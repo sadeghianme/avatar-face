@@ -30,6 +30,13 @@ interface Point {
 
 export interface EngineOptions {
   debugMesh?: boolean;
+  /**
+   * Show the ENTIRE photo (hair, shoulders, background) with the animated
+   * face composited over it, instead of cropping to the face box. Roll and
+   * breathing sway are disabled in this mode so the mesh rim stays glued
+   * to the static background.
+   */
+  fullPhoto?: boolean;
 }
 
 export class AvatarEngine {
@@ -73,6 +80,9 @@ export class AvatarEngine {
   private onAudioEnd: (() => void) | null = null;
 
   debugMesh: boolean;
+  private fullPhoto: boolean;
+  // Source crop (rig-image coords) that the canvas displays.
+  private crop = { x: 0, y: 0, w: 0, h: 0 };
 
   constructor(canvas: HTMLCanvasElement, rig: Rig, texture: HTMLImageElement, opts: EngineOptions = {}) {
     this.canvas = canvas;
@@ -82,6 +92,9 @@ export class AvatarEngine {
     this.rig = rig;
     this.texture = texture;
     this.debugMesh = opts.debugMesh ?? false;
+    this.fullPhoto = opts.fullPhoto ?? false;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
     this.innerRing = this.validInnerRing();
     this.computeFraming();
     this.startTime = performance.now();
@@ -107,15 +120,22 @@ export class AvatarEngine {
    * little down for the chin, fit into the canvas at TRUE aspect, center.
    */
   private computeFraming(): void {
-    const [bx0, by0, bx1, by1] = this.rig.face_box;
-    const bw = bx1 - bx0;
-    const bh = by1 - by0;
-    const cropX = Math.max(0, bx0 - bw * 0.25);
-    const cropY = Math.max(0, by0 - bh * 0.55); // forehead + hair
-    const cropX1 = Math.min(this.rig.image_size[0], bx1 + bw * 0.25);
-    const cropY1 = Math.min(this.rig.image_size[1], by1 + bh * 0.18); // chin
-    const cropW = cropX1 - cropX;
-    const cropH = cropY1 - cropY;
+    let cropX = 0;
+    let cropY = 0;
+    let cropW = this.rig.image_size[0];
+    let cropH = this.rig.image_size[1];
+    if (!this.fullPhoto) {
+      const [bx0, by0, bx1, by1] = this.rig.face_box;
+      const bw = bx1 - bx0;
+      const bh = by1 - by0;
+      cropX = Math.max(0, bx0 - bw * 0.25);
+      cropY = Math.max(0, by0 - bh * 0.55); // forehead + hair
+      const cropX1 = Math.min(this.rig.image_size[0], bx1 + bw * 0.25);
+      const cropY1 = Math.min(this.rig.image_size[1], by1 + bh * 0.18); // chin
+      cropW = cropX1 - cropX;
+      cropH = cropY1 - cropY;
+    }
+    this.crop = { x: cropX, y: cropY, w: cropW, h: cropH };
 
     const cw = this.canvas.width;
     const ch = this.canvas.height;
@@ -182,7 +202,11 @@ export class AvatarEngine {
     this.cues = cues;
     this.speaking = true;
 
-    this.attachAnalyser(audio);
+    // Only reroute through the analyser when the cue track is too sparse to
+    // drive the mouth (amplitude fallback needed). Rerouting risks silent
+    // playback (suspended AudioContext, Safari data:-URL taint), so rich cue
+    // tracks — every Liveface provider — play natively.
+    if (cues.length < 4) this.attachAnalyser(audio);
 
     audio.addEventListener("ended", () => {
       if (audio !== this.currentAudio) return;
@@ -243,9 +267,20 @@ export class AvatarEngine {
         this.analyserData = new Uint8Array(this.analyser.frequencyBinCount);
         this.analyser.connect(this.audioCtx.destination);
       }
-      void this.audioCtx.resume().catch(() => undefined);
-      const source = this.audioCtx.createMediaElementSource(audio);
-      source.connect(this.analyser!);
+      const ctx = this.audioCtx;
+      // createMediaElementSource REROUTES the element's output through the
+      // context — if the context is suspended (autoplay policy), playback
+      // goes silent. Only connect once the context is confirmed running;
+      // otherwise the element plays natively and we just lose the
+      // amplitude fallback.
+      void ctx
+        .resume()
+        .then(() => {
+          if (ctx.state !== "running" || audio !== this.currentAudio) return;
+          const source = ctx.createMediaElementSource(audio);
+          source.connect(this.analyser!);
+        })
+        .catch(() => undefined);
     } catch {
       // Analyser is an enhancement (amplitude fallback); audio still plays.
     }
@@ -291,10 +326,12 @@ export class AvatarEngine {
     this.targetWeights = visemeWeights;
 
     // Critically-damped-ish approach to targets (fast open, slower close).
+    // Rates tuned for smoothness: rapid per-character cue tracks would
+    // otherwise slam the jaw fully open/shut every ~75ms.
     const keys = Object.keys(this.weights) as (keyof BlendWeights)[];
     for (const key of keys) {
       const target = this.targetWeights[key];
-      const rate = target > this.weights[key] ? 0.45 : 0.25;
+      const rate = target > this.weights[key] ? 0.3 : 0.16;
       this.weights[key] += (target - this.weights[key]) * rate;
     }
 
@@ -438,17 +475,21 @@ export class AvatarEngine {
     pts[NOSE_TIP].x += yaw * 0.25;
 
     // Roll about a neck pivot below the chin; breathing sway rides along.
-    const roll = (Math.sin(t * 0.27 + 0.7) * 0.012 + Math.sin(t * 0.071) * 0.008) * amp;
-    const breathe = Math.sin(t * 0.9) * fh * 0.004;
-    const pivotX = fcx;
-    const pivotY = fMaxY + fh * 0.35;
-    const cosR = Math.cos(roll);
-    const sinR = Math.sin(roll);
-    for (const p of pts) {
-      const rx = p.x - pivotX;
-      const ry = p.y - pivotY;
-      p.x = pivotX + rx * cosR - ry * sinR;
-      p.y = pivotY + rx * sinR + ry * cosR + breathe;
+    // Skipped in fullPhoto mode: rolling the whole mesh would tear the rim
+    // away from the static photo behind it.
+    if (!this.fullPhoto) {
+      const roll = (Math.sin(t * 0.27 + 0.7) * 0.012 + Math.sin(t * 0.071) * 0.008) * amp;
+      const breathe = Math.sin(t * 0.9) * fh * 0.004;
+      const pivotX = fcx;
+      const pivotY = fMaxY + fh * 0.35;
+      const cosR = Math.cos(roll);
+      const sinR = Math.sin(roll);
+      for (const p of pts) {
+        const rx = p.x - pivotX;
+        const ry = p.y - pivotY;
+        p.x = pivotX + rx * cosR - ry * sinR;
+        p.y = pivotY + rx * sinR + ry * cosR + breathe;
+      }
     }
 
     return pts;
@@ -461,6 +502,23 @@ export class AvatarEngine {
     const ctx = this.ctx;
     const pts = this.deformedPoints(now);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Base layer: the un-warped photo. Triangle seams and sub-pixel gaps in
+    // the warp then reveal original pixels instead of holes — and in
+    // fullPhoto mode this is what shows hair/shoulders/background.
+    const tw = this.texture.naturalWidth / this.rig.image_size[0];
+    const th = this.texture.naturalHeight / this.rig.image_size[1];
+    ctx.drawImage(
+      this.texture,
+      this.crop.x * tw,
+      this.crop.y * th,
+      this.crop.w * tw,
+      this.crop.h * th,
+      this.crop.x * this.scale + this.offsetX,
+      this.crop.y * this.scale + this.offsetY,
+      this.crop.w * this.scale,
+      this.crop.h * this.scale
+    );
 
     for (const [a, b, c] of this.rig.triangles) {
       this.drawWarpedTriangle(pts, a, b, c);
@@ -508,7 +566,7 @@ export class AvatarEngine {
     // Slightly inflate the clip triangle to hide seams between triangles.
     const cx = (d0.x + d1.x + d2.x) / 3;
     const cy = (d0.y + d1.y + d2.y) / 3;
-    const grow = (p: Point) => ({ x: p.x + (p.x - cx) * 0.03, y: p.y + (p.y - cy) * 0.03 });
+    const grow = (p: Point) => ({ x: p.x + (p.x - cx) * 0.015, y: p.y + (p.y - cy) * 0.015 });
     const g0 = grow(d0), g1 = grow(d1), g2 = grow(d2);
     ctx.moveTo(g0.x, g0.y);
     ctx.lineTo(g1.x, g1.y);

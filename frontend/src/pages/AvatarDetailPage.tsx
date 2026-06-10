@@ -21,6 +21,7 @@ export function AvatarDetailPage() {
   const queryClient = useQueryClient();
   const [engine, setEngine] = useState<AvatarEngine | null>(null);
   const [debugMesh, setDebugMesh] = useState(false);
+  const [fullPhoto, setFullPhoto] = useState(false);
 
   const { data: avatar, isError } = useQuery({
     queryKey: ["avatar", current?.id, avatarId],
@@ -59,6 +60,20 @@ export function AvatarDetailPage() {
           <StatusBadge status={avatar.status} />
         </div>
         <div className="flex gap-2">
+          <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-600">
+            <button
+              className={`px-3 py-2 text-sm font-medium ${!fullPhoto ? "bg-brand-600 text-white" : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}
+              onClick={() => setFullPhoto(false)}
+            >
+              {t("viewFace")}
+            </button>
+            <button
+              className={`px-3 py-2 text-sm font-medium ${fullPhoto ? "bg-brand-600 text-white" : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}
+              onClick={() => setFullPhoto(true)}
+            >
+              {t("viewFull")}
+            </button>
+          </div>
           <label className="btn-secondary cursor-pointer select-none">
             <input
               type="checkbox"
@@ -94,8 +109,11 @@ export function AvatarDetailPage() {
           <div className="card">
             <AvatarPreview
               rigUrl={avatar.rig_url}
-              textureUrl={avatar.thumbnail_url}
+              // Full-resolution texture: the 256px thumbnail looks blurry
+              // on a large preview canvas.
+              textureUrl={avatar.image_url ?? avatar.thumbnail_url}
               debugMesh={debugMesh}
+              fullPhoto={fullPhoto}
               onEngine={setEngine}
             />
           </div>

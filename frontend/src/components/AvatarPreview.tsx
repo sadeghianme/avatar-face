@@ -8,14 +8,16 @@ import { useEffect, useRef, useState } from "react";
 export function AvatarPreview({
   rigUrl,
   textureUrl,
-  size = 320,
+  size = 480,
   debugMesh = false,
+  fullPhoto = false,
   onEngine,
 }: {
   rigUrl: string;
   textureUrl: string;
   size?: number;
   debugMesh?: boolean;
+  fullPhoto?: boolean;
   onEngine?: (engine: AvatarEngine | null) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -33,7 +35,7 @@ export function AvatarPreview({
       if (!rigResponse.ok) throw new Error(`rig fetch: ${rigResponse.status}`);
       const rig = (await rigResponse.json()) as Rig;
       if (cancelled || !canvasRef.current) return;
-      engine = new AvatarEngine(canvasRef.current, rig, texture, { debugMesh });
+      engine = new AvatarEngine(canvasRef.current, rig, texture, { debugMesh, fullPhoto });
       onEngine?.(engine);
     };
     boot().catch((err: Error) => !cancelled && setError(err.message));
@@ -44,7 +46,7 @@ export function AvatarPreview({
       engine?.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rigUrl, textureUrl, debugMesh]);
+  }, [rigUrl, textureUrl, debugMesh, fullPhoto]);
 
   if (error) return <p className="field-error">{error}</p>;
   return (
