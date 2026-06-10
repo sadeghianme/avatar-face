@@ -11,8 +11,18 @@ import { OrgProvider } from "./lib/org";
 import { ThemeProvider } from "./lib/theme";
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 10_000 } },
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 10_000,
+      // Don't pause queries on flaky onLine signals (embedded webviews and
+      // headless browsers misreport connectivity); let fetch itself fail.
+      networkMode: "always",
+    },
+  },
 });
+// Dev aid: lets the console inspect query state (harmless in prod).
+(window as unknown as { __queryClient: QueryClient }).__queryClient = queryClient;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

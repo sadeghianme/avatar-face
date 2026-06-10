@@ -22,7 +22,7 @@ export function AvatarDetailPage() {
   const [engine, setEngine] = useState<AvatarEngine | null>(null);
   const [debugMesh, setDebugMesh] = useState(false);
 
-  const { data: avatar } = useQuery({
+  const { data: avatar, isError } = useQuery({
     queryKey: ["avatar", current?.id, avatarId],
     queryFn: () => api.get<Avatar>(`/orgs/${current!.id}/avatars/${avatarId}`),
     enabled: Boolean(current && avatarId),
@@ -33,6 +33,9 @@ export function AvatarDetailPage() {
     },
   });
 
+  if (isError) {
+    return <p className="field-error">{t("error")} — avatar not found in this organization.</p>;
+  }
   if (!avatar || !current) {
     return <p className="text-gray-500">{t("loading")}</p>;
   }
