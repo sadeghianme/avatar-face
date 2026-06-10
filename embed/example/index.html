@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Liveface embed example — third-party host page</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 3rem auto; padding: 0 1rem; }
+    textarea { width: 100%; min-height: 80px; margin: 1rem 0 .5rem; }
+    button { padding: .5rem 1rem; margin-right: .5rem; }
+    .hint { color: #666; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <h1>Acme Corp support</h1>
+  <p class="hint">
+    This page simulates a third-party site embedding a Liveface avatar.
+    Serve it from any origin (e.g. <code>python3 -m http.server 8088</code>)
+    and fill in your avatar id + API key below — or bake them into the
+    script tag like a real integration would.
+  </p>
+
+  <!-- The one-line integration: -->
+  <script
+    src="http://localhost:7002/liveface.js"
+    data-avatar="YOUR_AVATAR_ID"
+    data-key="YOUR_API_KEY"
+    data-api="http://localhost:7002"
+    data-provider="offline"
+    data-voice="offline-warm"
+    data-size="320"
+  ></script>
+
+  <textarea id="text">Hello! I am a Liveface avatar embedded on a third-party page. Long text is split into sentences and streamed, so I start speaking right away. 你好！ Привет! مرحبا!</textarea>
+  <div>
+    <button onclick="Liveface.speak(document.getElementById('text').value)">Speak</button>
+    <button onclick="Liveface.stop()">Stop</button>
+    <button onclick="Liveface.sttSupported() ? Liveface.listen().then(t => { document.getElementById('text').value = t; Liveface.speak(t); }) : alert('STT not supported in this browser')">🎤 Dictate</button>
+  </div>
+</body>
+</html>

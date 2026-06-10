@@ -86,6 +86,24 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         return {"status": "ok", "app": settings.app_name}
 
+    @app.get("/liveface.js", include_in_schema=False)
+    async def widget_script():
+        """Serve the built embed widget so integrators get a one-line setup."""
+        from pathlib import Path
+
+        from fastapi.responses import FileResponse, PlainTextResponse
+
+        bundle = Path(__file__).resolve().parents[2] / "embed" / "dist" / "liveface.js"
+        if not bundle.is_file():
+            return PlainTextResponse(
+                "// liveface.js not built — run `make embed`", status_code=404
+            )
+        return FileResponse(
+            bundle,
+            media_type="application/javascript",
+            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=300"},
+        )
+
     app.include_router(auth.router)
     app.include_router(orgs.router)
     app.include_router(avatars.router)
