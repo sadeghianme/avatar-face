@@ -533,10 +533,22 @@ export class AvatarEngine {
     const cx = ring.reduce((s, p) => s + p.x, 0) / ring.length;
     const cy = ring.reduce((s, p) => s + p.y, 0) / ring.length;
 
-    // ANGLE-SORT around the centroid — raw index order self-intersects.
-    const sorted = [...ring].sort(
-      (p, q) => Math.atan2(p.y - cy, p.x - cx) - Math.atan2(q.y - cy, q.x - cx)
+    // The cavity only opens with the jaw: at rest the lips are closed even
+    // if the rig's inner ring has geometric height (the synthetic rig's
+    // does), so squash the ring toward its centerline by openness.
+    const openness = Math.min(
+      1,
+      this.weights.jawOpen * 1.3 +
+        this.weights.mouthFunnel * 0.25 -
+        this.weights.mouthClose * 0.6
     );
+    if (openness < 0.06) return;
+    const squash = 0.1 + 0.9 * openness;
+
+    // ANGLE-SORT around the centroid — raw index order self-intersects.
+    const sorted = [...ring]
+      .sort((p, q) => Math.atan2(p.y - cy, p.x - cx) - Math.atan2(q.y - cy, q.x - cx))
+      .map((p) => ({ x: p.x, y: cy + (p.y - cy) * squash }));
 
     const xs = sorted.map((p) => p.x);
     const ys = sorted.map((p) => p.y);
