@@ -11,6 +11,8 @@ export default defineConfig({
     },
   },
   server: {
+    host: true, // listen on LAN so phones/tablets on the same Wi-Fi can test
+    allowedHosts: [".trycloudflare.com"], // remote testing via cloudflared tunnels
     port: 5174,
     proxy: {
       "/api": {

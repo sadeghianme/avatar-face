@@ -19,13 +19,62 @@ import { BlendWeights, Cue, Rig, ZERO_WEIGHTS } from "./types";
 // Canonical MediaPipe brow rows, inner -> outer.
 const LEFT_BROW = [55, 65, 52, 53, 46];
 const RIGHT_BROW = [285, 295, 282, 283, 276];
-const LEFT_EYE = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246];
-const RIGHT_EYE = [263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466];
+// Eyes split into lids: a blink is the UPPER lid sweeping down over the
+// eyeball (skin from above stretches down to cover it) — NOT the whole ring
+// squashing, which compresses the eyeball texture and looks alien.
+const UPPER_LIDS = [
+  [246, 161, 160, 159, 158, 157, 173],
+  [466, 388, 387, 386, 385, 384, 398],
+];
+const LOWER_LIDS = [
+  [7, 163, 144, 145, 153, 154, 155],
+  [249, 390, 373, 374, 380, 381, 382],
+];
+const EYE_CORNERS: [number, number][] = [
+  [33, 133],
+  [263, 362],
+];
 const NOSE_TIP = 4;
+
+const VOWEL_VISEMES = new Set(["aa", "E", "ih", "oh", "ou"]);
 
 interface Point {
   x: number;
   y: number;
+}
+
+/**
+ * Downsample a cue track to articulation rate. Per-character tracks (one
+ * cue every ~75ms) make the mouth wobble through noise; real speech reads
+ * as ~4-6 mouth keyframes per second, dominated by vowels (jaw) with
+ * consonants as brief shaping. Cues closer than MIN_CUE_MS are folded into
+ * their predecessor, preferring vowels when they collide.
+ */
+const MIN_CUE_MS = 110;
+
+export function prepareCues(cues: Cue[]): Cue[] {
+  if (cues.length <= 2) return cues;
+  const out: Cue[] = [];
+  for (const cue of cues) {
+    const last = out[out.length - 1];
+    if (last && cue.t - last.t < MIN_CUE_MS) {
+      // Collides with the previous keyframe: vowels win (they carry the
+      // jaw motion); otherwise keep the existing one.
+      if (VOWEL_VISEMES.has(cue.viseme) && !VOWEL_VISEMES.has(last.viseme)) {
+        last.viseme = cue.viseme;
+      }
+      continue;
+    }
+    if (last && last.viseme === cue.viseme) continue;
+    out.push({ ...cue });
+  }
+  // Always end closed, at the track's true end time.
+  const end = cues[cues.length - 1];
+  const lastOut = out[out.length - 1];
+  if (!lastOut || lastOut.viseme !== "sil" || lastOut.t < end.t) {
+    out.push({ t: Math.max(end.t, (lastOut?.t ?? 0) + 1), viseme: "sil" });
+  }
+  return out;
 }
 
 export interface EngineOptions {
@@ -103,6 +152,8 @@ export class AvatarEngine {
     this.nextBrowPulseAt = this.startTime + 1800 + Math.random() * 2500;
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
+    // Debug handle (last engine wins): lets a console force blinks/visemes.
+    (globalThis as { __liveface?: AvatarEngine }).__liveface = this;
   }
 
   destroy(): void {
@@ -199,7 +250,7 @@ export class AvatarEngine {
     const audio = new Audio(`data:${mime};base64,${audioB64}`);
     this.currentAudio = audio;
     this.onAudioEnd = onEnd ?? null;
-    this.cues = cues;
+    this.cues = prepareCues(cues);
     this.speaking = true;
 
     // Only reroute through the analyser when the cue track is too sparse to
@@ -355,7 +406,7 @@ export class AvatarEngine {
     const keys = Object.keys(this.weights) as (keyof BlendWeights)[];
     for (const key of keys) {
       const target = this.targetWeights[key];
-      const rate = target > this.weights[key] ? 0.22 : 0.12;
+      const rate = target > this.weights[key] ? 0.28 : 0.16;
       this.weights[key] += (target - this.weights[key]) * rate;
     }
 
@@ -461,14 +512,30 @@ export class AvatarEngine {
     const fw = (fMaxX - fMinX) / 2;
     const fh = (fMaxY - fMinY) / 2;
 
-    // Eased blinks: close the eyes by pulling lid points to the eye center.
+    // Eased blinks: the upper lid sweeps DOWN to the lower lid (lid skin
+    // stretches over the eyeball); the lower lid rises only slightly.
+    // Corner points stay pinned, mid-lid points travel furthest.
     if (this.blink > 0) {
-      const amount = Math.sin(this.blink * Math.PI); // ease in-out
-      for (const eye of [LEFT_EYE, RIGHT_EYE]) {
-        let ecy = 0;
-        for (const i of eye) ecy += pts[i].y;
-        ecy /= eye.length;
-        for (const i of eye) pts[i].y = pts[i].y + (ecy - pts[i].y) * amount * 0.85;
+      // Asymmetric ease: lids snap shut faster than they reopen.
+      const phase = this.blink;
+      const amount = phase < 0.4 ? Math.sin((phase / 0.4) * (Math.PI / 2))
+                                 : Math.cos(((phase - 0.4) / 0.6) * (Math.PI / 2));
+      for (let e = 0; e < 2; e++) {
+        const [c0, c1] = EYE_CORNERS[e];
+        const ecx = (pts[c0].x + pts[c1].x) / 2;
+        const halfW = Math.max(Math.abs(pts[c1].x - pts[c0].x) / 2, 1);
+        let eyeBottom = -Infinity;
+        let eyeTop = Infinity;
+        for (const i of LOWER_LIDS[e]) eyeBottom = Math.max(eyeBottom, pts[i].y);
+        for (const i of UPPER_LIDS[e]) eyeTop = Math.min(eyeTop, pts[i].y);
+        for (const i of UPPER_LIDS[e]) {
+          const centrality = Math.max(0, 1 - ((pts[i].x - ecx) / halfW) ** 2);
+          pts[i].y += (eyeBottom - pts[i].y) * amount * (0.15 + 0.85 * centrality);
+        }
+        for (const i of LOWER_LIDS[e]) {
+          const centrality = Math.max(0, 1 - ((pts[i].x - ecx) / halfW) ** 2);
+          pts[i].y -= (pts[i].y - eyeTop) * amount * 0.12 * centrality;
+        }
       }
     }
 
@@ -626,8 +693,13 @@ export class AvatarEngine {
         this.weights.mouthFunnel * 0.25 -
         this.weights.mouthClose * 0.6
     );
-    if (openness < 0.06) return;
+    if (openness < 0.12) return;
     const squash = 0.1 + 0.9 * openness;
+    // Fade the interior in over a range so it never pops, and only draw
+    // teeth/tongue when the mouth is genuinely open — a thin part shows a
+    // soft dark line, not a flickering teeth strip.
+    const interiorAlpha = Math.min(1, (openness - 0.12) / 0.15);
+    const showTeeth = openness > 0.32;
 
     // ANGLE-SORT around the centroid — raw index order self-intersects.
     const sorted = [...ring]
@@ -655,6 +727,7 @@ export class AvatarEngine {
     }
     ctx.closePath();
     ctx.clip();
+    ctx.globalAlpha = interiorAlpha;
 
     // Cavity base.
     ctx.fillStyle = "#270d0c";
@@ -667,31 +740,33 @@ export class AvatarEngine {
     // hanging from the lips; opening grows the dark gap between rows.
     const toothH = mouthW * 0.12;
 
-    // Gum line + upper teeth.
-    ctx.fillStyle = "#9e5a55";
-    ctx.fillRect(cx - mouthW / 2, upperY, mouthW, toothH * 0.25);
-    ctx.fillStyle = "#f3eee4";
-    const teeth = 8;
-    const toothW = mouthW / teeth;
-    for (let i = 0; i < teeth; i++) {
-      const tx = cx - mouthW / 2 + i * toothW;
-      ctx.beginPath();
-      ctx.moveTo(tx + 0.5, upperY + toothH * 0.2);
-      ctx.lineTo(tx + toothW - 0.5, upperY + toothH * 0.2);
-      ctx.lineTo(tx + toothW - 1, upperY + toothH);
-      ctx.quadraticCurveTo(tx + toothW / 2, upperY + toothH * 1.15, tx + 1, upperY + toothH);
-      ctx.closePath();
-      ctx.fill();
-    }
-    // Lower teeth hang up from the lower lip.
-    ctx.fillStyle = "#e8e2d4";
-    for (let i = 0; i < teeth; i++) {
-      const tx = cx - mouthW / 2 + i * toothW;
-      ctx.fillRect(tx + 1, lowerY - toothH * 0.7, toothW - 2, toothH * 0.7);
+    if (showTeeth) {
+      // Gum line + upper teeth.
+      ctx.fillStyle = "#9e5a55";
+      ctx.fillRect(cx - mouthW / 2, upperY, mouthW, toothH * 0.25);
+      ctx.fillStyle = "#f3eee4";
+      const teeth = 8;
+      const toothW = mouthW / teeth;
+      for (let i = 0; i < teeth; i++) {
+        const tx = cx - mouthW / 2 + i * toothW;
+        ctx.beginPath();
+        ctx.moveTo(tx + 0.5, upperY + toothH * 0.2);
+        ctx.lineTo(tx + toothW - 0.5, upperY + toothH * 0.2);
+        ctx.lineTo(tx + toothW - 1, upperY + toothH);
+        ctx.quadraticCurveTo(tx + toothW / 2, upperY + toothH * 1.15, tx + 1, upperY + toothH);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // Lower teeth hang up from the lower lip.
+      ctx.fillStyle = "#e8e2d4";
+      for (let i = 0; i < teeth; i++) {
+        const tx = cx - mouthW / 2 + i * toothW;
+        ctx.fillRect(tx + 1, lowerY - toothH * 0.7, toothW - 2, toothH * 0.7);
+      }
     }
 
     // Tongue rises with jaw opening; center groove when open.
-    if (jaw > 0.12) {
+    if (showTeeth && jaw > 0.12) {
       const tongueH = mouthH * (0.3 + jaw * 0.25);
       ctx.fillStyle = "#b4524b";
       ctx.beginPath();
@@ -712,6 +787,7 @@ export class AvatarEngine {
     ctx.fillStyle = shadow;
     ctx.fillRect(cx - mouthW / 2, upperY, mouthW, mouthH * 0.5);
 
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 
