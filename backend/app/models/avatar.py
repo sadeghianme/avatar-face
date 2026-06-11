@@ -15,6 +15,11 @@ class AvatarStatus(str, enum.Enum):
     failed = "failed"
 
 
+class AvatarKind(str, enum.Enum):
+    photo = "photo"      # 2D photo, rigged with face landmarks
+    model3d = "model3d"  # GLB with ARKit/Oculus morph targets
+
+
 class Avatar(TimestampedBase):
     __tablename__ = "avatars"
 
@@ -25,6 +30,9 @@ class Avatar(TimestampedBase):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[AvatarStatus] = mapped_column(
         Enum(AvatarStatus), default=AvatarStatus.pending, nullable=False
+    )
+    kind: Mapped[AvatarKind] = mapped_column(
+        Enum(AvatarKind), default=AvatarKind.photo, nullable=False
     )
     content_type: Mapped[str] = mapped_column(String(64), nullable=False)
     # Storage keys (set as the pipeline progresses)

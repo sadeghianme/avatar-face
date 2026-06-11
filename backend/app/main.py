@@ -86,23 +86,31 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         return {"status": "ok", "app": settings.app_name}
 
-    @app.get("/liveface.js", include_in_schema=False)
-    async def widget_script():
-        """Serve the built embed widget so integrators get a one-line setup."""
+    def _serve_widget_bundle(filename: str):
         from pathlib import Path
 
         from fastapi.responses import FileResponse, PlainTextResponse
 
-        bundle = Path(__file__).resolve().parents[2] / "embed" / "dist" / "liveface.js"
+        bundle = Path(__file__).resolve().parents[2] / "embed" / "dist" / filename
         if not bundle.is_file():
             return PlainTextResponse(
-                "// liveface.js not built — run `make embed`", status_code=404
+                f"// {filename} not built — run `make embed`", status_code=404
             )
         return FileResponse(
             bundle,
             media_type="application/javascript",
             headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=300"},
         )
+
+    @app.get("/liveface.js", include_in_schema=False)
+    async def widget_script():
+        """The embed widget (13KB; lazy-loads the 3D bundle when needed)."""
+        return _serve_widget_bundle("liveface.js")
+
+    @app.get("/liveface-3d.js", include_in_schema=False)
+    async def widget_script_3d():
+        """Three.js + 3D engine, loaded only for kind=model3d avatars."""
+        return _serve_widget_bundle("liveface-3d.js")
 
     app.include_router(auth.router)
     app.include_router(orgs.router)

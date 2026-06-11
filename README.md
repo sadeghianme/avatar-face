@@ -29,8 +29,11 @@ cd .. && make frontend         # http://localhost:5174
 cd embed && npm install && cd .. && make embed
 ```
 
-Then: register → an org is created for you → **New avatar** → upload a photo
-or pick a stock avatar → it rigs in seconds → open it and press **Speak**.
+Then: register → an org is created for you → **New avatar** → upload a photo,
+pick a stock avatar, or import a **3D model** (.glb with ARKit blendshapes or
+viseme morphs — e.g. an Avaturn export) → it rigs in seconds → open it and
+press **Speak**. 3D avatars render with Three.js (sculpted visemes, real head
+bones, eyelid blinks); the widget lazy-loads the 3D bundle only when needed.
 
 ## Embedding on any site
 

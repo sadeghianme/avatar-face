@@ -16,7 +16,8 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@liveface/embed": ["../embed/src/index.ts"]
+      "@liveface/embed": ["../embed/src/index.ts"],
+      "@liveface/embed/*": ["../embed/src/*"]
     }
   },
   "include": ["src", "../embed/src"]

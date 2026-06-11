@@ -1,9 +1,10 @@
-import type { AvatarEngine } from "@liveface/embed";
+import type { SpeechPlayer } from "@liveface/embed";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { Avatar3DPreview } from "../components/Avatar3DPreview";
 import { AvatarPreview } from "../components/AvatarPreview";
 import { EmbedSnippet } from "../components/EmbedSnippet";
 import { PrepProgress } from "../components/PrepProgress";
@@ -19,7 +20,7 @@ export function AvatarDetailPage() {
   const { current } = useOrg();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [engine, setEngine] = useState<AvatarEngine | null>(null);
+  const [engine, setEngine] = useState<SpeechPlayer | null>(null);
   const [debugMesh, setDebugMesh] = useState(false);
   const [fullPhoto, setFullPhoto] = useState(false);
 
@@ -60,6 +61,7 @@ export function AvatarDetailPage() {
           <StatusBadge status={avatar.status} />
         </div>
         <div className="flex gap-2">
+          {avatar.kind === "photo" && (
           <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-600">
             <button
               className={`px-3 py-2 text-sm font-medium ${!fullPhoto ? "bg-brand-600 text-white" : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}
@@ -74,6 +76,8 @@ export function AvatarDetailPage() {
               {t("viewFull")}
             </button>
           </div>
+          )}
+          {avatar.kind === "photo" && (
           <label className="btn-secondary cursor-pointer select-none">
             <input
               type="checkbox"
@@ -83,6 +87,7 @@ export function AvatarDetailPage() {
             />
             mesh
           </label>
+          )}
           <button className="btn-danger" onClick={() => void remove()}>
             {t("delete")}
           </button>
@@ -107,15 +112,19 @@ export function AvatarDetailPage() {
       {avatar.status === "ready" && avatar.rig_url && avatar.thumbnail_url && (
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="card">
-            <AvatarPreview
-              rigUrl={avatar.rig_url}
-              // Full-resolution texture: the 256px thumbnail looks blurry
-              // on a large preview canvas.
-              textureUrl={avatar.image_url ?? avatar.thumbnail_url}
-              debugMesh={debugMesh}
-              fullPhoto={fullPhoto}
-              onEngine={setEngine}
-            />
+            {avatar.kind === "model3d" && avatar.model_url ? (
+              <Avatar3DPreview modelUrl={avatar.model_url} onEngine={setEngine} />
+            ) : (
+              <AvatarPreview
+                rigUrl={avatar.rig_url}
+                // Full-resolution texture: the 256px thumbnail looks blurry
+                // on a large preview canvas.
+                textureUrl={avatar.image_url ?? avatar.thumbnail_url}
+                debugMesh={debugMesh}
+                fullPhoto={fullPhoto}
+                onEngine={setEngine}
+              />
+            )}
           </div>
           <div className="flex flex-col gap-6">
             <SpeakPanel engine={engine} orgId={current.id} />

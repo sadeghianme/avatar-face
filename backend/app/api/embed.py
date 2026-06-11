@@ -82,12 +82,15 @@ async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
         raise NotFound404("Avatar is not ready", code="avatar_not_ready")
     storage = get_storage()
     # Absolute URLs: the widget runs on a third-party origin.
+    image_url = await storage.presign_get(avatar.image_key or "")
     return {
         "id": avatar.id,
         "name": avatar.name,
+        "kind": avatar.kind.value,
         "rig_url": await storage.presign_get(avatar.rig_key or ""),
         "thumbnail_url": await storage.presign_get(avatar.thumbnail_key or ""),
-        "image_url": await storage.presign_get(avatar.image_key or ""),
+        "image_url": image_url,
+        "model_url": image_url if avatar.kind.value == "model3d" else None,
     }
 
 

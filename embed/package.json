@@ -8,11 +8,15 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "typecheck": "tsc -b",
-    "build": "tsc -b && esbuild src/widget.ts --bundle --format=iife --outfile=dist/liveface.js --minify",
+    "build": "tsc -b && esbuild src/widget.ts --bundle --format=iife --outfile=dist/liveface.js --minify && esbuild src/widget3d.ts --bundle --format=iife --outfile=dist/liveface-3d.js --minify",
     "dev": "esbuild src/widget.ts --bundle --format=iife --outfile=dist/liveface.js --watch --servedir=."
   },
   "devDependencies": {
     "esbuild": "^0.21.5",
     "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "@types/three": "^0.184.1",
+    "three": "^0.184.0"
   }
 }

@@ -16,7 +16,8 @@
  *   Liveface.sttSupported()
  */
 import { AvatarEngine } from "./engine";
-import { SpeechQueue } from "./speech";
+import type { Avatar3DEngine } from "./engine3d";
+import { SpeechPlayer, SpeechQueue } from "./speech";
 import { listen, sttSupported, ListenOptions } from "./stt";
 import { Rig, SynthesisPayload } from "./types";
 
@@ -26,13 +27,28 @@ interface LivefaceApi {
   isSpeaking(): boolean;
   listen(options?: ListenOptions): Promise<string>;
   sttSupported(): boolean;
-  engine: AvatarEngine | null;
+  engine: SpeechPlayer | null;
 }
 
 declare global {
   interface Window {
     Liveface?: LivefaceApi;
+    __Liveface3D?: {
+      load: (canvas: HTMLCanvasElement, modelUrl: string) => Promise<Avatar3DEngine>;
+    };
   }
+}
+
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) return resolve();
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`failed to load ${src}`));
+    document.head.appendChild(script);
+  });
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -73,15 +89,27 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     console.error("[liveface] avatar fetch failed:", await meta.text());
     return;
   }
-  const info: { rig_url: string; thumbnail_url: string } = await meta.json();
+  const info: {
+    kind?: string;
+    rig_url: string;
+    thumbnail_url: string;
+    model_url?: string | null;
+  } = await meta.json();
 
-  const [rigResponse, texture] = await Promise.all([
-    fetch(info.rig_url),
-    loadImage(info.thumbnail_url),
-  ]);
-  const rig: Rig = await rigResponse.json();
-
-  const engine = new AvatarEngine(canvas, rig, texture);
+  let engine: SpeechPlayer & { isSpeaking(): boolean };
+  if (info.kind === "model3d" && info.model_url) {
+    // 3D avatar: lazy-load the Three.js bundle, then hand it the GLB.
+    await loadScript(`${apiBase}/liveface-3d.js`);
+    if (!window.__Liveface3D) throw new Error("liveface-3d.js failed to initialize");
+    engine = await window.__Liveface3D.load(canvas, info.model_url);
+  } else {
+    const [rigResponse, texture] = await Promise.all([
+      fetch(info.rig_url),
+      loadImage(info.thumbnail_url),
+    ]);
+    const rig: Rig = await rigResponse.json();
+    engine = new AvatarEngine(canvas, rig, texture);
+  }
 
   const synth = async (text: string): Promise<SynthesisPayload> => {
     const response = await fetch(`${apiBase}/embed/v1/synthesize`, {

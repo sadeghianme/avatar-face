@@ -1,8 +1,8 @@
 import {
-  AvatarEngine,
   listen,
   SpeechQueue,
   sttSupported,
+  type SpeechPlayer,
   type SynthesisPayload,
 } from "@liveface/embed";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -15,7 +15,7 @@ export function SpeakPanel({
   engine,
   orgId,
 }: {
-  engine: AvatarEngine | null;
+  engine: SpeechPlayer | null;
   orgId: string;
 }) {
   const { t, i18n } = useTranslation();

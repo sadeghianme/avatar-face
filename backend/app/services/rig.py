@@ -247,10 +247,17 @@ async def process_avatar(avatar_id: str) -> None:
         await db.commit()
 
         try:
+            from app.models import AvatarKind
+            from app.services.model3d import build_model_rig, make_model_thumbnail
+
             image_bytes = await storage.get_bytes(avatar.image_key)
-            points, blendshapes, size = landmarks_from_image(image_bytes)
-            rig = build_rig(points, size, blendshapes)
-            thumb = make_thumbnail(image_bytes)
+            if avatar.kind == AvatarKind.model3d:
+                rig = build_model_rig(image_bytes)
+                thumb = make_model_thumbnail()
+            else:
+                points, blendshapes, size = landmarks_from_image(image_bytes)
+                rig = build_rig(points, size, blendshapes)
+                thumb = make_thumbnail(image_bytes)
 
             rig_key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/rig.json"
             thumb_key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/thumb.jpg"

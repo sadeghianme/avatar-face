@@ -109,12 +109,15 @@ export const api = {
 export function uploadWithProgress(
   url: string,
   file: File,
-  onProgress: (fraction: number) => void
+  onProgress: (fraction: number) => void,
+  contentType?: string
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", file.type);
+    // S3 presigned PUTs sign the Content-Type; it must match exactly
+    // (.glb files often have an empty file.type, so callers override it).
+    xhr.setRequestHeader("Content-Type", contentType || file.type);
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(event.loaded / event.total);
     };

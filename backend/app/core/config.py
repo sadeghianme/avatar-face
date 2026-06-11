@@ -80,6 +80,14 @@ class Settings(BaseSettings):
     # --- Rig ---
     rig_model_path: str | None = None  # MediaPipe FaceLandmarker .task file
 
+    # --- 3D avatars: hosts allowed for GLB imports by URL (SSRF guard).
+    # Ready Player Me shut down Jan 2026; Avaturn et al. are compatible. ---
+    model_url_hosts: Annotated[list[str], NoDecode] = [
+        "api.avaturn.me",
+        "assets.avaturn.me",
+        "models.readyplayer.me",  # kept for self-hosted RPM archives
+    ]
+
     # --- TTS provider keys (env-level; the dashboard can override via DB) ---
     azure_speech_key: str | None = None
     azure_speech_region: str | None = None
@@ -101,7 +109,7 @@ class Settings(BaseSettings):
     def storage_configured(self) -> bool:
         return all((self.r2_endpoint, self.r2_access_key, self.r2_secret))
 
-    @field_validator("cors_origins", "allowed_image_types", mode="before")
+    @field_validator("cors_origins", "allowed_image_types", "model_url_hosts", mode="before")
     @classmethod
     def _decode_csv(cls, value: object) -> list[str]:
         if isinstance(value, (str, list)):

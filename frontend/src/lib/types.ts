@@ -35,12 +35,14 @@ export interface Invitation {
 }
 
 export type AvatarStatus = "pending" | "processing" | "ready" | "failed";
+export type AvatarKind = "photo" | "model3d";
 
 export interface Avatar {
   id: string;
   org_id: string;
   name: string;
   status: AvatarStatus;
+  kind: AvatarKind;
   content_type: string;
   error: string | null;
   created_at: string;
@@ -48,6 +50,7 @@ export interface Avatar {
   image_url?: string | null;
   rig_url?: string | null;
   thumbnail_url?: string | null;
+  model_url?: string | null;
 }
 
 export interface Provider {

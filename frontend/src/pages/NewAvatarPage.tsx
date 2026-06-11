@@ -31,19 +31,44 @@ export function NewAvatarPage() {
   const upload = async (file: File) => {
     if (!current) return;
     setError(null);
+    // .glb files usually arrive with an empty MIME type from the browser.
+    const contentType = file.name.toLowerCase().endsWith(".glb")
+      ? "model/gltf-binary"
+      : file.type;
     try {
       const created = await api.post<Created>(`/orgs/${current.id}/avatars`, {
         name: name.trim() || file.name.replace(/\.\w+$/, ""),
-        content_type: file.type,
+        content_type: contentType,
       });
       setProgress(0);
-      await uploadWithProgress(created.upload_url, file, setProgress);
+      await uploadWithProgress(created.upload_url, file, setProgress, contentType);
       await api.post(`/orgs/${current.id}/avatars/${created.avatar.id}/uploaded`);
       await queryClient.invalidateQueries({ queryKey: ["avatars", current.id] });
       navigate(`/avatars/${created.avatar.id}`);
     } catch (err) {
       setProgress(null);
       setError(err instanceof ApiError ? err.detail : t("error"));
+    }
+  };
+
+  const [modelUrl, setModelUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+
+  const fromModelUrl = async () => {
+    if (!current || !modelUrl.trim()) return;
+    setError(null);
+    setImporting(true);
+    try {
+      const avatar = await api.post<Avatar>(`/orgs/${current.id}/avatars/from-url`, {
+        url: modelUrl.trim(),
+        name: name.trim(),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["avatars", current.id] });
+      navigate(`/avatars/${avatar.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : t("error"));
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -98,11 +123,11 @@ export function NewAvatarPage() {
       >
         <span className="mb-2 text-4xl">📷</span>
         <p className="text-gray-600 dark:text-gray-300">{t("dragOrClick")}</p>
-        <p className="mt-1 text-xs text-gray-400">JPEG · PNG · WebP</p>
+        <p className="mt-1 text-xs text-gray-400">JPEG · PNG · WebP · GLB (3D)</p>
         <input
           ref={fileInput}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/jpeg,image/png,image/webp,.glb,model/gltf-binary"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -123,6 +148,30 @@ export function NewAvatarPage() {
         </div>
       )}
       {error && <p className="field-error mt-3">{error}</p>}
+
+      <h2 className="mb-3 mt-10 text-lg font-medium">{t("model3dTitle")}</h2>
+      <form
+        className="card flex flex-wrap items-end gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void fromModelUrl();
+        }}
+      >
+        <div className="min-w-64 flex-1">
+          <label className="label" htmlFor="rpm-url">{t("model3dUrl")}</label>
+          <input
+            id="rpm-url"
+            className="input"
+            placeholder="https://models.readyplayer.me/….glb"
+            value={modelUrl}
+            onChange={(e) => setModelUrl(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-gray-400">{t("model3dHint")}</p>
+        </div>
+        <button type="submit" className="btn-primary" disabled={importing || !modelUrl.trim()}>
+          {importing ? "…" : t("create")}
+        </button>
+      </form>
 
       <h2 className="mb-3 mt-10 text-lg font-medium">{t("stockGallery")}</h2>
       <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">

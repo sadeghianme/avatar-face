@@ -1,17 +1,29 @@
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
+import httpx
 from fastapi import APIRouter, BackgroundTasks
 from sqlalchemy import select
 
 from app.api.deps import DB, OrgMember
 from app.core.config import get_settings
 from app.core.errors import Conflict409, NotFound404, Validation422
-from app.models import Avatar, AvatarStatus
-from app.schemas.avatar import AvatarCreate, AvatarCreated, AvatarDetail, AvatarOut
+from app.models import Avatar, AvatarKind, AvatarStatus
+from app.schemas.avatar import (
+    AvatarCreate,
+    AvatarCreated,
+    AvatarDetail,
+    AvatarFromUrl,
+    AvatarOut,
+)
 from app.services.rig import process_avatar
 from app.services.storage import get_storage
 
 router = APIRouter(prefix="/orgs/{org_id}/avatars", tags=["avatars"])
+
+GLB_CONTENT_TYPE = "model/gltf-binary"
+MAX_MODEL_BYTES = 30 * 1024 * 1024
 
 
 async def _get_avatar(db: DB, org_id: str, avatar_id: str) -> Avatar:
@@ -28,24 +40,65 @@ async def _get_avatar(db: DB, org_id: str, avatar_id: str) -> Avatar:
 @router.post("", response_model=AvatarCreated, status_code=201)
 async def create_avatar(body: AvatarCreate, ctx: OrgMember, db: DB) -> AvatarCreated:
     settings = get_settings()
-    if body.content_type not in settings.allowed_image_types:
+    is_model = body.content_type == GLB_CONTENT_TYPE
+    if not is_model and body.content_type not in settings.allowed_image_types:
         raise Validation422(
-            f"content_type must be one of {settings.allowed_image_types}",
+            f"content_type must be one of {settings.allowed_image_types} or {GLB_CONTENT_TYPE}",
             code="unsupported_image_type",
         )
     avatar = Avatar(
         org_id=ctx.org.id,
         created_by_id=ctx.membership.user_id,
         name=body.name,
+        kind=AvatarKind.model3d if is_model else AvatarKind.photo,
         content_type=body.content_type,
     )
     db.add(avatar)
     await db.flush()
-    ext = body.content_type.split("/")[-1].replace("jpeg", "jpg")
+    ext = "glb" if is_model else body.content_type.split("/")[-1].replace("jpeg", "jpg")
     avatar.image_key = f"orgs/{ctx.org.id}/avatars/{avatar.id}/source.{ext}"
     await db.commit()
     upload_url = await get_storage().presign_put(avatar.image_key, body.content_type)
     return AvatarCreated(avatar=AvatarOut.model_validate(avatar), upload_url=upload_url)
+
+
+@router.post("/from-url", response_model=AvatarOut, status_code=201)
+async def create_from_url(
+    body: AvatarFromUrl, ctx: OrgMember, db: DB, background: BackgroundTasks
+) -> Avatar:
+    """Import a GLB avatar by URL (e.g. https://models.readyplayer.me/<id>.glb)."""
+    allowed_hosts = {h.lower() for h in get_settings().model_url_hosts}
+    parts = urlsplit(body.url)
+    if parts.scheme != "https" or (parts.hostname or "").lower() not in allowed_hosts:
+        raise Validation422(
+            f"URL host must be one of {sorted(allowed_hosts)} (configurable via MODEL_URL_HOSTS)",
+            code="model_host_not_allowed",
+        )
+    try:
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
+            response = await client.get(body.url)
+            response.raise_for_status()
+            data = response.content
+    except httpx.HTTPError as exc:
+        raise Validation422(f"Could not download model: {exc}", code="model_download_failed")
+    if len(data) > MAX_MODEL_BYTES:
+        raise Validation422("Model exceeds 30MB", code="model_too_large")
+
+    name = body.name or (parts.path.rsplit("/", 1)[-1].removesuffix(".glb") or "3D avatar")[:64]
+    avatar = Avatar(
+        org_id=ctx.org.id,
+        created_by_id=ctx.membership.user_id,
+        name=name,
+        kind=AvatarKind.model3d,
+        content_type=GLB_CONTENT_TYPE,
+    )
+    db.add(avatar)
+    await db.flush()
+    avatar.image_key = f"orgs/{ctx.org.id}/avatars/{avatar.id}/source.glb"
+    await get_storage().put_bytes(avatar.image_key, data, GLB_CONTENT_TYPE)
+    await db.commit()
+    background.add_task(process_avatar, avatar.id)
+    return avatar
 
 
 @router.get("", response_model=list[AvatarOut])
@@ -100,6 +153,8 @@ async def get_avatar_detail(avatar_id: str, ctx: OrgMember, db: DB) -> AvatarDet
     detail = AvatarDetail.model_validate(avatar)
     if avatar.image_key and await storage.exists(avatar.image_key):
         detail.image_url = await storage.presign_get(avatar.image_key)
+        if avatar.kind == AvatarKind.model3d:
+            detail.model_url = detail.image_url
     if avatar.rig_key:
         detail.rig_url = await storage.presign_get(avatar.rig_key)
     if avatar.thumbnail_key:
