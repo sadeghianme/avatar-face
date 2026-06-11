@@ -146,6 +146,43 @@ async def retry_rig(
     return avatar
 
 
+@router.post("/{avatar_id}/generate-3d", response_model=AvatarOut, status_code=201)
+async def generate_3d(
+    avatar_id: str, ctx: OrgMember, db: DB, background: BackgroundTasks
+) -> Avatar:
+    """Build a talking 3D face GLB from a photo avatar (in-house, free):
+    MediaPipe 3D landmarks + photo texture + procedural viseme/blink morphs.
+    Creates a NEW avatar of kind=model3d."""
+    from app.services.glb_builder import build_face_glb
+
+    source = await _get_avatar(db, ctx.org.id, avatar_id)
+    if source.kind != AvatarKind.photo:
+        raise Validation422("Source avatar must be a photo", code="not_a_photo")
+    if source.status != AvatarStatus.ready or not source.image_key:
+        raise Conflict409("Source avatar is not ready", code="not_ready")
+
+    image_bytes = await get_storage().get_bytes(source.image_key)
+    try:
+        glb = build_face_glb(image_bytes)
+    except Exception as exc:
+        raise Validation422(f"3D generation failed: {exc}", code="generation_failed")
+
+    avatar = Avatar(
+        org_id=ctx.org.id,
+        created_by_id=ctx.membership.user_id,
+        name=f"{source.name} 3D",
+        kind=AvatarKind.model3d,
+        content_type=GLB_CONTENT_TYPE,
+    )
+    db.add(avatar)
+    await db.flush()
+    avatar.image_key = f"orgs/{ctx.org.id}/avatars/{avatar.id}/source.glb"
+    await get_storage().put_bytes(avatar.image_key, glb, GLB_CONTENT_TYPE)
+    await db.commit()
+    background.add_task(process_avatar, avatar.id)
+    return avatar
+
+
 @router.get("/{avatar_id}", response_model=AvatarDetail)
 async def get_avatar_detail(avatar_id: str, ctx: OrgMember, db: DB) -> AvatarDetail:
     avatar = await _get_avatar(db, ctx.org.id, avatar_id)

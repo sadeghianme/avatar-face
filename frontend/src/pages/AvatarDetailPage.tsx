@@ -42,6 +42,14 @@ export function AvatarDetailPage() {
     return <p className="text-gray-500">{t("loading")}</p>;
   }
 
+  const generate3d = async () => {
+    const created = await api.post<Avatar>(
+      `/orgs/${current.id}/avatars/${avatar.id}/generate-3d`
+    );
+    await queryClient.invalidateQueries({ queryKey: ["avatars", current.id] });
+    navigate(`/avatars/${created.id}`);
+  };
+
   const retry = async () => {
     await api.post(`/orgs/${current.id}/avatars/${avatar.id}/retry`);
     await queryClient.invalidateQueries({ queryKey: ["avatar", current.id, avatarId] });
@@ -87,6 +95,11 @@ export function AvatarDetailPage() {
             />
             mesh
           </label>
+          )}
+          {avatar.kind === "photo" && avatar.status === "ready" && (
+            <button className="btn-secondary" onClick={() => void generate3d()}>
+              ✨ {t("generate3d")}
+            </button>
           )}
           <button className="btn-danger" onClick={() => void remove()}>
             {t("delete")}
