@@ -307,6 +307,31 @@ export class AvatarEngine {
     return viseme;
   }
 
+  /**
+   * Co-articulated viseme weights: instead of stepping to each cue, blend
+   * between the current and next viseme across the cue interval — real
+   * mouths are always mid-transition, never parked on a phoneme.
+   */
+  private blendedCueWeights(now: number): BlendWeights {
+    const t = now - this.cueStart;
+    let index = -1;
+    for (let i = 0; i < this.cues.length; i++) {
+      if (this.cues[i].t <= t) index = i;
+      else break;
+    }
+    if (index < 0) return { ...ZERO_WEIGHTS };
+    const curr = { ...ZERO_WEIGHTS, ...(this.rig.visemes[this.cues[index].viseme] ?? {}) };
+    const next = this.cues[index + 1];
+    if (!next || next.t <= this.cues[index].t) return curr;
+    const target = { ...ZERO_WEIGHTS, ...(this.rig.visemes[next.viseme] ?? {}) };
+    const f = Math.min(1, Math.max(0, (t - this.cues[index].t) / (next.t - this.cues[index].t)));
+    const out = { ...ZERO_WEIGHTS };
+    for (const key of Object.keys(out) as (keyof BlendWeights)[]) {
+      out[key] = curr[key] + (target[key] - curr[key]) * f;
+    }
+    return out;
+  }
+
   private loop(now: number): void {
     if (this.destroyed) return;
     this.tick(now);
@@ -315,23 +340,22 @@ export class AvatarEngine {
   }
 
   private tick(now: number): void {
-    // Viseme targets from the cue track (+ amplitude fallback when the
-    // track is silent but audio clearly isn't).
-    const visemeName = this.currentViseme(now);
-    const visemeWeights = { ...ZERO_WEIGHTS, ...(this.rig.visemes[visemeName] ?? {}) };
-    if (this.speaking && visemeName === "sil") {
+    // Viseme targets: co-articulated blend across cues (+ amplitude
+    // fallback when the track is silent but audio clearly isn't).
+    const visemeWeights = this.speaking ? this.blendedCueWeights(now) : { ...ZERO_WEIGHTS };
+    if (this.speaking && this.currentViseme(now) === "sil") {
       const amp = this.amplitude();
-      if (amp > 0.06) visemeWeights.jawOpen = Math.min(0.7, amp * 1.8);
+      if (amp > 0.06) visemeWeights.jawOpen = Math.min(0.5, amp * 1.2);
     }
     this.targetWeights = visemeWeights;
 
-    // Critically-damped-ish approach to targets (fast open, slower close).
-    // Rates tuned for smoothness: rapid per-character cue tracks would
-    // otherwise slam the jaw fully open/shut every ~75ms.
+    // Critically-damped-ish approach to targets. Slow on purpose: a
+    // newsreader's articulation is small and fluid, and the damping is the
+    // main thing standing between cue tracks and a flapping jaw.
     const keys = Object.keys(this.weights) as (keyof BlendWeights)[];
     for (const key of keys) {
       const target = this.targetWeights[key];
-      const rate = target > this.weights[key] ? 0.3 : 0.16;
+      const rate = target > this.weights[key] ? 0.22 : 0.12;
       this.weights[key] += (target - this.weights[key]) * rate;
     }
 
@@ -393,20 +417,22 @@ export class AvatarEngine {
     const innerSet = new Set(this.innerRing);
 
     // Blendshape-driven 2D deformation basis on mouth landmarks.
+    // Amplitudes are deliberately small — newsreader articulation: lips
+    // mostly shape sounds, the jaw barely drops.
     for (const i of mouthIdx) {
       const nx = (pts[i].x - mcx) / (mw / 2); // -1..1 across the mouth
       const ny = (pts[i].y - mcy) / (mh / 2);
       let dx = 0;
       let dy = 0;
       // jawOpen: lower lip drops (scaled by how low the point sits).
-      if (ny > 0) dy += w.jawOpen * mh * 1.15 * Math.min(1, ny);
-      else dy -= w.jawOpen * mh * 0.1 * -ny; // upper lip lifts slightly
+      if (ny > 0) dy += w.jawOpen * mh * 0.4 * Math.min(1, ny);
+      else dy -= w.jawOpen * mh * 0.06 * -ny; // upper lip lifts slightly
       // pucker/funnel: narrow horizontally, push lips toward an "O".
-      dx -= (w.mouthPucker * 0.30 + w.mouthFunnel * 0.18) * nx * (mw / 2);
-      if (ny < 0) dy -= w.mouthFunnel * mh * 0.12;
+      dx -= (w.mouthPucker * 0.18 + w.mouthFunnel * 0.1) * nx * (mw / 2);
+      if (ny < 0) dy -= w.mouthFunnel * mh * 0.07;
       // stretch/smile: widen; smile lifts the corners.
-      dx += (w.mouthStretch * 0.22 + w.mouthSmile * 0.12) * nx * (mw / 2);
-      if (Math.abs(nx) > 0.55) dy -= w.mouthSmile * mh * 0.3 * (Math.abs(nx) - 0.55);
+      dx += (w.mouthStretch * 0.12 + w.mouthSmile * 0.07) * nx * (mw / 2);
+      if (Math.abs(nx) > 0.55) dy -= w.mouthSmile * mh * 0.16 * (Math.abs(nx) - 0.55);
       // mouthClose: collapse inner ring toward the lip line.
       if (innerSet.has(i)) dy += (mcy - pts[i].y) * w.mouthClose * 0.8;
       pts[i].x += dx;
@@ -421,7 +447,7 @@ export class AvatarEngine {
         if (dyFromMouth <= 0) continue;
         const dist = Math.hypot(pts[i].x - mcx, dyFromMouth);
         const falloff = Math.max(0, 1 - dist / (mw * 1.4));
-        pts[i].y += w.jawOpen * mh * 0.9 * falloff;
+        pts[i].y += w.jawOpen * mh * 0.3 * falloff;
       }
     }
 
@@ -448,7 +474,7 @@ export class AvatarEngine {
 
     // Brow layer: lift rows inner->outer on eased sin pulses + rest browInnerUp.
     const browPulse = this.browPulsePhase < 1 ? Math.sin(this.browPulsePhase * Math.PI) : 0;
-    const browLift = browPulse * (this.speaking ? 0.8 + this.energy * 0.6 : 0.5);
+    const browLift = browPulse * (this.speaking ? 0.45 + this.energy * 0.3 : 0.4);
     for (const brow of [LEFT_BROW, RIGHT_BROW]) {
       for (let j = 0; j < brow.length; j++) {
         const innerness = 1 - j / (brow.length - 1); // inner moves most
@@ -461,7 +487,7 @@ export class AvatarEngine {
     const idleYaw = Math.sin(t * 0.43) * 0.25 + Math.sin(t * 0.117) * 0.2;
     const idlePitch = Math.sin(t * 0.31 + 1.3) * 0.22;
     const nod = this.nodPhase < 1 ? Math.sin(this.nodPhase * Math.PI) * 0.8 : 0;
-    const amp = 0.35 + this.energy * 0.9;
+    const amp = 0.3 + this.energy * 0.5;
     const yaw = idleYaw * amp * fw * 0.05;
     const pitch = (idlePitch * amp + nod * this.energy) * fh * 0.04;
     for (const p of pts) {
@@ -639,7 +665,7 @@ export class AvatarEngine {
     const lowerY = cy + mouthH / 2;
     // Anatomically fixed tooth height relative to mouth WIDTH (stable),
     // hanging from the lips; opening grows the dark gap between rows.
-    const toothH = mouthW * 0.16;
+    const toothH = mouthW * 0.12;
 
     // Gum line + upper teeth.
     ctx.fillStyle = "#9e5a55";
