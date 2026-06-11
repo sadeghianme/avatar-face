@@ -197,11 +197,14 @@ def build_face_glb(image_bytes: bytes) -> bytes:
     # UVs: normalized pixel coords (glTF UV origin = image top-left).
     uvs = np.column_stack([xs / width, ys / height]).astype(np.float32)
 
-    # Vertex colors: white with alpha fading at the face rim.
+    # Vertex colors: white with alpha fading at the face rim. The band is
+    # WIDE on purpose: border triangles are large, and a narrow fade reads
+    # as polygon sawtooth instead of a soft edge.
     half_w = max((xs.max() - xs.min()) / 2, 1.0)
     half_h = max((ys.max() - ys.min()) / 2, 1.0)
     radial = np.sqrt(((xs - cx) / half_w) ** 2 + ((ys - cy) / half_h) ** 2)
-    alpha = np.clip((1.02 - radial) / 0.22, 0, 1) ** 0.8
+    alpha = np.clip((1.08 - radial) / 0.5, 0, 1)
+    alpha = alpha * alpha * (3 - 2 * alpha)  # smoothstep: no hard fade start
     colors = np.column_stack(
         [np.ones_like(alpha), np.ones_like(alpha), np.ones_like(alpha), alpha]
     ).astype(np.float32)

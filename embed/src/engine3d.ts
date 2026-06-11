@@ -107,9 +107,15 @@ export class Avatar3DEngine {
 
   constructor(canvas: HTMLCanvasElement, model: THREE.Group, renderer?: THREE.WebGLRenderer) {
     this.renderer = renderer ?? new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    // setSize writes the scaled buffer size back into canvas.width — so a
+    // re-created engine (StrictMode remounts, HMR) must NOT read
+    // canvas.width as its base size or the buffer inflates exponentially.
+    // Remember the original logical size on the element.
+    const baseW = Number(canvas.dataset.lfBaseW ?? (canvas.dataset.lfBaseW = String(canvas.width)));
+    const baseH = Number(canvas.dataset.lfBaseH ?? (canvas.dataset.lfBaseH = String(canvas.height)));
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    this.renderer.setSize(canvas.width, canvas.height, false);
-    this.camera = new THREE.PerspectiveCamera(30, canvas.width / canvas.height, 0.01, 50);
+    this.renderer.setSize(baseW, baseH, false);
+    this.camera = new THREE.PerspectiveCamera(30, baseW / baseH, 0.01, 50);
 
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8888aa, 1.4));
     const key = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -166,10 +172,13 @@ export class Avatar3DEngine {
       this.headBone.getWorldPosition(target);
       target.y += size.y * 0.01;
     } else {
+      // Boneless = a face shell from the GLB generator: aim at its center.
       box.getCenter(target);
-      target.y = box.max.y - size.y * 0.12;
     }
-    const distance = Math.max(size.x, size.y * 0.35) * 1.9 + 0.25;
+    // Boneless models are face shells from the GLB generator: frame tighter.
+    const distance = this.headBone
+      ? Math.max(size.x, size.y * 0.35) * 1.9 + 0.25
+      : Math.max(size.x, size.y) * 1.35 + 0.12;
     this.camera.position.set(target.x, target.y + 0.02, target.z + distance);
     this.camera.lookAt(target);
   }
