@@ -7,5 +7,5 @@ export { SpeechQueue, splitSentences } from "./speech";
 export type { SynthFn, SpeechPlayer } from "./speech";
 export { listen, sttSupported } from "./stt";
 export type { ListenOptions } from "./stt";
-export type { BlendWeights, Cue, Rig, SynthesisPayload } from "./types";
-export { ZERO_WEIGHTS, weightsFromLegacy } from "./types";
+export type { BlendWeights, Cue, EngineTuning, Rig, SynthesisPayload } from "./types";
+export { DEFAULT_TUNING, ZERO_WEIGHTS, weightsFromLegacy } from "./types";

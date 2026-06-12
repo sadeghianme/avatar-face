@@ -35,6 +35,28 @@ export interface SynthesisPayload {
   cached: boolean;
 }
 
+/** Live-adjustable animation parameters (all multipliers/thresholds). */
+export interface EngineTuning {
+  /** Scales all mouth displacement (jaw, lips). 1 = default. */
+  mouthOpen: number;
+  /** Scales viseme approach rates. <1 smoother/lazier, >1 snappier. */
+  smoothness: number;
+  /** Mouth openness above which teeth appear (0..1). */
+  teethThreshold: number;
+  /** Teeth band height as a fraction of mouth width. */
+  teethHeight: number;
+  /** Scales idle/speech head motion. 0 disables. */
+  headMotion: number;
+}
+
+export const DEFAULT_TUNING: EngineTuning = {
+  mouthOpen: 1,
+  smoothness: 1,
+  teethThreshold: 0.45,
+  teethHeight: 0.07,
+  headMotion: 1,
+};
+
 export const ZERO_WEIGHTS: BlendWeights = {
   jawOpen: 0,
   mouthClose: 0,

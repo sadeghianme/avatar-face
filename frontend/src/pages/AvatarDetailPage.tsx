@@ -10,6 +10,7 @@ import { EmbedSnippet } from "../components/EmbedSnippet";
 import { PrepProgress } from "../components/PrepProgress";
 import { SpeakPanel } from "../components/SpeakPanel";
 import { StatusBadge } from "../components/StatusBadge";
+import { TuningPanel } from "../components/TuningPanel";
 import { api } from "../lib/api";
 import { useOrg } from "../lib/org";
 import type { Avatar } from "../lib/types";
@@ -141,6 +142,11 @@ export function AvatarDetailPage() {
           </div>
           <div className="flex flex-col gap-6">
             <SpeakPanel engine={engine} orgId={current.id} />
+            <TuningPanel
+              engine={engine}
+              avatarId={avatar.id}
+              is3d={avatar.kind === "model3d"}
+            />
             <EmbedSnippet avatarId={avatar.id} />
           </div>
         </div>

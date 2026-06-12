@@ -14,7 +14,7 @@
  * - A `destroyed` flag makes mount -> unmount -> mount safe under React
  *   StrictMode.
  */
-import { BlendWeights, Cue, Rig, ZERO_WEIGHTS } from "./types";
+import { BlendWeights, Cue, DEFAULT_TUNING, EngineTuning, Rig, ZERO_WEIGHTS } from "./types";
 
 // Canonical MediaPipe brow rows, inner -> outer.
 const LEFT_BROW = [55, 65, 52, 53, 46];
@@ -129,6 +129,8 @@ export class AvatarEngine {
   private onAudioEnd: (() => void) | null = null;
 
   debugMesh: boolean;
+  /** Live animation parameters — mutate freely, applied next frame. */
+  tuning: EngineTuning = { ...DEFAULT_TUNING };
   private fullPhoto: boolean;
   // Source crop (rig-image coords) that the canvas displays.
   private crop = { x: 0, y: 0, w: 0, h: 0 };
@@ -406,7 +408,10 @@ export class AvatarEngine {
     const keys = Object.keys(this.weights) as (keyof BlendWeights)[];
     for (const key of keys) {
       const target = this.targetWeights[key];
-      const rate = target > this.weights[key] ? 0.28 : 0.16;
+      const rate = Math.min(
+        0.6,
+        (target > this.weights[key] ? 0.28 : 0.16) * this.tuning.smoothness
+      );
       this.weights[key] += (target - this.weights[key]) * rate;
     }
 
@@ -486,8 +491,8 @@ export class AvatarEngine {
       if (Math.abs(nx) > 0.55) dy -= w.mouthSmile * mh * 0.16 * (Math.abs(nx) - 0.55);
       // mouthClose: collapse inner ring toward the lip line.
       if (innerSet.has(i)) dy += (mcy - pts[i].y) * w.mouthClose * 0.8;
-      pts[i].x += dx;
-      pts[i].y += dy;
+      pts[i].x += dx * this.tuning.mouthOpen;
+      pts[i].y += dy * this.tuning.mouthOpen;
     }
 
     // Chin/jaw follows jawOpen with radial falloff below the mouth.
@@ -498,7 +503,7 @@ export class AvatarEngine {
         if (dyFromMouth <= 0) continue;
         const dist = Math.hypot(pts[i].x - mcx, dyFromMouth);
         const falloff = Math.max(0, 1 - dist / (mw * 1.4));
-        pts[i].y += w.jawOpen * mh * 0.3 * falloff;
+        pts[i].y += w.jawOpen * mh * 0.3 * falloff * this.tuning.mouthOpen;
       }
     }
 
@@ -554,7 +559,7 @@ export class AvatarEngine {
     const idleYaw = Math.sin(t * 0.43) * 0.25 + Math.sin(t * 0.117) * 0.2;
     const idlePitch = Math.sin(t * 0.31 + 1.3) * 0.22;
     const nod = this.nodPhase < 1 ? Math.sin(this.nodPhase * Math.PI) * 0.8 : 0;
-    const amp = 0.3 + this.energy * 0.5;
+    const amp = (0.3 + this.energy * 0.5) * this.tuning.headMotion;
     const yaw = idleYaw * amp * fw * 0.05;
     const pitch = (idlePitch * amp + nod * this.energy) * fh * 0.04;
     for (const p of pts) {
@@ -701,7 +706,7 @@ export class AvatarEngine {
     const interiorAlpha = Math.min(1, (openness - 0.12) / 0.15);
     // Teeth only peek on wide-open sounds; most speech shows just the
     // dark interior, like a real mouth at conversation distance.
-    const showTeeth = openness > 0.45;
+    const showTeeth = openness > this.tuning.teethThreshold;
 
     // ANGLE-SORT around the centroid — raw index order self-intersects.
     const sorted = [...ring]
@@ -740,10 +745,10 @@ export class AvatarEngine {
     const lowerY = cy + mouthH / 2;
     // Short upper band only — at conversation distance you don't see
     // distinct teeth or a lower row, just a soft light strip under the lip.
-    const toothH = mouthW * 0.07;
+    const toothH = mouthW * this.tuning.teethHeight;
 
     if (showTeeth) {
-      const teethAlpha = Math.min(1, (openness - 0.45) / 0.2);
+      const teethAlpha = Math.min(1, (openness - this.tuning.teethThreshold) / 0.2);
       ctx.save();
       ctx.globalAlpha = interiorAlpha * teethAlpha * 0.9;
       // Single rounded band, slightly narrower than the mouth.

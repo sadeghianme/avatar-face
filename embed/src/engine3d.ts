@@ -15,7 +15,7 @@ import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
 const BASIS_TRANSCODER_PATH = "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/basis/";
 
 import { prepareCues } from "./engine";
-import { Cue } from "./types";
+import { Cue, DEFAULT_TUNING, EngineTuning } from "./types";
 
 // Oculus viseme -> Ready Player Me morph-target name. Note ih/oh/ou are
 // I/O/U in RPM's naming.
@@ -75,6 +75,9 @@ export class Avatar3DEngine {
   private neckRest = new THREE.Euler();
   private destroyed = false;
   private useArkit = false;
+  /** Live animation parameters — mouthOpen/smoothness/headMotion apply
+   * (teeth are part of the model's own geometry in 3D). */
+  tuning: EngineTuning = { ...DEFAULT_TUNING };
   private raf = 0;
   private startTime = performance.now();
 
@@ -269,8 +272,11 @@ export class Avatar3DEngine {
     const targets = this.cueTargets(now);
     let jaw = 0;
     for (const name of MORPH_NAMES) {
-      const target = targets[name] ?? 0;
-      const rate = target > this.morphWeights[name] ? 0.35 : 0.2;
+      const target = Math.min(1, (targets[name] ?? 0) * this.tuning.mouthOpen);
+      const rate = Math.min(
+        0.6,
+        (target > this.morphWeights[name] ? 0.35 : 0.2) * this.tuning.smoothness
+      );
       this.morphWeights[name] += (target - this.morphWeights[name]) * rate;
       if (name !== "viseme_sil") jaw = Math.max(jaw, this.morphWeights[name]);
     }
@@ -331,7 +337,7 @@ export class Avatar3DEngine {
     }
     if (this.nodPhase < 1) this.nodPhase = Math.min(1, this.nodPhase + 16 / 650);
     const nod = this.nodPhase < 1 ? Math.sin(this.nodPhase * Math.PI) : 0;
-    const amp = 0.35 + this.energy * 0.65;
+    const amp = (0.35 + this.energy * 0.65) * this.tuning.headMotion;
     if (this.headBone) {
       this.headBone.rotation.y = this.headRest.y + (Math.sin(t * 0.43) * 0.05 + Math.sin(t * 0.117) * 0.04) * amp;
       this.headBone.rotation.x = this.headRest.x + Math.sin(t * 0.31 + 1.3) * 0.03 * amp + nod * 0.05 * this.energy;

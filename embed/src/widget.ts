@@ -19,7 +19,7 @@ import { AvatarEngine } from "./engine";
 import type { Avatar3DEngine } from "./engine3d";
 import { SpeechPlayer, SpeechQueue } from "./speech";
 import { listen, sttSupported, ListenOptions } from "./stt";
-import { Rig, SynthesisPayload } from "./types";
+import { EngineTuning, Rig, SynthesisPayload } from "./types";
 
 interface LivefaceApi {
   speak(text: string): Promise<void>;
@@ -27,6 +27,8 @@ interface LivefaceApi {
   isSpeaking(): boolean;
   listen(options?: ListenOptions): Promise<string>;
   sttSupported(): boolean;
+  /** Adjust animation live, e.g. Liveface.tune({ mouthOpen: 1.3 }). */
+  tune(partial: Partial<EngineTuning>): void;
   engine: SpeechPlayer | null;
 }
 
@@ -128,6 +130,9 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     isSpeaking: () => queue.isSpeaking(),
     listen: (options?: ListenOptions) => listen(options),
     sttSupported,
+    tune: (partial: Partial<EngineTuning>) => {
+      Object.assign((engine as unknown as { tuning: EngineTuning }).tuning, partial);
+    },
     engine,
   };
   canvas.dispatchEvent(new CustomEvent("liveface:ready", { bubbles: true }));
