@@ -68,8 +68,10 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
   const avatarId = script.dataset.avatar;
   const apiKey = script.dataset.key;
   const apiBase = (script.dataset.api ?? new URL(script.src).origin).replace(/\/$/, "");
-  const provider = script.dataset.provider ?? "offline";
-  const voice = script.dataset.voice ?? "offline-warm";
+  // Default to the visitor's free system voices when the browser has them.
+  const provider =
+    script.dataset.provider ?? (BrowserTTS.supported() ? "browser" : "offline");
+  const voice = script.dataset.voice ?? (provider === "browser" ? "" : "offline-warm");
   const locale = script.dataset.locale ?? "en-US";
   const size = Number(script.dataset.size ?? 320);
   if (!avatarId || !apiKey) {
@@ -130,7 +132,7 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
 
   window.Liveface = {
     speak: (text: string) =>
-      browserTts ? browserTts.speak(text, voice === "offline-warm" ? undefined : voice, locale) : queue.speak(text),
+      browserTts ? browserTts.speak(text, voice || undefined, locale) : queue.speak(text),
     stop: () => {
       queue.stop();
       browserTts?.stop();

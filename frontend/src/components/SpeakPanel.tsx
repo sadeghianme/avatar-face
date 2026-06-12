@@ -22,11 +22,13 @@ export function SpeakPanel({
 }) {
   const { t, i18n } = useTranslation();
   const [text, setText] = useState("");
-  const [selection, setSelection] = useState<VoiceSelection>({
-    provider: "offline",
-    voice: "offline-warm",
-    locale: "en-US",
-  });
+  // Default to the device's real voices when available; the offline tone
+  // generator is the zero-dependency fallback, not the experience.
+  const [selection, setSelection] = useState<VoiceSelection>(() =>
+    BrowserTTS.supported()
+      ? { provider: BROWSER_PROVIDER, voice: "", locale: "en-US" }
+      : { provider: "offline", voice: "offline-warm", locale: "en-US" }
+  );
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
