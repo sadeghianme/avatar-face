@@ -78,6 +78,9 @@ export class BrowserTTS {
     return this.active;
   }
 
+  private heartbeat = 0;
+  private startTimeout = 0;
+
   speak(text: string, voiceURI?: string, lang?: string): Promise<void> {
     this.stop();
     return new Promise((resolve, reject) => {
@@ -93,10 +96,17 @@ export class BrowserTTS {
       const estimate = Math.max(600, text.length * 60);
       const perChar = estimate / Math.max([...text].length, 1);
       const cues = estimatedCues(text, estimate);
+      let settled = false;
 
       utterance.onstart = () => {
+        clearTimeout(this.startTimeout);
         this.active = true;
         this.player.playCues(cues);
+        // Chrome bug #2: long speech silently dies after ~15s unless the
+        // engine is poked with resume() periodically.
+        this.heartbeat = window.setInterval(() => {
+          if (speechSynthesis.speaking) speechSynthesis.resume();
+        }, 5000);
       };
       utterance.onboundary = (event) => {
         if (typeof event.charIndex === "number") {
@@ -104,24 +114,44 @@ export class BrowserTTS {
         }
       };
       const finish = () => {
+        clearInterval(this.heartbeat);
+        clearTimeout(this.startTimeout);
         this.active = false;
         this.player.stopSpeech();
       };
       utterance.onend = () => {
         finish();
+        settled = true;
         resolve();
       };
       utterance.onerror = (event) => {
         finish();
+        settled = true;
         // Cancellation must not surface as an error.
         if (event.error === "canceled" || event.error === "interrupted") resolve();
         else reject(new Error(`speechSynthesis: ${event.error}`));
       };
-      speechSynthesis.speak(utterance);
+
+      // Chrome bug #1: speak() in the same tick as cancel() is silently
+      // dropped. Defer the actual speak, and if onstart never fires the
+      // promise must still settle so callers don't hang forever.
+      setTimeout(() => {
+        speechSynthesis.resume(); // a stuck paused engine also blocks speech
+        speechSynthesis.speak(utterance);
+        this.startTimeout = window.setTimeout(() => {
+          if (!settled && !speechSynthesis.speaking) {
+            finish();
+            settled = true;
+            reject(new Error("speechSynthesis: utterance never started"));
+          }
+        }, 4000);
+      }, 100);
     });
   }
 
   stop(): void {
+    clearInterval(this.heartbeat);
+    clearTimeout(this.startTimeout);
     if (BrowserTTS.supported()) speechSynthesis.cancel();
     if (this.active) {
       this.active = false;
