@@ -699,7 +699,9 @@ export class AvatarEngine {
     // teeth/tongue when the mouth is genuinely open — a thin part shows a
     // soft dark line, not a flickering teeth strip.
     const interiorAlpha = Math.min(1, (openness - 0.12) / 0.15);
-    const showTeeth = openness > 0.32;
+    // Teeth only peek on wide-open sounds; most speech shows just the
+    // dark interior, like a real mouth at conversation distance.
+    const showTeeth = openness > 0.45;
 
     // ANGLE-SORT around the centroid — raw index order self-intersects.
     const sorted = [...ring]
@@ -736,33 +738,37 @@ export class AvatarEngine {
     const jaw = this.weights.jawOpen;
     const upperY = cy - mouthH / 2;
     const lowerY = cy + mouthH / 2;
-    // Anatomically fixed tooth height relative to mouth WIDTH (stable),
-    // hanging from the lips; opening grows the dark gap between rows.
-    const toothH = mouthW * 0.12;
+    // Short upper band only — at conversation distance you don't see
+    // distinct teeth or a lower row, just a soft light strip under the lip.
+    const toothH = mouthW * 0.07;
 
     if (showTeeth) {
-      // Gum line + upper teeth.
-      ctx.fillStyle = "#9e5a55";
-      ctx.fillRect(cx - mouthW / 2, upperY, mouthW, toothH * 0.25);
-      ctx.fillStyle = "#f3eee4";
-      const teeth = 8;
-      const toothW = mouthW / teeth;
-      for (let i = 0; i < teeth; i++) {
-        const tx = cx - mouthW / 2 + i * toothW;
+      const teethAlpha = Math.min(1, (openness - 0.45) / 0.2);
+      ctx.save();
+      ctx.globalAlpha = interiorAlpha * teethAlpha * 0.9;
+      // Single rounded band, slightly narrower than the mouth.
+      const bandW = mouthW * 0.82;
+      ctx.fillStyle = "#e9e2d6";
+      ctx.beginPath();
+      ctx.moveTo(cx - bandW / 2, upperY);
+      ctx.lineTo(cx + bandW / 2, upperY);
+      ctx.quadraticCurveTo(cx + bandW / 2, upperY + toothH, cx + bandW * 0.4, upperY + toothH);
+      ctx.lineTo(cx - bandW * 0.4, upperY + toothH);
+      ctx.quadraticCurveTo(cx - bandW / 2, upperY + toothH, cx - bandW / 2, upperY);
+      ctx.closePath();
+      ctx.fill();
+      // Faint tooth separations, barely-there.
+      ctx.strokeStyle = "rgba(120, 90, 80, 0.18)";
+      ctx.lineWidth = Math.max(0.5, mouthW * 0.006);
+      for (let i = 1; i < 6; i++) {
+        const tx = cx - bandW / 2 + (bandW * i) / 6;
         ctx.beginPath();
-        ctx.moveTo(tx + 0.5, upperY + toothH * 0.2);
-        ctx.lineTo(tx + toothW - 0.5, upperY + toothH * 0.2);
-        ctx.lineTo(tx + toothW - 1, upperY + toothH);
-        ctx.quadraticCurveTo(tx + toothW / 2, upperY + toothH * 1.15, tx + 1, upperY + toothH);
-        ctx.closePath();
-        ctx.fill();
+        ctx.moveTo(tx, upperY + toothH * 0.15);
+        ctx.lineTo(tx, upperY + toothH * 0.85);
+        ctx.stroke();
       }
-      // Lower teeth hang up from the lower lip.
-      ctx.fillStyle = "#e8e2d4";
-      for (let i = 0; i < teeth; i++) {
-        const tx = cx - mouthW / 2 + i * toothW;
-        ctx.fillRect(tx + 1, lowerY - toothH * 0.7, toothW - 2, toothH * 0.7);
-      }
+      ctx.restore();
+      ctx.globalAlpha = interiorAlpha;
     }
 
     // Tongue rises with jaw opening; center groove when open.
