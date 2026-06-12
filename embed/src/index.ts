@@ -5,6 +5,8 @@ export type { EngineOptions } from "./engine";
 // both load it on demand: import("@liveface/embed/engine3d") / liveface-3d.js.
 export { SpeechQueue, splitSentences } from "./speech";
 export type { SynthFn, SpeechPlayer } from "./speech";
+export { BrowserTTS, estimatedCues } from "./browser-tts";
+export type { CuePlayer } from "./browser-tts";
 export { listen, sttSupported } from "./stt";
 export type { ListenOptions } from "./stt";
 export type { BlendWeights, Cue, EngineTuning, Rig, SynthesisPayload } from "./types";

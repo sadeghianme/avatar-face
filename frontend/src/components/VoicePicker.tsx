@@ -1,9 +1,12 @@
+import { BrowserTTS } from "@liveface/embed";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../lib/api";
 import type { Provider, Voice } from "../lib/types";
+
+export const BROWSER_PROVIDER = "browser";
 
 export interface VoiceSelection {
   provider: string;
@@ -21,11 +24,28 @@ export function VoicePicker({
   const { t } = useTranslation();
   const { data: providers } = useQuery({
     queryKey: ["tts-providers"],
-    queryFn: () => api.get<Provider[]>("/tts/providers"),
+    queryFn: async () => {
+      const server = await api.get<Provider[]>("/tts/providers");
+      // Free local voices via the Web Speech API, when the browser has them.
+      return BrowserTTS.supported()
+        ? [{ name: BROWSER_PROVIDER, display_name: "Browser voice (free)" }, ...server]
+        : server;
+    },
   });
   const { data: voices } = useQuery({
     queryKey: ["tts-voices", value.provider],
-    queryFn: () => api.get<Voice[]>(`/tts/providers/${value.provider}/voices`),
+    queryFn: async (): Promise<Voice[]> => {
+      if (value.provider === BROWSER_PROVIDER) {
+        const list = await BrowserTTS.voices();
+        return list.map((v) => ({
+          id: v.voiceURI,
+          name: v.name,
+          locale: v.lang,
+          gender: "neutral",
+        }));
+      }
+      return api.get<Voice[]>(`/tts/providers/${value.provider}/voices`);
+    },
     enabled: Boolean(value.provider),
   });
 

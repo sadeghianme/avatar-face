@@ -279,6 +279,20 @@ export class AvatarEngine {
     }
   }
 
+  /** Drive lip-sync from an externally played voice (e.g. speechSynthesis):
+   * cues only, no audio element. */
+  playCues(cues: Cue[]): void {
+    this.stopAudio();
+    this.cues = prepareCues(cues);
+    this.speaking = true;
+    this.cueStart = performance.now();
+  }
+
+  /** Re-align the cue clock to a known position in the track (ms). */
+  syncCueTime(ms: number): void {
+    this.cueStart = performance.now() - ms;
+  }
+
   stopSpeech(): void {
     this.stopAudio();
     this.speaking = false;

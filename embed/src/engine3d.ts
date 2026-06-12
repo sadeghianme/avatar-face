@@ -202,6 +202,19 @@ export class Avatar3DEngine {
     playPromise?.catch(() => audio === this.currentAudio && this.finishSpeech());
   }
 
+  /** Drive lip-sync from an externally played voice (e.g. speechSynthesis). */
+  playCues(cues: Cue[]): void {
+    this.stopAudio();
+    this.cues = prepareCues(cues);
+    this.speaking = true;
+    this.cueStart = performance.now();
+  }
+
+  /** Re-align the cue clock to a known position in the track (ms). */
+  syncCueTime(ms: number): void {
+    this.cueStart = performance.now() - ms;
+  }
+
   stopSpeech(): void {
     this.stopAudio();
     this.speaking = false;

@@ -15,6 +15,7 @@
  *   Liveface.listen({lang}) — browser STT, resolves with the transcript
  *   Liveface.sttSupported()
  */
+import { BrowserTTS, CuePlayer } from "./browser-tts";
 import { AvatarEngine } from "./engine";
 import type { Avatar3DEngine } from "./engine3d";
 import { SpeechPlayer, SpeechQueue } from "./speech";
@@ -123,11 +124,18 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     return response.json();
   };
   const queue = new SpeechQueue(engine, synth);
+  // data-provider="browser": free local speechSynthesis voices.
+  const useBrowserVoice = provider === "browser" && BrowserTTS.supported();
+  const browserTts = useBrowserVoice ? new BrowserTTS(engine as unknown as CuePlayer) : null;
 
   window.Liveface = {
-    speak: (text: string) => queue.speak(text),
-    stop: () => queue.stop(),
-    isSpeaking: () => queue.isSpeaking(),
+    speak: (text: string) =>
+      browserTts ? browserTts.speak(text, voice === "offline-warm" ? undefined : voice, locale) : queue.speak(text),
+    stop: () => {
+      queue.stop();
+      browserTts?.stop();
+    },
+    isSpeaking: () => (browserTts ? browserTts.isSpeaking() : queue.isSpeaking()),
     listen: (options?: ListenOptions) => listen(options),
     sttSupported,
     tune: (partial: Partial<EngineTuning>) => {

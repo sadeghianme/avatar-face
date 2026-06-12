@@ -1,7 +1,9 @@
 import {
+  BrowserTTS,
   listen,
   SpeechQueue,
   sttSupported,
+  type CuePlayer,
   type SpeechPlayer,
   type SynthesisPayload,
 } from "@liveface/embed";
@@ -9,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api, ApiError } from "../lib/api";
-import { VoicePicker, type VoiceSelection } from "./VoicePicker";
+import { BROWSER_PROVIDER, VoicePicker, type VoiceSelection } from "./VoicePicker";
 
 export function SpeakPanel({
   engine,
@@ -44,14 +46,31 @@ export function SpeakPanel({
     });
   }, [engine, orgId]);
 
-  useEffect(() => () => queue?.stop(), [queue]);
+  // Free local voices: speechSynthesis plays, the engine just gets cues.
+  const browserTts = useMemo(
+    () => (engine ? new BrowserTTS(engine as unknown as CuePlayer) : null),
+    [engine]
+  );
+
+  useEffect(
+    () => () => {
+      queue?.stop();
+      browserTts?.stop();
+    },
+    [queue, browserTts]
+  );
 
   const speak = async () => {
-    if (!queue || !text.trim()) return;
+    if (!text.trim()) return;
     setError(null);
     setBusy(true);
     try {
-      await queue.speak(text);
+      const s = selectionRef.current;
+      if (s.provider === BROWSER_PROVIDER) {
+        await browserTts?.speak(text, s.voice, s.locale);
+      } else {
+        await queue?.speak(text);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));
     } finally {
@@ -95,6 +114,7 @@ export function SpeakPanel({
           disabled={!queue}
           onClick={() => {
             queue?.stop();
+            browserTts?.stop();
             setBusy(false);
           }}
         >
