@@ -33,11 +33,14 @@ async def storage_get(
         raise NotFound404("Object not found", code="object_not_found")
     data = await storage.get_bytes(key)
     media_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
+    # Rig JSON is mutable (manual fit adjustments rewrite it in place); a
+    # cached copy would make saved adjustments invisible until expiry.
+    cache = "no-cache" if key.endswith(".json") else "private, max-age=300"
     return Response(
         content=data,
         media_type=media_type,
         # Third-party embed pages fetch textures/audio cross-origin.
-        headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=300"},
+        headers={"Access-Control-Allow-Origin": "*", "Cache-Control": cache},
     )
 
 

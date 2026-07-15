@@ -16,6 +16,7 @@ from app.schemas.avatar import (
     AvatarDetail,
     AvatarFromUrl,
     AvatarOut,
+    RigAdjust,
 )
 from app.services.rig import process_avatar
 from app.services.storage import get_storage
@@ -180,6 +181,51 @@ async def generate_3d(
     await get_storage().put_bytes(avatar.image_key, glb, GLB_CONTENT_TYPE)
     await db.commit()
     background.add_task(process_avatar, avatar.id)
+    return avatar
+
+
+@router.post("/{avatar_id}/rig-adjust", response_model=AvatarOut)
+async def rig_adjust(avatar_id: str, body: RigAdjust, ctx: OrgMember, db: DB) -> Avatar:
+    """Manual fit correction (the auto-detected landmarks can miss on
+    stylized/rotated faces): translate+scale the mouth cluster and translate
+    each eye cluster, then persist the rewritten rig JSON."""
+    import json as _json
+
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    if avatar.kind != AvatarKind.photo or avatar.status != AvatarStatus.ready or not avatar.rig_key:
+        raise Conflict409("Avatar rig is not adjustable", code="not_adjustable")
+
+    storage = get_storage()
+    rig = _json.loads(await storage.get_bytes(avatar.rig_key))
+    points = rig["points"]
+
+    # Mouth: scale about its centroid, then translate.
+    mouth_indices = set(rig.get("mouth_indices", []))
+    if mouth_indices:
+        mcx = sum(points[i][0] for i in mouth_indices) / len(mouth_indices)
+        mcy = sum(points[i][1] for i in mouth_indices) / len(mouth_indices)
+        for i in mouth_indices:
+            points[i][0] = mcx + (points[i][0] - mcx) * body.mouth_scale + body.mouth_dx
+            points[i][1] = mcy + (points[i][1] - mcy) * body.mouth_scale + body.mouth_dy
+
+    # Eyes: translate lids + iris clusters together.
+    left_eye = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160,
+                161, 246, 468, 469, 470, 471, 472]
+    right_eye = [263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386,
+                 387, 388, 466, 473, 474, 475, 476, 477]
+    for cluster, dx, dy in (
+        (left_eye, body.left_eye_dx, body.left_eye_dy),
+        (right_eye, body.right_eye_dx, body.right_eye_dy),
+    ):
+        if dx or dy:
+            for i in cluster:
+                points[i][0] += dx
+                points[i][1] += dy
+
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    rig["face_box"] = [min(xs), min(ys), max(xs), max(ys)]
+    await storage.put_bytes(avatar.rig_key, _json.dumps(rig).encode(), "application/json")
     return avatar
 
 

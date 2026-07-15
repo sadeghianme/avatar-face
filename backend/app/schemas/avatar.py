@@ -19,6 +19,19 @@ class AvatarFromUrl(BaseModel):
     name: str = Field(default="", max_length=128)
 
 
+class RigAdjust(BaseModel):
+    """Manual fit correction, in ORIGINAL-image pixels. Applied to the
+    stored rig so both texture mapping and deformation move together."""
+
+    mouth_dx: float = Field(default=0, ge=-2000, le=2000)
+    mouth_dy: float = Field(default=0, ge=-2000, le=2000)
+    mouth_scale: float = Field(default=1, ge=0.4, le=2.5)
+    left_eye_dx: float = Field(default=0, ge=-2000, le=2000)
+    left_eye_dy: float = Field(default=0, ge=-2000, le=2000)
+    right_eye_dx: float = Field(default=0, ge=-2000, le=2000)
+    right_eye_dy: float = Field(default=0, ge=-2000, le=2000)
+
+
 class AvatarOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -103,6 +103,10 @@ export class AvatarEngine {
 
   private basePoints: Point[] = []; // canvas space, neutral pose
   private texPoints: Point[] = []; // texture space (naturalWidth/Height)
+  // Mouth-region subdivision: extra midpoint vertices (index >= 478) that
+  // follow their two parents, and the refined triangle list using them.
+  private derivedParents: [number, number][] = [];
+  private triangles: [number, number, number][] = [];
   private innerRing: number[] = [];
 
   // Animation state
@@ -148,6 +152,7 @@ export class AvatarEngine {
     ctx.imageSmoothingQuality = "high";
     this.innerRing = this.validInnerRing();
     this.computeFraming();
+    this.subdivideMouthRegion();
     this.startTime = performance.now();
     this.nextBlinkAt = this.startTime + 1200 + Math.random() * 2000;
     this.nextNodAt = this.startTime + 2500;
@@ -205,6 +210,65 @@ export class AvatarEngine {
       x: x * this.scale + this.offsetX,
       y: y * this.scale + this.offsetY,
     }));
+  }
+
+  /**
+   * Refine the mesh around the mouth: 1:4 subdivide every triangle with at
+   * least two vertices near the mouth. Big triangles are what make lip
+   * deformation look faceted — midpoint vertices (tracked by parent pair)
+   * follow the warp smoothly at near-zero cost (~200 extra triangles).
+   */
+  private subdivideMouthRegion(): void {
+    const mouth = this.rig.mouth_indices ?? [];
+    if (!mouth.length) {
+      this.triangles = this.rig.triangles.map((t) => [...t] as [number, number, number]);
+      return;
+    }
+    let mcx = 0;
+    let mcy = 0;
+    for (const i of mouth) {
+      mcx += this.basePoints[i].x;
+      mcy += this.basePoints[i].y;
+    }
+    mcx /= mouth.length;
+    mcy /= mouth.length;
+    const xs = mouth.map((i) => this.basePoints[i].x);
+    const radius = Math.max((Math.max(...xs) - Math.min(...xs)) * 0.95, 8);
+    const near = new Set<number>();
+    for (let i = 0; i < this.basePoints.length; i++) {
+      if (Math.hypot(this.basePoints[i].x - mcx, this.basePoints[i].y - mcy) < radius) {
+        near.add(i);
+      }
+    }
+
+    const midCache = new Map<string, number>();
+    const midpoint = (a: number, b: number): number => {
+      const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+      let index = midCache.get(key);
+      if (index === undefined) {
+        index = this.basePoints.length + this.derivedParents.length;
+        midCache.set(key, index);
+        this.derivedParents.push([a, b]);
+        this.texPoints.push({
+          x: (this.texPoints[a].x + this.texPoints[b].x) / 2,
+          y: (this.texPoints[a].y + this.texPoints[b].y) / 2,
+        });
+      }
+      return index;
+    };
+
+    this.triangles = [];
+    for (const [a, b, c] of this.rig.triangles) {
+      const inside = Number(near.has(a)) + Number(near.has(b)) + Number(near.has(c));
+      if (inside >= 2) {
+        const ab = midpoint(a, b);
+        const bc = midpoint(b, c);
+        const ca = midpoint(c, a);
+        this.triangles.push([a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]);
+      } else {
+        this.triangles.push([a, b, c]);
+      }
+    }
   }
 
   /**
@@ -509,15 +573,25 @@ export class AvatarEngine {
       pts[i].y += dy * this.tuning.mouthOpen;
     }
 
-    // Chin/jaw follows jawOpen with radial falloff below the mouth.
+    // Chin/jaw follows jawOpen with radial falloff below the mouth; cheeks
+    // beside the corners bulge outward slightly as the jaw opens.
     if (w.jawOpen > 0.01) {
+      const mouthSet = new Set(mouthIdx);
       for (let i = 0; i < pts.length; i++) {
-        if (mouthIdx.includes(i)) continue;
+        if (mouthSet.has(i)) continue;
+        const dx = pts[i].x - mcx;
         const dyFromMouth = pts[i].y - mcy;
-        if (dyFromMouth <= 0) continue;
-        const dist = Math.hypot(pts[i].x - mcx, dyFromMouth);
-        const falloff = Math.max(0, 1 - dist / (mw * 1.4));
-        pts[i].y += w.jawOpen * mh * 0.3 * falloff * this.tuning.mouthOpen;
+        if (dyFromMouth > 0) {
+          const dist = Math.hypot(dx, dyFromMouth);
+          const falloff = Math.max(0, 1 - dist / (mw * 1.4));
+          pts[i].y += w.jawOpen * mh * 0.3 * falloff * this.tuning.mouthOpen;
+        }
+        // Cheek bulge: lateral points near mouth height push outward.
+        const lateral = Math.abs(dx) - mw * 0.4;
+        if (lateral > 0 && lateral < mw * 0.8 && Math.abs(dyFromMouth) < mh * 2.5) {
+          const cheekFalloff = 1 - lateral / (mw * 0.8);
+          pts[i].x += Math.sign(dx) * w.jawOpen * mw * 0.02 * cheekFalloff * this.tuning.mouthOpen;
+        }
       }
     }
 
@@ -604,6 +678,12 @@ export class AvatarEngine {
       }
     }
 
+    // Derived midpoint vertices (mouth subdivision) follow their parents
+    // through EVERY layer above — computed last, from final positions.
+    for (const [a, b] of this.derivedParents) {
+      pts.push({ x: (pts[a].x + pts[b].x) / 2, y: (pts[a].y + pts[b].y) / 2 });
+    }
+
     return pts;
   }
 
@@ -632,10 +712,11 @@ export class AvatarEngine {
       this.crop.h * this.scale
     );
 
-    for (const [a, b, c] of this.rig.triangles) {
+    for (const [a, b, c] of this.triangles) {
       this.drawWarpedTriangle(pts, a, b, c);
     }
 
+    this.drawLipContactLine(pts);
     this.drawMouthInterior(pts);
 
     if (this.debugMesh) this.drawDebugMesh(pts);
@@ -687,6 +768,35 @@ export class AvatarEngine {
     ctx.clip();
     ctx.transform(a, b, c, d, e, f);
     ctx.drawImage(this.texture, 0, 0);
+    ctx.restore();
+  }
+
+  /**
+   * A soft dark line where the lips meet. Strongest when the mouth is
+   * closed (the interior isn't drawn then), fading out as it opens — gives
+   * the lips definition that the raw warp lacks.
+   */
+  private drawLipContactLine(pts: Point[]): void {
+    if (this.innerRing.length < 6) return;
+    const openness = Math.min(1, this.weights.jawOpen * 1.3 + this.weights.mouthFunnel * 0.25);
+    const alpha = 0.28 * Math.max(0, 1 - openness / 0.25);
+    if (alpha < 0.02) return;
+
+    const ring = this.innerRing.map((i) => pts[i]);
+    const cy = ring.reduce((s, p) => s + p.y, 0) / ring.length;
+    // Corner-to-corner midline through the ring, flattened to the lip seam.
+    const sorted = [...ring].sort((p, q) => p.x - q.x);
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = `rgba(70, 30, 28, ${alpha})`;
+    ctx.lineWidth = Math.max(1, (sorted[sorted.length - 1].x - sorted[0].x) * 0.018);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(sorted[0].x, cy + (sorted[0].y - cy) * 0.1);
+    for (let i = 1; i < sorted.length; i++) {
+      ctx.lineTo(sorted[i].x, cy + (sorted[i].y - cy) * 0.1);
+    }
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -821,7 +931,7 @@ export class AvatarEngine {
     ctx.save();
     ctx.strokeStyle = "rgba(0, 255, 140, 0.35)";
     ctx.lineWidth = 0.5;
-    for (const [a, b, c] of this.rig.triangles) {
+    for (const [a, b, c] of this.triangles) {
       ctx.beginPath();
       ctx.moveTo(pts[a].x, pts[a].y);
       ctx.lineTo(pts[b].x, pts[b].y);

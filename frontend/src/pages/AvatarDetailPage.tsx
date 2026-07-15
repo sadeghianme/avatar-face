@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { AdjustFitPanel } from "../components/AdjustFitPanel";
 import { Avatar3DPreview } from "../components/Avatar3DPreview";
 import { AvatarPreview } from "../components/AvatarPreview";
 import { EmbedSnippet } from "../components/EmbedSnippet";
@@ -24,6 +25,7 @@ export function AvatarDetailPage() {
   const [engine, setEngine] = useState<SpeechPlayer | null>(null);
   const [debugMesh, setDebugMesh] = useState(false);
   const [fullPhoto, setFullPhoto] = useState(false);
+  const [adjusting, setAdjusting] = useState(false);
 
   const { data: avatar, isError } = useQuery({
     queryKey: ["avatar", current?.id, avatarId],
@@ -98,9 +100,14 @@ export function AvatarDetailPage() {
           </label>
           )}
           {avatar.kind === "photo" && avatar.status === "ready" && (
-            <button className="btn-secondary" onClick={() => void generate3d()}>
-              ✨ {t("generate3d")}
-            </button>
+            <>
+              <button className="btn-secondary" onClick={() => setAdjusting((a) => !a)}>
+                🎯 {t("adjustFit")}
+              </button>
+              <button className="btn-secondary" onClick={() => void generate3d()}>
+                ✨ {t("generate3d")}
+              </button>
+            </>
           )}
           <button className="btn-danger" onClick={() => void remove()}>
             {t("delete")}
@@ -120,6 +127,12 @@ export function AvatarDetailPage() {
       {(avatar.status === "pending" || avatar.status === "processing") && (
         <div className="mb-6">
           <PrepProgress avatar={avatar} onRetry={() => void retry()} />
+        </div>
+      )}
+
+      {adjusting && avatar.status === "ready" && (
+        <div className="mb-6">
+          <AdjustFitPanel avatar={avatar} orgId={current.id} onClose={() => setAdjusting(false)} />
         </div>
       )}
 
