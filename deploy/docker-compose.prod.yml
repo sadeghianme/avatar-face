@@ -1,0 +1,40 @@
+# Production deployment behind the shared Caddy reverse proxy.
+# Run from the repo root on the server:
+#   docker compose -f deploy/docker-compose.prod.yml up -d --build
+# Requires an external `web_proxy` network (the Caddy ingress network) and a
+# `.env` file next to this compose file providing JWT_SECRET.
+
+name: liveface
+
+services:
+  liveface-api:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      PUBLIC_BASE_URL: https://liveface.mehdisadeghian.com/api
+      DATABASE_URL: sqlite+aiosqlite:////data/liveface.sqlite3
+      LOCAL_STORAGE_DIR: /data/storage
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in deploy/.env}
+      CORS_ORIGINS: https://liveface.mehdisadeghian.com
+      ENVIRONMENT: production
+    volumes:
+      - liveface_data:/data
+    networks:
+      - web_proxy
+
+  liveface-web:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    networks:
+      - web_proxy
+
+volumes:
+  liveface_data:
+
+networks:
+  web_proxy:
+    external: true

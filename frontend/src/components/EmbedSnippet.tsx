@@ -4,9 +4,10 @@ import { useTranslation } from "react-i18next";
 export function EmbedSnippet({ avatarId, apiKey }: { avatarId: string; apiKey?: string }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  // Dev: the API runs on its own port. Prod: Caddy exposes it under /api.
   const apiBase = window.location.origin.includes("localhost")
     ? "http://localhost:7002"
-    : window.location.origin;
+    : `${window.location.origin}/api`;
 
   const snippet = [
     `<script`,
