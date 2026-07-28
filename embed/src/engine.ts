@@ -600,14 +600,23 @@ export class AvatarEngine {
       let dx = 0;
       let dy = 0;
       // jawOpen: lower lip drops (scaled by how low the point sits).
-      if (ny > 0) dy += w.jawOpen * mh * 0.4 * Math.min(1, ny);
-      else dy -= w.jawOpen * mh * 0.06 * -ny; // upper lip lifts slightly
-      // pucker/funnel: narrow horizontally, push lips toward an "O".
-      dx -= (w.mouthPucker * 0.18 + w.mouthFunnel * 0.1) * nx * (mw / 2);
-      if (ny < 0) dy -= w.mouthFunnel * mh * 0.07;
-      // stretch/smile: widen; smile lifts the corners.
-      dx += (w.mouthStretch * 0.12 + w.mouthSmile * 0.07) * nx * (mw / 2);
-      if (Math.abs(nx) > 0.55) dy -= w.mouthSmile * mh * 0.16 * (Math.abs(nx) - 0.55);
+      // Amplitude is deliberately LARGE: articulate speech needs a wide
+      // peak-to-trough range. Keeping the average low is the timing model's
+      // job (consonants and rests sit near zero) — compressing the range
+      // here instead just produced a permanently half-open, mumbling mouth.
+      if (ny > 0) dy += w.jawOpen * mh * 0.9 * Math.min(1, ny);
+      else dy -= w.jawOpen * mh * 0.1 * -ny; // upper lip lifts slightly
+      // pucker/funnel: narrow horizontally and round the aperture, so
+      // "oo"/"oh" read as protrusion rather than just a smaller gap.
+      dx -= (w.mouthPucker * 0.32 + w.mouthFunnel * 0.18) * nx * (mw / 2);
+      if (ny < 0) dy -= w.mouthFunnel * mh * 0.14;
+      else dy += w.mouthFunnel * mh * 0.1;
+      // stretch/smile: widen, and pull the corners up and out.
+      dx += (w.mouthStretch * 0.26 + w.mouthSmile * 0.16) * nx * (mw / 2);
+      if (Math.abs(nx) > 0.55) dy -= w.mouthSmile * mh * 0.3 * (Math.abs(nx) - 0.55);
+      // The inner ring IS the aperture, so it must part further than the
+      // outer lips or the mouth reads as open-jawed-but-sealed.
+      if (innerSet.has(i) && ny > 0) dy += w.jawOpen * mh * 0.55;
       // mouthClose: collapse inner ring toward the lip line.
       if (innerSet.has(i)) dy += (mcy - pts[i].y) * w.mouthClose * 0.8;
       pts[i].x += dx * this.tuning.mouthOpen;
@@ -625,7 +634,7 @@ export class AvatarEngine {
         if (dyFromMouth > 0) {
           const dist = Math.hypot(dx, dyFromMouth);
           const falloff = Math.max(0, 1 - dist / (mw * 1.4));
-          pts[i].y += w.jawOpen * mh * 0.3 * falloff * this.tuning.mouthOpen;
+          pts[i].y += w.jawOpen * mh * 0.55 * falloff * this.tuning.mouthOpen;
         }
         // Cheek bulge: lateral points near mouth height push outward.
         const lateral = Math.abs(dx) - mw * 0.4;
@@ -1046,15 +1055,7 @@ export class AvatarEngine {
         this.weights.mouthFunnel * 0.25 -
         this.weights.mouthClose * 0.6
     );
-    if (openness < 0.12) return;
     const squash = 0.1 + 0.9 * openness;
-    // Fade the interior in over a range so it never pops, and only draw
-    // teeth/tongue when the mouth is genuinely open — a thin part shows a
-    // soft dark line, not a flickering teeth strip.
-    const interiorAlpha = Math.min(1, (openness - 0.12) / 0.15);
-    // Teeth only peek on wide-open sounds; most speech shows just the
-    // dark interior, like a real mouth at conversation distance.
-    const showTeeth = openness > this.tuning.teethThreshold;
 
     // ANGLE-SORT around the centroid — raw index order self-intersects.
     const sorted = [...ring]
@@ -1066,6 +1067,18 @@ export class AvatarEngine {
     const mouthW = Math.max(...xs) - Math.min(...xs);
     const mouthH = Math.max(...ys) - Math.min(...ys);
     if (mouthW < 2 || mouthH < 1.5) return; // mouth effectively closed
+
+    // What gets drawn is decided by the ACTUAL aperture we are about to
+    // paint — gap height as a fraction of mouth width — not by abstract
+    // blend weights. Keying off weights painted teeth into a 13%-of-width
+    // slit for 45% of every sentence.
+    const gapRatio = mouthH / mouthW;
+    if (gapRatio < 0.1) return; // lips together: nothing to show
+    const interiorAlpha = Math.min(1, (gapRatio - 0.1) / 0.06);
+    // The UI slider still scales this: its 0.45 default maps to a 0.22 gap.
+    const teethGap = 0.22 * (this.tuning.teethThreshold / DEFAULT_TUNING.teethThreshold);
+    const teethOpen = (gapRatio - teethGap) / 0.08;
+    const showTeeth = teethOpen > 0;
 
     ctx.save();
     // Smooth quadratic path through midpoints.
@@ -1096,7 +1109,7 @@ export class AvatarEngine {
     const toothH = mouthW * this.tuning.teethHeight;
 
     if (showTeeth) {
-      const teethAlpha = Math.min(1, (openness - this.tuning.teethThreshold) / 0.2);
+      const teethAlpha = Math.min(1, teethOpen);
       ctx.save();
       ctx.globalAlpha = interiorAlpha * teethAlpha * 0.9;
       // Single rounded band, slightly narrower than the mouth.
