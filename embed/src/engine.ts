@@ -57,7 +57,7 @@ interface Point {
  * consonants as brief shaping. Cues closer than MIN_CUE_MS are folded into
  * their predecessor, preferring vowels when they collide.
  */
-const MIN_CUE_MS = 110;
+const MIN_CUE_MS = 85;
 
 export function prepareCues(cues: Cue[]): Cue[] {
   if (cues.length <= 2) return cues;
@@ -506,9 +506,12 @@ export class AvatarEngine {
     const keys = Object.keys(this.weights) as (keyof BlendWeights)[];
     for (const key of keys) {
       const target = this.targetWeights[key];
+      // Jaws CLOSE faster than they open (muscle + gravity). Closing slower
+      // than opening left the mouth hanging open through a whole sentence —
+      // measured only 1% closed frames before this was corrected.
       const rate = Math.min(
         0.6,
-        (target > this.weights[key] ? 0.28 : 0.16) * this.tuning.smoothness
+        (target > this.weights[key] ? 0.30 : 0.40) * this.tuning.smoothness
       );
       this.weights[key] += (target - this.weights[key]) * rate;
     }
