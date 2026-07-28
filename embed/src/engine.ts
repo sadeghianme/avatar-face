@@ -542,12 +542,13 @@ export class AvatarEngine {
     if (now >= this.nextSaccadeAt) {
       const speaking = this.speaking;
       this.nextSaccadeAt = now + (speaking ? 900 : 1400) + Math.random() * (speaking ? 1600 : 2600);
-      const spread = speaking ? 0.16 : 0.3;
-      const centerBias = speaking ? 0.55 : 0.25;
-      this.gazeTarget = {
-        x: (Math.random() * 2 - 1) * spread * (1 - centerBias * Math.random()),
-        y: (Math.random() * 2 - 1) * spread * 0.5,
-      };
+      // Most fixations return to the viewer; only some wander. A face that
+      // is usually looking somewhere else reads as distracted, not alive.
+      const spread = speaking ? 0.12 : 0.18;
+      const lookAway = Math.random() < (speaking ? 0.35 : 0.5);
+      this.gazeTarget = lookAway
+        ? { x: (Math.random() * 2 - 1) * spread, y: (Math.random() * 2 - 1) * spread * 0.5 }
+        : { x: 0, y: 0 };
     }
     // Saccades are ballistic: fast jump, then a still fixation.
     this.gaze.x += (this.gazeTarget.x - this.gaze.x) * 0.35;
@@ -946,8 +947,10 @@ export class AvatarEngine {
       if (!base) continue;
       const gx = this.gaze.x * openW * 0.22 * (1 - blinkAmount);
       const gy = this.gaze.y * openW * 0.12 * (1 - blinkAmount);
-      const dx = base.x + gx;
-      const dy = base.y + gy;
+      // At rest, touch NOTHING: the mesh already drew the real eye, which
+      // is always more correct than anything we can repaint. Only when the
+      // iris actually needs to move do we patch it.
+      if (Math.hypot(gx, gy) < 0.6) continue;
 
       ctx.save();
       // Clip to the eye opening: the iris can never escape the socket.
@@ -957,15 +960,21 @@ export class AvatarEngine {
       ctx.closePath();
       ctx.clip();
 
-      // Repaint the socket, then stamp the iris at its new position.
+      // Cover ONLY the original iris (not the whole socket): lashes, tear
+      // duct, lid shading and corners stay as photographed. The cover is
+      // slightly larger than the measured iris so an imperfect landmark
+      // radius can't leave a rim of the old iris behind.
       ctx.fillStyle = layer.sclera[e];
-      ctx.fillRect(cx - openW, cy - openH, openW * 2, openH * 2);
+      ctx.beginPath();
+      ctx.arc(base.x, base.y, irisR * 1.18, 0, Math.PI * 2);
+      ctx.fill();
 
+      // Stamp the iris at its new position.
       const texC = this.texPoints[centers[e]];
       const texR = layer.irisTexRadius[e];
       ctx.save();
       ctx.beginPath();
-      ctx.arc(dx, dy, irisR, 0, Math.PI * 2);
+      ctx.arc(base.x + gx, base.y + gy, irisR, 0, Math.PI * 2);
       ctx.clip();
       ctx.drawImage(
         this.texture,
@@ -973,20 +982,12 @@ export class AvatarEngine {
         texC.y - texR * 1.15,
         texR * 2.3,
         texR * 2.3,
-        dx - irisR * 1.15,
-        dy - irisR * 1.15,
+        base.x + gx - irisR * 1.15,
+        base.y + gy - irisR * 1.15,
         irisR * 2.3,
         irisR * 2.3
       );
       ctx.restore();
-
-      // Upper-lid shadow: eyes are recessed, the top of the sclera is never
-      // as bright as the middle.
-      const shade = ctx.createLinearGradient(0, cy - openH / 2, 0, cy + openH * 0.2);
-      shade.addColorStop(0, "rgba(0,0,0,0.30)");
-      shade.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = shade;
-      ctx.fillRect(cx - openW, cy - openH, openW * 2, openH * 1.5);
       ctx.restore();
     }
   }
