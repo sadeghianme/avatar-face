@@ -13,11 +13,11 @@ services:
       dockerfile: backend/Dockerfile
     restart: unless-stopped
     environment:
-      PUBLIC_BASE_URL: https://liveface.mehdisadeghian.com/api
+      PUBLIC_BASE_URL: https://avatar.mehdisadeghian.com/api
       DATABASE_URL: sqlite+aiosqlite:////data/liveface.sqlite3
       LOCAL_STORAGE_DIR: /data/storage
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in deploy/.env}
-      CORS_ORIGINS: https://liveface.mehdisadeghian.com
+      CORS_ORIGINS: https://avatar.mehdisadeghian.com
       ENVIRONMENT: production
     volumes:
       - liveface_data:/data
