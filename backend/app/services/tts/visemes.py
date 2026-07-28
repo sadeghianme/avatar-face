@@ -99,17 +99,13 @@ def char_to_viseme(ch: str) -> str:
 
 
 def cues_from_text(text: str, duration_ms: int) -> list[dict]:
-    """Evenly spread per-character viseme cues across a known duration."""
-    chars = [c for c in text]
-    if not chars or duration_ms <= 0:
-        return [{"t": 0, "viseme": "sil"}]
-    step = duration_ms / len(chars)
-    cues: list[dict] = []
-    last = None
-    for i, ch in enumerate(chars):
-        viseme = char_to_viseme(ch)
-        if viseme != last:
-            cues.append({"t": int(i * step), "viseme": viseme})
-            last = viseme
-    cues.append({"t": duration_ms, "viseme": "sil"})
-    return cues
+    """Viseme cues for audio of a known duration.
+
+    Delegates to the phoneme-class timing model (vowels hold longer than
+    stops, punctuation buys silence, rounded shapes lead the sound) rather
+    than spreading characters evenly, which reads as off-beat.
+    """
+    # Imported here: timing depends on char_to_viseme above.
+    from app.services.tts.timing import cues_for_duration
+
+    return cues_for_duration(text, duration_ms)

@@ -34,6 +34,13 @@ const EYE_CORNERS: [number, number][] = [
   [33, 133],
   [263, 362],
 ];
+// Iris clusters (center + 4 rim points). Moving these is what makes a face
+// look alive: eyes that only blink read as dead, but eyes that drift and
+// dart are read as attentive even when nothing else moves.
+const IRIS_CLUSTERS = [
+  [468, 469, 470, 471, 472],
+  [473, 474, 475, 476, 477],
+];
 const NOSE_TIP = 4;
 
 const VOWEL_VISEMES = new Set(["aa", "E", "ih", "oh", "ou"]);
@@ -122,6 +129,10 @@ export class AvatarEngine {
   private nodPhase = 1; // 1 = finished
   private browPulsePhase = 1;
   private nextBrowPulseAt = 0;
+  // Gaze: current and target offsets in eye-widths, plus saccade timing.
+  private gaze = { x: 0, y: 0 };
+  private gazeTarget = { x: 0, y: 0 };
+  private nextSaccadeAt = 0;
   private raf = 0;
   private startTime = 0;
 
@@ -157,6 +168,7 @@ export class AvatarEngine {
     this.nextBlinkAt = this.startTime + 1200 + Math.random() * 2000;
     this.nextNodAt = this.startTime + 2500;
     this.nextBrowPulseAt = this.startTime + 1800 + Math.random() * 2500;
+    this.nextSaccadeAt = this.startTime + 600 + Math.random() * 1200;
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
     // Debug handle (last engine wins): lets a console force blinks/visemes.
@@ -516,6 +528,23 @@ export class AvatarEngine {
     }
     if (this.nodPhase < 1) this.nodPhase = Math.min(1, this.nodPhase + 16 / 650);
 
+    // Saccades: eyes jump to a new fixation, then hold. While speaking the
+    // gaze returns near-center more often (engaged with the listener);
+    // idle gaze wanders further and rests longer.
+    if (now >= this.nextSaccadeAt) {
+      const speaking = this.speaking;
+      this.nextSaccadeAt = now + (speaking ? 900 : 1400) + Math.random() * (speaking ? 1600 : 2600);
+      const spread = speaking ? 0.16 : 0.3;
+      const centerBias = speaking ? 0.55 : 0.25;
+      this.gazeTarget = {
+        x: (Math.random() * 2 - 1) * spread * (1 - centerBias * Math.random()),
+        y: (Math.random() * 2 - 1) * spread * 0.5,
+      };
+    }
+    // Saccades are ballistic: fast jump, then a still fixation.
+    this.gaze.x += (this.gazeTarget.x - this.gaze.x) * 0.35;
+    this.gaze.y += (this.gazeTarget.y - this.gaze.y) * 0.35;
+
     // Brow pulses: idle micro-expressions + emphasis while speaking.
     if (now >= this.nextBrowPulseAt) {
       this.nextBrowPulseAt = now + (this.speaking ? 1400 : 3200) + Math.random() * 2800;
@@ -629,6 +658,32 @@ export class AvatarEngine {
           const centrality = Math.max(0, 1 - ((pts[i].x - ecx) / halfW) ** 2);
           pts[i].y -= (pts[i].y - eyeTop) * amount * 0.12 * centrality;
         }
+      }
+    }
+
+    // Gaze: shift each iris cluster within its own eye opening. Scaled by
+    // eye width so it works at any framing, and damped during a blink
+    // (the lid is covering the eye anyway).
+    const gazeDamp = 1 - Math.min(1, this.blink > 0 ? Math.sin(this.blink * Math.PI) : 0);
+    for (let e = 0; e < 2; e++) {
+      const [c0, c1] = EYE_CORNERS[e];
+      const eyeWidth = Math.abs(pts[c1].x - pts[c0].x);
+      if (!eyeWidth) continue;
+      const dx = this.gaze.x * eyeWidth * gazeDamp;
+      const dy = this.gaze.y * eyeWidth * 0.55 * gazeDamp;
+      for (const i of IRIS_CLUSTERS[e]) {
+        if (!pts[i]) continue;
+        pts[i].x += dx;
+        pts[i].y += dy;
+      }
+    }
+
+    // Smiling raises the lower lid (a real smile reaches the eyes).
+    if (w.mouthSmile > 0.05) {
+      for (let e = 0; e < 2; e++) {
+        const lift = w.mouthSmile * 0.12;
+        const top = Math.min(...UPPER_LIDS[e].map((i) => pts[i].y));
+        for (const i of LOWER_LIDS[e]) pts[i].y -= (pts[i].y - top) * lift;
       }
     }
 

@@ -91,6 +91,9 @@ export class Avatar3DEngine {
   private nextBlinkAt = 0;
   private nodPhase = 1;
   private nextNodAt = 0;
+  private gaze = { x: 0, y: 0 };
+  private gazeTarget = { x: 0, y: 0 };
+  private nextSaccadeAt = 0;
   private currentAudio: HTMLAudioElement | null = null;
   private onAudioEnd: (() => void) | null = null;
 
@@ -153,6 +156,7 @@ export class Avatar3DEngine {
     const now = performance.now();
     this.nextBlinkAt = now + 1200 + Math.random() * 2000;
     this.nextNodAt = now + 2500;
+    this.nextSaccadeAt = now + 600 + Math.random() * 1200;
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
     (globalThis as { __liveface3d?: Avatar3DEngine }).__liveface3d = this;
@@ -322,6 +326,31 @@ export class Avatar3DEngine {
       }
     }
 
+    // Saccades: same behaviour as the 2D engine, expressed through the
+    // ARKit eyeLook* morphs (models that lack them simply ignore these).
+    if (now >= this.nextSaccadeAt) {
+      const spread = this.speaking ? 0.16 : 0.3;
+      this.nextSaccadeAt =
+        now + (this.speaking ? 900 : 1400) + Math.random() * (this.speaking ? 1600 : 2600);
+      this.gazeTarget = {
+        x: (Math.random() * 2 - 1) * spread,
+        y: (Math.random() * 2 - 1) * spread * 0.5,
+      };
+    }
+    this.gaze.x += (this.gazeTarget.x - this.gaze.x) * 0.35;
+    this.gaze.y += (this.gazeTarget.y - this.gaze.y) * 0.35;
+    const gazeDamp = 1 - blinkAmount;
+    const look = {
+      eyeLookOutLeft: Math.max(0, -this.gaze.x) * gazeDamp,
+      eyeLookInLeft: Math.max(0, this.gaze.x) * gazeDamp,
+      eyeLookOutRight: Math.max(0, this.gaze.x) * gazeDamp,
+      eyeLookInRight: Math.max(0, -this.gaze.x) * gazeDamp,
+      eyeLookUpLeft: Math.max(0, -this.gaze.y) * gazeDamp,
+      eyeLookUpRight: Math.max(0, -this.gaze.y) * gazeDamp,
+      eyeLookDownLeft: Math.max(0, this.gaze.y) * gazeDamp,
+      eyeLookDownRight: Math.max(0, this.gaze.y) * gazeDamp,
+    };
+
     // Apply morphs to every mesh that has them (head, teeth, eyes...).
     for (const { dictionary, influences } of this.morphMeshes) {
       if (this.useArkit) {
@@ -338,6 +367,10 @@ export class Avatar3DEngine {
       for (const lid of ["eyeBlinkLeft", "eyeBlinkRight"]) {
         const index = morphIndex(dictionary, lid);
         if (index !== undefined) influences[index] = blinkAmount;
+      }
+      for (const [name, value] of Object.entries(look)) {
+        const index = morphIndex(dictionary, name);
+        if (index !== undefined) influences[index] = value;
       }
       const brow = dictionary["browInnerUp"];
       if (brow !== undefined) influences[brow] = 0.08 + this.energy * 0.15;

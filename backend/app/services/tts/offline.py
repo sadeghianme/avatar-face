@@ -13,11 +13,9 @@ import struct
 import wave
 
 from app.services.tts.base import SynthesisResult, TTSProvider, Voice
-from app.services.tts.visemes import char_to_viseme
+from app.services.tts.timing import cues_from_segments, segment_text, total_duration_ms
 
 SAMPLE_RATE = 22050
-MS_PER_CHAR = 75
-PAUSE_VISEMES = {"sil"}
 
 # Rough formant frequency per viseme: vowels low+loud, fricatives noisy-ish.
 VISEME_PITCH: dict[str, float] = {
@@ -44,34 +42,30 @@ class OfflineTTSProvider(TTSProvider):
 
     async def synthesize(self, text: str, voice: str, locale: str) -> SynthesisResult:
         pitch_mul = 1.25 if voice == "offline-bright" else 1.0
+        # Audio and cues are generated from ONE segment list, so the mouth
+        # can never drift from the sound.
+        segments = segment_text(text)
         samples: list[float] = []
-        cues: list[dict] = []
-        last_viseme = None
-        t_ms = 0
         phase = 0.0
 
-        for ch in text:
-            viseme = char_to_viseme(ch)
-            if viseme != last_viseme:
-                cues.append({"t": t_ms, "viseme": viseme})
-                last_viseme = viseme
-            n = int(SAMPLE_RATE * MS_PER_CHAR / 1000)
-            freq = VISEME_PITCH.get(viseme, 180) * pitch_mul
+        for segment in segments:
+            n = int(SAMPLE_RATE * segment.duration_ms / 1000)
+            freq = VISEME_PITCH.get(segment.viseme, 180) * pitch_mul
+            if freq <= 0 or segment.viseme == "sil":
+                samples.extend([0.0] * n)
+                continue
             for i in range(n):
-                if freq <= 0:
-                    samples.append(0.0)
-                    continue
-                # Envelope per char so syllables are audible as pulses.
+                # Envelope per articulation so syllables pulse audibly.
                 env = math.sin(math.pi * i / n) * 0.35
                 phase += 2 * math.pi * freq / SAMPLE_RATE
                 # Base tone + a quiet octave for timbre.
                 samples.append(env * (math.sin(phase) + 0.35 * math.sin(2 * phase)))
-            t_ms += MS_PER_CHAR
 
+        t_ms = total_duration_ms(segments)
         if not samples:  # empty text still returns valid audio
             samples = [0.0] * int(SAMPLE_RATE * 0.2)
             t_ms = 200
-        cues.append({"t": t_ms, "viseme": "sil"})
+        cues = cues_from_segments(segments)
 
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wav:
