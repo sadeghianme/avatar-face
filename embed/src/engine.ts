@@ -133,6 +133,13 @@ export class AvatarEngine {
   private gaze = { x: 0, y: 0 };
   private gazeTarget = { x: 0, y: 0 };
   private nextSaccadeAt = 0;
+  // Separate iris layer: sclera colour sampled per eye, iris radius in
+  // texture pixels, and the texture->canvas scale factor.
+  private eyeLayer: {
+    sclera: string[];
+    irisTexRadius: number[];
+    texToCanvas: number;
+  } | null = null;
   private raf = 0;
   private startTime = 0;
 
@@ -164,6 +171,7 @@ export class AvatarEngine {
     this.innerRing = this.validInnerRing();
     this.computeFraming();
     this.subdivideMouthRegion();
+    this.prepareEyeLayer();
     this.startTime = performance.now();
     this.nextBlinkAt = this.startTime + 1200 + Math.random() * 2000;
     this.nextNodAt = this.startTime + 2500;
@@ -661,22 +669,11 @@ export class AvatarEngine {
       }
     }
 
-    // Gaze: shift each iris cluster within its own eye opening. Scaled by
-    // eye width so it works at any framing, and damped during a blink
-    // (the lid is covering the eye anyway).
-    const gazeDamp = 1 - Math.min(1, this.blink > 0 ? Math.sin(this.blink * Math.PI) : 0);
-    for (let e = 0; e < 2; e++) {
-      const [c0, c1] = EYE_CORNERS[e];
-      const eyeWidth = Math.abs(pts[c1].x - pts[c0].x);
-      if (!eyeWidth) continue;
-      const dx = this.gaze.x * eyeWidth * gazeDamp;
-      const dy = this.gaze.y * eyeWidth * 0.55 * gazeDamp;
-      for (const i of IRIS_CLUSTERS[e]) {
-        if (!pts[i]) continue;
-        pts[i].x += dx;
-        pts[i].y += dy;
-      }
-    }
+    // NOTE: gaze is NOT applied to iris vertices — the iris and the sclera
+    // around it share one triangulated mesh, so moving those vertices drags
+    // the whole socket and reads as wall-eyed smearing. The iris is drawn
+    // as a separate layer instead (drawEyes), which is how it actually
+    // slides across the eye.
 
     // Smiling raises the lower lid (a real smile reaches the eyes).
     if (w.mouthSmile > 0.05) {
@@ -771,6 +768,7 @@ export class AvatarEngine {
       this.drawWarpedTriangle(pts, a, b, c);
     }
 
+    this.drawEyes(pts);
     this.drawLipContactLine(pts);
     this.drawMouthInterior(pts);
 
@@ -824,6 +822,173 @@ export class AvatarEngine {
     ctx.transform(a, b, c, d, e, f);
     ctx.drawImage(this.texture, 0, 0);
     ctx.restore();
+  }
+
+  /**
+   * Measure the iris in texture space and sample a sclera colour per eye,
+   * so the iris can be redrawn as its own layer. Needs pixel access to the
+   * texture; if that's unavailable (tainted canvas) the eye layer is
+   * disabled and the avatar simply renders without gaze.
+   */
+  private prepareEyeLayer(): void {
+    const centers = [468, 473];
+    if (!this.texPoints[477]) return; // rig has no iris landmarks
+    try {
+      const off = document.createElement("canvas");
+      off.width = this.texture.naturalWidth;
+      off.height = this.texture.naturalHeight;
+      const offCtx = off.getContext("2d", { willReadFrequently: true });
+      if (!offCtx) return;
+      offCtx.drawImage(this.texture, 0, 0);
+
+      const sclera: string[] = [];
+      const irisTexRadius: number[] = [];
+      for (let e = 0; e < 2; e++) {
+        const c = this.texPoints[centers[e]];
+        const rim = IRIS_CLUSTERS[e].slice(1).map((i) => this.texPoints[i]);
+        const radius =
+          rim.reduce((s, p) => s + Math.hypot(p.x - c.x, p.y - c.y), 0) / rim.length;
+        irisTexRadius.push(radius);
+        // Sclera: sample a grid strictly INSIDE the eye-opening polygon,
+        // skipping the iris disc, and take a high percentile brightness.
+        // Sampling by radius alone lands on lashes/liner and comes back
+        // muddy; the polygon keeps every sample on actual eye.
+        const poly = [...UPPER_LIDS[e], ...LOWER_LIDS[e], ...EYE_CORNERS[e]]
+          .map((i) => this.texPoints[i])
+          .filter(Boolean);
+        const pcx = poly.reduce((s, p) => s + p.x, 0) / poly.length;
+        const pcy = poly.reduce((s, p) => s + p.y, 0) / poly.length;
+        const ordered = [...poly].sort(
+          (p, q) => Math.atan2(p.y - pcy, p.x - pcx) - Math.atan2(q.y - pcy, q.x - pcx)
+        );
+        const minX = Math.min(...ordered.map((p) => p.x));
+        const maxX = Math.max(...ordered.map((p) => p.x));
+        const minY = Math.min(...ordered.map((p) => p.y));
+        const maxY = Math.max(...ordered.map((p) => p.y));
+        const inside = (x: number, y: number) => {
+          let hit = false;
+          for (let i = 0, j = ordered.length - 1; i < ordered.length; j = i++) {
+            const a = ordered[i];
+            const b = ordered[j];
+            if (
+              a.y > y !== b.y > y &&
+              x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x
+            ) {
+              hit = !hit;
+            }
+          }
+          return hit;
+        };
+
+        const candidates: { lum: number; rgb: [number, number, number] }[] = [];
+        const steps = 12;
+        for (let ix = 0; ix <= steps; ix++) {
+          for (let iy = 0; iy <= steps; iy++) {
+            const x = minX + ((maxX - minX) * ix) / steps;
+            const y = minY + ((maxY - minY) * iy) / steps;
+            if (!inside(x, y)) continue;
+            if (Math.hypot(x - c.x, y - c.y) < radius * 1.08) continue; // iris
+            const sx = Math.max(0, Math.min(off.width - 1, Math.round(x)));
+            const sy = Math.max(0, Math.min(off.height - 1, Math.round(y)));
+            const d = offCtx.getImageData(sx, sy, 1, 1).data;
+            candidates.push({
+              lum: 0.299 * d[0] + 0.587 * d[1] + 0.114 * d[2],
+              rgb: [d[0], d[1], d[2]],
+            });
+          }
+        }
+        candidates.sort((a, b) => a.lum - b.lum);
+        // 85th percentile: the sclera, without catching a specular highlight.
+        const pick = candidates[Math.floor(candidates.length * 0.85)];
+        const [r, g, b] = pick?.rgb ?? [225, 223, 220];
+        sclera.push(`rgb(${r}, ${g}, ${b})`);
+      }
+      const texToCanvas = (this.rig.image_size[0] / this.texture.naturalWidth) * this.scale;
+      this.eyeLayer = { sclera, irisTexRadius, texToCanvas };
+    } catch {
+      this.eyeLayer = null; // cross-origin texture: skip the eye layer
+    }
+  }
+
+  /**
+   * Draw each iris as its own layer inside the eye opening: repaint the
+   * socket with sclera, then stamp the iris disc at the gaze offset. This
+   * is what lets the eye actually LOOK somewhere — warping the mesh can
+   * only smear it.
+   */
+  private drawEyes(pts: Point[]): void {
+    const layer = this.eyeLayer;
+    if (!layer) return;
+    const blinkAmount = this.blink > 0 ? Math.sin(this.blink * Math.PI) : 0;
+    if (blinkAmount > 0.75) return; // lid is covering the eye
+    const ctx = this.ctx;
+    const centers = [468, 473];
+
+    for (let e = 0; e < 2; e++) {
+      const ringIdx = [...UPPER_LIDS[e], ...LOWER_LIDS[e], ...EYE_CORNERS[e]];
+      const ring = ringIdx.map((i) => pts[i]).filter(Boolean);
+      if (ring.length < 6) continue;
+      const cx = ring.reduce((s, p) => s + p.x, 0) / ring.length;
+      const cy = ring.reduce((s, p) => s + p.y, 0) / ring.length;
+      // Angle-sort so the opening is a simple polygon (index order isn't).
+      const sorted = [...ring].sort(
+        (p, q) => Math.atan2(p.y - cy, p.x - cx) - Math.atan2(q.y - cy, q.x - cx)
+      );
+      const xs = sorted.map((p) => p.x);
+      const ys = sorted.map((p) => p.y);
+      const openW = Math.max(...xs) - Math.min(...xs);
+      const openH = Math.max(...ys) - Math.min(...ys);
+      if (openW < 3 || openH < 2) continue;
+
+      const irisR = layer.irisTexRadius[e] * layer.texToCanvas;
+      if (irisR < 1) continue;
+      const base = pts[centers[e]];
+      if (!base) continue;
+      const gx = this.gaze.x * openW * 0.22 * (1 - blinkAmount);
+      const gy = this.gaze.y * openW * 0.12 * (1 - blinkAmount);
+      const dx = base.x + gx;
+      const dy = base.y + gy;
+
+      ctx.save();
+      // Clip to the eye opening: the iris can never escape the socket.
+      ctx.beginPath();
+      ctx.moveTo(sorted[0].x, sorted[0].y);
+      for (let i = 1; i < sorted.length; i++) ctx.lineTo(sorted[i].x, sorted[i].y);
+      ctx.closePath();
+      ctx.clip();
+
+      // Repaint the socket, then stamp the iris at its new position.
+      ctx.fillStyle = layer.sclera[e];
+      ctx.fillRect(cx - openW, cy - openH, openW * 2, openH * 2);
+
+      const texC = this.texPoints[centers[e]];
+      const texR = layer.irisTexRadius[e];
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(dx, dy, irisR, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(
+        this.texture,
+        texC.x - texR * 1.15,
+        texC.y - texR * 1.15,
+        texR * 2.3,
+        texR * 2.3,
+        dx - irisR * 1.15,
+        dy - irisR * 1.15,
+        irisR * 2.3,
+        irisR * 2.3
+      );
+      ctx.restore();
+
+      // Upper-lid shadow: eyes are recessed, the top of the sclera is never
+      // as bright as the middle.
+      const shade = ctx.createLinearGradient(0, cy - openH / 2, 0, cy + openH * 0.2);
+      shade.addColorStop(0, "rgba(0,0,0,0.30)");
+      shade.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = shade;
+      ctx.fillRect(cx - openW, cy - openH, openW * 2, openH * 1.5);
+      ctx.restore();
+    }
   }
 
   /**
