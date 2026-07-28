@@ -9,6 +9,8 @@ export function EmbedSnippet({ avatarId, apiKey }: { avatarId: string; apiKey?: 
     ? "http://localhost:7002"
     : `${window.location.origin}/api`;
 
+  // The widget bundle is served BY the API, so it lives under the same
+  // base as every other API route (in production that's <origin>/api).
   const snippet = [
     `<script`,
     `  src="${apiBase}/liveface.js"`,
