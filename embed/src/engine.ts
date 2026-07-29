@@ -1123,11 +1123,19 @@ export class AvatarEngine {
     const axisLen = Math.hypot(ax, ay);
     if (axisLen < 4) return;
     const axisLen2 = axisLen * axisLen;
+    // Stable opening direction: perpendicular to the corner-to-corner axis,
+    // pointing down the screen.
+    let axisNormX = -ay / axisLen;
+    let axisNormY = ax / axisLen;
+    if (axisNormY < 0) {
+      axisNormX = -axisNormX;
+      axisNormY = -axisNormY;
+    }
 
     const w = this.weights;
     const rounding = Math.min(1, w.mouthPucker + w.mouthFunnel * 0.6);
     const openFrac =
-      w.jawOpen * 0.38 + w.mouthFunnel * 0.10 + w.mouthStretch * 0.04 - w.mouthClose * 0.06;
+      w.jawOpen * 0.23 + w.mouthFunnel * 0.07 + w.mouthStretch * 0.03 - w.mouthClose * 0.05;
     const openHeight = Math.max(0, openFrac) * axisLen * this.tuning.mouthOpen;
     if (openHeight < axisLen * 0.012) return; // lips together
 
@@ -1147,22 +1155,53 @@ export class AvatarEngine {
     seam.push({ x: right.x, y: right.y, t: 1 });
     seam.sort((p, q) => p.t - q.t);
 
+    // Least-squares quadratic fit of the seam. Interpolating the raw
+    // midpoints put a 16px step at the mouth centre — the central lip
+    // landmarks take the strongest jaw displacement, so the midline
+    // kinked and the aperture sheared into a hook. A real lip line is a
+    // smooth curve, so fit one.
+    const fitQuadratic = (values: number[], ts: number[]) => {
+      let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0;
+      let b0 = 0, b1 = 0, b2 = 0;
+      for (let i = 0; i < ts.length; i++) {
+        const t = ts[i];
+        const t2 = t * t;
+        s0 += 1;
+        s1 += t;
+        s2 += t2;
+        s3 += t2 * t;
+        s4 += t2 * t2;
+        b0 += values[i];
+        b1 += values[i] * t;
+        b2 += values[i] * t2;
+      }
+      // Solve the 3x3 normal equations by Cramer's rule.
+      const det =
+        s0 * (s2 * s4 - s3 * s3) - s1 * (s1 * s4 - s3 * s2) + s2 * (s1 * s3 - s2 * s2);
+      if (Math.abs(det) < 1e-9) return [values[0] ?? 0, 0, 0];
+      const c0 =
+        (b0 * (s2 * s4 - s3 * s3) - s1 * (b1 * s4 - b2 * s3) + s2 * (b1 * s3 - b2 * s2)) / det;
+      const c1 =
+        (s0 * (b1 * s4 - b2 * s3) - b0 * (s1 * s4 - s3 * s2) + s2 * (s1 * b2 - s2 * b1)) / det;
+      const c2 =
+        (s0 * (s2 * b2 - s3 * b1) - s1 * (s1 * b2 - s2 * b1) + b0 * (s1 * s3 - s2 * s2)) / det;
+      return [c0, c1, c2];
+    };
+    const seamTs = seam.map((q) => q.t);
+    const fx = fitQuadratic(seam.map((q) => q.x), seamTs);
+    const fy = fitQuadratic(seam.map((q) => q.y), seamTs);
     const seamAt = (t: number) => {
       const tc = Math.max(0, Math.min(1, t));
-      for (let i = 1; i < seam.length; i++) {
-        if (tc <= seam[i].t || i === seam.length - 1) {
-          const a = seam[i - 1];
-          const b = seam[i];
-          const span = b.t - a.t || 1;
-          const f = Math.max(0, Math.min(1, (tc - a.t) / span));
-          return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
-        }
-      }
-      return { x: seam[0].x, y: seam[0].y };
+      return {
+        x: fx[0] + fx[1] * tc + fx[2] * tc * tc,
+        y: fy[0] + fy[1] * tc + fy[2] * tc * tc,
+      };
     };
 
-    // Rounded sounds keep the aperture away from the corners entirely.
-    const spanHalf = (1 - rounding * 0.46) / 2;
+    // The aperture always ends INSIDE the commissures: its own rounded ends
+    // then land on lip flesh, so the lips stay joined at the corners even
+    // though the profile itself is blunt.
+    const spanHalf = (0.84 - rounding * 0.4) / 2;
     const t0 = 0.5 - spanHalf;
     const t1 = 0.5 + spanHalf;
 
@@ -1176,27 +1215,29 @@ export class AvatarEngine {
       const u = i / SAMPLES;
       const t = t0 + u * (t1 - t0);
       const here = seamAt(t);
-      const ahead = seamAt(t + 0.02);
-      const behind = seamAt(t - 0.02);
-      let tx = ahead.x - behind.x;
-      let ty = ahead.y - behind.y;
-      const tl = Math.hypot(tx, ty) || 1;
-      tx /= tl;
-      ty /= tl;
-      // Normal, forced to point down the screen.
-      let nx = -ty;
-      let ny = tx;
-      if (ny < 0) {
-        nx = -nx;
-        ny = -ny;
-      }
-      // Zero at both ends of the aperture, full in the middle.
-      const gap = openHeight * Math.pow(Math.sin(Math.PI * u), 1.15);
+      // Offset along the MOUTH AXIS normal, not the local seam normal.
+      // The seam comes from noisy landmarks: where it tilts steeply the
+      // local normal swings toward horizontal (and the sign-flip guard
+      // fires), so the opening sheared into a wedge/hook on one side. A
+      // mouth opens perpendicular to its own corner-to-corner axis.
+      const nx = axisNormX;
+      const ny = axisNormY;
+      // Superellipse profile. sin(pi*u)^1.15 leaves the ends with a slope
+      // of ~1.9 — almost linear, which is exactly why the mouth read as a
+      // TRIANGLE. A true ellipse has an end slope near 20 (blunt); this
+      // superellipse keeps that roundness while staying slightly fuller in
+      // the middle than a circle.
+      const e = Math.abs(2 * u - 1);
+      const gap = openHeight * Math.pow(Math.max(0, 1 - Math.pow(e, 2.4)), 1 / 1.9);
       lowerPts.push({ x: here.x + nx * gap * LOWER_SHARE, y: here.y + ny * gap * LOWER_SHARE });
       upperPts.push({ x: here.x - nx * gap * UPPER_SHARE, y: here.y - ny * gap * UPPER_SHARE });
     }
 
-    const outline = [...lowerPts, ...upperPts.slice().reverse()];
+    // Drop the shared endpoints: at u=0 and u=1 the gap is zero, so
+    // upperPts and lowerPts hold the SAME point there. Feeding coincident
+    // points to Catmull-Rom gives zero-length tangents and the curve
+    // overshoots into a hook/wing off the corner of the mouth.
+    const outline = [...lowerPts, ...upperPts.slice(1, -1).reverse()];
     (this as unknown as { lastAperture?: unknown }).lastAperture = outline;
 
     const xs = outline.map((p) => p.x);
@@ -1204,7 +1245,11 @@ export class AvatarEngine {
     const bw = Math.max(...xs) - Math.min(...xs);
     const bh = Math.max(...ys) - Math.min(...ys);
     if (bw < 2 || bh < 1) return;
-    const gapRatio = bh / bw;
+    // Openness must come from the SYNTHESISED opening, not the drawn
+    // bounding box: bh also contains this face's resting lip bow, so a
+    // curved mouth reported gapRatio > 0.09 with the lips 4px apart and ran
+    // the cavity at full opacity. openHeight/axisLen is identity-independent.
+    const gapRatio = openHeight / Math.max(1, axisLen);
     const alpha = Math.min(1, Math.max(0, (gapRatio - 0.03) / 0.04));
     if (alpha <= 0.01) return;
     const midY = (Math.max(...ys) + Math.min(...ys)) / 2;
@@ -1223,6 +1268,31 @@ export class AvatarEngine {
     ctx.fillStyle = cavity;
     ctx.fillRect(cx - bw, midY - bh, bw * 2, bh * 2);
 
+    // --- Inner-lip depth. Without this the opening reads as a slice cut
+    // through the lips. Light comes from above, so the UNDERSIDE of the
+    // upper lip is deeply shadowed while the top surface of the lower lip
+    // catches a wet highlight. ---
+    const lipEdge = (edge: Point[], width: number, colour: string) => {
+      ctx.beginPath();
+      ctx.moveTo(edge[0].x, edge[0].y);
+      for (let i = 1; i < edge.length; i++) ctx.lineTo(edge[i].x, edge[i].y);
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = width;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+    };
+    // Upper lip underside: wide soft shadow, then a tighter darker core.
+    lipEdge(upperPts, bh * 0.3, "rgba(26, 8, 8, 0.38)");
+    lipEdge(upperPts, bh * 0.13, "rgba(18, 5, 5, 0.42)");
+    // Lower lip inner surface: shadow at the very edge, then the wet line.
+    lipEdge(lowerPts, bh * 0.18, "rgba(40, 12, 12, 0.34)");
+    lipEdge(
+      lowerPts.map((q) => ({ x: q.x, y: q.y - bh * 0.03 })),
+      Math.max(0.7, bh * 0.03),
+      "rgba(255, 226, 214, 0.16)"
+    );
+
     // --- Teeth: individual incisors hanging from the upper arch. ---
     const teethGap = 0.06 * (this.tuning.teethThreshold / DEFAULT_TUNING.teethThreshold);
     const teethAmount =
@@ -1232,14 +1302,31 @@ export class AvatarEngine {
     if (teethAmount > 0.02) {
       const upperH = Math.min(bh * 0.3, bw * 0.04) * (0.45 + 0.55 * teethAmount);
       this.drawTeethRow(upperPts, bw, alpha, teethAmount, upperH, false);
+      // The lower incisors are attached to the JAW, so they ride the lower
+      // lip. Almost all of each tooth is hidden behind that lip — only the
+      // biting tips clear it — so the row is seated ON the lower edge and
+      // drawn short. Floating it into the middle of the cavity (which is
+      // what flattening it toward the chord did) looks badly wrong.
+      const lowerArch = lowerPts.map((q) => ({ x: q.x, y: q.y - bh * 0.055 }));
       // Lower teeth appear once there is room for them without meeting the
       // uppers — a real jaw shows them well before it is fully open.
       const room = bh - upperH * 1.35;
-      const lowerH = Math.min(upperH * 0.62, room * 0.5);
+      const lowerH = Math.min(upperH * 0.5, room * 0.34);
       if (lowerH > 0.8) {
         // The lower row shows across the front only.
-        this.drawTeethRow(lowerPts, bw, alpha, teethAmount, lowerH, true, 0.26, 0.74, 0.28);
+        this.drawTeethRow(lowerArch, bw, alpha, teethAmount, lowerH, true, 0.3, 0.7, 0.18);
       }
+      // Dissolve both rows into darkness toward the commissures, so the
+      // teeth recede into the mouth instead of stopping at a hard end.
+      const fade = ctx.createLinearGradient(cx - bw / 2, 0, cx + bw / 2, 0);
+      fade.addColorStop(0, "rgba(24, 9, 8, 0.95)");
+      fade.addColorStop(0.16, "rgba(24, 9, 8, 0.55)");
+      fade.addColorStop(0.34, "rgba(24, 9, 8, 0)");
+      fade.addColorStop(0.66, "rgba(24, 9, 8, 0)");
+      fade.addColorStop(0.84, "rgba(24, 9, 8, 0.55)");
+      fade.addColorStop(1, "rgba(24, 9, 8, 0.95)");
+      ctx.fillStyle = fade;
+      ctx.fillRect(cx - bw / 2, midY - bh, bw, bh * 2);
     }
 
     // Tongue: a soft rise low in the cavity on genuinely open shapes.
@@ -1292,9 +1379,22 @@ export class AvatarEngine {
 
     // Smooth arch: a quadratic through the ends and the midpoint. Following
     // the raw samples put the teeth on a wavy line.
-    const a0 = arch[0];
-    const a1 = arch[arch.length - 1];
-    const rawMid = arch[Math.floor(arch.length / 2)];
+    // Fit the arch over the span the row actually occupies. Using
+    // arch[0] / arch[last] anchored the curve on the ZERO-GAP commissure
+    // samples — those sit on the seam, not on the lip, so the fitted arch
+    // was pulled up off the lower lip and the row appeared to float.
+    const sampleArch = (frac: number) => {
+      const f = Math.max(0, Math.min(1, frac)) * (arch.length - 1);
+      const i = Math.min(arch.length - 2, Math.floor(f));
+      const k = f - i;
+      return {
+        x: arch[i].x + (arch[i + 1].x - arch[i].x) * k,
+        y: arch[i].y + (arch[i + 1].y - arch[i].y) * k,
+      };
+    };
+    const a0 = sampleArch(spanStart);
+    const a1 = sampleArch(spanEnd);
+    const rawMid = sampleArch((spanStart + spanEnd) / 2);
     const chordMid = { x: (a0.x + a1.x) / 2, y: (a0.y + a1.y) / 2 };
     const am = {
       x: rawMid.x + (chordMid.x - rawMid.x) * flatten,
@@ -1302,7 +1402,7 @@ export class AvatarEngine {
     };
     const ctrl = { x: 2 * am.x - (a0.x + a1.x) / 2, y: 2 * am.y - (a0.y + a1.y) / 2 };
     const archAt = (u: number) => {
-      const k = spanStart + Math.max(0, Math.min(1, u)) * (spanEnd - spanStart);
+      const k = Math.max(0, Math.min(1, u));
       const m = 1 - k;
       return {
         x: m * m * a0.x + 2 * m * k * ctrl.x + k * k * a1.x,
@@ -1327,9 +1427,9 @@ export class AvatarEngine {
       const uc = (u0 + u1) / 2;
       // Perspective: 1 at the front of the arch, 0 at the corners.
       const depth = Math.sin(Math.PI * uc);
-      const h = height * (0.3 + 0.7 * depth);
+      const h = height * (0.22 + 0.78 * depth);
       // Receding teeth sit deeper — pushed back toward the gum line.
-      const recess = (1 - depth) * height * 0.55 * dir;
+      const recess = (1 - depth) * height * 0.95 * dir;
       const gapPx = Math.max(0.25, bw * 0.0018);
 
       const a = archAt(u0);
