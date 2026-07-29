@@ -48,10 +48,27 @@ export interface CuePlayer {
   stopSpeech(): void;
 }
 
+/** Timing for one utterance: cue track plus word-start anchors. */
+export interface CueTiming {
+  cues: Cue[];
+  durationMs: number;
+  /** ms offset of each word start, keyed by its character index. */
+  wordMarks: { char: number; t: number }[];
+}
+
 export class BrowserTTS {
   private active = false;
 
-  constructor(private player: CuePlayer) {}
+  /**
+   * @param cueSource Fetches server-modelled timing for the text. The browser
+   *   voice plays audio we never get a handle on, so timing cannot come from
+   *   the waveform. Without this we fall back to a flat ms-per-character
+   *   guess, which is what made the mouth look unrelated to the speech.
+   */
+  constructor(
+    private player: CuePlayer,
+    private cueSource?: (text: string) => Promise<CueTiming | null>
+  ) {}
 
   static supported(): boolean {
     return typeof window !== "undefined" && "speechSynthesis" in window;
@@ -81,8 +98,18 @@ export class BrowserTTS {
   private heartbeat = 0;
   private startTimeout = 0;
 
-  speak(text: string, voiceURI?: string, lang?: string): Promise<void> {
+  async speak(text: string, voiceURI?: string, lang?: string): Promise<void> {
     this.stop();
+    // Fetch BEFORE speaking: cues must be ready the instant onstart fires,
+    // or the first word plays against a still-closed mouth.
+    let timing: CueTiming | null = null;
+    if (this.cueSource) {
+      try {
+        timing = await this.cueSource(text);
+      } catch {
+        timing = null; // Offline or API down: the local estimate still works.
+      }
+    }
     return new Promise((resolve, reject) => {
       const utterance = new SpeechSynthesisUtterance(text);
       const voice = speechSynthesis
@@ -91,11 +118,31 @@ export class BrowserTTS {
       if (voice) utterance.voice = voice;
       else if (lang) utterance.lang = lang;
 
-      // ~60ms/char is a fair guess at rate 1; word-boundary events
-      // continuously correct the clock so drift never accumulates.
-      const estimate = Math.max(600, text.length * 60);
+      const estimate = timing?.durationMs ?? Math.max(600, text.length * 60);
       const perChar = estimate / Math.max([...text].length, 1);
-      const cues = estimatedCues(text, estimate);
+      const cues = timing?.cues ?? estimatedCues(text, estimate);
+      // Word-boundary events correct the clock so drift never accumulates.
+      // With server timing each word start has an exact offset; otherwise we
+      // fall back to interpolating at a uniform rate.
+      const marks = timing?.wordMarks ?? [];
+      const timeAtChar = (charIndex: number): number => {
+        if (!marks.length) return charIndex * perChar;
+        let lo = 0;
+        let hi = marks.length - 1;
+        while (lo < hi) {
+          const mid = (lo + hi + 1) >> 1;
+          if (marks[mid].char <= charIndex) lo = mid;
+          else hi = mid - 1;
+        }
+        const mark = marks[lo];
+        if (mark.char > charIndex) return mark.t;
+        // Interpolate within the word so mid-word boundaries land sensibly.
+        const next = marks[lo + 1];
+        if (!next) return Math.min(estimate, mark.t + (charIndex - mark.char) * perChar);
+        const span = next.char - mark.char;
+        const frac = span > 0 ? (charIndex - mark.char) / span : 0;
+        return mark.t + (next.t - mark.t) * Math.min(1, frac);
+      };
       let settled = false;
 
       utterance.onstart = () => {
@@ -110,7 +157,7 @@ export class BrowserTTS {
       };
       utterance.onboundary = (event) => {
         if (typeof event.charIndex === "number") {
-          this.player.syncCueTime(event.charIndex * perChar);
+          this.player.syncCueTime(timeAtChar(event.charIndex));
         }
       };
       const finish = () => {

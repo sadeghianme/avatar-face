@@ -154,3 +154,19 @@ async def test_member_cannot_manage_api_keys(client):
         f"/orgs/{org_id}/api-keys", json={"name": "nope"}, headers=bob
     )
     assert response.status_code == 403
+
+
+async def test_cues_endpoint_is_public_and_timed(client) -> None:
+    """The browser voice fetches this without a key — it synthesises nothing."""
+    response = await client.post("/embed/v1/cues", json={"text": "Hello world."})
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["duration_ms"] > 0
+    assert body["cues"][-1]["viseme"] == "sil"
+    assert all(b["t"] > a["t"] for a, b in zip(body["cues"], body["cues"][1:]))
+    assert [m["char"] for m in body["word_marks"]] == [0, 6]
+
+
+async def test_cues_endpoint_rejects_empty_text(client) -> None:
+    assert (await client.post("/embed/v1/cues", json={"text": ""})).status_code == 422

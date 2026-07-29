@@ -85,3 +85,28 @@ async def test_offline_timing_is_not_uniform():
     result = await OfflineTTSProvider().synthesize("aaa ttt", "offline-warm", "en-US")
     gaps = [result.cues[i + 1]["t"] - result.cues[i]["t"] for i in range(len(result.cues) - 1)]
     assert max(gaps) > min(gaps) * 2
+
+
+def test_word_marks_align_with_segment_clock() -> None:
+    """Word offsets must agree with the cue clock, since `onboundary`
+    corrections are applied to the same timeline the cues run on."""
+    from app.services.tts.timing import segment_text, total_duration_ms, word_marks
+
+    text = "Hello there, this is a test."
+    marks = word_marks(text)
+
+    # "Hello there, this is a test."
+    #   0     6      13   18 21 23
+    assert [m["char"] for m in marks] == [0, 6, 13, 18, 21, 23]
+    assert marks[0]["t"] == 0
+    # Strictly increasing, and never past the end of the utterance.
+    assert all(b["t"] > a["t"] for a, b in zip(marks, marks[1:]))
+    assert marks[-1]["t"] < total_duration_ms(segment_text(text))
+
+
+def test_word_marks_handles_leading_space_and_empty() -> None:
+    from app.services.tts.timing import word_marks
+
+    assert word_marks("") == []
+    assert word_marks("   ") == []
+    assert word_marks("  hi")[0]["char"] == 2

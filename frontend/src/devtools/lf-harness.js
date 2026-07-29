@@ -143,3 +143,79 @@ export function grid(names = ["sil", "PP", "aa", "E", "oh", "ou"]) {
 export function engine() {
   return state.engine;
 }
+
+/**
+ * Play a real cue track through the engine and lay consecutive frames out as
+ * a filmstrip. Static `pose()` cannot show what the coarticulation blend and
+ * the damping do — those are purely temporal — so this is the only way to
+ * actually look at smoothness rather than infer it from numbers.
+ */
+export async function strip(text = "Mama put a poppy in my bag.", opts = {}) {
+  const { fps = 20, cols = 8, rows = 4, spread = 1.9 } = opts;
+  const res = await fetch("/api/embed/v1/cues", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  const { cues, duration_ms } = await res.json();
+
+  const e = make();
+  delete e.targetWeights; // drop any getter left behind by pose()
+  e.targetWeights = { jawOpen: 0, mouthClose: 0, mouthPucker: 0, mouthFunnel: 0, mouthStretch: 0, mouthSmile: 0 };
+  e.cues = cues;
+  e.speaking = true;
+
+  const n = cols * rows;
+  const step = duration_ms / n;
+  const cellW = Math.floor(state.z.width / cols);
+  const cellH = Math.floor(state.z.height / rows);
+  const zc = state.zc;
+  zc.clearRect(0, 0, state.z.width, state.z.height);
+
+  // Advance on a fixed wall-clock so the dt damping sees realistic frames.
+  const t0 = performance.now();
+  e.cueStart = t0;
+  e.lastTickAt = t0;
+  let clock = t0;
+  const frameMs = 1000 / fps;
+  const weights = [];
+
+  for (let i = 0; i < n; i++) {
+    const until = t0 + i * step;
+    while (clock < until) {
+      clock = Math.min(until, clock + frameMs);
+      e.tick(clock);
+    }
+    e.render();
+    weights.push({ ...e.weights });
+
+    const p = e.deformedPoints(clock);
+    const m = e.rig.mouth_indices.map((k) => p[k]);
+    const xs = m.map((q) => q.x);
+    const ys = m.map((q) => q.y);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const w = (Math.max(...xs) - Math.min(...xs)) * spread;
+    const h = w * (cellH / cellW);
+    const dx = (i % cols) * cellW;
+    const dy = Math.floor(i / cols) * cellH;
+    zc.drawImage(state.cv, cx - w / 2, cy - h / 2, w, h, dx, dy, cellW, cellH);
+    zc.strokeStyle = "#0f0";
+    zc.strokeRect(dx, dy, cellW, cellH);
+    zc.fillStyle = "#0f0";
+    zc.font = "13px monospace";
+    zc.fillText(`${Math.round(i * step)}ms`, dx + 5, dy + 15);
+  }
+  e.speaking = false;
+
+  // Frame-to-frame jaw acceleration: the number the smoothness work targets.
+  const jaw = weights.map((w) => w.jawOpen);
+  const accel = jaw.slice(2).map((v, i) => Math.abs(v - 2 * jaw[i + 1] + jaw[i]));
+  return {
+    cues: cues.length,
+    durationMs: duration_ms,
+    jawPeak: +Math.max(...jaw).toFixed(3),
+    maxClose: +Math.max(...weights.map((w) => w.mouthClose)).toFixed(3),
+    meanAccel: +(accel.reduce((a, b) => a + b, 0) / accel.length).toFixed(5),
+  };
+}

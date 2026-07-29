@@ -117,3 +117,30 @@ def cues_for_duration(text: str, duration_ms: int) -> list[dict]:
     if not segments or modelled <= 0 or duration_ms <= 0:
         return [{"t": 0, "viseme": "sil"}]
     return cues_from_segments(segments, scale=duration_ms / modelled)
+
+
+def word_marks(text: str) -> list[dict]:
+    """Millisecond offset of each word start, keyed by character index.
+
+    `segment_text` emits exactly one segment per character, so segment i and
+    character i share an index and the cumulative duration up to i IS that
+    character's start time. The browser-voice path fires `onboundary` with a
+    charIndex; this table turns that event into an exact clock correction
+    instead of the uniform chars-per-ms guess it used before.
+    """
+    marks: list[dict] = []
+    t = 0
+    at_word_start = True
+    for i, ch in enumerate(text):
+        if ch.isspace() or ch in PAUSE_MS:
+            at_word_start = True
+        elif at_word_start:
+            marks.append({"char": i, "t": t})
+            at_word_start = False
+        if ch in PAUSE_MS:
+            t += PAUSE_MS[ch]
+        elif ch.isspace():
+            t += WORD_GAP_MS
+        else:
+            t += VISEME_DURATION_MS.get(char_to_viseme(ch), DEFAULT_DURATION_MS)
+    return marks

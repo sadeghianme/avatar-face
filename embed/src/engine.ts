@@ -57,6 +57,48 @@ interface Point {
  * consonants as brief shaping. Cues closer than MIN_CUE_MS are folded into
  * their predecessor, preferring vowels when they collide.
  */
+/** Span assumed for the final cue, which has no successor to measure against. */
+const DEFAULT_CUE_SPAN_MS = 90;
+
+/**
+ * Shape of each cue's dominance bell: exp(-0.5 * |z|^BELL_EXPONENT).
+ *
+ * A plain Gaussian (exponent 2) is pointy, so neighbouring cues are still
+ * contributing at the moment a segment should be at its own target — measured,
+ * that clipped peak jaw opening from 0.70 to 0.59, visibly flattening wide
+ * vowels. Exponent 4 gives a FLAT TOP with steep shoulders: a segment reaches
+ * its full shape in the middle of its own span, then hands over smoothly.
+ * Measured against the previous linear blend on a news sentence, this is
+ * better on every axis at once — peak 0.702 -> 0.716, lip closure 0.69 ->
+ * 0.84, mean |jaw acceleration| 0.0131 -> 0.0089.
+ */
+const BELL_EXPONENT = 4;
+/** Floor on dominance width: below this the bells stop overlapping and the
+ * blend degenerates back into snapping from viseme to viseme. */
+const MIN_DOMINANCE_MS = 42;
+
+/**
+ * Visemes whose shape is an articulatory CONSTRAINT, not a suggestion.
+ *
+ * A blend is an average, so it can never reach any single viseme's peak —
+ * measured, plain coarticulation let /p/ closure fall to 0.37 of its target,
+ * i.e. the mouth simply never shut on "m", "p" or "b". No amount of extra
+ * weight fixes that; the shapes have to be re-asserted after blending. The
+ * value is how fully the constraint is enforced at its own instant.
+ */
+const IMPERATIVE: Record<string, number> = {
+  PP: 1.0,  // p, b, m — full lip closure; the most legible shape there is
+  FF: 0.85, // f, v — lower lip tucked to the upper teeth
+};
+
+/** Constraint bells are narrower than the blend's own (which uses 0.62× span
+ * with a 42ms floor). Measured on a news-reading sentence, 0.7× here is the
+ * knee: closure comes back to 0.885 of target while mean |acceleration| stays
+ * at half the old linear blend's. Narrower restores the last 1.5% of closure
+ * but starts pushing the jerk back up. */
+const IMPERATIVE_WIDTH = 0.7;
+const MIN_IMPERATIVE_MS = 30;
+
 const MIN_CUE_MS = 85;
 
 export function prepareCues(cues: Cue[]): Cue[] {
@@ -170,6 +212,7 @@ export class AvatarEngine {
   } | null = null;
   private raf = 0;
   private startTime = 0;
+  private lastTickAt = 0;
 
   // Audio
   private audioCtx: AudioContext | null = null;
@@ -499,14 +542,54 @@ export class AvatarEngine {
       else break;
     }
     if (index < 0) return { ...ZERO_WEIGHTS };
-    const curr = { ...ZERO_WEIGHTS, ...(this.rig.visemes[this.cues[index].viseme] ?? {}) };
-    const next = this.cues[index + 1];
-    if (!next || next.t <= this.cues[index].t) return curr;
-    const target = { ...ZERO_WEIGHTS, ...(this.rig.visemes[next.viseme] ?? {}) };
-    const f = Math.min(1, Math.max(0, (t - this.cues[index].t) / (next.t - this.cues[index].t)));
+
+    // Coarticulation by overlapping dominance (Cohen-Massaro). Blending only
+    // the two bracketing cues walked the mouth in straight lines from one
+    // viseme vertex to the next, with a velocity corner at every cue — that
+    // piecewise-linear zigzag is what read as "random" darting. Here every
+    // cue near `t` contributes on a smooth bell, so the shape at any instant
+    // is a weighted mixture of what the mouth just did, is doing, and is
+    // about to do. That is also how real articulators behave: /k/ in "key"
+    // and "coo" are different shapes because the vowel is already pulling.
     const out = { ...ZERO_WEIGHTS };
-    for (const key of Object.keys(out) as (keyof BlendWeights)[]) {
-      out[key] = curr[key] + (target[key] - curr[key]) * f;
+    const keys = Object.keys(out) as (keyof BlendWeights)[];
+    const from = Math.max(0, index - 2);
+    const to = Math.min(this.cues.length, index + 3);
+    const spanOf = (i: number): number => {
+      const next = this.cues[i + 1];
+      return next ? Math.max(1, next.t - this.cues[i].t) : DEFAULT_CUE_SPAN_MS;
+    };
+
+    let totalWeight = 0;
+    for (let i = from; i < to; i++) {
+      const span = spanOf(i);
+      // Bell centred on the cue's own span, widened for longer sounds.
+      const sigma = Math.max(MIN_DOMINANCE_MS, span * 0.62);
+      const z = Math.abs(t - (this.cues[i].t + span / 2)) / sigma;
+      const weight = Math.exp(-0.5 * Math.pow(z, BELL_EXPONENT));
+      if (weight < 1e-3) continue;
+      const shape = this.rig.visemes[this.cues[i].viseme] ?? {};
+      for (const key of keys) out[key] += (shape[key] ?? 0) * weight;
+      totalWeight += weight;
+    }
+    if (totalWeight <= 0) {
+      return { ...ZERO_WEIGHTS, ...(this.rig.visemes[this.cues[index].viseme] ?? {}) };
+    }
+    for (const key of keys) out[key] /= totalWeight;
+
+    // Constraint pass: pull the blended shape back onto the closure-critical
+    // visemes. The gate is itself a smooth bell, so re-asserting the target
+    // costs no continuity — it only sharpens where a real mouth is sharp.
+    for (let i = from; i < to; i++) {
+      const strength = IMPERATIVE[this.cues[i].viseme];
+      if (!strength) continue;
+      const span = spanOf(i);
+      const sigma = Math.max(MIN_IMPERATIVE_MS, span * IMPERATIVE_WIDTH);
+      const z = (t - (this.cues[i].t + span / 2)) / sigma;
+      const gate = Math.exp(-0.5 * z * z) * strength;
+      if (gate < 1e-3) continue;
+      const shape = this.rig.visemes[this.cues[i].viseme] ?? {};
+      for (const key of keys) out[key] += ((shape[key] ?? 0) - out[key]) * gate;
     }
     return out;
   }
@@ -531,16 +614,23 @@ export class AvatarEngine {
     // Critically-damped-ish approach to targets. Slow on purpose: a
     // newsreader's articulation is small and fluid, and the damping is the
     // main thing standing between cue tracks and a flapping jaw.
+    // Frame-rate INDEPENDENT smoothing. A fixed fraction per frame makes the
+    // effective time constant depend on how fast frames happen to arrive, so
+    // any jitter in frame timing became jitter in the mouth. Convert to an
+    // exponential filter over real elapsed time: rate = 1 - exp(-dt / tau).
+    const dt = Math.min(64, Math.max(4, now - (this.lastTickAt || now - 16.7)));
+    this.lastTickAt = now;
+    const smoothing = Math.max(0.15, this.tuning.smoothness);
+    // Jaws CLOSE faster than they open (muscle + gravity). Closing slower
+    // than opening left the mouth hanging open through a whole sentence —
+    // measured only 1% closed frames before that was corrected.
+    const TAU_OPEN = 47 / smoothing; // ms; matches the old 0.30/frame @60fps
+    const TAU_CLOSE = 33 / smoothing; // ms; matches the old 0.40/frame @60fps
     const keys = Object.keys(this.weights) as (keyof BlendWeights)[];
     for (const key of keys) {
       const target = this.targetWeights[key];
-      // Jaws CLOSE faster than they open (muscle + gravity). Closing slower
-      // than opening left the mouth hanging open through a whole sentence —
-      // measured only 1% closed frames before this was corrected.
-      const rate = Math.min(
-        0.6,
-        (target > this.weights[key] ? 0.30 : 0.40) * this.tuning.smoothness
-      );
+      const tau = target > this.weights[key] ? TAU_OPEN : TAU_CLOSE;
+      const rate = 1 - Math.exp(-dt / tau);
       this.weights[key] += (target - this.weights[key]) * rate;
     }
 

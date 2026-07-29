@@ -128,7 +128,21 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
   const queue = new SpeechQueue(engine, synth);
   // data-provider="browser": free local speechSynthesis voices.
   const useBrowserVoice = provider === "browser" && BrowserTTS.supported();
-  const browserTts = useBrowserVoice ? new BrowserTTS(engine as unknown as CuePlayer) : null;
+  // The browser voice gets its timing from the same phoneme-duration model
+  // the server providers use — no audio is synthesised, only the cue track.
+  const fetchCues = async (text: string) => {
+    const response = await fetch(`${apiBase}/embed/v1/cues`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text, locale }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return { cues: data.cues, durationMs: data.duration_ms, wordMarks: data.word_marks };
+  };
+  const browserTts = useBrowserVoice
+    ? new BrowserTTS(engine as unknown as CuePlayer, fetchCues)
+    : null;
 
   window.Liveface = {
     speak: (text: string) =>

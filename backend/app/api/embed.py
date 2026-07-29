@@ -14,6 +14,7 @@ import base64
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.deps import DB
@@ -23,6 +24,12 @@ from app.schemas.tts import CueOut, SynthesizeRequest, SynthesizeResponse
 from app.services.rate_limit import get_embed_rate_limiter
 from app.services.storage import get_storage
 from app.services.tts.registry import synthesize_cached
+from app.services.tts.timing import (
+    cues_from_segments,
+    segment_text,
+    total_duration_ms,
+    word_marks,
+)
 from app.services.usage import check_usage_limit, record_synthesis
 
 router = APIRouter(prefix="/embed/v1", tags=["embed"])
@@ -92,6 +99,45 @@ async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
         "image_url": image_url,
         "model_url": image_url if avatar.kind.value == "model3d" else None,
     }
+
+
+class CueRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=5000)
+    locale: str = "en-US"
+
+
+class WordMark(BaseModel):
+    char: int
+    t: int
+
+
+class CueResponse(BaseModel):
+    cues: list[CueOut]
+    duration_ms: int
+    word_marks: list[WordMark]
+
+
+@router.post("/cues", response_model=CueResponse)
+async def embed_cues(body: CueRequest) -> CueResponse:
+    """Viseme cues for text WITHOUT synthesising audio.
+
+    The browser-voice path plays audio through speechSynthesis, which never
+    hands back a waveform, so timing cannot be measured from the audio. It
+    used to guess a flat 60ms per character — that mismatch is what made the
+    mouth look unrelated to the speech. This serves the same phoneme-duration
+    model the server providers use, plus per-word offsets so the widget can
+    resync exactly on each `onboundary` event.
+
+    Unauthenticated on purpose: it synthesises nothing, touches no org data,
+    and costs a text scan. Requiring a key would only add a failure mode to
+    a path whose whole point is working without server audio.
+    """
+    segments = segment_text(body.text)
+    return CueResponse(
+        cues=[CueOut(**c) for c in cues_from_segments(segments)],
+        duration_ms=total_duration_ms(segments),
+        word_marks=[WordMark(**m) for m in word_marks(body.text)],
+    )
 
 
 @router.post("/synthesize", response_model=SynthesizeResponse)
