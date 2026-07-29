@@ -24,12 +24,7 @@ from app.schemas.tts import CueOut, SynthesizeRequest, SynthesizeResponse
 from app.services.rate_limit import get_embed_rate_limiter
 from app.services.storage import get_storage
 from app.services.tts.registry import synthesize_cached
-from app.services.tts.timing import (
-    cues_from_segments,
-    segment_text,
-    total_duration_ms,
-    word_marks,
-)
+from app.services.tts.timing import cues_from_segments, plan_utterance, total_duration_ms
 from app.services.usage import check_usage_limit, record_synthesis
 
 router = APIRouter(prefix="/embed/v1", tags=["embed"])
@@ -132,11 +127,11 @@ async def embed_cues(body: CueRequest) -> CueResponse:
     and costs a text scan. Requiring a key would only add a failure mode to
     a path whose whole point is working without server audio.
     """
-    segments = segment_text(body.text)
+    segments, marks = plan_utterance(body.text, body.locale)
     return CueResponse(
         cues=[CueOut(**c) for c in cues_from_segments(segments)],
         duration_ms=total_duration_ms(segments),
-        word_marks=[WordMark(**m) for m in word_marks(body.text)],
+        word_marks=[WordMark(**m) for m in marks],
     )
 
 

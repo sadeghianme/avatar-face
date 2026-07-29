@@ -90,10 +90,10 @@ async def test_offline_timing_is_not_uniform():
 def test_word_marks_align_with_segment_clock() -> None:
     """Word offsets must agree with the cue clock, since `onboundary`
     corrections are applied to the same timeline the cues run on."""
-    from app.services.tts.timing import segment_text, total_duration_ms, word_marks
+    from app.services.tts.timing import plan_utterance, total_duration_ms
 
     text = "Hello there, this is a test."
-    marks = word_marks(text)
+    segments, marks = plan_utterance(text)
 
     # "Hello there, this is a test."
     #   0     6      13   18 21 23
@@ -101,12 +101,12 @@ def test_word_marks_align_with_segment_clock() -> None:
     assert marks[0]["t"] == 0
     # Strictly increasing, and never past the end of the utterance.
     assert all(b["t"] > a["t"] for a, b in zip(marks, marks[1:]))
-    assert marks[-1]["t"] < total_duration_ms(segment_text(text))
+    assert marks[-1]["t"] < total_duration_ms(segments)
 
 
 def test_word_marks_handles_leading_space_and_empty() -> None:
-    from app.services.tts.timing import word_marks
+    from app.services.tts.timing import plan_utterance
 
-    assert word_marks("") == []
-    assert word_marks("   ") == []
-    assert word_marks("  hi")[0]["char"] == 2
+    assert plan_utterance("")[1] == []
+    assert plan_utterance("   ")[1] == []
+    assert plan_utterance("  hi")[1][0]["char"] == 2

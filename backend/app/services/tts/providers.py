@@ -124,7 +124,7 @@ class AzureTTSProvider(TTSProvider):
             audio=audio,
             audio_mime="audio/wav",
             duration_ms=duration,
-            cues=cues_from_text(text, duration),
+            cues=cues_from_text(text, duration, locale),
         )
 
 
@@ -176,7 +176,7 @@ class ElevenLabsTTSProvider(TTSProvider):
         duration = int((ends[-1] if ends else 0) * 1000)
         if duration == 0:
             duration = len(text) * 75
-            cues = cues_from_text(text, duration)
+            cues = cues_from_text(text, duration, locale)
         else:
             cues.append({"t": duration, "viseme": "sil"})
         return SynthesisResult(audio=audio, audio_mime="audio/mpeg", duration_ms=duration, cues=cues)
@@ -264,7 +264,7 @@ class GoogleTTSProvider(TTSProvider):
             audio=audio,
             audio_mime="audio/wav",
             duration_ms=duration,
-            cues=cues_from_text(text, duration),
+            cues=cues_from_text(text, duration, locale),
         )
 
 
@@ -295,5 +295,5 @@ class OpenAITTSProvider(TTSProvider):
             audio=audio,
             audio_mime="audio/wav",
             duration_ms=duration,
-            cues=cues_from_text(text, duration),
+            cues=cues_from_text(text, duration, locale),
         )

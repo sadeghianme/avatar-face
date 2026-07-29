@@ -98,7 +98,7 @@ def char_to_viseme(ch: str) -> str:
     return "sil"  # punctuation, digits, whitespace
 
 
-def cues_from_text(text: str, duration_ms: int) -> list[dict]:
+def cues_from_text(text: str, duration_ms: int, locale: str = "en-US") -> list[dict]:
     """Viseme cues for audio of a known duration.
 
     Delegates to the phoneme-class timing model (vowels hold longer than
@@ -108,4 +108,4 @@ def cues_from_text(text: str, duration_ms: int) -> list[dict]:
     # Imported here: timing depends on char_to_viseme above.
     from app.services.tts.timing import cues_for_duration
 
-    return cues_for_duration(text, duration_ms)
+    return cues_for_duration(text, duration_ms, locale)

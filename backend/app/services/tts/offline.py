@@ -13,7 +13,7 @@ import struct
 import wave
 
 from app.services.tts.base import SynthesisResult, TTSProvider, Voice
-from app.services.tts.timing import cues_from_segments, segment_text, total_duration_ms
+from app.services.tts.timing import cues_from_segments, plan_utterance, total_duration_ms
 
 SAMPLE_RATE = 22050
 
@@ -44,7 +44,7 @@ class OfflineTTSProvider(TTSProvider):
         pitch_mul = 1.25 if voice == "offline-bright" else 1.0
         # Audio and cues are generated from ONE segment list, so the mouth
         # can never drift from the sound.
-        segments = segment_text(text)
+        segments, _ = plan_utterance(text, locale)
         samples: list[float] = []
         phase = 0.0
 
