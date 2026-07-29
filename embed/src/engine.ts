@@ -84,6 +84,34 @@ export function prepareCues(cues: Cue[]): Cue[] {
   return out;
 }
 
+/**
+ * Smooth closed curve through an ordered loop of points (Catmull-Rom
+ * converted to cubic beziers). Straight segments between landmarks make a
+ * mouth outline look faceted; this keeps it continuous.
+ */
+function smoothClosedPath(points: { x: number; y: number }[]): Path2D {
+  const path = new Path2D();
+  const n = points.length;
+  if (n < 3) return path;
+  path.moveTo(points[0].x, points[0].y);
+  for (let i = 0; i < n; i++) {
+    const p0 = points[(i - 1 + n) % n];
+    const p1 = points[i];
+    const p2 = points[(i + 1) % n];
+    const p3 = points[(i + 2) % n];
+    path.bezierCurveTo(
+      p1.x + (p2.x - p0.x) / 6,
+      p1.y + (p2.y - p0.y) / 6,
+      p2.x - (p3.x - p1.x) / 6,
+      p2.y - (p3.y - p1.y) / 6,
+      p2.x,
+      p2.y
+    );
+  }
+  path.closePath();
+  return path;
+}
+
 export interface EngineOptions {
   debugMesh?: boolean;
   /**
@@ -621,9 +649,11 @@ export class AvatarEngine {
         dy -= w.mouthSmile * mh * 0.3 * (Math.abs(nx) - 0.55) * falloff;
       }
       if (innerSet.has(i)) {
-        // The inner ring IS the aperture: it must part further than the
-        // outer lips, or the mouth reads as open-jawed but sealed.
-        if (ny > 0) dy += w.jawOpen * mh * 0.35;
+        // NOTE: no extra "part the inner ring" term here. It fired only on
+        // landmarks below the mouth centroid, so it opened some of the ring
+        // and not the rest — the seam came out as a zigzag. The aperture is
+        // synthesised in drawMouthInterior instead, which needs this ring
+        // to stay a clean curve.
         dy += (mcy - pts[i].y) * w.mouthClose * 0.8;
       }
       pts[i].x += dx * this.tuning.mouthOpen;
@@ -1040,163 +1070,198 @@ export class AvatarEngine {
    * jawOpen, not the teeth), gum line, tongue with center groove, and an
    * inner-lip contact shadow.
    */
+  /**
+   * Mouth interior, built from the REAL lip curve.
+   *
+   * Earlier versions drew an invented symmetric lens spanning the full
+   * corner-to-corner width, which put sharp dark spikes at the commissures
+   * — lips do not separate at the corners. Instead:
+   *   1. find the two commissures (the furthest-apart pair on the ring),
+   *   2. project every lip landmark onto the corner-to-corner axis to get
+   *      its position t and its perpendicular offset d (d IS the measured
+   *      lip shape from the photo),
+   *   3. scale d by a taper window that is zero at both corners and full
+   *      mid-mouth, so the opening physically cannot part at the corners,
+   *   4. draw a smooth Catmull-Rom curve through the result.
+   */
   private drawMouthInterior(pts: Point[]): void {
     if (this.innerRing.length < 6) return;
     const ctx = this.ctx;
     const ring = this.innerRing.map((i) => pts[i]);
-    const cx = ring.reduce((s, p) => s + p.x, 0) / ring.length;
-    const cy = ring.reduce((s, p) => s + p.y, 0) / ring.length;
 
-    // Aperture size. The raw landmark ring is noisy and asymmetric, which
-    // rendered as a tilted hard-edged wedge; we take only its DIMENSIONS
-    // and draw a clean anatomical shape from them.
+    // 1. Commissures: the furthest-apart pair (robust to index order and
+    // to rigs whose ring was rebuilt by the fallback path).
+    let a = 0;
+    let b = 1;
+    let best = -1;
+    for (let i = 0; i < ring.length; i++) {
+      for (let j = i + 1; j < ring.length; j++) {
+        const d2 = (ring[i].x - ring[j].x) ** 2 + (ring[i].y - ring[j].y) ** 2;
+        if (d2 > best) {
+          best = d2;
+          a = i;
+          b = j;
+        }
+      }
+    }
+    const left = ring[a].x <= ring[b].x ? ring[a] : ring[b];
+    const right = ring[a].x <= ring[b].x ? ring[b] : ring[a];
+    const ax = right.x - left.x;
+    const ay = right.y - left.y;
+    const axisLen = Math.hypot(ax, ay);
+    if (axisLen < 2) return;
+    const axisLen2 = axisLen * axisLen;
+
+    // 2. Opening scale from the visemes (same inputs as before).
+    const w = this.weights;
     const openness = Math.min(
       1,
-      this.weights.jawOpen * 1.3 +
-        this.weights.mouthFunnel * 0.25 -
-        this.weights.mouthClose * 0.6
+      w.jawOpen * 1.3 + w.mouthFunnel * 0.25 - w.mouthClose * 0.6
     );
-    const squash = 0.1 + 0.9 * openness;
-    const xs = ring.map((p) => p.x);
-    const ys = ring.map((p) => cy + (p.y - cy) * squash);
-    const width = Math.max(...xs) - Math.min(...xs);
-    const height = Math.max(...ys) - Math.min(...ys);
-    if (width < 2) return;
+    if (openness <= 0.02) return;
+    const rounding = Math.min(1, w.mouthPucker + w.mouthFunnel * 0.6);
 
-    // Landmark motion is damped by the falloff field, so shape read from
-    // geometry alone is too timid: "oo" looked as wide as "ah". Modulate
-    // the drawn aperture directly with the viseme weights.
-    const w = this.weights;
-    const narrow = 1 - w.mouthPucker * 0.5 - w.mouthFunnel * 0.22 + w.mouthStretch * 0.12;
-    const apertureW = width * Math.max(0.35, Math.min(1.15, narrow));
-    // Rounded sounds are TALLER than they are wide relative to a neutral
-    // opening; open vowels get a floor so "E" actually parts the lips.
-    const heightBoost = 1 + w.mouthPucker * 0.55 + w.mouthFunnel * 0.35;
-    // Floor relative to mouth WIDTH (stable) so shapes that barely move the
-    // landmarks — "E" is mostly a stretch — still part the lips.
-    const floorH = width * (w.jawOpen * 0.28 + w.mouthStretch * 0.1);
-    const apertureH = Math.max(height * heightBoost, floorH);
+    // 3. Build the opening ALONG the real lip seam.
+    //
+    // Critical: in a normal portrait the lips are closed, so the inner-lip
+    // landmarks are all but coincident — measured rest gaps here are
+    // 0.1-2px. There is no geometric aperture to scale up. So we take the
+    // SEAM CURVE from the landmarks (its position, curvature and tilt are
+    // real) and synthesize the opening height on top of it, tapering to
+    // zero at the true commissures.
+    const n = ring.length;
+    const half = Math.floor(n / 2);
+    const seamWidth = axisLen;
+    // Opening height as a fraction of mouth width, from the visemes.
+    const openFrac =
+      w.jawOpen * 0.30 + w.mouthFunnel * 0.10 + w.mouthStretch * 0.04 - w.mouthClose * 0.06;
+    const openHeight = Math.max(0, openFrac) * seamWidth * this.tuning.mouthOpen;
+    if (openHeight < seamWidth * 0.012) return; // lips together
+    // The jaw drops the lower lip far more than the upper lip lifts.
+    const LOWER_SHARE = 0.74;
+    const UPPER_SHARE = 0.26;
 
-    const gapRatio = apertureH / apertureW;
-    if (gapRatio < 0.1) return; // lips together
-    const alpha = Math.min(1, (gapRatio - 0.1) / 0.06);
-    const halfW = apertureW / 2;
+    const shaped: { x: number; y: number; t: number }[] = new Array(n);
+    shaped[0] = { x: ring[0].x, y: ring[0].y, t: 0 };
+    shaped[half] = { x: ring[half].x, y: ring[half].y, t: 1 };
+    for (let k = 1; k < half; k++) {
+      const lo = ring[k];
+      const up = ring[n - k];
+      // Seam point: the lip line itself.
+      const sx = (lo.x + up.x) / 2;
+      const sy = (lo.y + up.y) / 2;
+      const vx = sx - left.x;
+      const vy = sy - left.y;
+      const t = Math.max(0, Math.min(1, (vx * ax + vy * ay) / axisLen2));
+      // Zero at both corners, full mid-mouth: lips stay joined at the
+      // commissures, which is what made the corners look torn before.
+      // Exponent > 1 closes faster near the commissures: at sin^0.62 the
+      // opening was still 47% wide one landmark in from the corner.
+      const taper = Math.pow(Math.sin(Math.PI * t), 1.15);
+      // Rounded sounds pull the opening in from the corners as well.
+      const span = 1 - rounding * 0.46;
+      const tt = 0.5 + (t - 0.5) * span;
+      const cxSeam = left.x + ax * tt;
+      const cySeam = sy + (left.y + ay * tt - (left.y + ay * t));
+      const gap = openHeight * taper;
+      shaped[k] = { x: cxSeam, y: cySeam + gap * LOWER_SHARE, t };
+      shaped[n - k] = { x: cxSeam, y: cySeam - gap * UPPER_SHARE, t };
+    }
 
-    // Anchor the opening to the UPPER lip line and let only the bottom
-    // drop. Centring it on the ring centroid made the aperture climb into
-    // the upper lip as the jaw opened — anatomically it is the jaw that
-    // moves, not the top teeth.
-    const topY = Math.min(...ys);
-    const bottomY = topY + Math.min(apertureH, width * 0.5);
-    const midY = (topY + bottomY) / 2;
-    const halfH = (bottomY - topY) / 2;
-    if (halfH < 0.5) return;
+    // Debug aid: the last computed outline, for the dev harness to draw.
+    (this as unknown as { lastAperture?: unknown }).lastAperture = shaped;
 
-    // Corner-to-corner axis, so the aperture follows a tilted mouth.
-    const left = { x: cx - halfW, y: midY };
-    const right = { x: cx + halfW, y: midY };
+    // Upper chain runs from the right corner back to the left one.
+    const upper = shaped.slice(half + 1).reverse();
+    if (upper.length < 2) return;
+
+    const xs = shaped.map((p) => p.x);
+    const ys = shaped.map((p) => p.y);
+    const bw = Math.max(...xs) - Math.min(...xs);
+    const bh = Math.max(...ys) - Math.min(...ys);
+    if (bw < 2) return;
+    const gapRatio = bh / bw;
+    if (gapRatio < 0.06) return; // lips together
+    const alpha = Math.min(1, (gapRatio - 0.06) / 0.05);
+    const midY = (Math.max(...ys) + Math.min(...ys)) / 2;
+    const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
+
+    // 4. Smooth closed curve through the tapered outline (already in loop
+    // order: corner, lower chain, corner, upper chain).
+    const aperture = smoothClosedPath(shaped);
 
     ctx.save();
     ctx.globalAlpha = alpha;
-
-    // Lens/almond aperture: two quadratic arcs between the corners. This
-    // is the shape a real open mouth makes; the landmark polygon is not.
-    // Cubic arcs with inset control points: a lens built from quadratics
-    // ends in sharp spikes that poke past the lip corners.
-    const inset = halfW * 0.42;
-    const aperture = new Path2D();
-    aperture.moveTo(left.x, left.y);
-    aperture.bezierCurveTo(
-      left.x + inset, midY - halfH * 1.25,
-      right.x - inset, midY - halfH * 1.25,
-      right.x, right.y
-    );
-    aperture.bezierCurveTo(
-      right.x - inset, midY + halfH * 1.25,
-      left.x + inset, midY + halfH * 1.25,
-      left.x, left.y
-    );
-    aperture.closePath();
     ctx.clip(aperture);
 
-    // Cavity: darkest at the top (recessed throat), warmer low down.
-    const cavity = ctx.createLinearGradient(0, midY - halfH, 0, midY + halfH);
+    const cavity = ctx.createLinearGradient(0, midY - bh / 2, 0, midY + bh / 2);
     cavity.addColorStop(0, "#1b0908");
     cavity.addColorStop(0.55, "#3a1512");
-    cavity.addColorStop(1, "#551f1a");
+    cavity.addColorStop(1, "#55201a");
     ctx.fillStyle = cavity;
-    ctx.fillRect(cx - halfW, midY - halfH * 2, width, halfH * 4);
+    ctx.fillRect(cx - bw, midY - bh, bw * 2, bh * 2);
 
-    // Upper teeth: a thin band hugging the TOP arc, never a floating strip.
-    // Teeth are the enamel visible BEHIND the opening — they show whenever
-    // the lips part and are not pursed, and most on retracted/sibilant
-    // shapes ("E", "s"), which barely open the jaw at all. Gating them on
-    // jaw opening alone meant they never appeared outside a wide "ah".
+    // Teeth follow the upper arch of the real curve, tapering with it.
     const teethGap = 0.06 * (this.tuning.teethThreshold / DEFAULT_TUNING.teethThreshold);
-    const rounding = Math.min(1, w.mouthPucker + w.mouthFunnel * 0.6);
     const teethAmount =
       Math.max(0, Math.min(1, (gapRatio - teethGap) / 0.08)) *
       (0.55 + 0.45 * w.mouthStretch) *
       Math.max(0, Math.min(1, 1 - rounding / 0.45));
     if (teethAmount > 0.02) {
-      // Real upper teeth: an arc that tapers toward the corners, never the
-      // full width of the opening, with a dark gap left below and faint
-      // separations. A flat white bar reads as a sticker.
-      const bandH = Math.min(halfH * 0.52, width * 0.05);
-      const bandW = halfW * 1.28;
-      const bandTop = midY - halfH * 0.92;
+      const bandH = Math.min(bh * 0.34, bw * 0.042);
       ctx.save();
-      ctx.globalAlpha = alpha * teethAmount;
-      ctx.beginPath();
-      ctx.moveTo(cx - bandW / 2, bandTop + bandH * 0.35);
-      ctx.quadraticCurveTo(cx, bandTop - halfH * 0.3, cx + bandW / 2, bandTop + bandH * 0.35);
-      ctx.quadraticCurveTo(cx + bandW * 0.42, bandTop + bandH * 1.15, cx, bandTop + bandH * 1.2);
-      ctx.quadraticCurveTo(cx - bandW * 0.42, bandTop + bandH * 1.15, cx - bandW / 2, bandTop + bandH * 0.35);
-      ctx.closePath();
-      const enamel = ctx.createLinearGradient(0, bandTop, 0, bandTop + bandH * 1.2);
-      enamel.addColorStop(0, "#efe9dd");
-      enamel.addColorStop(0.65, "#ded6c8");
-      enamel.addColorStop(1, "#b3a998"); // shaded biting edge
-      ctx.fillStyle = enamel;
-      ctx.fill();
-      // Faint separations between individual teeth.
-      ctx.clip();
-      ctx.strokeStyle = "rgba(120, 104, 88, 0.28)";
-      ctx.lineWidth = Math.max(0.6, width * 0.004);
-      for (let i = 1; i < 6; i++) {
-        const tx = cx - bandW / 2 + (bandW * i) / 6;
+      ctx.globalAlpha = alpha * teethAmount * 0.9;
+      const arch = upper.filter((p) => p.t > 0.12 && p.t < 0.88);
+      if (arch.length >= 2) {
         ctx.beginPath();
-        ctx.moveTo(tx, bandTop);
-        ctx.lineTo(tx + bandH * 0.12, bandTop + bandH * 1.2);
-        ctx.stroke();
+        ctx.moveTo(arch[0].x, arch[0].y);
+        for (let i = 1; i < arch.length; i++) ctx.lineTo(arch[i].x, arch[i].y);
+        for (let i = arch.length - 1; i >= 0; i--) {
+          const drop = bandH * Math.pow(Math.sin(Math.PI * arch[i].t), 0.5);
+          ctx.lineTo(arch[i].x, arch[i].y + drop);
+        }
+        ctx.closePath();
+        const top = Math.min(...arch.map((q) => q.y));
+        const enamel = ctx.createLinearGradient(0, top, 0, top + bandH * 1.5);
+        enamel.addColorStop(0, "rgba(238, 232, 220, 0.96)");
+        enamel.addColorStop(0.6, "rgba(216, 208, 194, 0.92)");
+        enamel.addColorStop(1, "rgba(150, 140, 126, 0.55)"); // fades into shadow
+        ctx.fillStyle = enamel;
+        ctx.fill();
+        ctx.clip();
+        ctx.strokeStyle = "rgba(120, 104, 88, 0.25)";
+        ctx.lineWidth = Math.max(0.6, bw * 0.004);
+        for (let i = 1; i < 6; i++) {
+          const tx = cx - (bw * 0.36) + (bw * 0.72 * i) / 6;
+          ctx.beginPath();
+          ctx.moveTo(tx, midY - bh);
+          ctx.lineTo(tx + bandH * 0.15, midY + bh);
+          ctx.stroke();
+        }
       }
       ctx.restore();
     }
 
-    // Tongue: only on a genuinely wide mouth, low in the cavity, soft edged
-    // and small. The previous flat slab filled the whole opening.
-    if (gapRatio > 0.3) {
-      const t = Math.min(1, (gapRatio - 0.3) / 0.12);
-      const tw = halfW * 0.62;
-      const th = halfH * 0.55;
-      const ty = midY + halfH * 0.75;
-      const tongue = ctx.createRadialGradient(cx, ty, th * 0.15, cx, ty, th * 1.4);
-      tongue.addColorStop(0, "rgba(176, 92, 86, " + (0.9 * t).toFixed(3) + ")");
+    // Tongue: a soft rise low in the cavity on genuinely open shapes.
+    if (gapRatio > 0.26) {
+      const amount = Math.min(1, (gapRatio - 0.26) / 0.12);
+      const ty = midY + bh * 0.34;
+      const tongue = ctx.createRadialGradient(cx, ty, bh * 0.06, cx, ty, bh * 0.6);
+      tongue.addColorStop(0, `rgba(176, 92, 86, ${(0.85 * amount).toFixed(3)})`);
       tongue.addColorStop(1, "rgba(120, 52, 48, 0)");
       ctx.fillStyle = tongue;
       ctx.beginPath();
-      ctx.ellipse(cx, ty, tw, th, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx, ty, bw * 0.3, bh * 0.3, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
     ctx.restore();
 
-    // Soft contact shadow around the aperture rim, drawn OUTSIDE the clip so
-    // it blends the opening into the lips instead of ending on a hard edge.
+    // Soft rim so the opening blends into the lips instead of ending hard.
     ctx.save();
-    ctx.globalAlpha = alpha * 0.5;
-    ctx.strokeStyle = "rgba(60, 22, 20, 0.55)";
-    ctx.lineWidth = Math.max(1, width * 0.02);
+    ctx.globalAlpha = alpha * 0.45;
+    ctx.strokeStyle = "rgba(60, 22, 20, 0.5)";
+    ctx.lineWidth = Math.max(1, bw * 0.016);
     ctx.stroke(aperture);
     ctx.restore();
   }
