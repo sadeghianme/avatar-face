@@ -1127,7 +1127,7 @@ export class AvatarEngine {
     const w = this.weights;
     const rounding = Math.min(1, w.mouthPucker + w.mouthFunnel * 0.6);
     const openFrac =
-      w.jawOpen * 0.30 + w.mouthFunnel * 0.10 + w.mouthStretch * 0.04 - w.mouthClose * 0.06;
+      w.jawOpen * 0.38 + w.mouthFunnel * 0.10 + w.mouthStretch * 0.04 - w.mouthClose * 0.06;
     const openHeight = Math.max(0, openFrac) * axisLen * this.tuning.mouthOpen;
     if (openHeight < axisLen * 0.012) return; // lips together
 
@@ -1168,8 +1168,8 @@ export class AvatarEngine {
 
     // --- Sample upper and lower edges off the seam normal. ---
     const SAMPLES = 26;
-    const LOWER_SHARE = 0.74; // the jaw drops far more than the lip lifts
-    const UPPER_SHARE = 0.26;
+    const LOWER_SHARE = 0.80; // the jaw drops; the upper lip barely lifts
+    const UPPER_SHARE = 0.20;
     const upperPts: Point[] = [];
     const lowerPts: Point[] = [];
     for (let i = 0; i <= SAMPLES; i++) {
@@ -1230,7 +1230,16 @@ export class AvatarEngine {
       (0.55 + 0.45 * w.mouthStretch) *
       Math.max(0, Math.min(1, 1 - rounding / 0.45));
     if (teethAmount > 0.02) {
-      this.drawUpperTeeth(upperPts, bh, bw, alpha, teethAmount);
+      const upperH = Math.min(bh * 0.3, bw * 0.04) * (0.45 + 0.55 * teethAmount);
+      this.drawTeethRow(upperPts, bw, alpha, teethAmount, upperH, false);
+      // Lower teeth appear once there is room for them without meeting the
+      // uppers — a real jaw shows them well before it is fully open.
+      const room = bh - upperH * 1.35;
+      const lowerH = Math.min(upperH * 0.62, room * 0.5);
+      if (lowerH > 0.8) {
+        // The lower row shows across the front only.
+        this.drawTeethRow(lowerPts, bw, alpha, teethAmount, lowerH, true, 0.26, 0.74, 0.28);
+      }
     }
 
     // Tongue: a soft rise low in the cavity on genuinely open shapes.
@@ -1258,46 +1267,55 @@ export class AvatarEngine {
   }
 
   /**
-   * Individual upper teeth following the arch: central incisors widest,
-   * narrowing outward, each with a rounded biting edge, a gum shadow at
-   * the top and a dark gap between neighbours. A single white band reads
-   * as a sticker stuck on the face.
+   * One row of teeth on a smoothed dental arch, drawn with perspective:
+   * the arch curves away from the camera, so teeth toward the corners are
+   * narrower, shorter, set deeper into the mouth and in shadow. Uniform
+   * teeth read as a flat printed strip.
    */
-  private drawUpperTeeth(
+  private drawTeethRow(
     arch: Point[],
-    bh: number,
     bw: number,
     alpha: number,
-    exposure: number
+    exposure: number,
+    height: number,
+    isLower: boolean,
+    // Teeth occupy only the front of the arch; the rest curves away out of
+    // sight. Without this the row wrapped up around the commissures.
+    spanStart = 0.08,
+    spanEnd = 0.92,
+    // A dental arch is far flatter than the lip opening it sits behind;
+    // following the aperture curve exactly made the row dive at the sides.
+    flatten = 0.3
   ): void {
     const ctx = this.ctx;
-    if (arch.length < 4) return;
-    // Exposure controls how much tooth shows below the lip — NOT opacity.
-    // Fading them out instead let the black cavity through and they read
-    // as grey tiles.
-    const height = Math.min(bh * 0.42, bw * 0.055) * (0.45 + 0.55 * exposure);
-    if (height < 0.6) return;
+    if (arch.length < 4 || height < 0.6) return;
 
-    // Relative widths across the arch: incisors, laterals, canines.
-    const widths = [0.6, 0.85, 1.15, 1.15, 0.85, 0.6];
-    const total = widths.reduce((s, v) => s + v, 0);
-    // Smooth dental arch: real upper teeth sit on one clean curve. Following
-    // the raw seam samples made the teeth ride a wavy line.
+    // Smooth arch: a quadratic through the ends and the midpoint. Following
+    // the raw samples put the teeth on a wavy line.
     const a0 = arch[0];
     const a1 = arch[arch.length - 1];
-    const am = arch[Math.floor(arch.length / 2)];
-    const ctrl = {
-      x: 2 * am.x - (a0.x + a1.x) / 2,
-      y: 2 * am.y - (a0.y + a1.y) / 2,
+    const rawMid = arch[Math.floor(arch.length / 2)];
+    const chordMid = { x: (a0.x + a1.x) / 2, y: (a0.y + a1.y) / 2 };
+    const am = {
+      x: rawMid.x + (chordMid.x - rawMid.x) * flatten,
+      y: rawMid.y + (chordMid.y - rawMid.y) * flatten,
     };
+    const ctrl = { x: 2 * am.x - (a0.x + a1.x) / 2, y: 2 * am.y - (a0.y + a1.y) / 2 };
     const archAt = (u: number) => {
-      const k = Math.max(0, Math.min(1, u));
+      const k = spanStart + Math.max(0, Math.min(1, u)) * (spanEnd - spanStart);
       const m = 1 - k;
       return {
         x: m * m * a0.x + 2 * m * k * ctrl.x + k * k * a1.x,
         y: m * m * a0.y + 2 * m * k * ctrl.y + k * k * a1.y,
       };
     };
+
+    // Central incisors widest, narrowing to the canines.
+    const widths = isLower
+      ? [0.45, 0.65, 0.85, 1.0, 1.0, 0.85, 0.65, 0.45]
+      : [0.42, 0.62, 0.85, 1.1, 1.1, 0.85, 0.62, 0.42];
+    const total = widths.reduce((s, v) => s + v, 0);
+    const dir = isLower ? -1 : 1; // lower teeth grow upward
 
     ctx.save();
     ctx.globalAlpha = Math.min(0.97, alpha * (0.72 + 0.28 * exposure));
@@ -1306,45 +1324,64 @@ export class AvatarEngine {
       const u0 = acc / total;
       acc += widths[i];
       const u1 = acc / total;
-      // Teeth recede toward the corners: shorter and dimmer.
-      const centrality = Math.sin(Math.PI * ((u0 + u1) / 2));
-      const h = height * (0.82 + 0.18 * centrality);
+      const uc = (u0 + u1) / 2;
+      // Perspective: 1 at the front of the arch, 0 at the corners.
+      const depth = Math.sin(Math.PI * uc);
+      const h = height * (0.3 + 0.7 * depth);
+      // Receding teeth sit deeper — pushed back toward the gum line.
+      const recess = (1 - depth) * height * 0.55 * dir;
       const gapPx = Math.max(0.25, bw * 0.0018);
 
       const a = archAt(u0);
       const b = archAt(u1);
-      const mid = archAt((u0 + u1) / 2);
+      const mid = archAt(uc);
+      const ay = a.y + recess;
+      const by = b.y + recess;
+      const my = mid.y + recess;
+
       ctx.beginPath();
-      ctx.moveTo(a.x + gapPx, a.y);
-      ctx.quadraticCurveTo(mid.x, mid.y - h * 0.12, b.x - gapPx, b.y);
-      ctx.lineTo(b.x - gapPx, b.y + h * 0.72);
-      // Rounded biting edge.
-      ctx.quadraticCurveTo(mid.x, mid.y + h * 1.12, a.x + gapPx, a.y + h * 0.72);
+      ctx.moveTo(a.x + gapPx, ay);
+      ctx.quadraticCurveTo(mid.x, my - 0.1 * h * dir, b.x - gapPx, by);
+      ctx.lineTo(b.x - gapPx, by + h * 0.72 * dir);
+      ctx.quadraticCurveTo(
+        mid.x,
+        my + h * 1.1 * dir,
+        a.x + gapPx,
+        ay + h * 0.72 * dir
+      );
       ctx.closePath();
 
-      // Warm ivory, not grey; outer teeth sit deeper so they read darker.
-      const tint = 0.82 + 0.18 * centrality;
-      const shade = ctx.createLinearGradient(0, mid.y, 0, mid.y + h);
-      shade.addColorStop(0, `rgba(${Math.round(236 * tint)}, ${Math.round(230 * tint)}, ${Math.round(216 * tint)}, 0.98)`);
-      shade.addColorStop(0.7, `rgba(${Math.round(246 * tint)}, ${Math.round(240 * tint)}, ${Math.round(226 * tint)}, 0.97)`);
-      // Enamel is translucent at the biting edge.
-      shade.addColorStop(1, `rgba(${Math.round(206 * tint)}, ${Math.round(198 * tint)}, ${Math.round(182 * tint)}, 0.78)`);
-      ctx.fillStyle = shade;
+      // Darker toward the corners (in shadow) and darker overall on the
+      // lower row, which sits under the upper lip's shadow.
+      const tint = (isLower ? 0.42 : 0.5) + (isLower ? 0.36 : 0.5) * depth;
+      const g = ctx.createLinearGradient(0, my, 0, my + h * dir);
+      g.addColorStop(0, `rgba(${Math.round(236 * tint)}, ${Math.round(230 * tint)}, ${Math.round(216 * tint)}, 0.98)`);
+      g.addColorStop(0.7, `rgba(${Math.round(248 * tint)}, ${Math.round(242 * tint)}, ${Math.round(228 * tint)}, 0.97)`);
+      g.addColorStop(1, `rgba(${Math.round(200 * tint)}, ${Math.round(192 * tint)}, ${Math.round(176 * tint)}, 0.8)`);
+      ctx.fillStyle = g;
       ctx.fill();
-      // Barely-there separation, drawn as shadow rather than a cut.
-      ctx.strokeStyle = "rgba(96, 74, 62, 0.18)";
+      // Hairline separation, as shadow rather than a cut.
+      ctx.strokeStyle = "rgba(96, 74, 62, 0.2)";
       ctx.lineWidth = Math.max(0.4, bw * 0.0025);
       ctx.stroke();
     }
 
-    // Gum shadow where the teeth meet the upper lip.
+    // Shadow where the row meets the lip/gum.
     const first = archAt(0);
     const last = archAt(1);
-    const gum = ctx.createLinearGradient(0, Math.min(first.y, last.y) - height * 0.2, 0, Math.min(first.y, last.y) + height * 0.5);
-    gum.addColorStop(0, "rgba(70, 26, 24, 0.55)");
-    gum.addColorStop(1, "rgba(70, 26, 24, 0)");
-    ctx.fillStyle = gum;
-    ctx.fillRect(Math.min(first.x, last.x), Math.min(first.y, last.y) - height * 0.25, Math.abs(last.x - first.x), height * 0.7);
+    const y0 = isLower
+      ? Math.max(first.y, last.y) - height * 0.1
+      : Math.min(first.y, last.y) - height * 0.25;
+    const shade = ctx.createLinearGradient(0, y0, 0, y0 + height * 0.7 * dir);
+    shade.addColorStop(0, "rgba(70, 26, 24, 0.5)");
+    shade.addColorStop(1, "rgba(70, 26, 24, 0)");
+    ctx.fillStyle = shade;
+    ctx.fillRect(
+      Math.min(first.x, last.x),
+      Math.min(y0, y0 + height * 0.7 * dir),
+      Math.abs(last.x - first.x),
+      height * 0.7
+    );
     ctx.restore();
   }
 
