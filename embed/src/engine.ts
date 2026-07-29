@@ -595,7 +595,7 @@ export class AvatarEngine {
     // vertex, not a binary mouth/not-mouth split. The split moved lip
     // landmarks far while their neighbours stayed put, which tore the
     // texture into visible stair-steps below the lip.
-    const reach = mw * 1.5; // how far mouth motion bleeds into the face
+    const reach = mw * 1.15; // how far mouth motion bleeds into the face
     for (let i = 0; i < pts.length; i++) {
       const px = pts[i].x - mcx;
       const py = pts[i].y - mcy;
@@ -1128,29 +1128,48 @@ export class AvatarEngine {
     ctx.fillRect(cx - halfW, midY - halfH * 2, width, halfH * 4);
 
     // Upper teeth: a thin band hugging the TOP arc, never a floating strip.
-    const teethGap = 0.22 * (this.tuning.teethThreshold / DEFAULT_TUNING.teethThreshold);
-    // Pursed lips HIDE the teeth — on "oo"/"oh" the enamel band read as a
-    // white blob filling the little aperture.
+    // Teeth are the enamel visible BEHIND the opening — they show whenever
+    // the lips part and are not pursed, and most on retracted/sibilant
+    // shapes ("E", "s"), which barely open the jaw at all. Gating them on
+    // jaw opening alone meant they never appeared outside a wide "ah".
+    const teethGap = 0.06 * (this.tuning.teethThreshold / DEFAULT_TUNING.teethThreshold);
     const rounding = Math.min(1, w.mouthPucker + w.mouthFunnel * 0.6);
     const teethAmount =
-      Math.min(1, (gapRatio - teethGap) / 0.08) * Math.max(0, 1 - rounding / 0.35);
-    if (teethAmount > 0) {
-      const bandH = Math.min(halfH * 0.5, width * 0.05);
-      const bandW = halfW * 1.45;
+      Math.max(0, Math.min(1, (gapRatio - teethGap) / 0.08)) *
+      (0.55 + 0.45 * w.mouthStretch) *
+      Math.max(0, Math.min(1, 1 - rounding / 0.45));
+    if (teethAmount > 0.02) {
+      // Real upper teeth: an arc that tapers toward the corners, never the
+      // full width of the opening, with a dark gap left below and faint
+      // separations. A flat white bar reads as a sticker.
+      const bandH = Math.min(halfH * 0.52, width * 0.05);
+      const bandW = halfW * 1.28;
+      const bandTop = midY - halfH * 0.92;
       ctx.save();
-      ctx.globalAlpha = alpha * teethAmount * 0.95;
+      ctx.globalAlpha = alpha * teethAmount;
       ctx.beginPath();
-      const bandTop = midY - halfH * 0.8;
-      ctx.moveTo(cx - bandW / 2, bandTop);
-      ctx.quadraticCurveTo(cx, bandTop - halfH * 0.35, cx + bandW / 2, bandTop);
-      ctx.lineTo(cx + bandW / 2, bandTop + bandH);
-      ctx.quadraticCurveTo(cx, bandTop + bandH * 1.6, cx - bandW / 2, bandTop + bandH);
+      ctx.moveTo(cx - bandW / 2, bandTop + bandH * 0.35);
+      ctx.quadraticCurveTo(cx, bandTop - halfH * 0.3, cx + bandW / 2, bandTop + bandH * 0.35);
+      ctx.quadraticCurveTo(cx + bandW * 0.42, bandTop + bandH * 1.15, cx, bandTop + bandH * 1.2);
+      ctx.quadraticCurveTo(cx - bandW * 0.42, bandTop + bandH * 1.15, cx - bandW / 2, bandTop + bandH * 0.35);
       ctx.closePath();
-      const enamel = ctx.createLinearGradient(0, midY - halfH, 0, midY - halfH + bandH * 2);
-      enamel.addColorStop(0, "#e9e2d6");
-      enamel.addColorStop(1, "#b9b0a2");
+      const enamel = ctx.createLinearGradient(0, bandTop, 0, bandTop + bandH * 1.2);
+      enamel.addColorStop(0, "#efe9dd");
+      enamel.addColorStop(0.65, "#ded6c8");
+      enamel.addColorStop(1, "#b3a998"); // shaded biting edge
       ctx.fillStyle = enamel;
       ctx.fill();
+      // Faint separations between individual teeth.
+      ctx.clip();
+      ctx.strokeStyle = "rgba(120, 104, 88, 0.28)";
+      ctx.lineWidth = Math.max(0.6, width * 0.004);
+      for (let i = 1; i < 6; i++) {
+        const tx = cx - bandW / 2 + (bandW * i) / 6;
+        ctx.beginPath();
+        ctx.moveTo(tx, bandTop);
+        ctx.lineTo(tx + bandH * 0.12, bandTop + bandH * 1.2);
+        ctx.stroke();
+      }
       ctx.restore();
     }
 

@@ -1,7 +1,7 @@
 // Dev-only visual test harness for the canvas engine.
 // Dev-server only; NOT served in production (kept out of public/ because
 // it would otherwise be published). Usage in the browser console:
-//   const H = await import('/@fs/<repo>/embed/devtools/lf-harness.js?v=' + Date.now());
+//   const H = await import('/src/devtools/lf-harness.js?v=' + Date.now());
 //   await H.boot();
 //   H.pose('aa'); H.zoom('aa');
 // Renders the avatar on a large offscreen canvas and blows the mouth region
