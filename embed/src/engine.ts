@@ -43,6 +43,61 @@ const IRIS_CLUSTERS = [
 ];
 const NOSE_TIP = 4;
 
+export interface Sample {
+  lum: number;
+  rgb: [number, number, number];
+}
+
+export function luma(rgb: [number, number, number]): number {
+  return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
+}
+
+function chroma(rgb: [number, number, number]): number {
+  return Math.max(...rgb) - Math.min(...rgb);
+}
+
+/**
+ * Pick the sclera colour out of samples taken beside the iris, or null if none
+ * of them is plausibly an eye white.
+ *
+ * Getting this wrong is what made the eyes change when the avatar looked
+ * around: the old version took the 85th brightness percentile of everything
+ * inside the eye-opening polygon, which on a real avatar returned
+ * rgb(174,156,142) — beige skin — and then painted it inside the eye.
+ *
+ * A sclera is the brightest NEUTRAL thing in an eye. Both halves matter and
+ * neither works alone: skin is bright but strongly chromatic, while lash,
+ * liner and pupil are neutral but dark. So the test is relative to the skin
+ * just below the eye, which also handles exposure and skin tone — on a dark
+ * face the sclera is far brighter than the cheek, on a pale one it is about
+ * equal, but in both the sclera is markedly less chromatic.
+ *
+ * The thresholds are deliberately biased toward rejection. A false negative
+ * costs gaze on one eye, which nobody notices. A false positive paints skin
+ * colour inside an eyeball, which is the bug this replaces.
+ */
+export function pickScleraColour(candidates: Sample[], skin: Sample | null): string | null {
+  if (!candidates.length) return null;
+  const brightestFirst = [...candidates].sort((a, b) => b.lum - a.lum);
+  const skinChroma = skin ? chroma(skin.rgb) : 40;
+  const maxChroma = Math.max(6, skinChroma * MAX_SCLERA_CHROMA_VS_SKIN);
+  const minLum = skin ? skin.lum * MIN_SCLERA_LUMA_VS_SKIN : 120;
+  const found = brightestFirst.find(
+    (s) => chroma(s.rgb) <= maxChroma && s.lum >= minLum
+  );
+  return found ? `rgb(${found.rgb.join(", ")})` : null;
+}
+
+// How far the iris slides across the eye, as a fraction of eye width.
+const GAZE_TRAVEL_X = 0.12;
+const GAZE_TRAVEL_Y = 0.07;
+
+// A sclera's colour cast is a fraction of the surrounding skin's, and it is
+// never much darker than that skin. Tuned so a cartoon eye with no white at
+// all is rejected while real sclera under warm light still passes.
+const MAX_SCLERA_CHROMA_VS_SKIN = 0.45;
+const MIN_SCLERA_LUMA_VS_SKIN = 0.75;
+
 const VOWEL_VISEMES = new Set(["aa", "E", "ih", "oh", "ou"]);
 
 interface Point {
@@ -206,7 +261,9 @@ export class AvatarEngine {
   // Separate iris layer: sclera colour sampled per eye, iris radius in
   // texture pixels, and the texture->canvas scale factor.
   private eyeLayer: {
-    sclera: string[];
+    // null for an eye whose sclera could not be identified — see
+    // prepareEyeLayer. That eye keeps the photographed iris and forgoes gaze.
+    sclera: (string | null)[];
     irisTexRadius: number[];
     texToCanvas: number;
   } | null = null;
@@ -975,7 +1032,7 @@ export class AvatarEngine {
       if (!offCtx) return;
       offCtx.drawImage(this.texture, 0, 0);
 
-      const sclera: string[] = [];
+      const sclera: (string | null)[] = [];
       const irisTexRadius: number[] = [];
       for (let e = 0; e < 2; e++) {
         const c = this.texPoints[centers[e]];
@@ -983,10 +1040,14 @@ export class AvatarEngine {
         const radius =
           rim.reduce((s, p) => s + Math.hypot(p.x - c.x, p.y - c.y), 0) / rim.length;
         irisTexRadius.push(radius);
-        // Sclera: sample a grid strictly INSIDE the eye-opening polygon,
-        // skipping the iris disc, and take a high percentile brightness.
-        // Sampling by radius alone lands on lashes/liner and comes back
-        // muddy; the polygon keeps every sample on actual eye.
+        // Sclera colour. Sampling anywhere in the eye-opening polygon does
+        // NOT work: measured on a real avatar, the iris is 1.14x TALLER than
+        // the opening, so there is no sclera above or below it — the polygon
+        // is mostly lash, liner and lid skin, and a brightness percentile
+        // over it returned rgb(174,156,142), i.e. beige skin, which then got
+        // painted inside the eye. Sclera lives only in two slivers to the
+        // LEFT and RIGHT of the iris, level with its centre, so that is the
+        // only place worth looking.
         const poly = [...UPPER_LIDS[e], ...LOWER_LIDS[e], ...EYE_CORNERS[e]]
           .map((i) => this.texPoints[i])
           .filter(Boolean);
@@ -1014,28 +1075,48 @@ export class AvatarEngine {
           return hit;
         };
 
-        const candidates: { lum: number; rgb: [number, number, number] }[] = [];
-        const steps = 12;
-        for (let ix = 0; ix <= steps; ix++) {
-          for (let iy = 0; iy <= steps; iy++) {
-            const x = minX + ((maxX - minX) * ix) / steps;
-            const y = minY + ((maxY - minY) * iy) / steps;
+        const candidates: Sample[] = [];
+        const bandHalf = (maxY - minY) * 0.22; // level with the iris centre
+        const STEPS_X = 26;
+        const STEPS_Y = 6;
+        for (let ix = 0; ix <= STEPS_X; ix++) {
+          for (let iy = 0; iy <= STEPS_Y; iy++) {
+            const x = minX + ((maxX - minX) * ix) / STEPS_X;
+            const y = c.y - bandHalf + (2 * bandHalf * iy) / STEPS_Y;
             if (!inside(x, y)) continue;
-            if (Math.hypot(x - c.x, y - c.y) < radius * 1.08) continue; // iris
+            const dx = Math.abs(x - c.x);
+            // Outside the iris (plus a margin for landmark error), but inside
+            // the eye — not out past the corner, where only skin lives.
+            if (dx < radius * 1.15 || dx > (maxX - minX) * 0.46) continue;
             const sx = Math.max(0, Math.min(off.width - 1, Math.round(x)));
             const sy = Math.max(0, Math.min(off.height - 1, Math.round(y)));
             const d = offCtx.getImageData(sx, sy, 1, 1).data;
-            candidates.push({
-              lum: 0.299 * d[0] + 0.587 * d[1] + 0.114 * d[2],
-              rgb: [d[0], d[1], d[2]],
-            });
+            const rgb: [number, number, number] = [d[0], d[1], d[2]];
+            candidates.push({ lum: luma(rgb), rgb });
           }
         }
-        candidates.sort((a, b) => a.lum - b.lum);
-        // 85th percentile: the sclera, without catching a specular highlight.
-        const pick = candidates[Math.floor(candidates.length * 0.85)];
-        const [r, g, b] = pick?.rgb ?? [225, 223, 220];
-        sclera.push(`rgb(${r}, ${g}, ${b})`);
+        // Reference skin, taken just below the lower lid: it is the same
+        // exposure and skin tone as the eye, which is what makes the sclera
+        // test work across faces instead of needing absolute thresholds.
+        const lidBottom = Math.max(...LOWER_LIDS[e].map((i) => this.texPoints[i]?.y ?? c.y));
+        const skinSamples: Sample[] = [];
+        for (let ix = -2; ix <= 2; ix++) {
+          for (let iy = 1; iy <= 3; iy++) {
+            const x = c.x + ix * radius * 0.4;
+            const y = lidBottom + iy * radius * 0.45;
+            const sx = Math.max(0, Math.min(off.width - 1, Math.round(x)));
+            const sy = Math.max(0, Math.min(off.height - 1, Math.round(y)));
+            const d = offCtx.getImageData(sx, sy, 1, 1).data;
+            const rgb: [number, number, number] = [d[0], d[1], d[2]];
+            skinSamples.push({ lum: luma(rgb), rgb });
+          }
+        }
+        skinSamples.sort((a, b) => a.lum - b.lum);
+        const skin = skinSamples[Math.floor(skinSamples.length / 2)] ?? null;
+
+        // No credible sclera: leave this eye exactly as photographed. Losing
+        // gaze is invisible; painting skin colour inside an eye is not.
+        sclera.push(pickScleraColour(candidates, skin));
       }
       const texToCanvas = (this.rig.image_size[0] / this.texture.naturalWidth) * this.scale;
       this.eyeLayer = { sclera, irisTexRadius, texToCanvas };
@@ -1074,12 +1155,18 @@ export class AvatarEngine {
       const openH = Math.max(...ys) - Math.min(...ys);
       if (openW < 3 || openH < 2) continue;
 
+      const scleraColour = layer.sclera[e];
+      if (!scleraColour) continue; // no readable sclera — keep the photo
       const irisR = layer.irisTexRadius[e] * layer.texToCanvas;
       if (irisR < 1) continue;
       const base = pts[centers[e]];
       if (!base) continue;
-      const gx = this.gaze.x * openW * 0.22 * (1 - blinkAmount);
-      const gy = this.gaze.y * openW * 0.12 * (1 - blinkAmount);
+      // A human iris travels only ~2-3mm, roughly 0.12 of eye width, before
+      // the eye gives up and the head turns. The old 0.22 pushed the iris
+      // past the sclera that exists to uncover, so it clipped against the
+      // lid and the vacated area became larger than the eye could explain.
+      const gx = this.gaze.x * openW * GAZE_TRAVEL_X * (1 - blinkAmount);
+      const gy = this.gaze.y * openW * GAZE_TRAVEL_Y * (1 - blinkAmount);
       // At rest, touch NOTHING: the mesh already drew the real eye, which
       // is always more correct than anything we can repaint. Only when the
       // iris actually needs to move do we patch it.
@@ -1097,14 +1184,60 @@ export class AvatarEngine {
       // duct, lid shading and corners stay as photographed. The cover is
       // slightly larger than the measured iris so an imperfect landmark
       // radius can't leave a rim of the old iris behind.
-      ctx.fillStyle = layer.sclera[e];
-      ctx.beginPath();
-      ctx.arc(base.x, base.y, irisR * 1.18, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Stamp the iris at its new position.
+      //
+      // Cover it with REAL sclera pixels, not a flat colour. A flat disc was
+      // the visible defect here: the cover is ~58px across on a ~48px-tall
+      // opening, so once clipped to the lid it became a hard-edged wedge of
+      // uniform paint over half the eye — a sticker, not an eyeball. Instead
+      // take a thin VERTICAL strip of the eye from the side the iris is
+      // moving away from (which is sclera in the original) and stretch it
+      // horizontally across the vacated area. Stretching sideways preserves
+      // the vertical gradient — the shadow the upper lid casts on the top of
+      // the eyeball — which is most of what makes an eye read as wet and
+      // recessed rather than painted on.
       const texC = this.texPoints[centers[e]];
       const texR = layer.irisTexRadius[e];
+      const texRing = [...UPPER_LIDS[e], ...LOWER_LIDS[e], ...EYE_CORNERS[e]]
+        .map((i) => this.texPoints[i])
+        .filter(Boolean);
+      const texTop = Math.min(...texRing.map((p) => p.y));
+      const texBottom = Math.max(...texRing.map((p) => p.y));
+      const texLeft = Math.min(...texRing.map((p) => p.x));
+      const texRight = Math.max(...texRing.map((p) => p.x));
+      const canvasTop = Math.min(...ys);
+      const canvasBottom = Math.max(...ys);
+      const stripW = Math.max(2, texR * 0.3);
+      // The vacated side is opposite the direction of travel.
+      const away = gx >= 0 ? -1 : 1;
+      const stripCx = Math.max(
+        texLeft + stripW / 2,
+        Math.min(texRight - stripW / 2, texC.x + away * texR * 1.5)
+      );
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(base.x, base.y, irisR * 1.18, 0, Math.PI * 2);
+      ctx.clip();
+      // Fall back to the sampled flat colour only if the strip would be
+      // degenerate (a landmark collapse), so there is always something sane.
+      if (texBottom - texTop > 1 && canvasBottom - canvasTop > 1) {
+        ctx.drawImage(
+          this.texture,
+          stripCx - stripW / 2,
+          texTop,
+          stripW,
+          texBottom - texTop,
+          base.x - irisR * 1.4,
+          canvasTop,
+          irisR * 2.8,
+          canvasBottom - canvasTop
+        );
+      } else {
+        ctx.fillStyle = scleraColour;
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Stamp the iris at its new position.
       ctx.save();
       ctx.beginPath();
       ctx.arc(base.x + gx, base.y + gy, irisR, 0, Math.PI * 2);

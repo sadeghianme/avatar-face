@@ -219,3 +219,59 @@ export async function strip(text = "Mama put a poppy in my bag.", opts = {}) {
     meanAccel: +(accel.reduce((a, b) => a + b, 0) / accel.length).toFixed(5),
   };
 }
+
+/**
+ * What does the gaze patch actually do to the eye pixels?
+ *
+ * `drawEyes` leaves the eye untouched at rest and only repaints once the iris
+ * has to move. This renders the same frame at rest and at a given gaze offset
+ * and reports how far the eye region moved, so "the eyes change when it looks
+ * around" is a measurement rather than an impression.
+ */
+export function eyes(gazeX = 0.8, gazeY = 0.0) {
+  const e = state.engine;
+  const grab = () => {
+    e.render();
+    const pts = e.deformedPoints(performance.now());
+    const boxes = [];
+    for (const centre of [468, 473]) {
+      const c = pts[centre];
+      if (!c) continue;
+      const r = (e.eyeLayer?.irisTexRadius?.[boxes.length] ?? 8) * (e.eyeLayer?.texToCanvas ?? 1);
+      const pad = Math.max(12, r * 2.4);
+      boxes.push({
+        x: Math.round(c.x - pad), y: Math.round(c.y - pad),
+        w: Math.round(pad * 2), h: Math.round(pad * 2),
+      });
+    }
+    const ctx = state.cv.getContext("2d");
+    return boxes.map((b) => ({ b, data: ctx.getImageData(b.x, b.y, b.w, b.h).data }));
+  };
+
+  e.gaze = { x: 0, y: 0 };
+  e.gazeTarget = { x: 0, y: 0 };
+  const rest = grab();
+  e.gaze = { x: gazeX, y: gazeY };
+  e.gazeTarget = { x: gazeX, y: gazeY };
+  const moved = grab();
+
+  return rest.map((r, i) => {
+    const a = r.data, b = moved[i].data;
+    let changed = 0, sum = 0, worst = 0;
+    for (let p = 0; p < a.length; p += 4) {
+      const d = (Math.abs(a[p] - b[p]) + Math.abs(a[p + 1] - b[p + 1]) + Math.abs(a[p + 2] - b[p + 2])) / 3;
+      sum += d;
+      if (d > 8) changed++;
+      if (d > worst) worst = d;
+    }
+    const px = a.length / 4;
+    return {
+      eye: i ? "right" : "left",
+      irisRadiusPx: +(e.eyeLayer.irisTexRadius[i] * e.eyeLayer.texToCanvas).toFixed(1),
+      sclera: e.eyeLayer.sclera[i],
+      pctPixelsChanged: +((changed / px) * 100).toFixed(1),
+      meanDelta: +(sum / px).toFixed(1),
+      maxDelta: worst,
+    };
+  });
+}
