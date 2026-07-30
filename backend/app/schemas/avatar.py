@@ -32,6 +32,42 @@ class RigAdjust(BaseModel):
     right_eye_dy: float = Field(default=0, ge=-2000, le=2000)
 
 
+class AnchorBox(BaseModel):
+    """Where the user says a region's four edges are, in ORIGINAL-image px."""
+
+    left: float = Field(ge=-10000, le=10000)
+    right: float = Field(ge=-10000, le=10000)
+    top: float = Field(ge=-10000, le=10000)
+    bottom: float = Field(ge=-10000, le=10000)
+
+
+class AnchorPoint(BaseModel):
+    x: float = Field(ge=-10000, le=10000)
+    y: float = Field(ge=-10000, le=10000)
+
+
+class RigFit(BaseModel):
+    """Hand-placed landmark anchors.
+
+    Every field is optional: a region left out is not touched, so a user who
+    only needs to fix the mouth does not have to re-state the eyes.
+    """
+
+    head: AnchorBox | None = None
+    left_eye: AnchorBox | None = None
+    right_eye: AnchorBox | None = None
+    mouth: AnchorBox | None = None
+    mouth_center: AnchorPoint | None = None
+    # False (the default) computes the corrected rig and returns it WITHOUT
+    # writing, so the preview a user tests is the same object that gets saved.
+    persist: bool = False
+
+
+class RigFitResult(BaseModel):
+    rig: dict
+    persisted: bool
+
+
 class AvatarOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { AdjustFitPanel } from "../components/AdjustFitPanel";
+import { MarkFacePanel } from "../components/MarkFacePanel";
 import { Avatar3DPreview } from "../components/Avatar3DPreview";
 import { AvatarPreview } from "../components/AvatarPreview";
 import { EmbedSnippet } from "../components/EmbedSnippet";
@@ -102,7 +102,7 @@ export function AvatarDetailPage() {
           {avatar.kind === "photo" && avatar.status === "ready" && (
             <>
               <button className="btn-secondary" onClick={() => setAdjusting((a) => !a)}>
-                🎯 {t("adjustFit")}
+                🎯 {t("markFace")}
               </button>
               <button className="btn-secondary" onClick={() => void generate3d()}>
                 ✨ {t("generate3d")}
@@ -132,7 +132,7 @@ export function AvatarDetailPage() {
 
       {adjusting && avatar.status === "ready" && (
         <div className="mb-6">
-          <AdjustFitPanel avatar={avatar} orgId={current.id} onClose={() => setAdjusting(false)} />
+          <MarkFacePanel avatar={avatar} orgId={current.id} onClose={() => setAdjusting(false)} />
         </div>
       )}
 

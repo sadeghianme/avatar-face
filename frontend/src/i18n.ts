@@ -43,6 +43,14 @@ const resources = {
       viewFace: "Face",
       viewFull: "Full photo",
       generate3d: "Generate 3D",
+      markFace: "Mark the face",
+      markFaceHint:
+        "Drag the edge markers onto the real edges of the head, each eye and the mouth. "
+        + "Auto-detection assumes a human face, so on stylized art it lands in the wrong place. "
+        + "Test before saving — nothing is stored until you press Save.",
+      testBeforeSave: "Test before saving",
+      testHint: "Press Test to try your markers on a live preview before saving.",
+      resetDetected: "Reset to detected",
       adjustFit: "Adjust fit",
       adjustFitHint: "Drag the mouth and eye markers onto the right spots if auto-detection missed. Resize the mouth with the slider, then save.",
       mouthSize: "Mouth size",
@@ -128,6 +136,14 @@ const resources = {
       viewFace: "Visage",
       viewFull: "Photo entière",
       generate3d: "Générer en 3D",
+      markFace: "Marquer le visage",
+      markFaceHint:
+        "Faites glisser les repères sur les vrais bords de la tête, de chaque œil et de la bouche. "
+        + "La détection automatique suppose un visage humain : sur un dessin stylisé, elle se trompe. "
+        + "Testez avant d'enregistrer — rien n'est sauvegardé avant d'appuyer sur Enregistrer.",
+      testBeforeSave: "Tester avant d'enregistrer",
+      testHint: "Appuyez sur Tester pour essayer vos repères sur un aperçu avant d'enregistrer.",
+      resetDetected: "Rétablir la détection",
       adjustFit: "Ajuster",
       adjustFitHint: "Faites glisser les repères bouche/yeux au bon endroit si la détection a manqué. Ajustez la taille de la bouche, puis enregistrez.",
       mouthSize: "Taille de la bouche",

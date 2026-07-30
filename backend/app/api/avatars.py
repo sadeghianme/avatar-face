@@ -17,8 +17,11 @@ from app.schemas.avatar import (
     AvatarFromUrl,
     AvatarOut,
     RigAdjust,
+    RigFit,
+    RigFitResult,
 )
 from app.services.rig import process_avatar
+from app.services.rig_fit import BoxAnchors, apply_anchors, current_anchors
 from app.services.storage import get_storage
 
 router = APIRouter(prefix="/orgs/{org_id}/avatars", tags=["avatars"])
@@ -227,6 +230,62 @@ async def rig_adjust(avatar_id: str, body: RigAdjust, ctx: OrgMember, db: DB) ->
     rig["face_box"] = [min(xs), min(ys), max(xs), max(ys)]
     await storage.put_bytes(avatar.rig_key, _json.dumps(rig).encode(), "application/json")
     return avatar
+
+
+@router.get("/{avatar_id}/rig-anchors")
+async def rig_anchors(avatar_id: str, ctx: OrgMember, db: DB) -> dict:
+    """Where the detector currently believes each region's edges are.
+
+    The fit UI opens with its handles already on these, so the user corrects a
+    detection instead of marking a face from scratch — on a photo where the
+    detection is good, that means dragging nothing.
+    """
+    import json as _json
+
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    if not avatar.rig_key:
+        raise Conflict409("Avatar has no rig", code="not_adjustable")
+    rig = _json.loads(await get_storage().get_bytes(avatar.rig_key))
+    return {"anchors": current_anchors(rig), "image_size": rig["image_size"]}
+
+
+@router.post("/{avatar_id}/rig-fit", response_model=RigFitResult)
+async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFitResult:
+    """Rewrite the rig from hand-placed anchors.
+
+    With `persist` false this computes the corrected rig and returns it
+    without writing, so the client can render and speak with the exact object
+    that a subsequent save would store — the preview cannot disagree with the
+    result, because it IS the result.
+    """
+    import json as _json
+
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    if avatar.kind != AvatarKind.photo or avatar.status != AvatarStatus.ready or not avatar.rig_key:
+        raise Conflict409("Avatar rig is not adjustable", code="not_adjustable")
+
+    storage = get_storage()
+    rig = _json.loads(await storage.get_bytes(avatar.rig_key))
+
+    def box(value) -> BoxAnchors | None:
+        if value is None:
+            return None
+        return BoxAnchors(left=value.left, right=value.right, top=value.top, bottom=value.bottom)
+
+    adjusted = apply_anchors(
+        rig,
+        head=box(body.head),
+        left_eye=box(body.left_eye),
+        right_eye=box(body.right_eye),
+        mouth=box(body.mouth),
+        mouth_center=(body.mouth_center.x, body.mouth_center.y) if body.mouth_center else None,
+    )
+
+    if body.persist:
+        await storage.put_bytes(
+            avatar.rig_key, _json.dumps(adjusted).encode(), "application/json"
+        )
+    return RigFitResult(rig=adjusted, persisted=body.persist)
 
 
 @router.get("/{avatar_id}", response_model=AvatarDetail)
