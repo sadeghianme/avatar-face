@@ -143,3 +143,32 @@ CORPUS = [
 @pytest.mark.parametrize(("word", "expected"), CORPUS)
 def test_regular_spellings(word: str, expected: str) -> None:
     assert " ".join(word_to_phonemes(word)) == expected
+
+
+def test_tongue_consonants_survive_planning() -> None:
+    """They were being deleted wholesale: of 37 lingual phonemes in this text
+    only 5 used to reach a segment, so "the little girl said" was mimed as an
+    unbroken vowel smear with no consonant articulation at all."""
+    text = (
+        "The little girl said the answer was hidden in the middle of the tunnel. "
+        "Nine dollars and a dime. That did not tell the whole tale."
+    )
+    lingual_visemes = {"TH", "DD", "nn"}
+    wanted = kept = 0
+    for word in (w.strip(".,") for w in text.split()):
+        phones = word_to_phonemes_stressed(word)
+        wanted += sum(1 for p in phones if p in ("T", "D", "N", "L", "NG", "TH", "DH"))
+        kept += sum(1 for s in plan(phones) if s["vis"] in lingual_visemes)
+
+    assert wanted >= 30, "test text should be lingual-heavy"
+    assert kept / wanted > 0.8, f"only {kept}/{wanted} tongue consonants survived"
+
+
+def test_lingual_floor_does_not_steal_from_vowels() -> None:
+    """Linguals get their own short floor rather than being promoted to
+    lip-critical — promoting them made them borrow duration from the
+    neighbouring vowel and cost a third of the jaw movement."""
+    segments = plan(word_to_phonemes_stressed("dad"))
+    vowel = next(s for s in segments if s["vis"] == "aa")
+    assert vowel["ms"] >= 100, "the vowel kept its own duration"
+    assert any(s["vis"] == "DD" for s in segments)

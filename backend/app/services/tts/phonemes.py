@@ -303,6 +303,21 @@ def merge_and_cap(segs, max_hz=14.0):
     # 14 Hz and flag #14's anticipation window carries them. They are exempt from the floor
     # but never shorter than MIN_CLOSURE_MS.
     MIN_CLOSURE_MS = 30
+    # The tongue consonants are transients too, and they were being deleted
+    # wholesale: measured over a /l/-heavy paragraph, only 13.5% of 37 lingual
+    # phonemes survived planning, so "the little girl" was mimed as an
+    # unbroken vowel smear. They fail the dwell floor for the same reason
+    # PP/FF do — a 45-75ms segment cannot be a 71ms dwell — but unlike PP/FF
+    # they have liprole 0, so they fell straight through to the "absorb into
+    # the neighbour" branch and vanished.
+    #
+    # The fix is NOT to promote them to liprole 1: measured, that makes them
+    # steal duration from the neighbouring vowel and costs mean peak jaw
+    # 0.745 -> 0.621 (0.705 -> 0.339 on a /d/-heavy sentence). Give them their
+    # own shorter floor instead, so they survive at their natural length
+    # without borrowing time from anyone.
+    MIN_LINGUAL_MS = 45
+    LINGUAL = ("TH", "DD", "nn")
     floor = 1000.0 / max_hz
     changed = True
     while changed and len(m) > 1:
@@ -310,12 +325,19 @@ def merge_and_cap(segs, max_hz=14.0):
         for i, s in enumerate(m):
             if s["ms"] >= floor:
                 continue
-            if s["vis"] in ("PP", "FF"):
-                if s["ms"] < MIN_CLOSURE_MS:
+            transient_floor = (
+                MIN_CLOSURE_MS
+                if s["vis"] in ("PP", "FF")
+                else MIN_LINGUAL_MS
+                if s["vis"] in LINGUAL
+                else None
+            )
+            if transient_floor is not None:
+                if s["ms"] < transient_floor:
                     nb = max(
                         [j for j in (i - 1, i + 1) if 0 <= j < len(m)], key=lambda j: m[j]["ms"]
                     )
-                    take = min(MIN_CLOSURE_MS - s["ms"], max(0, m[nb]["ms"] - MIN_CLOSURE_MS))
+                    take = min(transient_floor - s["ms"], max(0, m[nb]["ms"] - transient_floor))
                     if take > 0:
                         m[nb]["ms"] -= take
                         s["ms"] += take

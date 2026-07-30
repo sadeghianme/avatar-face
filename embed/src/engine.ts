@@ -151,6 +151,13 @@ const MIN_DOMINANCE_MS = 42;
 const IMPERATIVE: Record<string, number> = {
   PP: 1.0,  // p, b, m — full lip closure; the most legible shape there is
   FF: 0.85, // f, v — lower lip tucked to the upper teeth
+  // The tongue consonants, now that they survive to be drawn at all. Same
+  // argument, weaker claim: a 45-60ms segment cannot reach its own shape
+  // through an average dominated by the neighbouring vowel's much wider
+  // bell. Held well below PP/FF because a /d/ is a smaller, less legible
+  // gesture than a lip closure and should not fight the vowel for the jaw.
+  nn: 0.35, // n, l, ng
+  DD: 0.3,  // t, d
 };
 
 /** Constraint bells are narrower than the blend's own (which uses 0.62× span
@@ -163,16 +170,37 @@ const MIN_IMPERATIVE_MS = 30;
 
 const MIN_CUE_MS = 85;
 
+/**
+ * Shapes that are transients, not dwells — a closure or a tongue contact that
+ * happens and is gone. Folding them at the dwell rate deleted them: measured
+ * over a /l/-heavy paragraph, of 37 tongue consonants only 2 survived to be
+ * drawn, so "the little girl said" was mimed as one unbroken vowel smear.
+ * The planner already exempts these from its own dwell floor for the same
+ * reason; this is the client half of the same argument.
+ */
+const TRANSIENT_VISEMES = new Set(["PP", "FF", "TH", "DD", "nn"]);
+const MIN_TRANSIENT_CUE_MS = 40;
+
 export function prepareCues(cues: Cue[]): Cue[] {
   if (cues.length <= 2) return cues;
   const out: Cue[] = [];
   for (const cue of cues) {
     const last = out[out.length - 1];
-    if (last && cue.t - last.t < MIN_CUE_MS) {
+    // A transient on EITHER side relaxes the floor: a /d/ followed 50ms later
+    // by its vowel has to keep both, or the consonant is swallowed by the
+    // vowel that follows it exactly as often as by the one before.
+    const floorMs =
+      TRANSIENT_VISEMES.has(cue.viseme) || (last && TRANSIENT_VISEMES.has(last.viseme))
+        ? MIN_TRANSIENT_CUE_MS
+        : MIN_CUE_MS;
+    if (last && cue.t - last.t < floorMs) {
       // Collides with the previous keyframe: vowels win (they carry the
-      // jaw motion); otherwise keep the existing one.
+      // jaw motion); otherwise keep the existing one. Replace the WHOLE cue
+      // rather than just its viseme — the old in-place `last.viseme = ...`
+      // left the deleted cue's other fields behind, so a vowel could inherit
+      // a consonant's stress amplitude.
       if (VOWEL_VISEMES.has(cue.viseme) && !VOWEL_VISEMES.has(last.viseme)) {
-        last.viseme = cue.viseme;
+        out[out.length - 1] = { ...cue, t: last.t };
       }
       continue;
     }
@@ -183,7 +211,7 @@ export function prepareCues(cues: Cue[]): Cue[] {
   const end = cues[cues.length - 1];
   const lastOut = out[out.length - 1];
   if (!lastOut || lastOut.viseme !== "sil" || lastOut.t < end.t) {
-    out.push({ t: Math.max(end.t, (lastOut?.t ?? 0) + 1), viseme: "sil" });
+    out.push({ t: Math.max(end.t, (lastOut?.t ?? 0) + 1), viseme: "sil", a: 1 });
   }
   return out;
 }
@@ -1376,8 +1404,34 @@ export class AvatarEngine {
     const rounding = Math.min(1, w.mouthPucker + w.mouthFunnel * 0.6);
     const openFrac =
       w.jawOpen * 0.23 + w.mouthFunnel * 0.07 + w.mouthStretch * 0.03 - w.mouthClose * 0.05;
-    const openHeight = Math.max(0, openFrac) * axisLen * this.tuning.mouthOpen;
-    if (openHeight < axisLen * 0.012) return; // lips together
+    // Lip RETRACTION, which is a different thing from jaw opening. /f/ /v/
+    // /s/ /z/ /sh/ barely drop the jaw — measured, /f/'s openFrac is exactly
+    // 0.010 against a 0.012 bail, so the whole interior returned early and
+    // those sounds rendered as a flat closed line. What they actually show is
+    // a bright tooth edge behind pulled-back lips.
+    //
+    // Rounding suppression is SQUARED: linear let /ou/ (a pucker, which shows
+    // nothing) leak through. The stretch deadband stops silence, which has a
+    // little residual stretch, from growing teeth.
+    const retract =
+      Math.min(1, w.mouthStretch * 1.5 + w.mouthSmile * 0.6) *
+      (1 - rounding) ** 2 *
+      Math.min(1, Math.max(0, (w.mouthStretch - 0.14) / 0.16));
+    // The labiodental tuck, /f/ and /v/, is the OTHER way teeth become
+    // visible, and it is not retraction — the lower lip rides UP against the
+    // upper incisors. For that shape mouthClose is the cause of the teeth
+    // showing, not a reason to hide them, which is why gating teeth on
+    // `1 - mouthClose` left /f/ at 0.058 alpha, i.e. invisible.
+    //
+    // mouthStretch is what separates it from a bilabial: /f/ carries ~0.25,
+    // /p/ /b/ /m/ carry none, so a closed mouth stays closed.
+    const tuck = w.mouthClose * Math.min(1, w.mouthStretch / 0.2) * (1 - rounding);
+    const teethDrive = Math.max(retract, tuck);
+    // A geometry floor, deliberately well below the cavity's 0.03 knee: /f/
+    // gets an arch to hang teeth from, not a black hole.
+    const openHeight =
+      Math.max(Math.max(0, openFrac), teethDrive * 0.018) * axisLen * this.tuning.mouthOpen;
+    if (openHeight < axisLen * 0.010) return; // lips together
 
     // --- Seam: midline between opposing landmarks, parameterised by t. ---
     const seam: { x: number; y: number; t: number }[] = [{ x: left.x, y: left.y, t: 0 }];
@@ -1490,17 +1544,22 @@ export class AvatarEngine {
     // curved mouth reported gapRatio > 0.09 with the lips 4px apart and ran
     // the cavity at full opacity. openHeight/axisLen is identity-independent.
     const gapRatio = openHeight / Math.max(1, axisLen);
-    const alpha = Math.min(1, Math.max(0, (gapRatio - 0.03) / 0.04));
-    if (alpha <= 0.01) return;
+    // One opacity used to gate the cavity, the lip shading AND the teeth, all
+    // keyed purely to how far the jaw had dropped. But teeth visibility is a
+    // function of lip retraction, not gape: you see someone's teeth on "fifty"
+    // with their jaw almost shut. Two opacities now.
+    const cavityAlpha = Math.min(1, Math.max(0, (gapRatio - 0.03) / 0.04));
+    const teethAlpha = Math.max(cavityAlpha, Math.min(0.85, teethDrive * 0.9));
+    if (cavityAlpha <= 0.01 && teethAlpha <= 0.01) return;
     const midY = (Math.max(...ys) + Math.min(...ys)) / 2;
     const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
 
     const aperture = smoothClosedPath(outline);
 
     ctx.save();
-    ctx.globalAlpha = alpha;
     ctx.clip(aperture);
 
+    ctx.globalAlpha = cavityAlpha;
     const cavity = ctx.createLinearGradient(0, midY - bh / 2, 0, midY + bh / 2);
     cavity.addColorStop(0, "#1b0908");
     cavity.addColorStop(0.55, "#3a1512");
@@ -1535,13 +1594,18 @@ export class AvatarEngine {
 
     // --- Teeth: individual incisors hanging from the upper arch. ---
     const teethGap = 0.06 * (this.tuning.teethThreshold / DEFAULT_TUNING.teethThreshold);
+    // How much of the teeth is exposed. mouthStretch used to appear here
+    // twice — once inside `retract`/gapRatio and again as an explicit
+    // multiplier — which is why the spread vowels saturated.
     const teethAmount =
-      Math.max(0, Math.min(1, (gapRatio - teethGap) / 0.08)) *
-      (0.55 + 0.45 * w.mouthStretch) *
-      Math.max(0, Math.min(1, 1 - rounding / 0.45));
-    if (teethAmount > 0.02) {
+      Math.max(
+        Math.max(0, Math.min(1, (gapRatio - teethGap) / 0.08)),
+        teethDrive * 0.75
+      ) * Math.max(0, Math.min(1, 1 - rounding / 0.45));
+    ctx.globalAlpha = 1;
+    if (teethAmount > 0.02 && teethAlpha > 0.02) {
       const upperH = Math.min(bh * 0.3, bw * 0.04) * (0.45 + 0.55 * teethAmount);
-      this.drawTeethRow(upperPts, bw, alpha, teethAmount, upperH, false);
+      this.drawTeethRow(upperPts, bw, teethAlpha, teethAmount, upperH, false);
       // The lower incisors are attached to the JAW, so they ride the lower
       // lip. Almost all of each tooth is hidden behind that lip — only the
       // biting tips clear it — so the row is seated ON the lower edge and
@@ -1554,7 +1618,7 @@ export class AvatarEngine {
       const lowerH = Math.min(upperH * 0.5, room * 0.34);
       if (lowerH > 0.8) {
         // The lower row shows across the front only.
-        this.drawTeethRow(lowerArch, bw, alpha, teethAmount, lowerH, true, 0.3, 0.7, 0.18);
+        this.drawTeethRow(lowerArch, bw, teethAlpha, teethAmount, lowerH, true, 0.3, 0.7, 0.18);
       }
       // Dissolve both rows into darkness toward the commissures, so the
       // teeth recede into the mouth instead of stopping at a hard end.
@@ -1565,11 +1629,14 @@ export class AvatarEngine {
       fade.addColorStop(0.66, "rgba(24, 9, 8, 0)");
       fade.addColorStop(0.84, "rgba(24, 9, 8, 0.55)");
       fade.addColorStop(1, "rgba(24, 9, 8, 0.95)");
+      ctx.globalAlpha = teethAlpha;
       ctx.fillStyle = fade;
       ctx.fillRect(cx - bw / 2, midY - bh, bw, bh * 2);
+      ctx.globalAlpha = 1;
     }
 
     // Tongue: a soft rise low in the cavity on genuinely open shapes.
+    ctx.globalAlpha = cavityAlpha;
     if (gapRatio > 0.26) {
       const amount = Math.min(1, (gapRatio - 0.26) / 0.12);
       const ty2 = midY + bh * 0.34;
@@ -1586,7 +1653,7 @@ export class AvatarEngine {
 
     // Soft rim so the opening blends into the lips.
     ctx.save();
-    ctx.globalAlpha = alpha * 0.45;
+    ctx.globalAlpha = cavityAlpha * 0.45;
     ctx.strokeStyle = "rgba(60, 22, 20, 0.5)";
     ctx.lineWidth = Math.max(1, bw * 0.016);
     ctx.stroke(aperture);
