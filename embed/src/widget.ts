@@ -80,8 +80,20 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
   }
 
   const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
+  // The backing store has to be in DEVICE pixels. CSS pixels are not what the
+  // screen has, and at the default size of 320 that difference is the whole
+  // ballgame: an individual tooth is ~4.5px wide, so the teeth, the lip-depth
+  // bands and the corner fade were all being drawn into a few pixels and
+  // averaged away. The 3D path has always done this (setPixelRatio); the 2D
+  // path never did. Capped at 2x — past that the fill cost is real and the
+  // gain is not visible.
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(size * dpr);
+  canvas.height = Math.round(size * dpr);
+  // Lay out at the requested CSS size; `auto` height keeps it square under
+  // the max-width, so narrow containers still shrink it without distortion.
+  canvas.style.width = `${size}px`;
+  canvas.style.height = "auto";
   canvas.style.maxWidth = "100%";
   canvas.setAttribute("data-liveface", avatarId);
   script.insertAdjacentElement("afterend", canvas);

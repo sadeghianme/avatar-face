@@ -22,6 +22,9 @@ export function AvatarPreview({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
+  // Read once and held: the engine reads canvas.width in computeFraming, so
+  // this must not change under a mounted engine.
+  const [dpr] = useState(() => Math.min(window.devicePixelRatio || 1, 2));
 
   useEffect(() => {
     let engine: AvatarEngine | null = null;
@@ -52,8 +55,12 @@ export function AvatarPreview({
   return (
     <canvas
       ref={canvasRef}
-      width={size}
-      height={size}
+      // Backing store in DEVICE pixels, laid out at `size` CSS pixels. Without
+      // this the mouth detail is drawn into a third of the pixels it was tuned
+      // for — a single tooth is only a few pixels wide at the default size.
+      width={Math.round(size * dpr)}
+      height={Math.round(size * dpr)}
+      style={{ width: size, height: "auto" }}
       className="mx-auto max-w-full rounded-xl bg-gray-100 dark:bg-gray-700"
     />
   );
