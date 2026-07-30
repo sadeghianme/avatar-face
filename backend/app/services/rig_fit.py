@@ -2,16 +2,29 @@
 
 Every landmark the engine trusts comes from MediaPipe, which fits a *human*
 face template. On stylized art that template lands in the wrong place and at
-the wrong size — measured on one anime avatar, the detected eye opening was
-35px tall inside a drawn eye whose iris alone was 27px in radius. Everything
-downstream inherits that error: the blink sweeps to the wrong lid, the mouth
-aperture is cut on the wrong seam, the gaze patch repaints the wrong disc.
+the wrong size, and everything downstream inherits the error: the blink sweeps
+to the wrong lid, the mouth aperture is cut on the wrong seam, the gaze patch
+repaints the wrong disc. No amount of tuning fixes a bad measurement, so this
+lets the user state the measurement directly.
 
-No amount of tuning fixes a bad measurement, so this lets the user state the
-measurement directly: drag the edges of the mouth, each eye and the head onto
-where they actually are. Each region is then fitted independently, because the
-error is not uniform — a cartoon can have a correctly-placed mouth and eyes
-twice the size the detector believed.
+Two things make this harder than moving the marked landmarks:
+
+1. The points are a TRIANGULATION, not independent markers. Moving a cluster
+   and leaving its neighbours behind tears the mesh at the boundary — measured
+   on a 1.5x eye correction, eye points moved up to 32px while the socket ring
+   one triangle away moved 0, so those bridging triangles stretched 32px along
+   one edge and nothing along the other. That seam renders as a visible layer
+   over the eye, and the blink then sweeps skin across it. So every correction
+   is applied as a WARP with a smooth falloff: the marked region moves fully,
+   the surrounding face follows and fades out, and no edge is ever
+   discontinuous.
+
+2. Faces are not axis-aligned boxes. A mouth's corners sit on a curve and are
+   rarely level with each other, and a tilted eye has no meaningful "top".
+   Each region is therefore marked as four or five FREE 2D points, and the
+   local transform is a least-squares affine fit over those correspondences —
+   which carries rotation and shear, so a curved or tilted mouth is expressible
+   where a bounding box was not.
 
 Anchors are in ORIGINAL-image pixels, the same space `rig["points"]` uses, so
 what the user sees while dragging is the space the correction is applied in.
@@ -32,106 +45,219 @@ RIGHT_EYE_INDICES = [
     473, 474, 475, 476, 477,
 ]
 
-# Below this the anchors have collapsed onto each other and the implied scale
-# is meaningless — leave that axis alone rather than divide by ~0.
-MIN_SPAN_PX = 2.0
-# A correction this large is a mis-drag, not a measurement.
+# How far past the marked region the warp keeps blending, as a multiple of the
+# region's own radius. 2.0 gives a blend band exactly as wide as the region
+# itself: gentle enough that no triangle is strained at the boundary, tight
+# enough that correcting the mouth does not drag the eyes — on a real face the
+# eyes sit about three mouth-radii away, outside this.
+FALLOFF_RADIUS = 2.0
+# A correction beyond this is a mis-drag, not a measurement.
 MAX_SCALE = 6.0
 MIN_SCALE = 1.0 / MAX_SCALE
 
+Point = tuple[float, float]
+
 
 @dataclass
-class BoxAnchors:
-    """Where the user says a region's four edges are."""
+class RegionMarks:
+    """Where the user says a region's extremes are, as free 2D points.
 
-    left: float
-    right: float
-    top: float
-    bottom: float
+    `center` is optional and only meaningful for the mouth, where it lets the
+    user place the middle of the lips independently of the corners.
+    """
 
-    @property
-    def width(self) -> float:
-        return self.right - self.left
+    left: Point
+    right: Point
+    top: Point
+    bottom: Point
+    center: Point | None = None
 
-    @property
-    def height(self) -> float:
-        return self.bottom - self.top
-
-    @property
-    def center(self) -> tuple[float, float]:
-        return ((self.left + self.right) / 2, (self.top + self.bottom) / 2)
+    def pairs(self) -> list[Point]:
+        pts = [self.left, self.right, self.top, self.bottom]
+        if self.center is not None:
+            pts.append(self.center)
+        return pts
 
 
-def _bounds(points: list[list[float]], indices: list[int]) -> tuple[float, float, float, float]:
+def _solve3(a: list[list[float]], b: list[float]) -> list[float] | None:
+    """Gaussian elimination on a 3x3 system. None if singular."""
+    m = [row[:] + [b[i]] for i, row in enumerate(a)]
+    for col in range(3):
+        pivot = max(range(col, 3), key=lambda r: abs(m[r][col]))
+        if abs(m[pivot][col]) < 1e-9:
+            return None
+        m[col], m[pivot] = m[pivot], m[col]
+        for r in range(3):
+            if r == col:
+                continue
+            f = m[r][col] / m[col][col]
+            for c in range(col, 4):
+                m[r][c] -= f * m[col][c]
+    return [m[i][3] / m[i][i] for i in range(3)]
+
+
+def _fit_affine(src: list[Point], dst: list[Point]) -> tuple[float, ...] | None:
+    """Least-squares affine mapping src -> dst: (a, b, tx, c, d, ty).
+
+    Affine rather than a box scale because a face is not axis-aligned: this
+    carries rotation and shear, so a mouth whose corners sit at different
+    heights maps onto a mouth whose corners sit at different heights.
+    """
+    if len(src) < 3:
+        return None
+    sxx = sum(p[0] * p[0] for p in src)
+    sxy = sum(p[0] * p[1] for p in src)
+    syy = sum(p[1] * p[1] for p in src)
+    sx = sum(p[0] for p in src)
+    sy = sum(p[1] for p in src)
+    n = float(len(src))
+    normal = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, n]]
+
+    out: list[float] = []
+    for axis in (0, 1):
+        rhs = [
+            sum(s[0] * d[axis] for s, d in zip(src, dst)),
+            sum(s[1] * d[axis] for s, d in zip(src, dst)),
+            sum(d[axis] for d in dst),
+        ]
+        row = _solve3(normal, rhs)
+        if row is None:
+            return None
+        out.extend(row)
+    return tuple(out)
+
+
+def _bounded(transform: tuple[float, ...]) -> bool:
+    """Reject a transform that scales absurdly or mirrors the region."""
+    a, b, _, c, d, _ = transform
+    det = a * d - b * c
+    if det <= 0:  # a mirrored region is always a mis-drag
+        return False
+    scale = abs(det) ** 0.5
+    return MIN_SCALE <= scale <= MAX_SCALE
+
+
+def _extremes(points: list[list[float]], indices: list[int]) -> RegionMarks:
+    """The region's current extreme points, as the user's handles would sit."""
+    left = min(indices, key=lambda i: points[i][0])
+    right = max(indices, key=lambda i: points[i][0])
+    top = min(indices, key=lambda i: points[i][1])
+    bottom = max(indices, key=lambda i: points[i][1])
     xs = [points[i][0] for i in indices]
     ys = [points[i][1] for i in indices]
-    return min(xs), max(xs), min(ys), max(ys)
+    return RegionMarks(
+        left=(points[left][0], points[left][1]),
+        right=(points[right][0], points[right][1]),
+        top=(points[top][0], points[top][1]),
+        bottom=(points[bottom][0], points[bottom][1]),
+        center=((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2),
+    )
 
 
-def _clamp_scale(value: float) -> float:
-    return max(MIN_SCALE, min(MAX_SCALE, value))
+def _smoothstep(t: float) -> float:
+    t = max(0.0, min(1.0, t))
+    return t * t * (3 - 2 * t)
 
 
-def _fit_box(
+def _warp(
     points: list[list[float]],
     indices: list[int],
-    target: BoxAnchors,
-    center_override: tuple[float, float] | None = None,
+    marks: RegionMarks,
+    *,
+    falloff: bool,
 ) -> None:
-    """Map a region's current bounding box onto `target`, in place.
+    """Apply the user's correction for one region, in place.
 
-    Scale is per-axis on purpose. A single uniform factor cannot express the
-    common case — a mouth detected too narrow but the right height — and
-    forcing one would trade a width error for a height error.
+    Every point in the mesh is displaced, not just the region's own: full
+    weight inside the region, smoothly fading to nothing by FALLOFF_RADIUS.
+    That continuity is the whole point — a hard cluster edit tears the
+    triangles that bridge the region to the rest of the face.
     """
     if not indices:
         return
-    x0, x1, y0, y1 = _bounds(points, indices)
-    cur_w, cur_h = x1 - x0, y1 - y0
-    cur_cx, cur_cy = (x0 + x1) / 2, (y0 + y1) / 2
+    current = _extremes(points, indices)
+    src = current.pairs()
+    dst = marks.pairs()
+    if marks.center is None:
+        src, dst = src[:4], dst[:4]
+    if len(src) != len(dst):
+        return
+    # Extreme points can coincide — on a nearly flat region the leftmost and
+    # topmost landmark are the same one. Feeding the same source twice with
+    # two different destinations makes the fit ill-conditioned and produces a
+    # wild transform, which is exactly how a small correction ends up moving
+    # the whole face. Drop duplicates and fall back if too few remain.
+    seen: list[Point] = []
+    kept_src: list[Point] = []
+    kept_dst: list[Point] = []
+    for s_pt, d_pt in zip(src, dst):
+        if any(abs(s_pt[0] - q[0]) < 1e-6 and abs(s_pt[1] - q[1]) < 1e-6 for q in seen):
+            continue
+        seen.append(s_pt)
+        kept_src.append(s_pt)
+        kept_dst.append(d_pt)
+    if len(kept_src) < 3:
+        return
+    transform = _fit_affine(kept_src, kept_dst)
+    if transform is None or not _bounded(transform):
+        return
+    a, b, tx, c, d, ty = transform
 
-    # A collapsed axis carries no scale information; keep 1.0 and just move.
-    sx = _clamp_scale(target.width / cur_w) if cur_w >= MIN_SPAN_PX and target.width > 0 else 1.0
-    sy = _clamp_scale(target.height / cur_h) if cur_h >= MIN_SPAN_PX and target.height > 0 else 1.0
-    tx, ty = center_override if center_override else target.center
+    # The falloff is scaled by the REGION's own extent, measured over all of
+    # its points rather than the handful of marked extremes: it is a property
+    # of the thing being corrected, not of how the user happened to drag.
+    cx = sum(points[i][0] for i in indices) / len(indices)
+    cy = sum(points[i][1] for i in indices) / len(indices)
+    radius = max(
+        1.0,
+        max(((points[i][0] - cx) ** 2 + (points[i][1] - cy) ** 2) ** 0.5 for i in indices),
+    )
+    outer = radius * FALLOFF_RADIUS
 
-    for i in indices:
-        points[i][0] = tx + (points[i][0] - cur_cx) * sx
-        points[i][1] = ty + (points[i][1] - cur_cy) * sy
+    for i in range(len(points)):
+        x, y = points[i]
+        if falloff:
+            dist = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
+            # 1 inside the region, easing to 0 at the outer radius.
+            weight = 1.0 if dist <= radius else _smoothstep((outer - dist) / (outer - radius))
+            if weight <= 0.0:
+                continue
+        else:
+            weight = 1.0
+        points[i][0] = x + ((a * x + b * y + tx) - x) * weight
+        points[i][1] = y + ((c * x + d * y + ty) - y) * weight
+
+
+def _present(indices: list[int], points: list[list[float]]) -> list[int]:
+    """Indices that actually exist — the synthetic fallback mesh is shorter
+    than MediaPipe's 478 and has no iris points."""
+    return [i for i in indices if 0 <= i < len(points)]
 
 
 def apply_anchors(
     rig: dict,
     *,
-    head: BoxAnchors | None = None,
-    left_eye: BoxAnchors | None = None,
-    right_eye: BoxAnchors | None = None,
-    mouth: BoxAnchors | None = None,
-    mouth_center: tuple[float, float] | None = None,
+    head: RegionMarks | None = None,
+    left_eye: RegionMarks | None = None,
+    right_eye: RegionMarks | None = None,
+    mouth: RegionMarks | None = None,
 ) -> dict:
     """Return a copy of `rig` with the user's anchors applied.
 
-    Order matters. The head fit moves every point, so it runs first and the
-    local regions are then measured against the already-corrected positions —
-    otherwise a head correction would silently undo the eye and mouth ones.
+    The head fit runs first and moves every point uniformly; the local fits
+    then measure against those corrected positions, so a head correction
+    cannot silently undo an eye or mouth one.
     """
     points = [[float(x), float(y)] for x, y in rig["points"]]
-    all_indices = list(range(len(points)))
 
     if head is not None:
-        _fit_box(points, all_indices, head)
-
+        _warp(points, list(range(len(points))), head, falloff=False)
     if left_eye is not None:
-        _fit_box(points, _present(LEFT_EYE_INDICES, points), left_eye)
+        _warp(points, _present(LEFT_EYE_INDICES, points), left_eye, falloff=True)
     if right_eye is not None:
-        _fit_box(points, _present(RIGHT_EYE_INDICES, points), right_eye)
-
+        _warp(points, _present(RIGHT_EYE_INDICES, points), right_eye, falloff=True)
     if mouth is not None:
-        mouth_indices = _present(rig.get("mouth_indices", []), points)
-        # The centre anchor is optional and overrides the box centre: it lets
-        # the user say "the mouth is this wide, but sits here", which a box
-        # alone cannot express when the corners are asymmetric.
-        _fit_box(points, mouth_indices, mouth, center_override=mouth_center)
+        _warp(points, _present(rig.get("mouth_indices", []), points), mouth, falloff=True)
 
     out = dict(rig)
     out["points"] = [[round(x, 2), round(y, 2)] for x, y in points]
@@ -141,42 +267,33 @@ def apply_anchors(
     return out
 
 
-def _present(indices: list[int], points: list[list[float]]) -> list[int]:
-    """Indices that actually exist — the synthetic fallback mesh is shorter
-    than MediaPipe's 478, and would otherwise raise on the iris points."""
-    return [i for i in indices if 0 <= i < len(points)]
-
-
 def current_anchors(rig: dict) -> dict:
-    """Where the detector currently thinks each region's edges are.
+    """Where the detector currently thinks each region's extremes are.
 
-    The UI opens with the handles already on these, so the user corrects a
-    detection rather than marking a face from scratch — on a photo where the
-    detection is good, that means dragging nothing.
+    The UI opens with the handles on these, so the user corrects a detection
+    rather than marking a face from scratch — and on a photo where detection
+    is good, that means dragging nothing.
     """
     points = [[float(x), float(y)] for x, y in rig["points"]]
 
-    def box(indices: list[int]) -> dict | None:
+    def marks(indices: list[int], with_center: bool) -> dict | None:
         present = _present(indices, points)
         if not present:
             return None
-        x0, x1, y0, y1 = _bounds(points, present)
-        return {"left": x0, "right": x1, "top": y0, "bottom": y1}
-
-    mouth_indices = _present(rig.get("mouth_indices", []), points)
-    mouth_center = None
-    if mouth_indices:
-        # The BOX centre, not the centroid of the lip points. They differ by
-        # ~0.6px on a real ring, and `_fit_box` re-centres on the box — so
-        # returning the centroid would make "open the panel and save without
-        # dragging" drift the rig slightly. Opening and saving must be exact.
-        x0, x1, y0, y1 = _bounds(points, mouth_indices)
-        mouth_center = {"x": (x0 + x1) / 2, "y": (y0 + y1) / 2}
+        e = _extremes(points, present)
+        out = {
+            "left": {"x": e.left[0], "y": e.left[1]},
+            "right": {"x": e.right[0], "y": e.right[1]},
+            "top": {"x": e.top[0], "y": e.top[1]},
+            "bottom": {"x": e.bottom[0], "y": e.bottom[1]},
+        }
+        if with_center and e.center is not None:
+            out["center"] = {"x": e.center[0], "y": e.center[1]}
+        return out
 
     return {
-        "head": box(list(range(len(points)))),
-        "left_eye": box(LEFT_EYE_INDICES),
-        "right_eye": box(RIGHT_EYE_INDICES),
-        "mouth": box(mouth_indices),
-        "mouth_center": mouth_center,
+        "head": marks(list(range(len(points))), False),
+        "left_eye": marks(LEFT_EYE_INDICES, False),
+        "right_eye": marks(RIGHT_EYE_INDICES, False),
+        "mouth": marks(_present(rig.get("mouth_indices", []), points), True),
     }

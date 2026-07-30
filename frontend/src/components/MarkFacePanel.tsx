@@ -9,23 +9,26 @@ import type { AvatarEngine } from "@liveface/embed";
 import { AvatarPreview } from "./AvatarPreview";
 import { SpeakPanel } from "./SpeakPanel";
 
-interface Box {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
+interface Pt {
+  x: number;
+  y: number;
+}
+/** A region's extremes as FREE 2D points, so a mouth can curve and an eye
+ * can tilt. A box forced both corners to the same height. */
+interface Marks {
+  left: Pt;
+  right: Pt;
+  top: Pt;
+  bottom: Pt;
+  center?: Pt;
 }
 type RegionId = "head" | "left_eye" | "right_eye" | "mouth";
-type Edge = keyof Box;
+type Edge = "left" | "right" | "top" | "bottom" | "center";
+
+const EDGES: Edge[] = ["left", "right", "top", "bottom"];
 
 interface AnchorsResponse {
-  anchors: {
-    head: Box | null;
-    left_eye: Box | null;
-    right_eye: Box | null;
-    mouth: Box | null;
-    mouth_center: { x: number; y: number } | null;
-  };
+  anchors: Record<RegionId, Marks | null>;
   image_size: [number, number];
 }
 
@@ -36,14 +39,10 @@ const REGIONS: { id: RegionId; colour: string; ring: string }[] = [
   { id: "mouth", colour: "#fb7185", ring: "rgba(251,113,133,0.9)" },
 ];
 
-/** Where an edge handle sits on its box. */
-function edgePosition(box: Box, edge: Edge): { x: number; y: number } {
-  const cx = (box.left + box.right) / 2;
-  const cy = (box.top + box.bottom) / 2;
-  if (edge === "left") return { x: box.left, y: cy };
-  if (edge === "right") return { x: box.right, y: cy };
-  if (edge === "top") return { x: cx, y: box.top };
-  return { x: cx, y: box.bottom };
+/** The outline through a region's four marks, drawn as a closed curve so the
+ * handles read as one shape rather than four loose dots. */
+function outline(m: Marks): string {
+  return [m.top, m.right, m.bottom, m.left].map((p) => `${p.x},${p.y}`).join(" ");
 }
 
 /**
@@ -71,11 +70,10 @@ export function MarkFacePanel({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const containerRef = useRef<HTMLDivElement>(null);
-  const [boxes, setBoxes] = useState<Record<RegionId, Box> | null>(null);
-  const [mouthCenter, setMouthCenter] = useState<{ x: number; y: number } | null>(null);
-  const [dragging, setDragging] = useState<{ region: RegionId; edge: Edge | "center" } | null>(null);
+  const [marks, setMarks] = useState<Record<RegionId, Marks> | null>(null);
+  const [dragging, setDragging] = useState<{ region: RegionId; edge: Edge } | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"test" | "save" | null>(null);
+  const [busy, setBusy] = useState<"test" | "save" | "redetect" | null>(null);
   const [engine, setEngine] = useState<AvatarEngine | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,54 +86,31 @@ export function MarkFacePanel({
   });
 
   useEffect(() => {
-    if (!data || boxes) return;
+    if (!data || marks) return;
     const a = data.anchors;
     if (!a.head || !a.left_eye || !a.right_eye || !a.mouth) return;
-    setBoxes({ head: a.head, left_eye: a.left_eye, right_eye: a.right_eye, mouth: a.mouth });
-    setMouthCenter(a.mouth_center);
-  }, [data, boxes]);
+    setMarks({ head: a.head, left_eye: a.left_eye, right_eye: a.right_eye, mouth: a.mouth });
+  }, [data, marks]);
 
   // Blob URLs are a real allocation; drop the previous one on every replace
   // and on unmount, or a few Test presses leak the whole rig each time.
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
-  const body = useMemo(
-    () =>
-      boxes && {
-        head: boxes.head,
-        left_eye: boxes.left_eye,
-        right_eye: boxes.right_eye,
-        mouth: boxes.mouth,
-        mouth_center: mouthCenter,
-      },
-    [boxes, mouthCenter]
-  );
+  const body = useMemo(() => marks && { ...marks }, [marks]);
 
-  if (!data || !boxes || !avatar.image_url) return null;
+  if (!data || !marks || !avatar.image_url) return null;
   const [imgW, imgH] = data.image_size;
 
   const onDrag = (event: React.PointerEvent) => {
     if (!dragging) return;
     const rect = containerRef.current!.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * imgW;
-    const y = ((event.clientY - rect.top) / rect.height) * imgH;
-    if (dragging.edge === "center") {
-      setMouthCenter({ x, y });
-      return;
-    }
-    const edge = dragging.edge;
-    setBoxes((prev) => {
-      if (!prev) return prev;
-      const box = { ...prev[dragging.region] };
-      // Each handle moves only its own edge, and cannot cross the opposite
-      // one — a box turned inside out has a negative span, which reads as a
-      // mirrored region rather than an obvious mistake.
-      if (edge === "left") box.left = Math.min(x, box.right - 2);
-      else if (edge === "right") box.right = Math.max(x, box.left + 2);
-      else if (edge === "top") box.top = Math.min(y, box.bottom - 2);
-      else box.bottom = Math.max(y, box.top + 2);
-      return { ...prev, [dragging.region]: box };
-    });
+    // Free 2D placement: each handle carries its own x AND y, so the mouth
+    // corners can sit at different heights and the fit picks up the tilt.
+    const x = Math.max(0, Math.min(imgW, ((event.clientX - rect.left) / rect.width) * imgW));
+    const y = Math.max(0, Math.min(imgH, ((event.clientY - rect.top) / rect.height) * imgH));
+    setMarks((prev) =>
+      prev ? { ...prev, [dragging.region]: { ...prev[dragging.region], [dragging.edge]: { x, y } } } : prev
+    );
   };
 
   const runFit = async (persist: boolean) => {
@@ -153,6 +128,22 @@ export function MarkFacePanel({
         const blob = new Blob([JSON.stringify(result.rig)], { type: "application/json" });
         setPreviewUrl(URL.createObjectURL(blob));
       }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : t("error"));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** Throw the marking away and re-detect from the original photo. Saving
+   * overwrites the rig, so without this a bad marking is unrecoverable. */
+  const redetect = async () => {
+    setBusy("redetect");
+    setError(null);
+    try {
+      await api.post(`/orgs/${orgId}/avatars/${avatar.id}/rig-reset`, {});
+      await queryClient.invalidateQueries({ queryKey: ["avatar", orgId, avatar.id] });
+      onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));
     } finally {
@@ -184,27 +175,36 @@ export function MarkFacePanel({
           <img src={avatar.image_url} alt="" className="h-full w-full object-fill" draggable={false} />
 
           {REGIONS.map(({ id, colour, ring }) => {
-            const box = boxes[id];
+            const m = marks[id];
+            const handles: Edge[] = m.center ? [...EDGES, "center"] : EDGES;
             return (
               <div key={id}>
-                {/* The box itself, so the four handles read as one region. */}
-                <div
-                  className="pointer-events-none absolute border-2 border-dashed"
-                  style={{
-                    left: pct(box.left, imgW),
-                    top: pct(box.top, imgH),
-                    width: pct(box.right - box.left, imgW),
-                    height: pct(box.bottom - box.top, imgH),
-                    borderColor: ring,
-                  }}
-                />
-                {(["left", "right", "top", "bottom"] as Edge[]).map((edge) => {
-                  const p = edgePosition(box, edge);
+                {/* The outline through the marks, so four dots read as one
+                    shape — and so a curved or tilted marking is visible as
+                    such rather than looking like a mistake. */}
+                <svg
+                  className="pointer-events-none absolute inset-0 h-full w-full"
+                  viewBox={`0 0 ${imgW} ${imgH}`}
+                  preserveAspectRatio="none"
+                >
+                  <polygon
+                    points={outline(m)}
+                    fill="none"
+                    stroke={ring}
+                    strokeWidth={Math.max(1, imgW / 400)}
+                    strokeDasharray={`${imgW / 90} ${imgW / 140}`}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </svg>
+                {handles.map((edge) => {
+                  const p = edge === "center" ? m.center! : m[edge];
                   const active = dragging?.region === id && dragging.edge === edge;
+                  const isCenter = edge === "center";
                   return (
                     <button
                       key={edge}
                       aria-label={`${id} ${edge}`}
+                      title={`${id} ${edge}`}
                       className="absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2
                         cursor-move items-center justify-center rounded-full"
                       style={{ left: pct(p.x, imgW), top: pct(p.y, imgH) }}
@@ -216,7 +216,8 @@ export function MarkFacePanel({
                     >
                       <span
                         className={`block rounded-full border border-white/90 shadow
-                          ${active ? "h-3.5 w-3.5 ring-2 ring-white" : "h-2.5 w-2.5"}`}
+                          ${active ? "h-3.5 w-3.5 ring-2 ring-white" : "h-2.5 w-2.5"}
+                          ${isCenter ? "ring-1 ring-white/70" : ""}`}
                         style={{ backgroundColor: colour }}
                       />
                     </button>
@@ -225,22 +226,6 @@ export function MarkFacePanel({
               </div>
             );
           })}
-
-          {mouthCenter && (
-            <button
-              aria-label="mouth center"
-              className="absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 cursor-move
-                items-center justify-center rounded-full"
-              style={{ left: pct(mouthCenter.x, imgW), top: pct(mouthCenter.y, imgH) }}
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.currentTarget.setPointerCapture(e.pointerId);
-                setDragging({ region: "mouth", edge: "center" });
-              }}
-            >
-              <span className="block h-3 w-3 rounded-full border-2 border-white bg-rose-500 shadow" />
-            </button>
-          )}
         </div>
 
         <div>
@@ -277,16 +262,18 @@ export function MarkFacePanel({
         </button>
         <button
           className="btn-secondary"
+          onClick={() => void redetect()}
+          disabled={busy !== null}
+          title={t("redetectHint")}
+        >
+          {busy === "redetect" ? t("loading") : t("redetect")}
+        </button>
+        <button
+          className="btn-secondary"
           onClick={() => {
             const a = data.anchors;
             if (a.head && a.left_eye && a.right_eye && a.mouth) {
-              setBoxes({
-                head: a.head,
-                left_eye: a.left_eye,
-                right_eye: a.right_eye,
-                mouth: a.mouth,
-              });
-              setMouthCenter(a.mouth_center);
+              setMarks({ head: a.head, left_eye: a.left_eye, right_eye: a.right_eye, mouth: a.mouth });
             }
             setPreviewUrl(null);
           }}

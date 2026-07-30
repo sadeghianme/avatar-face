@@ -21,7 +21,7 @@ from app.schemas.avatar import (
     RigFitResult,
 )
 from app.services.rig import process_avatar
-from app.services.rig_fit import BoxAnchors, apply_anchors, current_anchors
+from app.services.rig_fit import RegionMarks, apply_anchors, current_anchors
 from app.services.storage import get_storage
 
 router = APIRouter(prefix="/orgs/{org_id}/avatars", tags=["avatars"])
@@ -267,18 +267,23 @@ async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFi
     storage = get_storage()
     rig = _json.loads(await storage.get_bytes(avatar.rig_key))
 
-    def box(value) -> BoxAnchors | None:
+    def marks(value) -> RegionMarks | None:
         if value is None:
             return None
-        return BoxAnchors(left=value.left, right=value.right, top=value.top, bottom=value.bottom)
+        return RegionMarks(
+            left=(value.left.x, value.left.y),
+            right=(value.right.x, value.right.y),
+            top=(value.top.x, value.top.y),
+            bottom=(value.bottom.x, value.bottom.y),
+            center=(value.center.x, value.center.y) if value.center else None,
+        )
 
     adjusted = apply_anchors(
         rig,
-        head=box(body.head),
-        left_eye=box(body.left_eye),
-        right_eye=box(body.right_eye),
-        mouth=box(body.mouth),
-        mouth_center=(body.mouth_center.x, body.mouth_center.y) if body.mouth_center else None,
+        head=marks(body.head),
+        left_eye=marks(body.left_eye),
+        right_eye=marks(body.right_eye),
+        mouth=marks(body.mouth),
     )
 
     if body.persist:
@@ -286,6 +291,25 @@ async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFi
             avatar.rig_key, _json.dumps(adjusted).encode(), "application/json"
         )
     return RigFitResult(rig=adjusted, persisted=body.persist)
+
+
+@router.post("/{avatar_id}/rig-reset", response_model=AvatarOut)
+async def rig_reset(
+    avatar_id: str, ctx: OrgMember, db: DB, background: BackgroundTasks
+) -> Avatar:
+    """Throw away hand-placed anchors and re-detect from the original photo.
+
+    Saving a correction overwrites the rig, so without this a bad marking is
+    unrecoverable. The source image is still stored, so re-running the normal
+    pipeline reproduces the original detection exactly.
+    """
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    if avatar.kind != AvatarKind.photo or not avatar.image_key:
+        raise Conflict409("Avatar cannot be re-detected", code="not_adjustable")
+    avatar.status = AvatarStatus.processing
+    await db.commit()
+    background.add_task(process_avatar, avatar.id)
+    return avatar
 
 
 @router.get("/{avatar_id}", response_model=AvatarDetail)
