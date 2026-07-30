@@ -88,6 +88,13 @@ export function pickScleraColour(candidates: Sample[], skin: Sample | null): str
   return found ? `rgb(${found.rgb.join(", ")})` : null;
 }
 
+// Durations for the involuntary motions, in real milliseconds. These used to
+// be per-frame increments, which made every one of them run at a speed that
+// depended on the frame rate — a blink took 440ms on a 30fps device.
+const BLINK_MS = 220;
+const NOD_MS = 650;
+const SACCADE_MS = 35;
+
 // How far the iris slides across the eye, as a fraction of eye width.
 const GAZE_TRAVEL_X = 0.12;
 const GAZE_TRAVEL_Y = 0.07;
@@ -626,7 +633,12 @@ export class AvatarEngine {
       const weight = Math.exp(-0.5 * Math.pow(z, BELL_EXPONENT));
       if (weight < 1e-3) continue;
       const shape = this.rig.visemes[this.cues[i].viseme] ?? {};
-      for (const key of keys) out[key] += (shape[key] ?? 0) * weight;
+      // Stress amplitude: an unstressed syllable is a smaller mouth, not a
+      // faster one. Scaling the shape (rather than the duration) is what
+      // makes "MARket" look like one stressed and one reduced syllable
+      // instead of two identical ones.
+      const amp = this.cues[i].a ?? 1;
+      for (const key of keys) out[key] += (shape[key] ?? 0) * amp * weight;
       totalWeight += weight;
     }
     if (totalWeight <= 0) {
@@ -643,6 +655,9 @@ export class AvatarEngine {
       const span = spanOf(i);
       const sigma = Math.max(MIN_IMPERATIVE_MS, span * IMPERATIVE_WIDTH);
       const z = (t - (this.cues[i].t + span / 2)) / sigma;
+      // Deliberately NOT scaled by the cue's stress amplitude: /p/ /b/ /m/
+      // close completely in an unstressed syllable too — "puPPET" shuts the
+      // lips twice, equally, whatever the stress does to the vowels.
       const gate = Math.exp(-0.5 * z * z) * strength;
       if (gate < 1e-3) continue;
       const shape = this.rig.visemes[this.cues[i].viseme] ?? {};
@@ -695,7 +710,7 @@ export class AvatarEngine {
     const instant = this.speaking
       ? Math.min(1, this.weights.jawOpen + this.weights.mouthStretch * 0.5 + this.amplitude())
       : 0;
-    this.energy += (instant - this.energy) * 0.06;
+    this.energy += (instant - this.energy) * (1 - Math.exp(-dt / 270));
 
     // Eased (sin-curve) blinks.
     if (now >= this.nextBlinkAt) {
@@ -703,7 +718,7 @@ export class AvatarEngine {
       this.blink = 0.0001; // arm
     }
     if (this.blink > 0) {
-      this.blink += 16 / 220; // ~220ms full blink
+      this.blink += dt / BLINK_MS;
       if (this.blink >= 1) this.blink = 0;
     }
 
@@ -712,7 +727,7 @@ export class AvatarEngine {
       this.nextNodAt = now + 1800 + Math.random() * 2600;
       this.nodPhase = 0;
     }
-    if (this.nodPhase < 1) this.nodPhase = Math.min(1, this.nodPhase + 16 / 650);
+    if (this.nodPhase < 1) this.nodPhase = Math.min(1, this.nodPhase + dt / NOD_MS);
 
     // Saccades: eyes jump to a new fixation, then hold. While speaking the
     // gaze returns near-center more often (engaged with the listener);
@@ -729,8 +744,10 @@ export class AvatarEngine {
         : { x: 0, y: 0 };
     }
     // Saccades are ballistic: fast jump, then a still fixation.
-    this.gaze.x += (this.gazeTarget.x - this.gaze.x) * 0.35;
-    this.gaze.y += (this.gazeTarget.y - this.gaze.y) * 0.35;
+    // A saccade is ballistic and fast — ~35ms to cross, whatever the frame rate.
+    const saccadeRate = 1 - Math.exp(-dt / SACCADE_MS);
+    this.gaze.x += (this.gazeTarget.x - this.gaze.x) * saccadeRate;
+    this.gaze.y += (this.gazeTarget.y - this.gaze.y) * saccadeRate;
 
     // Brow pulses: idle micro-expressions + emphasis while speaking.
     if (now >= this.nextBrowPulseAt) {

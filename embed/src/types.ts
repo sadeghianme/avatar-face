@@ -25,6 +25,9 @@ export interface Rig {
 export interface Cue {
   t: number;
   viseme: string;
+  /** How fully to reach the shape, 0..1. Unstressed syllables reduce — a
+   * schwa is a small mouth. Absent (older API) means "fully". */
+  a?: number;
 }
 
 export interface SynthesisPayload {

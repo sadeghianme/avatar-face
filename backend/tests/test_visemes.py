@@ -63,14 +63,17 @@ def test_punctuation_and_digits_silent():
 def test_cues_from_text_structure():
     cues = cues_from_text("Hello, world", 1200)
     assert cues[0]["t"] == 0
-    assert cues[-1] == {"t": 1200, "viseme": "sil"}
+    assert cues[-1]["t"] == 1200
+    assert cues[-1]["viseme"] == "sil"
     assert all(cues[i]["t"] <= cues[i + 1]["t"] for i in range(len(cues) - 1))
     assert any(c["viseme"] != "sil" for c in cues)
 
 
 def test_cues_empty_text():
     cues = cues_from_text("", 0)
-    assert cues == [{"t": 0, "viseme": "sil"}]
+    assert len(cues) == 1
+    assert cues[0]["t"] == 0
+    assert cues[0]["viseme"] == "sil"
 
 
 def test_multilingual_text_produces_motion():

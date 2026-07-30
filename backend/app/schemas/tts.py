@@ -25,6 +25,9 @@ class SynthesizeRequest(BaseModel):
 class CueOut(BaseModel):
     t: int
     viseme: str
+    # How fully to reach the shape (unstressed syllables reduce). Optional so
+    # an older widget bundle that ignores it still animates correctly.
+    a: float = 1.0
 
 
 class SynthesizeResponse(BaseModel):

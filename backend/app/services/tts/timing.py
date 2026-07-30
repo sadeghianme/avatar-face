@@ -62,10 +62,19 @@ ANTICIPATION_MS: dict[str, int] = {
 
 @dataclass
 class Segment:
-    """One articulation slot: which mouth shape, for how long."""
+    """One articulation slot: which mouth shape, for how long, how far.
+
+    `amplitude` is how fully the shape is reached. English reduces unstressed
+    syllables, and a reduced vowel is a small mouth — without this the face
+    opens exactly as wide on the "-ket" of "market" as on the "MAR-", which
+    is the single most mechanical-looking thing a talking head can do. The
+    phoneme planner already derives it from the stress digit; it used to be
+    computed and then thrown away here.
+    """
 
     viseme: str
     duration_ms: int
+    amplitude: float = 1.0
 
 
 def segment_text(text: str) -> list[Segment]:
@@ -106,15 +115,21 @@ def cues_from_segments(segments: list[Segment], scale: float = 1.0) -> list[dict
             start = t - ANTICIPATION_MS.get(segment.viseme, 0)
             # Never precede the previous cue or run negative.
             floor = cues[-1]["t"] + 1 if cues else 0
-            cues.append({"t": max(floor, int(round(start * scale))), "viseme": segment.viseme})
+            cues.append(
+                {
+                    "t": max(floor, int(round(start * scale))),
+                    "viseme": segment.viseme,
+                    "a": round(segment.amplitude, 3),
+                }
+            )
             last_viseme = segment.viseme
         t += segment.duration_ms
     end = int(round(t * scale))
     if not cues or cues[-1]["viseme"] != "sil":
-        cues.append({"t": max(end, (cues[-1]["t"] + 1) if cues else 0), "viseme": "sil"})
+        cues.append({"t": max(end, (cues[-1]["t"] + 1) if cues else 0), "viseme": "sil", "a": 1.0})
     else:
         cues[-1]["t"] = min(cues[-1]["t"], end)
-        cues.append({"t": max(end, cues[-1]["t"] + 1), "viseme": "sil"})
+        cues.append({"t": max(end, cues[-1]["t"] + 1), "viseme": "sil", "a": 1.0})
     return cues
 
 
@@ -124,7 +139,7 @@ def cues_for_duration(text: str, duration_ms: int, locale: str = "en-US") -> lis
     segments, _ = plan_utterance(text, locale)
     modelled = total_duration_ms(segments)
     if not segments or modelled <= 0 or duration_ms <= 0:
-        return [{"t": 0, "viseme": "sil"}]
+        return [{"t": 0, "viseme": "sil", "a": 1.0}]
     return cues_from_segments(segments, scale=duration_ms / modelled)
 
 
@@ -167,7 +182,11 @@ def _phoneme_segments(word: str) -> list[Segment]:
         phones = word_to_phonemes_stressed(word)
         if not phones:
             return []
-        return [Segment(s["vis"], int(s["ms"])) for s in plan(phones) if s["ms"] > 0]
+        return [
+            Segment(s["vis"], int(s["ms"]), float(s.get("weight", 1.0)))
+            for s in plan(phones)
+            if s["ms"] > 0
+        ]
     except (UnknownPhone, ValueError, KeyError, IndexError):
         # Any gap in the rules falls back to the character path rather than
         # failing the request — a rough mouth beats no mouth.

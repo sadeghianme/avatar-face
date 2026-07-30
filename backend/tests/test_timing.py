@@ -60,7 +60,10 @@ def test_cues_for_duration_scales_to_audio():
 
 
 def test_cues_for_duration_handles_empty():
-    assert cues_for_duration("", 1000) == [{"t": 0, "viseme": "sil"}]
+    cues = cues_for_duration("", 1000)
+    assert len(cues) == 1
+    assert cues[0]["t"] == 0
+    assert cues[0]["viseme"] == "sil"
 
 
 @pytest.mark.asyncio
@@ -110,3 +113,32 @@ def test_word_marks_handles_leading_space_and_empty() -> None:
     assert plan_utterance("")[1] == []
     assert plan_utterance("   ")[1] == []
     assert plan_utterance("  hi")[1][0]["char"] == 2
+
+
+def test_unstressed_syllables_get_a_smaller_mouth() -> None:
+    """English reduces unstressed syllables, and a reduced vowel is a small
+    mouth. Without this the face opens exactly as wide on "-ket" as on "MAR-",
+    which is the most mechanical-looking thing a talking head can do."""
+    from app.services.tts.timing import plan_utterance
+
+    segments, _ = plan_utterance("The market opened.")
+    amplitudes = {s.viseme: s.amplitude for s in segments}
+
+    # "The" is a reduced function word; the stressed vowel of "market" is full.
+    assert min(s.amplitude for s in segments) < 0.5
+    assert max(s.amplitude for s in segments) == 1.0
+    assert amplitudes["aa"] == 1.0  # stressed MAR-
+
+    # Amplitude reaches the cue track the engine actually reads.
+    from app.services.tts.timing import cues_from_segments
+
+    assert any(c["a"] < 0.5 for c in cues_from_segments(segments))
+    assert all("a" in c for c in cues_from_segments(segments))
+
+
+def test_character_path_is_full_amplitude() -> None:
+    """Non-English text has no stress model, so nothing should be damped."""
+    from app.services.tts.timing import plan_utterance
+
+    segments, _ = plan_utterance("Привет мир", "ru-RU")
+    assert all(s.amplitude == 1.0 for s in segments)
