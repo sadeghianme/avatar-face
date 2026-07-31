@@ -313,6 +313,8 @@ export class AvatarEngine {
      * while borrowing its "skin" from eye artwork — which is what draws a
      * second lash line inside the first. Measured from pixels. */
     lidExtent: number[];
+    /** The eyelid's own colour, sampled from the skin just above the eye. */
+    lidSkin: string[];
   } | null = null;
   private raf = 0;
   private startTime = 0;
@@ -1222,8 +1224,39 @@ export class AvatarEngine {
         }
         lidExtent.push(Math.max(1, Math.min(2.0, reach / landmarkHalf)));
       }
+      // The lid's own colour, taken from the skin just above each eye. A lid
+      // is PAINTED, not blitted: sliding a rectangle of photographed skin
+      // over a curved eye reads as a shutter, and stretches its contents by a
+      // different amount every frame, which shimmers.
+      const lidSkin: string[] = [];
+      for (let e = 0; e < 2; e++) {
+        // Sample UNDER the eye, not above it. Above the lid is the crease and
+        // then the eyebrow, and a median over that returns brow brown — which
+        // painted the closed lid as a dark blob stuck on the face. The skin
+        // just below the lower lash is the same tone as a closed lid and is
+        // free of both brow and lashes.
+        const lower = LOWER_LIDS[e].map((i) => this.texPoints[i]).filter(Boolean);
+        const base = Math.max(...lower.map((p) => p.y));
+        const midX = lower.reduce((s2, p) => s2 + p.x, 0) / lower.length;
+        const span = Math.max(4, irisTexRadius[e]);
+        const picks: { lum: number; rgb: [number, number, number] }[] = [];
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = 1; dy <= 3; dy++) {
+            const sx = Math.max(0, Math.min(off.width - 1, Math.round(midX + dx * span * 0.6)));
+            const sy = Math.max(0, Math.min(off.height - 1, Math.round(base + dy * span * 0.45)));
+            const d = offCtx.getImageData(sx, sy, 1, 1).data;
+            const rgb: [number, number, number] = [d[0], d[1], d[2]];
+            picks.push({ lum: luma(rgb), rgb });
+          }
+        }
+        // Upper-middle of the range: any stray dark sample is a lash or a
+        // shadow, and a lid must never come out darker than the face.
+        picks.sort((a, b) => a.lum - b.lum);
+        const pick = picks[Math.floor(picks.length * 0.7)] ?? picks[picks.length - 1];
+        lidSkin.push(pick ? `rgb(${pick.rgb.join(", ")})` : "rgb(214, 184, 166)");
+      }
       const texToCanvas = (this.rig.image_size[0] / this.texture.naturalWidth) * this.scale;
-      this.eyeLayer = { sclera, irisTexRadius, texToCanvas, lidExtent };
+      this.eyeLayer = { sclera, irisTexRadius, texToCanvas, lidExtent, lidSkin };
     } catch {
       this.eyeLayer = null; // cross-origin texture: skip the eye layer
     }
@@ -1248,74 +1281,108 @@ export class AvatarEngine {
         : Math.cos(((phase - 0.4) / 0.6) * (Math.PI / 2));
     if (amount <= 0.01) return;
     const ctx = this.ctx;
+    const layer = this.eyeLayer;
 
     for (let e = 0; e < 2; e++) {
-      const ringIdx = [...UPPER_LIDS[e], ...LOWER_LIDS[e], ...EYE_CORNERS[e]];
-      // The RESTING opening, not the deformed one: the vertex sweep above has
-      // already begun squashing the deformed ring, and the lid has to travel
-      // across the eye as it actually sits.
-      const ring = ringIdx.map((i) => this.basePoints[i]).filter(Boolean);
-      const texRing = ringIdx.map((i) => this.texPoints[i]).filter(Boolean);
-      if (ring.length < 6 || texRing.length < 6) continue;
+      // Both lid curves, left to right, in resting position. The lid has to
+      // travel along the eye's OWN shape — an eye is an almond, and a
+      // straight edge crossing it is the single most artificial thing a
+      // blink can do.
+      const upper = UPPER_LIDS[e]
+        .map((i) => this.basePoints[i])
+        .filter(Boolean)
+        .slice()
+        .sort((a, b) => a.x - b.x);
+      const lower = LOWER_LIDS[e]
+        .map((i) => this.basePoints[i])
+        .filter(Boolean)
+        .slice()
+        .sort((a, b) => a.x - b.x);
+      if (upper.length < 3 || lower.length < 3) continue;
 
-      const cx = ring.reduce((s, p) => s + p.x, 0) / ring.length;
-      const cy = ring.reduce((s, p) => s + p.y, 0) / ring.length;
-      // Grow the opening to the eye as DRAWN, so the lid covers all of it.
-      const grow = this.eyeLayer?.lidExtent?.[e] ?? 1;
-      const sorted = [...ring]
-        .sort((p, q) => Math.atan2(p.y - cy, p.x - cx) - Math.atan2(q.y - cy, q.x - cx))
-        .map((p) => ({ x: p.x, y: cy + (p.y - cy) * grow }));
-      const xs = sorted.map((p) => p.x);
-      const ys = sorted.map((p) => p.y);
-      const x0 = Math.min(...xs);
-      const x1 = Math.max(...xs);
-      const y0 = Math.min(...ys);
-      const y1 = Math.max(...ys);
-      const height = y1 - y0;
-      if (x1 - x0 < 3 || height < 2) continue;
+      const [ci, co] = EYE_CORNERS[e].map((i) => this.basePoints[i]);
+      if (!ci || !co) continue;
+      const left = ci.x <= co.x ? ci : co;
+      const right = ci.x <= co.x ? co : ci;
+      const cy = (upper.reduce((s2, p) => s2 + p.y, 0) / upper.length +
+        lower.reduce((s2, p) => s2 + p.y, 0) / lower.length) / 2;
+      // Stylized art draws the eye larger than the landmarks describe; open
+      // both curves out to the eye as drawn so the lid covers all of it.
+      const grow = layer?.lidExtent?.[e] ?? 1;
+      const open = (p: Point) => ({ x: p.x, y: cy + (p.y - cy) * grow });
 
-      const tcy = texRing.reduce((s, p) => s + p.y, 0) / texRing.length;
-      const tx0 = Math.min(...texRing.map((p) => p.x));
-      const tx1 = Math.max(...texRing.map((p) => p.x));
-      const ty0 = tcy + (Math.min(...texRing.map((p) => p.y)) - tcy) * grow;
-      const ty1 = tcy + (Math.max(...texRing.map((p) => p.y)) - tcy) * grow;
-      const texH = ty1 - ty0;
-      if (tx1 - tx0 < 2 || texH < 1) continue;
+      // Sample both curves at the same parameter so they can be interpolated.
+      const STEPS = 14;
+      const sampleAt = (curve: Point[], t: number): Point => {
+        const x = left.x + (right.x - left.x) * t;
+        let a = curve[0];
+        let b = curve[curve.length - 1];
+        for (let i = 0; i < curve.length - 1; i++) {
+          if (curve[i].x <= x && curve[i + 1].x >= x) {
+            a = curve[i];
+            b = curve[i + 1];
+            break;
+          }
+        }
+        const span = b.x - a.x;
+        const f = span > 1e-3 ? (x - a.x) / span : 0;
+        return { x, y: a.y + (b.y - a.y) * Math.max(0, Math.min(1, f)) };
+      };
 
-      // How far down the lid has travelled.
-      const cover = height * amount;
-      // Source: the band of lid skin directly above the eye, taken from the
-      // part nearest the lash line so the crease travels with it.
-      const srcH = Math.max(1, texH * amount);
-      const srcY = Math.max(0, ty0 - srcH);
+      const lidTop: Point[] = [];
+      const lidEdge: Point[] = [];
+      for (let k = 0; k <= STEPS; k++) {
+        const t = k / STEPS;
+        const u = open(sampleAt(upper, t));
+        const l = open(sampleAt(lower, t));
+        lidTop.push(u);
+        // The corners are anchored: a real lid pivots there and sweeps most
+        // in the middle, which is also what keeps the almond shape.
+        const pinned = Math.sin(Math.PI * t) ** 0.55;
+        lidEdge.push({ x: u.x, y: u.y + (l.y - u.y) * amount * (0.25 + 0.75 * pinned) });
+      }
 
+      // The lid itself: the band between where the lid rests and where its
+      // edge has reached, filled with the eyelid's own colour.
       ctx.save();
       ctx.beginPath();
-      ctx.moveTo(sorted[0].x, sorted[0].y);
-      for (let i = 1; i < sorted.length; i++) ctx.lineTo(sorted[i].x, sorted[i].y);
+      ctx.moveTo(lidTop[0].x, lidTop[0].y - 1);
+      for (const p of lidTop) ctx.lineTo(p.x, p.y - 1);
+      for (let k = lidEdge.length - 1; k >= 0; k--) ctx.lineTo(lidEdge[k].x, lidEdge[k].y);
       ctx.closePath();
-      ctx.clip();
 
-      ctx.drawImage(
-        this.texture,
-        tx0,
-        srcY,
-        tx1 - tx0,
-        srcH,
-        x0,
-        y0 - 0.5,
-        x1 - x0,
-        cover + 0.5
-      );
+      const top = Math.min(...lidTop.map((p) => p.y));
+      const bottom = Math.max(...lidEdge.map((p) => p.y));
+      const skin = layer?.lidSkin?.[e] ?? "rgb(214, 184, 166)";
+      if (bottom > top + 0.5) {
+        // Slightly shaded toward the edge: the lid curves away from the light
+        // as it comes down, and a flat fill reads as paper.
+        const shade = ctx.createLinearGradient(0, top, 0, bottom);
+        shade.addColorStop(0, "rgba(255, 255, 255, 0.10)");
+        shade.addColorStop(0.6, "rgba(0, 0, 0, 0)");
+        shade.addColorStop(1, "rgba(0, 0, 0, 0.16)");
+        ctx.fillStyle = skin;
+        ctx.fill();
+        // A gentle roll: catch light on the upper curve, shade into the
+        // crease at the edge. Anything stronger and the lid reads as a patch.
+        ctx.fillStyle = shade;
+        ctx.fill();
+      } else {
+        ctx.fillStyle = skin;
+        ctx.fill();
+      }
+      ctx.restore();
 
-      // The lash line at the leading edge. Without it the borrowed skin has
-      // no edge and reads as a wash rather than a lid.
-      const edgeY = y0 + cover;
-      const lash = ctx.createLinearGradient(0, edgeY - height * 0.16, 0, edgeY);
-      lash.addColorStop(0, "rgba(60, 40, 34, 0)");
-      lash.addColorStop(1, `rgba(48, 30, 26, ${(0.5 * amount).toFixed(3)})`);
-      ctx.fillStyle = lash;
-      ctx.fillRect(x0, edgeY - height * 0.16, x1 - x0, height * 0.16);
+      // The lash line rides the leading edge, and only once fully drawn.
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(lidEdge[0].x, lidEdge[0].y);
+      for (const p of lidEdge) ctx.lineTo(p.x, p.y);
+      ctx.strokeStyle = `rgba(46, 28, 24, ${(0.72 * amount).toFixed(3)})`;
+      ctx.lineWidth = Math.max(1, (bottom - top) * 0.06 + 1);
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
       ctx.restore();
     }
   }
