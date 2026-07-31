@@ -93,8 +93,11 @@ export function pickScleraColour(candidates: Sample[], skin: Sample | null): str
 // depended on the frame rate — a blink took 440ms on a 30fps device.
 const BLINK_MS = 220;
 /** How far the upper-lid VERTICES travel, as a fraction of the way to the
- * lower lid. Small on purpose — see the comment where it is used. */
-const LID_VERTEX_SWEEP = 0.3;
+ * lower lid. ZERO on purpose: any sweep at all compresses the eyeball texture
+ * downward under the lid cover, and the squashed remnant showing below the
+ * descending lid is what reads as a SECOND eye. The cover supplies all of the
+ * blink; the mesh must hold the eye still underneath it. */
+const LID_VERTEX_SWEEP = 0.0;
 const NOD_MS = 650;
 const SACCADE_MS = 35;
 
@@ -304,6 +307,12 @@ export class AvatarEngine {
     sclera: (string | null)[];
     irisTexRadius: number[];
     texToCanvas: number;
+    /** How much taller the DRAWN eye is than the landmarked one, per eye.
+     * MediaPipe fits a human template; on stylized art it lands well inside
+     * the painted eye, and a lid sized to it covers only part of that eye
+     * while borrowing its "skin" from eye artwork — which is what draws a
+     * second lash line inside the first. Measured from pixels. */
+    lidExtent: number[];
   } | null = null;
   private raf = 0;
   private startTime = 0;
@@ -1176,8 +1185,45 @@ export class AvatarEngine {
         // gaze is invisible; painting skin colour inside an eye is not.
         sclera.push(pickScleraColour(candidates, skin));
       }
+      // How far the DRAWN eye actually extends above and below the iris.
+      // March vertical rays out from the iris centre until the dark eye
+      // region gives way to skin; the ratio against the landmarked opening
+      // tells the blink how big a lid it really has to draw.
+      const lidExtent: number[] = [];
+      for (let e = 0; e < 2; e++) {
+        const c = this.texPoints[centers[e]];
+        const r = irisTexRadius[e];
+        const ring = [...UPPER_LIDS[e], ...LOWER_LIDS[e]]
+          .map((i) => this.texPoints[i])
+          .filter(Boolean);
+        const landmarkHalf = Math.max(
+          1,
+          (Math.max(...ring.map((p) => p.y)) - Math.min(...ring.map((p) => p.y))) / 2
+        );
+        const lumAt = (x: number, y: number): number => {
+          const sx = Math.max(0, Math.min(off.width - 1, Math.round(x)));
+          const sy = Math.max(0, Math.min(off.height - 1, Math.round(y)));
+          const d = offCtx.getImageData(sx, sy, 1, 1).data;
+          return 0.299 * d[0] + 0.587 * d[1] + 0.114 * d[2];
+        };
+        // Skin reference well outside the eye, and the darkest point on the
+        // iris; the eye ends where luma crosses halfway between them.
+        const skin = lumAt(c.x, c.y + landmarkHalf * 3.2);
+        const dark = Math.min(lumAt(c.x, c.y), lumAt(c.x - r * 0.5, c.y), lumAt(c.x + r * 0.5, c.y));
+        const threshold = (skin + dark) / 2;
+        let reach = landmarkHalf;
+        for (const dx of [-r * 0.5, 0, r * 0.5]) {
+          for (const dir of [-1, 1]) {
+            for (let t = landmarkHalf; t < landmarkHalf * 2.4; t += 1) {
+              if (lumAt(c.x + dx, c.y + dir * t) > threshold) break;
+              reach = Math.max(reach, t);
+            }
+          }
+        }
+        lidExtent.push(Math.max(1, Math.min(2.0, reach / landmarkHalf)));
+      }
       const texToCanvas = (this.rig.image_size[0] / this.texture.naturalWidth) * this.scale;
-      this.eyeLayer = { sclera, irisTexRadius, texToCanvas };
+      this.eyeLayer = { sclera, irisTexRadius, texToCanvas, lidExtent };
     } catch {
       this.eyeLayer = null; // cross-origin texture: skip the eye layer
     }
@@ -1214,9 +1260,11 @@ export class AvatarEngine {
 
       const cx = ring.reduce((s, p) => s + p.x, 0) / ring.length;
       const cy = ring.reduce((s, p) => s + p.y, 0) / ring.length;
-      const sorted = [...ring].sort(
-        (p, q) => Math.atan2(p.y - cy, p.x - cx) - Math.atan2(q.y - cy, q.x - cx)
-      );
+      // Grow the opening to the eye as DRAWN, so the lid covers all of it.
+      const grow = this.eyeLayer?.lidExtent?.[e] ?? 1;
+      const sorted = [...ring]
+        .sort((p, q) => Math.atan2(p.y - cy, p.x - cx) - Math.atan2(q.y - cy, q.x - cx))
+        .map((p) => ({ x: p.x, y: cy + (p.y - cy) * grow }));
       const xs = sorted.map((p) => p.x);
       const ys = sorted.map((p) => p.y);
       const x0 = Math.min(...xs);
@@ -1226,10 +1274,11 @@ export class AvatarEngine {
       const height = y1 - y0;
       if (x1 - x0 < 3 || height < 2) continue;
 
+      const tcy = texRing.reduce((s, p) => s + p.y, 0) / texRing.length;
       const tx0 = Math.min(...texRing.map((p) => p.x));
       const tx1 = Math.max(...texRing.map((p) => p.x));
-      const ty0 = Math.min(...texRing.map((p) => p.y));
-      const ty1 = Math.max(...texRing.map((p) => p.y));
+      const ty0 = tcy + (Math.min(...texRing.map((p) => p.y)) - tcy) * grow;
+      const ty1 = tcy + (Math.max(...texRing.map((p) => p.y)) - tcy) * grow;
       const texH = ty1 - ty0;
       if (tx1 - tx0 < 2 || texH < 1) continue;
 
