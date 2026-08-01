@@ -50,6 +50,13 @@ export interface EngineTuning {
   teethHeight: number;
   /** Scales idle/speech head motion. 0 disables. */
   headMotion: number;
+  /** Blink amplitude, 0..1. Set 0 to stop blinking entirely.
+   *
+   * A photo of open eyes holds no record of the closed eye, so a blink can
+   * only be approximated, and every approximation shows on some face. This is
+   * the escape hatch: on a portrait where it still reads wrong, turn it off
+   * and lose nothing but the blink. */
+  blink: number;
 }
 
 export const DEFAULT_TUNING: EngineTuning = {
@@ -58,6 +65,11 @@ export const DEFAULT_TUNING: EngineTuning = {
   teethThreshold: 0.45,
   teethHeight: 0.07,
   headMotion: 1,
+  // Small on purpose. The lid moves the mesh, which compresses the eyeball
+  // texture as it comes down; measured on real portraits, the compression
+  // becomes visible as a wash across the eye well before the lid looks
+  // closed. This is the largest sweep that stays under that.
+  blink: 0.22,
 };
 
 export const ZERO_WEIGHTS: BlendWeights = {

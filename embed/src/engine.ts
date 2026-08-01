@@ -84,7 +84,9 @@ export function pickScleraColour(candidates: Sample[], skin: Sample | null): str
 // Durations for the involuntary motions, in real milliseconds. These used to
 // be per-frame increments, which made every one of them run at a speed that
 // depended on the frame rate — a blink took 440ms on a 30fps device.
-const BLINK_MS = 220;
+// Fast. The squash is only ever an approximation, so the less time it is on
+// screen the better; a real blink is 100-150ms anyway.
+const BLINK_MS = 150;
 /**
  * How far the upper lid travels, as a fraction of the way to the lower lid.
  *
@@ -101,7 +103,7 @@ const BLINK_MS = 220;
  * texture, so they travel with it), and never reaches the range where the
  * squash becomes visible.
  */
-const LID_VERTEX_SWEEP = 0.45;
+const LID_VERTEX_SWEEP = 1.0;
 const NOD_MS = 650;
 const SACCADE_MS = 35;
 
@@ -893,7 +895,11 @@ export class AvatarEngine {
           // short keeps the motion inside the range where the mesh still
           // looks like an eye narrowing.
           pts[i].y +=
-            (eyeBottom - pts[i].y) * amount * LID_VERTEX_SWEEP * (0.15 + 0.85 * centrality);
+            (eyeBottom - pts[i].y) *
+            amount *
+            LID_VERTEX_SWEEP *
+            this.tuning.blink *
+            (0.15 + 0.85 * centrality);
         }
         for (const i of LOWER_LIDS[e]) {
           const centrality = Math.max(0, 1 - ((pts[i].x - ecx) / halfW) ** 2);
