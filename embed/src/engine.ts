@@ -34,13 +34,6 @@ const EYE_CORNERS: [number, number][] = [
   [33, 133],
   [263, 362],
 ];
-// Iris clusters (center + 4 rim points). Moving these is what makes a face
-// look alive: eyes that only blink read as dead, but eyes that drift and
-// dart are read as attentive even when nothing else moves.
-const IRIS_CLUSTERS = [
-  [468, 469, 470, 471, 472],
-  [473, 474, 475, 476, 477],
-];
 const NOSE_TIP = 4;
 
 export interface Sample {
@@ -111,13 +104,6 @@ const BLINK_MS = 220;
 const LID_VERTEX_SWEEP = 0.45;
 const NOD_MS = 650;
 const SACCADE_MS = 35;
-
-/** Smallest iris, in TEXTURE pixels, that survives being re-stamped. */
-const MIN_IRIS_TEX_PX = 14;
-
-// How far the iris slides across the eye, as a fraction of eye width.
-const GAZE_TRAVEL_X = 0.12;
-const GAZE_TRAVEL_Y = 0.07;
 
 // A sclera's colour cast is a fraction of the surrounding skin's, and it is
 // never much darker than that skin. Tuned so a cartoon eye with no white at
@@ -307,21 +293,12 @@ export class AvatarEngine {
   private nextBlinkAt = 0;
   private nextNodAt = 0;
   private nodPhase = 1; // 1 = finished
-  private browPulsePhase = 1;
-  private nextBrowPulseAt = 0;
   // Gaze: current and target offsets in eye-widths, plus saccade timing.
   private gaze = { x: 0, y: 0 };
   private gazeTarget = { x: 0, y: 0 };
   private nextSaccadeAt = 0;
   // Separate iris layer: sclera colour sampled per eye, iris radius in
   // texture pixels, and the texture->canvas scale factor.
-  private eyeLayer: {
-    // null for an eye whose sclera could not be identified — see
-    // prepareEyeLayer. That eye keeps the photographed iris and forgoes gaze.
-    sclera: (string | null)[];
-    irisTexRadius: number[];
-    texToCanvas: number;
-  } | null = null;
   private raf = 0;
   private startTime = 0;
   private lastTickAt = 0;
@@ -354,11 +331,9 @@ export class AvatarEngine {
     this.innerRing = this.validInnerRing();
     this.computeFraming();
     this.subdivideMouthRegion();
-    this.prepareEyeLayer();
     this.startTime = performance.now();
     this.nextBlinkAt = this.startTime + 1200 + Math.random() * 2000;
     this.nextNodAt = this.startTime + 2500;
-    this.nextBrowPulseAt = this.startTime + 1800 + Math.random() * 2500;
     this.nextSaccadeAt = this.startTime + 600 + Math.random() * 1200;
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
@@ -798,11 +773,6 @@ export class AvatarEngine {
     this.gaze.y += (this.gazeTarget.y - this.gaze.y) * saccadeRate;
 
     // Brow pulses: idle micro-expressions + emphasis while speaking.
-    if (now >= this.nextBrowPulseAt) {
-      this.nextBrowPulseAt = now + (this.speaking ? 1400 : 3200) + Math.random() * 2800;
-      this.browPulsePhase = 0;
-    }
-    if (this.browPulsePhase < 1) this.browPulsePhase = Math.min(1, this.browPulsePhase + 16 / 500);
   }
 
   // --- Deformation -----------------------------------------------------------
@@ -948,7 +918,11 @@ export class AvatarEngine {
     }
 
     // Brow layer: lift rows inner->outer on eased sin pulses + rest browInnerUp.
-    const browPulse = this.browPulsePhase < 1 ? Math.sin(this.browPulsePhase * Math.PI) : 0;
+    // No brow pulse. It ran on its own random timer, independent of the
+    // blink's, so the two coincided often enough to read as a tic — brows up,
+    // then a blink. An involuntary motion that draws attention to itself is
+    // worse than none.
+    const browPulse = 0;
     const browLift = browPulse * (this.speaking ? 0.45 + this.energy * 0.3 : 0.4);
     for (const brow of [LEFT_BROW, RIGHT_BROW]) {
       for (let j = 0; j < brow.length; j++) {
@@ -1087,254 +1061,20 @@ export class AvatarEngine {
     ctx.restore();
   }
 
-  /**
-   * Measure the iris in texture space and sample a sclera colour per eye,
-   * so the iris can be redrawn as its own layer. Needs pixel access to the
-   * texture; if that's unavailable (tainted canvas) the eye layer is
-   * disabled and the avatar simply renders without gaze.
-   */
-  private prepareEyeLayer(): void {
-    const centers = [468, 473];
-    if (!this.texPoints[477]) return; // rig has no iris landmarks
-    try {
-      const off = document.createElement("canvas");
-      off.width = this.texture.naturalWidth;
-      off.height = this.texture.naturalHeight;
-      const offCtx = off.getContext("2d", { willReadFrequently: true });
-      if (!offCtx) return;
-      offCtx.drawImage(this.texture, 0, 0);
-
-      const sclera: (string | null)[] = [];
-      const irisTexRadius: number[] = [];
-      for (let e = 0; e < 2; e++) {
-        const c = this.texPoints[centers[e]];
-        const rim = IRIS_CLUSTERS[e].slice(1).map((i) => this.texPoints[i]);
-        const radius =
-          rim.reduce((s, p) => s + Math.hypot(p.x - c.x, p.y - c.y), 0) / rim.length;
-        irisTexRadius.push(radius);
-        // Sclera colour. Sampling anywhere in the eye-opening polygon does
-        // NOT work: measured on a real avatar, the iris is 1.14x TALLER than
-        // the opening, so there is no sclera above or below it — the polygon
-        // is mostly lash, liner and lid skin, and a brightness percentile
-        // over it returned rgb(174,156,142), i.e. beige skin, which then got
-        // painted inside the eye. Sclera lives only in two slivers to the
-        // LEFT and RIGHT of the iris, level with its centre, so that is the
-        // only place worth looking.
-        const poly = [...UPPER_LIDS[e], ...LOWER_LIDS[e], ...EYE_CORNERS[e]]
-          .map((i) => this.texPoints[i])
-          .filter(Boolean);
-        const pcx = poly.reduce((s, p) => s + p.x, 0) / poly.length;
-        const pcy = poly.reduce((s, p) => s + p.y, 0) / poly.length;
-        const ordered = [...poly].sort(
-          (p, q) => Math.atan2(p.y - pcy, p.x - pcx) - Math.atan2(q.y - pcy, q.x - pcx)
-        );
-        const minX = Math.min(...ordered.map((p) => p.x));
-        const maxX = Math.max(...ordered.map((p) => p.x));
-        const minY = Math.min(...ordered.map((p) => p.y));
-        const maxY = Math.max(...ordered.map((p) => p.y));
-        const inside = (x: number, y: number) => {
-          let hit = false;
-          for (let i = 0, j = ordered.length - 1; i < ordered.length; j = i++) {
-            const a = ordered[i];
-            const b = ordered[j];
-            if (
-              a.y > y !== b.y > y &&
-              x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x
-            ) {
-              hit = !hit;
-            }
-          }
-          return hit;
-        };
-
-        const candidates: Sample[] = [];
-        const bandHalf = (maxY - minY) * 0.22; // level with the iris centre
-        const STEPS_X = 26;
-        const STEPS_Y = 6;
-        for (let ix = 0; ix <= STEPS_X; ix++) {
-          for (let iy = 0; iy <= STEPS_Y; iy++) {
-            const x = minX + ((maxX - minX) * ix) / STEPS_X;
-            const y = c.y - bandHalf + (2 * bandHalf * iy) / STEPS_Y;
-            if (!inside(x, y)) continue;
-            const dx = Math.abs(x - c.x);
-            // Outside the iris (plus a margin for landmark error), but inside
-            // the eye — not out past the corner, where only skin lives.
-            if (dx < radius * 1.15 || dx > (maxX - minX) * 0.46) continue;
-            const sx = Math.max(0, Math.min(off.width - 1, Math.round(x)));
-            const sy = Math.max(0, Math.min(off.height - 1, Math.round(y)));
-            const d = offCtx.getImageData(sx, sy, 1, 1).data;
-            const rgb: [number, number, number] = [d[0], d[1], d[2]];
-            candidates.push({ lum: luma(rgb), rgb });
-          }
-        }
-        // Reference skin, taken just below the lower lid: it is the same
-        // exposure and skin tone as the eye, which is what makes the sclera
-        // test work across faces instead of needing absolute thresholds.
-        const lidBottom = Math.max(...LOWER_LIDS[e].map((i) => this.texPoints[i]?.y ?? c.y));
-        const skinSamples: Sample[] = [];
-        for (let ix = -2; ix <= 2; ix++) {
-          for (let iy = 1; iy <= 3; iy++) {
-            const x = c.x + ix * radius * 0.4;
-            const y = lidBottom + iy * radius * 0.45;
-            const sx = Math.max(0, Math.min(off.width - 1, Math.round(x)));
-            const sy = Math.max(0, Math.min(off.height - 1, Math.round(y)));
-            const d = offCtx.getImageData(sx, sy, 1, 1).data;
-            const rgb: [number, number, number] = [d[0], d[1], d[2]];
-            skinSamples.push({ lum: luma(rgb), rgb });
-          }
-        }
-        skinSamples.sort((a, b) => a.lum - b.lum);
-        const skin = skinSamples[Math.floor(skinSamples.length / 2)] ?? null;
-
-        // No credible sclera: leave this eye exactly as photographed. Losing
-        // gaze is invisible; painting skin colour inside an eye is not.
-        sclera.push(pickScleraColour(candidates, skin));
-      }
-      const texToCanvas = (this.rig.image_size[0] / this.texture.naturalWidth) * this.scale;
-      this.eyeLayer = { sclera, irisTexRadius, texToCanvas };
-    } catch {
-      this.eyeLayer = null; // cross-origin texture: skip the eye layer
-    }
-  }
-
-  /**
-   * Draw each iris as its own layer inside the eye opening: repaint the
-   * socket with sclera, then stamp the iris disc at the gaze offset. This
-   * is what lets the eye actually LOOK somewhere — warping the mesh can
-   * only smear it.
-   */
-  private drawEyes(pts: Point[]): void {
-    const layer = this.eyeLayer;
-    if (!layer) return;
-    const blinkAmount = this.blink > 0 ? Math.sin(this.blink * Math.PI) : 0;
-    if (blinkAmount > 0.6) return; // mid-blink the iris patch has nothing to add
-    const ctx = this.ctx;
-    const centers = [468, 473];
-
-    for (let e = 0; e < 2; e++) {
-      const ringIdx = [...UPPER_LIDS[e], ...LOWER_LIDS[e], ...EYE_CORNERS[e]];
-      const ring = ringIdx.map((i) => pts[i]).filter(Boolean);
-      if (ring.length < 6) continue;
-      const cx = ring.reduce((s, p) => s + p.x, 0) / ring.length;
-      const cy = ring.reduce((s, p) => s + p.y, 0) / ring.length;
-      // Angle-sort so the opening is a simple polygon (index order isn't).
-      const sorted = [...ring].sort(
-        (p, q) => Math.atan2(p.y - cy, p.x - cx) - Math.atan2(q.y - cy, q.x - cx)
-      );
-      const xs = sorted.map((p) => p.x);
-      const ys = sorted.map((p) => p.y);
-      const openW = Math.max(...xs) - Math.min(...xs);
-      const openH = Math.max(...ys) - Math.min(...ys);
-      if (openW < 3 || openH < 2) continue;
-
-      const scleraColour = layer.sclera[e];
-      if (!scleraColour) continue; // no readable sclera — keep the photo
-      // Not enough pixels to move the iris without destroying it. The patch
-      // re-stamps the iris from a source region only a couple of radii
-      // across; below about 14 texture px that upscales to a featureless
-      // blur sitting on a stretched sclera strip — measured on a portrait
-      // whose iris is 9.9px, both eyes turned into flat grey-green discs the
-      // moment the gaze moved at all. Losing gaze is invisible. This is not.
-      if (layer.irisTexRadius[e] < MIN_IRIS_TEX_PX) continue;
-      const irisR = layer.irisTexRadius[e] * layer.texToCanvas;
-      if (irisR < 1) continue;
-      const base = pts[centers[e]];
-      if (!base) continue;
-      // A human iris travels only ~2-3mm, roughly 0.12 of eye width, before
-      // the eye gives up and the head turns. The old 0.22 pushed the iris
-      // past the sclera that exists to uncover, so it clipped against the
-      // lid and the vacated area became larger than the eye could explain.
-      const gx = this.gaze.x * openW * GAZE_TRAVEL_X * (1 - blinkAmount);
-      const gy = this.gaze.y * openW * GAZE_TRAVEL_Y * (1 - blinkAmount);
-      // At rest, touch NOTHING: the mesh already drew the real eye, which
-      // is always more correct than anything we can repaint. Only when the
-      // iris actually needs to move do we patch it.
-      if (Math.hypot(gx, gy) < 0.6) continue;
-
-      ctx.save();
-      // Clip to the eye opening: the iris can never escape the socket.
-      ctx.beginPath();
-      ctx.moveTo(sorted[0].x, sorted[0].y);
-      for (let i = 1; i < sorted.length; i++) ctx.lineTo(sorted[i].x, sorted[i].y);
-      ctx.closePath();
-      ctx.clip();
-
-      // Cover ONLY the original iris (not the whole socket): lashes, tear
-      // duct, lid shading and corners stay as photographed. The cover is
-      // slightly larger than the measured iris so an imperfect landmark
-      // radius can't leave a rim of the old iris behind.
-      //
-      // Cover it with REAL sclera pixels, not a flat colour. A flat disc was
-      // the visible defect here: the cover is ~58px across on a ~48px-tall
-      // opening, so once clipped to the lid it became a hard-edged wedge of
-      // uniform paint over half the eye — a sticker, not an eyeball. Instead
-      // take a thin VERTICAL strip of the eye from the side the iris is
-      // moving away from (which is sclera in the original) and stretch it
-      // horizontally across the vacated area. Stretching sideways preserves
-      // the vertical gradient — the shadow the upper lid casts on the top of
-      // the eyeball — which is most of what makes an eye read as wet and
-      // recessed rather than painted on.
-      const texC = this.texPoints[centers[e]];
-      const texR = layer.irisTexRadius[e];
-      const texRing = [...UPPER_LIDS[e], ...LOWER_LIDS[e], ...EYE_CORNERS[e]]
-        .map((i) => this.texPoints[i])
-        .filter(Boolean);
-      const texTop = Math.min(...texRing.map((p) => p.y));
-      const texBottom = Math.max(...texRing.map((p) => p.y));
-      const texLeft = Math.min(...texRing.map((p) => p.x));
-      const texRight = Math.max(...texRing.map((p) => p.x));
-      const canvasTop = Math.min(...ys);
-      const canvasBottom = Math.max(...ys);
-      const stripW = Math.max(2, texR * 0.3);
-      // The vacated side is opposite the direction of travel.
-      const away = gx >= 0 ? -1 : 1;
-      const stripCx = Math.max(
-        texLeft + stripW / 2,
-        Math.min(texRight - stripW / 2, texC.x + away * texR * 1.5)
-      );
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(base.x, base.y, irisR * 1.18, 0, Math.PI * 2);
-      ctx.clip();
-      // Fall back to the sampled flat colour only if the strip would be
-      // degenerate (a landmark collapse), so there is always something sane.
-      if (texBottom - texTop > 1 && canvasBottom - canvasTop > 1) {
-        ctx.drawImage(
-          this.texture,
-          stripCx - stripW / 2,
-          texTop,
-          stripW,
-          texBottom - texTop,
-          base.x - irisR * 1.4,
-          canvasTop,
-          irisR * 2.8,
-          canvasBottom - canvasTop
-        );
-      } else {
-        ctx.fillStyle = scleraColour;
-        ctx.fill();
-      }
-      ctx.restore();
-
-      // Stamp the iris at its new position.
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(base.x + gx, base.y + gy, irisR, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(
-        this.texture,
-        texC.x - texR * 1.15,
-        texC.y - texR * 1.15,
-        texR * 2.3,
-        texR * 2.3,
-        base.x + gx - irisR * 1.15,
-        base.y + gy - irisR * 1.15,
-        irisR * 2.3,
-        irisR * 2.3
-      );
-      ctx.restore();
-      ctx.restore();
-    }
+  private drawEyes(_pts: Point[]): void {
+    // Deliberately does nothing.
+    //
+    // This used to slide the iris for gaze by covering the old one and
+    // re-stamping it. Every version of that broke on some real avatar: on a
+    // portrait whose iris is 9.9 texture px the re-stamp upscales into a flat
+    // grey disc, and on painted eyes the artwork's own catchlight gets
+    // stamped a second time, so one eye ends up with two highlights.
+    //
+    // The eye is the highest-contrast thing on a face and the first place a
+    // viewer looks, so anything repainted there is noticed immediately. There
+    // is no version of "invent iris pixels" that survives contact with
+    // arbitrary uploads. The eye is left exactly as photographed; gaze now
+    // reads through head motion instead, which costs nothing and never lies.
   }
 
   /**
