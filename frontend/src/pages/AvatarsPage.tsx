@@ -19,32 +19,59 @@ function SkeletonCard() {
   );
 }
 
-/** A number worth glancing at, not a chart. */
+const TONES = {
+  brand: { ring: "#6366f1", text: "text-brand-600 dark:text-brand-300" },
+  emerald: { ring: "#10b981", text: "text-emerald-600 dark:text-emerald-300" },
+  amber: { ring: "#f59e0b", text: "text-amber-600 dark:text-amber-300" },
+} as const;
+
+/**
+ * A stat with a progress ring, as on an admin console.
+ *
+ * The ring carries the proportion and the number carries the amount, so the
+ * card answers "how much" and "out of how much" without a legend.
+ */
 function Stat({
   label,
   value,
   hint,
+  percent,
+  icon,
   tone,
 }: {
   label: string;
   value: string | number;
   hint?: string;
-  tone: "brand" | "emerald" | "amber";
+  percent: number;
+  icon: string;
+  tone: keyof typeof TONES;
 }) {
-  const tones = {
-    brand: "from-brand-500/15 to-brand-500/5 text-brand-600 dark:text-brand-300",
-    emerald: "from-emerald-500/15 to-emerald-500/5 text-emerald-600 dark:text-emerald-300",
-    amber: "from-amber-500/15 to-amber-500/5 text-amber-600 dark:text-amber-300",
-  };
+  const r = 26;
+  const circumference = 2 * Math.PI * r;
+  const filled = (Math.max(0, Math.min(100, percent)) / 100) * circumference;
+  const { ring, text } = TONES[tone];
+
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/[0.03]">
-      <div
-        className={`inline-flex rounded-lg bg-gradient-to-br px-2 py-0.5 text-[11px] font-medium ${tones[tone]}`}
-      >
-        {label}
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 transition hover:shadow-md dark:border-white/10 dark:bg-[#161f31]">
+      <div className="flex items-center gap-4">
+        <div className="relative grid h-16 w-16 shrink-0 place-items-center">
+          <svg viewBox="0 0 64 64" className="absolute inset-0 -rotate-90">
+            <circle cx="32" cy="32" r={r} fill="none" strokeWidth="5"
+              className="stroke-gray-200 dark:stroke-white/10" />
+            <circle cx="32" cy="32" r={r} fill="none" strokeWidth="5" stroke={ring}
+              strokeLinecap="round" strokeDasharray={`${filled} ${circumference}`}
+              style={{ transition: "stroke-dasharray 600ms ease-out" }} />
+          </svg>
+          <span className="text-lg" aria-hidden>{icon}</span>
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium uppercase tracking-wide text-gray-400">
+            {label}
+          </p>
+          <p className="mt-1 text-2xl font-bold leading-none tracking-tight">{value}</p>
+          {hint && <p className={`mt-1.5 truncate text-xs ${text}`}>{hint}</p>}
+        </div>
       </div>
-      <p className="mt-2 text-2xl font-bold tracking-tight">{value}</p>
-      {hint && <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{hint}</p>}
     </div>
   );
 }
@@ -74,6 +101,7 @@ export function AvatarsPage() {
   const ready = avatars?.filter((a) => a.status === "ready").length ?? 0;
   const working =
     avatars?.filter((a) => a.status === "pending" || a.status === "processing").length ?? 0;
+  const total = avatars?.length ?? 0;
   const usedPct = usage?.char_limit
     ? Math.min(100, (usage.chars_used / usage.char_limit) * 100)
     : 0;
@@ -103,12 +131,29 @@ export function AvatarsPage() {
       </div>
 
       {/* ---- stats ---- */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label={t("statReady")} value={ready} hint={t("statReadyHint")} tone="emerald" />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat
+          label={t("statTotal")}
+          value={total}
+          hint={t("statTotalHint")}
+          percent={total ? 100 : 0}
+          icon="🎭"
+          tone="brand"
+        />
+        <Stat
+          label={t("statReady")}
+          value={ready}
+          hint={t("statReadyHint")}
+          percent={total ? (ready / total) * 100 : 0}
+          icon="✅"
+          tone="emerald"
+        />
         <Stat
           label={t("statProcessing")}
           value={working}
           hint={working ? t("statProcessingHint") : t("statAllDone")}
+          percent={total ? (working / total) * 100 : 0}
+          icon="⏳"
           tone="amber"
         />
         <Stat
@@ -122,14 +167,16 @@ export function AvatarsPage() {
                 })
               : undefined
           }
+          percent={usedPct}
+          icon="📊"
           tone="brand"
         />
       </div>
 
       {/* ---- avatars ---- */}
-      <div>
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-white/10 dark:bg-[#161f31]">
         <div className="mb-4 flex items-baseline justify-between">
-          <h2 className="text-lg font-semibold">{t("avatars")}</h2>
+          <h2 className="text-base font-semibold">{t("avatars")}</h2>
           {avatars && avatars.length > 0 && (
             <span className="text-sm text-gray-500 dark:text-gray-400">
               {t("avatarCount", { count: avatars.length })}
@@ -149,7 +196,7 @@ export function AvatarsPage() {
               <Link
                 key={avatar.id}
                 to={`/avatars/${avatar.id}`}
-                className="group overflow-hidden rounded-2xl border border-gray-200 bg-white transition
+                className="group overflow-hidden rounded-xl border border-gray-200 bg-gray-50 transition
                   hover:-translate-y-1 hover:border-brand-300 hover:shadow-xl
                   dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-brand-500/40"
               >
