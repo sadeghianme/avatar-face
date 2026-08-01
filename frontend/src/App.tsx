@@ -8,11 +8,19 @@ import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { ApiKeysPage } from "./pages/ApiKeysPage";
 import { AvatarDetailPage } from "./pages/AvatarDetailPage";
 import { AvatarsPage } from "./pages/AvatarsPage";
+import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MembersPage } from "./pages/MembersPage";
 import { NewAvatarPage } from "./pages/NewAvatarPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { SettingsPage } from "./pages/SettingsPage";
+
+/** Already signed in? An auth page has nothing to offer — go to the app. */
+function GuestOnly({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  return user ? <Navigate to="/app" replace /> : <>{children}</>;
+}
 
 function Protected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -32,15 +40,21 @@ function Protected({ children }: { children: ReactNode }) {
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+      {/* Public. The landing page is the front door; it does not redirect a
+          signed-in visitor away, it just offers them the dashboard instead. */}
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<GuestOnly><LoginPage /></GuestOnly>} />
+      <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
       <Route path="/invite/:token" element={<AcceptInvitePage />} />
-      <Route path="/" element={<Protected><AvatarsPage /></Protected>} />
+
+      {/* The app itself lives under /app. */}
+      <Route path="/app" element={<Protected><AvatarsPage /></Protected>} />
       <Route path="/avatars/new" element={<Protected><NewAvatarPage /></Protected>} />
       <Route path="/avatars/:avatarId" element={<Protected><AvatarDetailPage /></Protected>} />
       <Route path="/members" element={<Protected><MembersPage /></Protected>} />
       <Route path="/api-keys" element={<Protected><ApiKeysPage /></Protected>} />
       <Route path="/settings" element={<Protected><SettingsPage /></Protected>} />
+      {/* Anything unknown goes to the front door, not into the app. */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

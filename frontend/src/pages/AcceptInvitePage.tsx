@@ -29,7 +29,7 @@ export function AcceptInvitePage() {
   const accept = async () => {
     try {
       await api.post(`/invitations/${token}/accept`);
-      navigate("/", { replace: true });
+      navigate("/app", { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));
     }

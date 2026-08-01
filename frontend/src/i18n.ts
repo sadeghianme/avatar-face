@@ -6,6 +6,58 @@ const RTL_LANGS = new Set(["ar", "fa", "he", "ur"]);
 const resources = {
   en: {
     translation: {
+      navHow: "How it works",
+      navDevelopers: "Developers",
+      getStarted: "Get started",
+      openDashboard: "Open dashboard",
+      heroBadge: "Real-time lip-sync in the browser",
+      heroTitleA: "Turn one photo into",
+      heroTitleB: "an avatar that talks",
+      heroSubtitle:
+        "Upload a portrait and get a face that speaks your text with real lip-sync — phoneme-accurate, not a mouth flapping on a timer. Drop it on any page with a single script tag.",
+      heroDemoLine: "Hello there!",
+      heroFinePrint: "No credit card. Works with photographs, illustrations and 3D renders.",
+      createFreeAvatar: "Create your avatar",
+      seeTheCode: "See the code",
+      featuresTitle: "Built to actually look right",
+      featuresSubtitle:
+        "Most talking-head widgets open and close a mouth in time with the audio. This one works out how the words are pronounced first.",
+      featLipsyncTitle: "Pronunciation, not spelling",
+      featLipsyncBody:
+        "Text is converted to phonemes before it reaches the face, so \"knight\" never mimes a hard k and \"the\" is one shape, not three.",
+      featEmbedTitle: "One script tag",
+      featEmbedBody:
+        "A 29KB widget, no framework, no build step. Paste two lines and call Liveface.speak().",
+      featAnyFaceTitle: "Any kind of face",
+      featAnyFaceBody:
+        "Photographs, illustrations, anime, 3D renders. When auto-detection misses, mark the face by hand and test before saving.",
+      featVoicesTitle: "Voices in every language",
+      featVoicesBody:
+        "Free browser voices out of the box, or bring your own provider. Timing comes from the same model either way.",
+      featApiTitle: "An API, not a black box",
+      featApiBody:
+        "Keys, domain allow-lists, usage metering and a cue endpoint you can drive yourself.",
+      featPrivateTitle: "Your images stay yours",
+      featPrivateBody:
+        "Photos are processed into a mesh on your own instance. Nothing is sent to a third-party model.",
+      howTitle: "Three steps",
+      stepUploadTitle: "Upload a portrait",
+      stepUploadBody:
+        "Any front-facing photo or artwork. A face mesh, viseme set and thumbnail are built automatically.",
+      stepTuneTitle: "Check and adjust",
+      stepTuneBody:
+        "Preview it speaking, tune the mouth, and correct the landmarks by hand if the art is stylized.",
+      stepEmbedTitle: "Embed it",
+      stepEmbedBody:
+        "Copy the script tag into your site. Call speak() from anywhere — a chat reply, a form, a page load.",
+      devTitle: "Made for developers",
+      devBody:
+        "The widget is plain JavaScript and the API is plain REST. Nothing here needs a special client.",
+      devPoint1: "Cue endpoint returns viseme tracks with per-word timing.",
+      devPoint2: "Per-key domain allow-lists and usage limits.",
+      devPoint3: "Self-hostable — it is your server, your storage, your photos.",
+      ctaTitle: "Give your product a face",
+      ctaBody: "Make your first avatar in under a minute.",
       appName: "Liveface",
       tagline: "Turn a photo into a living, talking avatar",
       login: "Log in",
@@ -101,6 +153,58 @@ const resources = {
   },
   fr: {
     translation: {
+      navHow: "Comment ça marche",
+      navDevelopers: "Développeurs",
+      getStarted: "Commencer",
+      openDashboard: "Ouvrir le tableau de bord",
+      heroBadge: "Synchronisation labiale en temps réel",
+      heroTitleA: "Une photo devient",
+      heroTitleB: "un avatar qui parle",
+      heroSubtitle:
+        "Téléversez un portrait et obtenez un visage qui prononce votre texte avec une vraie synchronisation labiale — basée sur les phonèmes, pas une bouche qui s'agite. Intégrez-le avec une seule balise script.",
+      heroDemoLine: "Bonjour !",
+      heroFinePrint: "Sans carte bancaire. Photos, illustrations et rendus 3D.",
+      createFreeAvatar: "Créer votre avatar",
+      seeTheCode: "Voir le code",
+      featuresTitle: "Conçu pour que ce soit juste",
+      featuresSubtitle:
+        "La plupart des widgets ouvrent et ferment une bouche au rythme du son. Celui-ci commence par déterminer la prononciation.",
+      featLipsyncTitle: "La prononciation, pas l'orthographe",
+      featLipsyncBody:
+        "Le texte devient des phonèmes avant d'atteindre le visage : « knight » ne mime jamais un k dur.",
+      featEmbedTitle: "Une seule balise",
+      featEmbedBody:
+        "Un widget de 29 Ko, sans framework ni build. Collez deux lignes et appelez Liveface.speak().",
+      featAnyFaceTitle: "Tout type de visage",
+      featAnyFaceBody:
+        "Photos, illustrations, anime, rendus 3D. Si la détection se trompe, marquez le visage à la main et testez avant d'enregistrer.",
+      featVoicesTitle: "Des voix dans toutes les langues",
+      featVoicesBody:
+        "Voix du navigateur gratuites, ou votre propre fournisseur. Le rythme vient du même modèle.",
+      featApiTitle: "Une API, pas une boîte noire",
+      featApiBody:
+        "Clés, domaines autorisés, mesure d'usage et un point d'entrée de cues que vous pilotez vous-même.",
+      featPrivateTitle: "Vos images restent les vôtres",
+      featPrivateBody:
+        "Les photos sont transformées en maillage sur votre instance. Rien n'est envoyé à un modèle tiers.",
+      howTitle: "Trois étapes",
+      stepUploadTitle: "Téléversez un portrait",
+      stepUploadBody:
+        "Toute photo ou illustration de face. Maillage, visèmes et vignette sont générés automatiquement.",
+      stepTuneTitle: "Vérifiez et ajustez",
+      stepTuneBody:
+        "Écoutez-le parler, réglez la bouche, et corrigez les repères à la main si le dessin est stylisé.",
+      stepEmbedTitle: "Intégrez-le",
+      stepEmbedBody:
+        "Copiez la balise dans votre site. Appelez speak() où vous voulez.",
+      devTitle: "Pensé pour les développeurs",
+      devBody:
+        "Le widget est du JavaScript simple et l'API du REST simple. Aucun client particulier requis.",
+      devPoint1: "Le point d'entrée de cues renvoie les visèmes avec le timing par mot.",
+      devPoint2: "Domaines autorisés et limites d'usage par clé.",
+      devPoint3: "Auto-hébergeable — votre serveur, votre stockage, vos photos.",
+      ctaTitle: "Donnez un visage à votre produit",
+      ctaBody: "Créez votre premier avatar en moins d'une minute.",
       appName: "Liveface",
       tagline: "Transformez une photo en avatar parlant",
       login: "Connexion",

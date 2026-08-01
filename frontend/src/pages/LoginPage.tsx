@@ -29,7 +29,7 @@ export function LoginPage() {
   const onSubmit = async (data: Form) => {
     try {
       await login(data.username_or_email, data.password);
-      navigate(location.state?.from?.pathname ?? "/", { replace: true });
+      navigate(location.state?.from?.pathname ?? "/app", { replace: true });
     } catch (err) {
       setError("root", {
         message: err instanceof ApiError ? err.detail : t("error"),

@@ -6,7 +6,7 @@ import { useAuth } from "../lib/auth";
 import { OrgSwitcher } from "./OrgSwitcher";
 
 const NAV = [
-  { to: "/", key: "avatars", icon: "🎭" },
+  { to: "/app", key: "avatars", icon: "🎭" },
   { to: "/members", key: "members", icon: "👥" },
   { to: "/api-keys", key: "apiKeys", icon: "🔑" },
   { to: "/settings", key: "settings", icon: "⚙️" },
@@ -24,7 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <NavLink
           key={item.to}
           to={item.to}
-          end={item.to === "/"}
+          end={item.to === "/app"}
           onClick={() => setOpen(false)}
           className={({ isActive }) =>
             `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ${

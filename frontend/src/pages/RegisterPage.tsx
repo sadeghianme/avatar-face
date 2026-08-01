@@ -30,7 +30,7 @@ export function RegisterPage() {
   const onSubmit = async (data: Form) => {
     try {
       await signup(data.email, data.username, data.password, data.display_name);
-      navigate("/", { replace: true });
+      navigate("/app", { replace: true });
     } catch (err) {
       setError("root", { message: err instanceof ApiError ? err.detail : t("error") });
     }

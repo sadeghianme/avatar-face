@@ -34,6 +34,15 @@
   .label {
     @apply mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300;
   }
+  /* Scroll reveal for the landing page. Motion is opt-out: the observer that
+     drives this skips straight to the shown state under prefers-reduced-motion,
+     so this transition simply never runs for those users. */
+  .reveal {
+    @apply translate-y-4 opacity-0 transition-all duration-700 ease-out;
+  }
+  .reveal-in {
+    @apply translate-y-0 opacity-100;
+  }
   .field-error {
     @apply mt-1 text-xs text-red-600 dark:text-red-400;
   }

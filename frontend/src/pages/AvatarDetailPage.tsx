@@ -61,7 +61,7 @@ export function AvatarDetailPage() {
   const remove = async () => {
     await api.delete(`/orgs/${current.id}/avatars/${avatar.id}`);
     await queryClient.invalidateQueries({ queryKey: ["avatars", current.id] });
-    navigate("/");
+    navigate("/app");
   };
 
   return (
