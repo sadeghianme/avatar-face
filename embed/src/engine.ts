@@ -87,6 +87,21 @@ export function pickScleraColour(candidates: Sample[], skin: Sample | null): str
 // Fast. The squash is only ever an approximation, so the less time it is on
 // screen the better; a real blink is 100-150ms anyway.
 const BLINK_MS = 150;
+
+/**
+ * Blink envelope, 0..1 -> 0..1, closing faster than it opens.
+ *
+ * A single smooth curve rather than two joined quarter-waves: the old pair
+ * met at the peak with a discontinuous velocity, so the lid arrived at its
+ * lowest point and reversed in one frame, which reads as a snap.
+ */
+function blinkEase(phase: number): number {
+  const t = Math.max(0, Math.min(1, phase));
+  // Skew time so the close occupies the first ~40% and the opening the rest,
+  // then take one raised cosine over the skewed clock.
+  const skewed = t < 0.4 ? (t / 0.4) * 0.5 : 0.5 + ((t - 0.4) / 0.6) * 0.5;
+  return 0.5 - 0.5 * Math.cos(skewed * Math.PI * 2 - Math.PI);
+}
 /**
  * How far the upper lid travels, as a fraction of the way to the lower lid.
  *
@@ -301,6 +316,13 @@ export class AvatarEngine {
   private nextSaccadeAt = 0;
   // Separate iris layer: sclera colour sampled per eye, iris radius in
   // texture pixels, and the texture->canvas scale factor.
+  /** The face's own lip colour, sampled at load. The mouth interior is
+   * derived from it rather than hardcoded. */
+  private lipColour: [number, number, number] = [150, 90, 84];
+  /** Each eye's own lash colour. Not every face has black lashes — a fair or
+   * stylized one can have brown, auburn or near-white, and drawing black on
+   * those puts a stranger's eyelash on the face. */
+  private lashColour: string[] = ["rgba(60, 42, 38, 0.75)", "rgba(60, 42, 38, 0.75)"];
   private raf = 0;
   private startTime = 0;
   private lastTickAt = 0;
@@ -332,6 +354,8 @@ export class AvatarEngine {
     ctx.imageSmoothingQuality = "high";
     this.innerRing = this.validInnerRing();
     this.computeFraming();
+    this.sampleLipColour();
+    this.sampleLashColour();
     this.subdivideMouthRegion();
     this.startTime = performance.now();
     this.nextBlinkAt = this.startTime + 1200 + Math.random() * 2000;
@@ -390,6 +414,77 @@ export class AvatarEngine {
       x: x * this.scale + this.offsetX,
       y: y * this.scale + this.offsetY,
     }));
+  }
+
+  /**
+   * The lip's own colour, taken from the outer lip ring.
+   *
+   * The mouth interior used to be three hardcoded browns near black. On a
+   * pale face that is a hole punched in the skin, and it is the same hole on
+   * every avatar regardless of colouring. A real mouth interior is a darker,
+   * less saturated version of the lips in front of it, so sampling the lips
+   * gives every face an interior that belongs to it.
+   */
+  private sampleLipColour(): void {
+    try {
+      const off = document.createElement("canvas");
+      off.width = this.texture.naturalWidth;
+      off.height = this.texture.naturalHeight;
+      const ctx = off.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.drawImage(this.texture, 0, 0);
+      const picks: { lum: number; rgb: [number, number, number] }[] = [];
+      for (const i of this.rig.mouth_indices) {
+        const p = this.texPoints[i];
+        if (!p) continue;
+        const x = Math.max(0, Math.min(off.width - 1, Math.round(p.x)));
+        const y = Math.max(0, Math.min(off.height - 1, Math.round(p.y)));
+        const d = ctx.getImageData(x, y, 1, 1).data;
+        const rgb: [number, number, number] = [d[0], d[1], d[2]];
+        picks.push({ lum: luma(rgb), rgb });
+      }
+      if (!picks.length) return;
+      // Median: the ring straddles the lip edge, so the extremes are skin on
+      // one side and the seam shadow on the other.
+      picks.sort((a, b) => a.lum - b.lum);
+      this.lipColour = picks[Math.floor(picks.length / 2)].rgb;
+    } catch {
+      // Tainted texture: keep the default, which is a mid warm lip.
+    }
+  }
+
+  /** The darkest run along each upper lid — the lashes as this face has them. */
+  private sampleLashColour(): void {
+    try {
+      const off = document.createElement("canvas");
+      off.width = this.texture.naturalWidth;
+      off.height = this.texture.naturalHeight;
+      const ctx = off.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.drawImage(this.texture, 0, 0);
+      for (let e = 0; e < 2; e++) {
+        const lid = UPPER_LIDS[e].map((i) => this.texPoints[i]).filter(Boolean);
+        if (lid.length < 3) continue;
+        const picks: { lum: number; rgb: [number, number, number] }[] = [];
+        for (const p of lid) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const x = Math.max(0, Math.min(off.width - 1, Math.round(p.x)));
+            const y = Math.max(0, Math.min(off.height - 1, Math.round(p.y + dy)));
+            const d = ctx.getImageData(x, y, 1, 1).data;
+            const rgb: [number, number, number] = [d[0], d[1], d[2]];
+            picks.push({ lum: luma(rgb), rgb });
+          }
+        }
+        if (!picks.length) continue;
+        // The darkest quartile along the lid IS the lash line, whatever
+        // colour this face's lashes happen to be.
+        picks.sort((a, b) => a.lum - b.lum);
+        const [r, g, b] = picks[Math.floor(picks.length * 0.15)].rgb;
+        this.lashColour[e] = `rgba(${r}, ${g}, ${b}, 0.8)`;
+      }
+    } catch {
+      // Tainted texture: keep the neutral dark default.
+    }
   }
 
   /**
@@ -876,8 +971,10 @@ export class AvatarEngine {
     if (this.blink > 0) {
       // Asymmetric ease: lids snap shut faster than they reopen.
       const phase = this.blink;
-      const amount = phase < 0.4 ? Math.sin((phase / 0.4) * (Math.PI / 2))
-                                 : Math.cos(((phase - 0.4) / 0.6) * (Math.PI / 2));
+      // One continuous curve over the whole blink. The old piecewise
+      // sin-then-cos met at its peak with a corner in the velocity, which is
+      // what made the close read as a snap.
+      const amount = blinkEase(phase);
       for (let e = 0; e < 2; e++) {
         const [c0, c1] = EYE_CORNERS[e];
         const ecx = (pts[c0].x + pts[c1].x) / 2;
@@ -1012,6 +1109,7 @@ export class AvatarEngine {
     }
 
     this.drawEyes(pts);
+    this.drawLashes(pts);
     this.drawLipContactLine(pts);
     this.drawMouthInterior(pts);
 
@@ -1065,6 +1163,54 @@ export class AvatarEngine {
     ctx.transform(a, b, c, d, e, f);
     ctx.drawImage(this.texture, 0, 0);
     ctx.restore();
+  }
+
+  /**
+   * A lash line riding the closing lid.
+   *
+   * The mesh alone moves the photographed lashes down with the lid, but as
+   * the eye compresses they thin out and lose definition just when the eye
+   * most needs an edge. This lays this face's OWN lash colour along the lid's
+   * leading edge — sampled, never assumed black, because a fair or stylized
+   * face can have brown, auburn or near-white lashes and a black line on
+   * those looks pasted on.
+   */
+  private drawLashes(pts: Point[]): void {
+    if (this.blink <= 0) return;
+    const phase = this.blink;
+    const amount =
+      phase < 0.4
+        ? Math.sin((phase / 0.4) * (Math.PI / 2))
+        : Math.cos(((phase - 0.4) / 0.6) * (Math.PI / 2));
+    if (amount <= 0.02) return;
+    const ctx = this.ctx;
+    for (let e = 0; e < 2; e++) {
+      const lid = UPPER_LIDS[e]
+        .map((i) => pts[i])
+        .filter(Boolean)
+        .slice()
+        .sort((a, b) => a.x - b.x);
+      if (lid.length < 3) continue;
+      const width = Math.max(...lid.map((p) => p.x)) - Math.min(...lid.map((p) => p.x));
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(lid[0].x, lid[0].y);
+      // Through the lid points as a smooth curve, so the line is an arc
+      // rather than a chain of segments.
+      for (let i = 1; i < lid.length - 1; i++) {
+        const mx = (lid[i].x + lid[i + 1].x) / 2;
+        const my = (lid[i].y + lid[i + 1].y) / 2;
+        ctx.quadraticCurveTo(lid[i].x, lid[i].y, mx, my);
+      }
+      ctx.lineTo(lid[lid.length - 1].x, lid[lid.length - 1].y);
+      ctx.strokeStyle = this.lashColour[e];
+      ctx.globalAlpha = amount * 0.85;
+      ctx.lineWidth = Math.max(1, width * 0.022);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   private drawEyes(_pts: Point[]): void {
@@ -1341,9 +1487,16 @@ export class AvatarEngine {
 
     ctx.globalAlpha = cavityAlpha;
     const cavity = ctx.createLinearGradient(0, midY - bh / 2, 0, midY + bh / 2);
-    cavity.addColorStop(0, "#1b0908");
-    cavity.addColorStop(0.55, "#3a1512");
-    cavity.addColorStop(1, "#55201a");
+    // Derived from this face's lips: deepest at the top where the upper lip
+    // shadows the cavity, warming toward the tongue below. Never fully black
+    // — a real mouth is a lit red space, not a void, and pure black reads as
+    // a hole cut in the face.
+    const [lr, lg, lb] = this.lipColour;
+    const shade = (k: number) =>
+      `rgb(${Math.round(lr * k)}, ${Math.round(lg * k * 0.86)}, ${Math.round(lb * k * 0.86)})`;
+    cavity.addColorStop(0, shade(0.3));
+    cavity.addColorStop(0.55, shade(0.46));
+    cavity.addColorStop(1, shade(0.62));
     ctx.fillStyle = cavity;
     ctx.fillRect(cx - bw, midY - bh, bw * 2, bh * 2);
 
