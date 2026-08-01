@@ -92,12 +92,23 @@ export function pickScleraColour(candidates: Sample[], skin: Sample | null): str
 // be per-frame increments, which made every one of them run at a speed that
 // depended on the frame rate — a blink took 440ms on a 30fps device.
 const BLINK_MS = 220;
-/** How far the upper-lid VERTICES travel, as a fraction of the way to the
- * lower lid. ZERO on purpose: any sweep at all compresses the eyeball texture
- * downward under the lid cover, and the squashed remnant showing below the
- * descending lid is what reads as a SECOND eye. The cover supplies all of the
- * blink; the mesh must hold the eye still underneath it. */
-const LID_VERTEX_SWEEP = 0.0;
+/**
+ * How far the upper lid travels, as a fraction of the way to the lower lid.
+ *
+ * There is no drawn lid any more. Every attempt to synthesise one from a
+ * single photo added an artifact: sliding a band of skin down duplicates
+ * whatever is above the eye (on a face with drawn eyeliner, that is a second
+ * eyelash), and painting a filled shape reads as a sticker. Both put an extra
+ * layer over a face that never had one.
+ *
+ * So the blink is the mesh alone, and the only thing that makes that work is
+ * NOT closing all the way. A full sweep crushes the eyeball texture into a
+ * band and smears it. A short one reads as the quick narrowing a blink
+ * actually is at this size, moves the real lashes (they are part of the lid
+ * texture, so they travel with it), and never reaches the range where the
+ * squash becomes visible.
+ */
+const LID_VERTEX_SWEEP = 0.45;
 const NOD_MS = 650;
 const SACCADE_MS = 35;
 
@@ -902,14 +913,12 @@ export class AvatarEngine {
         for (const i of UPPER_LIDS[e]) eyeTop = Math.min(eyeTop, pts[i].y);
         for (const i of UPPER_LIDS[e]) {
           const centrality = Math.max(0, 1 - ((pts[i].x - ecx) / halfW) ** 2);
-          // Only a PARTIAL sweep. Driving these vertices all the way to the
-          // lower lid does not cover the eye — their texture coordinates are
-          // fixed, so it compresses the EYEBALL texture into a thin band and
-          // stretches the brow skin down over it. Rendered, that is a
-          // translucent smear with the iris still visible through it, which
-          // is exactly what a blink must not look like. The lid itself is
-          // drawn as a cover pass in drawBlink(); this just gives the
-          // surrounding skin its crease.
+          // A PARTIAL sweep, and that limit is the whole design. Driving
+          // these vertices all the way to the lower lid compresses the
+          // eyeball texture into a band and stretches brow skin across it —
+          // a translucent smear with the iris showing through. Stopping
+          // short keeps the motion inside the range where the mesh still
+          // looks like an eye narrowing.
           pts[i].y +=
             (eyeBottom - pts[i].y) * amount * LID_VERTEX_SWEEP * (0.15 + 0.85 * centrality);
         }
@@ -1020,7 +1029,6 @@ export class AvatarEngine {
     }
 
     this.drawEyes(pts);
-    this.drawBlink();
     this.drawLipContactLine(pts);
     this.drawMouthInterior(pts);
 
@@ -1187,94 +1195,6 @@ export class AvatarEngine {
   }
 
   /**
-   * Draw the eyelid closing over the eye.
-   *
-   * A photo has no picture of a closed lid, so one has to be borrowed: the
-   * skin immediately ABOVE the eye is eyelid skin, and sliding it down over
-   * the opening is both what really happens and the only source of correct
-   * pixels. Warping the mesh cannot do this — the eye triangles keep drawing
-   * the eyeball no matter where their vertices go, so the eye gets squashed
-   * rather than hidden.
-   */
-  private drawBlink(): void {
-    if (this.blink <= 0) return;
-    const phase = this.blink;
-    const amount =
-      phase < 0.4
-        ? Math.sin((phase / 0.4) * (Math.PI / 2))
-        : Math.cos(((phase - 0.4) / 0.6) * (Math.PI / 2));
-    if (amount <= 0.01) return;
-    const ctx = this.ctx;
-
-    for (let e = 0; e < 2; e++) {
-      const ringIdx = [...UPPER_LIDS[e], ...LOWER_LIDS[e], ...EYE_CORNERS[e]];
-      // The RESTING opening, not the deformed one: the vertex sweep above has
-      // already begun squashing the deformed ring, and the lid has to travel
-      // across the eye as it actually sits.
-      const ring = ringIdx.map((i) => this.basePoints[i]).filter(Boolean);
-      const texRing = ringIdx.map((i) => this.texPoints[i]).filter(Boolean);
-      if (ring.length < 6 || texRing.length < 6) continue;
-
-      const cx = ring.reduce((s, p) => s + p.x, 0) / ring.length;
-      const cy = ring.reduce((s, p) => s + p.y, 0) / ring.length;
-      const sorted = [...ring].sort(
-        (p, q) => Math.atan2(p.y - cy, p.x - cx) - Math.atan2(q.y - cy, q.x - cx)
-      );
-      const xs = sorted.map((p) => p.x);
-      const ys = sorted.map((p) => p.y);
-      const x0 = Math.min(...xs);
-      const x1 = Math.max(...xs);
-      const y0 = Math.min(...ys);
-      const y1 = Math.max(...ys);
-      const height = y1 - y0;
-      if (x1 - x0 < 3 || height < 2) continue;
-
-      const tx0 = Math.min(...texRing.map((p) => p.x));
-      const tx1 = Math.max(...texRing.map((p) => p.x));
-      const ty0 = Math.min(...texRing.map((p) => p.y));
-      const ty1 = Math.max(...texRing.map((p) => p.y));
-      const texH = ty1 - ty0;
-      if (tx1 - tx0 < 2 || texH < 1) continue;
-
-      // How far down the lid has travelled.
-      const cover = height * amount;
-      // Source: the band of lid skin directly above the eye, taken from the
-      // part nearest the lash line so the crease travels with it.
-      const srcH = Math.max(1, texH * amount);
-      const srcY = Math.max(0, ty0 - srcH);
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(sorted[0].x, sorted[0].y);
-      for (let i = 1; i < sorted.length; i++) ctx.lineTo(sorted[i].x, sorted[i].y);
-      ctx.closePath();
-      ctx.clip();
-
-      ctx.drawImage(
-        this.texture,
-        tx0,
-        srcY,
-        tx1 - tx0,
-        srcH,
-        x0,
-        y0 - 0.5,
-        x1 - x0,
-        cover + 0.5
-      );
-
-      // The lash line at the leading edge. Without it the borrowed skin has
-      // no edge and reads as a wash rather than a lid.
-      const edgeY = y0 + cover;
-      const lash = ctx.createLinearGradient(0, edgeY - height * 0.16, 0, edgeY);
-      lash.addColorStop(0, "rgba(60, 40, 34, 0)");
-      lash.addColorStop(1, `rgba(48, 30, 26, ${(0.5 * amount).toFixed(3)})`);
-      ctx.fillStyle = lash;
-      ctx.fillRect(x0, edgeY - height * 0.16, x1 - x0, height * 0.16);
-      ctx.restore();
-    }
-  }
-
-  /**
    * Draw each iris as its own layer inside the eye opening: repaint the
    * socket with sclera, then stamp the iris disc at the gaze offset. This
    * is what lets the eye actually LOOK somewhere — warping the mesh can
@@ -1284,7 +1204,7 @@ export class AvatarEngine {
     const layer = this.eyeLayer;
     if (!layer) return;
     const blinkAmount = this.blink > 0 ? Math.sin(this.blink * Math.PI) : 0;
-    if (blinkAmount > 0.35) return; // the lid cover owns the eye from here
+    if (blinkAmount > 0.6) return; // mid-blink the iris patch has nothing to add
     const ctx = this.ctx;
     const centers = [468, 473];
 
