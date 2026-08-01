@@ -112,6 +112,9 @@ const LID_VERTEX_SWEEP = 0.45;
 const NOD_MS = 650;
 const SACCADE_MS = 35;
 
+/** Smallest iris, in TEXTURE pixels, that survives being re-stamped. */
+const MIN_IRIS_TEX_PX = 14;
+
 // How far the iris slides across the eye, as a fraction of eye width.
 const GAZE_TRAVEL_X = 0.12;
 const GAZE_TRAVEL_Y = 0.07;
@@ -1226,6 +1229,13 @@ export class AvatarEngine {
 
       const scleraColour = layer.sclera[e];
       if (!scleraColour) continue; // no readable sclera — keep the photo
+      // Not enough pixels to move the iris without destroying it. The patch
+      // re-stamps the iris from a source region only a couple of radii
+      // across; below about 14 texture px that upscales to a featureless
+      // blur sitting on a stretched sclera strip — measured on a portrait
+      // whose iris is 9.9px, both eyes turned into flat grey-green discs the
+      // moment the gaze moved at all. Losing gaze is invisible. This is not.
+      if (layer.irisTexRadius[e] < MIN_IRIS_TEX_PX) continue;
       const irisR = layer.irisTexRadius[e] * layer.texToCanvas;
       if (irisR < 1) continue;
       const base = pts[centers[e]];
