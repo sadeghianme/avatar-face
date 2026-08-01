@@ -100,7 +100,11 @@ function blinkEase(phase: number): number {
   // Skew time so the close occupies the first ~40% and the opening the rest,
   // then take one raised cosine over the skewed clock.
   const skewed = t < 0.4 ? (t / 0.4) * 0.5 : 0.5 + ((t - 0.4) / 0.6) * 0.5;
-  return 0.5 - 0.5 * Math.cos(skewed * Math.PI * 2 - Math.PI);
+  // No phase offset here. With one, the curve starts CLOSED, opens at the
+  // peak and shuts again at the end — and since the eye is already open at
+  // rest, a single blink then renders as shut-open-shut: several fast
+  // blinks where there should be one.
+  return 0.5 - 0.5 * Math.cos(skewed * Math.PI * 2);
 }
 /**
  * How far the upper lid travels, as a fraction of the way to the lower lid.
