@@ -15,7 +15,9 @@ const resources = {
       heroTitleB: "an avatar that talks",
       heroSubtitle:
         "Upload a portrait and get a face that speaks your text with real lip-sync — phoneme-accurate, not a mouth flapping on a timer. Drop it on any page with a single script tag.",
-      heroDemoLine: "Hello there!",
+      heroDemoLine1: "Hi — I can read this page aloud for you.",
+      heroDemoLine2: "Ask me anything about your order.",
+      heroDemoLine3: "Welcome back. Shall we pick up where we left off?",
       heroFinePrint: "No credit card. Works with photographs, illustrations and 3D renders.",
       createFreeAvatar: "Create your avatar",
       seeTheCode: "See the code",
@@ -162,7 +164,9 @@ const resources = {
       heroTitleB: "un avatar qui parle",
       heroSubtitle:
         "Téléversez un portrait et obtenez un visage qui prononce votre texte avec une vraie synchronisation labiale — basée sur les phonèmes, pas une bouche qui s'agite. Intégrez-le avec une seule balise script.",
-      heroDemoLine: "Bonjour !",
+      heroDemoLine1: "Bonjour — je peux vous lire cette page.",
+      heroDemoLine2: "Posez-moi une question sur votre commande.",
+      heroDemoLine3: "Bon retour. On reprend où on s'était arrêté ?",
       heroFinePrint: "Sans carte bancaire. Photos, illustrations et rendus 3D.",
       createFreeAvatar: "Créer votre avatar",
       seeTheCode: "Voir le code",

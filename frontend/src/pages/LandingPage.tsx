@@ -36,106 +36,83 @@ function Section({ children, className = "" }: { children: React.ReactNode; clas
 }
 
 /**
- * A mouth that actually moves.
+ * The product in context, rather than a drawing of a face.
  *
- * The product is lip-sync, so the hero should demonstrate lip-sync rather than
- * describe it. This is a small SVG face driven by the same idea as the engine —
- * a viseme track on a clock — which needs no avatar, no API key and no network.
+ * An earlier version drew a cartoon face here to demonstrate lip-sync. It
+ * looked cheap, and a crude face on the landing page of a product about
+ * faces undersells the thing it is advertising. A browser frame showing the
+ * widget actually embedded says more and promises less.
  */
-function HeroFace() {
-  const [open, setOpen] = useState(0);
-  const [wide, setWide] = useState(0.5);
-  const [blink, setBlink] = useState(0);
+function HeroDemo() {
+  const { t } = useTranslation();
+  const [level, setLevel] = useState<number[]>(() => Array(28).fill(0.15));
+  const [caption, setCaption] = useState(0);
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    // Rough viseme rhythm: vowels hold, consonants are quick, pauses are still.
-    const track = [
-      [0.75, 0.4], [0.1, 0.5], [0.55, 0.8], [0.2, 0.5], [0.85, 0.35],
-      [0.05, 0.5], [0.45, 0.75], [0.7, 0.4], [0.15, 0.5], [0, 0.5], [0, 0.5],
-    ];
-    let i = 0;
+    // A speaking envelope: syllable-rate peaks with quiet between phrases,
+    // not a uniform dance — it should read as speech, not as a music player.
+    let t = 0;
     const id = window.setInterval(() => {
-      const [o, w] = track[i % track.length];
-      setOpen(o);
-      setWide(w);
-      i++;
-    }, 165);
-    const blinkId = window.setInterval(() => {
-      setBlink(1);
-      window.setTimeout(() => setBlink(0), 130);
-    }, 4200);
+      t += 1;
+      setLevel((prev) => {
+        const next = prev.slice(1);
+        const phrase = Math.sin(t / 34) > -0.35;
+        const syllable = Math.abs(Math.sin(t / 2.1)) ** 1.6;
+        next.push(phrase ? 0.12 + syllable * 0.88 : 0.06);
+        return next;
+      });
+    }, 55);
+    const capId = window.setInterval(() => setCaption((c) => (c + 1) % 3), 3400);
     return () => {
       clearInterval(id);
-      clearInterval(blinkId);
+      clearInterval(capId);
     };
   }, []);
 
-  const lipGap = 3 + open * 26;
-  const mouthW = 46 + wide * 26;
-  const lidY = 96 - blink * 9;
+  const lines = ["heroDemoLine1", "heroDemoLine2", "heroDemoLine3"];
 
   return (
-    <svg viewBox="0 0 240 260" className="h-full w-full" aria-hidden="true">
-      <defs>
-        <linearGradient id="skin" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f6d9c6" />
-          <stop offset="100%" stopColor="#e7bda3" />
-        </linearGradient>
-        <linearGradient id="cavity" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#7d3a37" />
-          <stop offset="100%" stopColor="#a8564e" />
-        </linearGradient>
-      </defs>
-      <ellipse cx="120" cy="130" rx="78" ry="98" fill="url(#skin)" />
-      {/* eyes */}
-      {[86, 154].map((x) => (
-        <g key={x}>
-          <ellipse cx={x} cy="104" rx="17" ry={Math.max(1.5, 11 - blink * 9)} fill="#fdfdfd" />
-          <circle cx={x} cy="104" r={Math.max(1, 8 - blink * 6)} fill="#5b3a2b" />
-          <circle cx={x} cy="104" r={Math.max(0.5, 3.4 - blink * 3)} fill="#20140f" />
-          <circle cx={x - 3} cy="101" r={Math.max(0, 1.6 - blink * 1.6)} fill="#fff" />
-          <path
-            d={`M ${x - 19} ${lidY} Q ${x} ${lidY - 8} ${x + 19} ${lidY}`}
-            stroke="#4a3226"
-            strokeWidth="2.4"
-            fill="none"
-            strokeLinecap="round"
-          />
-        </g>
-      ))}
-      <path d="M 64 84 Q 86 74 108 82" stroke="#5c4033" strokeWidth="5" fill="none" strokeLinecap="round" />
-      <path d="M 132 82 Q 154 74 176 84" stroke="#5c4033" strokeWidth="5" fill="none" strokeLinecap="round" />
-      <path d="M 120 118 L 116 146 Q 120 150 124 146" stroke="#c99a80" strokeWidth="3" fill="none" strokeLinecap="round" />
-      {/* mouth: the point of the whole thing */}
-      <g style={{ transition: "all 110ms ease-out" }}>
-        <ellipse cx="120" cy="182" rx={mouthW / 2} ry={lipGap / 2} fill="url(#cavity)" />
-        {open > 0.35 && (
-          <rect
-            x={120 - mouthW / 4}
-            y={182 - lipGap / 2 + 1}
-            width={mouthW / 2}
-            height={Math.min(5, lipGap * 0.22)}
-            rx="1.5"
-            fill="#fbf6f0"
-          />
-        )}
-        <path
-          d={`M ${120 - mouthW / 2} 182 Q 120 ${182 - lipGap / 2 - 7} ${120 + mouthW / 2} 182`}
-          stroke="#c4746b"
-          strokeWidth="5"
-          fill="none"
-          strokeLinecap="round"
-        />
-        <path
-          d={`M ${120 - mouthW / 2} 182 Q 120 ${182 + lipGap / 2 + 9} ${120 + mouthW / 2} 182`}
-          stroke="#b9635c"
-          strokeWidth="6"
-          fill="none"
-          strokeLinecap="round"
-        />
-      </g>
-    </svg>
+    <div className="overflow-hidden rounded-2xl border border-white/50 bg-white/80 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.06]">
+      {/* browser chrome */}
+      <div className="flex items-center gap-2 border-b border-gray-200/70 px-4 py-3 dark:border-white/10">
+        <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
+        <span className="h-2.5 w-2.5 rounded-full bg-yellow-400" />
+        <span className="h-2.5 w-2.5 rounded-full bg-green-400" />
+        <span className="ms-3 truncate rounded-md bg-gray-100 px-3 py-1 text-[11px] text-gray-500 dark:bg-white/10 dark:text-gray-400">
+          yoursite.com
+        </span>
+      </div>
+
+      <div className="space-y-4 p-5">
+        {/* the widget, sitting on someone's page */}
+        <div className="flex items-center gap-4 rounded-xl bg-gradient-to-br from-brand-500/10 to-fuchsia-500/10 p-4">
+          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full bg-gradient-to-br from-brand-400 to-fuchsia-400">
+            <span className="absolute inset-0 grid place-items-center text-2xl">🙂</span>
+            <span className="absolute inset-x-0 bottom-0 h-1.5 bg-emerald-400/90" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex h-10 items-end gap-[3px]" aria-hidden="true">
+              {level.map((v, i) => (
+                <span
+                  key={i}
+                  className="flex-1 rounded-full bg-brand-500/80"
+                  style={{ height: `${Math.max(8, v * 100)}%`, transition: "height 70ms linear" }}
+                />
+              ))}
+            </div>
+            <p className="mt-1.5 truncate text-xs text-gray-600 dark:text-gray-300">
+              {t(lines[caption])}
+            </p>
+          </div>
+        </div>
+
+        <pre className="overflow-x-auto rounded-xl bg-gray-900 p-3.5 text-[11px] leading-relaxed text-emerald-300">
+{`<script src=".../liveface.js"
+  data-avatar="a1b2c3" data-key="pk_live_…"></script>`}
+        </pre>
+      </div>
+    </div>
   );
 }
 
@@ -234,16 +211,13 @@ export function LandingPage() {
           </Section>
 
           <Section className="relative">
-            <div className="relative mx-auto aspect-square w-full max-w-sm">
+            <div className="relative mx-auto w-full max-w-md">
               <div
                 aria-hidden="true"
-                className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-brand-500/25 to-fuchsia-500/25 blur-2xl"
+                className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-brand-500/25 to-fuchsia-500/25 blur-3xl"
               />
-              <div className="relative h-full rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
-                <HeroFace />
-                <div className="absolute inset-x-6 bottom-5 rounded-xl bg-gray-900/85 px-3 py-2 text-center text-xs text-emerald-300 backdrop-blur">
-                  Liveface.speak(&quot;{t("heroDemoLine")}&quot;)
-                </div>
+              <div className="relative">
+                <HeroDemo />
               </div>
             </div>
           </Section>
