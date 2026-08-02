@@ -1,0 +1,189 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 980" width="1180" height="980" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#1f2937"/>
+    </marker>
+    <marker id="arrowMuted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9ca3af"/>
+    </marker>
+    <style>
+      .box   { rx:14; ry:14; stroke-width:2; }
+      .t     { font-size:14px; font-weight:600; fill:#111827; text-anchor:middle; }
+      .s     { font-size:11.5px; fill:#4b5563; text-anchor:middle; }
+      .lane  { font-size:12px; font-weight:700; fill:#6b7280; letter-spacing:1.4px; }
+      .edge  { stroke:#1f2937; stroke-width:2; fill:none; marker-end:url(#arrow); }
+      .edged { stroke:#9ca3af; stroke-width:2; fill:none; stroke-dasharray:6 5; marker-end:url(#arrowMuted); }
+      .elbl  { font-size:11px; fill:#6b7280; text-anchor:middle; }
+      .title { font-size:30px; font-weight:800; fill:#111827; text-anchor:middle; }
+      .sub   { font-size:14px; fill:#6b7280; text-anchor:middle; }
+    </style>
+  </defs>
+
+  <rect width="1180" height="980" fill="#ffffff"/>
+  <text class="title" x="590" y="52">Liveface — System Design</text>
+  <text class="sub" x="590" y="78">One photo → a real-time lip-syncing avatar, embeddable with one script tag</text>
+
+  <!-- ============ lanes ============ -->
+  <rect x="24" y="110" width="248" height="820" rx="18" fill="#f8fafc" stroke="#e5e7eb"/>
+  <rect x="288" y="110" width="212" height="820" rx="18" fill="#f8fafc" stroke="#e5e7eb"/>
+  <rect x="516" y="110" width="316" height="820" rx="18" fill="#f8fafc" stroke="#e5e7eb"/>
+  <rect x="848" y="110" width="308" height="820" rx="18" fill="#f8fafc" stroke="#e5e7eb"/>
+  <text class="lane" x="44"  y="136">BROWSER</text>
+  <text class="lane" x="308" y="136">EDGE</text>
+  <text class="lane" x="536" y="136">APPLICATION</text>
+  <text class="lane" x="868" y="136">STATE</text>
+
+  <!-- ============ browser ============ -->
+  <rect class="box" x="48" y="170" width="200" height="72" fill="#eef2ff" stroke="#818cf8"/>
+  <text class="t" x="148" y="200">Customer page</text>
+  <text class="s" x="148" y="220">&lt;script src="liveface.js"&gt;</text>
+
+  <rect class="box" x="48" y="286" width="200" height="112" fill="#eef2ff" stroke="#818cf8"/>
+  <text class="t" x="148" y="314">Widget runtime</text>
+  <text class="s" x="148" y="334">Canvas 2D triangle mesh</text>
+  <text class="s" x="148" y="352">viseme blend · blink · warp</text>
+  <text class="s" x="148" y="370">~29 KB, no framework</text>
+  <text class="s" x="148" y="388">engine.ts</text>
+
+  <rect class="box" x="48" y="442" width="200" height="90" fill="#ecfdf5" stroke="#34d399"/>
+  <text class="t" x="148" y="470">Speech</text>
+  <text class="s" x="148" y="490">Web Speech API (free)</text>
+  <text class="s" x="148" y="508">or server audio</text>
+
+  <rect class="box" x="48" y="576" width="200" height="90" fill="#eef2ff" stroke="#818cf8"/>
+  <text class="t" x="148" y="604">Dashboard SPA</text>
+  <text class="s" x="148" y="624">React · Vite · Tailwind</text>
+  <text class="s" x="148" y="642">TanStack Query · i18n</text>
+
+  <!-- ============ edge ============ -->
+  <rect class="box" x="308" y="286" width="172" height="112" fill="#fff7ed" stroke="#fb923c"/>
+  <text class="t" x="394" y="316">Caddy</text>
+  <text class="s" x="394" y="336">reverse proxy</text>
+  <text class="s" x="394" y="354">automatic TLS</text>
+  <text class="s" x="394" y="372">avatar.mehdi…​.com</text>
+
+  <rect class="box" x="308" y="576" width="172" height="90" fill="#fff7ed" stroke="#fb923c"/>
+  <text class="t" x="394" y="606">nginx</text>
+  <text class="s" x="394" y="626">static SPA bundle</text>
+  <text class="s" x="394" y="644">Docker container</text>
+
+  <!-- ============ application ============ -->
+  <rect class="box" x="540" y="170" width="268" height="86" fill="#eff6ff" stroke="#60a5fa"/>
+  <text class="t" x="674" y="198">FastAPI</text>
+  <text class="s" x="674" y="218">async SQLAlchemy 2.0 · Pydantic v2</text>
+  <text class="s" x="674" y="236">JWT auth · per-key domain allow-list</text>
+
+  <rect class="box" x="540" y="286" width="128" height="104" fill="#f5f3ff" stroke="#a78bfa"/>
+  <text class="t" x="604" y="314">Embed API</text>
+  <text class="s" x="604" y="334">/avatars</text>
+  <text class="s" x="604" y="352">/synthesize</text>
+  <text class="s" x="604" y="370">/cues</text>
+
+  <rect class="box" x="680" y="286" width="128" height="104" fill="#f5f3ff" stroke="#a78bfa"/>
+  <text class="t" x="744" y="314">Dashboard API</text>
+  <text class="s" x="744" y="334">orgs · members</text>
+  <text class="s" x="744" y="352">api-keys · usage</text>
+  <text class="s" x="744" y="370">rig-fit · rig-reset</text>
+
+  <rect class="box" x="540" y="424" width="268" height="128" fill="#fefce8" stroke="#facc15"/>
+  <text class="t" x="674" y="452">Rig pipeline (background)</text>
+  <text class="s" x="674" y="474">MediaPipe FaceLandmarker — 478 pts</text>
+  <text class="s" x="674" y="492">Delaunay mesh · 15 Oculus visemes</text>
+  <text class="s" x="674" y="510">thumbnail · face box</text>
+  <text class="s" x="674" y="530">synthetic mesh if no face found</text>
+
+  <rect class="box" x="540" y="586" width="268" height="146" fill="#ecfdf5" stroke="#34d399"/>
+  <text class="t" x="674" y="614">Speech timing</text>
+  <text class="s" x="674" y="636">g2p.py — spelling → ARPABET</text>
+  <text class="s" x="674" y="654">stress → reduced vs full vowels</text>
+  <text class="s" x="674" y="672">phonemes.py — ARPABET → visemes</text>
+  <text class="s" x="674" y="690">coarticulation · flap · rounding</text>
+  <text class="s" x="674" y="710">timing.py — cue track + word marks</text>
+
+  <rect class="box" x="540" y="766" width="268" height="104" fill="#fdf2f8" stroke="#f472b6"/>
+  <text class="t" x="674" y="794">TTS providers</text>
+  <text class="s" x="674" y="814">browser (free) · offline</text>
+  <text class="s" x="674" y="832">Azure · Google · ElevenLabs</text>
+  <text class="s" x="674" y="850">cached by (provider, voice, text)</text>
+
+  <!-- ============ state ============ -->
+  <rect class="box" x="872" y="170" width="260" height="112" fill="#f0fdfa" stroke="#2dd4bf"/>
+  <text class="t" x="1002" y="198">Object storage</text>
+  <text class="s" x="1002" y="220">source image</text>
+  <text class="s" x="1002" y="238">rig.json — points, visemes</text>
+  <text class="s" x="1002" y="256">thumbnail · signed URLs</text>
+  <text class="s" x="1002" y="274">local disk or S3</text>
+
+  <rect class="box" x="872" y="322" width="260" height="112" fill="#f0fdfa" stroke="#2dd4bf"/>
+  <text class="t" x="1002" y="350">Database</text>
+  <text class="s" x="1002" y="372">users · orgs · memberships</text>
+  <text class="s" x="1002" y="390">avatars · api keys</text>
+  <text class="s" x="1002" y="408">usage records · invitations</text>
+  <text class="s" x="1002" y="426">SQLite / Postgres · Alembic</text>
+
+  <rect class="box" x="872" y="474" width="260" height="86" fill="#f0fdfa" stroke="#2dd4bf"/>
+  <text class="t" x="1002" y="502">Audio cache</text>
+  <text class="s" x="1002" y="522">synthesised speech + cues</text>
+  <text class="s" x="1002" y="540">keyed by text hash</text>
+
+  <rect class="box" x="872" y="600" width="260" height="132" fill="#f1f5f9" stroke="#94a3b8"/>
+  <text class="t" x="1002" y="628">What crosses the wire</text>
+  <text class="s" x="1002" y="650">rig.json  ~26 KB</text>
+  <text class="s" x="1002" y="668">texture (thumbnail JPEG)</text>
+  <text class="s" x="1002" y="686">cue track  [{t, viseme, a}]</text>
+  <text class="s" x="1002" y="704">word marks [{char, t}]</text>
+  <text class="s" x="1002" y="722">audio only for server voices</text>
+
+  <rect class="box" x="872" y="766" width="260" height="104" fill="#f1f5f9" stroke="#94a3b8"/>
+  <text class="t" x="1002" y="794">Never leaves the instance</text>
+  <text class="s" x="1002" y="816">photos processed in-container</text>
+  <text class="s" x="1002" y="834">no third-party vision model</text>
+  <text class="s" x="1002" y="852">self-hostable end to end</text>
+
+  <!-- ============ edges ============ -->
+  <!-- widget load + api -->
+  <path class="edge" d="M248 206 L296 206 L296 316 L306 316"/>
+  <text class="elbl" x="272" y="198">load</text>
+
+  <path class="edge" d="M248 330 L306 330"/>
+  <text class="elbl" x="277" y="322">rig + cues</text>
+
+  <path class="edge" d="M480 330 L520 330 L520 213 L538 213"/>
+
+  <!-- dashboard -->
+  <path class="edge" d="M248 620 L306 620"/>
+  <path class="edge" d="M480 620 L508 620 L508 240 L538 240"/>
+  <text class="elbl" x="508" y="600">REST + JWT</text>
+
+  <!-- api to sub-apis -->
+  <path class="edge" d="M604 256 L604 284"/>
+  <path class="edge" d="M744 256 L744 284"/>
+
+  <!-- pipeline + speech -->
+  <path class="edge" d="M604 390 L604 422"/>
+  <path class="edge" d="M744 390 L744 422"/>
+  <path class="edge" d="M674 552 L674 584"/>
+  <path class="edge" d="M674 732 L674 764"/>
+
+  <!-- state -->
+  <path class="edge" d="M808 470 L840 470 L840 226 L870 226"/>
+  <text class="elbl" x="840" y="462">writes rig</text>
+
+
+  <path class="edge" d="M808 338 L870 378"/>
+  <text class="elbl" x="840" y="330">records</text>
+
+  <path class="edge" d="M808 818 L830 818 L830 517 L870 517"/>
+  <text class="elbl" x="833" y="560">cache</text>
+
+  <!-- storage back to widget (signed url) -->
+  <path class="edged" d="M872 240 L856 240 L856 152 L148 152 L148 168"/>
+  <text class="elbl" x="500" y="145">signed URLs — rig.json + texture fetched straight by the widget</text>
+
+  <!-- speech to browser -->
+  <path class="edged" d="M540 640 L500 640 L500 487 L250 487"/>
+  <text class="elbl" x="392" y="479">cue track (+ audio)</text>
+
+  <!-- widget speaks -->
+  <path class="edge" d="M148 398 L148 440"/>
+</svg>
