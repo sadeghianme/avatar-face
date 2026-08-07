@@ -145,7 +145,7 @@ export function LandingPage() {
       <header className="sticky top-0 z-40 border-b border-gray-200/60 bg-white/70 backdrop-blur-xl dark:border-line dark:bg-ink/70">
         <nav className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3.5">
           <Link to="/" className="flex items-center gap-2 text-lg font-bold tracking-tight">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 text-white">
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-500 text-white">
               ◕
             </span>
             {t("appName")}
@@ -190,13 +190,13 @@ export function LandingPage() {
               </span>
               {t("heroBadge")}
             </span>
-            <h1 className="mt-5 text-4xl font-extrabold leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl">
+            <h1 className="mt-6 text-[42px] font-semibold leading-[1.05] tracking-[-0.035em] sm:text-[56px] lg:text-[64px]">
               {t("heroTitleA")}{" "}
               <span className="bg-gradient-to-r from-brand-500 to-brand-600 bg-clip-text text-transparent">
                 {t("heroTitleB")}
               </span>
             </h1>
-            <p className="mt-5 max-w-lg text-lg leading-relaxed text-gray-600 dark:text-gray-300">
+            <p className="mt-5 max-w-md text-[17px] leading-[1.5] text-gray-500 dark:text-gray-400">
               {t("heroSubtitle")}
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
@@ -228,7 +228,7 @@ export function LandingPage() {
       <section className="border-y border-gray-200 bg-gray-50/60 py-20 dark:border-line dark:bg-white/[0.02]">
         <div className="mx-auto max-w-6xl px-5">
           <Section>
-            <h2 className="text-center text-3xl font-bold tracking-tight sm:text-4xl">
+            <h2 className="text-center text-[32px] font-semibold tracking-[-0.03em] sm:text-[40px]">
               {t("featuresTitle")}
             </h2>
             <p className="mx-auto mt-3 max-w-2xl text-center text-gray-600 dark:text-gray-300">
@@ -257,7 +257,7 @@ export function LandingPage() {
       <section id="how" className="py-20">
         <div className="mx-auto max-w-6xl px-5">
           <Section>
-            <h2 className="text-center text-3xl font-bold tracking-tight sm:text-4xl">
+            <h2 className="text-center text-[32px] font-semibold tracking-[-0.03em] sm:text-[40px]">
               {t("howTitle")}
             </h2>
           </Section>
@@ -283,7 +283,7 @@ export function LandingPage() {
       <section id="developers" className="border-y border-gray-200 bg-gray-50/60 py-20 dark:border-line dark:bg-white/[0.02]">
         <div className="mx-auto grid max-w-6xl items-center gap-10 px-5 md:grid-cols-2">
           <Section>
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">{t("devTitle")}</h2>
+            <h2 className="text-[32px] font-semibold tracking-[-0.03em] sm:text-[40px]">{t("devTitle")}</h2>
             <p className="mt-4 leading-relaxed text-gray-600 dark:text-gray-300">{t("devBody")}</p>
             <ul className="mt-6 space-y-3 text-sm">
               {["devPoint1", "devPoint2", "devPoint3"].map((k) => (
@@ -323,7 +323,7 @@ export function LandingPage() {
       <section className="py-24">
         <Section>
           <div className="mx-auto max-w-3xl px-5 text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">{t("ctaTitle")}</h2>
+            <h2 className="text-[32px] font-semibold tracking-[-0.03em] sm:text-[40px]">{t("ctaTitle")}</h2>
             <p className="mt-4 text-gray-600 dark:text-gray-300">{t("ctaBody")}</p>
             <Link
               to={user ? "/app" : "/register"}

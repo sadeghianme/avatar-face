@@ -36,7 +36,7 @@ function Waveform() {
       {bars.map((v, i) => (
         <span
           key={i}
-          className="flex-1 rounded-full bg-white/70"
+          className="flex-1 rounded-full bg-brand-500"
           style={{ height: `${Math.max(6, v * 100)}%`, transition: "height 80ms linear" }}
         />
       ))}
@@ -66,44 +66,38 @@ export function AuthShell({
   const points = ["authPoint1", "authPoint2", "authPoint3"];
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
+    <div className="grid min-h-screen bg-white text-gray-900 antialiased lg:grid-cols-[1.05fr_1fr] dark:bg-ink dark:text-gray-100">
       {/* ---- brand panel ---- */}
-      <aside className="relative hidden overflow-hidden bg-gradient-to-br from-brand-500 to-brand-600 p-12 text-white lg:flex lg:flex-col lg:justify-between">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(50%_40%_at_20%_15%,rgba(255,255,255,0.22),transparent),radial-gradient(45%_35%_at_85%_80%,rgba(255,255,255,0.14),transparent)]"
-        />
-        <Link to="/" className="relative flex items-center gap-2.5 text-xl font-bold tracking-tight">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/20 backdrop-blur">
+      <aside className="relative hidden overflow-hidden border-e border-black/[0.07] bg-[#fafaf9] p-12 lg:flex lg:flex-col lg:justify-between dark:border-white/[0.07] dark:bg-panel">
+        <Link to="/" className="relative flex items-center gap-2.5 text-[15px] font-semibold tracking-[-0.01em]">
+          <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-brand-500 text-[13px] text-white">
             ◕
           </span>
           {t("appName")}
         </Link>
 
         <div className="relative max-w-md">
-          <h2 className="text-3xl font-bold leading-tight">{t("authPanelTitle")}</h2>
-          <p className="mt-4 leading-relaxed text-white/80">{t("authPanelBody")}</p>
+          <h2 className="text-[34px] font-semibold leading-[1.1] tracking-[-0.03em]">{t("authPanelTitle")}</h2>
+          <p className="mt-4 text-[15px] leading-relaxed text-gray-500 dark:text-gray-400">{t("authPanelBody")}</p>
 
-          <div className="mt-8 rounded-2xl border border-white/20 bg-white/10 p-5 backdrop-blur-sm">
+          <div className="mt-9 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)] dark:bg-raised dark:shadow-none">
             <Waveform />
-            <p className="mt-3 truncate font-mono text-xs text-white/80">
+            <p className="mt-3 truncate font-mono text-[11.5px] text-gray-400">
               Liveface.speak(&quot;{t("heroDemoLine1")}&quot;)
             </p>
           </div>
 
           <ul className="mt-8 space-y-3">
             {points.map((k) => (
-              <li key={k} className="flex items-start gap-3 text-sm text-white/85">
-                <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/20 text-[11px]">
-                  ✓
-                </span>
+              <li key={k} className="flex items-start gap-2.5 text-[13.5px] text-gray-600 dark:text-gray-300">
+                <span className="mt-[3px] text-brand-500">✓</span>
                 {t(k)}
               </li>
             ))}
           </ul>
         </div>
 
-        <p className="relative text-xs text-white/50">
+        <p className="relative text-[11.5px] text-gray-400">
           © {new Date().getFullYear()} {t("appName")}
         </p>
       </aside>
@@ -119,7 +113,7 @@ export function AuthShell({
             to="/"
             className="flex items-center gap-2 text-lg font-bold tracking-tight text-gray-900 lg:invisible dark:text-white"
           >
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 text-white">
+            <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-brand-500 text-[13px] text-white">
               ◕
             </span>
             {t("appName")}
@@ -142,7 +136,7 @@ export function AuthShell({
 
         <div className="relative flex flex-1 items-center justify-center px-6 pb-16">
           <div className="w-full max-w-sm">
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
+            <h1 className="text-[30px] font-semibold tracking-[-0.03em] text-gray-900 dark:text-white">
               {title}
             </h1>
             {subtitle && (
