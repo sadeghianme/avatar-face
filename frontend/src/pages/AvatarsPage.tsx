@@ -10,7 +10,7 @@ import type { Avatar, Usage } from "../lib/types";
 
 function SkeletonCard() {
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200 dark:border-white/10">
+    <div className="overflow-hidden rounded-2xl border border-gray-200 dark:border-line">
       <div className="aspect-square animate-pulse bg-gray-200 dark:bg-white/10" />
       <div className="p-3">
         <div className="h-4 w-2/3 animate-pulse rounded bg-gray-200 dark:bg-white/10" />
@@ -20,9 +20,9 @@ function SkeletonCard() {
 }
 
 const TONES = {
-  brand: { ring: "#6366f1", text: "text-brand-600 dark:text-brand-300" },
-  emerald: { ring: "#10b981", text: "text-emerald-600 dark:text-emerald-300" },
-  amber: { ring: "#f59e0b", text: "text-amber-600 dark:text-amber-300" },
+  brand: { ring: "#f97316", text: "text-brand-600 dark:text-brand-400" },
+  emerald: { ring: "#10b981", text: "text-emerald-600 dark:text-emerald-400" },
+  amber: { ring: "#eab308", text: "text-amber-600 dark:text-amber-400" },
 } as const;
 
 /**
@@ -52,12 +52,12 @@ function Stat({
   const { ring, text } = TONES[tone];
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 transition hover:shadow-md dark:border-white/10 dark:bg-[#161f31]">
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 transition hover:shadow-md dark:border-line dark:bg-panel">
       <div className="flex items-center gap-4">
         <div className="relative grid h-16 w-16 shrink-0 place-items-center">
           <svg viewBox="0 0 64 64" className="absolute inset-0 -rotate-90">
             <circle cx="32" cy="32" r={r} fill="none" strokeWidth="5"
-              className="stroke-gray-200 dark:stroke-white/10" />
+              className="stroke-gray-200 dark:stroke-line" />
             <circle cx="32" cy="32" r={r} fill="none" strokeWidth="5" stroke={ring}
               strokeLinecap="round" strokeDasharray={`${filled} ${circumference}`}
               style={{ transition: "stroke-dasharray 600ms ease-out" }} />
@@ -109,7 +109,7 @@ export function AvatarsPage() {
   return (
     <div className="space-y-8">
       {/* ---- greeting ---- */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-600 via-violet-600 to-fuchsia-600 p-7 text-white sm:p-9">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-600 p-7 text-white sm:p-9">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(45%_60%_at_15%_10%,rgba(255,255,255,0.25),transparent),radial-gradient(40%_50%_at_90%_90%,rgba(255,255,255,0.14),transparent)]"
@@ -174,7 +174,7 @@ export function AvatarsPage() {
       </div>
 
       {/* ---- avatars ---- */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-white/10 dark:bg-[#161f31]">
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-line dark:bg-panel">
         <div className="mb-4 flex items-baseline justify-between">
           <h2 className="text-base font-semibold">{t("avatars")}</h2>
           {avatars && avatars.length > 0 && (
@@ -196,9 +196,9 @@ export function AvatarsPage() {
               <Link
                 key={avatar.id}
                 to={`/avatars/${avatar.id}`}
-                className="group overflow-hidden rounded-xl border border-gray-200 bg-gray-50 transition
+                className="group overflow-hidden rounded-xl border border-gray-200 bg-[#faf9f7] transition
                   hover:-translate-y-1 hover:border-brand-300 hover:shadow-xl
-                  dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-brand-500/40"
+                  dark:border-line dark:bg-white/[0.03] dark:hover:border-brand-500/40"
               >
                 <AvatarThumb avatar={avatar} orgId={current.id} />
                 <div className="flex items-center justify-between gap-2 p-3">
@@ -235,7 +235,7 @@ function EmptyState() {
   const steps = ["stepUploadTitle", "stepTuneTitle", "stepEmbedTitle"];
   return (
     <div className="rounded-3xl border border-dashed border-gray-300 p-10 text-center dark:border-white/15">
-      <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-brand-500/20 to-fuchsia-500/20 text-3xl">
+      <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-brand-500/20 to-brand-600/15 text-3xl">
         🎭
       </div>
       <h3 className="mt-5 text-lg font-semibold">{t("emptyTitle")}</h3>
@@ -269,7 +269,7 @@ function AvatarThumb({ avatar, orgId }: { avatar: Avatar; orgId: string }) {
     staleTime: 60_000,
   });
   return (
-    <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 dark:from-white/[0.06] dark:to-white/[0.02]">
+    <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 dark:from-raised dark:to-panel">
       {data?.thumbnail_url ? (
         <img
           src={data.thumbnail_url}

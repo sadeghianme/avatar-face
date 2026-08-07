@@ -73,9 +73,9 @@ function HeroDemo() {
   const lines = ["heroDemoLine1", "heroDemoLine2", "heroDemoLine3"];
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/50 bg-white/80 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.06]">
+    <div className="overflow-hidden rounded-2xl border border-white/50 bg-white/80 shadow-2xl backdrop-blur-xl dark:border-line dark:bg-white/[0.06]">
       {/* browser chrome */}
-      <div className="flex items-center gap-2 border-b border-gray-200/70 px-4 py-3 dark:border-white/10">
+      <div className="flex items-center gap-2 border-b border-gray-200/70 px-4 py-3 dark:border-line">
         <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
         <span className="h-2.5 w-2.5 rounded-full bg-yellow-400" />
         <span className="h-2.5 w-2.5 rounded-full bg-green-400" />
@@ -86,8 +86,8 @@ function HeroDemo() {
 
       <div className="space-y-4 p-5">
         {/* the widget, sitting on someone's page */}
-        <div className="flex items-center gap-4 rounded-xl bg-gradient-to-br from-brand-500/10 to-fuchsia-500/10 p-4">
-          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full bg-gradient-to-br from-brand-400 to-fuchsia-400">
+        <div className="flex items-center gap-4 rounded-xl bg-gradient-to-br from-brand-500/10 to-brand-600/5 p-4">
+          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full bg-gradient-to-br from-brand-400 to-brand-600">
             <span className="absolute inset-0 grid place-items-center text-2xl">🙂</span>
             <span className="absolute inset-x-0 bottom-0 h-1.5 bg-emerald-400/90" />
           </div>
@@ -140,12 +140,12 @@ export function LandingPage() {
   const steps = ["stepUpload", "stepTune", "stepEmbed"];
 
   return (
-    <div className="min-h-screen bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-50">
+    <div className="min-h-screen bg-white text-gray-900 dark:bg-ink dark:text-gray-50">
       {/* ---- nav ---- */}
-      <header className="sticky top-0 z-40 border-b border-gray-200/60 bg-white/70 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/70">
+      <header className="sticky top-0 z-40 border-b border-gray-200/60 bg-white/70 backdrop-blur-xl dark:border-line dark:bg-ink/70">
         <nav className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3.5">
           <Link to="/" className="flex items-center gap-2 text-lg font-bold tracking-tight">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-brand-500 to-fuchsia-500 text-white">
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 text-white">
               ◕
             </span>
             {t("appName")}
@@ -179,7 +179,7 @@ export function LandingPage() {
       <section className="relative overflow-hidden">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60%_50%_at_15%_0%,rgba(99,102,241,0.20),transparent),radial-gradient(50%_45%_at_85%_10%,rgba(217,70,239,0.18),transparent)]"
+          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60%_50%_at_15%_0%,rgba(249,115,22,0.16),transparent),radial-gradient(50%_45%_at_85%_10%,rgba(249,115,22,0.14),transparent)]"
         />
         <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-20 pt-16 md:grid-cols-2 md:pb-28 md:pt-24">
           <Section>
@@ -192,7 +192,7 @@ export function LandingPage() {
             </span>
             <h1 className="mt-5 text-4xl font-extrabold leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl">
               {t("heroTitleA")}{" "}
-              <span className="bg-gradient-to-r from-brand-500 via-violet-500 to-fuchsia-500 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-brand-500 to-brand-600 bg-clip-text text-transparent">
                 {t("heroTitleB")}
               </span>
             </h1>
@@ -214,7 +214,7 @@ export function LandingPage() {
             <div className="relative mx-auto w-full max-w-md">
               <div
                 aria-hidden="true"
-                className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-brand-500/25 to-fuchsia-500/25 blur-3xl"
+                className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-brand-500/25 to-brand-600/20 blur-3xl"
               />
               <div className="relative">
                 <HeroDemo />
@@ -225,7 +225,7 @@ export function LandingPage() {
       </section>
 
       {/* ---- features ---- */}
-      <section className="border-y border-gray-200 bg-gray-50/60 py-20 dark:border-white/10 dark:bg-white/[0.02]">
+      <section className="border-y border-gray-200 bg-gray-50/60 py-20 dark:border-line dark:bg-white/[0.02]">
         <div className="mx-auto max-w-6xl px-5">
           <Section>
             <h2 className="text-center text-3xl font-bold tracking-tight sm:text-4xl">
@@ -238,8 +238,8 @@ export function LandingPage() {
           <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((f) => (
               <Section key={f.key}>
-                <div className="group h-full rounded-2xl border border-gray-200 bg-white p-6 transition hover:-translate-y-1 hover:border-brand-300 hover:shadow-lg dark:border-white/10 dark:bg-white/5 dark:hover:border-brand-500/40">
-                  <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-brand-500/15 to-fuchsia-500/15 text-xl">
+                <div className="group h-full rounded-2xl border border-gray-200 bg-white p-6 transition hover:-translate-y-1 hover:border-brand-300 hover:shadow-lg dark:border-line dark:bg-white/5 dark:hover:border-brand-500/40">
+                  <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-brand-500/15 to-brand-600/10 text-xl">
                     {f.icon}
                   </div>
                   <h3 className="mt-4 font-semibold">{t(`${f.key}Title`)}</h3>
@@ -264,7 +264,7 @@ export function LandingPage() {
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {steps.map((key, i) => (
               <Section key={key}>
-                <div className="relative h-full rounded-2xl border border-gray-200 p-6 dark:border-white/10">
+                <div className="relative h-full rounded-2xl border border-gray-200 p-6 dark:border-line">
                   <div className="mb-4 grid h-9 w-9 place-items-center rounded-full bg-brand-600 text-sm font-bold text-white">
                     {i + 1}
                   </div>
@@ -280,7 +280,7 @@ export function LandingPage() {
       </section>
 
       {/* ---- developers ---- */}
-      <section id="developers" className="border-y border-gray-200 bg-gray-50/60 py-20 dark:border-white/10 dark:bg-white/[0.02]">
+      <section id="developers" className="border-y border-gray-200 bg-gray-50/60 py-20 dark:border-line dark:bg-white/[0.02]">
         <div className="mx-auto grid max-w-6xl items-center gap-10 px-5 md:grid-cols-2">
           <Section>
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">{t("devTitle")}</h2>
@@ -335,7 +335,7 @@ export function LandingPage() {
         </Section>
       </section>
 
-      <footer className="border-t border-gray-200 py-8 dark:border-white/10">
+      <footer className="border-t border-gray-200 py-8 dark:border-line">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-5 text-sm text-gray-500 sm:flex-row dark:text-gray-400">
           <span>
             © {new Date().getFullYear()} {t("appName")}

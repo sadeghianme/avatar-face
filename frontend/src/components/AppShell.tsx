@@ -46,7 +46,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         to="/"
         className="flex items-center gap-2.5 px-5 py-[18px] text-lg font-bold tracking-tight text-gray-900 dark:text-white"
       >
-        <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-brand-500 to-fuchsia-500 text-white">
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 text-white">
           ◕
         </span>
         {t("appName")}
@@ -93,9 +93,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         ))}
       </nav>
 
-      <div className="border-t border-gray-200 p-3 dark:border-white/10">
+      <div className="border-t border-gray-200 p-3 dark:border-line">
         <div className="flex items-center gap-3 rounded-lg px-2 py-2">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-fuchsia-500 text-sm font-semibold text-white">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-sm font-semibold text-white">
             {initial}
           </span>
           <div className="min-w-0 flex-1">
@@ -111,10 +111,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-[#111827] dark:text-gray-100">
+    <div className="min-h-screen bg-[#faf9f7] text-gray-900 dark:bg-ink dark:text-gray-100">
       {/* Fixed rail on desktop; a drawer below lg so the content gets the
           whole width on a phone rather than a squeezed column. */}
-      <aside className="fixed inset-y-0 start-0 z-40 hidden w-64 border-e border-gray-200 bg-white lg:block dark:border-white/10 dark:bg-[#161f31]">
+      <aside className="fixed inset-y-0 start-0 z-40 hidden w-64 border-e border-gray-200 bg-white lg:block dark:border-line dark:bg-panel">
         {sidebar}
       </aside>
 
@@ -125,14 +125,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="fixed inset-0 z-40 bg-black/50 lg:hidden"
             onClick={() => setOpen(false)}
           />
-          <aside className="fixed inset-y-0 start-0 z-50 w-64 border-e border-gray-200 bg-white lg:hidden dark:border-white/10 dark:bg-[#161f31]">
+          <aside className="fixed inset-y-0 start-0 z-50 w-64 border-e border-gray-200 bg-white lg:hidden dark:border-line dark:bg-panel">
             {sidebar}
           </aside>
         </>
       )}
 
       <div className="lg:ms-64">
-        <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/85 backdrop-blur-xl dark:border-white/10 dark:bg-[#161f31]/85">
+        <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/85 backdrop-blur-xl dark:border-line dark:bg-panel/85">
           <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
             <button
               aria-label="menu"
@@ -158,7 +158,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
               <div className="relative">
                 <button
-                  className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-fuchsia-500 text-sm font-semibold text-white"
+                  className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-sm font-semibold text-white"
                   onClick={() => setMenu((m) => !m)}
                   aria-label={user?.username ?? "account"}
                 >
@@ -172,8 +172,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                       tabIndex={-1}
                       onClick={() => setMenu(false)}
                     />
-                    <div className="absolute end-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-[#1c2740]">
-                      <div className="border-b border-gray-100 px-4 py-3 dark:border-white/10">
+                    <div className="absolute end-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-line dark:bg-raised">
+                      <div className="border-b border-gray-100 px-4 py-3 dark:border-line">
                         <p className="truncate text-sm font-medium">
                           {user?.display_name || user?.username}
                         </p>

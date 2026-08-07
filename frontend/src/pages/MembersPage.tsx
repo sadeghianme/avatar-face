@@ -113,7 +113,7 @@ export function MembersPage() {
             {members?.map((member) => (
               <tr
                 key={member.membership_id}
-                className="border-b border-gray-100 last:border-0 dark:border-gray-700"
+                className="border-b border-gray-100 last:border-0 dark:border-line"
               >
                 <td className="px-5 py-3">
                   <div className="font-medium">{member.display_name || member.username}</div>
@@ -162,7 +162,7 @@ export function MembersPage() {
                   .map((invitation) => (
                     <tr
                       key={invitation.id}
-                      className="border-b border-gray-100 last:border-0 dark:border-gray-700"
+                      className="border-b border-gray-100 last:border-0 dark:border-line"
                     >
                       <td className="px-5 py-3">{invitation.email}</td>
                       <td className="px-5 py-3">{t(`roles.${invitation.role}`)}</td>

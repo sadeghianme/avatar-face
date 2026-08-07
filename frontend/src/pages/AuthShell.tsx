@@ -68,7 +68,7 @@ export function AuthShell({
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
       {/* ---- brand panel ---- */}
-      <aside className="relative hidden overflow-hidden bg-gradient-to-br from-brand-600 via-violet-600 to-fuchsia-600 p-12 text-white lg:flex lg:flex-col lg:justify-between">
+      <aside className="relative hidden overflow-hidden bg-gradient-to-br from-brand-500 to-brand-600 p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(50%_40%_at_20%_15%,rgba(255,255,255,0.22),transparent),radial-gradient(45%_35%_at_85%_80%,rgba(255,255,255,0.14),transparent)]"
@@ -109,17 +109,17 @@ export function AuthShell({
       </aside>
 
       {/* ---- form side ---- */}
-      <main className="relative flex flex-col bg-white dark:bg-gray-950">
+      <main className="relative flex flex-col bg-white dark:bg-ink">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_40%_at_80%_0%,rgba(99,102,241,0.10),transparent)] lg:hidden"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_40%_at_80%_0%,rgba(249,115,22,0.10),transparent)] lg:hidden"
         />
         <header className="relative flex items-center justify-between px-6 py-5">
           <Link
             to="/"
             className="flex items-center gap-2 text-lg font-bold tracking-tight text-gray-900 lg:invisible dark:text-white"
           >
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-brand-500 to-fuchsia-500 text-white">
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 text-white">
               ◕
             </span>
             {t("appName")}

@@ -95,7 +95,7 @@ export function ApiKeysPage() {
             {t("keyCreatedOnce")}
           </p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 overflow-x-auto rounded bg-white px-3 py-2 text-sm dark:bg-gray-900">
+            <code className="flex-1 overflow-x-auto rounded bg-white px-3 py-2 text-sm dark:bg-panel">
               {revealed.plaintext}
             </code>
             <button
@@ -117,7 +117,7 @@ export function ApiKeysPage() {
             {keys?.map((key) => (
               <tr
                 key={key.id}
-                className={`border-b border-gray-100 last:border-0 dark:border-gray-700 ${
+                className={`border-b border-gray-100 last:border-0 dark:border-line ${
                   key.revoked_at ? "opacity-50" : ""
                 }`}
               >

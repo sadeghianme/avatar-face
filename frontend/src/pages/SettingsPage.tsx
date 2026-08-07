@@ -168,7 +168,7 @@ function VoiceProvidersCard({ orgId }: { orgId: string }) {
         {integrations?.map((integration) => (
           <div
             key={integration.provider}
-            className="rounded-lg border border-gray-200 p-4 dark:border-gray-700"
+            className="rounded-lg border border-gray-200 p-4 dark:border-line"
           >
             <div className="mb-3 flex items-center justify-between">
               <span className="font-medium capitalize">{integration.provider}</span>

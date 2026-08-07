@@ -244,7 +244,7 @@ export function MarkFacePanel({
             </>
           ) : (
             <div className="flex h-[280px] items-center justify-center rounded-xl border border-dashed
-              border-gray-300 text-center text-xs text-gray-500 dark:border-gray-600">
+              border-gray-300 text-center text-xs text-gray-500 dark:border-line">
               {t("testHint")}
             </div>
           )}

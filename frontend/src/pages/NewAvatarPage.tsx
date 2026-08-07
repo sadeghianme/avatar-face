@@ -105,7 +105,7 @@ export function NewAvatarPage() {
         tabIndex={0}
         aria-label={t("uploadPhoto")}
         className={`card flex cursor-pointer flex-col items-center justify-center border-2 border-dashed py-12 text-center transition-colors ${
-          dragging ? "border-brand-500 bg-brand-50 dark:bg-brand-700/10" : "border-gray-300 dark:border-gray-600"
+          dragging ? "border-brand-500 bg-brand-50 dark:bg-brand-700/10" : "border-gray-300 dark:border-line"
         }`}
         onClick={() => fileInput.current?.click()}
         onKeyDown={(e) => e.key === "Enter" && fileInput.current?.click()}
