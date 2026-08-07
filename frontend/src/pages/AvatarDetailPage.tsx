@@ -65,7 +65,7 @@ export function AvatarDetailPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold">{avatar.name}</h1>

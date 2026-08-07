@@ -52,7 +52,7 @@ export function ApiKeysPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div>
       <h1 className="mb-6 text-2xl font-semibold">{t("apiKeys")}</h1>
 
       <form

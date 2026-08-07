@@ -88,7 +88,7 @@ export function NewAvatarPage() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div>
       <h1 className="mb-6 text-2xl font-semibold">{t("newAvatar")}</h1>
 
       <label className="label" htmlFor="avatar-name">{t("avatarName")}</label>

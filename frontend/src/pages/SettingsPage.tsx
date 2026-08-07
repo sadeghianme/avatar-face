@@ -32,7 +32,7 @@ export function SettingsPage() {
   const pct = usage ? Math.min(100, (usage.chars_used / usage.char_limit) * 100) : 0;
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">{t("settings")}</h1>
 
       {/* Org rename */}
