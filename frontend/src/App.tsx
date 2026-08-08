@@ -14,6 +14,7 @@ import { MembersPage } from "./pages/MembersPage";
 import { NewAvatarPage } from "./pages/NewAvatarPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { SimulatorPage } from "./pages/SimulatorPage";
 
 /** Already signed in? An auth page has nothing to offer — go to the app. */
 function GuestOnly({ children }: { children: ReactNode }) {
@@ -54,6 +55,7 @@ export default function App() {
       <Route path="/members" element={<Protected><MembersPage /></Protected>} />
       <Route path="/api-keys" element={<Protected><ApiKeysPage /></Protected>} />
       <Route path="/settings" element={<Protected><SettingsPage /></Protected>} />
+      <Route path="/simulator" element={<Protected><SimulatorPage /></Protected>} />
       {/* Anything unknown goes to the front door, not into the app. */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -40,6 +40,8 @@ export const ICONS: Record<string, Shape[]> = {
     { circle: [14, 18, 2] },
   ],
   plus: [{ d: "M12 5.5v13M5.5 12h13" }],
+  // Simulator — a play control inside a browser frame.
+  play: [{ rect: [2.5, 4, 19, 16, 3] }, { d: "M2.5 8.5h19M10 12.5l4 2.2-4 2.3z" }],
   check: [{ d: "M20 6.5 9.5 17 4 11.5" }],
   clock: [{ circle: [12, 12, 9] }, { d: "M12 7.5V12l3 1.8" }],
   chart: [{ d: "M3.5 3.5v17h17" }, { d: "M7.5 16v-3M12 16V8.5M16.5 16v-5" }],

@@ -18,6 +18,7 @@ const NAV: { to: string; key: string; icon: IconName }[] = [
   { to: "/app", key: "avatars", icon: "faces" },
   { to: "/members", key: "members", icon: "users" },
   { to: "/api-keys", key: "apiKeys", icon: "key" },
+  { to: "/simulator", key: "simulator", icon: "play" },
   { to: "/settings", key: "settings", icon: "settings" },
 ];
 
@@ -28,6 +29,7 @@ function useCrumb(): string {
   if (pathname.startsWith("/members")) return t("members");
   if (pathname.startsWith("/api-keys")) return t("apiKeys");
   if (pathname.startsWith("/settings")) return t("settings");
+  if (pathname.startsWith("/simulator")) return t("simulator");
   if (pathname.startsWith("/avatars/new")) return t("newAvatar");
   if (pathname.startsWith("/avatars/")) return t("avatars");
   return t("dashboard");
