@@ -1,4 +1,3 @@
-import json
 
 from tests.conftest import create_org, create_ready_avatar, register_and_login, sample_png
 
@@ -159,3 +158,58 @@ async def test_retry_reenqueues(client):
     assert response.status_code == 200
     detail = await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)
     assert detail.json()["status"] == "ready"
+
+
+async def test_background_removal_is_reversible(client, monkeypatch):
+    """Replacing the photo is destructive, so the original has to survive it."""
+    from app.api import avatars as avatars_api
+
+    headers = await register_and_login(client, "bgowner")
+    org_id = await create_org(client, headers)
+    avatar_id = await create_ready_avatar(client, headers, org_id)
+
+    before = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
+    assert before["original_image_key"] is None
+
+    # A tiny stand-in for the segmenter: the real one needs a 244KB model that
+    # is not present in CI, and what is under test here is the bookkeeping.
+    monkeypatch.setattr(avatars_api, "remove_background", lambda raw: b"\x89PNG\r\n\x1a\n cut")
+
+    removed = await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/background", json={"remove": True}, headers=headers
+    )
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["original_image_key"] is not None
+
+    # Removing twice must not lose the original by overwriting the pointer.
+    again = await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/background", json={"remove": True}, headers=headers
+    )
+    assert again.json()["original_image_key"] == removed.json()["original_image_key"]
+
+    restored = await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/background", json={"remove": False}, headers=headers
+    )
+    assert restored.json()["original_image_key"] is None
+
+    after = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
+    assert after["image_url"] and before["image_url"]
+
+
+async def test_background_removal_reports_when_unconfigured(client, monkeypatch):
+    from app.api import avatars as avatars_api
+    from app.services.segment import SegmentationUnavailable
+
+    headers = await register_and_login(client, "bgnomodel")
+    org_id = await create_org(client, headers)
+    avatar_id = await create_ready_avatar(client, headers, org_id)
+
+    def unavailable(_raw):
+        raise SegmentationUnavailable("no model")
+
+    monkeypatch.setattr(avatars_api, "remove_background", unavailable)
+    response = await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/background", json={"remove": True}, headers=headers
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "segmentation_unavailable"

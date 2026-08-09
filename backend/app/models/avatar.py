@@ -37,6 +37,10 @@ class Avatar(TimestampedBase):
     content_type: Mapped[str] = mapped_column(String(64), nullable=False)
     # Storage keys (set as the pipeline progresses)
     image_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Set when the background has been removed: points at the photo as it was
+    # uploaded, so the cut-out can be undone. Null means image_key IS the
+    # original.
+    original_image_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     rig_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     thumbnail_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)

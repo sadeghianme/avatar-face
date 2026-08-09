@@ -29,6 +29,7 @@ COPY --from=embed-build /build/embed/dist /app/embed/dist
 RUN mkdir -p models && curl -fsSL -o models/face_landmarker.task \
     https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
 ENV RIG_MODEL_PATH=/app/backend/models/face_landmarker.task
+ENV SEGMENT_MODEL_PATH=/app/backend/models/selfie_segmenter.tflite
 
 EXPOSE 7002
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7002"]

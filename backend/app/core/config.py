@@ -79,6 +79,9 @@ class Settings(BaseSettings):
 
     # --- Rig ---
     rig_model_path: str | None = None  # MediaPipe FaceLandmarker .task file
+    # MediaPipe selfie segmenter .tflite. Unset simply disables background
+    # removal; nothing else depends on it.
+    segment_model_path: str | None = None
 
     # --- 3D avatars: hosts allowed for GLB imports by URL (SSRF guard).
     # Ready Player Me shut down Jan 2026; Avaturn et al. are compatible. ---

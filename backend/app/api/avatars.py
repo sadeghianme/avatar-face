@@ -6,6 +6,8 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks
 from sqlalchemy import select
 
+from pydantic import BaseModel
+
 from app.api.deps import DB, OrgMember
 from app.core.config import get_settings
 from app.core.errors import Conflict409, NotFound404, Validation422
@@ -22,6 +24,7 @@ from app.schemas.avatar import (
 )
 from app.services.rig import process_avatar
 from app.services.rig_fit import RegionMarks, apply_anchors, current_anchors
+from app.services.segment import SegmentationUnavailable, remove_background
 from app.services.storage import get_storage
 
 router = APIRouter(prefix="/orgs/{org_id}/avatars", tags=["avatars"])
@@ -229,6 +232,57 @@ async def rig_adjust(avatar_id: str, body: RigAdjust, ctx: OrgMember, db: DB) ->
     ys = [p[1] for p in points]
     rig["face_box"] = [min(xs), min(ys), max(xs), max(ys)]
     await storage.put_bytes(avatar.rig_key, _json.dumps(rig).encode(), "application/json")
+    return avatar
+
+
+class BackgroundRequest(BaseModel):
+    """True removes the background, false restores the original photo."""
+
+    remove: bool = True
+
+
+@router.post("/{avatar_id}/background", response_model=AvatarOut)
+async def set_background(
+    avatar_id: str, body: BackgroundRequest, ctx: OrgMember, db: DB
+) -> Avatar:
+    """Cut the subject out of the photo, or put the original back.
+
+    The rig is untouched on purpose. Removing a background does not move a
+    single landmark — the face is in exactly the same place — so re-detecting
+    would only risk a worse fit than the one already there, possibly one the
+    user corrected by hand.
+    """
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    if avatar.kind != AvatarKind.photo or not avatar.image_key:
+        raise Conflict409("Only photo avatars have a background", code="not_a_photo")
+
+    storage = get_storage()
+
+    if not body.remove:
+        if not avatar.original_image_key:
+            return avatar  # already the original; nothing to undo
+        avatar.image_key = avatar.original_image_key
+        avatar.original_image_key = None
+        await db.commit()
+        return avatar
+
+    if avatar.original_image_key:
+        return avatar  # already cut out
+
+    try:
+        cut_out = remove_background(await storage.get_bytes(avatar.image_key))
+    except SegmentationUnavailable as exc:
+        raise Conflict409(
+            "Background removal is not configured on this server",
+            code="segmentation_unavailable",
+        ) from exc
+
+    key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/source-nobg.png"
+    await storage.put_bytes(key, cut_out, "image/png")
+    # The original is kept, not overwritten, so this is reversible.
+    avatar.original_image_key = avatar.image_key
+    avatar.image_key = key
+    await db.commit()
     return avatar
 
 

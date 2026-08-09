@@ -48,6 +48,8 @@ export interface Avatar {
   created_at: string;
   updated_at: string;
   image_url?: string | null;
+  /** Set when the background has been removed — the pre-cut-out photo. */
+  original_image_key?: string | null;
   rig_url?: string | null;
   thumbnail_url?: string | null;
   model_url?: string | null;

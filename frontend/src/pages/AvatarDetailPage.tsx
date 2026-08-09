@@ -26,6 +26,7 @@ export function AvatarDetailPage() {
   const [debugMesh, setDebugMesh] = useState(false);
   const [fullPhoto, setFullPhoto] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
+  const [busyBg, setBusyBg] = useState(false);
 
   const { data: avatar, isError } = useQuery({
     queryKey: ["avatar", current?.id, avatarId],
@@ -44,6 +45,21 @@ export function AvatarDetailPage() {
   if (!avatar || !current) {
     return <p className="text-gray-500">{t("loading")}</p>;
   }
+
+  /** Cut the subject out, or put the original photo back. */
+  const toggleBackground = async () => {
+    setBusyBg(true);
+    try {
+      await api.post(`/orgs/${current!.id}/avatars/${avatar!.id}/background`, {
+        remove: !avatar!.original_image_key,
+      });
+      // A fresh detail fetch re-signs the image URL, so the preview reloads
+      // with the new texture rather than the cached one.
+      await queryClient.invalidateQueries({ queryKey: ["avatar", current!.id, avatar!.id] });
+    } finally {
+      setBusyBg(false);
+    }
+  };
 
   const generate3d = async () => {
     const created = await api.post<Avatar>(
@@ -103,6 +119,18 @@ export function AvatarDetailPage() {
             <>
               <button className="btn-secondary" onClick={() => setAdjusting((a) => !a)}>
                 🎯 {t("markFace")}
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={() => void toggleBackground()}
+                disabled={busyBg}
+                title={t("removeBgHint")}
+              >
+                {busyBg
+                  ? t("loading")
+                  : avatar.original_image_key
+                    ? t("restoreBg")
+                    : t("removeBg")}
               </button>
               <button className="btn-secondary" onClick={() => void generate3d()}>
                 ✨ {t("generate3d")}

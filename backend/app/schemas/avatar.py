@@ -83,6 +83,9 @@ class AvatarOut(BaseModel):
     kind: AvatarKind
     content_type: str
     error: str | None
+    # Non-null means the background has been removed and this is the photo as
+    # uploaded — the UI uses it to know whether to offer remove or restore.
+    original_image_key: str | None = None
     created_at: datetime
     updated_at: datetime
 
