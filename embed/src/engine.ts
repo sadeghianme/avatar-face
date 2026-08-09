@@ -14,7 +14,6 @@
  * - A `destroyed` flag makes mount -> unmount -> mount safe under React
  *   StrictMode.
  */
-import { HeadPose, HEAD_PITCH_MAX, HEAD_ROLL_MAX, HEAD_YAW_MAX } from "./headpose";
 import { BlendWeights, Cue, DEFAULT_TUNING, EngineTuning, Rig, ZERO_WEIGHTS } from "./types";
 
 // Canonical MediaPipe brow rows, inner -> outer.
@@ -125,85 +124,6 @@ function blinkEase(phase: number): number {
  */
 const LID_VERTEX_SWEEP = 1.0;
 const NOD_MS = 650;
-
-/**
- * Indices of the points on the convex hull, counter-clockwise.
- *
- * Andrew's monotone chain. Used to find an ordered boundary loop around the
- * face landmarks to grow the head shell from — the mesh's own outline is not
- * stored as a loop anywhere, and the hull of a face's landmarks is its
- * silhouette, which is exactly what needs extending.
- */
-function convexHullIndices(points: { x: number; y: number }[]): number[] {
-  const order = points.map((_, i) => i).sort((a, b) =>
-    points[a].x - points[b].x || points[a].y - points[b].y
-  );
-  const cross = (o: number, a: number, b: number) =>
-    (points[a].x - points[o].x) * (points[b].y - points[o].y) -
-    (points[a].y - points[o].y) * (points[b].x - points[o].x);
-
-  const build = (seq: number[]) => {
-    const out: number[] = [];
-    for (const i of seq) {
-      while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], i) <= 0) {
-        out.pop();
-      }
-      out.push(i);
-    }
-    out.pop(); // shared with the other half
-    return out;
-  };
-  return [...build(order), ...build([...order].reverse())];
-}
-
-// --- Head pose -------------------------------------------------------------
-//
-// Rotation is modelled as a cylinder rather than as a sideways slide. Turning
-// a head does not translate the features: the side turning away compresses
-// and the side turning towards you spreads out. That foreshortening is most
-// of what makes a turn read as a turn, and a pure translation reads as the
-// face sliding around inside the head.
-//
-// The model also pins the silhouette for free. At the edge of the face the
-// mapping is sin(±pi/2 + angle) = cos(angle), which changes only to second
-// order in the angle — so the outline barely moves while the nose moves a
-// lot, which is exactly what a real head does and what stops the mesh from
-// tearing away from the still photograph behind it.
-
-/**
- * The head shell: rings of extra vertices grown outward from the face.
- *
- * The landmark mesh covers the face and stops at the jaw and hairline, so
- * warping it turns the face inside a head that stays put — the features move
- * and the hair, ears and skull do not, which reads as a mask sliding about
- * rather than as someone turning their head.
- *
- * These rings extend the mesh over the hair and out into the surroundings.
- * Everything inside the first ring moves as one piece; the outermost ring is
- * pinned, so the annulus between them absorbs the motion and the mesh still
- * meets the untouched photograph exactly where it did before. The ring must
- * also enclose the whole head — the still photo is drawn underneath, so any
- * part of the original head the mesh fails to cover shows through as a ghost.
- *
- * Each entry is [outward scale, how freely it moves].
- */
-const HEAD_SHELL_RINGS: [number, number][] = [
-  [1.45, 1.0], // over the hair: still fully part of the head
-  [1.78, 0.55],
-  [2.15, 0.0], // pinned to the photograph
-];
-
-/**
- * How much less the rings grow downward than upward.
- *
- * A head ends at the chin, but it continues into a neck and shoulders that
- * must not swing with it. Growing the rings evenly would sweep the collar
- * along with the jaw.
- */
-const HEAD_SHELL_DOWNWARD_DAMP = 0.82;
-
-/** The head's centre of mass sits above the face landmarks, in the skull. */
-const HEAD_CENTRE_RISE = 0.22;
 const SACCADE_MS = 35;
 
 // A sclera's colour cast is a fraction of the surrounding skin's, and it is
@@ -394,13 +314,6 @@ export class AvatarEngine {
   private nextBlinkAt = 0;
   private nextNodAt = 0;
   private nodPhase = 1; // 1 = finished
-  private head = new HeadPose();
-  /** Per-vertex freedom to move: 1 across the head, 0 at the outer ring. */
-  private headFalloff: Float32Array | null = null;
-  private shellTriangles: [number, number, number][] = [];
-  private headCentre = { x: 0, y: 0 };
-  private headHalf = { x: 1, y: 1 };
-  private headBottom = 0;
   // Gaze: current and target offsets in eye-widths, plus saccade timing.
   private gaze = { x: 0, y: 0 };
   private gazeTarget = { x: 0, y: 0 };
@@ -444,9 +357,10 @@ export class AvatarEngine {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     this.innerRing = this.validInnerRing();
-    this.rebuildGeometry();
+    this.computeFraming();
     this.sampleLipColour();
     this.sampleLashColour();
+    this.subdivideMouthRegion();
     this.startTime = performance.now();
     this.nextBlinkAt = this.startTime + 1200 + Math.random() * 2000;
     this.nextNodAt = this.startTime + 2500;
@@ -504,134 +418,6 @@ export class AvatarEngine {
       x: x * this.scale + this.offsetX,
       y: y * this.scale + this.offsetY,
     }));
-  }
-
-  /**
-   * Rebuild everything derived from the rig and the texture, in order.
-   *
-   * The order is load-bearing. The shell appends vertices, and the mouth
-   * subdivision numbers its midpoints from basePoints.length — so the shell
-   * has to exist first or every subdivided index is off by the shell's size.
-   * Subdivision then rebuilds the triangle list from the rig, which is why
-   * the shell's own triangles are re-appended afterwards.
-   */
-  private rebuildGeometry(): void {
-    this.derivedParents = [];
-    this.computeFraming();
-    this.buildHeadShell();
-    this.subdivideMouthRegion();
-    this.triangles.push(...this.shellTriangles);
-  }
-
-  /**
-   * Swap in a different image of the same face, mid-animation.
-   *
-   * Used to upgrade from the thumbnail the widget starts with to the
-   * full-resolution photograph once it arrives. Everything derived from the
-   * pixels has to be recomputed: texture coordinates are in the texture's own
-   * pixels, and the lip and lash colours were sampled from the old one.
-   *
-   * The rig is untouched — it is in image-space and both images are the same
-   * face at different scales, so no landmark moves.
-   */
-  setTexture(texture: HTMLImageElement): void {
-    if (!texture.naturalWidth || !texture.naturalHeight) return;
-    this.texture = texture;
-    this.rebuildGeometry();
-    this.sampleLipColour();
-    this.sampleLashColour();
-  }
-
-  /**
-   * Grow the mesh outward from the face so the whole head moves with it.
-   *
-   * Works entirely in image space and converts at the end, so a ring vertex
-   * and its texture coordinate come from the same clamped point — at rest the
-   * shell reproduces the photograph exactly, which is what makes the addition
-   * invisible until something actually moves.
-   */
-  private buildHeadShell(): void {
-    const faceCount = this.rig.points.length;
-    const face = this.rig.points.map(([x, y]) => ({ x, y }));
-    const loop = convexHullIndices(face);
-    const [imageW, imageH] = this.rig.image_size;
-
-    const xs = face.map((p) => p.x);
-    const ys = face.map((p) => p.y);
-    const centre = {
-      x: (Math.min(...xs) + Math.max(...xs)) / 2,
-      // Rotation belongs to the skull, which sits above the landmarks: they
-      // stop at the brow, and everything above it is hair.
-      y:
-        (Math.min(...ys) + Math.max(...ys)) / 2 -
-        (Math.max(...ys) - Math.min(...ys)) * HEAD_CENTRE_RISE,
-    };
-
-    const falloff = new Float32Array(faceCount + loop.length * HEAD_SHELL_RINGS.length);
-    falloff.fill(1, 0, faceCount); // the face is all head: it moves as one piece
-
-    const rings: number[][] = [];
-    for (const [scale, freedom] of HEAD_SHELL_RINGS) {
-      const ring: number[] = [];
-      for (const index of loop) {
-        const dx = face[index].x - centre.x;
-        const dy = face[index].y - centre.y;
-        const length = Math.hypot(dx, dy) || 1;
-        // Downward growth is damped so the ring stops at the neck instead of
-        // reaching the shoulders.
-        const downward = Math.max(0, dy / length);
-        const k = 1 + (scale - 1) * (1 - downward * HEAD_SHELL_DOWNWARD_DAMP);
-        const point = {
-          x: Math.max(0, Math.min(imageW, centre.x + dx * k)),
-          y: Math.max(0, Math.min(imageH, centre.y + dy * k)),
-        };
-        const at = this.basePoints.length;
-        this.basePoints.push({
-          x: point.x * this.scale + this.offsetX,
-          y: point.y * this.scale + this.offsetY,
-        });
-        this.texPoints.push({
-          x: (point.x * this.texture.naturalWidth) / imageW,
-          y: (point.y * this.texture.naturalHeight) / imageH,
-        });
-        falloff[at] = freedom;
-        ring.push(at);
-      }
-      rings.push(ring);
-    }
-
-    // Stitch each gap into a quad strip. Every ring shares the loop's
-    // ordering, so ring[j] and ring[j+1] are the same direction from centre
-    // and the triangles never cross.
-    this.shellTriangles = [];
-    const bands = [loop, ...rings];
-    for (let b = 0; b < bands.length - 1; b++) {
-      const inner = bands[b];
-      const outer = bands[b + 1];
-      for (let j = 0; j < inner.length; j++) {
-        const k = (j + 1) % inner.length;
-        this.shellTriangles.push(
-          [inner[j], outer[j], outer[k]],
-          [inner[j], outer[k], inner[k]]
-        );
-      }
-    }
-
-    this.headFalloff = falloff;
-    // Metrics for the rotation itself, in canvas space, measured on the ring
-    // that bounds the head — so the cylinder spans the head and not the face.
-    const shell = rings[0].map((i) => this.basePoints[i]);
-    const sx = shell.map((p) => p.x);
-    const sy = shell.map((p) => p.y);
-    this.headCentre = {
-      x: centre.x * this.scale + this.offsetX,
-      y: centre.y * this.scale + this.offsetY,
-    };
-    this.headHalf = {
-      x: Math.max(1, (Math.max(...sx) - Math.min(...sx)) / 2),
-      y: Math.max(1, (Math.max(...sy) - Math.min(...sy)) / 2),
-    };
-    this.headBottom = Math.max(...sy);
   }
 
   /**
@@ -1067,8 +853,6 @@ export class AvatarEngine {
     }
     if (this.nodPhase < 1) this.nodPhase = Math.min(1, this.nodPhase + dt / NOD_MS);
 
-    this.head.update(dt, now, this.speaking);
-
     // Saccades: eyes jump to a new fixation, then hold. While speaking the
     // gaze returns near-center more often (engaged with the listener);
     // idle gaze wanders further and rests longer.
@@ -1175,15 +959,13 @@ export class AvatarEngine {
       }
     }
 
-    // Face geometry for pose layers — measured over the LANDMARKS only. The
-    // head shell is appended after them, and letting its rings into this
-    // would silently rescale every layer that works in face-widths: blink
-    // sweep, brow lift, cheek bulge.
-    const faceCount = this.rig.points.length;
-    const xs = [], ys = [];
-    for (let i = 0; i < faceCount; i++) { xs.push(pts[i].x); ys.push(pts[i].y); }
+    // Face geometry for pose layers.
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
     const fMinX = Math.min(...xs), fMaxX = Math.max(...xs);
     const fMinY = Math.min(...ys), fMaxY = Math.max(...ys);
+    const fcx = (fMinX + fMaxX) / 2;
+    const fcy = (fMinY + fMaxY) / 2;
     const fw = (fMaxX - fMinX) / 2;
     const fh = (fMaxY - fMinY) / 2;
 
@@ -1257,76 +1039,40 @@ export class AvatarEngine {
       }
     }
 
-    // --- Head pose ---------------------------------------------------------
-    //
-    // Yaw and pitch rotate the face as a cylinder (see HEAD_YAW_MAX): the far
-    // side foreshortens, the near side spreads, and the silhouette holds
-    // still. Roll then rotates the result about a pivot in the neck.
-    //
-    // A slow drift rides on top of the sprung pose so the head is never
-    // perfectly frozen between movements — a completely static face between
-    // gestures looks like a paused video.
-    const amp = (0.7 + this.energy * 0.3) * this.tuning.headMotion;
-    const driftYaw = Math.sin(t * 0.19) * 0.10 + Math.sin(t * 0.073 + 1.1) * 0.07;
-    const driftPitch = Math.sin(t * 0.14 + 2.2) * 0.09;
-    // Breathing: the chest lifts, so the head rises fractionally with it.
-    const breathe = Math.sin(t * 0.62) * fh * 0.005;
+    // Head pose (2.5D): yaw/pitch via radial-parallax dome; nose moves most.
+    const idleYaw = Math.sin(t * 0.43) * 0.25 + Math.sin(t * 0.117) * 0.2;
+    const idlePitch = Math.sin(t * 0.31 + 1.3) * 0.22;
     const nod = this.nodPhase < 1 ? Math.sin(this.nodPhase * Math.PI) * 0.8 : 0;
-
-    const yawAngle = (this.head.yaw + driftYaw) * HEAD_YAW_MAX * amp;
-    const pitchAngle =
-      ((this.head.pitch + driftPitch) * HEAD_PITCH_MAX + nod * this.energy * 0.05) * amp;
-    const rollAngle = (this.head.roll * HEAD_ROLL_MAX) * amp;
-
-    const cosRoll = Math.cos(rollAngle);
-    const sinRoll = Math.sin(rollAngle);
-    // Normalised against the head, not the face: the cylinder has to span
-    // hair and skull too, or the shell vertices all sit past its edge and
-    // the hair stops rotating with the features inside it.
-    const hcx = this.headCentre.x;
-    const hcy = this.headCentre.y;
-    const hhw = this.headHalf.x;
-    const hhh = this.headHalf.y;
-    const pivotX = hcx;
-    const pivotY = this.headBottom + hhh * 0.28;
-    const falloff = this.headFalloff;
-
-    for (let i = 0; i < pts.length; i++) {
-      const p = pts[i];
-      // Vertices past the mesh rim are pinned, so the warp never pulls away
-      // from the photograph it sits on.
-      const free = falloff ? falloff[Math.min(i, falloff.length - 1)] : 1;
-      if (free <= 0.0005) continue;
-
-      const startX = p.x;
-      const startY = p.y;
-
-      // Cylindrical yaw. asin maps the face across a half-turn of the
-      // cylinder, so adding the angle and taking sin again gives correct
-      // foreshortening rather than a uniform slide.
-      const u = Math.max(-1, Math.min(1, (p.x - hcx) / hhw));
-      let x = hcx + Math.sin(Math.asin(u) + yawAngle) * hhw;
-      const v = Math.max(-1, Math.min(1, (p.y - hcy) / hhh));
-      let y = hcy + Math.sin(Math.asin(v) + pitchAngle) * hhh;
-
-      // Roll about the neck, not about the face centre: a head pivots where
-      // it meets the spine, so rolling around its own middle looks like the
-      // face rotating inside the skull.
-      const rx = x - pivotX;
-      const ry = y - pivotY;
-      x = pivotX + rx * cosRoll - ry * sinRoll;
-      y = pivotY + rx * sinRoll + ry * cosRoll + breathe;
-
-      p.x = startX + (x - startX) * free;
-      p.y = startY + (y - startY) * free;
+    const amp = (0.3 + this.energy * 0.5) * this.tuning.headMotion;
+    const yaw = idleYaw * amp * fw * 0.05;
+    const pitch = (idlePitch * amp + nod * this.energy) * fh * 0.04;
+    for (const p of pts) {
+      const dx = (p.x - fcx) / fw;
+      const dy = (p.y - fcy) / fh;
+      const depth = Math.max(0, 1 - (dx * dx + dy * dy)); // dome: rim ~0, nose ~1
+      p.x += yaw * depth;
+      p.y += pitch * depth;
     }
+    // Nose nudge: it's the closest point to the camera.
+    pts[NOSE_TIP].x += yaw * 0.25;
 
-    // The nose is the part of a face closest to the camera, so it swings
-    // furthest on a turn. Everything else is on the cylinder's surface; this
-    // is the one feature that stands off it.
-    const noseFree = falloff ? falloff[NOSE_TIP] : 1;
-    pts[NOSE_TIP].x += Math.sin(yawAngle) * fw * 0.10 * noseFree;
-    pts[NOSE_TIP].y += Math.sin(pitchAngle) * fh * 0.06 * noseFree;
+    // Roll about a neck pivot below the chin; breathing sway rides along.
+    // Skipped in fullPhoto mode: rolling the whole mesh would tear the rim
+    // away from the static photo behind it.
+    if (!this.fullPhoto) {
+      const roll = (Math.sin(t * 0.27 + 0.7) * 0.012 + Math.sin(t * 0.071) * 0.008) * amp;
+      const breathe = Math.sin(t * 0.9) * fh * 0.004;
+      const pivotX = fcx;
+      const pivotY = fMaxY + fh * 0.35;
+      const cosR = Math.cos(roll);
+      const sinR = Math.sin(roll);
+      for (const p of pts) {
+        const rx = p.x - pivotX;
+        const ry = p.y - pivotY;
+        p.x = pivotX + rx * cosR - ry * sinR;
+        p.y = pivotY + rx * sinR + ry * cosR + breathe;
+      }
+    }
 
     // Derived midpoint vertices (mouth subdivision) follow their parents
     // through EVERY layer above — computed last, from final positions.
