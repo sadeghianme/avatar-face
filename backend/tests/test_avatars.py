@@ -173,7 +173,19 @@ async def test_background_removal_is_reversible(client, monkeypatch):
 
     # A tiny stand-in for the segmenter: the real one needs a 244KB model that
     # is not present in CI, and what is under test here is the bookkeeping.
-    monkeypatch.setattr(avatars_api, "remove_background", lambda raw: b"\x89PNG\r\n\x1a\n cut")
+    # It returns a REAL transparent PNG, because the endpoint now re-derives
+    # the thumbnail from whatever this produces — a dummy byte string would
+    # skip the path that has to keep the transparency.
+    def fake_cut_out(raw: bytes) -> bytes:
+        import io
+
+        from PIL import Image
+
+        out = io.BytesIO()
+        Image.new("RGBA", (300, 300), (0, 0, 0, 0)).save(out, format="PNG")
+        return out.getvalue()
+
+    monkeypatch.setattr(avatars_api, "remove_background", fake_cut_out)
 
     removed = await client.post(
         f"/orgs/{org_id}/avatars/{avatar_id}/background", json={"remove": True}, headers=headers
@@ -194,6 +206,44 @@ async def test_background_removal_is_reversible(client, monkeypatch):
 
     after = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
     assert after["image_url"] and before["image_url"]
+
+
+async def test_cut_out_thumbnail_is_a_png_and_reverts_on_restore(client, monkeypatch):
+    """The thumbnail has to follow the photo, in a format that can hold alpha.
+
+    It is a JPEG for a normal photo, and a JPEG cannot store transparency —
+    so leaving it alone after a removal means the dashboard, and anything
+    else reading the thumbnail, still shows the old background.
+    """
+    from app.api import avatars as avatars_api
+
+    headers = await register_and_login(client, "thumbowner")
+    org_id = await create_org(client, headers)
+    avatar_id = await create_ready_avatar(client, headers, org_id)
+
+    def fake_cut_out(raw: bytes) -> bytes:
+        import io
+
+        from PIL import Image
+
+        out = io.BytesIO()
+        Image.new("RGBA", (300, 300), (0, 0, 0, 0)).save(out, format="PNG")
+        return out.getvalue()
+
+    monkeypatch.setattr(avatars_api, "remove_background", fake_cut_out)
+
+    removed = await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/background", json={"remove": True}, headers=headers
+    )
+    assert removed.status_code == 200, removed.text
+    detail = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
+    assert ".png" in detail["thumbnail_url"], detail["thumbnail_url"]
+
+    await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/background", json={"remove": False}, headers=headers
+    )
+    restored = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
+    assert ".jpg" in restored["thumbnail_url"], restored["thumbnail_url"]
 
 
 async def test_background_removal_reports_when_unconfigured(client, monkeypatch):

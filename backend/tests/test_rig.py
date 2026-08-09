@@ -70,7 +70,28 @@ def test_thumbnail_max_256():
     from PIL import Image
     import io
 
-    thumb = make_thumbnail(sample_png())
+    thumb, content_type = make_thumbnail(sample_png())
     img = Image.open(io.BytesIO(thumb))
     assert max(img.size) <= 256
     assert img.format == "JPEG"
+    assert content_type == "image/jpeg"
+
+
+def test_thumbnail_of_a_cut_out_keeps_its_transparency():
+    """JPEG cannot store alpha, so an opaque thumbnail would undo the removal."""
+    from PIL import Image
+    import io
+
+    cut_out = Image.new("RGBA", (400, 400), (255, 0, 0, 0))
+    # An opaque subject on a fully transparent background.
+    cut_out.paste((10, 200, 30, 255), (100, 100, 300, 300))
+    buffer = io.BytesIO()
+    cut_out.save(buffer, format="PNG")
+
+    thumb, content_type = make_thumbnail(buffer.getvalue())
+    assert content_type == "image/png"
+    img = Image.open(io.BytesIO(thumb))
+    assert img.format == "PNG"
+    assert img.mode == "RGBA"
+    # The corner was transparent going in and must still be.
+    assert img.getpixel((2, 2))[3] == 0

@@ -218,14 +218,32 @@ def build_rig(points: np.ndarray, image_size: tuple[int, int],
     }
 
 
-def make_thumbnail(data: bytes) -> bytes:
-    image = Image.open(io.BytesIO(data)).convert("RGB")
+def write_thumbnail_key(org_id: str, avatar_id: str, content_type: str) -> str:
+    """Extension follows the format, so a cut-out does not keep a .jpg name."""
+    ext = "png" if content_type == "image/png" else "jpg"
+    return f"orgs/{org_id}/avatars/{avatar_id}/thumb.{ext}"
+
+
+def make_thumbnail(data: bytes) -> tuple[bytes, str]:
+    """Return (bytes, content_type).
+
+    PNG when the source has an alpha channel, JPEG otherwise. This is not a
+    detail: JPEG cannot store transparency at all, so a cut-out photo
+    thumbnailed as JPEG comes back with its background composited onto black
+    or white — the removal silently undone in every thumbnail.
+    """
+    image = Image.open(io.BytesIO(data))
+    transparent = image.mode in ("RGBA", "LA") or "transparency" in image.info
+    image = image.convert("RGBA" if transparent else "RGB")
     image.thumbnail((THUMBNAIL_SIZE, THUMBNAIL_SIZE) if max(image.size) > THUMBNAIL_SIZE
                     else image.size)
     # Keep aspect; the engine maps texture coords to naturalWidth/Height.
     out = io.BytesIO()
+    if transparent:
+        image.save(out, format="PNG", optimize=True)
+        return out.getvalue(), "image/png"
     image.save(out, format="JPEG", quality=88)
-    return out.getvalue()
+    return out.getvalue(), "image/jpeg"
 
 
 async def process_avatar(avatar_id: str) -> None:
@@ -253,16 +271,16 @@ async def process_avatar(avatar_id: str) -> None:
             image_bytes = await storage.get_bytes(avatar.image_key)
             if avatar.kind == AvatarKind.model3d:
                 rig = build_model_rig(image_bytes)
-                thumb = make_model_thumbnail()
+                thumb, thumb_type = make_model_thumbnail(), "image/jpeg"
             else:
                 points, blendshapes, size = landmarks_from_image(image_bytes)
                 rig = build_rig(points, size, blendshapes)
-                thumb = make_thumbnail(image_bytes)
+                thumb, thumb_type = make_thumbnail(image_bytes)
 
             rig_key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/rig.json"
-            thumb_key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/thumb.jpg"
+            thumb_key = write_thumbnail_key(avatar.org_id, avatar.id, thumb_type)
             await storage.put_bytes(rig_key, json.dumps(rig).encode(), "application/json")
-            await storage.put_bytes(thumb_key, thumb, "image/jpeg")
+            await storage.put_bytes(thumb_key, thumb, thumb_type)
 
             avatar.rig_key = rig_key
             avatar.thumbnail_key = thumb_key

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from urllib.parse import urlsplit
 
 import httpx
@@ -28,6 +29,7 @@ from app.services.rig_fit import RegionMarks, apply_anchors, current_anchors
 from app.services.segment import SegmentationUnavailable, remove_background
 from app.services.storage import get_storage
 
+logger = logging.getLogger("liveface.avatars")
 router = APIRouter(prefix="/orgs/{org_id}/avatars", tags=["avatars"])
 
 GLB_CONTENT_TYPE = "model/gltf-binary"
@@ -283,6 +285,7 @@ async def set_background(
             return avatar  # already the original; nothing to undo
         avatar.image_key = avatar.original_image_key
         avatar.original_image_key = None
+        await _rebuild_thumbnail(avatar, storage)
         await db.commit()
         return avatar
 
@@ -302,8 +305,31 @@ async def set_background(
     # The original is kept, not overwritten, so this is reversible.
     avatar.original_image_key = avatar.image_key
     avatar.image_key = key
+    # The thumbnail is derived from the photo, so it has to follow it — and as
+    # a JPEG it could not hold the transparency anyway, which is why the
+    # dashboard grid kept showing the background after a successful removal.
+    await _rebuild_thumbnail(avatar, storage)
     await db.commit()
     return avatar
+
+
+async def _rebuild_thumbnail(avatar: Avatar, storage) -> None:
+    """Regenerate the thumbnail from whatever image_key now points at."""
+    from app.services.rig import make_thumbnail, write_thumbnail_key
+
+    if not avatar.image_key:
+        return
+    try:
+        thumb, thumb_type = make_thumbnail(await storage.get_bytes(avatar.image_key))
+    except Exception:
+        # A stale thumbnail is a cosmetic problem. Failing the request is not:
+        # it would leave someone unable to restore their original photo
+        # because the preview of it could not be regenerated.
+        logger.exception("thumbnail rebuild failed for avatar %s", avatar.id)
+        return
+    key = write_thumbnail_key(avatar.org_id, avatar.id, thumb_type)
+    await storage.put_bytes(key, thumb, thumb_type)
+    avatar.thumbnail_key = key
 
 
 @router.get("/{avatar_id}/rig-anchors")
