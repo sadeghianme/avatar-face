@@ -149,7 +149,16 @@ def create_app() -> FastAPI:
         return FileResponse(
             bundle,
             media_type="application/javascript",
-            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=300"},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                # no-cache, NOT no-store: the browser keeps its copy and
+                # revalidates, so an unchanged bundle costs a ~200 byte 304
+                # rather than a re-download. A fixed max-age cannot work here
+                # because the URL is baked into every customer's snippet —
+                # there is no filename to version — so the only way a fix
+                # reaches visitors promptly is if they ask whether it changed.
+                "Cache-Control": "no-cache, must-revalidate",
+            },
         )
 
     @app.get("/liveface.js", include_in_schema=False)
