@@ -21,10 +21,8 @@ from functools import lru_cache
 
 logger = logging.getLogger("liveface.segment")
 
-# Below this the pixel is background, above it foreground; between them the
-# alpha ramps, which is what gives hair a soft edge instead of a staircase.
-ALPHA_LOW = 0.35
-ALPHA_HIGH = 0.65
+# Thresholds and the edge treatment live in matting.py, which turns this
+# model's coarse mask into an actual alpha matte.
 
 
 class SegmentationUnavailable(RuntimeError):
@@ -58,6 +56,8 @@ def remove_background(image_bytes: bytes) -> bytes:
 
     import mediapipe as mp
 
+    from app.services.matting import refine_matte
+
     segmenter = _segmenter()  # raises SegmentationUnavailable if not configured
 
     source = Image.open(io.BytesIO(image_bytes)).convert("RGB")
@@ -71,19 +71,10 @@ def remove_background(image_bytes: bytes) -> bytes:
     if mask.ndim == 3:
         mask = mask[:, :, 0]
 
-    # Smooth ramp rather than a step, so hair and shoulders feather out.
-    alpha = np.clip((mask - ALPHA_LOW) / (ALPHA_HIGH - ALPHA_LOW), 0.0, 1.0)
-
-    # Un-mix the background from the partially transparent band. Those pixels
-    # are a blend of subject and background; leaving them as-is paints a rim
-    # of the old backdrop around the whole figure — the classic halo. Dividing
-    # the colour back out recovers the subject's own colour there.
-    out = rgb.astype(np.float32)
-    edge = (alpha > 0.02) & (alpha < 0.98)
-    if edge.any():
-        background = _estimate_background(rgb, alpha)
-        a = alpha[edge][:, None]
-        out[edge] = np.clip((out[edge] - background * (1 - a)) / np.maximum(a, 0.15), 0, 255)
+    # Everything that makes the edge good happens here: see matting.py. The
+    # model's mask is only the starting point — on its own it produces the
+    # backdrop-coloured rim that makes a cut-out look cheap.
+    alpha, out = refine_matte(rgb, mask)
 
     rgba = np.dstack([out.astype(np.uint8), (alpha * 255).astype(np.uint8)])
     buffer = io.BytesIO()
@@ -91,16 +82,3 @@ def remove_background(image_bytes: bytes) -> bytes:
     return buffer.getvalue()
 
 
-def _estimate_background(rgb, alpha):
-    """Average colour of the confidently-background pixels.
-
-    A single colour is enough here: portraits are shot against a wall or a
-    blurred field, and the value is only used to un-mix a thin edge band, so
-    a per-pixel estimate would cost far more than it improves.
-    """
-    import numpy as np
-
-    background_pixels = rgb[alpha < 0.02]
-    if background_pixels.size == 0:
-        return np.zeros(3, dtype=np.float32)
-    return background_pixels.mean(axis=0).astype(np.float32)
