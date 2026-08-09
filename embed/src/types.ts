@@ -50,6 +50,8 @@ export interface EngineTuning {
   teethHeight: number;
   /** Scales idle/speech head motion. 0 disables. */
   headMotion: number;
+  /** Scales body sway and breathing. 0 disables them. */
+  bodyMotion: number;
   /** Blink amplitude, 0..1. Set 0 to stop blinking entirely.
    *
    * A photo of open eyes holds no record of the closed eye, so a blink can
@@ -65,6 +67,7 @@ export const DEFAULT_TUNING: EngineTuning = {
   teethThreshold: 0.45,
   teethHeight: 0.07,
   headMotion: 1,
+  bodyMotion: 1,
   // Small on purpose. The lid moves the mesh, which compresses the eyeball
   // texture as it comes down; measured on real portraits, the compression
   // becomes visible as a wash across the eye well before the lid looks

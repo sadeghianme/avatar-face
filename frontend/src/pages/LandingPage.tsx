@@ -145,9 +145,7 @@ export function LandingPage() {
       <header className="sticky top-0 z-40 border-b border-gray-200/60 bg-white/70 backdrop-blur-xl dark:border-line dark:bg-ink/70">
         <nav className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3.5">
           <Link to="/" className="flex items-center gap-2 text-lg font-bold tracking-tight">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-500 text-white">
-              ◕
-            </span>
+            <img src="/brand/liveface-mark-512.png" alt="" className="h-8 w-8 rounded-lg" />
             {t("appName")}
           </Link>
           <div className="flex items-center gap-2">

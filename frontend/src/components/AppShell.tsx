@@ -49,9 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         to="/"
         className="flex items-center gap-2.5 px-5 pb-6 pt-5 text-[15px] font-semibold tracking-[-0.01em]"
       >
-        <span className="grid h-7 w-7 place-items-center rounded-[9px] bg-brand-500 text-[13px] text-white">
-          ◕
-        </span>
+        <img src="/brand/liveface-mark-512.png" alt="" className="h-7 w-7 rounded-[9px]" />
         {t("appName")}
       </Link>
 

@@ -70,9 +70,7 @@ export function AuthShell({
       {/* ---- brand panel ---- */}
       <aside className="relative hidden overflow-hidden border-e border-black/[0.07] bg-[#fafaf9] p-12 lg:flex lg:flex-col lg:justify-between dark:border-white/[0.07] dark:bg-panel">
         <Link to="/" className="relative flex items-center gap-2.5 text-[15px] font-semibold tracking-[-0.01em]">
-          <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-brand-500 text-[13px] text-white">
-            ◕
-          </span>
+          <img src="/brand/liveface-mark-512.png" alt="" className="h-8 w-8 rounded-[10px]" />
           {t("appName")}
         </Link>
 
@@ -113,9 +111,7 @@ export function AuthShell({
             to="/"
             className="flex items-center gap-2 text-lg font-bold tracking-tight text-gray-900 lg:invisible dark:text-white"
           >
-            <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-brand-500 text-[13px] text-white">
-              ◕
-            </span>
+            <img src="/brand/liveface-mark-512.png" alt="" className="h-8 w-8 rounded-[10px]" />
             {t("appName")}
           </Link>
           <div className="flex items-center gap-2">

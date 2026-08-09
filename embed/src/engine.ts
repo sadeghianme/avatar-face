@@ -14,6 +14,7 @@
  * - A `destroyed` flag makes mount -> unmount -> mount safe under React
  *   StrictMode.
  */
+import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
 import { BlendWeights, Cue, DEFAULT_TUNING, EngineTuning, Rig, ZERO_WEIGHTS } from "./types";
 
 // Canonical MediaPipe brow rows, inner -> outer.
@@ -124,6 +125,19 @@ function blinkEase(phase: number): number {
  */
 const LID_VERTEX_SWEEP = 1.0;
 const NOD_MS = 650;
+
+/** Pivot depth for body sway, as a multiple of canvas height. Below the
+ *  frame: a standing body turns about its feet, not its middle. */
+const BODY_PIVOT_DEPTH = 1.75;
+
+/** A head is wider than the face landmarks that sit inside it. Used only to
+ *  express the sway target in the same units it was measured in. */
+const FACE_TO_HEAD_WIDTH = 1.4;
+
+/** Sway is scaled down when the photo still has its background: moving the
+ *  whole picture then reads as a wobbling camera rather than a moving person,
+ *  and it drags the photo's own edge into frame. */
+const OPAQUE_BACKGROUND_SCALE = 0.3;
 const SACCADE_MS = 35;
 
 // A sclera's colour cast is a fraction of the surrounding skin's, and it is
@@ -314,6 +328,12 @@ export class AvatarEngine {
   private nextBlinkAt = 0;
   private nextNodAt = 0;
   private nodPhase = 1; // 1 = finished
+  private body = new BodyMotion();
+  private bodyPivot = { x: 0, y: 0 };
+  private swayAngle = 0;   // radians at full deflection
+  private breathRise = 0;  // pixels at the top of an inhale
+  /** Whether the photo is a cut-out. Decides how far the body may move. */
+  private cutOut = false;
   // Gaze: current and target offsets in eye-widths, plus saccade timing.
   private gaze = { x: 0, y: 0 };
   private gazeTarget = { x: 0, y: 0 };
@@ -418,6 +438,67 @@ export class AvatarEngine {
       x: x * this.scale + this.offsetX,
       y: y * this.scale + this.offsetY,
     }));
+    this.detectCutOut();
+    this.measureBody();
+  }
+
+  /**
+   * Does this photo have its background removed?
+   *
+   * Decides how far the body is allowed to move. Checked by sampling the
+   * corners rather than by asking the server, so the engine stays usable with
+   * any image and a cut-out made elsewhere still gets the full treatment.
+   * Several corners, because one of them can legitimately be part of the
+   * subject — a shoulder often reaches the bottom edge.
+   */
+  private detectCutOut(): void {
+    try {
+      const probe = document.createElement("canvas");
+      probe.width = 32;
+      probe.height = 32;
+      const ctx = probe.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.drawImage(this.texture, 0, 0, 32, 32);
+      const data = ctx.getImageData(0, 0, 32, 32).data;
+      const at = (x: number, y: number) => data[(y * 32 + x) * 4 + 3];
+      const corners = [at(1, 1), at(30, 1), at(1, 30), at(30, 30)];
+      // Two clear corners is enough, and is what a head-and-shoulders cut-out
+      // reliably has at the top even when the body fills the bottom.
+      this.cutOut = corners.filter((a) => a < 24).length >= 2;
+    } catch {
+      // Tainted canvas (cross-origin texture): assume it is not a cut-out,
+      // which is the conservative choice — less movement, never a stray edge.
+      this.cutOut = false;
+    }
+  }
+
+  /**
+   * Where the body pivots, and how far it may travel.
+   *
+   * The pivot goes below the canvas, roughly where the feet would be. A small
+   * rotation about a distant point is very nearly a translation that grows
+   * with height — which is both what an inverted pendulum does and the reason
+   * the bottom of the frame stays put while the head moves.
+   */
+  private measureBody(): void {
+    const xs = this.basePoints.map((p) => p.x);
+    const ys = this.basePoints.map((p) => p.y);
+    const faceW = Math.max(1, Math.max(...xs) - Math.min(...xs));
+    const faceH = Math.max(1, Math.max(...ys) - Math.min(...ys));
+    const faceCentreY = (Math.min(...ys) + Math.max(...ys)) / 2;
+
+    this.bodyPivot = {
+      x: (Math.min(...xs) + Math.max(...xs)) / 2,
+      y: this.canvas.height * BODY_PIVOT_DEPTH,
+    };
+    // The measurement this is matched against was taken across a head, and
+    // the landmarks only span a face, so scale up to compare like with like.
+    const headW = faceW * FACE_TO_HEAD_WIDTH;
+    const reach = Math.max(1, this.bodyPivot.y - faceCentreY);
+    // Half the peak-to-peak travel, expressed as the angle that produces it
+    // at head height.
+    this.swayAngle = (headW * SWAY_TRAVEL) / 2 / reach;
+    this.breathRise = faceH * BREATH_RISE;
   }
 
   /**
@@ -853,6 +934,8 @@ export class AvatarEngine {
     }
     if (this.nodPhase < 1) this.nodPhase = Math.min(1, this.nodPhase + dt / NOD_MS);
 
+    this.body.update(dt, now);
+
     // Saccades: eyes jump to a new fixation, then hold. While speaking the
     // gaze returns near-center more often (engaged with the listener);
     // idle gaze wanders further and rests longer.
@@ -1091,6 +1174,16 @@ export class AvatarEngine {
     const pts = this.deformedPoints(now);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
+    // Body motion is applied to the finished picture, not to the mesh.
+    //
+    // That is the whole point: a rigid transform cannot distort a face. The
+    // earlier attempt to move the head warped vertices to fake a rotation,
+    // which deformed the features instead of turning them. Sway and breathing
+    // are things a camera sees a whole subject do, so moving the whole
+    // drawing is not an approximation — it is exactly right.
+    ctx.save();
+    this.applyBodyTransform(ctx);
+
     // Base layer: the un-warped photo. Triangle seams and sub-pixel gaps in
     // the warp then reveal original pixels instead of holes — and in
     // fullPhoto mode this is what shows hair/shoulders/background.
@@ -1118,6 +1211,25 @@ export class AvatarEngine {
     this.drawMouthInterior(pts);
 
     if (this.debugMesh) this.drawDebugMesh(pts);
+    ctx.restore();
+  }
+
+  /**
+   * Tip the whole picture about a pivot below the frame, and lift it to breathe.
+   *
+   * Scaled right down when the photo still carries its own background: moving
+   * the entire image then looks like a shaky camera rather than a person
+   * shifting their weight, and it walks the photo's own edge into view. A
+   * cut-out has no edge to expose, so it gets the full amount.
+   */
+  private applyBodyTransform(ctx: CanvasRenderingContext2D): void {
+    const scale = (this.cutOut ? 1 : OPAQUE_BACKGROUND_SCALE) * this.tuning.bodyMotion;
+    if (scale <= 0) return;
+    const angle = this.body.sway * this.swayAngle * scale;
+    const rise = this.body.breath * this.breathRise * scale;
+    ctx.translate(this.bodyPivot.x, this.bodyPivot.y);
+    ctx.rotate(angle);
+    ctx.translate(-this.bodyPivot.x, -this.bodyPivot.y - rise);
   }
 
   /**
