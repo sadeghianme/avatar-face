@@ -126,6 +126,36 @@ function blinkEase(phase: number): number {
 const LID_VERTEX_SWEEP = 1.0;
 const NOD_MS = 650;
 
+/**
+ * Indices of the points on the convex hull, counter-clockwise.
+ *
+ * Andrew's monotone chain. Used to find an ordered boundary loop around the
+ * face landmarks to grow the head shell from — the mesh's own outline is not
+ * stored as a loop anywhere, and the hull of a face's landmarks is its
+ * silhouette, which is exactly what needs extending.
+ */
+function convexHullIndices(points: { x: number; y: number }[]): number[] {
+  const order = points.map((_, i) => i).sort((a, b) =>
+    points[a].x - points[b].x || points[a].y - points[b].y
+  );
+  const cross = (o: number, a: number, b: number) =>
+    (points[a].x - points[o].x) * (points[b].y - points[o].y) -
+    (points[a].y - points[o].y) * (points[b].x - points[o].x);
+
+  const build = (seq: number[]) => {
+    const out: number[] = [];
+    for (const i of seq) {
+      while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], i) <= 0) {
+        out.pop();
+      }
+      out.push(i);
+    }
+    out.pop(); // shared with the other half
+    return out;
+  };
+  return [...build(order), ...build([...order].reverse())];
+}
+
 // --- Head pose -------------------------------------------------------------
 //
 // Rotation is modelled as a cylinder rather than as a sideways slide. Turning
@@ -140,9 +170,40 @@ const NOD_MS = 650;
 // lot, which is exactly what a real head does and what stops the mesh from
 // tearing away from the still photograph behind it.
 
-/** Where the motion is free (face core) and where it is pinned (mesh rim). */
-const HEAD_FREE_RADIUS = 0.80;
-const HEAD_PINNED_RADIUS = 1.18;
+/**
+ * The head shell: rings of extra vertices grown outward from the face.
+ *
+ * The landmark mesh covers the face and stops at the jaw and hairline, so
+ * warping it turns the face inside a head that stays put — the features move
+ * and the hair, ears and skull do not, which reads as a mask sliding about
+ * rather than as someone turning their head.
+ *
+ * These rings extend the mesh over the hair and out into the surroundings.
+ * Everything inside the first ring moves as one piece; the outermost ring is
+ * pinned, so the annulus between them absorbs the motion and the mesh still
+ * meets the untouched photograph exactly where it did before. The ring must
+ * also enclose the whole head — the still photo is drawn underneath, so any
+ * part of the original head the mesh fails to cover shows through as a ghost.
+ *
+ * Each entry is [outward scale, how freely it moves].
+ */
+const HEAD_SHELL_RINGS: [number, number][] = [
+  [1.45, 1.0], // over the hair: still fully part of the head
+  [1.78, 0.55],
+  [2.15, 0.0], // pinned to the photograph
+];
+
+/**
+ * How much less the rings grow downward than upward.
+ *
+ * A head ends at the chin, but it continues into a neck and shoulders that
+ * must not swing with it. Growing the rings evenly would sweep the collar
+ * along with the jaw.
+ */
+const HEAD_SHELL_DOWNWARD_DAMP = 0.82;
+
+/** The head's centre of mass sits above the face landmarks, in the skull. */
+const HEAD_CENTRE_RISE = 0.22;
 const SACCADE_MS = 35;
 
 // A sclera's colour cast is a fraction of the surrounding skin's, and it is
@@ -334,8 +395,12 @@ export class AvatarEngine {
   private nextNodAt = 0;
   private nodPhase = 1; // 1 = finished
   private head = new HeadPose();
-  /** Per-vertex freedom to move: 1 in the face core, 0 at the mesh rim. */
+  /** Per-vertex freedom to move: 1 across the head, 0 at the outer ring. */
   private headFalloff: Float32Array | null = null;
+  private shellTriangles: [number, number, number][] = [];
+  private headCentre = { x: 0, y: 0 };
+  private headHalf = { x: 1, y: 1 };
+  private headBottom = 0;
   // Gaze: current and target offsets in eye-widths, plus saccade timing.
   private gaze = { x: 0, y: 0 };
   private gazeTarget = { x: 0, y: 0 };
@@ -379,10 +444,9 @@ export class AvatarEngine {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     this.innerRing = this.validInnerRing();
-    this.computeFraming();
+    this.rebuildGeometry();
     this.sampleLipColour();
     this.sampleLashColour();
-    this.subdivideMouthRegion();
     this.startTime = performance.now();
     this.nextBlinkAt = this.startTime + 1200 + Math.random() * 2000;
     this.nextNodAt = this.startTime + 2500;
@@ -440,7 +504,23 @@ export class AvatarEngine {
       x: x * this.scale + this.offsetX,
       y: y * this.scale + this.offsetY,
     }));
-    this.computeHeadFalloff();
+  }
+
+  /**
+   * Rebuild everything derived from the rig and the texture, in order.
+   *
+   * The order is load-bearing. The shell appends vertices, and the mouth
+   * subdivision numbers its midpoints from basePoints.length — so the shell
+   * has to exist first or every subdivided index is off by the shell's size.
+   * Subdivision then rebuilds the triangle list from the rig, which is why
+   * the shell's own triangles are re-appended afterwards.
+   */
+  private rebuildGeometry(): void {
+    this.derivedParents = [];
+    this.computeFraming();
+    this.buildHeadShell();
+    this.subdivideMouthRegion();
+    this.triangles.push(...this.shellTriangles);
   }
 
   /**
@@ -457,45 +537,101 @@ export class AvatarEngine {
   setTexture(texture: HTMLImageElement): void {
     if (!texture.naturalWidth || !texture.naturalHeight) return;
     this.texture = texture;
-    this.computeFraming();
+    this.rebuildGeometry();
     this.sampleLipColour();
     this.sampleLashColour();
   }
 
   /**
-   * How freely each vertex may move when the head turns.
+   * Grow the mesh outward from the face so the whole head moves with it.
    *
-   * The mesh covers the face; everything around it — hair, ears, shoulders,
-   * background — is the still photograph. Move a vertex that sits on the
-   * boundary between the two and the warped triangle slides out from under
-   * its surroundings, which shows up as a torn or shimmering rim. That is why
-   * head roll used to be switched off entirely whenever the whole photo was
-   * on screen.
-   *
-   * Weighting by distance from the face centre solves it generally: the core
-   * moves, the rim is pinned, and the transition is smooth enough that no
-   * single triangle stretches noticeably. Roll now works in both framings.
+   * Works entirely in image space and converts at the end, so a ring vertex
+   * and its texture coordinate come from the same clamped point — at rest the
+   * shell reproduces the photograph exactly, which is what makes the addition
+   * invisible until something actually moves.
    */
-  private computeHeadFalloff(): void {
-    const xs = this.basePoints.map((p) => p.x);
-    const ys = this.basePoints.map((p) => p.y);
-    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-    const halfW = Math.max(1, (Math.max(...xs) - Math.min(...xs)) / 2);
-    const halfH = Math.max(1, (Math.max(...ys) - Math.min(...ys)) / 2);
+  private buildHeadShell(): void {
+    const faceCount = this.rig.points.length;
+    const face = this.rig.points.map(([x, y]) => ({ x, y }));
+    const loop = convexHullIndices(face);
+    const [imageW, imageH] = this.rig.image_size;
 
-    const falloff = new Float32Array(this.basePoints.length);
-    for (let i = 0; i < this.basePoints.length; i++) {
-      const dx = (this.basePoints[i].x - cx) / halfW;
-      const dy = (this.basePoints[i].y - cy) / halfH;
-      const r = Math.sqrt(dx * dx + dy * dy);
-      const t = Math.max(
-        0,
-        Math.min(1, (HEAD_PINNED_RADIUS - r) / (HEAD_PINNED_RADIUS - HEAD_FREE_RADIUS))
-      );
-      falloff[i] = t * t * (3 - 2 * t); // smoothstep: no crease at either end
+    const xs = face.map((p) => p.x);
+    const ys = face.map((p) => p.y);
+    const centre = {
+      x: (Math.min(...xs) + Math.max(...xs)) / 2,
+      // Rotation belongs to the skull, which sits above the landmarks: they
+      // stop at the brow, and everything above it is hair.
+      y:
+        (Math.min(...ys) + Math.max(...ys)) / 2 -
+        (Math.max(...ys) - Math.min(...ys)) * HEAD_CENTRE_RISE,
+    };
+
+    const falloff = new Float32Array(faceCount + loop.length * HEAD_SHELL_RINGS.length);
+    falloff.fill(1, 0, faceCount); // the face is all head: it moves as one piece
+
+    const rings: number[][] = [];
+    for (const [scale, freedom] of HEAD_SHELL_RINGS) {
+      const ring: number[] = [];
+      for (const index of loop) {
+        const dx = face[index].x - centre.x;
+        const dy = face[index].y - centre.y;
+        const length = Math.hypot(dx, dy) || 1;
+        // Downward growth is damped so the ring stops at the neck instead of
+        // reaching the shoulders.
+        const downward = Math.max(0, dy / length);
+        const k = 1 + (scale - 1) * (1 - downward * HEAD_SHELL_DOWNWARD_DAMP);
+        const point = {
+          x: Math.max(0, Math.min(imageW, centre.x + dx * k)),
+          y: Math.max(0, Math.min(imageH, centre.y + dy * k)),
+        };
+        const at = this.basePoints.length;
+        this.basePoints.push({
+          x: point.x * this.scale + this.offsetX,
+          y: point.y * this.scale + this.offsetY,
+        });
+        this.texPoints.push({
+          x: (point.x * this.texture.naturalWidth) / imageW,
+          y: (point.y * this.texture.naturalHeight) / imageH,
+        });
+        falloff[at] = freedom;
+        ring.push(at);
+      }
+      rings.push(ring);
     }
+
+    // Stitch each gap into a quad strip. Every ring shares the loop's
+    // ordering, so ring[j] and ring[j+1] are the same direction from centre
+    // and the triangles never cross.
+    this.shellTriangles = [];
+    const bands = [loop, ...rings];
+    for (let b = 0; b < bands.length - 1; b++) {
+      const inner = bands[b];
+      const outer = bands[b + 1];
+      for (let j = 0; j < inner.length; j++) {
+        const k = (j + 1) % inner.length;
+        this.shellTriangles.push(
+          [inner[j], outer[j], outer[k]],
+          [inner[j], outer[k], inner[k]]
+        );
+      }
+    }
+
     this.headFalloff = falloff;
+    // Metrics for the rotation itself, in canvas space, measured on the ring
+    // that bounds the head — so the cylinder spans the head and not the face.
+    const shell = rings[0].map((i) => this.basePoints[i]);
+    const sx = shell.map((p) => p.x);
+    const sy = shell.map((p) => p.y);
+    this.headCentre = {
+      x: centre.x * this.scale + this.offsetX,
+      y: centre.y * this.scale + this.offsetY,
+    };
+    this.headHalf = {
+      x: Math.max(1, (Math.max(...sx) - Math.min(...sx)) / 2),
+      y: Math.max(1, (Math.max(...sy) - Math.min(...sy)) / 2),
+    };
+    this.headBottom = Math.max(...sy);
   }
 
   /**
@@ -1039,13 +1175,15 @@ export class AvatarEngine {
       }
     }
 
-    // Face geometry for pose layers.
-    const xs = pts.map((p) => p.x);
-    const ys = pts.map((p) => p.y);
+    // Face geometry for pose layers — measured over the LANDMARKS only. The
+    // head shell is appended after them, and letting its rings into this
+    // would silently rescale every layer that works in face-widths: blink
+    // sweep, brow lift, cheek bulge.
+    const faceCount = this.rig.points.length;
+    const xs = [], ys = [];
+    for (let i = 0; i < faceCount; i++) { xs.push(pts[i].x); ys.push(pts[i].y); }
     const fMinX = Math.min(...xs), fMaxX = Math.max(...xs);
     const fMinY = Math.min(...ys), fMaxY = Math.max(...ys);
-    const fcx = (fMinX + fMaxX) / 2;
-    const fcy = (fMinY + fMaxY) / 2;
     const fw = (fMaxX - fMinX) / 2;
     const fh = (fMaxY - fMinY) / 2;
 
@@ -1142,8 +1280,15 @@ export class AvatarEngine {
 
     const cosRoll = Math.cos(rollAngle);
     const sinRoll = Math.sin(rollAngle);
-    const pivotX = fcx;
-    const pivotY = fMaxY + fh * 0.35;
+    // Normalised against the head, not the face: the cylinder has to span
+    // hair and skull too, or the shell vertices all sit past its edge and
+    // the hair stops rotating with the features inside it.
+    const hcx = this.headCentre.x;
+    const hcy = this.headCentre.y;
+    const hhw = this.headHalf.x;
+    const hhh = this.headHalf.y;
+    const pivotX = hcx;
+    const pivotY = this.headBottom + hhh * 0.28;
     const falloff = this.headFalloff;
 
     for (let i = 0; i < pts.length; i++) {
@@ -1159,10 +1304,10 @@ export class AvatarEngine {
       // Cylindrical yaw. asin maps the face across a half-turn of the
       // cylinder, so adding the angle and taking sin again gives correct
       // foreshortening rather than a uniform slide.
-      const u = Math.max(-1, Math.min(1, (p.x - fcx) / fw));
-      let x = fcx + Math.sin(Math.asin(u) + yawAngle) * fw;
-      const v = Math.max(-1, Math.min(1, (p.y - fcy) / fh));
-      let y = fcy + Math.sin(Math.asin(v) + pitchAngle) * fh;
+      const u = Math.max(-1, Math.min(1, (p.x - hcx) / hhw));
+      let x = hcx + Math.sin(Math.asin(u) + yawAngle) * hhw;
+      const v = Math.max(-1, Math.min(1, (p.y - hcy) / hhh));
+      let y = hcy + Math.sin(Math.asin(v) + pitchAngle) * hhh;
 
       // Roll about the neck, not about the face centre: a head pivots where
       // it meets the spine, so rolling around its own middle looks like the
