@@ -26,8 +26,11 @@ RUN pip install --no-cache-dir . mediapipe
 COPY --from=embed-build /build/embed/dist /app/embed/dist
 
 # MediaPipe FaceLandmarker model for real photo rigging.
-RUN mkdir -p models && curl -fsSL -o models/face_landmarker.task \
-    https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
+RUN mkdir -p models \
+ && curl -fsSL -o models/face_landmarker.task \
+    https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task \
+ && curl -fsSL -o models/selfie_segmenter.tflite \
+    https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite
 ENV RIG_MODEL_PATH=/app/backend/models/face_landmarker.task
 ENV SEGMENT_MODEL_PATH=/app/backend/models/selfie_segmenter.tflite
 

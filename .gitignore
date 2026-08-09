@@ -24,3 +24,6 @@ backend/models/*.task
 .DS_Store
 .idea/
 .vscode/
+
+# MediaPipe models are downloaded at image build time, not committed.
+backend/models/
