@@ -1,7 +1,9 @@
 """Liveface application factory."""
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,12 +51,60 @@ class PublicCorsMiddleware(BaseHTTPMiddleware):
         return response
 
 
+logger = logging.getLogger("liveface.startup")
+
+
+async def _ensure_schema(engine) -> None:
+    """Bring the database up to date before serving.
+
+    `create_all` alone is not enough and this bit us: it creates MISSING
+    TABLES but never adds a column to a table that already exists. So a
+    migration that adds a column applied on fresh installs and silently did
+    nothing on the deployed database, which then answered every avatar query
+    with "no such column".
+
+    Fresh database  -> create_all, then stamp head, so later migrations apply.
+    Managed database -> upgrade head.
+    Existing but unstamped -> refuse to guess. Stamping head would mark
+    pending migrations as done and hide exactly the failure above; log it and
+    let a human run `alembic stamp <rev>` once.
+    """
+    import asyncio
+
+    from sqlalchemy import inspect
+
+    async with engine.begin() as conn:
+        tables = await conn.run_sync(lambda c: set(inspect(c).get_table_names()))
+
+    fresh = "users" not in tables
+    stamped = "alembic_version" in tables
+
+    if fresh:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+    def run_alembic(action: str) -> None:
+        from alembic import command
+        from alembic.config import Config
+
+        cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        (command.stamp if action == "stamp" else command.upgrade)(cfg, "head")
+
+    if fresh:
+        await asyncio.to_thread(run_alembic, "stamp")
+    elif stamped:
+        await asyncio.to_thread(run_alembic, "upgrade")
+    else:
+        logger.error(
+            "database has tables but no alembic_version; migrations are NOT being "
+            "applied. Run `alembic stamp <current-revision>` once to adopt it."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Dev convenience: create tables on boot (Alembic owns real migrations).
     engine = get_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    await _ensure_schema(engine)
     # Load dashboard-managed provider credentials over env settings.
     async with get_session_factory()() as db:
         await credentials.load(db)
