@@ -24,7 +24,6 @@ export function AvatarDetailPage() {
   const queryClient = useQueryClient();
   const [engine, setEngine] = useState<SpeechPlayer | null>(null);
   const [debugMesh, setDebugMesh] = useState(false);
-  const [fullPhoto, setFullPhoto] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
   const [busyBg, setBusyBg] = useState(false);
 
@@ -45,6 +44,15 @@ export function AvatarDetailPage() {
   if (!avatar || !current) {
     return <p className="text-gray-500">{t("loading")}</p>;
   }
+
+  // Framing is a property of the avatar, not a local view preference: it is
+  // what embedding sites render, so switching it here changes what visitors
+  // to those sites see.
+  const fullPhoto = avatar.framing === "full";
+  const setFraming = async (framing: "face" | "full") => {
+    await api.patch(`/orgs/${current!.id}/avatars/${avatar!.id}`, { framing });
+    await queryClient.invalidateQueries({ queryKey: ["avatar", current!.id, avatar!.id] });
+  };
 
   /** Cut the subject out, or put the original photo back. */
   const toggleBackground = async () => {
@@ -92,13 +100,13 @@ export function AvatarDetailPage() {
           <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-line">
             <button
               className={`px-3 py-2 text-sm font-medium ${!fullPhoto ? "bg-brand-600 text-white" : "bg-white text-gray-600 dark:bg-panel dark:text-gray-300"}`}
-              onClick={() => setFullPhoto(false)}
+              onClick={() => void setFraming("face")}
             >
               {t("viewFace")}
             </button>
             <button
               className={`px-3 py-2 text-sm font-medium ${fullPhoto ? "bg-brand-600 text-white" : "bg-white text-gray-600 dark:bg-panel dark:text-gray-300"}`}
-              onClick={() => setFullPhoto(true)}
+              onClick={() => void setFraming("full")}
             >
               {t("viewFull")}
             </button>

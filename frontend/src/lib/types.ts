@@ -50,6 +50,8 @@ export interface Avatar {
   image_url?: string | null;
   /** Set when the background has been removed — the pre-cut-out photo. */
   original_image_key?: string | null;
+  /** How embedding sites render it: cropped to the head, or the whole photo. */
+  framing?: "face" | "full";
   rig_url?: string | null;
   thumbnail_url?: string | null;
   model_url?: string | null;

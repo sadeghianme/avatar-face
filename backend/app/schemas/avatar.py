@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -82,12 +83,20 @@ class AvatarOut(BaseModel):
     status: AvatarStatus
     kind: AvatarKind
     content_type: str
+    framing: str = "face"
     error: str | None
     # Non-null means the background has been removed and this is the photo as
     # uploaded — the UI uses it to know whether to offer remove or restore.
     original_image_key: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class AvatarUpdate(BaseModel):
+    """Owner-editable settings. Every field is optional; omitted means unchanged."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    framing: Literal["face", "full"] | None = None
 
 
 class AvatarCreated(BaseModel):

@@ -41,6 +41,10 @@ class Avatar(TimestampedBase):
     # uploaded, so the cut-out can be undone. Null means image_key IS the
     # original.
     original_image_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # How the avatar is framed when rendered: "face" crops to the head, "full"
+    # shows the whole photo. Stored on the avatar rather than passed per-embed
+    # so changing it in the dashboard reaches every site already embedding it.
+    framing: Mapped[str] = mapped_column(String(8), default="face", nullable=False)
     rig_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     thumbnail_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)

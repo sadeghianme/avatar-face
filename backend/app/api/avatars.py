@@ -18,6 +18,7 @@ from app.schemas.avatar import (
     AvatarDetail,
     AvatarFromUrl,
     AvatarOut,
+    AvatarUpdate,
     RigAdjust,
     RigFit,
     RigFitResult,
@@ -239,6 +240,25 @@ class BackgroundRequest(BaseModel):
     """True removes the background, false restores the original photo."""
 
     remove: bool = True
+
+
+@router.patch("/{avatar_id}", response_model=AvatarOut)
+async def update_avatar(
+    avatar_id: str, body: AvatarUpdate, ctx: OrgMember, db: DB
+) -> Avatar:
+    """Change owner-editable settings.
+
+    Framing lives here rather than on the embed snippet so that switching it
+    reaches sites that already have the snippet pasted in — they re-read the
+    avatar on every page load, so the change lands without anyone editing HTML.
+    """
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    if body.name is not None:
+        avatar.name = body.name
+    if body.framing is not None:
+        avatar.framing = body.framing
+    await db.commit()
+    return avatar
 
 
 @router.post("/{avatar_id}/background", response_model=AvatarOut)

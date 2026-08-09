@@ -37,6 +37,47 @@ async def test_embed_avatar_with_key(client):
     assert body["thumbnail_url"].startswith("http://testserver/")
 
 
+async def test_embed_serves_the_full_image_not_the_thumbnail(client):
+    """The widget textures from image_url; a 256px thumbnail would be an upscale."""
+    _, _, avatar_id, created = await _setup(client)
+    body = (
+        await client.get(
+            f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": created["plaintext"]}
+        )
+    ).json()
+    assert body["image_url"], "embed payload must carry the full-resolution photo"
+    assert "source" in body["image_url"], body["image_url"]
+
+
+async def test_framing_change_reaches_the_embed(client):
+    """Switching framing in the dashboard must change what embedding sites render.
+
+    This is the whole reason framing is a column instead of a snippet
+    attribute — nobody should have to re-paste HTML on every site.
+    """
+    headers, org_id, avatar_id, created = await _setup(client)
+    key = {"X-Api-Key": created["plaintext"]}
+
+    before = (await client.get(f"/embed/v1/avatars/{avatar_id}", headers=key)).json()
+    assert before["framing"] == "face"
+
+    patched = await client.patch(
+        f"/orgs/{org_id}/avatars/{avatar_id}", json={"framing": "full"}, headers=headers
+    )
+    assert patched.status_code == 200, patched.text
+
+    after = (await client.get(f"/embed/v1/avatars/{avatar_id}", headers=key)).json()
+    assert after["framing"] == "full"
+
+
+async def test_framing_rejects_unknown_values(client):
+    headers, org_id, avatar_id, _ = await _setup(client)
+    response = await client.patch(
+        f"/orgs/{org_id}/avatars/{avatar_id}", json={"framing": "sideways"}, headers=headers
+    )
+    assert response.status_code == 422
+
+
 async def test_embed_requires_key(client):
     _, _, avatar_id, _ = await _setup(client)
     response = await client.get(f"/embed/v1/avatars/{avatar_id}")

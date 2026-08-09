@@ -87,7 +87,10 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
   // averaged away. The 3D path has always done this (setPixelRatio); the 2D
   // path never did. Capped at 2x — past that the fill cost is real and the
   // gain is not visible.
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // Capped at 3 rather than 2 now that the texture is the full-resolution
+  // photo — with a 256px thumbnail behind it, more backing store bought
+  // nothing but a bigger upscale, so the old cap cost nothing. It does now.
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
   canvas.width = Math.round(size * dpr);
   canvas.height = Math.round(size * dpr);
   // Lay out at the requested CSS size; `auto` height keeps it square under
@@ -108,8 +111,10 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
   }
   const info: {
     kind?: string;
+    framing?: string;
     rig_url: string;
     thumbnail_url: string;
+    image_url?: string | null;
     model_url?: string | null;
   } = await meta.json();
 
@@ -120,12 +125,22 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     if (!window.__Liveface3D) throw new Error("liveface-3d.js failed to initialize");
     engine = await window.__Liveface3D.load(canvas, info.model_url);
   } else {
+    // The full-resolution photo, NOT the thumbnail. The thumbnail is 256px on
+    // its long edge; the canvas backing store is 2-3x the CSS size, so using
+    // it meant every embedded avatar was an upscale of a postage stamp while
+    // the sharp original sat in storage unused. The dashboard preview always
+    // used the real image, which is why this only ever looked bad on
+    // customers' sites.
     const [rigResponse, texture] = await Promise.all([
       fetch(info.rig_url),
-      loadImage(info.thumbnail_url),
+      loadImage(info.image_url || info.thumbnail_url),
     ]);
     const rig: Rig = await rigResponse.json();
-    engine = new AvatarEngine(canvas, rig, texture);
+    engine = new AvatarEngine(canvas, rig, texture, {
+      // data-framing on the snippet wins; otherwise the avatar's own setting,
+      // so changing it in the dashboard reaches sites already embedding it.
+      fullPhoto: (script.dataset.framing ?? info.framing) === "full",
+    });
   }
 
   const synth = async (text: string): Promise<SynthesisPayload> => {

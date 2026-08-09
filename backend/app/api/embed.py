@@ -89,6 +89,9 @@ async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
         "id": avatar.id,
         "name": avatar.name,
         "kind": avatar.kind.value,
+        # The owner's framing choice, so a change in the dashboard shows up on
+        # every embedding site at their next page load.
+        "framing": avatar.framing,
         "rig_url": await storage.presign_get(avatar.rig_key or ""),
         "thumbnail_url": await storage.presign_get(avatar.thumbnail_key or ""),
         "image_url": image_url,
