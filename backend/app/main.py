@@ -5,7 +5,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -112,6 +112,55 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
+def _bundle_etag(path) -> str:
+    """A content hash of the bundle, cached against (mtime, size).
+
+    Content rather than mtime: a rebuild rewrites the file on every deploy
+    even when the bundle is byte-identical, and hashing the mtime would throw
+    away every visitor's cached copy for no reason.
+    """
+    import hashlib
+
+    stat = path.stat()
+    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    cached = _ETAG_CACHE.get(key)
+    if cached is None:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()[:32]
+        # Keyed by mtime and size, so a rebuild replaces rather than grows it.
+        _ETAG_CACHE.clear()
+        cached = _ETAG_CACHE[key] = f'"{digest}"'
+    return cached
+
+
+_ETAG_CACHE: dict[tuple, str] = {}
+
+
+def _etag_matches(if_none_match: str | None, etag: str) -> bool:
+    """RFC 9110 If-None-Match, tolerant of what proxies do to the tag.
+
+    Caddy and Cloudflare append a suffix like `-gzip` when they re-encode the
+    body, and may mark it weak. Comparing raw strings would therefore never
+    match through the proxy, and every revalidation would return a full 200.
+    """
+    if not if_none_match:
+        return False
+    if if_none_match.strip() == "*":
+        return True
+
+    def normalise(tag: str) -> str:
+        tag = tag.strip()
+        if tag.startswith(("W/", "w/")):
+            tag = tag[2:]
+        tag = tag.strip('"')
+        for suffix in ("-gzip", "-br", "-zstd", "-df"):
+            if tag.endswith(suffix):
+                tag = tag[: -len(suffix)]
+        return tag
+
+    target = normalise(etag)
+    return any(normalise(tag) == target for tag in if_none_match.split(","))
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.debug)
@@ -136,40 +185,54 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         return {"status": "ok", "app": settings.app_name}
 
-    def _serve_widget_bundle(filename: str):
+    def _serve_widget_bundle(filename: str, request: Request):
+        """Serve an embed bundle that revalidates instead of expiring.
+
+        The URL is baked into every customer's pasted snippet, so it can never
+        carry a content hash the way a normal asset does — which leaves
+        revalidation as the only way a deployed fix reaches visitors promptly.
+
+        Two things make that work, and both are load-bearing:
+
+        `private` keeps Cloudflare from rewriting the header. Its Browser
+        Cache TTL is set to 4 hours and silently replaces `no-cache` with
+        `max-age=14400` on anything it considers cacheable; marking the
+        response private takes it out of that path.
+
+        The conditional handling below is what makes `no-cache` cheap. A bare
+        FileResponse ignores If-None-Match and answers 200 with the whole
+        body every time, so without this, revalidation would mean
+        re-downloading the bundle on every single page load.
+        """
         from pathlib import Path
 
-        from fastapi.responses import FileResponse, PlainTextResponse
+        from fastapi.responses import FileResponse, PlainTextResponse, Response
 
         bundle = Path(__file__).resolve().parents[2] / "embed" / "dist" / filename
         if not bundle.is_file():
             return PlainTextResponse(
                 f"// {filename} not built — run `make embed`", status_code=404
             )
-        return FileResponse(
-            bundle,
-            media_type="application/javascript",
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                # no-cache, NOT no-store: the browser keeps its copy and
-                # revalidates, so an unchanged bundle costs a ~200 byte 304
-                # rather than a re-download. A fixed max-age cannot work here
-                # because the URL is baked into every customer's snippet —
-                # there is no filename to version — so the only way a fix
-                # reaches visitors promptly is if they ask whether it changed.
-                "Cache-Control": "no-cache, must-revalidate",
-            },
-        )
+
+        etag = _bundle_etag(bundle)
+        headers = {
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "private, no-cache, must-revalidate",
+            "ETag": etag,
+        }
+        if _etag_matches(request.headers.get("if-none-match"), etag):
+            return Response(status_code=304, headers=headers)
+        return FileResponse(bundle, media_type="application/javascript", headers=headers)
 
     @app.get("/liveface.js", include_in_schema=False)
-    async def widget_script():
+    async def widget_script(request: Request):
         """The embed widget (13KB; lazy-loads the 3D bundle when needed)."""
-        return _serve_widget_bundle("liveface.js")
+        return _serve_widget_bundle("liveface.js", request)
 
     @app.get("/liveface-3d.js", include_in_schema=False)
-    async def widget_script_3d():
+    async def widget_script_3d(request: Request):
         """Three.js + 3D engine, loaded only for kind=model3d avatars."""
-        return _serve_widget_bundle("liveface-3d.js")
+        return _serve_widget_bundle("liveface-3d.js", request)
 
     app.include_router(auth.router)
     app.include_router(orgs.router)
