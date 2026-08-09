@@ -14,6 +14,7 @@
  * - A `destroyed` flag makes mount -> unmount -> mount safe under React
  *   StrictMode.
  */
+import { HeadPose, HEAD_PITCH_MAX, HEAD_ROLL_MAX, HEAD_YAW_MAX } from "./headpose";
 import { BlendWeights, Cue, DEFAULT_TUNING, EngineTuning, Rig, ZERO_WEIGHTS } from "./types";
 
 // Canonical MediaPipe brow rows, inner -> outer.
@@ -124,6 +125,24 @@ function blinkEase(phase: number): number {
  */
 const LID_VERTEX_SWEEP = 1.0;
 const NOD_MS = 650;
+
+// --- Head pose -------------------------------------------------------------
+//
+// Rotation is modelled as a cylinder rather than as a sideways slide. Turning
+// a head does not translate the features: the side turning away compresses
+// and the side turning towards you spreads out. That foreshortening is most
+// of what makes a turn read as a turn, and a pure translation reads as the
+// face sliding around inside the head.
+//
+// The model also pins the silhouette for free. At the edge of the face the
+// mapping is sin(±pi/2 + angle) = cos(angle), which changes only to second
+// order in the angle — so the outline barely moves while the nose moves a
+// lot, which is exactly what a real head does and what stops the mesh from
+// tearing away from the still photograph behind it.
+
+/** Where the motion is free (face core) and where it is pinned (mesh rim). */
+const HEAD_FREE_RADIUS = 0.80;
+const HEAD_PINNED_RADIUS = 1.18;
 const SACCADE_MS = 35;
 
 // A sclera's colour cast is a fraction of the surrounding skin's, and it is
@@ -314,6 +333,9 @@ export class AvatarEngine {
   private nextBlinkAt = 0;
   private nextNodAt = 0;
   private nodPhase = 1; // 1 = finished
+  private head = new HeadPose();
+  /** Per-vertex freedom to move: 1 in the face core, 0 at the mesh rim. */
+  private headFalloff: Float32Array | null = null;
   // Gaze: current and target offsets in eye-widths, plus saccade timing.
   private gaze = { x: 0, y: 0 };
   private gazeTarget = { x: 0, y: 0 };
@@ -418,6 +440,62 @@ export class AvatarEngine {
       x: x * this.scale + this.offsetX,
       y: y * this.scale + this.offsetY,
     }));
+    this.computeHeadFalloff();
+  }
+
+  /**
+   * Swap in a different image of the same face, mid-animation.
+   *
+   * Used to upgrade from the thumbnail the widget starts with to the
+   * full-resolution photograph once it arrives. Everything derived from the
+   * pixels has to be recomputed: texture coordinates are in the texture's own
+   * pixels, and the lip and lash colours were sampled from the old one.
+   *
+   * The rig is untouched — it is in image-space and both images are the same
+   * face at different scales, so no landmark moves.
+   */
+  setTexture(texture: HTMLImageElement): void {
+    if (!texture.naturalWidth || !texture.naturalHeight) return;
+    this.texture = texture;
+    this.computeFraming();
+    this.sampleLipColour();
+    this.sampleLashColour();
+  }
+
+  /**
+   * How freely each vertex may move when the head turns.
+   *
+   * The mesh covers the face; everything around it — hair, ears, shoulders,
+   * background — is the still photograph. Move a vertex that sits on the
+   * boundary between the two and the warped triangle slides out from under
+   * its surroundings, which shows up as a torn or shimmering rim. That is why
+   * head roll used to be switched off entirely whenever the whole photo was
+   * on screen.
+   *
+   * Weighting by distance from the face centre solves it generally: the core
+   * moves, the rim is pinned, and the transition is smooth enough that no
+   * single triangle stretches noticeably. Roll now works in both framings.
+   */
+  private computeHeadFalloff(): void {
+    const xs = this.basePoints.map((p) => p.x);
+    const ys = this.basePoints.map((p) => p.y);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const halfW = Math.max(1, (Math.max(...xs) - Math.min(...xs)) / 2);
+    const halfH = Math.max(1, (Math.max(...ys) - Math.min(...ys)) / 2);
+
+    const falloff = new Float32Array(this.basePoints.length);
+    for (let i = 0; i < this.basePoints.length; i++) {
+      const dx = (this.basePoints[i].x - cx) / halfW;
+      const dy = (this.basePoints[i].y - cy) / halfH;
+      const r = Math.sqrt(dx * dx + dy * dy);
+      const t = Math.max(
+        0,
+        Math.min(1, (HEAD_PINNED_RADIUS - r) / (HEAD_PINNED_RADIUS - HEAD_FREE_RADIUS))
+      );
+      falloff[i] = t * t * (3 - 2 * t); // smoothstep: no crease at either end
+    }
+    this.headFalloff = falloff;
   }
 
   /**
@@ -853,6 +931,8 @@ export class AvatarEngine {
     }
     if (this.nodPhase < 1) this.nodPhase = Math.min(1, this.nodPhase + dt / NOD_MS);
 
+    this.head.update(dt, now, this.speaking);
+
     // Saccades: eyes jump to a new fixation, then hold. While speaking the
     // gaze returns near-center more often (engaged with the listener);
     // idle gaze wanders further and rests longer.
@@ -1039,40 +1119,69 @@ export class AvatarEngine {
       }
     }
 
-    // Head pose (2.5D): yaw/pitch via radial-parallax dome; nose moves most.
-    const idleYaw = Math.sin(t * 0.43) * 0.25 + Math.sin(t * 0.117) * 0.2;
-    const idlePitch = Math.sin(t * 0.31 + 1.3) * 0.22;
+    // --- Head pose ---------------------------------------------------------
+    //
+    // Yaw and pitch rotate the face as a cylinder (see HEAD_YAW_MAX): the far
+    // side foreshortens, the near side spreads, and the silhouette holds
+    // still. Roll then rotates the result about a pivot in the neck.
+    //
+    // A slow drift rides on top of the sprung pose so the head is never
+    // perfectly frozen between movements — a completely static face between
+    // gestures looks like a paused video.
+    const amp = (0.7 + this.energy * 0.3) * this.tuning.headMotion;
+    const driftYaw = Math.sin(t * 0.19) * 0.10 + Math.sin(t * 0.073 + 1.1) * 0.07;
+    const driftPitch = Math.sin(t * 0.14 + 2.2) * 0.09;
+    // Breathing: the chest lifts, so the head rises fractionally with it.
+    const breathe = Math.sin(t * 0.62) * fh * 0.005;
     const nod = this.nodPhase < 1 ? Math.sin(this.nodPhase * Math.PI) * 0.8 : 0;
-    const amp = (0.3 + this.energy * 0.5) * this.tuning.headMotion;
-    const yaw = idleYaw * amp * fw * 0.05;
-    const pitch = (idlePitch * amp + nod * this.energy) * fh * 0.04;
-    for (const p of pts) {
-      const dx = (p.x - fcx) / fw;
-      const dy = (p.y - fcy) / fh;
-      const depth = Math.max(0, 1 - (dx * dx + dy * dy)); // dome: rim ~0, nose ~1
-      p.x += yaw * depth;
-      p.y += pitch * depth;
-    }
-    // Nose nudge: it's the closest point to the camera.
-    pts[NOSE_TIP].x += yaw * 0.25;
 
-    // Roll about a neck pivot below the chin; breathing sway rides along.
-    // Skipped in fullPhoto mode: rolling the whole mesh would tear the rim
-    // away from the static photo behind it.
-    if (!this.fullPhoto) {
-      const roll = (Math.sin(t * 0.27 + 0.7) * 0.012 + Math.sin(t * 0.071) * 0.008) * amp;
-      const breathe = Math.sin(t * 0.9) * fh * 0.004;
-      const pivotX = fcx;
-      const pivotY = fMaxY + fh * 0.35;
-      const cosR = Math.cos(roll);
-      const sinR = Math.sin(roll);
-      for (const p of pts) {
-        const rx = p.x - pivotX;
-        const ry = p.y - pivotY;
-        p.x = pivotX + rx * cosR - ry * sinR;
-        p.y = pivotY + rx * sinR + ry * cosR + breathe;
-      }
+    const yawAngle = (this.head.yaw + driftYaw) * HEAD_YAW_MAX * amp;
+    const pitchAngle =
+      ((this.head.pitch + driftPitch) * HEAD_PITCH_MAX + nod * this.energy * 0.05) * amp;
+    const rollAngle = (this.head.roll * HEAD_ROLL_MAX) * amp;
+
+    const cosRoll = Math.cos(rollAngle);
+    const sinRoll = Math.sin(rollAngle);
+    const pivotX = fcx;
+    const pivotY = fMaxY + fh * 0.35;
+    const falloff = this.headFalloff;
+
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      // Vertices past the mesh rim are pinned, so the warp never pulls away
+      // from the photograph it sits on.
+      const free = falloff ? falloff[Math.min(i, falloff.length - 1)] : 1;
+      if (free <= 0.0005) continue;
+
+      const startX = p.x;
+      const startY = p.y;
+
+      // Cylindrical yaw. asin maps the face across a half-turn of the
+      // cylinder, so adding the angle and taking sin again gives correct
+      // foreshortening rather than a uniform slide.
+      const u = Math.max(-1, Math.min(1, (p.x - fcx) / fw));
+      let x = fcx + Math.sin(Math.asin(u) + yawAngle) * fw;
+      const v = Math.max(-1, Math.min(1, (p.y - fcy) / fh));
+      let y = fcy + Math.sin(Math.asin(v) + pitchAngle) * fh;
+
+      // Roll about the neck, not about the face centre: a head pivots where
+      // it meets the spine, so rolling around its own middle looks like the
+      // face rotating inside the skull.
+      const rx = x - pivotX;
+      const ry = y - pivotY;
+      x = pivotX + rx * cosRoll - ry * sinRoll;
+      y = pivotY + rx * sinRoll + ry * cosRoll + breathe;
+
+      p.x = startX + (x - startX) * free;
+      p.y = startY + (y - startY) * free;
     }
+
+    // The nose is the part of a face closest to the camera, so it swings
+    // furthest on a turn. Everything else is on the cylinder's surface; this
+    // is the one feature that stands off it.
+    const noseFree = falloff ? falloff[NOSE_TIP] : 1;
+    pts[NOSE_TIP].x += Math.sin(yawAngle) * fw * 0.10 * noseFree;
+    pts[NOSE_TIP].y += Math.sin(pitchAngle) * fh * 0.06 * noseFree;
 
     // Derived midpoint vertices (mouth subdivision) follow their parents
     // through EVERY layer above — computed last, from final positions.

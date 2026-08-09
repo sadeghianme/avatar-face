@@ -99,7 +99,41 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
   canvas.style.height = "auto";
   canvas.style.maxWidth = "100%";
   canvas.setAttribute("data-liveface", avatarId);
-  script.insertAdjacentElement("afterend", canvas);
+
+  // Reserve the space and show something immediately.
+  //
+  // Between the script running and the first frame there are three network
+  // round trips — the avatar record, the rig, and a photograph that can be a
+  // couple of megabytes. On a customer's page that was several seconds of
+  // nothing at all, followed by the layout jumping as the canvas appeared.
+  // The placeholder holds the exact final size, so nothing moves when the
+  // avatar arrives.
+  const mount = document.createElement("div");
+  mount.style.cssText = `position:relative;display:inline-block;width:${size}px;max-width:100%`;
+  const placeholder = document.createElement("div");
+  placeholder.setAttribute("data-liveface-loading", "");
+  placeholder.style.cssText =
+    "position:absolute;inset:0;border-radius:12px;" +
+    // A moving sheen rather than a spinner: it reads as "this is arriving"
+    // instead of "something is wrong", and it needs no icon or wordmark that
+    // would clash with whatever the host page looks like.
+    "background:linear-gradient(100deg,rgba(128,128,128,0.10) 30%,rgba(128,128,128,0.20) 50%,rgba(128,128,128,0.10) 70%);" +
+    "background-size:220% 100%;animation:liveface-sheen 1.4s ease-in-out infinite;";
+  if (!document.getElementById("liveface-style")) {
+    const style = document.createElement("style");
+    style.id = "liveface-style";
+    // Scoped to our own keyframe name so it cannot collide with the host's.
+    style.textContent =
+      "@keyframes liveface-sheen{0%{background-position:180% 0}100%{background-position:-80% 0}}" +
+      "@media (prefers-reduced-motion:reduce){[data-liveface-loading]{animation:none!important}}";
+    document.head.appendChild(style);
+  }
+  mount.appendChild(canvas);
+  mount.appendChild(placeholder);
+  script.insertAdjacentElement("afterend", mount);
+
+  /** Called once there is a real frame to look at. */
+  const ready = () => placeholder.remove();
 
   const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
   const meta = await fetch(`${apiBase}/embed/v1/avatars/${avatarId}`, {
@@ -124,23 +158,38 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     await loadScript(`${apiBase}/liveface-3d.js`);
     if (!window.__Liveface3D) throw new Error("liveface-3d.js failed to initialize");
     engine = await window.__Liveface3D.load(canvas, info.model_url);
+    ready();
   } else {
-    // The full-resolution photo, NOT the thumbnail. The thumbnail is 256px on
-    // its long edge; the canvas backing store is 2-3x the CSS size, so using
-    // it meant every embedded avatar was an upscale of a postage stamp while
-    // the sharp original sat in storage unused. The dashboard preview always
-    // used the real image, which is why this only ever looked bad on
-    // customers' sites.
-    const [rigResponse, texture] = await Promise.all([
-      fetch(info.rig_url),
-      loadImage(info.image_url || info.thumbnail_url),
-    ]);
-    const rig: Rig = await rigResponse.json();
-    engine = new AvatarEngine(canvas, rig, texture, {
+    const rig: Rig = await (await fetch(info.rig_url)).json();
+    const fullUrl = info.image_url || info.thumbnail_url;
+
+    // Start on the thumbnail, upgrade to the photograph.
+    //
+    // The full-resolution image is the one that must end up on screen — a
+    // 256px thumbnail stretched across a canvas backing store 2-3x the CSS
+    // size is what made embedded avatars look soft. But it is also the one
+    // thing here big enough to keep the page empty for seconds. Loading the
+    // small one first puts a talking face on the page almost immediately and
+    // then sharpens it in place, which beats both a slow blank box and a
+    // permanently soft avatar.
+    const firstUrl = info.thumbnail_url || fullUrl;
+    const texture = await loadImage(firstUrl);
+    const avatar = new AvatarEngine(canvas, rig, texture, {
       // data-framing on the snippet wins; otherwise the avatar's own setting,
       // so changing it in the dashboard reaches sites already embedding it.
       fullPhoto: (script.dataset.framing ?? info.framing) === "full",
     });
+    engine = avatar;
+    ready();
+
+    if (fullUrl && fullUrl !== firstUrl) {
+      // Deliberately not awaited: the avatar is already animating, and a slow
+      // photograph must not hold up speech. A failure here leaves the
+      // thumbnail in place, which is a soft avatar rather than a broken one.
+      loadImage(fullUrl)
+        .then((sharp) => avatar.setTexture(sharp))
+        .catch((error) => console.warn("[liveface] full-resolution image failed:", error));
+    }
   }
 
   const synth = async (text: string): Promise<SynthesisPayload> => {
