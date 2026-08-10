@@ -177,6 +177,16 @@ const resources = {
       cropApply: "Apply crop",
       cropReset: "Reset crop",
       cropTooSmall: "Keep at least 15% of the width and height.",
+      testInSimulator: "Test",
+      simModeToken: "Use a test key",
+      simModeOwn: "Use my own key",
+      simModeTokenHint:
+        "Runs with a short-lived key minted for this page. Proves the avatar, voice and widget work — but not that your own key is configured correctly.",
+      simModeOwnHint:
+        "Runs with the key in the snippet. Also proves the key itself works — but it must allow this dashboard's domain.",
+      simPlaceholderKey: "Replace YOUR_API_KEY with a real key, or switch to a test key.",
+      simTokenFailed: "Could not get a test key:",
+      simRenewed: "Test key expired — renewed automatically.",
       cropFree: "Free",
       cropSquare: "1:1",
       cropPortrait: "4:5",
@@ -386,6 +396,16 @@ const resources = {
       cropApply: "Appliquer",
       cropReset: "Réinitialiser",
       cropTooSmall: "Gardez au moins 15 % de la largeur et de la hauteur.",
+      testInSimulator: "Tester",
+      simModeToken: "Clé de test",
+      simModeOwn: "Ma propre clé",
+      simModeTokenHint:
+        "Utilise une clé temporaire créée pour cette page. Vérifie l'avatar, la voix et le widget — mais pas votre propre clé.",
+      simModeOwnHint:
+        "Utilise la clé du snippet. Vérifie aussi la clé elle-même — elle doit autoriser le domaine de ce tableau de bord.",
+      simPlaceholderKey: "Remplacez YOUR_API_KEY par une vraie clé, ou utilisez une clé de test.",
+      simTokenFailed: "Impossible d'obtenir une clé de test :",
+      simRenewed: "Clé de test expirée — renouvelée automatiquement.",
       cropFree: "Libre",
       cropSquare: "1:1",
       cropPortrait: "4:5",

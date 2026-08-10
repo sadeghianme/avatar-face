@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 
+import { buildSnippet } from "../components/EmbedSnippet";
 import { Icon } from "../components/Icon";
+import { api } from "../lib/api";
+import { useOrg } from "../lib/org";
 
 /** What we could pull out of the pasted snippet. */
 interface Parsed {
@@ -118,14 +122,29 @@ function buildDocument(p: Parsed): string {
 
 export function SimulatorPage() {
   const { t } = useTranslation();
-  const [snippet, setSnippet] = useState("");
+  // Arriving from an avatar's "Test in Simulator" prefills the snippet, so
+  // the common path involves no copying at all.
+  const [params] = useSearchParams();
+  const [snippet, setSnippet] = useState(() => {
+    const avatar = params.get("avatar");
+    return avatar ? buildSnippet(avatar) : "";
+  });
   const [running, setRunning] = useState<Parsed | null>(null);
   const [log, setLog] = useState<Entry[]>([]);
   const [text, setText] = useState("");
+  // "token" runs with a short-lived credential minted for this page; "own"
+  // runs with whatever key is in the snippet. The difference is not cosmetic:
+  // only the second one proves the customer's key is configured correctly.
+  const [mode, setMode] = useState<"token" | "own">("token");
   const frame = useRef<HTMLIFrameElement>(null);
+  const { current } = useOrg();
 
   const parsed = useMemo(() => parseSnippet(snippet), [snippet]);
-  const missing = parsed ? ["src", "avatar", "key"].filter((k) => !parsed[k as keyof Parsed]) : [];
+  // In token mode the key in the snippet is irrelevant — it is replaced at
+  // run time — so it is not a missing field.
+  const required = mode === "own" ? ["src", "avatar", "key"] : ["src", "avatar"];
+  const missing = parsed ? required.filter((k) => !parsed[k as keyof Parsed]) : [];
+  const placeholderKey = mode === "own" && parsed?.key === "YOUR_API_KEY";
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -136,16 +155,64 @@ export function SimulatorPage() {
     return () => window.removeEventListener("message", onMessage);
   }, []);
 
-  const run = () => {
+  /** Mint a fresh Simulator credential. Cheap, so it is done per run. */
+  const mintToken = async (): Promise<string | null> => {
+    if (!current) return null;
+    try {
+      const r = await api.post<{ token: string }>(
+        `/orgs/${current.id}/api-keys/simulator-token`
+      );
+      return r.token;
+    } catch (e) {
+      setLog((prev) => [
+        ...prev,
+        { at: Date.now(), level: "error", message: `${t("simTokenFailed")} ${String(e)}` },
+      ]);
+      return null;
+    }
+  };
+
+  const run = async () => {
     if (!parsed) return;
     setLog([{ at: Date.now(), level: "info", message: t("simStarting") }]);
-    setRunning({ ...parsed });
+    if (mode === "own") {
+      setRunning({ ...parsed });
+      return;
+    }
+    const token = await mintToken();
+    if (!token) return;
+    // The token goes into the running page, never into the textarea: a
+    // 15-minute credential copied onto a live site works beautifully until it
+    // silently stops.
+    setRunning({ ...parsed, key: token });
   };
 
   const speak = () => {
     if (!text.trim()) return;
     frame.current?.contentWindow?.postMessage({ speak: text }, "*");
   };
+
+  // Re-mint and re-run when the credential ages out mid-session. This is what
+  // makes the short lifetime free: without it the expiry would surface as
+  // Speak dying for no visible reason, which reads as a broken product.
+  useEffect(() => {
+    if (mode !== "token" || !running) return;
+    const stale = log.some(
+      (l) => l.level === "error" && /simulator_token_invalid|401/i.test(l.message)
+    );
+    if (!stale) return;
+    let cancelled = false;
+    void (async () => {
+      const token = await mintToken();
+      if (cancelled || !token) return;
+      setLog((prev) => [...prev, { at: Date.now(), level: "info", message: t("simRenewed") }]);
+      setRunning((prev) => (prev ? { ...prev, key: token } : prev));
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [log, mode, running]);
 
   const ok = log.some((l) => l.level === "ok" && l.message.includes("canvas mounted"));
   const failed = log.some((l) => l.level === "error");
@@ -213,10 +280,35 @@ export function SimulatorPage() {
             </p>
           )}
 
+          <div className="mt-4 flex overflow-hidden rounded-lg border border-black/10 dark:border-white/15">
+            {(["token", "own"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`flex-1 px-3 py-2 text-[12.5px] font-medium transition-colors ${
+                  mode === m
+                    ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                    : "text-gray-500 hover:bg-black/5 dark:hover:bg-white/10"
+                }`}
+              >
+                {t(m === "token" ? "simModeToken" : "simModeOwn")}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[12.5px] text-gray-500 dark:text-gray-400">
+            {t(mode === "token" ? "simModeTokenHint" : "simModeOwnHint")}
+          </p>
+
+          {placeholderKey && (
+            <p className="mt-2 text-[12.5px] text-amber-600 dark:text-amber-400">
+              {t("simPlaceholderKey")}
+            </p>
+          )}
+
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <button
-              onClick={run}
-              disabled={!parsed || missing.length > 0}
+              onClick={() => void run()}
+              disabled={!parsed || missing.length > 0 || placeholderKey}
               className="inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-4 py-2 text-[13px] font-medium text-white
                 transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-900"
             >

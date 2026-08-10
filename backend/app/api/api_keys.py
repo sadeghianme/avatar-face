@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from sqlalchemy import select
 
-from app.api.deps import DB, OrgAdmin
-from app.core.errors import NotFound404
+from app.api.deps import DB, OrgAdmin, OrgMember
+from app.core.config import get_settings
+from app.core.errors import NotFound404, Validation422
 from app.models import ApiKey, generate_api_key, utcnow
 from app.schemas.api_key import ApiKeyCreate, ApiKeyCreated, ApiKeyOut
+from app.services.simulator_token import DEFAULT_TTL_SECONDS, mint
 
 router = APIRouter(prefix="/orgs/{org_id}/api-keys", tags=["api-keys"])
 
@@ -54,3 +56,28 @@ async def revoke_api_key(key_id: str, ctx: OrgAdmin, db: DB):
         raise NotFound404("API key not found", code="api_key_not_found")
     api_key.revoked_at = utcnow()
     await db.commit()
+
+
+@router.post("/simulator-token")
+async def create_simulator_token(request: Request, ctx: OrgMember) -> dict:
+    """A short-lived credential for the in-dashboard Simulator.
+
+    Any member, not just an admin: this grants strictly less than the session
+    the caller already holds, and requiring admin would stop most people from
+    testing their own avatars.
+
+    Deliberately not an API key. It is signed rather than stored, expires in
+    minutes, and only works from the origin that asked for it — see
+    app.services.simulator_token for why a real key cannot be used here.
+    """
+    from urllib.parse import urlsplit
+
+    origin = request.headers.get("origin") or request.headers.get("referer")
+    host = (urlsplit(origin).hostname or "").lower() if origin else ""
+    if not host:
+        # Without an origin the token could not be bound to anything, and an
+        # unbound token is just a key with a timer.
+        raise Validation422("A browser origin is required", code="origin_required")
+
+    token, expires_at = mint(get_settings().jwt_secret, ctx.org.id, host)
+    return {"token": token, "expires_at": expires_at, "ttl_seconds": DEFAULT_TTL_SECONDS}

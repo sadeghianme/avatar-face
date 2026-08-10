@@ -1,17 +1,23 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export function EmbedSnippet({ avatarId, apiKey }: { avatarId: string; apiKey?: string }) {
-  const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  // Dev: the API runs on its own port. Prod: Caddy exposes it under /api.
-  const apiBase = window.location.origin.includes("localhost")
+/** Dev: the API runs on its own port. Prod: Caddy exposes it under /api. */
+export function apiBaseUrl(): string {
+  return window.location.origin.includes("localhost")
     ? "http://localhost:7002"
     : `${window.location.origin}/api`;
+}
 
+/**
+ * Exported so the Simulator prefills exactly what the user is told to paste.
+ * Two copies of this would drift, and the Simulator's whole claim is that it
+ * runs the same thing your site will.
+ */
+export function buildSnippet(avatarId: string, apiKey?: string): string {
+  const apiBase = apiBaseUrl();
   // The widget bundle is served BY the API, so it lives under the same
   // base as every other API route (in production that's <origin>/api).
-  const snippet = [
+  return [
     `<script`,
     `  src="${apiBase}/liveface.js"`,
     `  data-avatar="${avatarId}"`,
@@ -20,6 +26,12 @@ export function EmbedSnippet({ avatarId, apiKey }: { avatarId: string; apiKey?: 
     `></script>`,
     `<script>/* then: Liveface.speak("Hello!") */</script>`,
   ].join("\n");
+}
+
+export function EmbedSnippet({ avatarId, apiKey }: { avatarId: string; apiKey?: string }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const snippet = buildSnippet(avatarId, apiKey);
 
   return (
     <div className="card">

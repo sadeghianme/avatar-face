@@ -18,10 +18,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.deps import DB
+from app.core.config import get_settings
 from app.core.errors import Auth401, Forbidden403, NotFound404, RateLimit429
 from app.models import ApiKey, Avatar, AvatarStatus, hash_api_key, utcnow
 from app.schemas.tts import CueOut, SynthesizeRequest, SynthesizeResponse
 from app.services.rate_limit import get_embed_rate_limiter
+from app.services.simulator_token import looks_like_one as looks_like_simulator_token
 from app.services.storage import get_storage
 from app.services.tts.registry import synthesize_cached
 from app.services.tts.timing import cues_from_segments, plan_utterance, total_duration_ms
@@ -48,10 +50,41 @@ def _host_allowed(host: str, patterns: list[str]) -> bool:
     return False
 
 
+def _simulator_key(token: str, request: Request) -> ApiKey:
+    """Resolve a Simulator token to a key-shaped object, without storing one.
+
+    Returned transient: never added to the session, so nothing is written and
+    nothing appears in the customer's key list. Everything downstream only
+    reads org_id, an id for rate limiting, and the domain list — usage is
+    metered per organisation, not per key, so there is no row to reference.
+    """
+    from app.services.simulator_token import InvalidSimulatorToken
+    from app.services.simulator_token import verify as verify_simulator_token
+
+    try:
+        org_id = verify_simulator_token(
+            get_settings().jwt_secret, token, _origin_host(request)
+        )
+    except InvalidSimulatorToken as exc:
+        # One code for every failure: the Simulator re-mints and retries on
+        # this, and distinguishing expired from forged would only help someone
+        # probing.
+        raise Auth401(f"Simulator token rejected ({exc})", code="simulator_token_invalid")
+
+    key = ApiKey(org_id=org_id, name="Simulator", prefix="lfsim_", key_hash="", allowed_domains="")
+    key.id = f"sim:{org_id}"  # stable, so simulator traffic shares a rate-limit bucket
+    key.revoked_at = None  # is_active is derived from this, not settable
+    return key
+
+
 async def _authenticate(request: Request, db: DB) -> ApiKey:
     plaintext = request.headers.get("x-api-key") or request.query_params.get("key")
     if not plaintext:
         raise Auth401("Missing API key", code="missing_api_key")
+
+    if looks_like_simulator_token(plaintext):
+        return _simulator_key(plaintext, request)
+
     api_key = (
         await db.execute(select(ApiKey).where(ApiKey.key_hash == hash_api_key(plaintext)))
     ).scalar_one_or_none()

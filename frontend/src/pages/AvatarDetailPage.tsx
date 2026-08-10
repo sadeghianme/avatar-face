@@ -167,6 +167,10 @@ export function AvatarDetailPage() {
                     ? t("restoreBg")
                     : t("removeBg")}
               </button>
+              <Link className="btn-secondary" to={`/simulator?avatar=${avatar.id}`}>
+                <Icon name="play" className="me-1.5 inline h-4 w-4" />
+                {t("testInSimulator")}
+              </Link>
               <button className="btn-secondary" onClick={() => void generate3d()}>
                 <Icon name="cube" className="me-1.5 inline h-4 w-4" />
                 {t("generate3d")}
