@@ -59,8 +59,10 @@ _SINGLE = {
 }
 
 # Stress, length, syllable and word separators, ties: all timing or structure,
-# none of it a mouth shape.
-_IGNORE = set("ˈˌːˑ.|‖ ̯͡‿()[]/")
+# none of it a mouth shape. The underscore is espeak's own phoneme separator
+# under `--ipa=1` — listed explicitly rather than left to fall through the
+# unknown-symbol path, so that path keeps meaning "we did not recognise this".
+_IGNORE = set("ˈˌːˑ.|‖ ̯͡‿()[]/_-")
 
 
 def _strip_marks(text: str) -> str:

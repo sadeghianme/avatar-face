@@ -40,6 +40,12 @@ def test_unknown_symbols_are_dropped_not_guessed():
     assert ipa_to_visemes("") == []
 
 
+def test_espeaks_own_separator_is_not_treated_as_unknown():
+    """`--ipa=1` joins phonemes with underscores. Handling them explicitly
+    keeps the unknown-symbol path meaning what it says."""
+    assert ipa_to_visemes("b_o_k_\u02c8u") == ["PP", "oh", "kk", "ou"]
+
+
 def test_repeats_collapse():
     assert collapse_repeats(["PP", "PP", "aa", "aa", "PP"]) == ["PP", "aa", "PP"]
 
