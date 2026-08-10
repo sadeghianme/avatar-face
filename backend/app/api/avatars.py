@@ -283,6 +283,7 @@ async def set_background(
     if not body.remove:
         if not avatar.original_image_key:
             return avatar  # already the original; nothing to undo
+        await _snapshot(avatar, storage, "restore background")
         avatar.image_key = avatar.original_image_key
         avatar.original_image_key = None
         await _rebuild_thumbnail(avatar, storage)
@@ -300,6 +301,7 @@ async def set_background(
             code="segmentation_unavailable",
         ) from exc
 
+    await _snapshot(avatar, storage, "remove background")
     key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/source-nobg.png"
     await storage.put_bytes(key, cut_out, "image/png")
     # The original is kept, not overwritten, so this is reversible.
@@ -330,6 +332,93 @@ async def _rebuild_thumbnail(avatar: Avatar, storage) -> None:
     key = write_thumbnail_key(avatar.org_id, avatar.id, thumb_type)
     await storage.put_bytes(key, thumb, thumb_type)
     avatar.thumbnail_key = key
+
+
+"""Undo.
+
+One history instead of a reset button per feature. Each entry snapshots the
+editable state *before* a change, so undo restores a known-good state rather
+than trying to invert an operation — inverting a crop means knowing the
+original size, inverting a background removal means keeping the old file, and
+each new edit would add another special case.
+
+The rig is copied rather than referenced, because operations like crop rewrite
+rig.json in place: without a copy, undoing the image would leave landmarks in
+cropped coordinates.
+"""
+
+MAX_HISTORY = 12
+
+
+async def _snapshot(avatar: Avatar, storage, label: str) -> None:
+    """Record the current state so the change about to happen can be undone."""
+    import json as _json
+    import uuid as _uuid
+
+    entry = {
+        "label": label,
+        "image_key": avatar.image_key,
+        "thumbnail_key": avatar.thumbnail_key,
+        "original_image_key": avatar.original_image_key,
+        "precrop_image_key": avatar.precrop_image_key,
+        "framing": avatar.framing,
+        "rig_snapshot_key": None,
+    }
+    if avatar.rig_key:
+        key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/history/{_uuid.uuid4().hex}.json"
+        try:
+            await storage.put_bytes(
+                key, await storage.get_bytes(avatar.rig_key), "application/json"
+            )
+            entry["rig_snapshot_key"] = key
+        except Exception:
+            # A missing rig must not block the edit; undo then restores the
+            # image and leaves the rig, which is the lesser wrong.
+            logger.exception("rig snapshot failed for avatar %s", avatar.id)
+
+    try:
+        history = _json.loads(avatar.edit_history or "[]")
+    except ValueError:
+        history = []
+    history.append(entry)
+    avatar.edit_history = _json.dumps(history[-MAX_HISTORY:])
+
+
+@router.post("/{avatar_id}/undo", response_model=AvatarOut)
+async def undo_edit(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
+    """Step back one edit — crop, background, framing, whatever it was."""
+    import json as _json
+
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    try:
+        history = _json.loads(avatar.edit_history or "[]")
+    except ValueError:
+        history = []
+    if not history:
+        raise Conflict409("Nothing to undo", code="nothing_to_undo")
+
+    entry = history.pop()
+    storage = get_storage()
+
+    avatar.image_key = entry.get("image_key")
+    avatar.thumbnail_key = entry.get("thumbnail_key")
+    avatar.original_image_key = entry.get("original_image_key")
+    avatar.precrop_image_key = entry.get("precrop_image_key")
+    if entry.get("framing"):
+        avatar.framing = entry["framing"]
+
+    snapshot = entry.get("rig_snapshot_key")
+    if snapshot and avatar.rig_key:
+        try:
+            await storage.put_bytes(
+                avatar.rig_key, await storage.get_bytes(snapshot), "application/json"
+            )
+        except Exception:
+            logger.exception("rig restore failed for avatar %s", avatar.id)
+
+    avatar.edit_history = _json.dumps(history)
+    await db.commit()
+    return avatar
 
 
 class CropRequest(BaseModel):
@@ -368,6 +457,7 @@ async def crop_avatar(
     if body.reset:
         if not avatar.precrop_image_key:
             return avatar  # never cropped; nothing to undo
+        await _snapshot(avatar, storage, "crop reset")
         avatar.image_key = avatar.precrop_image_key
         avatar.precrop_image_key = None
         await _rebuild_thumbnail(avatar, storage)
@@ -402,6 +492,7 @@ async def crop_avatar(
     buffer = io.BytesIO()
     cropped.save(buffer, format="PNG", optimize=True)
 
+    await _snapshot(avatar, storage, "crop")
     key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/source-crop.png"
     await storage.put_bytes(key, buffer.getvalue(), "image/png")
     # Only the first crop records the pre-crop image, so cropping twice still

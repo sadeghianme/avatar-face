@@ -53,3 +53,21 @@ class Avatar(TimestampedBase):
     rig_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     thumbnail_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON list of snapshots taken before each edit, oldest first. See
+    # app.api.avatars._snapshot.
+    edit_history: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    @property
+    def undo_label(self) -> str | None:
+        """What an undo would reverse, or None when there is nothing to undo.
+
+        Exposed rather than the raw history so the button can name the change
+        instead of saying "undo" and hoping the user remembers.
+        """
+        import json
+
+        try:
+            history = json.loads(self.edit_history or "[]")
+        except ValueError:
+            return None
+        return history[-1].get("label") if history else None

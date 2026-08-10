@@ -269,6 +269,82 @@ async def test_crop_is_resettable_and_two_crops_reset_all_the_way(client):
     assert back["image_url"].split("?")[0] == original["image_url"].split("?")[0]
 
 
+async def test_undo_restores_the_image_and_the_rig_together(client):
+    """Crop rewrites rig.json in place, so undoing only the image would leave
+    the landmarks in cropped coordinates — the mesh beside the face."""
+    headers = await register_and_login(client, "undoer")
+    org_id = await create_org(client, headers)
+    avatar_id = await create_ready_avatar(client, headers, org_id)
+
+    before = await _rig_of(client, org_id, avatar_id, headers)
+    detail_before = (
+        await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)
+    ).json()
+    assert detail_before["undo_label"] is None
+
+    cropped = await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/crop",
+        json={"x": 0.2, "y": 0.2, "width": 0.6, "height": 0.6},
+        headers=headers,
+    )
+    assert cropped.json()["undo_label"] == "crop"
+
+    undone = await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/undo", headers=headers)
+    assert undone.status_code == 200, undone.text
+    assert undone.json()["undo_label"] is None
+    assert undone.json()["precrop_image_key"] is None
+
+    after = await _rig_of(client, org_id, avatar_id, headers)
+    assert after["image_size"] == before["image_size"]
+    assert after["points"] == before["points"], "the rig must come back too"
+
+
+async def test_undo_steps_back_one_edit_at_a_time(client, monkeypatch):
+    """Two different kinds of edit, undone in reverse order."""
+    from app.api import avatars as avatars_api
+
+    def fake_cut_out(raw: bytes) -> bytes:
+        import io
+
+        from PIL import Image
+
+        out = io.BytesIO()
+        Image.new("RGBA", (300, 300), (0, 0, 0, 0)).save(out, format="PNG")
+        return out.getvalue()
+
+    monkeypatch.setattr(avatars_api, "remove_background", fake_cut_out)
+
+    headers = await register_and_login(client, "undoer2")
+    org_id = await create_org(client, headers)
+    avatar_id = await create_ready_avatar(client, headers, org_id)
+
+    await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/crop",
+        json={"x": 0.1, "y": 0.1, "width": 0.8, "height": 0.8},
+        headers=headers,
+    )
+    bg = await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/background", json={"remove": True}, headers=headers
+    )
+    assert bg.json()["undo_label"] == "remove background"
+
+    first = await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/undo", headers=headers)
+    assert first.json()["undo_label"] == "crop", "the crop is still there underneath"
+    assert first.json()["original_image_key"] is None, "background removal is off again"
+
+    second = await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/undo", headers=headers)
+    assert second.json()["undo_label"] is None
+    assert second.json()["precrop_image_key"] is None
+
+
+async def test_undo_with_nothing_to_undo_is_rejected(client):
+    headers = await register_and_login(client, "undoer3")
+    org_id = await create_org(client, headers)
+    avatar_id = await create_ready_avatar(client, headers, org_id)
+    response = await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/undo", headers=headers)
+    assert response.status_code == 409
+
+
 async def test_crop_rejects_a_rectangle_that_leaves_almost_nothing(client):
     headers = await register_and_login(client, "cropper3")
     org_id = await create_org(client, headers)

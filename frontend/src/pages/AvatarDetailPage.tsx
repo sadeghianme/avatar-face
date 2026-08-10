@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { CropPanel } from "../components/CropPanel";
+import { CropStudio } from "../components/CropStudio";
 import { Icon } from "../components/Icon";
 import { MarkFacePanel } from "../components/MarkFacePanel";
 import { Avatar3DPreview } from "../components/Avatar3DPreview";
@@ -83,6 +83,13 @@ export function AvatarDetailPage() {
   const retry = async () => {
     await api.post(`/orgs/${current.id}/avatars/${avatar.id}/retry`);
     await queryClient.invalidateQueries({ queryKey: ["avatar", current.id, avatarId] });
+  };
+
+  /** Step back one edit — crop, background, whatever it was. */
+  const undo = async () => {
+    await api.post(`/orgs/${current!.id}/avatars/${avatar!.id}/undo`);
+    await queryClient.invalidateQueries({ queryKey: ["avatar", current!.id, avatar!.id] });
+    await queryClient.invalidateQueries({ queryKey: ["avatars", current!.id] });
   };
 
   const remove = async () => {
@@ -166,6 +173,16 @@ export function AvatarDetailPage() {
               </button>
             </>
           )}
+          {avatar.undo_label && (
+            <button
+              className="btn-secondary"
+              onClick={() => void undo()}
+              title={t("undoWhat", { what: avatar.undo_label })}
+            >
+              <Icon name="undo" className="me-1.5 inline h-4 w-4" />
+              {t("undoWhat", { what: avatar.undo_label })}
+            </button>
+          )}
           <button className="btn-danger" onClick={() => void remove()}>
             {t("delete")}
           </button>
@@ -187,19 +204,6 @@ export function AvatarDetailPage() {
         </div>
       )}
 
-      {cropping && avatar.status === "ready" && (
-        <div className="mb-6">
-          <CropPanel
-            avatar={avatar}
-            orgId={current.id}
-            onClose={() => {
-              setCropping(false);
-              void queryClient.invalidateQueries({ queryKey: ["avatar", current.id, avatar.id] });
-            }}
-          />
-        </div>
-      )}
-
       {adjusting && avatar.status === "ready" && (
         <div className="mb-6">
           <MarkFacePanel avatar={avatar} orgId={current.id} onClose={() => setAdjusting(false)} />
@@ -209,7 +213,19 @@ export function AvatarDetailPage() {
       {avatar.status === "ready" && avatar.rig_url && avatar.thumbnail_url && (
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="card">
-            {avatar.kind === "model3d" && avatar.model_url ? (
+            {cropping ? (
+              <CropStudio
+                avatar={avatar}
+                orgId={current.id}
+                onCancel={() => setCropping(false)}
+                onDone={() => {
+                  setCropping(false);
+                  void queryClient.invalidateQueries({
+                    queryKey: ["avatar", current.id, avatar.id],
+                  });
+                }}
+              />
+            ) : avatar.kind === "model3d" && avatar.model_url ? (
               <Avatar3DPreview modelUrl={avatar.model_url} onEngine={setEngine} />
             ) : (
               <AvatarPreview

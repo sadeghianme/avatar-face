@@ -58,6 +58,7 @@ export const ICONS: Record<string, Shape[]> = {
     { d: "M6.5 6.5 7.5 20a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1l1-13.5" },
   ],
   back: [{ d: "M20 12H5M11 6 5 12l6 6" }],
+  undo: [{ d: "M3.5 8.5h11a5.5 5.5 0 0 1 0 11H8" }, { d: "M7 4 3.5 8.5 7 13" }],
   // Mark the face — a reticle, which is what the tool actually is.
   target: [{ circle: [12, 12, 8] }, { circle: [12, 12, 2.2] }, { d: "M12 2v3M12 19v3M2 12h3M19 12h3" }],
   // Generate 3D — a cube, not a sparkle. The output is geometry.

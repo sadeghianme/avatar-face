@@ -54,6 +54,8 @@ export interface Avatar {
   framing?: "face" | "full";
   /** Non-null means the photo has been cropped and the crop can be reset. */
   precrop_image_key?: string | null;
+  /** Names the change an undo would reverse; absent when there is nothing. */
+  undo_label?: string | null;
   rig_url?: string | null;
   thumbnail_url?: string | null;
   model_url?: string | null;

@@ -90,6 +90,8 @@ class AvatarOut(BaseModel):
     original_image_key: str | None = None
     # Non-null means the photo has been cropped and the crop can be reset.
     precrop_image_key: str | None = None
+    # Names the change an undo would reverse; null when there is nothing to undo.
+    undo_label: str | None = None
     created_at: datetime
     updated_at: datetime
 

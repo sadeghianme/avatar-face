@@ -2,6 +2,8 @@ import { DEFAULT_TUNING, type EngineTuning, type SpeechPlayer } from "@liveface/
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Icon } from "./Icon";
+
 interface SliderDef {
   key: keyof EngineTuning;
   labelKey: string;
@@ -79,7 +81,10 @@ export function TuningPanel({
         className="flex w-full items-center justify-between font-medium"
         onClick={() => setOpen((o) => !o)}
       >
-        <span>🎛 {t("tuning")}</span>
+        <span className="inline-flex items-center gap-2">
+          <Icon name="sliders" className="h-4 w-4" />
+          {t("tuning")}
+        </span>
         <span className="text-gray-400">{open ? "▾" : "▸"}</span>
       </button>
       {open && (
