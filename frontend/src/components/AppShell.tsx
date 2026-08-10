@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Link, NavLink, useLocation } from "react-router-dom";
 
 import { Icon, type IconName } from "./Icon";
+import { LanguageMenu } from "./LanguageMenu";
 import { useAuth } from "../lib/auth";
 import { useTheme } from "../lib/theme";
 import { OrgSwitcher } from "./OrgSwitcher";
@@ -130,6 +131,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <h1 className="truncate text-[15px] font-medium tracking-[-0.01em]">{crumb}</h1>
 
             <div className="ms-auto flex items-center gap-1">
+              <LanguageMenu />
               <button
                 className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 dark:hover:bg-white/10 dark:hover:text-white"
                 onClick={toggle}
