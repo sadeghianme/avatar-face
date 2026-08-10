@@ -137,13 +137,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 <Icon name={theme === "dark" ? "sun" : "moon"} className="h-[18px] w-[18px]" />
               </button>
-              <Link
-                to="/avatars/new"
-                className="ms-1 inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-3.5 py-1.5 text-[13px] font-medium text-white transition-opacity hover:opacity-85 dark:bg-white dark:text-gray-900"
-              >
-                <Icon name="plus" className="h-4 w-4" strokeWidth={2} />
-                <span className="hidden sm:inline">{t("newAvatar")}</span>
-              </Link>
             </div>
           </div>
         </header>

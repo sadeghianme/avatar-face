@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
+import { Icon } from "../components/Icon";
 import { useTheme } from "../lib/theme";
 
 /**
@@ -125,7 +126,7 @@ export function AuthShell({
               <option value="fr">Français</option>
             </select>
             <button className="btn-secondary px-3 py-1.5" onClick={toggle} aria-label={t("theme")}>
-              {theme === "dark" ? "☀️" : "🌙"}
+              <Icon name={theme === "dark" ? "sun" : "moon"} className="h-4 w-4" />
             </button>
           </div>
         </header>

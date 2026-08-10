@@ -96,12 +96,24 @@ export function AvatarsPage() {
 
       <div className="mt-10">
         <div className="mb-4 flex items-baseline justify-between">
-          <h2 className="text-[19px] font-semibold tracking-[-0.02em]">{t("avatars")}</h2>
-          {avatars && avatars.length > 0 && (
-            <span className="text-[13px] text-gray-400">
-              {t("avatarCount", { count: avatars.length })}
-            </span>
-          )}
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-[19px] font-semibold tracking-[-0.02em]">{t("avatars")}</h2>
+            {avatars && avatars.length > 0 && (
+              <span className="text-[13px] text-gray-400">
+                {t("avatarCount", { count: avatars.length })}
+              </span>
+            )}
+          </div>
+          {/* Creating an avatar belongs beside the avatars, not in the app
+              chrome: in the header it sat on every page including the ones
+              where it means nothing. */}
+          <Link
+            to="/avatars/new"
+            className="inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-4 py-2 text-[13px] font-medium text-white transition-opacity hover:opacity-85 dark:bg-white dark:text-gray-900"
+          >
+            <Icon name="plus" className="h-4 w-4" strokeWidth={2} />
+            {t("newAvatar")}
+          </Link>
         </div>
 
         {isLoading || !current ? (

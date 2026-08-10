@@ -10,6 +10,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Icon } from "./Icon";
 import { api, ApiError } from "../lib/api";
 import { BROWSER_PROVIDER, VoicePicker, type VoiceSelection } from "./VoicePicker";
 
@@ -21,7 +22,9 @@ export function SpeakPanel({
   orgId: string;
 }) {
   const { t, i18n } = useTranslation();
-  const [text, setText] = useState("");
+  // Prefilled rather than empty: an empty box disables Speak, so the first
+  // thing the page offers is a dead button and a blank field.
+  const [text, setText] = useState(() => t("speakSample"));
   // Default to the device's real voices when available; the offline tone
   // generator is the zero-dependency fallback, not the experience.
   const [selection, setSelection] = useState<VoiceSelection>(() =>
@@ -109,7 +112,8 @@ export function SpeakPanel({
           disabled={!engine || !text.trim() || busy}
           onClick={() => void speak()}
         >
-          🗣 {t("speak")}
+          <Icon name="speaker" className="me-1.5 inline h-4 w-4" />
+          {t("speak")}
         </button>
         <button
           className="btn-secondary"
@@ -120,7 +124,8 @@ export function SpeakPanel({
             setBusy(false);
           }}
         >
-          ⏹ {t("stop")}
+          <Icon name="stop" className="me-1.5 inline h-4 w-4" />
+          {t("stop")}
         </button>
         {sttSupported() && (
           <button
@@ -129,7 +134,7 @@ export function SpeakPanel({
             onClick={() => void dictate()}
             title={t("dictate")}
           >
-            {listening ? "👂" : "🎤"}
+            <Icon name={listening ? "ear" : "mic"} className="h-4 w-4" />
           </button>
         )}
       </div>

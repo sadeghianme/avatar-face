@@ -166,6 +166,17 @@ const resources = {
       tuneTeethHeight: "Teeth size",
       tuneReset: "Reset to defaults",
       speakPlaceholder: "Type something for your avatar to say…",
+      // Prefilled so the Speak button does something the moment the page
+      // opens. Chosen to exercise the lip-sync: plosives, a rounded vowel,
+      // sibilants and a couple of sentence breaks.
+      speakSample:
+        "Hi, I'm your virtual assistant. I can answer questions about your products, book a meeting, or point you to the right page. Just type something and press Speak to hear how I sound.",
+      crop: "Crop",
+      cropTitle: "Crop the photo",
+      cropHint: "Drag inside the picture to draw a box, or move the corners. Everything dimmed is cut away.",
+      cropApply: "Apply crop",
+      cropReset: "Reset crop",
+      cropTooSmall: "Keep at least 15% of the width and height.",
       voice: "Voice",
       provider: "Provider",
       inviteMember: "Invite member",
@@ -362,6 +373,14 @@ const resources = {
       tuneTeethHeight: "Taille des dents",
       tuneReset: "Réinitialiser",
       speakPlaceholder: "Écrivez ce que votre avatar doit dire…",
+      speakSample:
+        "Bonjour, je suis votre assistant virtuel. Je peux répondre à vos questions, planifier un rendez-vous ou vous orienter vers la bonne page. Écrivez quelque chose et appuyez sur Parler pour m'entendre.",
+      crop: "Recadrer",
+      cropTitle: "Recadrer la photo",
+      cropHint: "Faites glisser dans l'image pour tracer un cadre, ou déplacez les coins. Tout ce qui est assombri sera coupé.",
+      cropApply: "Appliquer",
+      cropReset: "Réinitialiser",
+      cropTooSmall: "Gardez au moins 15 % de la largeur et de la hauteur.",
       voice: "Voix",
       provider: "Fournisseur",
       inviteMember: "Inviter un membre",

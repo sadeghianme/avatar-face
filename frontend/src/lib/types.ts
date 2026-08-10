@@ -52,6 +52,8 @@ export interface Avatar {
   original_image_key?: string | null;
   /** How embedding sites render it: cropped to the head, or the whole photo. */
   framing?: "face" | "full";
+  /** Non-null means the photo has been cropped and the crop can be reset. */
+  precrop_image_key?: string | null;
   rig_url?: string | null;
   thumbnail_url?: string | null;
   model_url?: string | null;

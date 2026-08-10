@@ -208,6 +208,91 @@ async def test_background_removal_is_reversible(client, monkeypatch):
     assert after["image_url"] and before["image_url"]
 
 
+async def _rig_of(client, org_id, avatar_id, headers):
+    import json
+
+    detail = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
+    raw = await client.get(detail["rig_url"])
+    return json.loads(raw.content)
+
+
+async def test_crop_moves_the_rig_with_the_image(client):
+    """The rig is in image pixels, so a crop that ignores it puts the mesh
+    beside the face instead of on it."""
+    headers = await register_and_login(client, "cropper")
+    org_id = await create_org(client, headers)
+    avatar_id = await create_ready_avatar(client, headers, org_id)
+
+    before = await _rig_of(client, org_id, avatar_id, headers)
+    w, h = before["image_size"]
+
+    response = await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/crop",
+        json={"x": 0.25, "y": 0.2, "width": 0.5, "height": 0.6},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["precrop_image_key"] is not None
+
+    after = await _rig_of(client, org_id, avatar_id, headers)
+    assert after["image_size"] == [round(w * 0.5), round(h * 0.6)]
+
+    dx, dy = round(w * 0.25), round(h * 0.2)
+    for (bx, by), (ax, ay) in zip(before["points"], after["points"]):
+        assert abs(ax - (bx - dx)) <= 1, "every landmark shifts by the crop origin"
+        assert abs(ay - (by - dy)) <= 1
+
+
+async def test_crop_is_resettable_and_two_crops_reset_all_the_way(client):
+    headers = await register_and_login(client, "cropper2")
+    org_id = await create_org(client, headers)
+    avatar_id = await create_ready_avatar(client, headers, org_id)
+    original = (
+        await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)
+    ).json()
+
+    for _ in range(2):
+        await client.post(
+            f"/orgs/{org_id}/avatars/{avatar_id}/crop",
+            json={"x": 0.1, "y": 0.1, "width": 0.7, "height": 0.7},
+            headers=headers,
+        )
+    # The second crop must not overwrite the pointer with the first crop's
+    # output, or reset would only undo one step.
+    reset = await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/crop", json={"reset": True}, headers=headers
+    )
+    assert reset.status_code == 200, reset.text
+    assert reset.json()["precrop_image_key"] is None
+
+    back = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
+    assert back["image_url"].split("?")[0] == original["image_url"].split("?")[0]
+
+
+async def test_crop_rejects_a_rectangle_that_leaves_almost_nothing(client):
+    headers = await register_and_login(client, "cropper3")
+    org_id = await create_org(client, headers)
+    avatar_id = await create_ready_avatar(client, headers, org_id)
+    response = await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/crop",
+        json={"x": 0.4, "y": 0.4, "width": 0.05, "height": 0.05},
+        headers=headers,
+    )
+    assert response.status_code == 422
+
+
+async def test_crop_rejects_a_rectangle_running_off_the_edge(client):
+    headers = await register_and_login(client, "cropper4")
+    org_id = await create_org(client, headers)
+    avatar_id = await create_ready_avatar(client, headers, org_id)
+    response = await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/crop",
+        json={"x": 0.7, "y": 0.1, "width": 0.6, "height": 0.5},
+        headers=headers,
+    )
+    assert response.status_code == 422
+
+
 async def test_cut_out_thumbnail_is_a_png_and_reverts_on_restore(client, monkeypatch):
     """The thumbnail has to follow the photo, in a format that can hold alpha.
 

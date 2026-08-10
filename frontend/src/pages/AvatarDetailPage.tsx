@@ -2,8 +2,10 @@ import type { SpeechPlayer } from "@liveface/embed";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { CropPanel } from "../components/CropPanel";
+import { Icon } from "../components/Icon";
 import { MarkFacePanel } from "../components/MarkFacePanel";
 import { Avatar3DPreview } from "../components/Avatar3DPreview";
 import { AvatarPreview } from "../components/AvatarPreview";
@@ -25,6 +27,7 @@ export function AvatarDetailPage() {
   const [engine, setEngine] = useState<SpeechPlayer | null>(null);
   const [debugMesh, setDebugMesh] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
+  const [cropping, setCropping] = useState(false);
   const [busyBg, setBusyBg] = useState(false);
 
   const { data: avatar, isError } = useQuery({
@@ -92,6 +95,17 @@ export function AvatarDetailPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
+          {/* Back before the title, not buried in the sidebar: a detail page
+              reached from a list needs a way out of it that is where the eye
+              already is. */}
+          <Link
+            to="/app"
+            aria-label={t("avatars")}
+            title={t("avatars")}
+            className="-ms-1 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 dark:hover:bg-white/10 dark:hover:text-white"
+          >
+            <Icon name="back" className="h-5 w-5" />
+          </Link>
           <h1 className="text-2xl font-semibold">{avatar.name}</h1>
           <StatusBadge status={avatar.status} />
         </div>
@@ -126,7 +140,12 @@ export function AvatarDetailPage() {
           {avatar.kind === "photo" && avatar.status === "ready" && (
             <>
               <button className="btn-secondary" onClick={() => setAdjusting((a) => !a)}>
-                🎯 {t("markFace")}
+                <Icon name="target" className="me-1.5 inline h-4 w-4" />
+                {t("markFace")}
+              </button>
+              <button className="btn-secondary" onClick={() => setCropping((c) => !c)}>
+                <Icon name="crop" className="me-1.5 inline h-4 w-4" />
+                {t("crop")}
               </button>
               <button
                 className="btn-secondary"
@@ -134,6 +153,7 @@ export function AvatarDetailPage() {
                 disabled={busyBg}
                 title={t("removeBgHint")}
               >
+                <Icon name="eraser" className="me-1.5 inline h-4 w-4" />
                 {busyBg
                   ? t("loading")
                   : avatar.original_image_key
@@ -141,7 +161,8 @@ export function AvatarDetailPage() {
                     : t("removeBg")}
               </button>
               <button className="btn-secondary" onClick={() => void generate3d()}>
-                ✨ {t("generate3d")}
+                <Icon name="cube" className="me-1.5 inline h-4 w-4" />
+                {t("generate3d")}
               </button>
             </>
           )}
@@ -163,6 +184,19 @@ export function AvatarDetailPage() {
       {(avatar.status === "pending" || avatar.status === "processing") && (
         <div className="mb-6">
           <PrepProgress avatar={avatar} onRetry={() => void retry()} />
+        </div>
+      )}
+
+      {cropping && avatar.status === "ready" && (
+        <div className="mb-6">
+          <CropPanel
+            avatar={avatar}
+            orgId={current.id}
+            onClose={() => {
+              setCropping(false);
+              void queryClient.invalidateQueries({ queryKey: ["avatar", current.id, avatar.id] });
+            }}
+          />
         </div>
       )}
 

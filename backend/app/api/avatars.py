@@ -7,7 +7,7 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks
 from sqlalchemy import select
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.deps import DB, OrgMember
 from app.core.config import get_settings
@@ -330,6 +330,120 @@ async def _rebuild_thumbnail(avatar: Avatar, storage) -> None:
     key = write_thumbnail_key(avatar.org_id, avatar.id, thumb_type)
     await storage.put_bytes(key, thumb, thumb_type)
     avatar.thumbnail_key = key
+
+
+class CropRequest(BaseModel):
+    """A rectangle in fractions of the current image, or a reset."""
+
+    x: float = Field(default=0.0, ge=0.0, le=1.0)
+    y: float = Field(default=0.0, ge=0.0, le=1.0)
+    width: float = Field(default=1.0, gt=0.0, le=1.0)
+    height: float = Field(default=1.0, gt=0.0, le=1.0)
+    reset: bool = False
+
+
+# Below this the rig has too little face left to be worth keeping.
+MIN_CROP_FRACTION = 0.15
+
+
+@router.post("/{avatar_id}/crop", response_model=AvatarOut)
+async def crop_avatar(
+    avatar_id: str, body: CropRequest, ctx: OrgMember, db: DB
+) -> Avatar:
+    """Crop the photo, and move the rig with it.
+
+    The rig is in image pixels, so cropping the image without translating the
+    landmarks would leave every point offset by the crop origin — the mesh
+    would sit beside the face instead of on it. Translating is exact and,
+    unlike re-detecting, keeps any correction the user made by hand.
+    """
+    import json as _json
+
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    if avatar.kind != AvatarKind.photo or not avatar.image_key:
+        raise Conflict409("Only photo avatars can be cropped", code="not_a_photo")
+
+    storage = get_storage()
+
+    if body.reset:
+        if not avatar.precrop_image_key:
+            return avatar  # never cropped; nothing to undo
+        avatar.image_key = avatar.precrop_image_key
+        avatar.precrop_image_key = None
+        await _rebuild_thumbnail(avatar, storage)
+        await _rebuild_rig(avatar, storage)
+        await db.commit()
+        return avatar
+
+    if body.x + body.width > 1.0 or body.y + body.height > 1.0:
+        raise Validation422("Crop rectangle falls outside the image", code="crop_out_of_bounds")
+    if body.width < MIN_CROP_FRACTION or body.height < MIN_CROP_FRACTION:
+        raise Validation422(
+            f"Crop must keep at least {int(MIN_CROP_FRACTION * 100)}% of each side",
+            code="crop_too_small",
+        )
+
+    import io
+
+    from PIL import Image
+
+    source = Image.open(io.BytesIO(await storage.get_bytes(avatar.image_key)))
+    # Preserve alpha: cropping a cut-out must not paste the background back.
+    has_alpha = source.mode in ("RGBA", "LA") or "transparency" in source.info
+    source = source.convert("RGBA" if has_alpha else "RGB")
+    width, height = source.size
+
+    left = int(round(body.x * width))
+    top = int(round(body.y * height))
+    right = int(round((body.x + body.width) * width))
+    bottom = int(round((body.y + body.height) * height))
+    cropped = source.crop((left, top, right, bottom))
+
+    buffer = io.BytesIO()
+    cropped.save(buffer, format="PNG", optimize=True)
+
+    key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/source-crop.png"
+    await storage.put_bytes(key, buffer.getvalue(), "image/png")
+    # Only the first crop records the pre-crop image, so cropping twice still
+    # resets all the way back rather than to the previous crop.
+    if not avatar.precrop_image_key:
+        avatar.precrop_image_key = avatar.image_key
+    avatar.image_key = key
+
+    await _translate_rig(avatar, storage, left, top, cropped.size, _json)
+    await _rebuild_thumbnail(avatar, storage)
+    await db.commit()
+    return avatar
+
+
+async def _translate_rig(avatar: Avatar, storage, left: int, top: int, size, _json) -> None:
+    """Shift every landmark by the crop origin and restate the image size."""
+    if not avatar.rig_key:
+        return
+    rig = _json.loads(await storage.get_bytes(avatar.rig_key))
+    rig["image_size"] = [size[0], size[1]]
+    rig["points"] = [[p[0] - left, p[1] - top] for p in rig.get("points", [])]
+    box = rig.get("face_box")
+    if box and len(box) == 4:
+        rig["face_box"] = [box[0] - left, box[1] - top, box[2] - left, box[3] - top]
+    await storage.put_bytes(avatar.rig_key, _json.dumps(rig).encode(), "application/json")
+
+
+async def _rebuild_rig(avatar: Avatar, storage) -> None:
+    """Re-detect after a reset, since the old rig is in cropped coordinates."""
+    from app.services.rig import build_rig, landmarks_from_image
+
+    if not avatar.rig_key or not avatar.image_key:
+        return
+    import json as _json
+
+    try:
+        points, blendshapes, size = landmarks_from_image(await storage.get_bytes(avatar.image_key))
+        rig = build_rig(points, size, blendshapes)
+    except Exception:
+        logger.exception("rig rebuild failed after crop reset for avatar %s", avatar.id)
+        return
+    await storage.put_bytes(avatar.rig_key, _json.dumps(rig).encode(), "application/json")
 
 
 @router.get("/{avatar_id}/rig-anchors")

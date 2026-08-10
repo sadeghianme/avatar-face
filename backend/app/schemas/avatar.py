@@ -88,6 +88,8 @@ class AvatarOut(BaseModel):
     # Non-null means the background has been removed and this is the photo as
     # uploaded — the UI uses it to know whether to offer remove or restore.
     original_image_key: str | None = None
+    # Non-null means the photo has been cropped and the crop can be reset.
+    precrop_image_key: str | None = None
     created_at: datetime
     updated_at: datetime
 

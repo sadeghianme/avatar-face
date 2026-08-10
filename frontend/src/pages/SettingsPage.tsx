@@ -2,6 +2,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Icon } from "../components/Icon";
+
 import { api, ApiError } from "../lib/api";
 import { useOrg } from "../lib/org";
 import { useTheme } from "../lib/theme";
@@ -87,7 +89,8 @@ export function SettingsPage() {
         <div>
           <h2 className="mb-2 font-medium">{t("theme")}</h2>
           <button className="btn-secondary" onClick={toggle}>
-            {theme === "dark" ? `☀️ ${t("light")}` : `🌙 ${t("dark")}`}
+            <Icon name={theme === "dark" ? "sun" : "moon"} className="me-1.5 inline h-4 w-4" />
+            {theme === "dark" ? t("light") : t("dark")}
           </button>
         </div>
         <div>

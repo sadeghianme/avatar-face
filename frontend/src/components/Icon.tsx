@@ -57,6 +57,41 @@ export const ICONS: Record<string, Shape[]> = {
     { d: "M4 6.5h16M9.5 6.5V4.5h5v2" },
     { d: "M6.5 6.5 7.5 20a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1l1-13.5" },
   ],
+  back: [{ d: "M20 12H5M11 6 5 12l6 6" }],
+  // Mark the face — a reticle, which is what the tool actually is.
+  target: [{ circle: [12, 12, 8] }, { circle: [12, 12, 2.2] }, { d: "M12 2v3M12 19v3M2 12h3M19 12h3" }],
+  // Generate 3D — a cube, not a sparkle. The output is geometry.
+  cube: [
+    { d: "M12 2.6 20.5 7v10L12 21.4 3.5 17V7z" },
+    { d: "M3.5 7 12 11.6 20.5 7M12 11.6V21.4" },
+  ],
+  crop: [{ d: "M6.5 2v15.5H22" }, { d: "M2 6.5h15.5V22" }],
+  // Remove background — an eraser taken to a corner.
+  eraser: [
+    { d: "M8.5 21H21" },
+    { d: "M15.5 3.5 21 9 10.5 19.5H5L2.6 17.1z" },
+    { d: "M10.5 8.5 16 14" },
+  ],
+  speaker: [{ d: "M11 5 6.5 9H3v6h3.5L11 19z" }, { d: "M15.5 9.2a4 4 0 0 1 0 5.6M18.4 6.4a8 8 0 0 1 0 11.2" }],
+  stop: [{ rect: [6, 6, 12, 12, 2] }],
+  mic: [
+    { d: "M12 3.5a2.6 2.6 0 0 1 2.6 2.6v5.4a2.6 2.6 0 0 1-5.2 0V6.1A2.6 2.6 0 0 1 12 3.5Z" },
+    { d: "M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" },
+  ],
+  ear: [{ d: "M7.5 9a4.5 4.5 0 0 1 9 0c0 2.5-2 3.4-2.8 5-.7 1.4-.2 3.4-2.2 3.4" }, { d: "M11 9a1 1 0 0 1 2 0" }],
+  // Animation tuning — sliders, matching the settings idiom.
+  sliders: [
+    { d: "M4 7h5M13 7h7M4 12h11M19 12h1M4 17h3M11 17h9" },
+    { circle: [11, 7, 2] },
+    { circle: [17, 12, 2] },
+    { circle: [9, 17, 2] },
+  ],
+  grid: [
+    { rect: [3, 3, 8, 8, 2] },
+    { rect: [13, 3, 8, 8, 2] },
+    { rect: [3, 13, 8, 8, 2] },
+    { rect: [13, 13, 8, 8, 2] },
+  ],
 };
 
 export type IconName = keyof typeof ICONS;
