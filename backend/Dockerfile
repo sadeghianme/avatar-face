@@ -12,9 +12,12 @@ RUN npm run build
 FROM python:3.12-slim
 WORKDIR /app/backend
 
-# mediapipe needs OpenCV runtime libs.
+# mediapipe needs OpenCV runtime libs. espeak-ng is used only for its
+# grapheme-to-phoneme front end (`-q --ipa`), which is what lets lip-sync work
+# in roughly a hundred languages instead of only English — a few MB for every
+# language nobody has to hand-write a rule table for.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 curl \
+    libgl1 libglib2.0-0 curl espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/pyproject.toml ./

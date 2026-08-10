@@ -23,6 +23,9 @@ from dataclasses import dataclass
 
 from app.services.tts.g2p import word_to_phonemes_stressed
 from app.services.tts.phonemes import UnknownPhone, plan
+from app.services.tts.espeak import supports as espeak_supports
+from app.services.tts.espeak import text_to_ipa
+from app.services.tts.ipa import collapse_repeats, ipa_to_visemes
 from app.services.tts.visemes import char_to_viseme
 
 # Typical articulation duration per viseme class at conversational rate (ms).
@@ -175,6 +178,14 @@ def _char_word_marks(text: str) -> list[dict]:
 # --------------------------------------------------------------------------
 _WORD_RE = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)*")
 
+# Any run of letters, in any script. `[^\W\d_]` is Python's way of writing
+# \p{L} — word characters minus digits and underscore. The Latin-only pattern
+# above is right for the English rules and useless for everything else: it
+# finds no words at all in Arabic, Russian or Chinese, which are exactly the
+# scripts where per-character shapes are least like speech. Languages written
+# without spaces come through as one long run, which espeak handles.
+_ANY_WORD_RE = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)*", re.UNICODE)
+
 
 def _phoneme_segments(word: str) -> list[Segment]:
     """Segments for one English word, or [] if it cannot be handled."""
@@ -205,14 +216,37 @@ def _char_segments(text: str) -> list[Segment]:
     return segments
 
 
+def is_english(locale: str) -> bool:
+    return locale.lower().replace("_", "-").split("-")[0] == "en"
+
+
 def uses_phonemes(locale: str) -> bool:
     """Whether this locale is driven by pronunciation rather than spelling.
 
-    Only English: the rule table encodes English orthography specifically, and
-    applying it to French or German spelling would be worse than the character
-    path, not better.
+    English has its own hand-written rules. Every other language goes through
+    espeak-ng, when it is installed — so this answers "can we pronounce this
+    right now", and degrades to the character path on a machine without it
+    rather than failing.
     """
-    return locale.lower().replace("_", "-").split("-")[0] == "en"
+    if is_english(locale):
+        return True
+    return espeak_supports(locale)
+
+
+def _ipa_segments(word: str, locale: str) -> list[Segment]:
+    """Segments for one word, via espeak-ng.
+
+    Repeats are collapsed before timing: adjacent identical visemes are one
+    mouth position held longer, not two movements, and emitting both makes a
+    doubled consonant look like a stutter.
+    """
+    ipa = text_to_ipa(word, locale)
+    if not ipa:
+        return []
+    visemes = collapse_repeats(ipa_to_visemes(ipa))
+    return [
+        Segment(v, VISEME_DURATION_MS.get(v, DEFAULT_DURATION_MS)) for v in visemes
+    ]
 
 
 def plan_utterance(text: str, locale: str = "en-US") -> tuple[list[Segment], list[dict]]:
@@ -242,11 +276,16 @@ def plan_utterance(text: str, locale: str = "en-US") -> tuple[list[Segment], lis
         elif chunk:
             emit([Segment("sil", WORD_GAP_MS)])
 
-    for match in _WORD_RE.finditer(text) if phonemic else []:
+    english = is_english(locale)
+    word_re = _WORD_RE if english else _ANY_WORD_RE
+    for match in word_re.finditer(text) if phonemic else []:
         gap(text[cursor : match.start()])
         marks.append({"char": match.start(), "t": elapsed})
         word = match.group()
-        emit(_phoneme_segments(word) or _char_segments(word))
+        # English keeps its own rules — they encode this orthography's
+        # irregularities better than a general phonemiser does.
+        segs = _phoneme_segments(word) if english else _ipa_segments(word, locale)
+        emit(segs or _char_segments(word))
         cursor = match.end()
 
     if not phonemic:
