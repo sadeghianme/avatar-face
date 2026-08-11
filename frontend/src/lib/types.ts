@@ -45,6 +45,8 @@ export interface Avatar {
   kind: AvatarKind;
   content_type: string;
   error: string | null;
+  /** A ready avatar that may still look wrong, and why. */
+  quality_note?: string | null;
   created_at: string;
   updated_at: string;
   image_url?: string | null;

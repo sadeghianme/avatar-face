@@ -53,6 +53,11 @@ class Avatar(TimestampedBase):
     rig_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     thumbnail_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Why a READY avatar may still look wrong — face too small, cropped at the
+    # frame edge, head turned. Separate from `error`, which means it failed:
+    # these are warnings about a working avatar, and conflating them would
+    # make "ready with a caveat" indistinguishable from "broken".
+    quality_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     # JSON list of snapshots taken before each edit, oldest first. See
     # app.api.avatars._snapshot.
     edit_history: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -197,6 +197,17 @@ export function AvatarDetailPage() {
         </div>
       </div>
 
+      {avatar.quality_note && avatar.status === "ready" && (
+        <div className="card mb-6 border-amber-300/60 dark:border-amber-500/30">
+          <p className="text-[13.5px] text-amber-700 dark:text-amber-400">
+            <span className="font-medium">{t("qualityNoteTitle")}</span> {avatar.quality_note}
+          </p>
+          <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">
+            {t("qualityNoteHint")}
+          </p>
+        </div>
+      )}
+
       {avatar.status === "failed" && (
         <div className="card mb-6 border-red-200 dark:border-red-900">
           <p className="field-error">{avatar.error}</p>

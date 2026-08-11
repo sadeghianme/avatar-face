@@ -177,6 +177,8 @@ const resources = {
       cropApply: "Apply crop",
       cropReset: "Reset crop",
       cropTooSmall: "Keep at least 15% of the width and height.",
+      qualityNoteTitle: "This avatar may not look its best:",
+      qualityNoteHint: "It still works. Crop the photo, or upload one where the face is larger and facing the camera.",
       imageProviders: "Image providers",
       imageProvidersHint:
         "Used to generate avatar images from a photo. Photos are sent to the provider.",
@@ -417,6 +419,8 @@ const resources = {
       cropApply: "Appliquer",
       cropReset: "Réinitialiser",
       cropTooSmall: "Gardez au moins 15 % de la largeur et de la hauteur.",
+      qualityNoteTitle: "Cet avatar peut ne pas être optimal :",
+      qualityNoteHint: "Il fonctionne quand même. Recadrez la photo, ou utilisez-en une où le visage est plus grand et de face.",
       imageProviders: "Fournisseurs d'images",
       imageProvidersHint:
         "Utilisés pour générer des avatars à partir d'une photo. Les photos sont envoyées au fournisseur.",

@@ -34,8 +34,14 @@ from PIL import Image
 from scipy.spatial import Delaunay
 
 from app.core.config import get_settings
+from app.services.riggable import check_landmarks
 
 logger = logging.getLogger("liveface.rig")
+
+
+class NoFaceDetected(Exception):
+    """The image has no usable face. Distinguished from a crash so the user
+    gets an instruction instead of a stack trace in `error`."""
 
 RIG_VERSION = 3
 NUM_LANDMARKS = 478
@@ -75,10 +81,16 @@ INNER_LIP_RING = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308,
 MOUTH_INDICES = sorted(set(OUTER_LIP_RING + INNER_LIP_RING))
 
 
-def landmarks_from_image(data: bytes) -> tuple[np.ndarray, dict[str, float] | None, tuple[int, int]]:
-    """Return (points[478,2] in pixel coords, neutral blendshapes|None, (w,h)).
+def landmarks_from_image(
+    data: bytes,
+) -> tuple[np.ndarray, dict[str, float] | None, tuple[int, int], bool]:
+    """Return (points[478,2] in pixel coords, blendshapes|None, (w,h), detected).
 
-    Tries MediaPipe when configured; falls back to the synthetic mesh.
+    `detected` is the important one. This falls back to a synthetic mesh when
+    MediaPipe finds nothing, and that mesh is perfectly proportioned — every
+    caller downstream is happy, and the avatar ships "ready" with a mouth
+    moving in empty space. Callers have to be able to tell the difference, so
+    it is returned rather than left to be guessed at.
     """
     image = Image.open(io.BytesIO(data)).convert("RGB")
     width, height = image.size
@@ -86,12 +98,12 @@ def landmarks_from_image(data: bytes) -> tuple[np.ndarray, dict[str, float] | No
     model_path = get_settings().rig_model_path
     if model_path:
         try:
-            return _mediapipe_landmarks(image), None, (width, height)
+            return _mediapipe_landmarks(image), None, (width, height), True
         except Exception:
             logger.exception("MediaPipe landmarking failed; using synthetic mesh")
 
     points = synthetic_face_mesh(width, height)
-    return points, None, (width, height)
+    return points, None, (width, height), False
 
 
 def _mediapipe_landmarks(image: Image.Image) -> np.ndarray:
@@ -268,12 +280,34 @@ async def process_avatar(avatar_id: str) -> None:
             from app.models import AvatarKind
             from app.services.model3d import build_model_rig, make_model_thumbnail
 
+            # Set before the branch: only the photo path computes one, and a
+            # 3D avatar reaching the assignment below would raise.
+            quality_note: str | None = None
+
             image_bytes = await storage.get_bytes(avatar.image_key)
             if avatar.kind == AvatarKind.model3d:
                 rig = build_model_rig(image_bytes)
                 thumb, thumb_type = make_model_thumbnail(), "image/jpeg"
             else:
-                points, blendshapes, size = landmarks_from_image(image_bytes)
+                points, blendshapes, size, detected = landmarks_from_image(image_bytes)
+
+                # An undetected face used to ship as a ready avatar whose
+                # mouth moves in the wrong place, with nothing to explain it.
+                # Only enforced when a model is installed: without one every
+                # image uses the synthetic mesh by design, which is how the
+                # stock gallery works.
+                if get_settings().rig_model_path and not detected:
+                    raise NoFaceDetected(
+                        "No face was found in this image. Use a photo where the "
+                        "face is clearly visible and looking at the camera."
+                    )
+
+                verdict = check_landmarks(points, size, detected)
+                # Geometry problems are a warning, not a failure: the avatar
+                # works, it just will not look its best, and the thresholds are
+                # heuristics that should not veto a picture the user chose.
+                quality_note = None if verdict.ok else verdict.reason
+
                 rig = build_rig(points, size, blendshapes)
                 thumb, thumb_type = make_thumbnail(image_bytes)
 
@@ -286,6 +320,12 @@ async def process_avatar(avatar_id: str) -> None:
             avatar.thumbnail_key = thumb_key
             avatar.status = AvatarStatus.ready
             avatar.error = None
+            avatar.quality_note = quality_note
+        except NoFaceDetected as exc:
+            # Expected, and the user can act on it — no stack trace.
+            logger.info("no face in avatar %s", avatar_id)
+            avatar.status = AvatarStatus.failed
+            avatar.error = str(exc)
         except Exception as exc:
             logger.exception("rig pipeline failed for avatar %s", avatar_id)
             avatar.status = AvatarStatus.failed

@@ -532,7 +532,7 @@ async def _rebuild_rig(avatar: Avatar, storage) -> None:
     import json as _json
 
     try:
-        points, blendshapes, size = landmarks_from_image(await storage.get_bytes(avatar.image_key))
+        points, blendshapes, size, _ = landmarks_from_image(await storage.get_bytes(avatar.image_key))
         rig = build_rig(points, size, blendshapes)
     except Exception:
         logger.exception("rig rebuild failed after crop reset for avatar %s", avatar.id)
