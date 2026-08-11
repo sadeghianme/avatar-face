@@ -50,6 +50,13 @@ class Settings(BaseSettings):
 
     # --- Auth ---
     jwt_secret: str = "dev-only-change-me"
+
+    # --- Transactional email (password reset) ---
+    resend_api_key: str | None = None
+    # Must be on a domain verified in Resend, or delivery is rejected.
+    email_from: str | None = None
+    # Where the reset link points — the dashboard, not the API.
+    app_base_url: str = "http://localhost:5174"
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 15
     refresh_token_days: int = 30

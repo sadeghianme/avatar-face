@@ -17,6 +17,13 @@ services:
       DATABASE_URL: sqlite+aiosqlite:////data/liveface.sqlite3
       LOCAL_STORAGE_DIR: /data/storage
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in deploy/.env}
+      # Password reset email. Without these the endpoint still answers
+      # normally — it must not reveal whether an address exists — but nothing
+      # is delivered, so the API logs an error at ERROR level instead.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      # Reset links point at the dashboard, not the API.
+      APP_BASE_URL: https://avatar.mehdisadeghian.com
       CORS_ORIGINS: https://avatar.mehdisadeghian.com
       ENVIRONMENT: production
     volumes:

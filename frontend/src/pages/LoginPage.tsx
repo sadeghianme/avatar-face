@@ -94,6 +94,14 @@ export function LoginPage() {
         </button>
 
         <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+          <Link
+            to="/forgot-password"
+            className="font-medium text-brand-600 hover:underline dark:text-brand-400"
+          >
+            {t("forgotPassword")}
+          </Link>
+        </p>
+        <p className="mt-2 text-center text-sm text-gray-500 dark:text-gray-400">
           {t("noAccount")}{" "}
           <Link to="/register" className="font-medium text-brand-600 hover:underline dark:text-brand-400">
             {t("register")}

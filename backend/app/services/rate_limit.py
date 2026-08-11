@@ -44,3 +44,25 @@ def get_embed_rate_limiter() -> SlidingWindowRateLimiter:
 def reset_embed_rate_limiter() -> None:
     global _limiter
     _limiter = None
+
+
+_reset_limiter: SlidingWindowRateLimiter | None = None
+
+
+def get_reset_rate_limiter() -> SlidingWindowRateLimiter:
+    """Password-reset requests, per email address.
+
+    Three an hour: enough for someone who mistypes or loses the first mail,
+    far short of using the endpoint to bury an inbox. Keyed by address rather
+    than by IP because the inbox is what gets hurt, and an attacker changes
+    address far more easily than a victim changes mailbox.
+    """
+    global _reset_limiter
+    if _reset_limiter is None:
+        _reset_limiter = SlidingWindowRateLimiter(limit=3, window_seconds=3600.0)
+    return _reset_limiter
+
+
+def reset_reset_rate_limiter() -> None:
+    global _reset_limiter
+    _reset_limiter = None

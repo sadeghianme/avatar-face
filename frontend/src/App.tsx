@@ -9,7 +9,9 @@ import { ApiKeysPage } from "./pages/ApiKeysPage";
 import { AvatarDetailPage } from "./pages/AvatarDetailPage";
 import { AvatarsPage } from "./pages/AvatarsPage";
 import { LandingPage } from "./pages/LandingPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { LoginPage } from "./pages/LoginPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { MembersPage } from "./pages/MembersPage";
 import { NewAvatarPage } from "./pages/NewAvatarPage";
 import { RegisterPage } from "./pages/RegisterPage";
@@ -46,6 +48,10 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<GuestOnly><LoginPage /></GuestOnly>} />
       <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
+      <Route path="/forgot-password" element={<GuestOnly><ForgotPasswordPage /></GuestOnly>} />
+      {/* Not GuestOnly: a stale session in another tab must not block a reset
+          link, which is often opened exactly because the account is stuck. */}
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/invite/:token" element={<AcceptInvitePage />} />
 
       {/* The app itself lives under /app. */}
