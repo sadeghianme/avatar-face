@@ -10,6 +10,8 @@ import pytest
 from app.services.imagegen import STYLES, build_prompt
 from app.services.riggable import MIN_FACE_FRACTION, check_landmarks
 
+RIG_REQUIREMENTS_MARKER = "The result must be"
+
 SIZE = (1024, 1024)
 
 
@@ -90,9 +92,26 @@ def test_every_style_carries_the_rig_requirements(style):
 
 
 def test_an_image_to_image_prompt_asks_to_keep_the_likeness():
+    """Likeness described as structure, not rendering.
+
+    An earlier version asked to keep "skin tone and texture", which pulled
+    every style back toward the photograph — measured, the three stylised
+    outputs differed from each other by 10-17 while each differed from the
+    source by ~40. Proportions and hair survive a restyle; surface does not.
+    """
     prompt = build_prompt("anime", has_source=True)
     assert "recognisable" in prompt
-    assert "Do not beautify" in prompt
+    assert "face proportions" in prompt
+    assert "texture" not in prompt.split(RIG_REQUIREMENTS_MARKER)[0]
+
+
+def test_a_stylised_prompt_says_it_is_not_a_retouch():
+    """The instruction has to say what the picture IS, or the model returns a
+    lightly polished version of the input for every style."""
+    for style in ("anime", "illustrated", "render3d"):
+        assert "not a retouch" in build_prompt(style, has_source=True), style
+    # Photoreal is the one style where staying close to the photo is right.
+    assert "not a retouch" not in build_prompt("photoreal", has_source=True)
 
 
 def test_a_from_scratch_prompt_does_not_reference_a_photograph():

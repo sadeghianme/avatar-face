@@ -47,18 +47,38 @@ RIG_REQUIREMENTS = (
     "no objects in front of the face, no extreme camera angle, no tilted head."
 )
 
+# Style first, and committed. An earlier version described each style in a
+# single mild clause and asked hard for identity preservation; measured on a
+# real portrait, the three stylised outputs differed from each other by only
+# 10-17 (mean abs, 0-255) while each differed from the source by ~40. In other
+# words every style produced the same thing: a lightly polished photograph.
+# The instruction has to say what the picture IS, not merely tint it.
 STYLES: dict[str, str] = {
     "photoreal": (
-        "a polished, professional photographic headshot with soft studio lighting"
+        "a polished professional photographic headshot, soft studio lighting, "
+        "shallow depth of field, natural skin texture"
     ),
     "illustrated": (
-        "a clean vector-style illustrated portrait with flat colour and simple shading"
+        "a flat vector illustration: bold clean outlines, large areas of flat "
+        "colour, simplified shading with no gradients or photographic texture. "
+        "It should read as a drawing, not a photograph"
     ),
-    "anime": "an anime-style portrait with clean linework and cel shading",
+    "anime": (
+        "an anime illustration: cel shading with hard-edged shadow shapes, "
+        "large stylised eyes with visible highlights, simplified nose and mouth, "
+        "clean ink linework, flat colour blocking. Unmistakably anime, "
+        "definitely not photorealistic"
+    ),
     "render3d": (
-        "a friendly stylised 3D character render, like a modern animated feature"
+        "a stylised 3D character render in the manner of a modern animated "
+        "feature: smooth subsurface-scattering skin, slightly exaggerated "
+        "proportions with larger eyes, soft cinematic key light, clearly a "
+        "rendered character rather than a photograph"
     ),
 }
+
+# Which styles must actively resist looking like the source photograph.
+_STYLISED = {"illustrated", "anime", "render3d"}
 
 
 class ImageGenUnavailable(RuntimeError):
@@ -115,15 +135,23 @@ def shrink_source(data: bytes) -> tuple[bytes, str]:
 def build_prompt(style: str, has_source: bool, extra: str = "") -> str:
     look = STYLES.get(style, STYLES["photoreal"])
     if has_source:
+        # Identity is described as structure, not rendering. Asking to keep
+        # "skin tone and texture" pulls every style back toward the photograph;
+        # asking to keep the face's proportions does not.
         subject = (
-            f"Redraw the person in this photograph as {look}. "
-            "Keep their identity clearly recognisable — same face shape, hair, "
-            "skin tone and apparent age. Do not beautify or change their features."
+            f"Redraw this person as {look}. "
+            "Keep them recognisable: same face proportions, same hairstyle and "
+            "hair colour, same apparent age and ethnicity, same clothing. "
         )
+        if style in _STYLISED:
+            subject += (
+                "This is a full stylistic reinterpretation, not a retouch of "
+                "the photograph — commit completely to the style above. "
+            )
     else:
-        subject = f"Create {look} of a plausible person."
+        subject = f"Create {look} of a plausible person. "
     note = f" {extra.strip()}" if extra.strip() else ""
-    return f"{subject} {RIG_REQUIREMENTS}{note}"
+    return f"{subject}{RIG_REQUIREMENTS}{note}"
 
 
 async def generate(
