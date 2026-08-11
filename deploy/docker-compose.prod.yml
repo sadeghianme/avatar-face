@@ -22,6 +22,9 @@ services:
       # is delivered, so the API logs an error at ERROR level instead.
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
+      # Avatar image generation. Absent means the endpoint reports itself
+      # unavailable rather than half-working.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # Reset links point at the dashboard, not the API.
       APP_BASE_URL: https://avatar.mehdisadeghian.com
       CORS_ORIGINS: https://avatar.mehdisadeghian.com

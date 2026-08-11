@@ -104,6 +104,8 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str | None = None
     google_tts_credentials_json: str | None = None
     openai_api_key: str | None = None
+    # Avatar image generation (Gemini image-to-image).
+    gemini_api_key: str | None = None
 
     # --- Credentials encryption (Fernet). Falls back to a key derived from
     # jwt_secret so encrypted-at-rest works out of the box. ---

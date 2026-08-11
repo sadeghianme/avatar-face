@@ -24,6 +24,9 @@ from app.schemas.avatar import (
     RigFit,
     RigFitResult,
 )
+from uuid import uuid4
+
+from app.services.imagegen import STYLES as GEN_STYLES
 from app.services.rig import process_avatar
 from app.services.rig_fit import RegionMarks, apply_anchors, current_anchors
 from app.services.segment import SegmentationUnavailable, remove_background
@@ -642,3 +645,125 @@ async def delete_avatar(avatar_id: str, ctx: OrgMember, db: DB):
             await storage.delete(key)
     await db.delete(avatar)
     await db.commit()
+
+
+class GenerateRequest(BaseModel):
+    """Generate candidate avatar images.
+
+    `source_avatar_id` starts from an existing avatar's photo (image-to-image);
+    omitting it generates from scratch.
+    """
+
+    style: str = Field(default="photoreal")
+    source_avatar_id: str | None = None
+    count: int = Field(default=2, ge=1, le=4)
+    note: str = Field(default="", max_length=300)
+
+
+# Each attempt costs money and ~10s, so the ceiling is low. Two accepted
+# candidates out of four tries is a normal outcome; zero means the source or
+# the style is fighting the rig requirements, and more tries will not fix it.
+MAX_GENERATION_ATTEMPTS = 6
+
+
+@router.post("/generate")
+async def generate_candidates(
+    body: GenerateRequest, ctx: OrgMember, db: DB
+) -> dict:
+    """Generate images and keep only the ones the rig can actually use.
+
+    A picture that looks right is not the same as one that works: rig.py falls
+    back to a synthetic mesh when no face is found, so an unusable image would
+    otherwise sail through and become a "ready" avatar whose mouth moves in
+    the wrong place. Every candidate is put through detection here, and the
+    rejected ones are reported rather than hidden — "the head is turned away"
+    tells the user what to change; a silent retry does not.
+    """
+    from app.services.imagegen import ImageGenUnavailable, generate
+    from app.services.riggable import check_image
+
+    if body.style not in GEN_STYLES:
+        raise Validation422(f"style must be one of {sorted(GEN_STYLES)}", code="unknown_style")
+
+    storage = get_storage()
+    source: bytes | None = None
+    if body.source_avatar_id:
+        origin = await _get_avatar(db, ctx.org.id, body.source_avatar_id)
+        if origin.kind != AvatarKind.photo or not origin.image_key:
+            raise Conflict409("The source avatar is not a photo", code="not_a_photo")
+        source = await storage.get_bytes(origin.image_key)
+
+    accepted: list[dict] = []
+    rejected: list[str] = []
+    attempts = 0
+    while len(accepted) < body.count and attempts < MAX_GENERATION_ATTEMPTS:
+        attempts += 1
+        try:
+            result = await generate(body.style, source, extra=body.note)
+        except ImageGenUnavailable as exc:
+            raise Conflict409(
+                "Image generation is not configured on this server",
+                code="imagegen_unavailable",
+            ) from exc
+        except Exception as exc:
+            logger.exception("generation attempt failed")
+            rejected.append(str(exc)[:120])
+            continue
+
+        verdict = check_image(result.image)
+        if not verdict.ok:
+            rejected.append(verdict.summary)
+            continue
+
+        # Candidates live outside any avatar until one is chosen, so an
+        # abandoned generation leaves no half-made avatar in the list.
+        key = f"orgs/{ctx.org.id}/candidates/{uuid4().hex}.png"
+        await storage.put_bytes(key, result.image, "image/png")
+        accepted.append(
+            {
+                "key": key,
+                "url": await storage.presign_get(key),
+                "face_fraction": round(verdict.face_fraction, 3),
+            }
+        )
+
+    return {
+        "candidates": accepted,
+        "rejected": rejected,
+        "attempts": attempts,
+    }
+
+
+class FromCandidateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    key: str
+
+
+@router.post("/from-candidate", response_model=AvatarOut, status_code=201)
+async def create_from_candidate(
+    body: FromCandidateRequest, ctx: OrgMember, db: DB, background: BackgroundTasks
+) -> Avatar:
+    """Turn a chosen candidate into a real avatar."""
+    storage = get_storage()
+    # The key is client-supplied, so it is checked against this org's own
+    # candidate prefix — otherwise it would read any object in storage.
+    prefix = f"orgs/{ctx.org.id}/candidates/"
+    if not body.key.startswith(prefix) or ".." in body.key:
+        raise Validation422("Unknown candidate", code="unknown_candidate")
+    if not await storage.exists(body.key):
+        raise Validation422("That candidate has expired", code="unknown_candidate")
+
+    avatar = Avatar(
+        org_id=ctx.org.id,
+        created_by_id=ctx.membership.user_id,
+        name=body.name,
+        kind=AvatarKind.photo,
+        content_type="image/png",
+    )
+    db.add(avatar)
+    await db.flush()
+    avatar.image_key = f"orgs/{ctx.org.id}/avatars/{avatar.id}/source.png"
+    await storage.put_bytes(avatar.image_key, await storage.get_bytes(body.key), "image/png")
+    await db.commit()
+    background.add_task(process_avatar, avatar.id)
+    return avatar
