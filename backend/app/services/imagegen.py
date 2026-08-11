@@ -25,6 +25,13 @@ import httpx
 
 logger = logging.getLogger("liveface.imagegen")
 
+# The source is billed as input tokens, and a portrait carries no useful
+# detail past this for the model's purposes — it is redrawing a face, not
+# retouching one. A 1254px PNG source costs roughly ten times what this does
+# and produces the same result.
+SOURCE_MAX_EDGE = 1024
+SOURCE_QUALITY = 88
+
 MODEL = "gemini-2.5-flash-image"
 API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
 TIMEOUT_SECONDS = 90
@@ -80,6 +87,31 @@ def configured() -> bool:
     return bool(api_key())
 
 
+def shrink_source(data: bytes) -> tuple[bytes, str]:
+    """Downscale and re-encode the source before sending it.
+
+    Input images are billed by token count, and an over-large source is the
+    easiest way to exhaust a quota for nothing: the model is redrawing the
+    face, not retouching it, so detail beyond SOURCE_MAX_EDGE buys nothing.
+    JPEG rather than PNG for the same reason — the source is a photograph and
+    lossless is wasted on it.
+    """
+    import io
+
+    from PIL import Image
+
+    try:
+        image = Image.open(io.BytesIO(data)).convert("RGB")
+        if max(image.size) > SOURCE_MAX_EDGE:
+            image.thumbnail((SOURCE_MAX_EDGE, SOURCE_MAX_EDGE), Image.LANCZOS)
+        out = io.BytesIO()
+        image.save(out, format="JPEG", quality=SOURCE_QUALITY, optimize=True)
+        return out.getvalue(), "image/jpeg"
+    except Exception:
+        logger.exception("could not shrink the source; sending it as-is")
+        return data, "image/png"
+
+
 def build_prompt(style: str, has_source: bool, extra: str = "") -> str:
     look = STYLES.get(style, STYLES["photoreal"])
     if has_source:
@@ -104,13 +136,10 @@ async def generate(
 
     parts: list[dict] = [{"text": build_prompt(style, source is not None, extra)}]
     if source is not None:
+        payload, mime = shrink_source(source)
+        logger.info("source %dKB -> %dKB", len(source) // 1024, len(payload) // 1024)
         parts.append(
-            {
-                "inline_data": {
-                    "mime_type": source_mime,
-                    "data": base64.b64encode(source).decode(),
-                }
-            }
+            {"inline_data": {"mime_type": mime, "data": base64.b64encode(payload).decode()}}
         )
 
     async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:
