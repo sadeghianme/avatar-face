@@ -107,7 +107,8 @@ export function SettingsPage() {
         </div>
       </section>
 
-      {isOwner && orgId && <VoiceProvidersCard orgId={orgId} />}
+      {isOwner && orgId && <ProvidersCard orgId={orgId} kind="voice" />}
+      {isOwner && orgId && <ProvidersCard orgId={orgId} kind="image" />}
     </div>
   );
 }
@@ -118,9 +119,10 @@ const FIELD_LABELS: Record<string, string> = {
   elevenlabs_api_key: "API key",
   google_tts_credentials_json: "Service-account JSON (or file path)",
   openai_api_key: "API key",
+  gemini_api_key: "API key",
 };
 
-function VoiceProvidersCard({ orgId }: { orgId: string }) {
+function ProvidersCard({ orgId, kind }: { orgId: string; kind: "voice" | "image" }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -148,6 +150,7 @@ function VoiceProvidersCard({ orgId }: { orgId: string }) {
       });
       await queryClient.invalidateQueries({ queryKey: ["integrations", orgId] });
       await queryClient.invalidateQueries({ queryKey: ["tts-providers"] });
+      await queryClient.invalidateQueries({ queryKey: ["imagegen"] });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));
     }
@@ -165,10 +168,15 @@ function VoiceProvidersCard({ orgId }: { orgId: string }) {
 
   return (
     <section className="card">
-      <h2 className="mb-4 font-medium">{t("voiceProviders")}</h2>
+      <h2 className="mb-1 font-medium">
+        {t(kind === "image" ? "imageProviders" : "voiceProviders")}
+      </h2>
+      <p className="mb-4 text-[13px] text-gray-500 dark:text-gray-400">
+        {t(kind === "image" ? "imageProvidersHint" : "voiceProvidersHint")}
+      </p>
       {error && <p className="field-error mb-3">{error}</p>}
       <div className="flex flex-col gap-5">
-        {integrations?.map((integration) => (
+        {integrations?.filter((i) => i.kind === kind).map((integration) => (
           <div
             key={integration.provider}
             className="rounded-lg border border-gray-200 p-4 dark:border-line"

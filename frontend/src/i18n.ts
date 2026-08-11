@@ -177,6 +177,10 @@ const resources = {
       cropApply: "Apply crop",
       cropReset: "Reset crop",
       cropTooSmall: "Keep at least 15% of the width and height.",
+      imageProviders: "Image providers",
+      imageProvidersHint:
+        "Used to generate avatar images from a photo. Photos are sent to the provider.",
+      voiceProvidersHint: "Used to synthesise speech. Leave empty to use the free browser voices.",
       forgotPassword: "Forgot your password?",
       forgotTitle: "Reset your password",
       forgotSubtitle: "We'll email you a link to choose a new one.",
@@ -413,6 +417,10 @@ const resources = {
       cropApply: "Appliquer",
       cropReset: "Réinitialiser",
       cropTooSmall: "Gardez au moins 15 % de la largeur et de la hauteur.",
+      imageProviders: "Fournisseurs d'images",
+      imageProvidersHint:
+        "Utilisés pour générer des avatars à partir d'une photo. Les photos sont envoyées au fournisseur.",
+      voiceProvidersHint: "Utilisés pour la synthèse vocale. Laissez vide pour les voix du navigateur.",
       forgotPassword: "Mot de passe oublié ?",
       forgotTitle: "Réinitialiser le mot de passe",
       forgotSubtitle: "Nous vous enverrons un lien par e-mail.",

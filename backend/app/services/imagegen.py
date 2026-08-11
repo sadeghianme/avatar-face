@@ -64,10 +64,20 @@ class Generated:
     mime: str
 
 
-def configured() -> bool:
-    from app.core.config import get_settings
+def api_key() -> str | None:
+    """The key, from the dashboard if set there, otherwise the environment.
 
-    return bool(get_settings().gemini_api_key)
+    Through the credential overlay rather than settings directly, so a key
+    entered in Settings takes effect without a redeploy — which is the whole
+    point of having that page.
+    """
+    from app.core.credentials import credentials
+
+    return credentials.get("gemini_api_key")
+
+
+def configured() -> bool:
+    return bool(api_key())
 
 
 def build_prompt(style: str, has_source: bool, extra: str = "") -> str:
@@ -88,10 +98,8 @@ async def generate(
     style: str, source: bytes | None = None, source_mime: str = "image/png", extra: str = ""
 ) -> Generated:
     """One candidate. Raises ImageGenUnavailable or RuntimeError on failure."""
-    from app.core.config import get_settings
-
-    settings = get_settings()
-    if not settings.gemini_api_key:
+    key = api_key()
+    if not key:
         raise ImageGenUnavailable("gemini_api_key is not set")
 
     parts: list[dict] = [{"text": build_prompt(style, source is not None, extra)}]
@@ -108,7 +116,7 @@ async def generate(
     async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:
         response = await client.post(
             API_URL,
-            headers={"x-goog-api-key": settings.gemini_api_key},
+            headers={"x-goog-api-key": key},
             json={"contents": [{"parts": parts}]},
         )
 
@@ -130,3 +138,25 @@ async def generate(
     # A response with only text is usually a refusal, and the text says why.
     logger.error("gemini returned no image: %s", response.text[:400])
     raise RuntimeError("the model returned no image")
+
+
+async def verify_key() -> dict:
+    """Is the configured key usable? Cheap — no image is generated.
+
+    Fetching the model description exercises authentication and the model name
+    together, which are the two things that are actually wrong when this fails.
+    """
+    key = api_key()
+    if not key:
+        return {"ok": False, "error": "no API key set"}
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.get(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}",
+                headers={"x-goog-api-key": key},
+            )
+    except httpx.HTTPError as exc:
+        return {"ok": False, "error": str(exc)[:160]}
+    if response.status_code >= 300:
+        return {"ok": False, "error": f"{response.status_code}: {response.text[:160]}"}
+    return {"ok": True, "model": MODEL}

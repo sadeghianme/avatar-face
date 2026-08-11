@@ -106,6 +106,8 @@ export interface IntegrationField {
 
 export interface Integration {
   provider: string;
+  /** "voice" or "image" — decides the section and what Test does. */
+  kind: "voice" | "image";
   fields: IntegrationField[];
   configured: boolean;
 }

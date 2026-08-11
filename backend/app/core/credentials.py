@@ -26,8 +26,22 @@ CREDENTIAL_FIELDS: dict[str, list[str]] = {
     "elevenlabs": ["elevenlabs_api_key"],
     "google": ["google_tts_credentials_json"],
     "openai": ["openai_api_key"],
+    # Image generation, not speech — grouped here anyway so there is one
+    # place a deployment's provider secrets live.
+    "gemini": ["gemini_api_key"],
 }
 ALL_CREDENTIAL_NAMES = [name for fields in CREDENTIAL_FIELDS.values() for name in fields]
+
+# What each provider is for. The dashboard groups by this, and the "test"
+# action dispatches on it — asking the speech registry to test an image
+# provider fails in a way that looks like a broken key.
+PROVIDER_KIND: dict[str, str] = {
+    "azure": "voice",
+    "elevenlabs": "voice",
+    "google": "voice",
+    "openai": "voice",
+    "gemini": "image",
+}
 
 
 def _fernet() -> Fernet:

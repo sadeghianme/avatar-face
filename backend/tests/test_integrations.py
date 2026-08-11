@@ -12,11 +12,35 @@ async def test_get_integrations_initial_state(client):
     response = await client.get(f"/orgs/{org_id}/integrations", headers=headers)
     assert response.status_code == 200
     providers = {p["provider"] for p in response.json()}
-    assert providers == {"azure", "elevenlabs", "google", "openai"}
+    assert providers == {"azure", "elevenlabs", "google", "openai", "gemini"}
     for provider in response.json():
         assert provider["configured"] is False
         for field in provider["fields"]:
             assert field["source"] == "unset"
+
+
+async def test_providers_declare_what_they_are_for(client):
+    """The dashboard groups by kind, and `test` dispatches on it — asking the
+    speech registry to test an image provider fails in a way that reads as a
+    broken key rather than a wrong question."""
+    headers = await register_and_login(client, "kinds")
+    org_id = await create_org(client, headers)
+    response = await client.get(f"/orgs/{org_id}/integrations", headers=headers)
+    kinds = {p["provider"]: p["kind"] for p in response.json()}
+    assert kinds["gemini"] == "image"
+    assert kinds["elevenlabs"] == "voice"
+    assert set(kinds.values()) <= {"voice", "image"}
+
+
+async def test_testing_an_image_provider_without_a_key_says_so(client):
+    """And does not fall through to the speech registry."""
+    headers = await register_and_login(client, "imgtest")
+    org_id = await create_org(client, headers)
+    response = await client.post(f"/orgs/{org_id}/integrations/gemini/test", headers=headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["ok"] is False
+    assert "key" in body["error"].lower()
 
 
 async def test_put_credential_masked_and_effective(client):
