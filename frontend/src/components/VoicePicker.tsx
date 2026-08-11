@@ -14,6 +14,17 @@ export interface VoiceSelection {
   locale: string;
 }
 
+/** The voice a fresh panel starts on.
+ *
+ * Device voices when the browser has them; the offline tone generator is the
+ * zero-dependency fallback, not the experience.
+ */
+export function defaultVoiceSelection(): VoiceSelection {
+  return BrowserTTS.supported()
+    ? { provider: BROWSER_PROVIDER, voice: "", locale: "en-US" }
+    : { provider: "offline", voice: "offline-warm", locale: "en-US" };
+}
+
 export function VoicePicker({
   value,
   onChange,

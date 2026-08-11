@@ -12,6 +12,7 @@ import { AvatarPreview } from "../components/AvatarPreview";
 import { EmbedSnippet } from "../components/EmbedSnippet";
 import { PrepProgress } from "../components/PrepProgress";
 import { SpeakPanel } from "../components/SpeakPanel";
+import { defaultVoiceSelection, type VoiceSelection } from "../components/VoicePicker";
 import { StatusBadge } from "../components/StatusBadge";
 import { TuningPanel } from "../components/TuningPanel";
 import { api } from "../lib/api";
@@ -28,6 +29,9 @@ export function AvatarDetailPage() {
   const [debugMesh, setDebugMesh] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
   const [cropping, setCropping] = useState(false);
+  // Owned here so the embed snippet reproduces the voice that was just
+  // tested — otherwise the copied snippet speaks en-US whatever was picked.
+  const [voice, setVoice] = useState<VoiceSelection>(defaultVoiceSelection);
   const [busyBg, setBusyBg] = useState(false);
 
   const { data: avatar, isError } = useQuery({
@@ -244,13 +248,18 @@ export function AvatarDetailPage() {
             )}
           </div>
           <div className="flex flex-col gap-6">
-            <SpeakPanel engine={engine} orgId={current.id} />
+            <SpeakPanel
+              engine={engine}
+              orgId={current.id}
+              selection={voice}
+              onSelectionChange={setVoice}
+            />
             <TuningPanel
               engine={engine}
               avatarId={avatar.id}
               is3d={avatar.kind === "model3d"}
             />
-            <EmbedSnippet avatarId={avatar.id} />
+            <EmbedSnippet avatarId={avatar.id} voice={voice} />
           </div>
         </div>
       )}

@@ -12,26 +12,33 @@ import { useTranslation } from "react-i18next";
 
 import { Icon } from "./Icon";
 import { api, ApiError } from "../lib/api";
-import { BROWSER_PROVIDER, VoicePicker, type VoiceSelection } from "./VoicePicker";
+import {
+  BROWSER_PROVIDER,
+  VoicePicker,
+  defaultVoiceSelection,
+  type VoiceSelection,
+} from "./VoicePicker";
 
 export function SpeakPanel({
   engine,
   orgId,
+  selection: controlledSelection,
+  onSelectionChange,
 }: {
   engine: SpeechPlayer | null;
   orgId: string;
+  /** Controlled when supplied — the avatar page owns it so the embed snippet
+   *  can reproduce the voice that was tested. Standalone callers omit both. */
+  selection?: VoiceSelection;
+  onSelectionChange?: (selection: VoiceSelection) => void;
 }) {
   const { t, i18n } = useTranslation();
   // Prefilled rather than empty: an empty box disables Speak, so the first
   // thing the page offers is a dead button and a blank field.
   const [text, setText] = useState(() => t("speakSample"));
-  // Default to the device's real voices when available; the offline tone
-  // generator is the zero-dependency fallback, not the experience.
-  const [selection, setSelection] = useState<VoiceSelection>(() =>
-    BrowserTTS.supported()
-      ? { provider: BROWSER_PROVIDER, voice: "", locale: "en-US" }
-      : { provider: "offline", voice: "offline-warm", locale: "en-US" }
-  );
+  const [ownSelection, setOwnSelection] = useState<VoiceSelection>(defaultVoiceSelection);
+  const selection = controlledSelection ?? ownSelection;
+  const setSelection = onSelectionChange ?? setOwnSelection;
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
