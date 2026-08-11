@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
+import { GeneratePanel } from "../components/GeneratePanel";
 import { api, ApiError, uploadWithProgress } from "../lib/api";
 import { useOrg } from "../lib/org";
 import type { Avatar, StockAvatar } from "../lib/types";
@@ -148,6 +149,10 @@ export function NewAvatarPage() {
         </div>
       )}
       {error && <p className="field-error mt-3">{error}</p>}
+
+      <h2 className="mb-1 mt-10 text-lg font-medium">{t("genTitle")}</h2>
+      <p className="mb-3 text-[13px] text-gray-500 dark:text-gray-400">{t("genSubtitle")}</p>
+      {current && <GeneratePanel orgId={current.id} />}
 
       <h2 className="mb-3 mt-10 text-lg font-medium">{t("model3dTitle")}</h2>
       <form
