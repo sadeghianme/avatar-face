@@ -36,6 +36,14 @@ const EYE_CORNERS: [number, number][] = [
   [33, 133],
   [263, 362],
 ];
+// The second eye detector: MediaPipe's iris ring — a center plus four rim
+// points per eye. Gives the pupil's position and radius directly, so the
+// gaze shift can be confined to a circle around the iris instead of the
+// whole eye opening.
+const IRISES: [number, number[]][] = [
+  [468, [469, 470, 471, 472]],
+  [473, [474, 475, 476, 477]],
+];
 
 export interface Sample {
   lum: number;
@@ -1456,14 +1464,16 @@ export class AvatarEngine {
    * twice. The rule that survives arbitrary uploads is: never invent eye
    * pixels.
    *
-   * So nothing is synthesised here. The texture region around the eye —
-   * iris, sclera, catchlight, whatever the artist drew — is redrawn as one
-   * piece, offset by the gaze, clipped to the eye opening built from the
-   * deformed lid points. One copy, so there is exactly one iris and one
-   * catchlight; the clip follows the lids, so blinks close over it and
-   * nothing ever paints outside the opening. The offsets are capped small:
-   * at a few pixels the sliver entering at the trailing corner is adjacent
-   * sclera or caruncle, which is what lives there anyway.
+   * So nothing is synthesised here. The texture region around the iris —
+   * iris, catchlight, surrounding sclera, whatever the artist drew — is
+   * redrawn as one piece, offset by the gaze, clipped to the intersection
+   * of TWO detectors: the eye opening built from the deformed lid points,
+   * and a circle around MediaPipe's iris ring. The circle is what makes
+   * this survive painted eyes: the clip-vs-original seam lands in sclera
+   * (white meeting white) instead of on the eyeliner and lashes, where the
+   * lid-polygon-only version doubled the lash line. One copy, so there is
+   * exactly one iris and one catchlight; the lid clip follows blinks; the
+   * shift is capped well inside the circle so the iris never crosses it.
    */
   private drawEyes(pts: Point[]): void {
     const gx = Math.max(-0.6, Math.min(0.6, this.gaze.x));
@@ -1492,13 +1502,19 @@ export class AvatarEngine {
       if (!a || !b || !ta || !tb) continue;
       const eyeW = Math.hypot(b.x - a.x, b.y - a.y);
       if (eyeW < 3) continue;
-      // Stylised faces get NO gaze shift at all. When an eye is much wider
-      // than its share of the interocular span (human ratio ≈ 0.5, anime
-      // 0.7+), the eye is painted art: hard eyeliner and lashes right at
-      // the clip boundary, where any shifted copy of the iris/sclera lands
-      // as a doubled lash line. Blinks still work — they deform the mesh,
-      // not the texture.
-      if (interOc > 0 && eyeW > interOc * 0.58) continue;
+
+      // The pupil detector: iris center and radius from the ring points.
+      const [ic, ring] = IRISES[e];
+      const c = pts[ic], tc = this.texPoints[ic];
+      if (!c || !tc) continue;
+      let r = 0;
+      for (const i of ring) {
+        const q = pts[i];
+        if (!q) { r = 0; break; }
+        r += Math.hypot(q.x - c.x, q.y - c.y);
+      }
+      r /= 4;
+      if (r < 2) continue;
 
       // The opening: corner, upper lid, corner, lower lid back. Built from
       // the DEFORMED points, so a blink shrinks the clip and mid-blink the
@@ -1514,21 +1530,29 @@ export class AvatarEngine {
       }
       ctx.closePath();
       ctx.clip();
+      // ∩ the iris circle, generous enough to hold the shifted iris plus a
+      // sclera margin where the seam can hide.
+      const R = r * 1.5;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, R, 0, Math.PI * 2);
+      ctx.clip();
 
-      // Source and destination boxes around the eye, mapped through the same
-      // texture<->canvas ratio the triangles use, so the content lands 1:1.
-      const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-      const tcx = (ta.x + tb.x) / 2, tcy = (ta.y + tb.y) / 2;
+      // Shift, capped twice: within the circle (so the iris rim never
+      // reaches the clip edge) and against the interocular distance (so a
+      // giant stylised iris still moves a believable few pixels).
+      const capX = Math.min(r * 0.35, interOc * 0.05);
+      const capY = Math.min(r * 0.25, interOc * 0.035);
+      const sx = gx * capX, sy = gy * capY;
+
+      // Source box around the iris in texture space, mapped through the
+      // same texture<->canvas ratio the triangles use so content lands 1:1.
       const eyeWt = Math.hypot(tb.x - ta.x, tb.y - ta.y);
-      const hw = eyeW * 1.2, hh = eyeW * 0.8;
-      const hwT = eyeWt * 1.2, hhT = eyeWt * 0.8;
-
+      const k = eyeWt / eyeW; // texture px per canvas px
+      const m = R + 3;
       ctx.drawImage(
         this.texture,
-        tcx - hwT, tcy - hhT, hwT * 2, hhT * 2,
-        cx - hw + gx * Math.min(eyeW, interOc * 0.4) * 0.13,
-        cy - hh + gy * Math.min(eyeW, interOc * 0.4) * 0.1,
-        hw * 2, hh * 2
+        tc.x - m * k, tc.y - m * k, 2 * m * k, 2 * m * k,
+        c.x - m + sx, c.y - m + sy, 2 * m, 2 * m
       );
       ctx.restore();
     }

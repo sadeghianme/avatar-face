@@ -39,6 +39,10 @@ export function AvatarPreview({
       const rig = (await rigResponse.json()) as Rig;
       if (cancelled || !canvasRef.current) return;
       engine = new AvatarEngine(canvasRef.current, rig, texture, { debugMesh, fullPhoto });
+      // Lets tooling drive poses (gaze, head) for visual checks; harmless in
+      // production, and this file's tsconfig lacks vite/client types for a
+      // clean import.meta.env.DEV gate.
+      (window as unknown as Record<string, unknown>).__lfEngine = engine;
       onEngine?.(engine);
     };
     boot().catch((err: Error) => !cancelled && setError(err.message));
