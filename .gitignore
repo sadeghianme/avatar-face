@@ -27,3 +27,6 @@ backend/models/*.task
 
 # MediaPipe models are downloaded at image build time, not committed.
 backend/models/
+
+# graphify knowledge graph output
+graphify-out/

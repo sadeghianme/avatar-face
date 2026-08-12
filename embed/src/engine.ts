@@ -15,6 +15,7 @@
  *   StrictMode.
  */
 import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
+import { HeadMotion } from "./headmotion";
 import { BlendWeights, Cue, DEFAULT_TUNING, EngineTuning, Rig, ZERO_WEIGHTS } from "./types";
 
 // Canonical MediaPipe brow rows, inner -> outer.
@@ -35,7 +36,6 @@ const EYE_CORNERS: [number, number][] = [
   [33, 133],
   [263, 362],
 ];
-const NOSE_TIP = 4;
 
 export interface Sample {
   lum: number;
@@ -329,6 +329,17 @@ export class AvatarEngine {
   private nextNodAt = 0;
   private nodPhase = 1; // 1 = finished
   private body = new BodyMotion();
+  // The head as a movable unit. The layer is the head REGION of the photo —
+  // hair, ears, skull — cut out once with feathered edges; the geometry is
+  // where it sits and how far it may travel. The first attempt moved face
+  // vertices instead, and the face slid around inside a stationary head.
+  private headDrive = new HeadMotion();
+  private headLayer: HTMLCanvasElement | null = null;
+  private headGeom: {
+    x: number; y: number; w: number; h: number;
+    pivotX: number; pivotY: number;
+    yawPx: number; pitchPx: number; faceH: number;
+  } | null = null;
   private bodyPivot = { x: 0, y: 0 };
   private swayAngle = 0;   // radians at full deflection
   private breathRise = 0;  // pixels at the top of an inhale
@@ -440,6 +451,110 @@ export class AvatarEngine {
     }));
     this.detectCutOut();
     this.measureBody();
+    this.buildHeadLayer();
+  }
+
+  /**
+   * Cut the head out of the photo, once, as its own layer.
+   *
+   * The face mesh spans eyebrows to chin — it knows nothing about hair or
+   * ears. Warping it moves the face while the rest of the head stands still,
+   * which is exactly the failure the first head-motion attempt shipped. So
+   * the unit of motion is a rectangle around the whole head, sampled from
+   * the texture with feathered edges: soft at the sides and top so a moved
+   * layer blends into the still background, and a deep fade at the neck,
+   * where a seam lands on a collar instead of across a chin.
+   */
+  private buildHeadLayer(): void {
+    this.headLayer = null;
+    this.headGeom = null;
+    const xs = this.basePoints.map((p) => p.x);
+    const ys = this.basePoints.map((p) => p.y);
+    const fx0 = Math.min(...xs), fx1 = Math.max(...xs);
+    const fy0 = Math.min(...ys), fy1 = Math.max(...ys);
+    const faceW = fx1 - fx0, faceH = fy1 - fy0;
+    if (faceW < 4 || faceH < 4) return;
+
+    const x = Math.max(0, fx0 - faceW * 0.42);
+    const y = Math.max(0, fy0 - faceH * 0.9);
+    const w = Math.min(this.canvas.width, fx1 + faceW * 0.42) - x;
+    const h = Math.min(this.canvas.height, fy1 + faceH * 0.5) - y;
+    if (w < 8 || h < 8) return;
+
+    const layer = document.createElement("canvas");
+    layer.width = Math.round(w);
+    layer.height = Math.round(h);
+    const lctx = layer.getContext("2d");
+    if (!lctx) return;
+
+    // The same canvas<->texture mapping the base draw uses.
+    const tw = this.texture.naturalWidth / this.rig.image_size[0];
+    const th = this.texture.naturalHeight / this.rig.image_size[1];
+    lctx.drawImage(
+      this.texture,
+      ((x - this.offsetX) / this.scale) * tw,
+      ((y - this.offsetY) / this.scale) * th,
+      (w / this.scale) * tw,
+      (h / this.scale) * th,
+      0, 0, w, h
+    );
+
+    // Feather. destination-out with gradients, one per edge; the bottom one
+    // is much deeper because that is the neck seam.
+    // Each gradient runs from the interior boundary OUT to the canvas edge.
+    // destination-out erases where the fill is opaque, so the interior stop
+    // must be transparent — and crucially, points beyond a gradient's start
+    // clamp to the first stop, which is what keeps the whole interior at
+    // "erase nothing". With the stops reversed, the interior clamps to
+    // full-erase and the layer comes out blank; that shipped briefly and
+    // made this entire feature a silent no-op.
+    const fade = (x0: number, y0: number, x1: number, y1: number) => {
+      const g = lctx.createLinearGradient(x0, y0, x1, y1);
+      g.addColorStop(0, "rgba(0,0,0,0)");
+      g.addColorStop(1, "rgba(0,0,0,1)");
+      lctx.fillStyle = g;
+      lctx.fillRect(0, 0, w, h);
+    };
+    lctx.globalCompositeOperation = "destination-out";
+    const side = w * 0.1, top = h * 0.08, neck = h * 0.26;
+    fade(side, 0, 0, 0);
+    fade(w - side, 0, w, 0);
+    fade(0, top, 0, 0);
+    fade(0, h - neck, 0, h);
+    lctx.globalCompositeOperation = "source-over";
+
+    this.headLayer = layer;
+    this.headGeom = {
+      x, y, w, h,
+      pivotX: (fx0 + fx1) / 2,
+      // A head pivots where it meets the spine, in the upper chest — not
+      // about its own middle, which reads as the face rotating in the skull.
+      pivotY: fy1 + faceH * 0.85,
+      // Peak travel. SitePal's measured drift is ~2-3% of head width in
+      // normal motion; these are the |pose|=1 extremes the signed-square
+      // draw rarely reaches, so typical motion sits well inside that.
+      yawPx: faceW * 0.055,
+      pitchPx: faceH * 0.03,
+      faceH,
+    };
+  }
+
+  /** Current head displacement in canvas px, plus the face's parallax share. */
+  private headOffsets(): { dx: number; dy: number; roll: number; fdx: number; fdy: number } {
+    const g = this.headGeom;
+    if (!g) return { dx: 0, dy: 0, roll: 0, fdx: 0, fdy: 0 };
+    // Ghosting: a moved layer over an intact photo leaves a sliver of the
+    // original behind it. A cut-out has its head punched out of the base, so
+    // it can travel further.
+    const s = (this.cutOut ? 1 : 0.7) * this.tuning.headMotion;
+    const nod = this.nodPhase < 1 ? Math.sin(this.nodPhase * Math.PI) : 0;
+    const dx = this.headDrive.yaw * g.yawPx * s;
+    const dy = (this.headDrive.pitch * g.pitchPx + nod * this.energy * g.faceH * 0.02) * s;
+    const roll = this.headDrive.roll * 0.035 * s;
+    // The face rides the head and adds a little of its own travel — the
+    // parallax that makes a shift read as a turn. Both parts are rigid; only
+    // their relative offset differs, so nothing can distort.
+    return { dx, dy, roll, fdx: dx * 0.35, fdy: dy * 0.25 };
   }
 
   /**
@@ -935,6 +1050,7 @@ export class AvatarEngine {
     if (this.nodPhase < 1) this.nodPhase = Math.min(1, this.nodPhase + dt / NOD_MS);
 
     this.body.update(dt, now);
+    this.headDrive.update(dt, now, this.speaking);
 
     // Saccades: eyes jump to a new fixation, then hold. While speaking the
     // gaze returns near-center more often (engaged with the listener);
@@ -961,8 +1077,7 @@ export class AvatarEngine {
 
   // --- Deformation -----------------------------------------------------------
 
-  private deformedPoints(now: number): Point[] {
-    const t = (now - this.startTime) / 1000;
+  private deformedPoints(_now: number): Point[] {
     const pts = this.basePoints.map((p) => ({ x: p.x, y: p.y }));
     const w = this.weights;
 
@@ -1042,15 +1157,9 @@ export class AvatarEngine {
       }
     }
 
-    // Face geometry for pose layers.
-    const xs = pts.map((p) => p.x);
+    // Face half-height, for expression amplitudes.
     const ys = pts.map((p) => p.y);
-    const fMinX = Math.min(...xs), fMaxX = Math.max(...xs);
-    const fMinY = Math.min(...ys), fMaxY = Math.max(...ys);
-    const fcx = (fMinX + fMaxX) / 2;
-    const fcy = (fMinY + fMaxY) / 2;
-    const fw = (fMaxX - fMinX) / 2;
-    const fh = (fMaxY - fMinY) / 2;
+    const fh = (Math.max(...ys) - Math.min(...ys)) / 2;
 
     // Eased blinks: the upper lid sweeps DOWN to the lower lid (lid skin
     // stretches over the eyeball); the lower lid rises only slightly.
@@ -1122,40 +1231,9 @@ export class AvatarEngine {
       }
     }
 
-    // Head pose (2.5D): yaw/pitch via radial-parallax dome; nose moves most.
-    const idleYaw = Math.sin(t * 0.43) * 0.25 + Math.sin(t * 0.117) * 0.2;
-    const idlePitch = Math.sin(t * 0.31 + 1.3) * 0.22;
-    const nod = this.nodPhase < 1 ? Math.sin(this.nodPhase * Math.PI) * 0.8 : 0;
-    const amp = (0.3 + this.energy * 0.5) * this.tuning.headMotion;
-    const yaw = idleYaw * amp * fw * 0.05;
-    const pitch = (idlePitch * amp + nod * this.energy) * fh * 0.04;
-    for (const p of pts) {
-      const dx = (p.x - fcx) / fw;
-      const dy = (p.y - fcy) / fh;
-      const depth = Math.max(0, 1 - (dx * dx + dy * dy)); // dome: rim ~0, nose ~1
-      p.x += yaw * depth;
-      p.y += pitch * depth;
-    }
-    // Nose nudge: it's the closest point to the camera.
-    pts[NOSE_TIP].x += yaw * 0.25;
-
-    // Roll about a neck pivot below the chin; breathing sway rides along.
-    // Skipped in fullPhoto mode: rolling the whole mesh would tear the rim
-    // away from the static photo behind it.
-    if (!this.fullPhoto) {
-      const roll = (Math.sin(t * 0.27 + 0.7) * 0.012 + Math.sin(t * 0.071) * 0.008) * amp;
-      const breathe = Math.sin(t * 0.9) * fh * 0.004;
-      const pivotX = fcx;
-      const pivotY = fMaxY + fh * 0.35;
-      const cosR = Math.cos(roll);
-      const sinR = Math.sin(roll);
-      for (const p of pts) {
-        const rx = p.x - pivotX;
-        const ry = p.y - pivotY;
-        p.x = pivotX + rx * cosR - ry * sinR;
-        p.y = pivotY + rx * sinR + ry * cosR + breathe;
-      }
-    }
+    // Head pose is applied at render time as a rigid layer transform —
+    // see buildHeadLayer. Warping vertices for it is how the face ended up
+    // sliding around inside a stationary head.
 
     // Derived midpoint vertices (mouth subdivision) follow their parents
     // through EVERY layer above — computed last, from final positions.
@@ -1201,6 +1279,29 @@ export class AvatarEngine {
       this.crop.h * this.scale
     );
 
+    // --- Head layer -------------------------------------------------------
+    //
+    // The whole head — hair included — moves as one rigid unit over the
+    // still body, with the face given a slightly larger share of the same
+    // travel (parallax), which is what makes a shift read as a turn. For a
+    // cut-out, the head is erased from the base first so the moved layer
+    // does not leave a ghost of itself behind.
+    const head = this.headOffsets();
+    const geom = this.headGeom;
+    if (geom && this.headLayer && this.cutOut) {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.drawImage(this.headLayer, geom.x, geom.y);
+      ctx.globalCompositeOperation = "source-over";
+    }
+    ctx.save();
+    if (geom && this.headLayer) {
+      ctx.translate(geom.pivotX + head.dx, geom.pivotY + head.dy);
+      ctx.rotate(head.roll);
+      ctx.translate(-geom.pivotX, -geom.pivotY);
+      ctx.drawImage(this.headLayer, geom.x, geom.y);
+      ctx.translate(head.fdx, head.fdy);
+    }
+
     for (const [a, b, c] of this.triangles) {
       this.drawWarpedTriangle(pts, a, b, c);
     }
@@ -1211,6 +1312,7 @@ export class AvatarEngine {
     this.drawMouthInterior(pts);
 
     if (this.debugMesh) this.drawDebugMesh(pts);
+    ctx.restore();
     ctx.restore();
   }
 
@@ -1329,20 +1431,70 @@ export class AvatarEngine {
     }
   }
 
-  private drawEyes(_pts: Point[]): void {
-    // Deliberately does nothing.
-    //
-    // This used to slide the iris for gaze by covering the old one and
-    // re-stamping it. Every version of that broke on some real avatar: on a
-    // portrait whose iris is 9.9 texture px the re-stamp upscales into a flat
-    // grey disc, and on painted eyes the artwork's own catchlight gets
-    // stamped a second time, so one eye ends up with two highlights.
-    //
-    // The eye is the highest-contrast thing on a face and the first place a
-    // viewer looks, so anything repainted there is noticed immediately. There
-    // is no version of "invent iris pixels" that survives contact with
-    // arbitrary uploads. The eye is left exactly as photographed; gaze now
-    // reads through head motion instead, which costs nothing and never lies.
+  /**
+   * Gaze, by sliding the photograph's own eye inside the lids.
+   *
+   * The predecessor of this method re-stamped an extracted iris disc, and
+   * every version broke on some real avatar: a 10-texture-px iris upscaled
+   * into a flat grey disc, and painted eyes got their catchlight stamped
+   * twice. The rule that survives arbitrary uploads is: never invent eye
+   * pixels.
+   *
+   * So nothing is synthesised here. The texture region around the eye —
+   * iris, sclera, catchlight, whatever the artist drew — is redrawn as one
+   * piece, offset by the gaze, clipped to the eye opening built from the
+   * deformed lid points. One copy, so there is exactly one iris and one
+   * catchlight; the clip follows the lids, so blinks close over it and
+   * nothing ever paints outside the opening. The offsets are capped small:
+   * at a few pixels the sliver entering at the trailing corner is adjacent
+   * sclera or caruncle, which is what lives there anyway.
+   */
+  private drawEyes(pts: Point[]): void {
+    const gx = Math.max(-0.6, Math.min(0.6, this.gaze.x));
+    const gy = Math.max(-0.6, Math.min(0.6, this.gaze.y));
+    if (Math.abs(gx) < 0.02 && Math.abs(gy) < 0.02) return;
+
+    const ctx = this.ctx;
+    for (let e = 0; e < 2; e++) {
+      const [c0, c1] = EYE_CORNERS[e];
+      const a = pts[c0], b = pts[c1];
+      const ta = this.texPoints[c0], tb = this.texPoints[c1];
+      if (!a || !b || !ta || !tb) continue;
+      const eyeW = Math.hypot(b.x - a.x, b.y - a.y);
+      if (eyeW < 3) continue;
+
+      // The opening: corner, upper lid, corner, lower lid back. Built from
+      // the DEFORMED points, so a blink shrinks the clip and mid-blink the
+      // patch only paints below the descended lid.
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      for (const i of UPPER_LIDS[e]) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.lineTo(b.x, b.y);
+      for (let j = LOWER_LIDS[e].length - 1; j >= 0; j--) {
+        const q = pts[LOWER_LIDS[e][j]];
+        ctx.lineTo(q.x, q.y);
+      }
+      ctx.closePath();
+      ctx.clip();
+
+      // Source and destination boxes around the eye, mapped through the same
+      // texture<->canvas ratio the triangles use, so the content lands 1:1.
+      const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+      const tcx = (ta.x + tb.x) / 2, tcy = (ta.y + tb.y) / 2;
+      const eyeWt = Math.hypot(tb.x - ta.x, tb.y - ta.y);
+      const hw = eyeW * 1.2, hh = eyeW * 0.8;
+      const hwT = eyeWt * 1.2, hhT = eyeWt * 0.8;
+
+      ctx.drawImage(
+        this.texture,
+        tcx - hwT, tcy - hhT, hwT * 2, hhT * 2,
+        cx - hw + gx * eyeW * 0.1,
+        cy - hh + gy * eyeW * 0.06,
+        hw * 2, hh * 2
+      );
+      ctx.restore();
+    }
   }
 
   /**
