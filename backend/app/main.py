@@ -1,6 +1,7 @@
 """Liveface application factory."""
 from __future__ import annotations
 
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -103,12 +104,33 @@ async def _ensure_schema(engine) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
+
+    from app.services.sweeper import run_forever as sweep_forever
+
     engine = get_engine()
     await _ensure_schema(engine)
     # Load dashboard-managed provider credentials over env settings.
     async with get_session_factory()() as db:
         await credentials.load(db)
+
+    # Staged images nobody kept. In-process on a timer so a fresh deployment
+    # cleans up without anyone installing a cron entry — see services.sweeper
+    # for why that stops being right with more than one instance.
+    settings = get_settings()
+    sweeper = None
+    if settings.candidate_retention_hours > 0:
+        sweeper = asyncio.create_task(
+            sweep_forever(settings.candidate_sweep_interval_minutes * 60)
+        )
+
     yield
+
+    if sweeper is not None:
+        sweeper.cancel()
+        # Awaited so shutdown does not race a delete that is midway through.
+        with contextlib.suppress(asyncio.CancelledError):
+            await sweeper
     await engine.dispose()
 
 

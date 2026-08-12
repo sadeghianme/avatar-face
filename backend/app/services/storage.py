@@ -41,6 +41,21 @@ class Storage:
     async def delete(self, key: str) -> None:
         raise NotImplementedError
 
+    async def sweep(self, prefix: str, older_than_seconds: int, must_contain: str) -> int:
+        """Delete objects under `prefix`, older than the cutoff, whose key
+        contains `must_contain`.
+
+        The substring is not a convenience — it is a guard. Avatar sources,
+        rigs and thumbnails live under the same `orgs/` prefix as the staging
+        area, so a sweep scoped only by prefix would delete every avatar on
+        the instance. Requiring "/candidates/" in the key means getting the
+        prefix wrong costs nothing.
+
+        Implemented per backend because there is no portable way to list: the
+        filesystem walks a directory and S3 pages through a listing.
+        """
+        raise NotImplementedError
+
 
 class LocalStorage(Storage):
     """Filesystem-backed storage with presigned-URL semantics.
@@ -91,6 +106,27 @@ class LocalStorage(Storage):
 
     async def exists(self, key: str) -> bool:
         return self._path(key).is_file()
+
+    async def sweep(self, prefix: str, older_than_seconds: int, must_contain: str) -> int:
+        import time
+
+        if not must_contain:
+            raise ValueError("must_contain is required — see Storage.sweep")
+        root = (self.root / prefix).resolve()
+        if not root.is_relative_to(self.root.resolve()) or not root.exists():
+            return 0
+        cutoff = time.time() - older_than_seconds
+        removed = 0
+        for path in root.rglob("*"):
+            if not path.is_file():
+                continue
+            key = "/" + str(path.relative_to(self.root.resolve()))
+            if must_contain not in key:
+                continue
+            if path.stat().st_mtime < cutoff:
+                path.unlink(missing_ok=True)
+                removed += 1
+        return removed
 
     async def delete(self, key: str) -> None:
         path = self._path(key)
@@ -151,6 +187,29 @@ class S3Storage(Storage):
     async def delete(self, key: str) -> None:
         async with self._client() as s3:
             await s3.delete_object(Bucket=self.bucket, Key=key)
+
+    async def sweep(self, prefix: str, older_than_seconds: int, must_contain: str) -> int:
+        from datetime import datetime, timedelta, timezone
+
+        if not must_contain:
+            raise ValueError("must_contain is required — see Storage.sweep")
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
+        removed = 0
+        async with self._client() as s3:
+            paginator = s3.get_paginator("list_objects_v2")
+            async for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
+                stale = [
+                    {"Key": obj["Key"]}
+                    for obj in page.get("Contents", [])
+                    if must_contain in "/" + obj["Key"] and obj["LastModified"] < cutoff
+                ]
+                # Batched: one request per thousand rather than per object,
+                # which matters when a month of candidates has piled up.
+                for i in range(0, len(stale), 1000):
+                    batch = stale[i : i + 1000]
+                    await s3.delete_objects(Bucket=self.bucket, Delete={"Objects": batch})
+                    removed += len(batch)
+        return removed
 
 
 _storage: Storage | None = None

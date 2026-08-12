@@ -125,6 +125,11 @@ class Settings(BaseSettings):
     # on screen means something rather than being a bare count.
     image_generation_cost_usd: float = 0.04
 
+    # Staged and generated images nobody kept. A day is far longer than any
+    # real editing session and still bounds the pile; 0 disables the sweep.
+    candidate_retention_hours: int = 24
+    candidate_sweep_interval_minutes: int = 60
+
     @property
     def storage_configured(self) -> bool:
         return all((self.r2_endpoint, self.r2_access_key, self.r2_secret))
