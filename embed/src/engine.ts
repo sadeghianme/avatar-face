@@ -124,7 +124,7 @@ function blinkEase(phase: number): number {
  * squash becomes visible.
  */
 const LID_VERTEX_SWEEP = 1.0;
-const NOD_MS = 650;
+const NOD_MS = 1050;
 
 /** Pivot depth for body sway, as a multiple of canvas height. Below the
  *  frame: a standing body turns about its feet, not its middle. */
@@ -547,9 +547,13 @@ export class AvatarEngine {
     // original behind it. A cut-out has its head punched out of the base, so
     // it can travel further.
     const s = (this.cutOut ? 1 : 0.7) * this.tuning.headMotion;
-    const nod = this.nodPhase < 1 ? Math.sin(this.nodPhase * Math.PI) : 0;
+    // sin² envelope, not sin: sin starts at its steepest, which read as the
+    // head being yanked downward at every nod onset. sin² starts and ends
+    // with zero velocity, so the dip eases in and out.
+    const p = this.nodPhase;
+    const nod = p < 1 ? Math.sin(p * Math.PI) ** 2 : 0;
     const dx = this.headDrive.yaw * g.yawPx * s;
-    const dy = (this.headDrive.pitch * g.pitchPx + nod * this.energy * g.faceH * 0.02) * s;
+    const dy = (this.headDrive.pitch * g.pitchPx + nod * this.energy * g.faceH * 0.013) * s;
     const roll = this.headDrive.roll * 0.035 * s;
     // The face rides the head and adds a little of its own travel — the
     // parallax that makes a shift read as a turn. Both parts are rigid; only
@@ -1060,11 +1064,18 @@ export class AvatarEngine {
       this.nextSaccadeAt = now + (speaking ? 900 : 1400) + Math.random() * (speaking ? 1600 : 2600);
       // Most fixations return to the viewer; only some wander. A face that
       // is usually looking somewhere else reads as distracted, not alive.
-      const spread = speaking ? 0.12 : 0.18;
-      const lookAway = Math.random() < (speaking ? 0.35 : 0.5);
-      this.gazeTarget = lookAway
-        ? { x: (Math.random() * 2 - 1) * spread, y: (Math.random() * 2 - 1) * spread * 0.5 }
-        : { x: 0, y: 0 };
+      // Wanders split into sideways glances and the occasional glance DOWN —
+      // the recollecting-your-thoughts look — which never happens with a
+      // symmetric draw because y is halved and rarely lands low.
+      const spread = speaking ? 0.2 : 0.3;
+      const roll = Math.random();
+      if (roll < (speaking ? 0.5 : 0.35)) {
+        this.gazeTarget = { x: 0, y: 0 };
+      } else if (roll < (speaking ? 0.68 : 0.55)) {
+        this.gazeTarget = { x: (Math.random() * 2 - 1) * spread * 0.6, y: spread * (1.4 + Math.random() * 0.6) };
+      } else {
+        this.gazeTarget = { x: (Math.random() * 2 - 1) * spread, y: (Math.random() * 2 - 1) * spread * 0.5 };
+      }
     }
     // Saccades are ballistic: fast jump, then a still fixation.
     // A saccade is ballistic and fast — ~35ms to cross, whatever the frame rate.
@@ -1489,8 +1500,8 @@ export class AvatarEngine {
       ctx.drawImage(
         this.texture,
         tcx - hwT, tcy - hhT, hwT * 2, hhT * 2,
-        cx - hw + gx * eyeW * 0.1,
-        cy - hh + gy * eyeW * 0.06,
+        cx - hw + gx * eyeW * 0.13,
+        cy - hh + gy * eyeW * 0.1,
         hw * 2, hh * 2
       );
       ctx.restore();
