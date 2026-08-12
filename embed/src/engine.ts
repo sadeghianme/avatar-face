@@ -516,7 +516,10 @@ export class AvatarEngine {
       lctx.fillRect(0, 0, w, h);
     };
     lctx.globalCompositeOperation = "destination-out";
-    const side = w * 0.1, top = h * 0.08, neck = h * 0.26;
+    // Wide side/top bands: hair routinely crosses this boundary (long or
+    // voluminous hair extends well past the face-derived rect), and a narrow
+    // feather there turns every head shift into a visible slice through it.
+    const side = w * 0.16, top = h * 0.13, neck = h * 0.26;
     fade(side, 0, 0, 0);
     fade(w - side, 0, w, 0);
     fade(0, top, 0, 0);
@@ -530,11 +533,12 @@ export class AvatarEngine {
       // A head pivots where it meets the spine, in the upper chest — not
       // about its own middle, which reads as the face rotating in the skull.
       pivotY: fy1 + faceH * 0.85,
-      // Peak travel. SitePal's measured drift is ~2-3% of head width in
-      // normal motion; these are the |pose|=1 extremes the signed-square
-      // draw rarely reaches, so typical motion sits well inside that.
-      yawPx: faceW * 0.055,
-      pitchPx: faceH * 0.03,
+      // Peak travel, |pose|=1 extremes the signed-square draw rarely
+      // reaches. Kept close to SitePal's measured ~2% drift: anything
+      // livelier drags the layer boundary across hair and background
+      // detail, which reads as the image tearing, not the head turning.
+      yawPx: faceW * 0.03,
+      pitchPx: faceH * 0.025,
       faceH,
     };
   }
@@ -546,7 +550,7 @@ export class AvatarEngine {
     // Ghosting: a moved layer over an intact photo leaves a sliver of the
     // original behind it. A cut-out has its head punched out of the base, so
     // it can travel further.
-    const s = (this.cutOut ? 1 : 0.7) * this.tuning.headMotion;
+    const s = (this.cutOut ? 1 : 0.5) * this.tuning.headMotion;
     // sin² envelope, not sin: sin starts at its steepest, which read as the
     // head being yanked downward at every nod onset. sin² starts and ends
     // with zero velocity, so the dip eases in and out.
@@ -554,11 +558,12 @@ export class AvatarEngine {
     const nod = p < 1 ? Math.sin(p * Math.PI) ** 2 : 0;
     const dx = this.headDrive.yaw * g.yawPx * s;
     const dy = (this.headDrive.pitch * g.pitchPx + nod * this.energy * g.faceH * 0.013) * s;
-    const roll = this.headDrive.roll * 0.035 * s;
-    // The face rides the head and adds a little of its own travel — the
-    // parallax that makes a shift read as a turn. Both parts are rigid; only
-    // their relative offset differs, so nothing can distort.
-    return { dx, dy, roll, fdx: dx * 0.35, fdy: dy * 0.25 };
+    const roll = this.headDrive.roll * 0.02 * s;
+    // NO face parallax. The face mesh redrawn at its own offset over the
+    // head layer duplicates whatever crosses the mesh hull — bangs over a
+    // forehead become two sets of bangs a few px apart, which reads as cuts
+    // through the face. One rigid unit, one offset, nothing to mismatch.
+    return { dx, dy, roll, fdx: 0, fdy: 0 };
   }
 
   /**
@@ -1072,7 +1077,7 @@ export class AvatarEngine {
       if (roll < (speaking ? 0.5 : 0.35)) {
         this.gazeTarget = { x: 0, y: 0 };
       } else if (roll < (speaking ? 0.68 : 0.55)) {
-        this.gazeTarget = { x: (Math.random() * 2 - 1) * spread * 0.6, y: spread * (1.4 + Math.random() * 0.6) };
+        this.gazeTarget = { x: (Math.random() * 2 - 1) * spread * 0.6, y: spread * (1.0 + Math.random() * 0.5) };
       } else {
         this.gazeTarget = { x: (Math.random() * 2 - 1) * spread, y: (Math.random() * 2 - 1) * spread * 0.5 };
       }
@@ -1462,8 +1467,22 @@ export class AvatarEngine {
    */
   private drawEyes(pts: Point[]): void {
     const gx = Math.max(-0.6, Math.min(0.6, this.gaze.x));
-    const gy = Math.max(-0.6, Math.min(0.6, this.gaze.y));
+    const gy = Math.max(-0.5, Math.min(0.5, this.gaze.y));
     if (Math.abs(gx) < 0.02 && Math.abs(gy) < 0.02) return;
+
+    // Shift scale is capped against the interocular distance, not just the
+    // eye's own width: stylised faces (anime) have eyes near half the face
+    // wide, and an eye-width-proportional shift slides those giant irises
+    // several px — enough to tear against the lashes at the clip boundary.
+    const eL0 = pts[EYE_CORNERS[0][0]], eL1 = pts[EYE_CORNERS[0][1]];
+    const eR0 = pts[EYE_CORNERS[1][0]], eR1 = pts[EYE_CORNERS[1][1]];
+    const interOc =
+      eL0 && eL1 && eR0 && eR1
+        ? Math.hypot(
+            (eR0.x + eR1.x - eL0.x - eL1.x) / 2,
+            (eR0.y + eR1.y - eL0.y - eL1.y) / 2
+          )
+        : 0;
 
     const ctx = this.ctx;
     for (let e = 0; e < 2; e++) {
@@ -1500,8 +1519,8 @@ export class AvatarEngine {
       ctx.drawImage(
         this.texture,
         tcx - hwT, tcy - hhT, hwT * 2, hhT * 2,
-        cx - hw + gx * eyeW * 0.13,
-        cy - hh + gy * eyeW * 0.1,
+        cx - hw + gx * Math.min(eyeW, interOc * 0.4) * 0.13,
+        cy - hh + gy * Math.min(eyeW, interOc * 0.4) * 0.1,
         hw * 2, hh * 2
       );
       ctx.restore();
