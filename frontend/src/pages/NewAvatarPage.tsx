@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { GeneratePanel } from "../components/GeneratePanel";
+import { PhotoStudio, type Staged } from "../components/PhotoStudio";
+import { Spinner } from "../components/Spinner";
 import { api, ApiError, uploadWithProgress } from "../lib/api";
 import { useOrg } from "../lib/org";
 import type { Avatar, StockAvatar } from "../lib/types";
@@ -29,26 +31,79 @@ export function NewAvatarPage() {
     queryFn: () => api.get<StockAvatar[]>("/stock-avatars"),
   });
 
+  // A photo waits here while it is edited; a .glb has nothing to edit and
+  // goes straight through as before.
+  const [staged, setStaged] = useState<Staged | null>(null);
+  const [history, setHistory] = useState<Staged[]>([]);
+  const [saving, setSaving] = useState(false);
+
   const upload = async (file: File) => {
     if (!current) return;
     setError(null);
-    // .glb files usually arrive with an empty MIME type from the browser.
-    const contentType = file.name.toLowerCase().endsWith(".glb")
-      ? "model/gltf-binary"
-      : file.type;
+    const isModel = file.name.toLowerCase().endsWith(".glb");
+
+    if (isModel) {
+      try {
+        const created = await api.post<Created>(`/orgs/${current.id}/avatars`, {
+          name: name.trim() || file.name.replace(/\.\w+$/, ""),
+          content_type: "model/gltf-binary",
+        });
+        setProgress(0);
+        await uploadWithProgress(created.upload_url, file, setProgress, "model/gltf-binary");
+        await api.post(`/orgs/${current.id}/avatars/${created.avatar.id}/uploaded`);
+        await queryClient.invalidateQueries({ queryKey: ["avatars", current.id] });
+        navigate(`/avatars/${created.avatar.id}`);
+      } catch (err) {
+        setProgress(null);
+        setError(err instanceof ApiError ? err.detail : t("error"));
+      }
+      return;
+    }
+
+    // Photos are staged instead of created. Nothing appears in the avatar
+    // list until Save, so an abandoned edit leaves nothing behind.
     try {
-      const created = await api.post<Created>(`/orgs/${current.id}/avatars`, {
-        name: name.trim() || file.name.replace(/\.\w+$/, ""),
-        content_type: contentType,
-      });
       setProgress(0);
-      await uploadWithProgress(created.upload_url, file, setProgress, contentType);
-      await api.post(`/orgs/${current.id}/avatars/${created.avatar.id}/uploaded`);
-      await queryClient.invalidateQueries({ queryKey: ["avatars", current.id] });
-      navigate(`/avatars/${created.avatar.id}`);
+      const form = new FormData();
+      form.append("file", file);
+      const next = await api.postForm<Staged>(`/orgs/${current.id}/staging`, form);
+      setProgress(null);
+      if (!name.trim()) setName(file.name.replace(/\.\w+$/, ""));
+      setStaged(next);
+      setHistory([]);
     } catch (err) {
       setProgress(null);
       setError(err instanceof ApiError ? err.detail : t("error"));
+    }
+  };
+
+  const replaceStaged = (next: Staged) => {
+    if (staged) setHistory((h) => [...h, staged]);
+    setStaged(next);
+  };
+
+  const undoStaged = () => {
+    setHistory((h) => {
+      if (!h.length) return h;
+      setStaged(h[h.length - 1]);
+      return h.slice(0, -1);
+    });
+  };
+
+  const saveStaged = async () => {
+    if (!current || !staged) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const avatar = await api.post<Avatar>(`/orgs/${current.id}/avatars/from-candidate`, {
+        name: name.trim() || "Avatar",
+        key: staged.key,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["avatars", current.id] });
+      navigate(`/avatars/${avatar.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : t("error"));
+      setSaving(false);
     }
   };
 
@@ -92,6 +147,49 @@ export function NewAvatarPage() {
     <div>
       <h1 className="mb-6 text-2xl font-semibold">{t("newAvatar")}</h1>
 
+      {staged ? (
+        <>
+          <label className="label" htmlFor="avatar-name">{t("avatarName")}</label>
+          <input
+            id="avatar-name"
+            className="input mb-5"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ava"
+          />
+
+          <PhotoStudio
+            orgId={current!.id}
+            staged={staged}
+            onChange={replaceStaged}
+            onUndo={undoStaged}
+            canUndo={history.length > 0}
+          />
+
+          {error && <p className="field-error mt-3">{error}</p>}
+
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <button className="btn-primary" onClick={() => void saveStaged()} disabled={saving}>
+              {saving ? <Spinner className="me-1.5 inline h-4 w-4" /> : null}
+              {saving ? t("loading") : t("saveAndContinue")}
+            </button>
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                setStaged(null);
+                setHistory([]);
+              }}
+              disabled={saving}
+            >
+              {t("startOver")}
+            </button>
+            <span className="text-[12.5px] text-gray-500 dark:text-gray-400">
+              {t("saveHint")}
+            </span>
+          </div>
+        </>
+      ) : (
+      <>
       <label className="label" htmlFor="avatar-name">{t("avatarName")}</label>
       <input
         id="avatar-name"
@@ -151,7 +249,7 @@ export function NewAvatarPage() {
       {error && <p className="field-error mt-3">{error}</p>}
 
       <h2 className="mb-1 mt-10 text-lg font-medium">{t("genTitle")}</h2>
-      <p className="mb-3 text-[13px] text-gray-500 dark:text-gray-400">{t("genSubtitle")}</p>
+      <p className="mb-3 text-[13px] text-gray-500 dark:text-gray-400">{t("genScratchTitle")}</p>
       {current && <GeneratePanel orgId={current.id} />}
 
       <h2 className="mb-3 mt-10 text-lg font-medium">{t("model3dTitle")}</h2>
@@ -195,6 +293,8 @@ export function NewAvatarPage() {
           </button>
         ))}
       </div>
+      </>
+      )}
     </div>
   );
 }

@@ -67,14 +67,17 @@ async function request<T>(
   retried = false
 ): Promise<T> {
   const headers: Record<string, string> = {};
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  // FormData sets its own Content-Type, including the multipart boundary.
+  // Setting it by hand produces a body the server cannot parse.
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+  if (body !== undefined && !isForm) headers["Content-Type"] = "application/json";
   const tokens = getTokens();
   if (tokens) headers.Authorization = `Bearer ${tokens.access_token}`;
 
   const response = await fetch(`${BASE}${path}`, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
   });
 
   if (response.status === 401 && !retried && tokens) {
@@ -102,6 +105,7 @@ export const api = {
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
   put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
+  postForm: <T>(path: string, form: FormData) => request<T>("POST", path, form),
   delete: <T>(path: string) => request<T>("DELETE", path),
 };
 

@@ -11,7 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 
-from app.api import api_keys, auth, avatars, embed, integrations, orgs, stock, storage_routes, tts, usage
+from app.api import api_keys, auth, avatars, embed, integrations, orgs, staging, stock, storage_routes, tts, usage
 from app.core.config import get_settings
 from app.core.credentials import credentials
 from app.core.errors import install_error_handlers
@@ -243,6 +243,7 @@ def create_app() -> FastAPI:
     app.include_router(embed.router)
     app.include_router(integrations.router)
     app.include_router(usage.router)
+    app.include_router(staging.router)
     app.include_router(stock.router)
 
     return app
