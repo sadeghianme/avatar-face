@@ -28,6 +28,7 @@ from uuid import uuid4
 
 from app.services.imagegen import STYLES as GEN_STYLES
 from app.services.rig import process_avatar
+from app.services.usage import check_image_limit, record_generated_avatar, record_generation
 from app.services.rig_fit import RegionMarks, apply_anchors, current_anchors
 from app.services.segment import SegmentationUnavailable, remove_background
 from app.services.storage import get_storage
@@ -697,9 +698,17 @@ async def generate_candidates(
     rejected: list[str] = []
     attempts = 0
     while len(accepted) < body.count and attempts < MAX_GENERATION_ATTEMPTS:
+        # Checked before every attempt, not once up front: the retry loop can
+        # run several times per click, and a limit that only guards the first
+        # one is not a limit.
+        await check_image_limit(db, ctx.org.id)
         attempts += 1
         try:
             result = await generate(body.style, source, extra=body.note)
+            # Recorded on success only — a request the provider rejected was
+            # not billed, and counting it would spend the user's allowance on
+            # our own errors.
+            await record_generation(db, ctx.org.id, "gemini")
         except ImageGenUnavailable as exc:
             raise Conflict409(
                 "Image generation is not configured on this server",
@@ -765,5 +774,6 @@ async def create_from_candidate(
     avatar.image_key = f"orgs/{ctx.org.id}/avatars/{avatar.id}/source.png"
     await storage.put_bytes(avatar.image_key, await storage.get_bytes(body.key), "image/png")
     await db.commit()
+    await record_generated_avatar(db, ctx.org.id, "gemini")
     background.add_task(process_avatar, avatar.id)
     return avatar

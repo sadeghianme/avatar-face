@@ -94,6 +94,24 @@ export function AvatarsPage() {
         />
       </div>
 
+      {(usage?.images_generated ?? 0) > 0 && (
+        <div className="mt-6 flex flex-wrap items-baseline gap-x-6 gap-y-1 rounded-xl bg-black/[0.03] px-5 py-3.5 text-[13px] dark:bg-white/[0.04]">
+          <span className="font-medium">{t("aiReportTitle")}</span>
+          <span className="text-gray-600 dark:text-gray-300">
+            {t("aiReportMade", { count: usage?.avatars_generated ?? 0 })}
+          </span>
+          <span className="text-gray-600 dark:text-gray-300">
+            {t("aiReportAttempts", {
+              used: usage?.images_generated ?? 0,
+              limit: usage?.image_limit ?? 0,
+            })}
+          </span>
+          <span className="text-gray-600 dark:text-gray-300">
+            {t("aiReportCost", { cost: (usage?.image_cost_usd ?? 0).toFixed(2) })}
+          </span>
+        </div>
+      )}
+
       <div className="mt-10">
         <div className="mb-4 flex items-baseline justify-between">
           <div className="flex items-baseline gap-3">

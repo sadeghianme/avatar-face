@@ -94,6 +94,12 @@ export interface ApiKeyInfo {
 }
 
 export interface Usage {
+  /** Attempts this month — what is charged, including rejected candidates. */
+  images_generated?: number;
+  image_limit?: number;
+  /** Candidates actually kept as avatars. */
+  avatars_generated?: number;
+  image_cost_usd?: number;
   month_start: string;
   chars_used: number;
   char_limit: number;

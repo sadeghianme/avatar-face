@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { Icon } from "./Icon";
+import { Spinner } from "./Spinner";
 import { api } from "../lib/api";
 import type { Avatar } from "../lib/types";
 
@@ -144,7 +145,11 @@ export function GeneratePanel({ orgId }: { orgId: string }) {
 
         <div className="flex items-center gap-3">
           <button className="btn-primary" onClick={() => void run()} disabled={busy}>
-            <Icon name="cube" className="me-1.5 inline h-4 w-4" />
+            {busy ? (
+              <Spinner className="me-1.5 inline h-4 w-4" />
+            ) : (
+              <Icon name="cube" className="me-1.5 inline h-4 w-4" />
+            )}
             {busy ? t("genWorking") : t("generate")}
           </button>
           <span className="text-[12.5px] text-gray-500 dark:text-gray-400">{t("genCost")}</span>
@@ -153,7 +158,23 @@ export function GeneratePanel({ orgId }: { orgId: string }) {
         {error && <p className="field-error">{error}</p>}
       </div>
 
-      {result && (
+      {busy && (
+        <div className="mt-6">
+          <h3 className="mb-3 text-[15px] font-semibold">{t("genWorking")}</h3>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className="grid aspect-square animate-pulse place-items-center rounded-xl bg-black/[0.05] text-gray-400 dark:bg-white/[0.06]"
+              >
+                <Spinner className="h-6 w-6" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!busy && result && (
         <div className="mt-6">
           {result.candidates.length > 0 && (
             <>
@@ -168,6 +189,11 @@ export function GeneratePanel({ orgId }: { orgId: string }) {
                   >
                     <div className="overflow-hidden rounded-xl border border-black/[0.08] transition-shadow group-hover:shadow-lg dark:border-white/[0.1]">
                       <img src={c.url} alt="" className="block w-full" />
+                      {creating === c.key && (
+                        <div className="grid place-items-center bg-black/60 p-4 text-white">
+                          <Spinner className="h-5 w-5" />
+                        </div>
+                      )}
                     </div>
                     <p className="mt-1.5 text-[12.5px] text-gray-500">
                       {creating === c.key ? t("loading") : t("genUseThis")}

@@ -117,6 +117,14 @@ class Settings(BaseSettings):
     # --- Usage ---
     monthly_char_limit: int = 100_000
 
+    # Image generation is metered per image and is the one feature here that
+    # can run up a real bill by being clicked twice.
+    image_generation_monthly_limit: int = 100
+    # An ESTIMATE used only for the dashboard figure — set it to your provider's
+    # actual per-image rate. Nothing bills from this; it exists so the number
+    # on screen means something rather than being a bare count.
+    image_generation_cost_usd: float = 0.04
+
     @property
     def storage_configured(self) -> bool:
         return all((self.r2_endpoint, self.r2_access_key, self.r2_secret))
