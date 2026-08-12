@@ -1492,6 +1492,13 @@ export class AvatarEngine {
       if (!a || !b || !ta || !tb) continue;
       const eyeW = Math.hypot(b.x - a.x, b.y - a.y);
       if (eyeW < 3) continue;
+      // Stylised faces get NO gaze shift at all. When an eye is much wider
+      // than its share of the interocular span (human ratio ≈ 0.5, anime
+      // 0.7+), the eye is painted art: hard eyeliner and lashes right at
+      // the clip boundary, where any shifted copy of the iris/sclera lands
+      // as a doubled lash line. Blinks still work — they deform the mesh,
+      // not the texture.
+      if (interOc > 0 && eyeW > interOc * 0.58) continue;
 
       // The opening: corner, upper lid, corner, lower lid back. Built from
       // the DEFORMED points, so a blink shrinks the clip and mid-blink the
