@@ -45,6 +45,12 @@ RIGHT_EYE_INDICES = [
     473, 474, 475, 476, 477,
 ]
 
+# The iris ring alone: center then four rim points. Correctable on its own
+# because on stylised art MediaPipe's iris guess is the least reliable part of
+# the detection, and the engine's gaze circle is built directly from these.
+LEFT_IRIS_INDICES = [468, 469, 470, 471, 472]
+RIGHT_IRIS_INDICES = [473, 474, 475, 476, 477]
+
 # How far past the marked region the warp keeps blending, as a multiple of the
 # region's own radius. 2.0 gives a blend band exactly as wide as the region
 # itself: gentle enough that no triangle is strained at the boundary, tight
@@ -77,6 +83,18 @@ class RegionMarks:
         if self.center is not None:
             pts.append(self.center)
         return pts
+
+
+@dataclass
+class PupilMarks:
+    """Where the user says a pupil is: its center, and one point on its rim.
+
+    Two points instead of four extremes because a pupil is a circle — center
+    fixes position, rim fixes radius, and there is no rotation to express.
+    """
+
+    center: Point
+    rim: Point
 
 
 def _solve3(a: list[list[float]], b: list[float]) -> list[float] | None:
@@ -228,6 +246,30 @@ def _warp(
         points[i][1] = y + ((c * x + d * y + ty) - y) * weight
 
 
+def _warp_pupil(points: list[list[float]], indices: list[int], marks: PupilMarks) -> None:
+    """Move an iris ring to the user's circle: translate + uniform scale.
+
+    A hard cluster edit, no falloff — the iris points are not vertices of the
+    face triangulation (the engine reads them only to place the gaze circle),
+    so moving them alone cannot tear anything.
+    """
+    if len(indices) != 5:
+        return
+    c = points[indices[0]]
+    ring = [points[i] for i in indices[1:]]
+    old_r = sum(((p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2) ** 0.5 for p in ring) / 4
+    new_r = ((marks.rim[0] - marks.center[0]) ** 2 + (marks.rim[1] - marks.center[1]) ** 2) ** 0.5
+    if old_r < 0.5 or new_r < 0.5:
+        return
+    scale = new_r / old_r
+    if not (MIN_SCALE <= scale <= MAX_SCALE):
+        return
+    cx, cy = c[0], c[1]
+    for i in indices:
+        points[i][0] = marks.center[0] + (points[i][0] - cx) * scale
+        points[i][1] = marks.center[1] + (points[i][1] - cy) * scale
+
+
 def _present(indices: list[int], points: list[list[float]]) -> list[int]:
     """Indices that actually exist — the synthetic fallback mesh is shorter
     than MediaPipe's 478 and has no iris points."""
@@ -241,12 +283,15 @@ def apply_anchors(
     left_eye: RegionMarks | None = None,
     right_eye: RegionMarks | None = None,
     mouth: RegionMarks | None = None,
+    left_pupil: PupilMarks | None = None,
+    right_pupil: PupilMarks | None = None,
 ) -> dict:
     """Return a copy of `rig` with the user's anchors applied.
 
     The head fit runs first and moves every point uniformly; the local fits
     then measure against those corrected positions, so a head correction
-    cannot silently undo an eye or mouth one.
+    cannot silently undo an eye or mouth one. Pupils go last for the same
+    reason — they are placed relative to the corrected eye.
     """
     points = [[float(x), float(y)] for x, y in rig["points"]]
 
@@ -258,6 +303,10 @@ def apply_anchors(
         _warp(points, _present(RIGHT_EYE_INDICES, points), right_eye, falloff=True)
     if mouth is not None:
         _warp(points, _present(rig.get("mouth_indices", []), points), mouth, falloff=True)
+    if left_pupil is not None and len(_present(LEFT_IRIS_INDICES, points)) == 5:
+        _warp_pupil(points, LEFT_IRIS_INDICES, left_pupil)
+    if right_pupil is not None and len(_present(RIGHT_IRIS_INDICES, points)) == 5:
+        _warp_pupil(points, RIGHT_IRIS_INDICES, right_pupil)
 
     out = dict(rig)
     out["points"] = [[round(x, 2), round(y, 2)] for x, y in points]
@@ -268,13 +317,16 @@ def apply_anchors(
 
 
 def current_anchors(rig: dict) -> dict:
-    """Where the detector currently thinks each region's extremes are.
+    """Where each region's handles should open.
 
-    The UI opens with the handles on these, so the user corrects a detection
-    rather than marking a face from scratch — and on a photo where detection
-    is good, that means dragging nothing.
+    A saved marking is returned VERBATIM from `rig["user_anchors"]` — the
+    warped mesh's extremes are not where the user dropped the handles,
+    because regions interact (a mouth correction drags the chin through the
+    falloff, which moves where "head bottom" lands). Only regions the user
+    never marked fall back to the detector's extremes.
     """
     points = [[float(x), float(y)] for x, y in rig["points"]]
+    saved = rig.get("user_anchors") or {}
 
     def marks(indices: list[int], with_center: bool) -> dict | None:
         present = _present(indices, points)
@@ -291,9 +343,25 @@ def current_anchors(rig: dict) -> dict:
             out["center"] = {"x": e.center[0], "y": e.center[1]}
         return out
 
-    return {
+    def pupil(indices: list[int]) -> dict | None:
+        present = _present(indices, points)
+        if len(present) != 5:
+            return None
+        c = points[indices[0]]
+        ring = [points[i] for i in indices[1:]]
+        r = sum(((p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2) ** 0.5 for p in ring) / 4
+        r = max(r, 2.0)
+        return {
+            "center": {"x": c[0], "y": c[1]},
+            "rim": {"x": c[0] + r, "y": c[1]},
+        }
+
+    computed = {
         "head": marks(list(range(len(points))), False),
         "left_eye": marks(LEFT_EYE_INDICES, False),
         "right_eye": marks(RIGHT_EYE_INDICES, False),
         "mouth": marks(_present(rig.get("mouth_indices", []), points), True),
+        "left_pupil": pupil(LEFT_IRIS_INDICES),
+        "right_pupil": pupil(RIGHT_IRIS_INDICES),
     }
+    return {k: saved.get(k) or v for k, v in computed.items()}

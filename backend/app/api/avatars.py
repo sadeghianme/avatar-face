@@ -29,7 +29,7 @@ from uuid import uuid4
 from app.services.imagegen import STYLES as GEN_STYLES
 from app.services.rig import process_avatar
 from app.services.usage import check_image_limit, record_generated_avatar, record_generation
-from app.services.rig_fit import RegionMarks, apply_anchors, current_anchors
+from app.services.rig_fit import PupilMarks, RegionMarks, apply_anchors, current_anchors
 from app.services.segment import SegmentationUnavailable, remove_background
 from app.services.storage import get_storage
 
@@ -521,6 +521,13 @@ async def _translate_rig(avatar: Avatar, storage, left: int, top: int, size, _js
     box = rig.get("face_box")
     if box and len(box) == 4:
         rig["face_box"] = [box[0] - left, box[1] - top, box[2] - left, box[3] - top]
+    # Saved hand-placed marks live in image pixels too; without this a crop
+    # would reopen the marking panel with every handle off by the crop origin.
+    for region in (rig.get("user_anchors") or {}).values():
+        for pt in region.values():
+            if isinstance(pt, dict) and "x" in pt:
+                pt["x"] -= left
+                pt["y"] -= top
     await storage.put_bytes(avatar.rig_key, _json.dumps(rig).encode(), "application/json")
 
 
@@ -587,13 +594,34 @@ async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFi
             center=(value.center.x, value.center.y) if value.center else None,
         )
 
+    def pupil(value) -> PupilMarks | None:
+        if value is None:
+            return None
+        return PupilMarks(
+            center=(value.center.x, value.center.y), rim=(value.rim.x, value.rim.y)
+        )
+
     adjusted = apply_anchors(
         rig,
         head=marks(body.head),
         left_eye=marks(body.left_eye),
         right_eye=marks(body.right_eye),
         mouth=marks(body.mouth),
+        left_pupil=pupil(body.left_pupil),
+        right_pupil=pupil(body.right_pupil),
     )
+    # The marks as placed, kept verbatim so reopening the panel shows the
+    # user's own handles. The warped mesh's extremes are NOT that: regions
+    # interact through the falloff (a mouth fix drags the chin, moving where
+    # "head bottom" would be re-derived), so deriving loses the marking.
+    adjusted["user_anchors"] = {
+        **(rig.get("user_anchors") or {}),
+        **{
+            region: getattr(body, region).model_dump()
+            for region in ("head", "left_eye", "right_eye", "mouth", "left_pupil", "right_pupil")
+            if getattr(body, region) is not None
+        },
+    }
 
     if body.persist:
         await storage.put_bytes(

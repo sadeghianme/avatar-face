@@ -149,6 +149,7 @@ const resources = {
       markFace: "Mark the face",
       markFaceHint:
         "Drag the edge markers onto the real edges of the head, each eye and the mouth. "
+        + "The amber circles are the pupils: the center dot places one, the rim dot sizes it. "
         + "Auto-detection assumes a human face, so on stylized art it lands in the wrong place. "
         + "Test before saving — nothing is stored until you press Save.",
       testBeforeSave: "Test before saving",
@@ -428,6 +429,7 @@ const resources = {
       markFace: "Marquer le visage",
       markFaceHint:
         "Faites glisser les repères sur les vrais bords de la tête, de chaque œil et de la bouche. "
+        + "Les cercles ambrés sont les pupilles : le point central la place, le point du bord règle sa taille. "
         + "La détection automatique suppose un visage humain : sur un dessin stylisé, elle se trompe. "
         + "Testez avant d'enregistrer — rien n'est sauvegardé avant d'appuyer sur Enregistrer.",
       testBeforeSave: "Tester avant d'enregistrer",

@@ -53,6 +53,13 @@ class AnchorMarks(BaseModel):
     center: AnchorPoint | None = None
 
 
+class PupilAnchor(BaseModel):
+    """A pupil as the user marked it: center, and one point on the rim."""
+
+    center: AnchorPoint
+    rim: AnchorPoint
+
+
 class RigFit(BaseModel):
     """Hand-placed landmark anchors.
 
@@ -64,6 +71,8 @@ class RigFit(BaseModel):
     left_eye: AnchorMarks | None = None
     right_eye: AnchorMarks | None = None
     mouth: AnchorMarks | None = None
+    left_pupil: PupilAnchor | None = None
+    right_pupil: PupilAnchor | None = None
     # False (the default) computes the corrected rig and returns it WITHOUT
     # writing, so the preview a user tests is the object that gets saved.
     persist: bool = False
