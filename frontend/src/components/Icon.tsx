@@ -93,6 +93,17 @@ export const ICONS: Record<string, Shape[]> = {
     { circle: [17, 12, 2] },
     { circle: [9, 17, 2] },
   ],
+  // Fullscreen — corners pointing out, and its inverse pointing in.
+  expand: [
+    { d: "M14.5 3.5H20.5V9.5" },
+    { d: "M9.5 20.5H3.5V14.5" },
+    { d: "M20.5 3.5 14 10M3.5 20.5 10 14" },
+  ],
+  compress: [
+    { d: "M20.5 9.5H14.5V3.5" },
+    { d: "M3.5 14.5H9.5V20.5" },
+    { d: "M14.5 9.5 21 3M9.5 14.5 3 21" },
+  ],
   grid: [
     { rect: [3, 3, 8, 8, 2] },
     { rect: [13, 3, 8, 8, 2] },

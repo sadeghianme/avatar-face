@@ -47,3 +47,16 @@
     @apply mt-1 text-xs text-red-600 dark:text-red-400;
   }
 }
+
+/* The avatar preview card in native fullscreen. The canvas is square, so it
+   is sized by whichever viewport dimension is tighter; width:auto keeps the
+   aspect ratio from the intrinsic width/height attributes. */
+.preview-fullscreen {
+  @apply flex items-center justify-center rounded-none border-0;
+}
+.preview-fullscreen canvas {
+  /* !important on both: they must beat the element's inline width/height,
+     which are what sizes the canvas in the normal card. */
+  width: auto !important;
+  height: min(94vh, 94vw) !important;
+}

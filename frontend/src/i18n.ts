@@ -143,6 +143,8 @@ const resources = {
       dictate: "Dictate",
       viewFace: "Face",
       viewFull: "Full photo",
+      fullscreen: "Fullscreen",
+      exitFullscreen: "Exit fullscreen",
       generate3d: "Generate 3D",
       markFace: "Mark the face",
       markFaceHint:
@@ -420,6 +422,8 @@ const resources = {
       dictate: "Dicter",
       viewFace: "Visage",
       viewFull: "Photo entière",
+      fullscreen: "Plein écran",
+      exitFullscreen: "Quitter le plein écran",
       generate3d: "Générer en 3D",
       markFace: "Marquer le visage",
       markFaceHint:

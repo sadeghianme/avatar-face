@@ -1,6 +1,6 @@
 import type { SpeechPlayer } from "@liveface/embed";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -33,6 +33,22 @@ export function AvatarDetailPage() {
   // tested — otherwise the copied snippet speaks en-US whatever was picked.
   const [voice, setVoice] = useState<VoiceSelection>(defaultVoiceSelection);
   const [busyBg, setBusyBg] = useState(false);
+
+  // Native fullscreen on the preview card. The `fullscreen` state exists so
+  // the toggle icon flips even when the user leaves with Esc, which never
+  // passes through our button.
+  const previewBoxRef = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    const onChange = () =>
+      setFullscreen(document.fullscreenElement === previewBoxRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void previewBoxRef.current?.requestFullscreen();
+  };
 
   const { data: avatar, isError } = useQuery({
     queryKey: ["avatar", current?.id, avatarId],
@@ -231,7 +247,21 @@ export function AvatarDetailPage() {
 
       {avatar.status === "ready" && avatar.rig_url && avatar.thumbnail_url && (
         <div className="grid gap-6 lg:grid-cols-2">
-          <div className="card">
+          <div
+            ref={previewBoxRef}
+            className={`card relative ${fullscreen ? "preview-fullscreen" : ""}`}
+          >
+            {!cropping && (
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                aria-label={t(fullscreen ? "exitFullscreen" : "fullscreen")}
+                title={t(fullscreen ? "exitFullscreen" : "fullscreen")}
+                className="absolute end-3 top-3 z-10 rounded-lg bg-black/40 p-2 text-white/90 backdrop-blur transition-colors hover:bg-black/60 hover:text-white"
+              >
+                <Icon name={fullscreen ? "compress" : "expand"} className="h-4 w-4" />
+              </button>
+            )}
             {cropping ? (
               <CropStudio
                 avatar={avatar}

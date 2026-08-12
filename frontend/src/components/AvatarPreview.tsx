@@ -60,8 +60,11 @@ export function AvatarPreview({
       // for — a single tooth is only a few pixels wide at the default size.
       width={Math.round(size * dpr)}
       height={Math.round(size * dpr)}
-      style={{ width: size, height: "auto" }}
-      className="mx-auto max-w-full rounded-xl bg-gray-100 dark:bg-gray-700"
+      // Fill the container: `size` is the backing-store resolution, not the
+      // layout width, so the avatar uses the whole card instead of a 480px
+      // island in the middle of it.
+      style={{ width: "100%", height: "auto" }}
+      className="mx-auto rounded-xl bg-gray-100 dark:bg-gray-700"
     />
   );
 }
