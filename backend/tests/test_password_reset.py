@@ -4,7 +4,6 @@ import time
 
 import pytest
 
-from app.services.rate_limit import reset_reset_rate_limiter
 from app.services.reset_token import (
     InvalidResetToken,
     fingerprint,
@@ -17,11 +16,8 @@ SECRET = "test-secret"
 HASH = "$2b$12$abcdefghijklmnopqrstuv"
 
 
-@pytest.fixture(autouse=True)
-def _fresh_limiter():
-    reset_reset_rate_limiter()
-    yield
-    reset_reset_rate_limiter()
+# No limiter fixture: the throttle now counts rows in the database, and every
+# test already gets its own database.
 
 
 @pytest.fixture(autouse=True)

@@ -46,23 +46,42 @@ def reset_embed_rate_limiter() -> None:
     _limiter = None
 
 
-_reset_limiter: SlidingWindowRateLimiter | None = None
+# Password-reset throttle: three an hour, enough for someone who mistypes or
+# loses the first mail, far short of using the endpoint to bury an inbox.
+# Keyed by address rather than by IP because the inbox is what gets hurt, and
+# an attacker changes address far more easily than a victim changes mailbox.
+RESET_LIMIT = 3
+RESET_WINDOW_SECONDS = 3600
 
 
-def get_reset_rate_limiter() -> SlidingWindowRateLimiter:
-    """Password-reset requests, per email address.
+async def allow_persistent(db, key: str, *, limit: int, window_seconds: int) -> bool:
+    """Sliding-window limit counted in the database.
 
-    Three an hour: enough for someone who mistypes or loses the first mail,
-    far short of using the endpoint to bury an inbox. Keyed by address rather
-    than by IP because the inbox is what gets hurt, and an attacker changes
-    address far more easily than a victim changes mailbox.
+    For limits where surviving a restart matters: the in-memory limiter
+    reset on every deploy, and this project deploys many times a day, so
+    "3 per hour" was really "3 per deploy". Low-traffic keys only — this
+    costs a delete, a count and an insert per call.
+
+    Rows the caller creates are committed by the caller's own transaction,
+    which is the point: the hit and the action it gates land atomically.
     """
-    global _reset_limiter
-    if _reset_limiter is None:
-        _reset_limiter = SlidingWindowRateLimiter(limit=3, window_seconds=3600.0)
-    return _reset_limiter
+    from datetime import timedelta
 
+    from sqlalchemy import delete, func, select
 
-def reset_reset_rate_limiter() -> None:
-    global _reset_limiter
-    _reset_limiter = None
+    from app.models import RateHit
+    from app.models.base import utcnow
+
+    cutoff = utcnow() - timedelta(seconds=window_seconds)
+    # Purge this key's expired rows — keeps the table at worst a few rows per
+    # active key without needing a background job.
+    await db.execute(delete(RateHit).where(RateHit.key == key, RateHit.created_at < cutoff))
+    hits = (
+        await db.execute(
+            select(func.count()).select_from(RateHit).where(RateHit.key == key, RateHit.created_at >= cutoff)
+        )
+    ).scalar_one()
+    if hits >= limit:
+        return False
+    db.add(RateHit(key=key))
+    return True

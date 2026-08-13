@@ -20,7 +20,7 @@ from app.core.config import get_settings
 from app.models import User
 from app.services.email import reset_email
 from app.services.email import send as send_email
-from app.services.rate_limit import get_reset_rate_limiter
+from app.services.rate_limit import RESET_LIMIT, RESET_WINDOW_SECONDS, allow_persistent
 from app.services.reset_token import DEFAULT_TTL_SECONDS as RESET_TTL_SECONDS
 from app.services.reset_token import InvalidResetToken
 from app.services.reset_token import fingerprint as hash_fingerprint
@@ -120,7 +120,14 @@ async def forgot_password(body: ForgotPasswordRequest, db: DB) -> dict:
     settings = get_settings()
     address = body.email.strip().lower()
 
-    if not get_reset_rate_limiter().allow(address):
+    allowed = await allow_persistent(
+        db, f"pwreset:{address}", limit=RESET_LIMIT, window_seconds=RESET_WINDOW_SECONDS
+    )
+    # get_db never commits on its own, and this endpoint otherwise writes
+    # nothing — without this the counted hit would evaporate per request and
+    # the limit would never engage.
+    await db.commit()
+    if not allowed:
         # Same shape as success on purpose — a distinct 429 would leak that
         # this address had already been asked for.
         logger.info("password reset throttled for an address")
