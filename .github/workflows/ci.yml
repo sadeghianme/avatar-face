@@ -33,6 +33,14 @@ jobs:
             https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
           curl -fsSL -o models/selfie_segmenter.tflite \
             https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite
+      - name: Stub widget bundles
+        # The bundle-serving tests assert caching/CORS headers, which only
+        # exist when the file does; any content works, so stubs beat pulling
+        # the whole Node toolchain into this job.
+        run: |
+          mkdir -p ../embed/dist
+          echo "// ci stub" > ../embed/dist/liveface.js
+          echo "// ci stub" > ../embed/dist/liveface-3d.js
       - name: Tests
         run: python -m pytest tests -q
 
