@@ -1,0 +1,72 @@
+# Every regression this pipeline exists to catch was first caught by hand:
+# a quality_note UnboundLocalError that broke 3D avatars, a Latin-only word
+# regex that silenced every non-Latin language, and a gradient inversion that
+# turned head motion into a no-op. Tests existed for all three; nothing ran
+# them automatically.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install espeak-ng (multilingual phonemes)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends espeak-ng
+      - name: Install backend
+        run: pip install -e ".[rig,dev]"
+      - name: Fetch MediaPipe models (same URLs the Dockerfile uses)
+        run: |
+          mkdir -p models
+          curl -fsSL -o models/face_landmarker.task \
+            https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
+          curl -fsSL -o models/selfie_segmenter.tflite \
+            https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite
+      - name: Tests
+        run: python -m pytest tests -q
+
+  embed:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: embed
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: embed/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # The dashboard imports @liveface/embed straight from ../embed/src via
+      # tsconfig paths, so its node_modules must exist for the type-check.
+      - name: Install embed deps
+        run: npm ci --prefix ../embed
+      - run: npm ci
+      - name: Typecheck and build
+        run: npm run build
