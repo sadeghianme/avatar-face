@@ -125,22 +125,33 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     if (!window.__Liveface3D) throw new Error("liveface-3d.js failed to initialize");
     engine = await window.__Liveface3D.load(canvas, info.model_url);
   } else {
-    // The full-resolution photo, NOT the thumbnail. The thumbnail is 256px on
-    // its long edge; the canvas backing store is 2-3x the CSS size, so using
-    // it meant every embedded avatar was an upscale of a postage stamp while
-    // the sharp original sat in storage unused. The dashboard preview always
-    // used the real image, which is why this only ever looked bad on
-    // customers' sites.
-    const [rigResponse, texture] = await Promise.all([
+    // Progressive texture: boot on whichever image lands first — usually the
+    // 256px thumbnail, tens of KB — so a face appears and starts animating
+    // immediately, then upgrade in place to the full-resolution photo. The
+    // full image is what the avatar must end on: the canvas backing store is
+    // 2-3x the CSS size, and rendering the thumbnail into it permanently was
+    // an upscale of a postage stamp while the sharp original sat in storage.
+    const fullUrl = info.image_url || info.thumbnail_url;
+    const thumbPromise = loadImage(info.thumbnail_url);
+    const fullPromise = fullUrl === info.thumbnail_url ? null : loadImage(fullUrl);
+    const [rigResponse, first] = await Promise.all([
       fetch(info.rig_url),
-      loadImage(info.image_url || info.thumbnail_url),
+      fullPromise
+        ? Promise.race([thumbPromise, fullPromise]).catch(() => thumbPromise)
+        : thumbPromise,
     ]);
     const rig: Rig = await rigResponse.json();
-    engine = new AvatarEngine(canvas, rig, texture, {
+    const photoEngine = new AvatarEngine(canvas, rig, first, {
       // data-framing on the snippet wins; otherwise the avatar's own setting,
       // so changing it in the dashboard reaches sites already embedding it.
       fullPhoto: (script.dataset.framing ?? info.framing) === "full",
     });
+    engine = photoEngine;
+    void fullPromise
+      ?.then((img) => {
+        if (img !== first) photoEngine.setTexture(img);
+      })
+      .catch(() => undefined); // thumbnail stays — worse, but alive
   }
 
   const synth = async (text: string): Promise<SynthesisPayload> => {

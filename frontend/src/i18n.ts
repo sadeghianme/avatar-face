@@ -41,7 +41,8 @@ const resources = {
         "Keys, domain allow-lists, usage metering and a cue endpoint you can drive yourself.",
       featPrivateTitle: "Your images stay yours",
       featPrivateBody:
-        "Photos are processed into a mesh on your own instance. Nothing is sent to a third-party model.",
+        "Meshing, lip-sync and animation all run on your own instance. Only the optional "
+        + "AI restyling sends a photo to your configured image provider — and says so before it does.",
       howTitle: "Three steps",
       stepUploadTitle: "Upload a portrait",
       stepUploadBody:
@@ -71,7 +72,7 @@ const resources = {
         "Liveface turns a portrait into a real-time talking avatar you can drop on any page with a single script tag.",
       authPoint1: "Phoneme-accurate lip-sync, not a mouth on a timer",
       authPoint2: "Photos, illustrations, anime and 3D renders",
-      authPoint3: "Your images stay on your own instance",
+      authPoint3: "Runs on your own instance — AI restyling is opt-in",
       dashGreeting: "Hello, {{name}}",
       dashSubtitle: "Create an avatar, give it a voice, and drop it on any page.",
       statReady: "Ready",
@@ -321,7 +322,8 @@ const resources = {
         "Clés, domaines autorisés, mesure d'usage et un point d'entrée de cues que vous pilotez vous-même.",
       featPrivateTitle: "Vos images restent les vôtres",
       featPrivateBody:
-        "Les photos sont transformées en maillage sur votre instance. Rien n'est envoyé à un modèle tiers.",
+        "Maillage, synchronisation labiale et animation s'exécutent sur votre instance. Seule la "
+        + "restylisation IA, optionnelle, envoie une photo à votre fournisseur d'images — et le dit avant.",
       howTitle: "Trois étapes",
       stepUploadTitle: "Téléversez un portrait",
       stepUploadBody:
@@ -351,7 +353,7 @@ const resources = {
         "Liveface transforme un portrait en avatar parlant en temps réel, intégrable avec une seule balise script.",
       authPoint1: "Synchronisation labiale basée sur les phonèmes",
       authPoint2: "Photos, illustrations, anime et rendus 3D",
-      authPoint3: "Vos images restent sur votre instance",
+      authPoint3: "S'exécute sur votre instance — la restylisation IA est optionnelle",
       dashGreeting: "Bonjour, {{name}}",
       dashSubtitle: "Créez un avatar, donnez-lui une voix, intégrez-le partout.",
       statReady: "Prêts",

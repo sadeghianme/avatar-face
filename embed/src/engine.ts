@@ -410,6 +410,26 @@ export class AvatarEngine {
     (globalThis as { __liveface?: AvatarEngine }).__liveface = this;
   }
 
+  /**
+   * Swap in a sharper copy of the same photo, mid-flight.
+   *
+   * The widget boots on the 256px thumbnail so a face appears immediately,
+   * then upgrades to the full-resolution image when it lands. Everything
+   * sampled or derived from the texture is redone: texPoints and the mouth
+   * subdivision (derivedParents cleared first — the subdivision APPENDS
+   * derived points, so re-running it without the reset doubles them), the
+   * lip/lash colours, the cut-out probe and the head layer.
+   */
+  setTexture(texture: HTMLImageElement): void {
+    if (this.destroyed) return;
+    this.texture = texture;
+    this.derivedParents = [];
+    this.computeFraming();
+    this.sampleLipColour();
+    this.sampleLashColour();
+    this.subdivideMouthRegion();
+  }
+
   destroy(): void {
     this.destroyed = true;
     cancelAnimationFrame(this.raf);
