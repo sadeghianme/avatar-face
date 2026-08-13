@@ -291,22 +291,26 @@ async def process_avatar(avatar_id: str) -> None:
             else:
                 points, blendshapes, size, detected = landmarks_from_image(image_bytes)
 
-                # An undetected face used to ship as a ready avatar whose
-                # mouth moves in the wrong place, with nothing to explain it.
-                # Only enforced when a model is installed: without one every
-                # image uses the synthetic mesh by design, which is how the
-                # stock gallery works.
+                # An undetected face is NOT a failure: the synthetic fallback
+                # mesh is a complete, well-proportioned 478-point rig (iris
+                # ring included), which is exactly what the manual marking
+                # panel needs as a starting point. Failing here used to dead-
+                # end stylised art, mascots and animal faces that Mark the
+                # face can rescue in a minute. The note tells the user the
+                # mouth is a guess until they place it.
                 if get_settings().rig_model_path and not detected:
-                    raise NoFaceDetected(
-                        "No face was found in this image. Use a photo where the "
-                        "face is clearly visible and looking at the camera."
+                    quality_note = (
+                        "No face was detected in this image, so the animation "
+                        "points are a guess. Open “Mark the face” and place "
+                        "the head, eyes, mouth and pupils by hand."
                     )
-
-                verdict = check_landmarks(points, size, detected)
-                # Geometry problems are a warning, not a failure: the avatar
-                # works, it just will not look its best, and the thresholds are
-                # heuristics that should not veto a picture the user chose.
-                quality_note = None if verdict.ok else verdict.reason
+                else:
+                    verdict = check_landmarks(points, size, detected)
+                    # Geometry problems are a warning, not a failure: the
+                    # avatar works, it just will not look its best, and the
+                    # thresholds are heuristics that should not veto a
+                    # picture the user chose.
+                    quality_note = None if verdict.ok else verdict.reason
 
                 rig = build_rig(points, size, blendshapes)
                 thumb, thumb_type = make_thumbnail(image_bytes)

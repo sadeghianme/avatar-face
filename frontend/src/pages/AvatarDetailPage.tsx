@@ -221,6 +221,15 @@ export function AvatarDetailPage() {
           <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">
             {t("qualityNoteHint")}
           </p>
+          {avatar.kind === "photo" && !adjusting && (
+            <button
+              className="btn-secondary mt-3 px-3 py-1.5 text-xs"
+              onClick={() => setAdjusting(true)}
+            >
+              <Icon name="target" className="h-4 w-4" />
+              {t("markFace")}
+            </button>
+          )}
         </div>
       )}
 
