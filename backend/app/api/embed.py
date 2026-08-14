@@ -130,7 +130,42 @@ async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
         "image_url": image_url,
         "model_url": image_url if avatar.kind.value == "model3d" else None,
         "layer_urls": await _layer_urls(avatar, storage),
+        "viseme_frames": await _viseme_frames(avatar, storage),
     }
+
+
+async def _viseme_frames(avatar: Avatar, storage) -> dict | None:
+    """Manifest + presigned frame URLs, or None when the mouth is geometric.
+
+    The manifest carries each frame's blendshape coordinates, so the client
+    can place them in the same shape space the cue blender already works in.
+    """
+    if not getattr(avatar, "viseme_frames", 0):
+        return None
+    import json as _json
+
+    from app.services.visemeframes import frame_key, manifest_key
+
+    key = manifest_key(avatar.org_id, avatar.id)
+    if not await storage.exists(key):
+        return None
+    try:
+        manifest = _json.loads(await storage.get_bytes(key))
+    except Exception:
+        return None
+    frames = []
+    for entry in manifest.get("frames", []):
+        frames.append(
+            {
+                **entry,
+                "url": await storage.presign_get(
+                    frame_key(avatar.org_id, avatar.id, entry["viseme"])
+                ),
+            }
+        )
+    if not frames:
+        return None
+    return {"box": manifest["box"], "frames": frames}
 
 
 async def _layer_urls(avatar: Avatar, storage) -> dict[str, str] | None:

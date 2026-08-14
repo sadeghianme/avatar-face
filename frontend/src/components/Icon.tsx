@@ -93,6 +93,11 @@ export const ICONS: Record<string, Shape[]> = {
     { circle: [17, 12, 2] },
     { circle: [9, 17, 2] },
   ],
+  // Mouth frames — lips, since the feature is about what the mouth shows.
+  mouth: [
+    { d: "M3.5 12s3.5-4.5 8.5-4.5S20.5 12 20.5 12s-3.5 4.5-8.5 4.5S3.5 12 3.5 12Z" },
+    { d: "M3.5 12h17" },
+  ],
   // Fullscreen — corners pointing out, and its inverse pointing in.
   expand: [
     { d: "M14.5 3.5H20.5V9.5" },

@@ -154,20 +154,46 @@ def build_prompt(style: str, has_source: bool, extra: str = "") -> str:
     return f"{subject}{RIG_REQUIREMENTS}{note}"
 
 
+async def generate_raw(
+    prompt: str, source: bytes | None = None, source_mime: str = "image/png"
+) -> bytes:
+    """One image from a caller-written prompt. Returns the raw bytes.
+
+    For callers that are not making an avatar portrait and must not inherit
+    the style/rig prompt scaffolding — viseme keyframes, where the whole
+    instruction is "change only the mouth". `source` is passed through as
+    given; shrink it first if it is large.
+    """
+    return (await _request(prompt, source, source_mime)).data
+
+
 async def generate(
     style: str, source: bytes | None = None, source_mime: str = "image/png", extra: str = ""
 ) -> Generated:
     """One candidate. Raises ImageGenUnavailable or RuntimeError on failure."""
+    payload = source
+    mime = source_mime
+    if source is not None:
+        payload, mime = shrink_source(source)
+        logger.info("source %dKB -> %dKB", len(source) // 1024, len(payload) // 1024)
+    return await _request(build_prompt(style, source is not None, extra), payload, mime)
+
+
+async def _request(prompt: str, source: bytes | None, source_mime: str) -> Generated:
+    """POST one generation and pull the image out of the response."""
     key = api_key()
     if not key:
         raise ImageGenUnavailable("gemini_api_key is not set")
 
-    parts: list[dict] = [{"text": build_prompt(style, source is not None, extra)}]
+    parts: list[dict] = [{"text": prompt}]
     if source is not None:
-        payload, mime = shrink_source(source)
-        logger.info("source %dKB -> %dKB", len(source) // 1024, len(payload) // 1024)
         parts.append(
-            {"inline_data": {"mime_type": mime, "data": base64.b64encode(payload).decode()}}
+            {
+                "inline_data": {
+                    "mime_type": source_mime,
+                    "data": base64.b64encode(source).decode(),
+                }
+            }
         )
 
     async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:

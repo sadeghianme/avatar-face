@@ -62,6 +62,10 @@ class Avatar(TimestampedBase):
     # renders those instead of tearing one flat photo. Strictly optional:
     # everything must work when this is False.
     has_layers: Mapped[bool] = mapped_column(default=False, nullable=False)
+    # How many AI-generated mouth keyframes exist (0 = geometric mouth only).
+    # Opt-in per avatar: generating them costs money and takes a minute, so
+    # it never happens as a side effect of uploading a photo.
+    viseme_frames: Mapped[int] = mapped_column(default=0, nullable=False)
     # JSON list of snapshots taken before each edit, oldest first. See
     # app.api.avatars._snapshot.
     edit_history: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -60,6 +60,13 @@ export interface Avatar {
   undo_label?: string | null;
   /** Background/body/head decomposition for the layered render path. */
   layer_urls?: Record<string, string> | null;
+  /** How many AI mouth keyframes are in use; 0 is the geometric mouth. */
+  viseme_frames?: number;
+  /** The keyframes themselves, when in use. */
+  viseme_frame_set?: {
+    box: { x: number; y: number; w: number; h: number };
+    frames: { viseme: string; shape: Record<string, number>; url: string }[];
+  } | null;
   rig_url?: string | null;
   thumbnail_url?: string | null;
   model_url?: string | null;
