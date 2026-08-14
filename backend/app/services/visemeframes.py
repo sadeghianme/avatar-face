@@ -55,10 +55,13 @@ KEY_VISEMES: dict[str, str] = {
     "FF": "upper teeth resting lightly on the lower lip, as when saying 'f' or 'v'",
 }
 
-# Landmarks the mouth cannot move: outer eye corners and the nose bridge.
-# The alignment fit uses only these, so a changed mouth cannot drag the
-# transform toward itself.
-STABLE_LANDMARKS = [33, 133, 263, 362, 168, 6, 197, 195]
+# Landmarks the mouth cannot move: eye corners, the nose bridge, and — the
+# ones that matter most — the nose base and nostril corners. A fit anchored
+# only on the upper face leaves its residual error to accumulate downward,
+# right where the patch is cut, and the frames then sit at slightly
+# different heights and the mouth appears to jump between shapes. The nose
+# base sits directly above the mouth and does not move when the jaw drops.
+STABLE_LANDMARKS = [33, 133, 263, 362, 168, 6, 197, 195, 1, 2, 98, 327]
 
 # Mouth patch extent, as multiples of the mouth's own width/height.
 PATCH_WIDTH = 1.5

@@ -28,8 +28,12 @@ def _mesh(offset=(0.0, 0.0), scale=1.0):
     points = np.zeros((478, 2), dtype=np.float64)
     rng = np.random.default_rng(1)
     points[:] = rng.uniform(40, 160, size=(478, 2))
+    # Every landmark the fit uses, so the transform is determined by the
+    # anchors rather than by leftover noise in the unplaced points.
     anchors = {33: (60, 80), 133: (90, 80), 263: (140, 80), 362: (110, 80),
-               168: (100, 70), 6: (100, 85), 197: (100, 95), 195: (100, 105)}
+               168: (100, 70), 6: (100, 85), 197: (100, 95), 195: (100, 105),
+               1: (100, 115), 2: (100, 122), 98: (92, 120), 327: (108, 120)}
+    assert set(anchors) >= set(STABLE_LANDMARKS), "fixture must place every fitted point"
     for index, (x, y) in anchors.items():
         points[index] = (x * scale + offset[0], y * scale + offset[1])
     return points
