@@ -115,3 +115,21 @@ async def _generated():
     from app.services.imagegen import Generated
 
     return Generated(b"PNGDATA", "image/png")
+
+
+def test_a_differently_sized_generation_is_not_read_as_reframing(monkeypatch):
+    """Providers answer at their own resolution. Treating that ratio as a
+    framing change rejected every real frame — the whole feature produced
+    nothing until the landmarks were normalised to the base photo first."""
+    import app.services.rig as rig_module
+
+    base = _mesh()  # in a 200x200 photo
+    half = _mesh(scale=0.5)  # same face, returned at 100x100
+    monkeypatch.setattr(
+        rig_module, "landmarks_from_image", lambda data: (half, None, (100, 100), True)
+    )
+    buf = io.BytesIO()
+    Image.new("RGB", (100, 100), (120, 100, 90)).save(buf, format="PNG")
+
+    built = build_frame(buf.getvalue(), base, (200, 200))
+    assert built is not None, "a rescaled generation is the same face, not a new framing"

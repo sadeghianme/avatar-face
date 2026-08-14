@@ -121,8 +121,15 @@ def build_frame(generated: bytes, base_points, image_size) -> tuple[bytes, dict]
         logger.info("viseme frame: no face in the generated image")
         return None
 
+    width, height = image_size
     base = np.asarray(base_points, dtype=np.float64)
     got = np.asarray(points, dtype=np.float64)
+    # Normalise to the base photo's pixel space FIRST. The provider returns
+    # its own resolution (1024² against a 1254² source, say), and without
+    # this the fit reports that ratio as a scale change and every frame is
+    # rejected as "differently framed" — which is exactly what happened.
+    if size[0] and size[1]:
+        got = got * np.array([width / size[0], height / size[1]])
     fit = _similarity(
         [tuple(got[i]) for i in STABLE_LANDMARKS],
         [tuple(base[i]) for i in STABLE_LANDMARKS],
@@ -131,7 +138,6 @@ def build_frame(generated: bytes, base_points, image_size) -> tuple[bytes, dict]
         return None
     scale, rot, offset = fit
 
-    width, height = image_size
     if abs(scale - 1.0) > MAX_ALIGN_SCALE:
         logger.info("viseme frame: scale %.3f out of range", scale)
         return None
@@ -146,9 +152,11 @@ def build_frame(generated: bytes, base_points, image_size) -> tuple[bytes, dict]
     inv_rot = rot.T
     a = inv_scale * inv_rot
     b = -a @ offset
+    # Resized to the BASE photo's size, matching the normalised landmarks the
+    # transform was fitted to.
     image = Image.open(io.BytesIO(generated)).convert("RGB")
-    if image.size != (size[0], size[1]):
-        image = image.resize((size[0], size[1]))
+    if image.size != (width, height):
+        image = image.resize((width, height), Image.LANCZOS)
     aligned = image.transform(
         (width, height),
         Image.AFFINE,
