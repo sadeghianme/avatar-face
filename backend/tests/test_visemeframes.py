@@ -96,3 +96,22 @@ def test_stable_landmarks_exclude_the_mouth():
     from app.services.rig import MOUTH_INDICES
 
     assert not set(STABLE_LANDMARKS) & set(MOUTH_INDICES)
+
+
+async def test_generate_raw_returns_image_bytes(monkeypatch):
+    """A field-name slip here is invisible until it has already spent money:
+    the provider call succeeds and is billed, then unpacking the response
+    raises. Cheap to assert, so assert it."""
+    from app.services import imagegen
+
+    monkeypatch.setattr(
+        imagegen, "_request", lambda *a, **k: _generated(), raising=True
+    )
+    out = await imagegen.generate_raw("prompt")
+    assert out == b"PNGDATA"
+
+
+async def _generated():
+    from app.services.imagegen import Generated
+
+    return Generated(b"PNGDATA", "image/png")

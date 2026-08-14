@@ -164,7 +164,7 @@ async def generate_raw(
     instruction is "change only the mouth". `source` is passed through as
     given; shrink it first if it is large.
     """
-    return (await _request(prompt, source, source_mime)).data
+    return (await _request(prompt, source, source_mime)).image
 
 
 async def generate(
