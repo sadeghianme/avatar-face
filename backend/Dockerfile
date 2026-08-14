@@ -24,6 +24,8 @@ COPY backend/pyproject.toml ./
 COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./
+# One-off maintenance scripts, run with `python -m scripts.<name>`.
+COPY backend/scripts ./scripts
 RUN pip install --no-cache-dir . mediapipe
 # Widget bundles served at /liveface.js and /liveface-3d.js
 COPY --from=embed-build /build/embed/dist /app/embed/dist
