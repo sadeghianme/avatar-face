@@ -16,8 +16,13 @@ WORKDIR /app/backend
 # grapheme-to-phoneme front end (`-q --ipa`), which is what lets lip-sync work
 # in roughly a hundred languages instead of only English — a few MB for every
 # language nobody has to hand-write a rule table for.
+# libegl1/libgles2 are needed by mediapipe 1.x, which loads a C shared
+# library at import of any task. Without them every detection raises inside
+# landmarks_from_image, which catches and falls back to the synthetic mesh —
+# so face detection does not fail loudly, it silently stops working and
+# every upload gets "no face detected". Learned the hard way.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 curl espeak-ng \
+    libgl1 libglib2.0-0 libegl1 libgles2 curl espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/pyproject.toml ./
@@ -26,7 +31,10 @@ COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./
 # One-off maintenance scripts, run with `python -m scripts.<name>`.
 COPY backend/scripts ./scripts
-RUN pip install --no-cache-dir . mediapipe
+# Pinned: this was unpinned, and a rebuild silently upgraded to a mediapipe
+# major version with a different runtime dependency, breaking detection on a
+# deploy that changed nothing in this repo.
+RUN pip install --no-cache-dir . "mediapipe==1.0.1"
 # Widget bundles served at /liveface.js and /liveface-3d.js
 COPY --from=embed-build /build/embed/dist /app/embed/dist
 
