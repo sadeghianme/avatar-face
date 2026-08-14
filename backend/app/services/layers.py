@@ -59,6 +59,15 @@ def build_layers(image_bytes: bytes, face_box: list[float]) -> dict[str, bytes]:
     source = Image.open(io.BytesIO(image_bytes))
     had_alpha = source.mode in ("RGBA", "LA", "PA")
 
+    # The mask used to decide which pixels to REPAINT, kept separate from the
+    # one used to cut the layers. They must differ: the layer mask is padded
+    # with a landmark ellipse so an illustrated face never comes out with
+    # holes, but repainting everything under that ellipse overwrites real
+    # background with fill and leaves a visible elliptical seam around the
+    # head — which is exactly what showed up on a photo with a lit ceiling
+    # behind it. Only pixels the SEGMENTER calls person get repainted.
+    fill_alpha = None
+
     if had_alpha:
         rgba = np.asarray(source.convert("RGBA")).astype(np.float32)
         rgb, alpha = rgba[:, :, :3], rgba[:, :, 3] / 255.0
@@ -80,6 +89,7 @@ def build_layers(image_bytes: bytes, face_box: list[float]) -> dict[str, bytes]:
         yy, xx = np.mgrid[0:height, 0:width]
         prior = (((xx - fcx) / ax) ** 2 + ((yy - fcy) / ay) ** 2 <= 1.0).astype(np.float32)
         rgb, alpha = person_matte(image_bytes, prior_mask=prior)
+        _, fill_alpha = person_matte(image_bytes)  # no prior: the true silhouette
 
     height, width = alpha.shape
     _, fy0, _, fy1 = face_box[0], face_box[1], face_box[2], face_box[3]
@@ -110,9 +120,13 @@ def build_layers(image_bytes: bytes, face_box: list[float]) -> dict[str, bytes]:
     # renderer treats its absence as "transparent", same as today. Only an
     # opaque photo gets a fill.
     if not had_alpha:
-        fill = _diffuse_fill(rgb.astype(np.float32), alpha)
-        person = alpha[:, :, None] > 0.01
-        background = np.where(person, fill, rgb).astype(np.uint8)
+        repaint = fill_alpha if fill_alpha is not None else alpha
+        fill = _diffuse_fill(rgb.astype(np.float32), repaint)
+        # Crossfade rather than switch: a hard boundary between filled and
+        # original pixels is visible even when the colours nearly match,
+        # because the fill is smooth and the photo has grain.
+        blend = np.clip(repaint * 1.6, 0.0, 1.0)[:, :, None]
+        background = (fill * blend + rgb * (1.0 - blend)).astype(np.uint8)
         buf = io.BytesIO()
         Image.fromarray(background, mode="RGB").save(buf, format="JPEG", quality=88)
         layers["background"] = buf.getvalue()

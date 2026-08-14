@@ -135,7 +135,21 @@ const LID_VERTEX_SWEEP = 1.0;
 const NOD_MS = 1050;
 
 /** Where the mouth-frame feather starts fading, as a fraction of the radius. */
-const FEATHER_SOLID = 0.55;
+const FEATHER_SOLID = 0.45;
+
+/**
+ * The visible mouth patch, as multiples of the live mouth's own size.
+ *
+ * Sized here rather than at generation time on purpose: the stored frame is
+ * a generous crop, and how much of it shows is a rendering decision that can
+ * be re-tuned without paying to regenerate anything. Generous was wrong —
+ * a patch covering the whole lower face replaces nose, chin and cheeks with
+ * generated pixels, and the model's identity drift is then plainly visible.
+ * Tall relative to width because an open jaw grows downward far more than
+ * the mouth grows sideways.
+ */
+const MOUTH_PATCH_W = 0.82;
+const MOUTH_PATCH_H = 1.5;
 
 /** Pivot depth for body sway, as a multiple of canvas height. Below the
  *  frame: a standing body turns about its feet, not its middle. */
@@ -1471,22 +1485,49 @@ export class AvatarEngine {
         const delta = (w[key] ?? 0) - (frame.shape[key] ?? 0);
         d2 += k * delta * delta;
       }
-      // Inverse distance, softened so the nearest key does not win outright
-      // at every instant (which would step frame-to-frame, the exact
-      // stutter this whole approach exists to avoid).
-      return { frame, weight: 1 / (d2 + 0.02) };
+      // Inverse SQUARED distance: plain inverse distance leaves every key
+      // contributing everywhere, so a closed mouth carried a little of the
+      // wide-open frame and the resting face wore a permanent half-smile.
+      // Squaring makes the nearest key clearly dominant while still
+      // crossfading through the ones between.
+      return { frame, weight: 1 / (d2 * d2 + 0.004) };
     });
     scored.sort((a, b) => b.weight - a.weight);
     const top = scored.slice(0, 3);
     const total = top.reduce((sum, s) => sum + s.weight, 0);
     if (!(total > 0)) return;
 
-    // Where the patch lands on canvas, in the same mapping as the photo.
+    // Where the stored patch lands on canvas, in the photo's mapping.
     const box = set.box;
     const dx = box.x * this.scale + this.offsetX;
     const dy = box.y * this.scale + this.offsetY;
     const dw = box.w * this.scale;
     const dh = box.h * this.scale;
+
+    // How much of it is allowed to SHOW: an ellipse hugging the live mouth.
+    // Taken from the deformed points rather than the stored box so it tracks
+    // the mouth the rest of the engine is drawing, and so the visible extent
+    // stays a render-time decision (see MOUTH_PATCH_W/H).
+    const mouthIdx = this.rig.mouth_indices ?? [];
+    if (!mouthIdx.length) return;
+    let mx0 = Infinity, my0 = Infinity, mx1 = -Infinity, my1 = -Infinity;
+    for (const i of mouthIdx) {
+      const p = pts[i];
+      if (!p) continue;
+      if (p.x < mx0) mx0 = p.x;
+      if (p.x > mx1) mx1 = p.x;
+      if (p.y < my0) my0 = p.y;
+      if (p.y > my1) my1 = p.y;
+    }
+    if (!(mx1 > mx0)) return;
+    const mcx = (mx0 + mx1) / 2;
+    const mcy = (my0 + my1) / 2;
+    const mw = mx1 - mx0;
+    // Height from the WIDTH, not the measured height: a closed mouth is a
+    // few pixels tall, and a patch scaled from that would be a slit that
+    // cannot show an open jaw.
+    const rx = mw * MOUTH_PATCH_W;
+    const ry = mw * MOUTH_PATCH_H * 0.5;
 
     // Build the blend in an offscreen buffer, then feather the buffer once
     // and stamp it. Feathering each frame as it goes down would fade the
@@ -1510,26 +1551,29 @@ export class AvatarEngine {
     }
     bctx.globalAlpha = 1;
 
-    // Feather to an ellipse: a hard-edged patch stamps a visible rectangle
-    // of slightly different skin around every mouth. destination-in keeps
-    // the buffer only where the gradient is opaque.
+    // Feather to the mouth ellipse: a hard-edged patch stamps a visible
+    // rectangle of slightly different skin around every mouth.
+    // destination-in keeps the buffer only where the gradient is opaque.
+    // The ellipse is expressed in BUFFER pixels, which is why the live
+    // mouth centre is converted out of canvas space here.
+    const bufScaleX = buffer.width / dw;
+    const bufScaleY = buffer.height / dh;
     bctx.globalCompositeOperation = "destination-in";
     bctx.save();
-    // Unit circle in a space scaled to the box makes the gradient elliptical
-    // — a circular one would clip the corners of a wide mouth patch.
-    bctx.translate(buffer.width / 2, buffer.height / 2);
-    bctx.scale(buffer.width / 2, buffer.height / 2);
+    bctx.translate((mcx - dx) * bufScaleX, (mcy - dy) * bufScaleY);
+    bctx.scale(rx * bufScaleX, ry * bufScaleY);
     const feather = bctx.createRadialGradient(0, 0, 0, 0, 0, 1);
     feather.addColorStop(0, "rgba(0,0,0,1)");
     feather.addColorStop(FEATHER_SOLID, "rgba(0,0,0,1)");
     feather.addColorStop(1, "rgba(0,0,0,0)");
     bctx.fillStyle = feather;
-    bctx.fillRect(-1, -1, 2, 2);
+    // Cover the whole buffer in this scaled space, so nothing outside the
+    // ellipse survives regardless of where the mouth sits in the patch.
+    bctx.fillRect(-1e4, -1e4, 2e4, 2e4);
     bctx.restore();
     bctx.globalCompositeOperation = "source-over";
 
     this.ctx.drawImage(buffer, dx, dy, dw, dh);
-    void pts;
   }
 
   /** Reusable offscreen buffer for the mouth blend, grown as needed. */
