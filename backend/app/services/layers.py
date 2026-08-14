@@ -88,8 +88,20 @@ def build_layers(image_bytes: bytes, face_box: list[float]) -> dict[str, bytes]:
         ax, ay = fw * 0.8, fh * 1.1
         yy, xx = np.mgrid[0:height, 0:width]
         prior = (((xx - fcx) / ax) ** 2 + ((yy - fcy) / ay) ** 2 <= 1.0).astype(np.float32)
-        rgb, alpha = person_matte(image_bytes, prior_mask=prior)
-        _, fill_alpha = person_matte(image_bytes)  # no prior: the true silhouette
+
+        # The prior is applied AFTER matting, never through it. Feeding it in
+        # makes alpha step from the segmenter's value to 1 at the ellipse rim,
+        # which lands that rim inside the edge band where backdrop colour is
+        # un-mixed out — subtracting backdrop from pixels that are backdrop
+        # paints a dark ellipse into the picture. That ring was visible around
+        # the head on the first real photo tested.
+        raw = np.asarray(source.convert("RGB")).astype(np.float32)
+        unmixed, fill_alpha = person_matte(image_bytes)
+        alpha = np.maximum(fill_alpha, prior)
+        # Un-mixed colour only inside the true silhouette, where it is what
+        # makes a cut-out edge clean. Where only the prior says "person" —
+        # the holes it exists to fill — the photo's own pixels are correct.
+        rgb = np.where((fill_alpha > 0.5)[:, :, None], unmixed, raw)
 
     height, width = alpha.shape
     _, fy0, _, fy1 = face_box[0], face_box[1], face_box[2], face_box[3]
@@ -121,12 +133,15 @@ def build_layers(image_bytes: bytes, face_box: list[float]) -> dict[str, bytes]:
     # opaque photo gets a fill.
     if not had_alpha:
         repaint = fill_alpha if fill_alpha is not None else alpha
-        fill = _diffuse_fill(rgb.astype(np.float32), repaint)
+        # Diffuse from the RAW photo: the un-mixed colour is only meaningful
+        # under the subject, and seeding the backdrop fill with it drags the
+        # subject's edge colours outward.
+        fill = _diffuse_fill(raw, repaint)
         # Crossfade rather than switch: a hard boundary between filled and
         # original pixels is visible even when the colours nearly match,
         # because the fill is smooth and the photo has grain.
         blend = np.clip(repaint * 1.6, 0.0, 1.0)[:, :, None]
-        background = (fill * blend + rgb * (1.0 - blend)).astype(np.uint8)
+        background = (fill * blend + raw * (1.0 - blend)).astype(np.uint8)
         buf = io.BytesIO()
         Image.fromarray(background, mode="RGB").save(buf, format="JPEG", quality=88)
         layers["background"] = buf.getvalue()
