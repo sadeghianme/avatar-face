@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 export function AvatarPreview({
   rigUrl,
   textureUrl,
+  layerUrls,
   size = 480,
   debugMesh = false,
   fullPhoto = false,
@@ -15,6 +16,8 @@ export function AvatarPreview({
 }: {
   rigUrl: string;
   textureUrl: string;
+  /** Background/body/head decomposition; enables the layered render path. */
+  layerUrls?: Record<string, string> | null;
   size?: number;
   debugMesh?: boolean;
   fullPhoto?: boolean;
@@ -44,6 +47,19 @@ export function AvatarPreview({
       // clean import.meta.env.DEV gate.
       (window as unknown as Record<string, unknown>).__lfEngine = engine;
       onEngine?.(engine);
+
+      if (layerUrls?.body && layerUrls.head) {
+        const held = engine;
+        void Promise.all([
+          layerUrls.background ? loadImage(layerUrls.background) : Promise.resolve(undefined),
+          loadImage(layerUrls.body),
+          loadImage(layerUrls.head),
+        ])
+          .then(([bg, body, head]) => {
+            if (!cancelled) held.setLayers({ background: bg, body, head });
+          })
+          .catch(() => undefined); // flat photo stays — still a working preview
+      }
     };
     boot().catch((err: Error) => !cancelled && setError(err.message));
 
@@ -53,7 +69,7 @@ export function AvatarPreview({
       engine?.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rigUrl, textureUrl, debugMesh, fullPhoto]);
+  }, [rigUrl, textureUrl, debugMesh, fullPhoto, layerUrls]);
 
   if (error) return <p className="field-error">{error}</p>;
   return (

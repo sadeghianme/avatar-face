@@ -124,3 +124,6 @@ class AvatarDetail(AvatarOut):
     thumbnail_url: str | None = None
     # For kind=model3d: presigned URL of the GLB itself.
     model_url: str | None = None
+    # Background/body/head decomposition, when built — the layered render
+    # path. "background" may be absent (cut-outs have nothing behind them).
+    layer_urls: dict[str, str] | None = None

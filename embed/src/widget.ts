@@ -116,6 +116,7 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     thumbnail_url: string;
     image_url?: string | null;
     model_url?: string | null;
+    layer_urls?: { background?: string; body: string; head: string } | null;
   } = await meta.json();
 
   let engine: SpeechPlayer & { isSpeaking(): boolean };
@@ -152,6 +153,23 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
         if (img !== first) photoEngine.setTexture(img);
       })
       .catch(() => undefined); // thumbnail stays — worse, but alive
+
+    // Layered upgrade, also progressive: the avatar is already animating on
+    // the flat photo; when the background/body/head decomposition lands the
+    // engine flips render paths mid-flight. All-or-nothing — a body without
+    // its head is worse than the flat photo.
+    if (info.layer_urls) {
+      const { background, body, head } = info.layer_urls;
+      void Promise.all([
+        background ? loadImage(background) : Promise.resolve(undefined),
+        loadImage(body),
+        loadImage(head),
+      ])
+        .then(([bg, bodyImg, headImg]) =>
+          photoEngine.setLayers({ background: bg, body: bodyImg, head: headImg })
+        )
+        .catch(() => undefined);
+    }
   }
 
   const synth = async (text: string): Promise<SynthesisPayload> => {

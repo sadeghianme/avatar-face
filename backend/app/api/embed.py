@@ -129,7 +129,27 @@ async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
         "thumbnail_url": await storage.presign_get(avatar.thumbnail_key or ""),
         "image_url": image_url,
         "model_url": image_url if avatar.kind.value == "model3d" else None,
+        "layer_urls": await _layer_urls(avatar, storage),
     }
+
+
+async def _layer_urls(avatar: Avatar, storage) -> dict[str, str] | None:
+    """Presigned URLs of the background/body/head decomposition, if built.
+
+    The background is absent for cut-outs (nothing behind them); the widget
+    treats a missing entry as transparent.
+    """
+    if not getattr(avatar, "has_layers", False):
+        return None
+    from app.services.layers import layer_key
+
+    urls: dict[str, str] = {}
+    for name in ("background", "body", "head"):
+        key = layer_key(avatar.org_id, avatar.id, name)
+        if name == "background" and not await storage.exists(key):
+            continue
+        urls[name] = await storage.presign_get(key)
+    return urls
 
 
 class CueRequest(BaseModel):

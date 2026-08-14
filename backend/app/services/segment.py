@@ -49,8 +49,21 @@ def _segmenter():
     )
 
 
-def remove_background(image_bytes: bytes) -> bytes:
-    """Return a PNG of the same size with the background made transparent."""
+def person_matte(image_bytes: bytes, prior_mask=None):
+    """(rgb float HxWx3, alpha float HxW) for the person in the photo.
+
+    The shared front half of background removal and layer building: run the
+    segmenter, then refine its coarse mask into a real matte (see matting.py —
+    the raw mask alone produces the backdrop-coloured rim that makes a
+    cut-out look cheap).
+
+    `prior_mask` (float HxW, 0..1) is region the caller KNOWS is person —
+    typically a head ellipse from the face landmarks. It is merged into the
+    model's mask BEFORE refinement, which matters: the segmenter misfires on
+    illustrations, and a mid-confidence face goes through edge un-mixing,
+    which subtracts the backdrop colour out of skin and leaves literal black.
+    A confident prior keeps those pixels out of the edge band entirely.
+    """
     import numpy as np
     from PIL import Image
 
@@ -70,14 +83,23 @@ def remove_background(image_bytes: bytes) -> bytes:
     mask = np.asarray(result.confidence_masks[-1].numpy_view(), dtype=np.float32)
     if mask.ndim == 3:
         mask = mask[:, :, 0]
+    if prior_mask is not None:
+        mask = np.maximum(mask, prior_mask.astype(np.float32))
 
-    # Everything that makes the edge good happens here: see matting.py. The
-    # model's mask is only the starting point — on its own it produces the
-    # backdrop-coloured rim that makes a cut-out look cheap.
     alpha, out = refine_matte(rgb, mask)
+    return out, alpha
 
+
+def remove_background(image_bytes: bytes) -> bytes:
+    """Return a PNG of the same size with the background made transparent."""
+    import io as _io
+
+    import numpy as np
+    from PIL import Image
+
+    out, alpha = person_matte(image_bytes)
     rgba = np.dstack([out.astype(np.uint8), (alpha * 255).astype(np.uint8)])
-    buffer = io.BytesIO()
+    buffer = _io.BytesIO()
     Image.fromarray(rgba, mode="RGBA").save(buffer, format="PNG", optimize=True)
     return buffer.getvalue()
 

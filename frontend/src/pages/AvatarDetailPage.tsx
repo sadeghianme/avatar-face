@@ -291,6 +291,7 @@ export function AvatarDetailPage() {
                 // Full-resolution texture: the 256px thumbnail looks blurry
                 // on a large preview canvas.
                 textureUrl={avatar.image_url ?? avatar.thumbnail_url}
+                layerUrls={avatar.layer_urls}
                 debugMesh={debugMesh}
                 fullPhoto={fullPhoto}
                 onEngine={setEngine}

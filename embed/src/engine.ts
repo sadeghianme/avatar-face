@@ -384,6 +384,13 @@ export class AvatarEngine {
   // Source crop (rig-image coords) that the canvas displays.
   private crop = { x: 0, y: 0, w: 0, h: 0 };
 
+  // Layered render path (see setLayers). Null means single-photo.
+  private layers: {
+    background?: HTMLImageElement;
+    body: HTMLImageElement;
+    head: HTMLImageElement;
+  } | null = null;
+
   constructor(canvas: HTMLCanvasElement, rig: Rig, texture: HTMLImageElement, opts: EngineOptions = {}) {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d");
@@ -408,6 +415,25 @@ export class AvatarEngine {
     this.raf = requestAnimationFrame(this.loop);
     // Debug handle (last engine wins): lets a console force blinks/visemes.
     (globalThis as { __liveface?: AvatarEngine }).__liveface = this;
+  }
+
+  /**
+   * Switch to the layered render path: real content behind the head.
+   *
+   * The layers are full-frame images aligned to the original photo's pixels
+   * (background may be absent — a cut-out has nothing behind it). With them,
+   * the head moves over the body's own pixels and the body sways over a
+   * still background, so nothing is ever revealed that does not exist —
+   * the punch-out and feathered-cutout machinery of the single-photo path
+   * becomes unnecessary and is simply not used.
+   */
+  setLayers(layers: {
+    background?: HTMLImageElement;
+    body: HTMLImageElement;
+    head: HTMLImageElement;
+  }): void {
+    if (this.destroyed) return;
+    this.layers = layers;
   }
 
   /**
@@ -578,7 +604,9 @@ export class AvatarEngine {
     // Ghosting: a moved layer over an intact photo leaves a sliver of the
     // original behind it. A cut-out has its head punched out of the base, so
     // it can travel further.
-    const s = (this.cutOut ? 1 : 0.5) * this.tuning.headMotion;
+    // Layered heads move at full strength: there is real content behind
+    // them, so wider travel reveals pixels instead of tearing them.
+    const s = (this.layers || this.cutOut ? 1 : 0.5) * this.tuning.headMotion;
     // sin² envelope, not sin: sin starts at its steepest, which read as the
     // head being yanked downward at every nod onset. sin² starts and ends
     // with zero velocity, so the dip eases in and out.
@@ -1296,6 +1324,11 @@ export class AvatarEngine {
     const pts = this.deformedPoints(now);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
+    if (this.layers) {
+      this.renderLayered(pts);
+      return;
+    }
+
     // Body motion is applied to the finished picture, not to the mesh.
     //
     // That is the whole point: a rigid transform cannot distort a face. The
@@ -1360,6 +1393,65 @@ export class AvatarEngine {
     ctx.restore();
   }
 
+  /** Draw a full-frame layer through the same crop/scale mapping as the photo. */
+  private drawFullFrame(img: HTMLImageElement): void {
+    const tw = img.naturalWidth / this.rig.image_size[0];
+    const th = img.naturalHeight / this.rig.image_size[1];
+    this.ctx.drawImage(
+      img,
+      this.crop.x * tw,
+      this.crop.y * th,
+      this.crop.w * tw,
+      this.crop.h * th,
+      this.crop.x * this.scale + this.offsetX,
+      this.crop.y * this.scale + this.offsetY,
+      this.crop.w * this.scale,
+      this.crop.h * this.scale
+    );
+  }
+
+  /**
+   * The layered picture: still background, swaying body, moving head.
+   *
+   * Every layer is real pixels — the body's collar exists under the head,
+   * the wall exists behind the hair — so no motion can reveal a hole, and
+   * none of the single-photo path's compensations (punch-out, feathered
+   * cutout, reduced travel over an attached background) apply. Body sway
+   * runs at full strength because the background genuinely stays still,
+   * which is exactly what a camera watching a standing person sees.
+   */
+  private renderLayered(pts: Point[]): void {
+    const ctx = this.ctx;
+    const L = this.layers!;
+
+    if (L.background) this.drawFullFrame(L.background);
+
+    ctx.save();
+    this.applyBodyTransform(ctx, true);
+    this.drawFullFrame(L.body);
+
+    const head = this.headOffsets();
+    const geom = this.headGeom;
+    ctx.save();
+    if (geom) {
+      ctx.translate(geom.pivotX + head.dx, geom.pivotY + head.dy);
+      ctx.rotate(head.roll);
+      ctx.translate(-geom.pivotX, -geom.pivotY);
+    }
+    this.drawFullFrame(L.head);
+
+    for (const [a, b, c] of this.triangles) {
+      this.drawWarpedTriangle(pts, a, b, c);
+    }
+    this.drawEyes(pts);
+    this.drawLashes(pts);
+    this.drawLipContactLine(pts);
+    this.drawMouthInterior(pts);
+    if (this.debugMesh) this.drawDebugMesh(pts);
+    ctx.restore();
+    ctx.restore();
+  }
+
   /**
    * Tip the whole picture about a pivot below the frame, and lift it to breathe.
    *
@@ -1368,8 +1460,9 @@ export class AvatarEngine {
    * shifting their weight, and it walks the photo's own edge into view. A
    * cut-out has no edge to expose, so it gets the full amount.
    */
-  private applyBodyTransform(ctx: CanvasRenderingContext2D): void {
-    const scale = (this.cutOut ? 1 : OPAQUE_BACKGROUND_SCALE) * this.tuning.bodyMotion;
+  private applyBodyTransform(ctx: CanvasRenderingContext2D, layered = false): void {
+    const scale =
+      (layered || this.cutOut ? 1 : OPAQUE_BACKGROUND_SCALE) * this.tuning.bodyMotion;
     if (scale <= 0) return;
     const angle = this.body.sway * this.swayAngle * scale;
     const rise = this.body.breath * this.breathRise * scale;

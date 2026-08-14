@@ -291,6 +291,7 @@ async def set_background(
         avatar.image_key = avatar.original_image_key
         avatar.original_image_key = None
         await _rebuild_thumbnail(avatar, storage)
+        await _rebuild_layers(avatar, storage)
         await db.commit()
         return avatar
 
@@ -315,8 +316,34 @@ async def set_background(
     # a JPEG it could not hold the transparency anyway, which is why the
     # dashboard grid kept showing the background after a successful removal.
     await _rebuild_thumbnail(avatar, storage)
+    await _rebuild_layers(avatar, storage)
     await db.commit()
     return avatar
+
+
+async def _rebuild_layers(avatar: Avatar, storage) -> None:
+    """Re-derive the background/body/head layers from the current image.
+
+    Called after anything that changes what image_key points at — crop,
+    background toggle, undo — because layers cut from the old pixels would
+    otherwise be composited over the new ones. Likewise never fatal; the
+    embed falls back to the single-photo path when has_layers is False.
+    """
+    import json as _json
+
+    from app.services.layers import store_layers
+
+    avatar.has_layers = False
+    if avatar.kind != AvatarKind.photo or not avatar.rig_key or not avatar.image_key:
+        return
+    try:
+        rig = _json.loads(await storage.get_bytes(avatar.rig_key))
+        if rig.get("face_box"):
+            avatar.has_layers = await store_layers(
+                avatar, storage, await storage.get_bytes(avatar.image_key), rig["face_box"]
+            )
+    except Exception:
+        logger.exception("layer rebuild failed for avatar %s", avatar.id)
 
 
 async def _rebuild_thumbnail(avatar: Avatar, storage) -> None:
@@ -421,6 +448,7 @@ async def undo_edit(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
             logger.exception("rig restore failed for avatar %s", avatar.id)
 
     avatar.edit_history = _json.dumps(history)
+    await _rebuild_layers(avatar, storage)
     await db.commit()
     return avatar
 
@@ -466,6 +494,7 @@ async def crop_avatar(
         avatar.precrop_image_key = None
         await _rebuild_thumbnail(avatar, storage)
         await _rebuild_rig(avatar, storage)
+        await _rebuild_layers(avatar, storage)
         await db.commit()
         return avatar
 
@@ -507,6 +536,7 @@ async def crop_avatar(
 
     await _translate_rig(avatar, storage, left, top, cropped.size, _json)
     await _rebuild_thumbnail(avatar, storage)
+    await _rebuild_layers(avatar, storage)
     await db.commit()
     return avatar
 
@@ -662,6 +692,9 @@ async def get_avatar_detail(avatar_id: str, ctx: OrgMember, db: DB) -> AvatarDet
         detail.rig_url = await storage.presign_get(avatar.rig_key)
     if avatar.thumbnail_key:
         detail.thumbnail_url = await storage.presign_get(avatar.thumbnail_key)
+    from app.api.embed import _layer_urls
+
+    detail.layer_urls = await _layer_urls(avatar, storage)
     return detail
 
 

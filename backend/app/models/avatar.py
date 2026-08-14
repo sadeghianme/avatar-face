@@ -58,6 +58,10 @@ class Avatar(TimestampedBase):
     # these are warnings about a working avatar, and conflating them would
     # make "ready with a caveat" indistinguishable from "broken".
     quality_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A background/body/head layer set exists under .../layers/ — the embed
+    # renders those instead of tearing one flat photo. Strictly optional:
+    # everything must work when this is False.
+    has_layers: Mapped[bool] = mapped_column(default=False, nullable=False)
     # JSON list of snapshots taken before each edit, oldest first. See
     # app.api.avatars._snapshot.
     edit_history: Mapped[str | None] = mapped_column(Text, nullable=True)

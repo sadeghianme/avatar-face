@@ -325,6 +325,17 @@ async def process_avatar(avatar_id: str) -> None:
             avatar.status = AvatarStatus.ready
             avatar.error = None
             avatar.quality_note = quality_note
+
+            # Layer decomposition, photo avatars only. Optional by contract:
+            # a failure (no segmenter, odd geometry) leaves a working
+            # single-photo avatar.
+            avatar.has_layers = False
+            if avatar.kind != AvatarKind.model3d and rig.get("face_box"):
+                from app.services.layers import store_layers
+
+                avatar.has_layers = await store_layers(
+                    avatar, storage, image_bytes, rig["face_box"]
+                )
         except NoFaceDetected as exc:
             # Expected, and the user can act on it — no stack trace.
             logger.info("no face in avatar %s", avatar_id)
