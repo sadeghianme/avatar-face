@@ -147,16 +147,16 @@ const resources = {
       fullscreen: "Fullscreen",
       exitFullscreen: "Exit fullscreen",
       mouthFramesTitle: "AI mouth shapes",
-      mouthFramesBody:
-        "Generate photographic mouth shapes for this face — real teeth and tongue "
-        + "instead of a warp of the closed mouth in your photo.",
-      mouthFramesActive: "Using {{count}} generated mouth shapes.",
-      mouthFramesOn: "Generate",
-      mouthFramesOff: "Turn off",
+      mouthModeFree: "Free mouth",
+      mouthModeAi: "AI mouth",
+      mouthModeFreeBody:
+        "This avatar uses the built-in mouth, which costs nothing. Switch on to "
+        + "generate photographic mouth shapes for this face — real teeth and tongue.",
+      mouthModeAiBody: "Using {{count}} generated mouth shapes. Switch off for the free mouth.",
       mouthFramesWorking: "Generating…",
       mouthFramesCost:
-        "Six image generations, about a minute. Your photo is sent to your image "
-        + "provider. Turning it off later keeps the shapes, so switching back is free.",
+        "Switching on the first time costs six image generations (about a minute) and "
+        + "sends your photo to your image provider. After that, switching is free.",
       generate3d: "Generate 3D",
       markFace: "Mark the face",
       markFaceHint:
@@ -439,16 +439,17 @@ const resources = {
       fullscreen: "Plein écran",
       exitFullscreen: "Quitter le plein écran",
       mouthFramesTitle: "Bouches générées par IA",
-      mouthFramesBody:
-        "Générez des formes de bouche photographiques pour ce visage — de vraies dents "
-        + "et une vraie langue, au lieu d'une déformation de la bouche fermée de votre photo.",
-      mouthFramesActive: "{{count}} formes de bouche générées utilisées.",
-      mouthFramesOn: "Générer",
-      mouthFramesOff: "Désactiver",
+      mouthModeFree: "Bouche gratuite",
+      mouthModeAi: "Bouche IA",
+      mouthModeFreeBody:
+        "Cet avatar utilise la bouche intégrée, qui ne coûte rien. Activez pour générer "
+        + "des formes de bouche photographiques — de vraies dents et une vraie langue.",
+      mouthModeAiBody:
+        "{{count}} formes de bouche générées utilisées. Désactivez pour la bouche gratuite.",
       mouthFramesWorking: "Génération…",
       mouthFramesCost:
-        "Six générations d'images, environ une minute. Votre photo est envoyée à votre "
-        + "fournisseur d'images. La désactivation conserve les formes : réactiver est gratuit.",
+        "La première activation coûte six générations d'images (environ une minute) et "
+        + "envoie votre photo à votre fournisseur. Ensuite, changer est gratuit.",
       generate3d: "Générer en 3D",
       markFace: "Marquer le visage",
       markFaceHint:
