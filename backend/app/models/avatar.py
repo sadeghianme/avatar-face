@@ -62,6 +62,13 @@ class Avatar(TimestampedBase):
     # renders those instead of tearing one flat photo. Strictly optional:
     # everything must work when this is False.
     has_layers: Mapped[bool] = mapped_column(default=False, nullable=False)
+    # Set means this avatar has a public share page at /s/<token>. A random
+    # token rather than the avatar id, so sharing one avatar never exposes an
+    # id that appears in authenticated URLs, and revoking is a single UPDATE
+    # that instantly kills every copy of the link.
+    share_token: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, unique=True, index=True
+    )
     # JSON list of snapshots taken before each edit, oldest first. See
     # app.api.avatars._snapshot.
     edit_history: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -102,6 +102,8 @@ class AvatarOut(BaseModel):
     precrop_image_key: str | None = None
     # Names the change an undo would reverse; null when there is nothing to undo.
     undo_label: str | None = None
+    # Set means a public page exists at /s/<token>; null means not shared.
+    share_token: str | None = None
     created_at: datetime
     updated_at: datetime
 

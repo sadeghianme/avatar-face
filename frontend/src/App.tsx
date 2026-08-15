@@ -16,6 +16,7 @@ import { MembersPage } from "./pages/MembersPage";
 import { NewAvatarPage } from "./pages/NewAvatarPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { SharePage } from "./pages/SharePage";
 import { SimulatorPage } from "./pages/SimulatorPage";
 
 /** Already signed in? An auth page has nothing to offer — go to the app. */
@@ -53,6 +54,8 @@ export default function App() {
           link, which is often opened exactly because the account is stuck. */}
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/invite/:token" element={<AcceptInvitePage />} />
+      {/* Public: no auth, no shell — the whole page is the avatar. */}
+      <Route path="/s/:token" element={<SharePage />} />
 
       {/* The app itself lives under /app. */}
       <Route path="/app" element={<Protected><AvatarsPage /></Protected>} />

@@ -93,10 +93,10 @@ export const ICONS: Record<string, Shape[]> = {
     { circle: [17, 12, 2] },
     { circle: [9, 17, 2] },
   ],
-  // Mouth frames — lips, since the feature is about what the mouth shows.
-  mouth: [
-    { d: "M3.5 12s3.5-4.5 8.5-4.5S20.5 12 20.5 12s-3.5 4.5-8.5 4.5S3.5 12 3.5 12Z" },
-    { d: "M3.5 12h17" },
+  // Share — two links of a chain.
+  link: [
+    { d: "M10 13.5a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2" },
+    { d: "M14 10.5a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2" },
   ],
   // Fullscreen — corners pointing out, and its inverse pointing in.
   expand: [

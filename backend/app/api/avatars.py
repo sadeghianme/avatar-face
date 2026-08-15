@@ -660,6 +660,31 @@ async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFi
     return RigFitResult(rig=adjusted, persisted=body.persist)
 
 
+@router.post("/{avatar_id}/share", response_model=AvatarOut)
+async def enable_share(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
+    """Publish a public page for this avatar, at /s/<token>.
+
+    Idempotent: an avatar that already has a link keeps it, so pressing the
+    button twice cannot invalidate a link someone has already sent out.
+    """
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    if avatar.status != AvatarStatus.ready:
+        raise Conflict409("Only a ready avatar can be shared", code="not_ready")
+    if not avatar.share_token:
+        avatar.share_token = uuid4().hex
+        await db.commit()
+    return avatar
+
+
+@router.delete("/{avatar_id}/share", response_model=AvatarOut)
+async def disable_share(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
+    """Revoke the public page. Every copy of the link stops working at once."""
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    avatar.share_token = None
+    await db.commit()
+    return avatar
+
+
 @router.post("/{avatar_id}/rig-reset", response_model=AvatarOut)
 async def rig_reset(
     avatar_id: str, ctx: OrgMember, db: DB, background: BackgroundTasks

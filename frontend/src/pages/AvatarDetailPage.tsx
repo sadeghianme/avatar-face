@@ -11,6 +11,7 @@ import { Avatar3DPreview } from "../components/Avatar3DPreview";
 import { AvatarPreview } from "../components/AvatarPreview";
 import { EmbedSnippet } from "../components/EmbedSnippet";
 import { PrepProgress } from "../components/PrepProgress";
+import { SharePanel } from "../components/SharePanel";
 import { SpeakPanel } from "../components/SpeakPanel";
 import { defaultVoiceSelection, type VoiceSelection } from "../components/VoicePicker";
 import { StatusBadge } from "../components/StatusBadge";
@@ -305,6 +306,7 @@ export function AvatarDetailPage() {
               selection={voice}
               onSelectionChange={setVoice}
             />
+            <SharePanel avatar={avatar} orgId={current.id} />
             <TuningPanel
               engine={engine}
               avatarId={avatar.id}

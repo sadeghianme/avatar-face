@@ -12,7 +12,20 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 
-from app.api import api_keys, auth, avatars, embed, integrations, orgs, staging, stock, storage_routes, tts, usage
+from app.api import (
+    api_keys,
+    auth,
+    avatars,
+    embed,
+    integrations,
+    orgs,
+    share,
+    staging,
+    stock,
+    storage_routes,
+    tts,
+    usage,
+)
 from app.core.config import get_settings
 from app.core.credentials import credentials
 from app.core.errors import install_error_handlers
@@ -22,7 +35,7 @@ from app.models import Base
 
 # Paths that third-party pages call directly: CORS must reflect ANY origin
 # (key-level allowed_domains does the actual gating).
-PUBLIC_CORS_PREFIXES = ("/embed/", "/storage/", "/stock-avatars/")
+PUBLIC_CORS_PREFIXES = ("/embed/", "/storage/", "/stock-avatars/", "/public/")
 
 
 class PublicCorsMiddleware(BaseHTTPMiddleware):
@@ -267,6 +280,7 @@ def create_app() -> FastAPI:
     app.include_router(usage.router)
     app.include_router(staging.router)
     app.include_router(stock.router)
+    app.include_router(share.router)
 
     return app
 

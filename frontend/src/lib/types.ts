@@ -58,6 +58,8 @@ export interface Avatar {
   precrop_image_key?: string | null;
   /** Names the change an undo would reverse; absent when there is nothing. */
   undo_label?: string | null;
+  /** Set means a public page exists at /s/<token>. */
+  share_token?: string | null;
   /** Background/body/head decomposition for the layered render path. */
   layer_urls?: Record<string, string> | null;
   rig_url?: string | null;
