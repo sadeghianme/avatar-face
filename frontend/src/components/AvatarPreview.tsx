@@ -5,16 +5,10 @@ import { useEffect, useRef, useState } from "react";
  * Canvas preview that reuses the embed engine. StrictMode-safe: the engine's
  * `destroyed` flag plus this effect's cleanup handle mount->unmount->mount.
  */
-export interface VisemeFrameSet {
-  box: { x: number; y: number; w: number; h: number };
-  frames: { viseme: string; shape: Record<string, number>; url: string }[];
-}
-
 export function AvatarPreview({
   rigUrl,
   textureUrl,
   layerUrls,
-  visemeFrameSet,
   size = 480,
   debugMesh = false,
   fullPhoto = false,
@@ -24,8 +18,6 @@ export function AvatarPreview({
   textureUrl: string;
   /** Background/body/head decomposition; enables the layered render path. */
   layerUrls?: Record<string, string> | null;
-  /** AI mouth keyframes; enables the photographic mouth. */
-  visemeFrameSet?: VisemeFrameSet | null;
   size?: number;
   debugMesh?: boolean;
   fullPhoto?: boolean;
@@ -56,20 +48,6 @@ export function AvatarPreview({
       (window as unknown as Record<string, unknown>).__lfEngine = engine;
       onEngine?.(engine);
 
-      if (visemeFrameSet?.frames?.length) {
-        const held = engine;
-        const set = visemeFrameSet;
-        void Promise.all(set.frames.map((f) => loadImage(f.url)))
-          .then((images) => {
-            if (!cancelled) {
-              held.setVisemeFrames({
-                box: set.box,
-                frames: set.frames.map((f, i) => ({ shape: f.shape, image: images[i] })),
-              });
-            }
-          })
-          .catch(() => undefined); // geometric mouth stays
-      }
 
       if (layerUrls?.body && layerUrls.head) {
         const held = engine;
@@ -92,7 +70,7 @@ export function AvatarPreview({
       engine?.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rigUrl, textureUrl, debugMesh, fullPhoto, layerUrls, visemeFrameSet]);
+  }, [rigUrl, textureUrl, debugMesh, fullPhoto, layerUrls]);
 
   if (error) return <p className="field-error">{error}</p>;
   return (

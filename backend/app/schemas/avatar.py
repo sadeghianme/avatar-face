@@ -102,8 +102,6 @@ class AvatarOut(BaseModel):
     precrop_image_key: str | None = None
     # Names the change an undo would reverse; null when there is nothing to undo.
     undo_label: str | None = None
-    # How many AI mouth keyframes are in use; 0 is the geometric mouth.
-    viseme_frames: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -129,5 +127,3 @@ class AvatarDetail(AvatarOut):
     # Background/body/head decomposition, when built — the layered render
     # path. "background" may be absent (cut-outs have nothing behind them).
     layer_urls: dict[str, str] | None = None
-    # AI mouth keyframes: {"box": {...}, "frames": [{viseme, shape, url}]}.
-    viseme_frame_set: dict | None = None

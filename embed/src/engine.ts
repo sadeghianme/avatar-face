@@ -134,22 +134,6 @@ function blinkEase(phase: number): number {
 const LID_VERTEX_SWEEP = 1.0;
 const NOD_MS = 1050;
 
-/** Where the mouth-frame feather starts fading, as a fraction of the radius. */
-const FEATHER_SOLID = 0.45;
-
-/**
- * The visible mouth patch, as multiples of the live mouth's own size.
- *
- * Sized here rather than at generation time on purpose: the stored frame is
- * a generous crop, and how much of it shows is a rendering decision that can
- * be re-tuned without paying to regenerate anything. Generous was wrong —
- * a patch covering the whole lower face replaces nose, chin and cheeks with
- * generated pixels, and the model's identity drift is then plainly visible.
- * Tall relative to width because an open jaw grows downward far more than
- * the mouth grows sideways.
- */
-const MOUTH_PATCH_W = 0.82;
-const MOUTH_PATCH_H = 1.5;
 
 /** Pivot depth for body sway, as a multiple of canvas height. Below the
  *  frame: a standing body turns about its feet, not its middle. */
@@ -408,11 +392,6 @@ export class AvatarEngine {
     head: HTMLImageElement;
   } | null = null;
 
-  // Photographic mouth keyframes (see setVisemeFrames). Null = geometric.
-  private visemeFrames: {
-    box: { x: number; y: number; w: number; h: number };
-    frames: { shape: Partial<BlendWeights>; image: HTMLImageElement }[];
-  } | null = null;
 
   constructor(canvas: HTMLCanvasElement, rig: Rig, texture: HTMLImageElement, opts: EngineOptions = {}) {
     this.canvas = canvas;
@@ -459,22 +438,6 @@ export class AvatarEngine {
     this.layers = layers;
   }
 
-  /**
-   * Switch the mouth to photographic keyframes.
-   *
-   * Each frame is a picture of THIS face making one mouth shape, aligned to
-   * the photo and cropped to a shared box (see services/visemeframes.py).
-   * The frames carry the blendshape coordinates of the shape they depict, so
-   * they are keys in the space the cue blender already produces — nothing
-   * about timing, coarticulation or stress changes here. Only the pixels do.
-   */
-  setVisemeFrames(set: {
-    box: { x: number; y: number; w: number; h: number };
-    frames: { shape: Partial<BlendWeights>; image: HTMLImageElement }[];
-  }): void {
-    if (this.destroyed || !set.frames.length) return;
-    this.visemeFrames = set;
-  }
 
   /**
    * Swap in a sharper copy of the same photo, mid-flight.
@@ -1425,168 +1388,12 @@ export class AvatarEngine {
 
     this.drawEyes(pts);
     this.drawLashes(pts);
-    this.drawMouth(pts);
+    this.drawLipContactLine(pts);
+    this.drawMouthInterior(pts);
 
     if (this.debugMesh) this.drawDebugMesh(pts);
     ctx.restore();
     ctx.restore();
-  }
-
-  /**
-   * The mouth: photographic keyframes when they exist, geometry otherwise.
-   *
-   * The two are alternatives, never both. The contact line and interior
-   * shading are compensations for what a warp of a closed mouth cannot show
-   * — over a real photograph of an open mouth they draw a second dark line
-   * across teeth that are already there.
-   */
-  private drawMouth(pts: Point[]): void {
-    if (this.visemeFrames) {
-      this.drawVisemeFrames(pts);
-      return;
-    }
-    this.drawLipContactLine(pts);
-    this.drawMouthInterior(pts);
-  }
-
-  /**
-   * The mouth, drawn from photographs instead of warped geometry.
-   *
-   * The current shape is a point in blendshape space; the frames are labelled
-   * points in that same space. Inverse-distance weights over the nearest few
-   * give a continuous mixture — the mouth is never parked on a keyframe, it
-   * moves through them, which is what the geometric path was already doing
-   * and what real articulation does.
-   *
-   * Compositing note: the frames are stacked back-to-front with alpha
-   * w_i / sum(w_i..w_n), which is exactly a weighted average under `over`
-   * compositing — the last (heaviest) frame lands at full alpha, so the
-   * region is fully replaced rather than ghosted over the warped mouth
-   * underneath. The whole stack is clipped to a feathered ellipse so the
-   * patch has no edge of its own.
-   */
-  private drawVisemeFrames(pts: Point[]): void {
-    const set = this.visemeFrames!;
-    const w = this.weights;
-
-    // Distance in shape space. jawOpen dominates how a mouth reads, so it
-    // carries more weight than the lip-detail channels.
-    const AXES: [keyof BlendWeights, number][] = [
-      ["jawOpen", 1.6],
-      ["mouthClose", 1.2],
-      ["mouthPucker", 1.0],
-      ["mouthFunnel", 0.8],
-      ["mouthStretch", 0.9],
-      ["mouthSmile", 0.5],
-    ];
-    const scored = set.frames.map((frame) => {
-      let d2 = 0;
-      for (const [key, k] of AXES) {
-        const delta = (w[key] ?? 0) - (frame.shape[key] ?? 0);
-        d2 += k * delta * delta;
-      }
-      // Inverse SQUARED distance: plain inverse distance leaves every key
-      // contributing everywhere, so a closed mouth carried a little of the
-      // wide-open frame and the resting face wore a permanent half-smile.
-      // Squaring makes the nearest key clearly dominant while still
-      // crossfading through the ones between.
-      return { frame, weight: 1 / (d2 * d2 + 0.004) };
-    });
-    scored.sort((a, b) => b.weight - a.weight);
-    const top = scored.slice(0, 3);
-    const total = top.reduce((sum, s) => sum + s.weight, 0);
-    if (!(total > 0)) return;
-
-    // Where the stored patch lands on canvas, in the photo's mapping.
-    const box = set.box;
-    const dx = box.x * this.scale + this.offsetX;
-    const dy = box.y * this.scale + this.offsetY;
-    const dw = box.w * this.scale;
-    const dh = box.h * this.scale;
-
-    // How much of it is allowed to SHOW: an ellipse hugging the live mouth.
-    // Taken from the deformed points rather than the stored box so it tracks
-    // the mouth the rest of the engine is drawing, and so the visible extent
-    // stays a render-time decision (see MOUTH_PATCH_W/H).
-    const mouthIdx = this.rig.mouth_indices ?? [];
-    if (!mouthIdx.length) return;
-    let mx0 = Infinity, my0 = Infinity, mx1 = -Infinity, my1 = -Infinity;
-    for (const i of mouthIdx) {
-      const p = pts[i];
-      if (!p) continue;
-      if (p.x < mx0) mx0 = p.x;
-      if (p.x > mx1) mx1 = p.x;
-      if (p.y < my0) my0 = p.y;
-      if (p.y > my1) my1 = p.y;
-    }
-    if (!(mx1 > mx0)) return;
-    const mcx = (mx0 + mx1) / 2;
-    const mcy = (my0 + my1) / 2;
-    const mw = mx1 - mx0;
-    // Height from the WIDTH, not the measured height: a closed mouth is a
-    // few pixels tall, and a patch scaled from that would be a slit that
-    // cannot show an open jaw.
-    const rx = mw * MOUTH_PATCH_W;
-    const ry = mw * MOUTH_PATCH_H * 0.5;
-
-    // Build the blend in an offscreen buffer, then feather the buffer once
-    // and stamp it. Feathering each frame as it goes down would fade the
-    // earlier frames repeatedly and hollow out the middle of the mouth.
-    const buffer = this.mouthBuffer(Math.ceil(dw), Math.ceil(dh));
-    if (!buffer) return;
-    const bctx = buffer.getContext("2d")!;
-    bctx.globalCompositeOperation = "source-over";
-    bctx.clearRect(0, 0, buffer.width, buffer.height);
-    // Weighted average under `over`: draw lightest first at full alpha, then
-    // each heavier frame at w_i / (sum of it and everything already down).
-    // The accumulator has to grow with what is BELOW — running it the other
-    // way puts the heaviest frame on top at alpha 1, which hides the blend
-    // entirely and snaps the mouth from key to key. (Caught by sampling a
-    // shape halfway between two keys and finding one key's exact colour.)
-    let below = 0;
-    for (let i = top.length - 1; i >= 0; i--) {
-      below += top[i].weight;
-      bctx.globalAlpha = Math.min(1, top[i].weight / below);
-      bctx.drawImage(top[i].frame.image, 0, 0, buffer.width, buffer.height);
-    }
-    bctx.globalAlpha = 1;
-
-    // Feather to the mouth ellipse: a hard-edged patch stamps a visible
-    // rectangle of slightly different skin around every mouth.
-    // destination-in keeps the buffer only where the gradient is opaque.
-    // The ellipse is expressed in BUFFER pixels, which is why the live
-    // mouth centre is converted out of canvas space here.
-    const bufScaleX = buffer.width / dw;
-    const bufScaleY = buffer.height / dh;
-    bctx.globalCompositeOperation = "destination-in";
-    bctx.save();
-    bctx.translate((mcx - dx) * bufScaleX, (mcy - dy) * bufScaleY);
-    bctx.scale(rx * bufScaleX, ry * bufScaleY);
-    const feather = bctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-    feather.addColorStop(0, "rgba(0,0,0,1)");
-    feather.addColorStop(FEATHER_SOLID, "rgba(0,0,0,1)");
-    feather.addColorStop(1, "rgba(0,0,0,0)");
-    bctx.fillStyle = feather;
-    // Cover the whole buffer in this scaled space, so nothing outside the
-    // ellipse survives regardless of where the mouth sits in the patch.
-    bctx.fillRect(-1e4, -1e4, 2e4, 2e4);
-    bctx.restore();
-    bctx.globalCompositeOperation = "source-over";
-
-    this.ctx.drawImage(buffer, dx, dy, dw, dh);
-  }
-
-  /** Reusable offscreen buffer for the mouth blend, grown as needed. */
-  private mouthBufferCanvas: HTMLCanvasElement | null = null;
-  private mouthBuffer(width: number, height: number): HTMLCanvasElement | null {
-    if (width < 2 || height < 2) return null;
-    let canvas = this.mouthBufferCanvas;
-    if (!canvas) canvas = this.mouthBufferCanvas = document.createElement("canvas");
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
-    }
-    return canvas;
   }
 
   /** Draw a full-frame layer through the same crop/scale mapping as the photo. */
@@ -1641,7 +1448,8 @@ export class AvatarEngine {
     }
     this.drawEyes(pts);
     this.drawLashes(pts);
-    this.drawMouth(pts);
+    this.drawLipContactLine(pts);
+    this.drawMouthInterior(pts);
     if (this.debugMesh) this.drawDebugMesh(pts);
     ctx.restore();
     ctx.restore();

@@ -146,17 +146,6 @@ const resources = {
       viewFull: "Full photo",
       fullscreen: "Fullscreen",
       exitFullscreen: "Exit fullscreen",
-      mouthFramesTitle: "AI mouth shapes",
-      mouthModeFree: "Free mouth",
-      mouthModeAi: "AI mouth",
-      mouthModeFreeBody:
-        "This avatar uses the built-in mouth, which costs nothing. Switch on to "
-        + "generate photographic mouth shapes for this face — real teeth and tongue.",
-      mouthModeAiBody: "Using {{count}} generated mouth shapes. Switch off for the free mouth.",
-      mouthFramesWorking: "Generating…",
-      mouthFramesCost:
-        "Switching on the first time costs six image generations (about a minute) and "
-        + "sends your photo to your image provider. After that, switching is free.",
       generate3d: "Generate 3D",
       markFace: "Mark the face",
       markFaceHint:
@@ -438,18 +427,6 @@ const resources = {
       viewFull: "Photo entière",
       fullscreen: "Plein écran",
       exitFullscreen: "Quitter le plein écran",
-      mouthFramesTitle: "Bouches générées par IA",
-      mouthModeFree: "Bouche gratuite",
-      mouthModeAi: "Bouche IA",
-      mouthModeFreeBody:
-        "Cet avatar utilise la bouche intégrée, qui ne coûte rien. Activez pour générer "
-        + "des formes de bouche photographiques — de vraies dents et une vraie langue.",
-      mouthModeAiBody:
-        "{{count}} formes de bouche générées utilisées. Désactivez pour la bouche gratuite.",
-      mouthFramesWorking: "Génération…",
-      mouthFramesCost:
-        "La première activation coûte six générations d'images (environ une minute) et "
-        + "envoie votre photo à votre fournisseur. Ensuite, changer est gratuit.",
       generate3d: "Générer en 3D",
       markFace: "Marquer le visage",
       markFaceHint:

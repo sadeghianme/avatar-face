@@ -660,83 +660,6 @@ async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFi
     return RigFitResult(rig=adjusted, persisted=body.persist)
 
 
-@router.post("/{avatar_id}/viseme-frames", response_model=AvatarOut)
-async def build_viseme_frames(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
-    """Generate photographic mouth keyframes for this avatar.
-
-    Opt-in and explicitly requested: it spends image-generation quota (one
-    call per key shape) and takes about a minute, so it is never a side
-    effect of uploading. Synchronous on purpose — the user pressed a button
-    that costs money and should see the result, not a background job whose
-    outcome they have to go looking for.
-    """
-    import json as _json
-
-    from app.services.visemeframes import (
-        KEY_VISEMES,
-        VisemeFramesUnavailable,
-        build_all,
-        manifest_key,
-    )
-
-    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
-    if avatar.kind != AvatarKind.photo or not avatar.rig_key or not avatar.image_key:
-        raise Conflict409("Only ready photo avatars can have mouth frames", code="not_a_photo")
-
-    storage = get_storage()
-    # Turning the feature back on after switching it off must not re-buy what
-    # is already stored.
-    existing = manifest_key(avatar.org_id, avatar.id)
-    if await storage.exists(existing):
-        avatar.viseme_frames = len(
-            _json.loads(await storage.get_bytes(existing)).get("frames", [])
-        )
-        if avatar.viseme_frames:
-            await db.commit()
-            return avatar
-
-    await check_image_limit(db, ctx.org.id, len(KEY_VISEMES))
-    rig = _json.loads(await storage.get_bytes(avatar.rig_key))
-    try:
-        built = await build_all(
-            avatar, storage, await storage.get_bytes(avatar.image_key), rig
-        )
-    except VisemeFramesUnavailable as exc:
-        raise Conflict409(
-            "No image provider is configured on this server",
-            code="imagegen_unavailable",
-        ) from exc
-
-    # Metered per frame that was actually generated, not per frame kept: a
-    # frame the provider produced and we then rejected still cost money.
-    for _ in range(len(KEY_VISEMES)):
-        await record_generation(db, ctx.org.id, "gemini")
-
-    if not built:
-        raise Conflict409(
-            "No usable mouth frames came back. Try again, or use a photo where "
-            "the face is larger and facing the camera.",
-            code="no_usable_frames",
-        )
-
-    avatar.viseme_frames = built
-    await db.commit()
-    return avatar
-
-
-@router.delete("/{avatar_id}/viseme-frames", response_model=AvatarOut)
-async def clear_viseme_frames(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
-    """Go back to the geometric mouth.
-
-    The stored frames are left in place: they are already paid for, and
-    turning the feature back on should not spend the quota again.
-    """
-    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
-    avatar.viseme_frames = 0
-    await db.commit()
-    return avatar
-
-
 @router.post("/{avatar_id}/rig-reset", response_model=AvatarOut)
 async def rig_reset(
     avatar_id: str, ctx: OrgMember, db: DB, background: BackgroundTasks
@@ -769,10 +692,9 @@ async def get_avatar_detail(avatar_id: str, ctx: OrgMember, db: DB) -> AvatarDet
         detail.rig_url = await storage.presign_get(avatar.rig_key)
     if avatar.thumbnail_key:
         detail.thumbnail_url = await storage.presign_get(avatar.thumbnail_key)
-    from app.api.embed import _layer_urls, _viseme_frames
+    from app.api.embed import _layer_urls
 
     detail.layer_urls = await _layer_urls(avatar, storage)
-    detail.viseme_frame_set = await _viseme_frames(avatar, storage)
     return detail
 
 

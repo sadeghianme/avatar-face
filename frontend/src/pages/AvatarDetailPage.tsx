@@ -7,7 +7,6 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { CropStudio } from "../components/CropStudio";
 import { Icon } from "../components/Icon";
 import { MarkFacePanel } from "../components/MarkFacePanel";
-import { MouthFramesPanel } from "../components/MouthFramesPanel";
 import { Avatar3DPreview } from "../components/Avatar3DPreview";
 import { AvatarPreview } from "../components/AvatarPreview";
 import { EmbedSnippet } from "../components/EmbedSnippet";
@@ -293,7 +292,6 @@ export function AvatarDetailPage() {
                 // on a large preview canvas.
                 textureUrl={avatar.image_url ?? avatar.thumbnail_url}
                 layerUrls={avatar.layer_urls}
-                visemeFrameSet={avatar.viseme_frame_set}
                 debugMesh={debugMesh}
                 fullPhoto={fullPhoto}
                 onEngine={setEngine}
@@ -307,9 +305,6 @@ export function AvatarDetailPage() {
               selection={voice}
               onSelectionChange={setVoice}
             />
-            {avatar.kind === "photo" && (
-              <MouthFramesPanel avatar={avatar} orgId={current.id} />
-            )}
             <TuningPanel
               engine={engine}
               avatarId={avatar.id}

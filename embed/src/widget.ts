@@ -117,10 +117,6 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     image_url?: string | null;
     model_url?: string | null;
     layer_urls?: { background?: string; body: string; head: string } | null;
-    viseme_frames?: {
-      box: { x: number; y: number; w: number; h: number };
-      frames: { viseme: string; shape: Record<string, number>; url: string }[];
-    } | null;
   } = await meta.json();
 
   let engine: SpeechPlayer & { isSpeaking(): boolean };
@@ -158,20 +154,6 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
       })
       .catch(() => undefined); // thumbnail stays — worse, but alive
 
-    // Photographic mouth keyframes, when the owner paid for them. Also
-    // progressive and all-or-nothing: a partial set would blend toward
-    // shapes that are not there.
-    const vf = info.viseme_frames;
-    if (vf?.frames?.length) {
-      void Promise.all(vf.frames.map((f) => loadImage(f.url)))
-        .then((images) =>
-          photoEngine.setVisemeFrames({
-            box: vf.box,
-            frames: vf.frames.map((f, i) => ({ shape: f.shape, image: images[i] })),
-          })
-        )
-        .catch(() => undefined); // geometric mouth stays
-    }
 
     // Layered upgrade, also progressive: the avatar is already animating on
     // the flat photo; when the background/body/head decomposition lands the
