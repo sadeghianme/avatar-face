@@ -219,6 +219,9 @@ const resources = {
       imageProvidersHint:
         "Used to generate avatar images from a photo. Photos are sent to the provider.",
       voiceProvidersHint: "Used to synthesise speech. Leave empty to use the free browser voices.",
+      modelProviders: "3D avatar providers",
+      modelProvidersHint:
+        "Used to build a rigged 3D avatar from a photo. Without one, 3D avatars can still be imported as GLB files.",
       forgotPassword: "Forgot your password?",
       forgotTitle: "Reset your password",
       forgotSubtitle: "We'll email you a link to choose a new one.",

@@ -12,7 +12,7 @@ async def test_get_integrations_initial_state(client):
     response = await client.get(f"/orgs/{org_id}/integrations", headers=headers)
     assert response.status_code == 200
     providers = {p["provider"] for p in response.json()}
-    assert providers == {"azure", "elevenlabs", "google", "openai", "gemini"}
+    assert providers == {"azure", "elevenlabs", "google", "openai", "gemini", "avaturn"}
     for provider in response.json():
         assert provider["configured"] is False
         for field in provider["fields"]:
@@ -29,7 +29,8 @@ async def test_providers_declare_what_they_are_for(client):
     kinds = {p["provider"]: p["kind"] for p in response.json()}
     assert kinds["gemini"] == "image"
     assert kinds["elevenlabs"] == "voice"
-    assert set(kinds.values()) <= {"voice", "image"}
+    assert kinds["avaturn"] == "model"
+    assert set(kinds.values()) <= {"voice", "image", "model"}
 
 
 async def test_testing_an_image_provider_without_a_key_says_so(client):

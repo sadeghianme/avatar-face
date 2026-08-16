@@ -109,6 +109,7 @@ export function SettingsPage() {
 
       {isOwner && orgId && <ProvidersCard orgId={orgId} kind="voice" />}
       {isOwner && orgId && <ProvidersCard orgId={orgId} kind="image" />}
+      {isOwner && orgId && <ProvidersCard orgId={orgId} kind="model" />}
     </div>
   );
 }
@@ -122,7 +123,7 @@ const FIELD_LABELS: Record<string, string> = {
   gemini_api_key: "API key",
 };
 
-function ProvidersCard({ orgId, kind }: { orgId: string; kind: "voice" | "image" }) {
+function ProvidersCard({ orgId, kind }: { orgId: string; kind: "voice" | "image" | "model" }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -169,10 +170,10 @@ function ProvidersCard({ orgId, kind }: { orgId: string; kind: "voice" | "image"
   return (
     <section className="card">
       <h2 className="mb-1 font-medium">
-        {t(kind === "image" ? "imageProviders" : "voiceProviders")}
+        {t(`${kind}Providers`)}
       </h2>
       <p className="mb-4 text-[13px] text-gray-500 dark:text-gray-400">
-        {t(kind === "image" ? "imageProvidersHint" : "voiceProvidersHint")}
+        {t(`${kind}ProvidersHint`)}
       </p>
       {error && <p className="field-error mb-3">{error}</p>}
       <div className="flex flex-col gap-5">

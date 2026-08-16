@@ -93,14 +93,6 @@ export function AvatarDetailPage() {
     }
   };
 
-  const generate3d = async () => {
-    const created = await api.post<Avatar>(
-      `/orgs/${current.id}/avatars/${avatar.id}/generate-3d`
-    );
-    await queryClient.invalidateQueries({ queryKey: ["avatars", current.id] });
-    navigate(`/avatars/${created.id}`);
-  };
-
   const retry = async () => {
     await api.post(`/orgs/${current.id}/avatars/${avatar.id}/retry`);
     await queryClient.invalidateQueries({ queryKey: ["avatar", current.id, avatarId] });
@@ -192,10 +184,6 @@ export function AvatarDetailPage() {
                 <Icon name="play" className="me-1.5 inline h-4 w-4" />
                 {t("testInSimulator")}
               </Link>
-              <button className="btn-secondary" onClick={() => void generate3d()}>
-                <Icon name="cube" className="me-1.5 inline h-4 w-4" />
-                {t("generate3d")}
-              </button>
             </>
           )}
           {avatar.undo_label && (

@@ -29,6 +29,9 @@ CREDENTIAL_FIELDS: dict[str, list[str]] = {
     # Image generation, not speech — grouped here anyway so there is one
     # place a deployment's provider secrets live.
     "gemini": ["gemini_api_key"],
+    # 3D avatars from a photo. Paid-plan only on Avaturn's side, which is
+    # why this is a key the operator supplies rather than a built-in.
+    "avaturn": ["avaturn_api_token"],
 }
 ALL_CREDENTIAL_NAMES = [name for fields in CREDENTIAL_FIELDS.values() for name in fields]
 
@@ -41,6 +44,7 @@ PROVIDER_KIND: dict[str, str] = {
     "google": "voice",
     "openai": "voice",
     "gemini": "image",
+    "avaturn": "model",
 }
 
 

@@ -78,17 +78,27 @@ async def test_rig_adjust_validates_scale(client):
     assert response.status_code == 422
 
 
-async def test_rig_adjust_rejects_3d(client):
+async def test_rig_adjust_rejects_3d(client, monkeypatch):
+    """Landmark nudging is a 2D-mesh operation; a GLB has no mesh to nudge."""
+    from app.models import Avatar, AvatarKind
+    from app.db import get_session_factory
+    from sqlalchemy import select
+
     headers = await register_and_login(client, "alice")
     org_id = await create_org(client, headers)
     photo_id = await create_ready_avatar(client, headers, org_id)
-    model = (
-        await client.post(
-            f"/orgs/{org_id}/avatars/{photo_id}/generate-3d", headers=headers
-        )
-    ).json()
+
+    # Turn it into a model3d row directly: importing a real GLB would need a
+    # network fetch, and what is under test is the kind check.
+    async with get_session_factory()() as db:
+        avatar = (
+            await db.execute(select(Avatar).where(Avatar.id == photo_id))
+        ).scalar_one()
+        avatar.kind = AvatarKind.model3d
+        await db.commit()
+
     response = await client.post(
-        f"/orgs/{org_id}/avatars/{model['id']}/rig-adjust",
+        f"/orgs/{org_id}/avatars/{photo_id}/rig-adjust",
         json={"mouth_dy": 5},
         headers=headers,
     )
