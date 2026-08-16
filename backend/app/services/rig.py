@@ -73,6 +73,46 @@ VISEME_BLENDSHAPES: dict[str, dict[str, float]] = {
     "ou":  {"jawOpen": 0.35, "mouthClose": 0.05, "mouthPucker": 0.85, "mouthFunnel": 0.6, "mouthStretch": 0.0, "mouthSmile": 0.0},
 }
 
+# A muzzle is a jaw, not a pair of lips.
+#
+# Every shape above is a human mouth: "oo" purses, "oh" funnels, "ee" spreads
+# the corners. A dog or a cat has none of that machinery — the mouth is a
+# hinge that opens along the snout, and driving it with pucker and funnel
+# produces the rubbery, human-lipped look that gives away a talking-animal
+# effect. So the vowels here are separated by how far the jaw drops rather
+# than by lip rounding, pucker and funnel are zero throughout, and the
+# closures (PP, and the nasals) stay firm because animals do close their
+# mouths completely.
+#
+# Same keys, same engine, different numbers: nothing downstream knows which
+# table it was handed.
+ANIMAL_VISEME_BLENDSHAPES: dict[str, dict[str, float]] = {
+    "sil": {"jawOpen": 0.0, "mouthClose": 0.1, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.0, "mouthSmile": 0.0},
+    "PP":  {"jawOpen": 0.02, "mouthClose": 0.95, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.0, "mouthSmile": 0.0},
+    "FF":  {"jawOpen": 0.12, "mouthClose": 0.5, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.15, "mouthSmile": 0.0},
+    "TH":  {"jawOpen": 0.3, "mouthClose": 0.1, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.12, "mouthSmile": 0.0},
+    "DD":  {"jawOpen": 0.35, "mouthClose": 0.08, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.12, "mouthSmile": 0.0},
+    "kk":  {"jawOpen": 0.45, "mouthClose": 0.05, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.08, "mouthSmile": 0.0},
+    "CH":  {"jawOpen": 0.3, "mouthClose": 0.08, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.06, "mouthSmile": 0.0},
+    "SS":  {"jawOpen": 0.18, "mouthClose": 0.15, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.3, "mouthSmile": 0.05},
+    "nn":  {"jawOpen": 0.22, "mouthClose": 0.28, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.1, "mouthSmile": 0.0},
+    "RR":  {"jawOpen": 0.3, "mouthClose": 0.06, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.06, "mouthSmile": 0.0},
+    "aa":  {"jawOpen": 0.95, "mouthClose": 0.0, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.15, "mouthSmile": 0.0},
+    "E":   {"jawOpen": 0.55, "mouthClose": 0.0, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.35, "mouthSmile": 0.1},
+    "ih":  {"jawOpen": 0.35, "mouthClose": 0.04, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.3, "mouthSmile": 0.08},
+    "oh":  {"jawOpen": 0.7, "mouthClose": 0.0, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.05, "mouthSmile": 0.0},
+    "ou":  {"jawOpen": 0.45, "mouthClose": 0.05, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.0, "mouthSmile": 0.0},
+}
+
+# Human is the default and its table is the original, untouched: an existing
+# avatar must animate exactly as it did before face types existed.
+VISEME_PROFILES: dict[str, dict[str, dict[str, float]]] = {
+    "human": VISEME_BLENDSHAPES,
+    "cartoon": VISEME_BLENDSHAPES,
+    "animal": ANIMAL_VISEME_BLENDSHAPES,
+}
+
+
 # Canonical MediaPipe FaceMesh lip landmark indices.
 OUTER_LIP_RING = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291,
                   409, 270, 269, 267, 0, 37, 39, 40, 185]
@@ -209,7 +249,11 @@ def synthetic_face_mesh(width: int, height: int) -> np.ndarray:
 
 
 def build_rig(points: np.ndarray, image_size: tuple[int, int],
-              blendshapes: dict[str, float] | None = None) -> dict:
+              blendshapes: dict[str, float] | None = None,
+              face_type: str = "human") -> dict:
+    """Build the rig. `face_type` only selects the viseme table — geometry,
+    triangulation and every other field are identical for all types, and
+    "human" is the default so existing callers are unaffected."""
     width, height = image_size
     xs, ys = points[:, 0], points[:, 1]
     face_box = [float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max())]
@@ -225,7 +269,7 @@ def build_rig(points: np.ndarray, image_size: tuple[int, int],
         "mouth_indices": MOUTH_INDICES,
         "inner_lip_ring": INNER_LIP_RING,
         "outer_lip_ring": OUTER_LIP_RING,
-        "visemes": VISEME_BLENDSHAPES,
+        "visemes": VISEME_PROFILES.get(face_type, VISEME_BLENDSHAPES),
         "blendshapes": blendshapes,
     }
 
@@ -298,12 +342,23 @@ async def process_avatar(avatar_id: str) -> None:
                 # end stylised art, mascots and animal faces that Mark the
                 # face can rescue in a minute. The note tells the user the
                 # mouth is a guess until they place it.
+                animal = avatar.face_type == "animal"
                 if get_settings().rig_model_path and not detected:
                     quality_note = (
+                        "The muzzle could not be located automatically — no "
+                        "detector is trained on animal faces. Open “Mark the "
+                        "face” and place the head, eyes and mouth by hand."
+                        if animal else
                         "No face was detected in this image, so the animation "
                         "points are a guess. Open “Mark the face” and place "
                         "the head, eyes, mouth and pupils by hand."
                     )
+                elif animal:
+                    # The riggable checks measure HUMAN proportions — face
+                    # fraction, nose-offset frontality. A muzzle fails them
+                    # for being a muzzle, and warning about that would be
+                    # noise the user can do nothing with.
+                    quality_note = None
                 else:
                     verdict = check_landmarks(points, size, detected)
                     # Geometry problems are a warning, not a failure: the
@@ -312,7 +367,7 @@ async def process_avatar(avatar_id: str) -> None:
                     # picture the user chose.
                     quality_note = None if verdict.ok else verdict.reason
 
-                rig = build_rig(points, size, blendshapes)
+                rig = build_rig(points, size, blendshapes, face_type=avatar.face_type)
                 thumb, thumb_type = make_thumbnail(image_bytes)
 
             rig_key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/rig.json"

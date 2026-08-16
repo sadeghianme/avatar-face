@@ -15,6 +15,7 @@ from app.core.errors import Conflict409, NotFound404, Validation422
 from app.models import Avatar, AvatarKind, AvatarStatus
 from app.schemas.avatar import (
     AvatarCreate,
+    FaceType,
     AvatarCreated,
     AvatarDetail,
     AvatarFromUrl,
@@ -66,6 +67,7 @@ async def create_avatar(body: AvatarCreate, ctx: OrgMember, db: DB) -> AvatarCre
         name=body.name,
         kind=AvatarKind.model3d if is_model else AvatarKind.photo,
         content_type=body.content_type,
+        face_type=body.face_type,
     )
     db.add(avatar)
     await db.flush()
@@ -244,8 +246,33 @@ async def update_avatar(
         avatar.name = body.name
     if body.framing is not None:
         avatar.framing = body.framing
+    if body.face_type is not None and body.face_type != avatar.face_type:
+        avatar.face_type = body.face_type
+        # Only the viseme table changes. Re-running detection would throw
+        # away a hand-marked rig for a setting that has nothing to do with
+        # where the landmarks are.
+        await _reprofile_visemes(avatar)
     await db.commit()
     return avatar
+
+
+async def _reprofile_visemes(avatar: Avatar) -> None:
+    """Swap the stored rig's viseme table to match the avatar's face type."""
+    import json as _json
+
+    from app.services.rig import VISEME_BLENDSHAPES, VISEME_PROFILES
+
+    if not avatar.rig_key or avatar.kind != AvatarKind.photo:
+        return
+    storage = get_storage()
+    try:
+        rig = _json.loads(await storage.get_bytes(avatar.rig_key))
+        rig["visemes"] = VISEME_PROFILES.get(avatar.face_type, VISEME_BLENDSHAPES)
+        await storage.put_bytes(
+            avatar.rig_key, _json.dumps(rig).encode(), "application/json"
+        )
+    except Exception:
+        logger.exception("viseme reprofile failed for avatar %s", avatar.id)
 
 
 @router.post("/{avatar_id}/background", response_model=AvatarOut)
@@ -813,6 +840,7 @@ async def generate_candidates(
 class FromCandidateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     key: str
+    face_type: FaceType = "human"
 
 
 @router.post("/from-candidate", response_model=AvatarOut, status_code=201)
@@ -835,6 +863,7 @@ async def create_from_candidate(
         name=body.name,
         kind=AvatarKind.photo,
         content_type="image/png",
+        face_type=body.face_type,
     )
     db.add(avatar)
     await db.flush()

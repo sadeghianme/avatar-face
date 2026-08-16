@@ -34,6 +34,10 @@ export function NewAvatarPage() {
 
   // A photo waits here while it is edited; a .glb has nothing to edit and
   // goes straight through as before.
+  // Human unless the user says otherwise. Only the mouth shapes and the
+  // quality checks differ; everything else about the flow is identical,
+  // which is why this is one control rather than a separate section.
+  const [faceType, setFaceType] = useState<"human" | "animal" | "cartoon">("human");
   const [staged, setStaged] = useState<Staged | null>(null);
   const [history, setHistory] = useState<Staged[]>([]);
   const [saving, setSaving] = useState(false);
@@ -48,6 +52,7 @@ export function NewAvatarPage() {
         const created = await api.post<Created>(`/orgs/${current.id}/avatars`, {
           name: name.trim() || file.name.replace(/\.\w+$/, ""),
           content_type: "model/gltf-binary",
+          face_type: faceType,
         });
         setProgress(0);
         await uploadWithProgress(created.upload_url, file, setProgress, "model/gltf-binary");
@@ -99,6 +104,7 @@ export function NewAvatarPage() {
       const avatar = await api.post<Avatar>(`/orgs/${current.id}/avatars/from-candidate`, {
         name: name.trim() || "Avatar",
         key: staged.key,
+        face_type: faceType,
       });
       await queryClient.invalidateQueries({ queryKey: ["avatars", current.id] });
       navigate(`/avatars/${avatar.id}`);
@@ -199,6 +205,27 @@ export function NewAvatarPage() {
         onChange={(e) => setName(e.target.value)}
         placeholder="Ava"
       />
+
+      <label className="label">{t("faceType")}</label>
+      <div className="mb-6 flex flex-wrap gap-2">
+        {(["human", "animal", "cartoon"] as const).map((type) => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => setFaceType(type)}
+            className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+              faceType === type
+                ? "border-brand-600 bg-brand-600 text-white"
+                : "border-gray-300 bg-white text-gray-700 dark:border-line dark:bg-panel dark:text-gray-300"
+            }`}
+          >
+            {t(`faceType_${type}`)}
+          </button>
+        ))}
+      </div>
+      <p className="-mt-4 mb-6 text-xs text-gray-500 dark:text-gray-400">
+        {t(`faceTypeHint_${faceType}`)}
+      </p>
 
       <div
         role="button"

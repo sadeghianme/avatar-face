@@ -8,9 +8,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.models.avatar import AvatarKind, AvatarStatus
 
 
+FaceType = Literal["human", "animal", "cartoon"]
+
+
 class AvatarCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     content_type: str
+    # Human unless stated: every existing client omits this and must keep
+    # getting exactly what it got before.
+    face_type: FaceType = "human"
 
 
 class AvatarFromUrl(BaseModel):
@@ -104,6 +110,7 @@ class AvatarOut(BaseModel):
     undo_label: str | None = None
     # Set means a public page exists at /s/<token>; null means not shared.
     share_token: str | None = None
+    face_type: str = "human"
     created_at: datetime
     updated_at: datetime
 
@@ -113,6 +120,7 @@ class AvatarUpdate(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=128)
     framing: Literal["face", "full"] | None = None
+    face_type: FaceType | None = None
 
 
 class AvatarCreated(BaseModel):

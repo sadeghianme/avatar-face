@@ -138,6 +138,16 @@ const resources = {
       model3dTitle: "Or import a 3D avatar",
       model3dUrl: "3D model URL (.glb)",
       model3dHint: "Paste a GLB URL from an allowed host (e.g. Avaturn), or upload a .glb above — any model with ARKit blendshapes or viseme morphs gets sculpted lip-sync.",
+      faceType: "Face type",
+      faceType_human: "Human",
+      faceType_animal: "Animal",
+      faceType_cartoon: "Cartoon",
+      faceTypeHint_human: "A person's face. Lips round and spread as they would in real speech.",
+      faceTypeHint_animal:
+        "A muzzle is a jaw, not a pair of lips — speech moves the jaw instead of rounding. "
+        + "Nothing detects animal faces automatically, so use “Mark the face” to place the "
+        + "head, eyes and mouth. Works best on a head-on photo.",
+      faceTypeHint_cartoon: "Drawn or rendered characters with human-shaped mouths.",
       avatarName: "Avatar name",
       create: "Create",
       cancel: "Cancel",
@@ -441,6 +451,16 @@ const resources = {
       model3dTitle: "Ou importez un avatar 3D",
       model3dUrl: "URL du modèle 3D (.glb)",
       model3dHint: "Collez une URL GLB d'un hôte autorisé (ex. Avaturn), ou téléversez un .glb — tout modèle avec blendshapes ARKit ou morphs de visèmes obtient une synchronisation labiale sculptée.",
+      faceType: "Type de visage",
+      faceType_human: "Humain",
+      faceType_animal: "Animal",
+      faceType_cartoon: "Dessin animé",
+      faceTypeHint_human: "Un visage humain. Les lèvres s'arrondissent et s'étirent comme dans la parole réelle.",
+      faceTypeHint_animal:
+        "Un museau est une mâchoire, pas des lèvres — la parole ouvre la mâchoire au lieu d'arrondir. "
+        + "Aucune détection automatique n'existe pour les animaux : utilisez « Marquer le visage » pour "
+        + "placer la tête, les yeux et la bouche. Idéal sur une photo de face.",
+      faceTypeHint_cartoon: "Personnages dessinés ou rendus, avec une bouche de forme humaine.",
       avatarName: "Nom de l'avatar",
       create: "Créer",
       cancel: "Annuler",

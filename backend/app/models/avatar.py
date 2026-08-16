@@ -69,6 +69,10 @@ class Avatar(TimestampedBase):
     share_token: Mapped[str | None] = mapped_column(
         String(32), nullable=True, unique=True, index=True
     )
+    # "human" (default), "animal" or "cartoon". Selects the viseme table and
+    # relaxes the human-geometry checks; nothing else branches on it, and
+    # human keeps the behaviour that existed before this field.
+    face_type: Mapped[str] = mapped_column(String(16), default="human", nullable=False)
     # JSON list of snapshots taken before each edit, oldest first. See
     # app.api.avatars._snapshot.
     edit_history: Mapped[str | None] = mapped_column(Text, nullable=True)
