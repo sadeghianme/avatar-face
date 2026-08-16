@@ -128,6 +128,13 @@ const resources = {
       uploadPhoto: "Upload a photo",
       dragOrClick: "Drag a portrait here, or click to choose",
       stockGallery: "Or start from a stock avatar",
+      avaturnTitle: "Create a 3D avatar from your photo",
+      avaturnSubtitle:
+        "Build a fully rigged 3D head and body in Avaturn's editor, then bring it here to speak.",
+      avaturnBody:
+        "Your photos go straight from your browser to Avaturn — this server never sees them.",
+      avaturnStart: "Open the 3D editor",
+      avaturnImporting: "Importing your avatar…",
       model3dTitle: "Or import a 3D avatar",
       model3dUrl: "3D model URL (.glb)",
       model3dHint: "Paste a GLB URL from an allowed host (e.g. Avaturn), or upload a .glb above — any model with ARKit blendshapes or viseme morphs gets sculpted lip-sync.",
@@ -424,6 +431,13 @@ const resources = {
       uploadPhoto: "Téléverser une photo",
       dragOrClick: "Glissez un portrait ici, ou cliquez pour choisir",
       stockGallery: "Ou partez d'un avatar prédéfini",
+      avaturnTitle: "Créer un avatar 3D à partir de votre photo",
+      avaturnSubtitle:
+        "Créez une tête et un corps 3D entièrement rigués dans l'éditeur Avaturn, puis importez-les ici.",
+      avaturnBody:
+        "Vos photos vont directement de votre navigateur à Avaturn — ce serveur ne les voit jamais.",
+      avaturnStart: "Ouvrir l'éditeur 3D",
+      avaturnImporting: "Importation de votre avatar…",
       model3dTitle: "Ou importez un avatar 3D",
       model3dUrl: "URL du modèle 3D (.glb)",
       model3dHint: "Collez une URL GLB d'un hôte autorisé (ex. Avaturn), ou téléversez un .glb — tout modèle avec blendshapes ARKit ou morphs de visèmes obtient une synchronisation labiale sculptée.",

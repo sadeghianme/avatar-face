@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
+import { Avaturn3DPanel } from "../components/Avaturn3DPanel";
 import { GeneratePanel } from "../components/GeneratePanel";
 import { PhotoStudio, type Staged } from "../components/PhotoStudio";
 import { Spinner } from "../components/Spinner";
@@ -251,6 +252,10 @@ export function NewAvatarPage() {
       <h2 className="mb-1 mt-10 text-lg font-medium">{t("genTitle")}</h2>
       <p className="mb-3 text-[13px] text-gray-500 dark:text-gray-400">{t("genScratchTitle")}</p>
       {current && <GeneratePanel orgId={current.id} />}
+
+      <h2 className="mb-1 mt-10 text-lg font-medium">{t("avaturnTitle")}</h2>
+      <p className="mb-3 text-[13px] text-gray-500 dark:text-gray-400">{t("avaturnSubtitle")}</p>
+      {current && <Avaturn3DPanel orgId={current.id} />}
 
       <h2 className="mb-3 mt-10 text-lg font-medium">{t("model3dTitle")}</h2>
       <form

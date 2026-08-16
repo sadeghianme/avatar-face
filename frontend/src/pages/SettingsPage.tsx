@@ -121,6 +121,7 @@ const FIELD_LABELS: Record<string, string> = {
   google_tts_credentials_json: "Service-account JSON (or file path)",
   openai_api_key: "API key",
   gemini_api_key: "API key",
+  avaturn_api_token: "Project API token",
 };
 
 function ProvidersCard({ orgId, kind }: { orgId: string; kind: "voice" | "image" | "model" }) {

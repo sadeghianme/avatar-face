@@ -115,6 +115,24 @@ async def create_from_url(
     return avatar
 
 
+@router.post("/avaturn-session")
+async def avaturn_session(ctx: OrgMember) -> dict:
+    """An Avaturn editor URL for this user to build a 3D avatar in.
+
+    The token never leaves the server; the browser only ever sees the
+    session URL, which is scoped to one throwaway Avaturn user.
+    """
+    from app.services.avaturn import AvaturnUnavailable, new_session
+
+    try:
+        return await new_session()
+    except AvaturnUnavailable as exc:
+        raise Conflict409(
+            "No 3D avatar provider is configured on this server",
+            code="avaturn_unavailable",
+        ) from exc
+
+
 @router.get("", response_model=list[AvatarOut])
 async def list_avatars(ctx: OrgMember, db: DB) -> list[Avatar]:
     return list(
