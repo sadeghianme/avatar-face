@@ -7,6 +7,7 @@ import { api } from "../lib/api";
 import type { Provider, Voice } from "../lib/types";
 
 export const BROWSER_PROVIDER = "browser";
+export const SERVER_PROVIDER = "kokoro";
 
 export interface VoiceSelection {
   provider: string;
@@ -16,13 +17,15 @@ export interface VoiceSelection {
 
 /** The voice a fresh panel starts on.
  *
- * Device voices when the browser has them; the offline tone generator is the
- * zero-dependency fallback, not the experience.
+ * The server voice, because it is the only one that sounds the same for
+ * everyone: device voices differ per visitor's OS, so what an owner hears
+ * while building an avatar would not be what their visitors hear. If this
+ * instance never downloaded the Kokoro weights the picker falls back to
+ * whatever IS available (see the provider-validation effect below), so
+ * naming it here is a preference, not a requirement.
  */
 export function defaultVoiceSelection(): VoiceSelection {
-  return BrowserTTS.supported()
-    ? { provider: BROWSER_PROVIDER, voice: "", locale: "en-US" }
-    : { provider: "offline", voice: "offline-warm", locale: "en-US" };
+  return { provider: SERVER_PROVIDER, voice: "af_heart", locale: "en-US" };
 }
 
 export function VoicePicker({
@@ -59,6 +62,17 @@ export function VoicePicker({
     },
     enabled: Boolean(value.provider),
   });
+
+  // Keep the PROVIDER valid too. The default names the server voice, which
+  // an instance without the model files does not have — without this the
+  // select would show a value absent from its own options and the voice
+  // query would 422.
+  useEffect(() => {
+    if (providers?.length && !providers.some((p) => p.name === value.provider)) {
+      onChange({ ...value, provider: providers[0].name, voice: "" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providers]);
 
   // Keep the voice valid when the provider (or its voice list) changes.
   useEffect(() => {

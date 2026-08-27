@@ -5,8 +5,8 @@
  *           data-avatar="AVATAR_ID"
  *           data-key="lf_..."
  *           data-api="https://api.example.com"
- *           data-voice="offline-warm"
- *           data-provider="offline"></script>
+ *           data-voice="af_heart"
+ *           data-provider="kokoro"></script>
  *
  * Renders a canvas where the script tag sits and exposes window.Liveface:
  *   Liveface.speak(text)  — chunked + prefetched for long text
@@ -68,10 +68,14 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
   const avatarId = script.dataset.avatar;
   const apiKey = script.dataset.key;
   const apiBase = (script.dataset.api ?? new URL(script.src).origin).replace(/\/$/, "");
-  // Default to the visitor's free system voices when the browser has them.
-  const provider =
-    script.dataset.provider ?? (BrowserTTS.supported() ? "browser" : "offline");
-  const voice = script.dataset.voice ?? (provider === "browser" ? "" : "offline-warm");
+  // Default to the server voice: it sounds the same for every visitor,
+  // where device voices differ by OS and browser. An explicit
+  // data-provider always wins, and every snippet the dashboard generates
+  // states one, so this only governs hand-written tags.
+  const provider = script.dataset.provider ?? "kokoro";
+  const voice =
+    script.dataset.voice ??
+    (provider === "kokoro" ? "af_heart" : provider === "browser" ? "" : "offline-warm");
   const locale = script.dataset.locale ?? "en-US";
   const size = Number(script.dataset.size ?? 320);
   if (!avatarId || !apiKey) {

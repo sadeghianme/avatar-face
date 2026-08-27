@@ -87,15 +87,17 @@ export function SharePage() {
   }, [token]);
 
   /**
-   * Speak with the visitor's own browser voice.
+   * Speak with the server voice, falling back to the visitor's own.
    *
-   * Free, and that is the point: a public link that billed its owner per
-   * press would be a liability to share. The timing still comes from the
-   * server's phoneme model (the /cues endpoint, which synthesises nothing),
-   * so the lip-sync is the real one and not a guess from character counts.
+   * The server voice is the point of a share link: it sounds identical for
+   * everyone who opens it, where device voices differ by OS so the same
+   * link would sound like a different character on every machine. Kokoro
+   * runs on our own CPU, so this costs the owner no per-character fee —
+   * only their monthly character allowance, and the speech cache means a
+   * phrase asked twice is synthesized once.
    *
-   * The paid server-voice path exists at /public/v1/.../speak for a future
-   * "use my provider" option; nothing on this page reaches it.
+   * If the instance has no server voice, or the request is throttled, the
+   * visitor's browser voice takes over rather than the page going silent.
    */
   const speak = async () => {
     const spoken = text.trim();
@@ -103,6 +105,32 @@ export function SharePage() {
     setSpeaking(true);
     setError(null);
     try {
+      const served = await fetch(`/api/public/v1/avatars/${token}/speak`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: spoken,
+          provider: "kokoro",
+          voice: "af_heart",
+          locale: "en-US",
+        }),
+      });
+      if (served.ok) {
+        const payload = await served.json();
+        await new Promise<void>((resolve) => {
+          engineRef.current!.playAudio(
+            payload.audio_b64,
+            payload.audio_mime,
+            payload.cues,
+            resolve
+          );
+        });
+        return;
+      }
+
+      // No server voice on this instance, or throttled: speak locally rather
+      // than leave the visitor looking at a silent face.
+      if (!BrowserTTS.supported()) throw new Error(t("shareNoVoice"));
       const tts = new BrowserTTS(engineRef.current, async (phrase) => {
         const response = await fetch("/api/embed/v1/cues", {
           method: "POST",
@@ -113,7 +141,6 @@ export function SharePage() {
         const body = await response.json();
         return { cues: body.cues, durationMs: body.duration_ms, wordMarks: body.word_marks };
       });
-      if (!BrowserTTS.supported()) throw new Error(t("shareNoVoice"));
       await tts.speak(spoken, undefined, "en-US");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("error"));

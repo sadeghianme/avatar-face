@@ -14,6 +14,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { MembersPage } from "./pages/MembersPage";
 import { NewAvatarPage } from "./pages/NewAvatarPage";
+import { PhotofaceHDPage } from "./pages/PhotofaceHDPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SharePage } from "./pages/SharePage";
@@ -61,6 +62,7 @@ export default function App() {
       <Route path="/app" element={<Protected><AvatarsPage /></Protected>} />
       <Route path="/avatars/new" element={<Protected><NewAvatarPage /></Protected>} />
       <Route path="/avatars/:avatarId" element={<Protected><AvatarDetailPage /></Protected>} />
+      <Route path="/photoface-hd" element={<Protected><PhotofaceHDPage /></Protected>} />
       <Route path="/members" element={<Protected><MembersPage /></Protected>} />
       <Route path="/api-keys" element={<Protected><ApiKeysPage /></Protected>} />
       <Route path="/settings" element={<Protected><SettingsPage /></Protected>} />
