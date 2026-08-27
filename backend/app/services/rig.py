@@ -391,6 +391,17 @@ async def process_avatar(avatar_id: str) -> None:
                 avatar.has_layers = await store_layers(
                     avatar, storage, image_bytes, rig["face_box"]
                 )
+            # A brand-new avatar publishes itself, so creating one and
+            # pasting the snippet works immediately. Only the FIRST build:
+            # re-running the pipeline on an existing avatar (retry, re-detect)
+            # is an edit, and edits wait for Publish like every other change.
+            if not avatar.published_config:
+                from app.services.publishing import publish as publish_snapshot
+
+                try:
+                    await publish_snapshot(avatar, storage)
+                except Exception:
+                    logger.exception("first publish failed for avatar %s", avatar.id)
         except NoFaceDetected as exc:
             # Expected, and the user can act on it — no stack trace.
             logger.info("no face in avatar %s", avatar_id)

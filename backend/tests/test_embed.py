@@ -46,14 +46,19 @@ async def test_embed_serves_the_full_image_not_the_thumbnail(client):
         )
     ).json()
     assert body["image_url"], "embed payload must carry the full-resolution photo"
-    assert "source" in body["image_url"], body["image_url"]
+    # Served from the published snapshot, which is a copy of the source photo
+    # rather than the 256px thumbnail.
+    assert "thumb" not in body["image_url"], body["image_url"]
+    assert "/published/" in body["image_url"], body["image_url"]
 
 
-async def test_framing_change_reaches_the_embed(client):
-    """Switching framing in the dashboard must change what embedding sites render.
+async def test_an_edit_does_not_reach_the_embed_until_published(client):
+    """The core of the draft/published split.
 
-    This is the whole reason framing is a column instead of a snippet
-    attribute — nobody should have to re-paste HTML on every site.
+    Editing and shipping used to be the same action: cropping a photo changed
+    what visitors saw before the owner had looked at the result. An edit now
+    moves the draft only; embedding sites keep serving the last published
+    snapshot until Publish is pressed.
     """
     headers, org_id, avatar_id, created = await _setup(client)
     key = {"X-Api-Key": created["plaintext"]}
@@ -65,6 +70,20 @@ async def test_framing_change_reaches_the_embed(client):
         f"/orgs/{org_id}/avatars/{avatar_id}", json={"framing": "full"}, headers=headers
     )
     assert patched.status_code == 200, patched.text
+    assert patched.json()["unpublished"] is True
+
+    # The dashboard shows the draft...
+    detail = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
+    assert detail["framing"] == "full"
+    # ...while visitors still get what was published.
+    during = (await client.get(f"/embed/v1/avatars/{avatar_id}", headers=key)).json()
+    assert during["framing"] == "face"
+
+    published = await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/publish", headers=headers
+    )
+    assert published.status_code == 200, published.text
+    assert published.json()["unpublished"] is False
 
     after = (await client.get(f"/embed/v1/avatars/{avatar_id}", headers=key)).json()
     assert after["framing"] == "full"

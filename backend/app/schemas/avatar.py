@@ -111,6 +111,10 @@ class AvatarOut(BaseModel):
     # Set means a public page exists at /s/<token>; null means not shared.
     share_token: str | None = None
     face_type: str = "human"
+    # True when the draft has moved ahead of the published snapshot — the
+    # dashboard shows a Publish bar on this.
+    unpublished: bool = False
+    published_at: str | None = None
     created_at: datetime
     updated_at: datetime
 

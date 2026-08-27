@@ -32,6 +32,7 @@ from app.services.rig import process_avatar
 from app.services.usage import check_image_limit, record_generated_avatar, record_generation
 from app.services.rig_fit import PupilMarks, RegionMarks, apply_anchors, current_anchors
 from app.services.segment import SegmentationUnavailable, remove_background
+from app.services.publishing import discard_draft, mark_dirty, publish
 from app.services.storage import get_storage
 
 logger = logging.getLogger("liveface.avatars")
@@ -246,6 +247,8 @@ async def update_avatar(
         avatar.name = body.name
     if body.framing is not None:
         avatar.framing = body.framing
+    if body.framing is not None or body.face_type is not None:
+        mark_dirty(avatar)
     if body.face_type is not None and body.face_type != avatar.face_type:
         avatar.face_type = body.face_type
         # Only the viseme table changes. Re-running detection would throw
@@ -300,6 +303,7 @@ async def set_background(
         avatar.original_image_key = None
         await _rebuild_thumbnail(avatar, storage)
         await _rebuild_layers(avatar, storage)
+        mark_dirty(avatar)
         await db.commit()
         return avatar
 
@@ -325,6 +329,7 @@ async def set_background(
     # dashboard grid kept showing the background after a successful removal.
     await _rebuild_thumbnail(avatar, storage)
     await _rebuild_layers(avatar, storage)
+    mark_dirty(avatar)
     await db.commit()
     return avatar
 
@@ -457,6 +462,7 @@ async def undo_edit(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
 
     avatar.edit_history = _json.dumps(history)
     await _rebuild_layers(avatar, storage)
+    mark_dirty(avatar)
     await db.commit()
     return avatar
 
@@ -503,6 +509,7 @@ async def crop_avatar(
         await _rebuild_thumbnail(avatar, storage)
         await _rebuild_rig(avatar, storage)
         await _rebuild_layers(avatar, storage)
+        mark_dirty(avatar)
         await db.commit()
         return avatar
 
@@ -545,6 +552,7 @@ async def crop_avatar(
     await _translate_rig(avatar, storage, left, top, cropped.size, _json)
     await _rebuild_thumbnail(avatar, storage)
     await _rebuild_layers(avatar, storage)
+    mark_dirty(avatar)
     await db.commit()
     return avatar
 
@@ -665,7 +673,40 @@ async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFi
         await storage.put_bytes(
             avatar.rig_key, _json.dumps(adjusted).encode(), "application/json"
         )
+        mark_dirty(avatar)
     return RigFitResult(rig=adjusted, persisted=body.persist)
+
+
+@router.post("/{avatar_id}/publish", response_model=AvatarOut)
+async def publish_avatar(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
+    """Make the current draft what embedded sites and share links serve.
+
+    Copies the draft's assets into an immutable snapshot rather than
+    recording which keys were live — layer files are overwritten in place,
+    so pointers would silently drift. See services/publishing.
+    """
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    if avatar.status != AvatarStatus.ready:
+        raise Conflict409("Only a ready avatar can be published", code="not_ready")
+    try:
+        await publish(avatar, get_storage())
+    except ValueError as exc:
+        raise Conflict409(str(exc), code="nothing_to_publish") from exc
+    await db.commit()
+    return avatar
+
+
+@router.post("/{avatar_id}/discard-draft", response_model=AvatarOut)
+async def discard_avatar_draft(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
+    """Throw the draft away and go back to what is published."""
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    if not await discard_draft(avatar, get_storage()):
+        raise Conflict409(
+            "This avatar has never been published, so there is nothing to go back to",
+            code="never_published",
+        )
+    await db.commit()
+    return avatar
 
 
 @router.post("/{avatar_id}/share", response_model=AvatarOut)

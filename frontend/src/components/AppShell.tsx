@@ -18,6 +18,7 @@ import { OrgSwitcher } from "./OrgSwitcher";
 const NAV: { to: string; key: string; icon: IconName }[] = [
   { to: "/app", key: "avatars", icon: "faces" },
   { to: "/photoface-hd", key: "photofaceHD", icon: "cube" },
+  { to: "/voices", key: "voicesNav", icon: "mic" },
   { to: "/members", key: "members", icon: "users" },
   { to: "/api-keys", key: "apiKeys", icon: "key" },
   { to: "/simulator", key: "simulator", icon: "play" },

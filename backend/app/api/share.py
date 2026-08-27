@@ -59,18 +59,22 @@ async def public_avatar(token: str, db: DB) -> dict:
     """Everything the widget engine needs to render, and nothing else."""
     avatar = await _resolve(token, db)
     storage = get_storage()
-    image_url = await storage.presign_get(avatar.image_key or "")
-    from app.api.embed import _layer_urls
+    # Published, like the embed: a share link is a page other people open,
+    # so a half-finished edit must not appear on it either.
+    from app.services.publishing import published_view
 
+    view = await published_view(avatar, storage)
+    if view is None:
+        raise NotFound404("This link is not available", code="share_not_found")
     return {
         "name": avatar.name,
         "kind": avatar.kind.value,
-        "framing": avatar.framing,
-        "rig_url": await storage.presign_get(avatar.rig_key or ""),
-        "thumbnail_url": await storage.presign_get(avatar.thumbnail_key or ""),
-        "image_url": image_url,
-        "model_url": image_url if avatar.kind.value == "model3d" else None,
-        "layer_urls": await _layer_urls(avatar, storage),
+        "framing": view["framing"],
+        "rig_url": view["rig_url"],
+        "thumbnail_url": view["thumbnail_url"],
+        "image_url": view["image_url"],
+        "model_url": view["image_url"] if avatar.kind.value == "model3d" else None,
+        "layer_urls": view["layer_urls"],
     }
 
 

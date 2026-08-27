@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import enum
 
-from sqlalchemy import Enum, ForeignKey, String, Text
+from sqlalchemy import Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import TimestampedBase
@@ -73,9 +73,34 @@ class Avatar(TimestampedBase):
     # relaxes the human-geometry checks; nothing else branches on it, and
     # human keeps the behaviour that existed before this field.
     face_type: Mapped[str] = mapped_column(String(16), default="human", nullable=False)
+    # Draft/published split. `draft_revision` is bumped by every edit a
+    # visitor could notice; `published_config` is the JSON snapshot the embed
+    # serves. Unpublished changes are simply the two disagreeing — comparing
+    # storage keys would not work, because marking the face rewrites rig.json
+    # in place under an unchanged key.
+    draft_revision: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    published_config: Mapped[str | None] = mapped_column(Text, nullable=True)
     # JSON list of snapshots taken before each edit, oldest first. See
     # app.api.avatars._snapshot.
     edit_history: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    @property
+    def unpublished(self) -> bool:
+        """Has the draft moved ahead of what visitors are served?
+
+        A property rather than something each endpoint computes: the avatar
+        list, the detail page and the publish response must never disagree
+        about whether there is something to publish.
+        """
+        from app.services.publishing import has_unpublished_changes
+
+        return has_unpublished_changes(self)
+
+    @property
+    def published_at(self) -> str | None:
+        from app.services.publishing import config_of
+
+        return (config_of(self) or {}).get("published_at")
 
     @property
     def undo_label(self) -> str | None:

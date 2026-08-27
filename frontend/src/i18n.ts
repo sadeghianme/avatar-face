@@ -139,6 +139,37 @@ const resources = {
       photofaceHDReuse: "The same voices, phoneme cues and speech queue drive the new renderer.",
       photofaceHDIsolation: "Experimental module: the established 2D renderer and embed widget are untouched.",
       members: "Members",
+      voicesNav: "Voices",
+      voicesTitle: "Cloned voices",
+      voicesSubtitle:
+        "Record ten seconds of a voice and this instance learns to speak your lines in it. "
+        + "Rendering runs on your own hardware; everything else happens right here.",
+      voicesRecordTitle: "1 · Record a reference",
+      voicesRecordHint: "Read the passage below in a quiet room — at least {{seconds}} seconds.",
+      voicesPassage:
+        "The quick brown fox jumps over the lazy dog, but today the weather is bright and I have "
+        + "a thousand cheerful things to say. Please call me back when you hear this — thank you!",
+      voicesRecord: "Record",
+      voicesStop: "Stop",
+      voicesTooShort: "too short",
+      voicesMicDenied: "Microphone access was refused. Allow it in the browser and try again.",
+      voicesName: "Voice name",
+      voicesLines: "2 · Lines this voice will say",
+      voicesLinesHint: "One phrase per line. The avatar speaks exactly these in the cloned voice; anything else falls back to a server voice.",
+      voicesConsent: "This is my voice, or I have the speaker's written permission to clone it.",
+      voicesSubmit: "3 · Clone this voice",
+      voicesJobs: "Rendering",
+      voicesYours: "Your voices",
+      voicesStats: "{{lines}} lines · {{seconds}}s of audio",
+      voicesUseHint: "Use one in an embed snippet with data-provider=\"cloned\" and data-voice=\"ORG_ID:name\".",
+      voicesWorkerHint:
+        "A job is waiting for the render worker. Start it on the machine with the hardware (your Mac):",
+      voicesStatus_pending: "Waiting for worker",
+      voicesStatus_processing: "Rendering",
+      voicesStatus_done: "Ready",
+      voicesStatus_failed: "Failed",
+      voicesDefaultLines:
+        "Welcome! I'm glad you're here.\nHow can I help you today?\nThanks for visiting — see you soon!",
       apiKeys: "API keys",
       settings: "Settings",
       newAvatar: "New avatar",
@@ -165,6 +196,13 @@ const resources = {
         + "Nothing detects animal faces automatically, so use “Mark the face” to place the "
         + "head, eyes and mouth. Works best on a head-on photo.",
       faceTypeHint_cartoon: "Drawn or rendered characters with human-shaped mouths.",
+      publish: "Publish",
+      publishDiscard: "Discard changes",
+      publishDraftTitle: "You have unpublished changes",
+      publishDraftBody:
+        "Your sites and share links are still showing the last published version. Publish to make these changes live.",
+      publishLiveTitle: "Published",
+      publishLiveBody: "Everywhere this avatar is embedded is showing the current version.",
       avatarName: "Avatar name",
       create: "Create",
       cancel: "Cancel",
@@ -470,6 +508,37 @@ const resources = {
       photofaceHDReuse: "Les mêmes voix, phonèmes et files de lecture pilotent le nouveau moteur.",
       photofaceHDIsolation: "Module expérimental : le moteur 2D et le widget actuels restent intacts.",
       members: "Membres",
+      voicesNav: "Voix",
+      voicesTitle: "Voix clonées",
+      voicesSubtitle:
+        "Enregistrez dix secondes d'une voix et cette instance apprend à dire vos répliques avec. "
+        + "Le rendu s'exécute sur votre propre matériel ; tout le reste se passe ici.",
+      voicesRecordTitle: "1 · Enregistrez une référence",
+      voicesRecordHint: "Lisez le passage ci-dessous dans un endroit calme — au moins {{seconds}} secondes.",
+      voicesPassage:
+        "Portez ce vieux whisky au juge blond qui fume, mais aujourd'hui le temps est superbe et "
+        + "j'ai mille choses joyeuses à raconter. Rappelez-moi quand vous entendrez ceci — merci !",
+      voicesRecord: "Enregistrer",
+      voicesStop: "Arrêter",
+      voicesTooShort: "trop court",
+      voicesMicDenied: "L'accès au micro a été refusé. Autorisez-le dans le navigateur et réessayez.",
+      voicesName: "Nom de la voix",
+      voicesLines: "2 · Répliques que cette voix dira",
+      voicesLinesHint: "Une phrase par ligne. L'avatar dit exactement celles-ci avec la voix clonée ; le reste bascule sur une voix serveur.",
+      voicesConsent: "C'est ma voix, ou j'ai la permission écrite du locuteur pour la cloner.",
+      voicesSubmit: "3 · Cloner cette voix",
+      voicesJobs: "Rendu",
+      voicesYours: "Vos voix",
+      voicesStats: "{{lines}} répliques · {{seconds}}s d'audio",
+      voicesUseHint: "Utilisez-la dans un extrait avec data-provider=\"cloned\" et data-voice=\"ORG_ID:nom\".",
+      voicesWorkerHint:
+        "Une tâche attend le worker de rendu. Lancez-le sur la machine équipée (votre Mac) :",
+      voicesStatus_pending: "En attente du worker",
+      voicesStatus_processing: "Rendu en cours",
+      voicesStatus_done: "Prête",
+      voicesStatus_failed: "Échec",
+      voicesDefaultLines:
+        "Bienvenue ! Ravi de vous voir.\nComment puis-je vous aider aujourd'hui ?\nMerci de votre visite — à bientôt !",
       apiKeys: "Clés API",
       settings: "Paramètres",
       newAvatar: "Nouvel avatar",
@@ -496,6 +565,13 @@ const resources = {
         + "Aucune détection automatique n'existe pour les animaux : utilisez « Marquer le visage » pour "
         + "placer la tête, les yeux et la bouche. Idéal sur une photo de face.",
       faceTypeHint_cartoon: "Personnages dessinés ou rendus, avec une bouche de forme humaine.",
+      publish: "Publier",
+      publishDiscard: "Annuler les modifications",
+      publishDraftTitle: "Modifications non publiées",
+      publishDraftBody:
+        "Vos sites et liens publics affichent encore la dernière version publiée. Publiez pour rendre ces changements visibles.",
+      publishLiveTitle: "Publié",
+      publishLiveBody: "Partout où cet avatar est intégré, la version actuelle est affichée.",
       avatarName: "Nom de l'avatar",
       create: "Créer",
       cancel: "Annuler",

@@ -116,20 +116,24 @@ async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
     if avatar.status != AvatarStatus.ready:
         raise NotFound404("Avatar is not ready", code="avatar_not_ready")
     storage = get_storage()
-    # Absolute URLs: the widget runs on a third-party origin.
-    image_url = await storage.presign_get(avatar.image_key or "")
+    # The PUBLISHED snapshot, never the draft. An owner mid-edit must not be
+    # able to change what a visitor sees by accident; that only happens when
+    # they press Publish.
+    from app.services.publishing import published_view
+
+    view = await published_view(avatar, storage)
+    if view is None:
+        raise NotFound404("Avatar has not been published", code="avatar_not_published")
     return {
         "id": avatar.id,
         "name": avatar.name,
         "kind": avatar.kind.value,
-        # The owner's framing choice, so a change in the dashboard shows up on
-        # every embedding site at their next page load.
-        "framing": avatar.framing,
-        "rig_url": await storage.presign_get(avatar.rig_key or ""),
-        "thumbnail_url": await storage.presign_get(avatar.thumbnail_key or ""),
-        "image_url": image_url,
-        "model_url": image_url if avatar.kind.value == "model3d" else None,
-        "layer_urls": await _layer_urls(avatar, storage),
+        "framing": view["framing"],
+        "rig_url": view["rig_url"],
+        "thumbnail_url": view["thumbnail_url"],
+        "image_url": view["image_url"],
+        "model_url": view["image_url"] if avatar.kind.value == "model3d" else None,
+        "layer_urls": view["layer_urls"],
     }
 
 

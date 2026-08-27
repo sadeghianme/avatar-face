@@ -11,6 +11,7 @@ import { Avatar3DPreview } from "../components/Avatar3DPreview";
 import { AvatarPreview } from "../components/AvatarPreview";
 import { EmbedSnippet } from "../components/EmbedSnippet";
 import { PrepProgress } from "../components/PrepProgress";
+import { PublishBar } from "../components/PublishBar";
 import { SharePanel } from "../components/SharePanel";
 import { SpeakPanel } from "../components/SpeakPanel";
 import { defaultVoiceSelection, type VoiceSelection } from "../components/VoicePicker";
@@ -230,6 +231,8 @@ export function AvatarDetailPage() {
           </button>
         </div>
       )}
+
+      {avatar.status === "ready" && <PublishBar avatar={avatar} orgId={current.id} />}
 
       {(avatar.status === "pending" || avatar.status === "processing") && (
         <div className="mb-6">
