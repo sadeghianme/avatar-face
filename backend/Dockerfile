@@ -54,5 +54,25 @@ RUN curl -fsSL -o models/kokoro-v1.0.onnx     https://github.com/thewh1teagle/ko
 ENV KOKORO_MODEL_PATH=/app/backend/models/kokoro-v1.0.onnx
 ENV KOKORO_VOICES_PATH=/app/backend/models/voices-v1.0.bin
 
+# Piper voices (MIT) for the languages Kokoro does not speak — Persian first,
+# then Arabic, Turkish, Russian, German, Dutch, Polish. ~63MB each; only the
+# ones present on disk are advertised, so trimming this list is safe.
+RUN mkdir -p models/piper \
+ && for v in fa/fa_IR/amir/medium/fa_IR-amir-medium \
+             fa/fa_IR/gyro/medium/fa_IR-gyro-medium \
+             ar/ar_JO/kareem/medium/ar_JO-kareem-medium \
+             tr/tr_TR/dfki/medium/tr_TR-dfki-medium \
+             ru/ru_RU/dmitri/medium/ru_RU-dmitri-medium \
+             de/de_DE/thorsten/medium/de_DE-thorsten-medium \
+             nl/nl_NL/mls/medium/nl_NL-mls-medium \
+             pl/pl_PL/darkman/medium/pl_PL-darkman-medium ; do \
+      name=$(basename $v) ; \
+      curl -fsSL -o models/piper/$name.onnx \
+        https://huggingface.co/rhasspy/piper-voices/resolve/main/$v.onnx \
+   && curl -fsSL -o models/piper/$name.onnx.json \
+        https://huggingface.co/rhasspy/piper-voices/resolve/main/$v.onnx.json ; \
+    done
+ENV PIPER_VOICES_DIR=/app/backend/models/piper
+
 EXPOSE 7002
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7002"]

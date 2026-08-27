@@ -92,6 +92,8 @@ class Settings(BaseSettings):
     # Kokoro local TTS. Set by the Dockerfile; absent in dev unless downloaded.
     kokoro_model_path: str | None = None
     kokoro_voices_path: str | None = None
+    # Directory of Piper .onnx voices; covers the languages Kokoro lacks.
+    piper_voices_dir: str | None = None
 
     # --- 3D avatars: hosts allowed for GLB imports by URL (SSRF guard).
     # Ready Player Me shut down Jan 2026; Avaturn et al. are compatible. ---
