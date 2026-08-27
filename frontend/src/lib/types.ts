@@ -61,6 +61,8 @@ export interface Avatar {
   /** True when the draft has unpublished changes. */
   unpublished?: boolean;
   published_at?: string | null;
+  /** The avatar's draft voice {provider, voice, locale}; published on Publish. */
+  voice?: { provider: string; voice: string; locale: string } | null;
   /** Set means a public page exists at /s/<token>. */
   share_token?: string | null;
   /** Background/body/head decomposition for the layered render path. */

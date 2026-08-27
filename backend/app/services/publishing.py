@@ -123,6 +123,7 @@ async def publish(avatar, storage) -> dict:
         "revision": revision,
         "framing": avatar.framing,
         "face_type": getattr(avatar, "face_type", "human"),
+        "voice": getattr(avatar, "voice", None),
         "image_key": image_key,
         "rig_key": rig_key,
         "thumbnail_key": thumbnail_key,
@@ -236,6 +237,7 @@ async def published_view(avatar, storage) -> dict | None:
     }
     return {
         "framing": config.get("framing", "face"),
+        "voice": config.get("voice"),
         "rig_url": await storage.presign_get(config["rig_key"]) if config.get("rig_key") else "",
         "thumbnail_url": (
             await storage.presign_get(config["thumbnail_key"])

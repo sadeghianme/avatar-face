@@ -31,9 +31,12 @@ export function AvatarDetailPage() {
   const [debugMesh, setDebugMesh] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
   const [cropping, setCropping] = useState(false);
-  // Owned here so the embed snippet reproduces the voice that was just
-  // tested — otherwise the copied snippet speaks en-US whatever was picked.
+  // The avatar's DRAFT voice. Seeded from the saved value once loaded, and
+  // every change is written back — voice is a published property like
+  // framing now, so picking one shows the Publish bar and publishing makes
+  // embeds and share links speak with it.
   const [voice, setVoice] = useState<VoiceSelection>(defaultVoiceSelection);
+  const seededFor = useRef<string | null>(null);
   const [busyBg, setBusyBg] = useState(false);
 
   // Native fullscreen on the preview card. The `fullscreen` state exists so
@@ -52,6 +55,19 @@ export function AvatarDetailPage() {
     else void previewBoxRef.current?.requestFullscreen();
   };
 
+  const saveVoice = async (selection: VoiceSelection) => {
+    setVoice(selection);
+    await api.patch(`/orgs/${current!.id}/avatars/${avatarId}`, {
+      voice: {
+        provider: selection.provider,
+        voice: selection.voice,
+        locale: selection.locale,
+      },
+    });
+    // The PATCH bumps the draft revision; refetch so the Publish bar appears.
+    await queryClient.invalidateQueries({ queryKey: ["avatar", current!.id, avatarId] });
+  };
+
   const { data: avatar, isError } = useQuery({
     queryKey: ["avatar", current?.id, avatarId],
     queryFn: () => api.get<Avatar>(`/orgs/${current!.id}/avatars/${avatarId}`),
@@ -62,6 +78,15 @@ export function AvatarDetailPage() {
       return status === "pending" || status === "processing" ? 1500 : false;
     },
   });
+
+  // Seed once per avatar: reopening the page must show the saved voice, but
+  // a refetch mid-edit must not clobber a selection being made.
+  useEffect(() => {
+    if (avatar?.voice && seededFor.current !== avatar.id) {
+      seededFor.current = avatar.id;
+      setVoice(avatar.voice as VoiceSelection);
+    }
+  }, [avatar]);
 
   if (isError) {
     return <p className="field-error">{t("error")} — avatar not found in this organization.</p>;
@@ -295,7 +320,7 @@ export function AvatarDetailPage() {
               engine={engine}
               orgId={current.id}
               selection={voice}
-              onSelectionChange={setVoice}
+              onSelectionChange={(next) => void saveVoice(next)}
             />
             <SharePanel avatar={avatar} orgId={current.id} />
             <TuningPanel

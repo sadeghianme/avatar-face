@@ -11,6 +11,14 @@ from app.models.avatar import AvatarKind, AvatarStatus
 FaceType = Literal["human", "animal", "cartoon"]
 
 
+class VoiceConfig(BaseModel):
+    """What the avatar speaks with. The trio always changes together."""
+
+    provider: str = Field(min_length=1, max_length=32)
+    voice: str = Field(default="", max_length=200)
+    locale: str = Field(default="en-US", max_length=16)
+
+
 class AvatarCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     content_type: str
@@ -111,6 +119,8 @@ class AvatarOut(BaseModel):
     # Set means a public page exists at /s/<token>; null means not shared.
     share_token: str | None = None
     face_type: str = "human"
+    # The DRAFT voice; what visitors hear is the published snapshot's copy.
+    voice: dict | None = None
     # True when the draft has moved ahead of the published snapshot — the
     # dashboard shows a Publish bar on this.
     unpublished: bool = False
@@ -125,6 +135,7 @@ class AvatarUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     framing: Literal["face", "full"] | None = None
     face_type: FaceType | None = None
+    voice: VoiceConfig | None = None
 
 
 class AvatarCreated(BaseModel):

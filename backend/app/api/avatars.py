@@ -247,7 +247,11 @@ async def update_avatar(
         avatar.name = body.name
     if body.framing is not None:
         avatar.framing = body.framing
-    if body.framing is not None or body.face_type is not None:
+    if body.voice is not None:
+        import json as _json
+
+        avatar.voice_config = _json.dumps(body.voice.model_dump())
+    if body.framing is not None or body.face_type is not None or body.voice is not None:
         mark_dirty(avatar)
     if body.face_type is not None and body.face_type != avatar.face_type:
         avatar.face_type = body.face_type

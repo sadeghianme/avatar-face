@@ -14,6 +14,7 @@ interface PublicAvatar {
   image_url: string;
   thumbnail_url: string;
   layer_urls?: Record<string, string> | null;
+  voice?: { provider: string; voice: string; locale: string } | null;
 }
 
 /**
@@ -105,16 +106,33 @@ export function SharePage() {
     setSpeaking(true);
     setError(null);
     try {
-      const served = await fetch(`/api/public/v1/avatars/${token}/speak`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: spoken,
-          provider: "kokoro",
-          voice: "af_heart",
-          locale: "en-US",
-        }),
-      });
+      // The avatar's PUBLISHED voice, so what the owner chose (and
+      // published) is what every visitor hears. Browser-voice choices
+      // cannot be synthesised server-side, so they fall through to the
+      // visitor's own speechSynthesis below.
+      const chosen = avatar?.voice;
+      const serverVoice = chosen && chosen.provider !== "browser" ? chosen : null;
+      const served = serverVoice
+        ? await fetch(`/api/public/v1/avatars/${token}/speak`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: spoken,
+              provider: serverVoice.provider,
+              voice: serverVoice.voice,
+              locale: serverVoice.locale,
+            }),
+          })
+        : await fetch(`/api/public/v1/avatars/${token}/speak`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: spoken,
+              provider: "kokoro",
+              voice: "af_heart",
+              locale: "en-US",
+            }),
+          });
       if (served.ok) {
         const payload = await served.json();
         await new Promise<void>((resolve) => {

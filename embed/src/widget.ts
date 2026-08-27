@@ -68,15 +68,13 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
   const avatarId = script.dataset.avatar;
   const apiKey = script.dataset.key;
   const apiBase = (script.dataset.api ?? new URL(script.src).origin).replace(/\/$/, "");
-  // Default to the server voice: it sounds the same for every visitor,
-  // where device voices differ by OS and browser. An explicit
-  // data-provider always wins, and every snippet the dashboard generates
-  // states one, so this only governs hand-written tags.
-  const provider = script.dataset.provider ?? "kokoro";
-  const voice =
-    script.dataset.voice ??
-    (provider === "kokoro" ? "af_heart" : provider === "browser" ? "" : "offline-warm");
-  const locale = script.dataset.locale ?? "en-US";
+  // Voice precedence: explicit data-* attributes on the snippet win (that
+  // is per-site intent), then the avatar's PUBLISHED voice from the meta
+  // response below (so changing it in the dashboard and publishing reaches
+  // every embedding site), then the server-voice default.
+  let provider = script.dataset.provider ?? "";
+  let voice = script.dataset.voice ?? "";
+  let locale = script.dataset.locale ?? "";
   const size = Number(script.dataset.size ?? 320);
   if (!avatarId || !apiKey) {
     console.error("[liveface] missing data-avatar or data-key");
@@ -121,7 +119,15 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     image_url?: string | null;
     model_url?: string | null;
     layer_urls?: { background?: string; body: string; head: string } | null;
+    voice?: { provider: string; voice: string; locale: string } | null;
   } = await meta.json();
+
+  if (!provider) {
+    provider = info.voice?.provider ?? "kokoro";
+    voice = voice || (info.voice?.voice ?? (provider === "kokoro" ? "af_heart" : ""));
+  }
+  if (!voice && provider === "offline") voice = "offline-warm";
+  if (!locale) locale = info.voice?.locale ?? "en-US";
 
   let engine: SpeechPlayer & { isSpeaking(): boolean };
   if (info.kind === "model3d" && info.model_url) {

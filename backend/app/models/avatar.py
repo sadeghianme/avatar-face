@@ -73,6 +73,11 @@ class Avatar(TimestampedBase):
     # relaxes the human-geometry checks; nothing else branches on it, and
     # human keeps the behaviour that existed before this field.
     face_type: Mapped[str] = mapped_column(String(16), default="human", nullable=False)
+    # The voice this avatar speaks with, as JSON {provider, voice, locale}.
+    # Null means the deployment default. A draft/published property like
+    # framing: changing it marks the draft dirty, and only publishing makes
+    # embedding sites and share links speak with it.
+    voice_config: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Draft/published split. `draft_revision` is bumped by every edit a
     # visitor could notice; `published_config` is the JSON snapshot the embed
     # serves. Unpublished changes are simply the two disagreeing — comparing
@@ -83,6 +88,15 @@ class Avatar(TimestampedBase):
     # JSON list of snapshots taken before each edit, oldest first. See
     # app.api.avatars._snapshot.
     edit_history: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    @property
+    def voice(self) -> dict | None:
+        import json
+
+        try:
+            return json.loads(self.voice_config) if self.voice_config else None
+        except ValueError:
+            return None
 
     @property
     def unpublished(self) -> bool:

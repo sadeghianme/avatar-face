@@ -41,9 +41,11 @@ export function buildSnippet(
     `  data-key="${apiKey ?? "YOUR_API_KEY"}"`,
     `  data-api="${apiBase}"`,
   ];
-  if (voice?.provider) lines.push(`  data-provider="${voice.provider}"`);
-  if (voice?.voice) lines.push(`  data-voice="${voice.voice}"`);
-  if (voice?.locale) lines.push(`  data-locale="${voice.locale}"`);
+  // Deliberately NO voice attributes: the widget reads the avatar's
+  // published voice at load time, so changing it in the dashboard reaches
+  // sites that already pasted this snippet. Hand-adding data-provider /
+  // data-voice / data-locale still works and pins that one site.
+  void voice;
   lines.push(`></script>`, `<script>/* then: Liveface.speak("Hello!") */</script>`);
   return lines.join("\n");
 }
