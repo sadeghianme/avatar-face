@@ -7,8 +7,13 @@ the dashboard watches the clone appear without touching a terminal.
 
     python -m scripts.clone_worker \
         --api https://avatar.example.com/api \
-        --token "$LIVEFACE_TOKEN" \
+        --email you@example.com \
         --org ORG_ID
+
+The password is asked for interactively (never an argument: arguments land
+in shell history and process lists). Alternatively pass --token if you
+already have one. Logging in itself also means the worker can refresh when
+the short-lived token expires, which a pasted token cannot.
 
 Setup (once)::
 
@@ -47,7 +52,8 @@ def _to_wav_bytes(tensor, sample_rate: int) -> bytes:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api", required=True, help="API base URL incl. any /api prefix")
-    parser.add_argument("--token", required=True)
+    parser.add_argument("--email", help="dashboard login; password is prompted")
+    parser.add_argument("--token", help="alternative to --email: a ready access token")
     parser.add_argument("--org", required=True)
     parser.add_argument("--device", default="mps", help="mps (Apple), cuda, or cpu")
     parser.add_argument("--once", action="store_true", help="drain the queue, then exit")
@@ -57,7 +63,42 @@ def main() -> int:
     import tempfile
 
     base = args.api.rstrip("/")
-    headers = {"Authorization": f"Bearer {args.token}"}
+
+    password: str | None = None
+
+    def login() -> str:
+        nonlocal password
+        if password is None:
+            import getpass
+
+            password = getpass.getpass(f"password for {args.email}: ")
+        response = requests.post(
+            f"{base}/auth/login",
+            json={"username_or_email": args.email, "password": password},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()["access_token"]
+
+    if not args.token and not args.email:
+        print("Pass --email (interactive password) or --token", file=sys.stderr)
+        return 2
+    token = args.token or login()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    def refresh_auth() -> None:
+        """Access tokens are short-lived; a logged-in worker just logs in
+        again, which is the whole reason --email beats a pasted token."""
+        if not args.email:
+            raise RuntimeError("token expired — restart with a fresh --token or use --email")
+        headers["Authorization"] = f"Bearer {login()}"
+
+    def request(method: str, url: str, **kwargs):
+        response = requests.request(method, url, headers=headers, timeout=kwargs.pop("timeout", 60), **kwargs)
+        if response.status_code == 401:
+            refresh_auth()
+            response = requests.request(method, url, headers=headers, timeout=60, **kwargs)
+        return response
 
     from chatterbox.tts import ChatterboxTTS
 
@@ -67,7 +108,7 @@ def main() -> int:
 
     idle_reported = False
     while True:
-        response = requests.post(f"{base}/orgs/{args.org}/clone-jobs/claim", headers=headers, timeout=30)
+        response = request("POST", f"{base}/orgs/{args.org}/clone-jobs/claim", timeout=30)
         if response.status_code == 404:
             if args.once:
                 print("queue empty — done")
@@ -95,24 +136,24 @@ def main() -> int:
             for index, text in enumerate(lines, start=1):
                 started = time.time()
                 audio = _to_wav_bytes(model.generate(text), model.sr)
-                upload = requests.post(
+                upload = request(
+                    "POST",
                     f"{base}/orgs/{args.org}/cloned-voices/{name}/lines",
-                    headers=headers,
                     data={"text": text, "locale": job["locale"], "consent": "true"},
                     files={"audio": (f"{index:03d}.wav", audio, "audio/wav")},
                     timeout=120,
                 )
                 upload.raise_for_status()
-                requests.post(
+                request(
+                    "POST",
                     f"{base}/orgs/{args.org}/clone-jobs/{job_id}/progress",
-                    headers=headers,
                     json={"done_lines": index},
                     timeout=30,
                 )
                 print(f"  [{index}/{len(lines)}] rendered in {time.time()-started:4.1f}s — {text[:60]}", flush=True)
 
-            requests.post(
-                f"{base}/orgs/{args.org}/clone-jobs/{job_id}/complete", headers=headers, timeout=30
+            request(
+                "POST", f"{base}/orgs/{args.org}/clone-jobs/{job_id}/complete", timeout=30
             ).raise_for_status()
             print(f"  done: '{name}' is ready in the dashboard", flush=True)
         except KeyboardInterrupt:
@@ -122,9 +163,9 @@ def main() -> int:
             message = f"{type(exc).__name__}: {exc} {detail}".strip()[:900]
             print(f"  FAILED: {message}", file=sys.stderr, flush=True)
             try:
-                requests.post(
+                request(
+                    "POST",
                     f"{base}/orgs/{args.org}/clone-jobs/{job_id}/fail",
-                    headers=headers,
                     json={"error": message},
                     timeout=30,
                 )

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { Icon } from "../components/Icon";
 import { Spinner } from "../components/Spinner";
-import { api, ApiError, getTokens } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { MicRecorder, type Recording } from "../lib/recorder";
 import { useOrg } from "../lib/org";
 
@@ -249,7 +249,7 @@ export function VoicesPage() {
               <pre className="mt-2 overflow-x-auto rounded-lg bg-gray-900 p-3 text-[11px] text-gray-100">
 {`python -m scripts.clone_worker \\
   --api ${window.location.origin}/api \\
-  --token "${getTokens()?.access_token ? "<your token>" : "<login token>"}" \\
+  --email you@example.com \\
   --org ${orgId}`}
               </pre>
             </div>
