@@ -47,5 +47,12 @@ RUN mkdir -p models \
 ENV RIG_MODEL_PATH=/app/backend/models/face_landmarker.task
 ENV SEGMENT_MODEL_PATH=/app/backend/models/selfie_segmenter.tflite
 
+# Kokoro-82M local TTS (Apache-2.0): one consistent server voice with no key,
+# no per-character bill, and no text leaving the instance. ~350MB, fetched at
+# build time like the MediaPipe models above.
+RUN curl -fsSL -o models/kokoro-v1.0.onnx     https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx  && curl -fsSL -o models/voices-v1.0.bin     https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+ENV KOKORO_MODEL_PATH=/app/backend/models/kokoro-v1.0.onnx
+ENV KOKORO_VOICES_PATH=/app/backend/models/voices-v1.0.bin
+
 EXPOSE 7002
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7002"]

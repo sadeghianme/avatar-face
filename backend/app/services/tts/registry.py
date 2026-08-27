@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import NotFound404, Validation422
 from app.models import SpeechCache
 from app.services.tts.base import SynthesisResult, TTSProvider
+from app.services.tts.kokoro import KokoroTTSProvider
 from app.services.tts.offline import OfflineTTSProvider
 from app.services.tts.providers import (
     AzureTTSProvider,
@@ -25,6 +26,7 @@ from app.services.tts.providers import (
 
 _ALL_PROVIDERS: list[TTSProvider] = [
     OfflineTTSProvider(),
+    KokoroTTSProvider(),
     AzureTTSProvider(),
     ElevenLabsTTSProvider(),
     GoogleTTSProvider(),

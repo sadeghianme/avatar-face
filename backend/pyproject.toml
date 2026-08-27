@@ -22,6 +22,10 @@ dependencies = [
     "scipy>=1.13",
     "Pillow>=10.3",
     "cryptography>=42.0",
+    # Local TTS (Kokoro-82M via ONNX). Model weights are downloaded by the
+    # Dockerfile, not pip; without them the provider reports unconfigured.
+    "kokoro-onnx>=0.4",
+    "soundfile>=0.12",
 ]
 
 [project.optional-dependencies]
