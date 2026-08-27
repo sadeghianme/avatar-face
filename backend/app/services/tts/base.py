@@ -28,6 +28,10 @@ class SynthesisResult:
 class TTSProvider:
     name: str = "base"
     display_name: str = "Base"
+    # Whether this provider belongs in a generic provider list. Cloned
+    # voices are per-organisation rows, so a global listing would show an
+    # empty entry to everyone and leak nothing useful to anyone.
+    listed: bool = True
 
     def is_configured(self) -> bool:
         raise NotImplementedError

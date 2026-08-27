@@ -16,6 +16,7 @@ from app.api import (
     api_keys,
     auth,
     avatars,
+    cloned_voices,
     embed,
     integrations,
     orgs,
@@ -281,6 +282,7 @@ def create_app() -> FastAPI:
     app.include_router(staging.router)
     app.include_router(stock.router)
     app.include_router(share.router)
+    app.include_router(cloned_voices.router)
 
     return app
 
