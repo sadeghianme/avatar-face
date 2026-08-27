@@ -123,31 +123,10 @@ async def upload_line(
         raise Validation422("Audio exceeds 10MB", code="audio_too_large")
     duration_ms, _ = _wav_facts(data)
 
-    voice = scoped_voice_id(ctx.org.id, name)
-    key = cache_key(PROVIDER_NAME, voice, locale, text)
-    existing = (
-        await db.execute(select(SpeechCache).where(SpeechCache.cache_key == key))
-    ).scalar_one_or_none()
+    from app.services.tts.cloned import store_line
 
-    # Cues are computed HERE, from the same phoneme model every provider
-    # uses, so the uploader never has to produce them and a re-render with a
-    # different tool cannot drift the lip-sync.
-    cues = cues_from_text(text, duration_ms, locale)
-    payload = dict(
-        provider=PROVIDER_NAME,
-        voice=voice,
-        locale=locale,
-        char_count=len(text),
-        audio_mime="audio/wav",
-        audio=data,
-        cues_json=json.dumps(cues),
-        duration_ms=duration_ms,
-    )
-    if existing is not None:
-        for field, value in payload.items():
-            setattr(existing, field, value)
-    else:
-        db.add(SpeechCache(cache_key=key, **payload))
+    await store_line(db, ctx.org.id, name, locale, text, data, duration_ms)
+    voice = scoped_voice_id(ctx.org.id, name)
     await db.commit()
     logger.info("cloned line stored for %s (%d ms)", voice, duration_ms)
 

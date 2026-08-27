@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, UploadFile
 from pydantic import BaseModel, Field
 
 from app.api.deps import DB, OrgMember
@@ -82,6 +82,54 @@ async def create_job(
     return await clonejobs.create_job(
         get_storage(), ctx.org.id, name=name, locale=locale, lines=cleaned, reference=data
     )
+
+
+@router.get("/render-capability")
+async def render_capability(ctx: OrgMember) -> dict:
+    """Can THIS backend render clone jobs itself?
+
+    True on an operator's laptop with Apple Silicon; false on the CPU-only
+    server, where the UI shows the external-worker instructions instead.
+    """
+    from app.services.local_render import capability
+
+    return capability()
+
+
+@router.post("/{job_id}/render", status_code=202)
+async def render_here(
+    job_id: str, ctx: OrgMember, background: BackgroundTasks
+) -> dict:
+    """Render a job inside this backend, if the hardware allows.
+
+    202 with the claimed job: rendering takes seconds per line, and the page
+    already polls — a blocking response would just hold a connection open
+    for a minute to say what the poll says anyway.
+    """
+    from app.core.errors import Conflict409
+    from app.services.local_render import capability, render_job
+
+    check = capability()
+    if not check["available"]:
+        raise Conflict409(
+            f"This server cannot render: {check['reason']}",
+            code="render_unavailable",
+        )
+    storage = get_storage()
+    job = await clonejobs.get_job(storage, ctx.org.id, job_id)
+    if job is None:
+        raise NotFound404("No such job", code="job_not_found")
+    if job["status"] not in ("pending", "failed"):
+        raise Conflict409("Job is not waiting", code="not_pending")
+    # Claim synchronously so a double-click cannot start two renders.
+    job["status"] = "processing"
+    job["error"] = None
+    import time as _time
+
+    job["claimed_at"] = _time.time()
+    await clonejobs._write_job(storage, ctx.org.id, job)
+    background.add_task(render_job, ctx.org.id, job_id)
+    return job
 
 
 @router.get("")

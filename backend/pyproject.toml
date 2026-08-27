@@ -31,6 +31,10 @@ dependencies = [
 
 [project.optional-dependencies]
 rig = ["mediapipe>=0.10.14"]
+# In-process voice-clone rendering. Install ONLY where an accelerator lives
+# (an operator's Apple Silicon laptop or a CUDA box) — the server image must
+# not carry 2.5GB of torch for a capability it refuses on CPU anyway.
+clone = ["chatterbox-tts>=0.1", "resemble-perth>=1.0", "setuptools<81"]
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",

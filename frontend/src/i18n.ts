@@ -164,7 +164,8 @@ const resources = {
       voicesUseHint: "Use one in an embed snippet with data-provider=\"cloned\" and data-voice=\"ORG_ID:name\".",
       voicesWorkerHint:
         "A job is waiting for the render worker. Start it on the machine with the hardware (your Mac):",
-      voicesStatus_pending: "Waiting for worker",
+      voicesRenderHere: "Render now",
+      voicesStatus_pending: "Waiting",
       voicesStatus_processing: "Rendering",
       voicesStatus_done: "Ready",
       voicesStatus_failed: "Failed",
@@ -533,7 +534,8 @@ const resources = {
       voicesUseHint: "Utilisez-la dans un extrait avec data-provider=\"cloned\" et data-voice=\"ORG_ID:nom\".",
       voicesWorkerHint:
         "Une tâche attend le worker de rendu. Lancez-le sur la machine équipée (votre Mac) :",
-      voicesStatus_pending: "En attente du worker",
+      voicesRenderHere: "Générer maintenant",
+      voicesStatus_pending: "En attente",
       voicesStatus_processing: "Rendu en cours",
       voicesStatus_done: "Prête",
       voicesStatus_failed: "Échec",

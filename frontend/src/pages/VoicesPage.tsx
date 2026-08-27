@@ -61,6 +61,27 @@ export function VoicesPage() {
   // Object URLs are real allocations; drop the old one on replace/unmount.
   useEffect(() => () => { if (reference) URL.revokeObjectURL(reference.url); }, [reference]);
 
+  // Can the backend render on its own hardware? Locally yes; on the
+  // CPU-only server no — the UI adapts rather than assuming.
+  const { data: renderCap } = useQuery({
+    queryKey: ["render-capability", orgId],
+    queryFn: () => api.get<{ available: boolean; reason: string | null }>(
+      `/orgs/${orgId}/clone-jobs/render-capability`
+    ),
+    enabled: Boolean(orgId),
+    staleTime: Infinity, // cannot change without a backend restart
+  });
+
+  const renderHere = async (jobId: string) => {
+    setError(null);
+    try {
+      await api.post(`/orgs/${orgId}/clone-jobs/${jobId}/render`, {});
+      void queryClient.invalidateQueries({ queryKey: ["clone-jobs", orgId] });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : t("error"));
+    }
+  };
+
   const { data: jobs = [] } = useQuery({
     queryKey: ["clone-jobs", orgId],
     queryFn: () => api.get<CloneJob[]>(`/orgs/${orgId}/clone-jobs`),
@@ -241,7 +262,7 @@ export function VoicesPage() {
 
         {/* ------------------------------------------------ jobs & voices */}
         <div className="flex flex-col gap-6">
-          {waiting && (
+          {waiting && !renderCap?.available && (
             <div className="card border-amber-300/60 dark:border-amber-500/30">
               <p className="text-[13px] text-amber-700 dark:text-amber-400">
                 {t("voicesWorkerHint")}
@@ -264,6 +285,15 @@ export function VoicesPage() {
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium">{job.name}</span>
                       <div className="flex items-center gap-2">
+                        {renderCap?.available &&
+                          (job.status === "pending" || job.status === "failed") && (
+                          <button
+                            className="btn-primary px-3 py-1 text-xs"
+                            onClick={() => void renderHere(job.id)}
+                          >
+                            {t("voicesRenderHere")}
+                          </button>
+                        )}
                         <JobStatus job={job} />
                         <button
                           className="text-gray-400 hover:text-red-600"

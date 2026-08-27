@@ -87,6 +87,45 @@ async def voices_for_org(db: AsyncSession, org_id: str) -> list[Voice]:
     return out
 
 
+async def store_line(
+    db: AsyncSession, org_id: str, name: str, locale: str, text: str,
+    audio: bytes, duration_ms: int,
+) -> None:
+    """Store one rendered line as a cache row. Idempotent by cache key.
+
+    Shared by the HTTP upload (remote worker) and the in-process renderer
+    (backend running on capable hardware) so the two paths cannot drift.
+    Cues are computed here, from the same phoneme model every provider uses.
+    """
+    import json
+
+    from sqlalchemy import select
+
+    from app.services.tts.registry import cache_key
+    from app.services.tts.visemes import cues_from_text
+
+    voice = scoped_voice_id(org_id, name)
+    key = cache_key(PROVIDER_NAME, voice, locale, text)
+    existing = (
+        await db.execute(select(SpeechCache).where(SpeechCache.cache_key == key))
+    ).scalar_one_or_none()
+    payload = dict(
+        provider=PROVIDER_NAME,
+        voice=voice,
+        locale=locale,
+        char_count=len(text),
+        audio_mime="audio/wav",
+        audio=audio,
+        cues_json=json.dumps(cues_from_text(text, duration_ms, locale)),
+        duration_ms=duration_ms,
+    )
+    if existing is not None:
+        for field, value in payload.items():
+            setattr(existing, field, value)
+    else:
+        db.add(SpeechCache(cache_key=key, **payload))
+
+
 def scoped_voice_id(org_id: str, name: str) -> str:
     """Cloned voice ids are org-prefixed.
 
