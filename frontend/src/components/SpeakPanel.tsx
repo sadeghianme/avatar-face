@@ -7,6 +7,7 @@ import {
   type SpeechPlayer,
   type SynthesisPayload,
 } from "@liveface/embed";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -16,6 +17,7 @@ import {
   BROWSER_PROVIDER,
   VoicePicker,
   defaultVoiceSelection,
+  type SpeechLanguage,
   type VoiceSelection,
 } from "./VoicePicker";
 
@@ -36,6 +38,9 @@ export function SpeakPanel({
   // Prefilled rather than empty: an empty box disables Speak, so the first
   // thing the page offers is a dead button and a blank field.
   const [text, setText] = useState(() => t("speakSample"));
+  // True once the user types: their words are never replaced by a sample,
+  // however many times they change language afterwards.
+  const [edited, setEdited] = useState(false);
   const [ownSelection, setOwnSelection] = useState<VoiceSelection>(defaultVoiceSelection);
   const selection = controlledSelection ?? ownSelection;
   const setSelection = onSelectionChange ?? setOwnSelection;
@@ -44,6 +49,19 @@ export function SpeakPanel({
   const [error, setError] = useState<string | null>(null);
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
+
+  // Follow the chosen speech language with a sample IN that language.
+  // Pressing Speak on Persian should demonstrate Persian, not an English
+  // sentence read by a Persian voice — which is the one thing that makes a
+  // language picker feel broken even when it works.
+  const { data: languages } = useQuery({
+    queryKey: ["tts-languages"],
+    queryFn: () => api.get<SpeechLanguage[]>("/tts/languages"),
+  });
+  const sample = languages?.find((l) => l.locale === selection.locale)?.sample;
+  useEffect(() => {
+    if (!edited && sample) setText(sample);
+  }, [sample, edited]);
 
   const queue = useMemo(() => {
     if (!engine) return null;
@@ -110,7 +128,10 @@ export function SpeakPanel({
         className="input min-h-24"
         placeholder={t("speakPlaceholder")}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setEdited(true);
+          setText(e.target.value);
+        }}
       />
       {error && <p className="field-error">{error}</p>}
       <div className="flex gap-2">

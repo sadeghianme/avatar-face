@@ -25,6 +25,25 @@ async def list_providers() -> list[ProviderOut]:
     ]
 
 
+@router.get("/languages")
+async def list_languages() -> list[dict]:
+    """Languages this deployment can speak, each already resolved to the best
+    provider and voice for it.
+
+    The picker asks for a language, not a provider: nobody choosing Persian
+    should have to know that Piper speaks it and Kokoro does not. Each entry
+    also carries a sample line in that language, so pressing Speak
+    demonstrates something the user can judge rather than English read by a
+    Persian voice.
+
+    Unauthenticated for the same reason /cues is: it synthesises nothing,
+    touches no org data, and the share page needs it too.
+    """
+    from app.services.tts.languages import available_languages
+
+    return await available_languages()
+
+
 @router.get("/providers/{provider}/voices", response_model=list[VoiceOut])
 async def list_voices(provider: str) -> list[VoiceOut]:
     voices = await get_provider(provider).voices()

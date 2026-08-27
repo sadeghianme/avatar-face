@@ -32,9 +32,11 @@ from app.core.config import get_settings
 from app.services.tts.base import SynthesisResult, TTSProvider, Voice
 from app.services.tts.visemes import cues_from_text
 
-# The subset of Kokoro's ~50 voices worth showing. All en-* — its other
-# languages need phonemizer language packs this image does not ship, and a
-# menu of 50 near-identical entries helps nobody.
+# A curated slice of Kokoro's 54 voices: one or two per language, not fifty
+# near-identical English ones. Japanese and Mandarin are deliberately absent
+# — those voices were trained with a dedicated Japanese/Chinese text
+# processor (misaki), and this image phonemizes with espeak, which produces
+# audio but mispronounces enough to be worse than offering nothing.
 VOICES = [
     Voice(id="af_heart", name="Heart · warm female", locale="en-US", gender="female"),
     Voice(id="af_bella", name="Bella · bright female", locale="en-US", gender="female"),
@@ -42,8 +44,22 @@ VOICES = [
     Voice(id="am_fenrir", name="Fenrir · deep male", locale="en-US", gender="male"),
     Voice(id="bf_emma", name="Emma · British female", locale="en-GB", gender="female"),
     Voice(id="bm_george", name="George · British male", locale="en-GB", gender="male"),
+    Voice(id="ef_dora", name="Dora · Spanish female", locale="es-ES", gender="female"),
+    Voice(id="em_alex", name="Alex · Spanish male", locale="es-ES", gender="male"),
+    Voice(id="ff_siwis", name="Siwis · French female", locale="fr-FR", gender="female"),
+    Voice(id="if_sara", name="Sara · Italian female", locale="it-IT", gender="female"),
+    Voice(id="im_nicola", name="Nicola · Italian male", locale="it-IT", gender="male"),
+    Voice(id="pf_dora", name="Dora · Portuguese female", locale="pt-BR", gender="female"),
+    Voice(id="pm_alex", name="Alex · Portuguese male", locale="pt-BR", gender="male"),
+    Voice(id="hf_alpha", name="Alpha · Hindi female", locale="hi-IN", gender="female"),
+    Voice(id="hm_omega", name="Omega · Hindi male", locale="hi-IN", gender="male"),
 ]
 _VOICE_IDS = {v.id for v in VOICES}
+# Kokoro's voice-id prefixes ARE its language codes.
+_LANG_BY_PREFIX = {
+    "a": "en-us", "b": "en-gb", "e": "es", "f": "fr-fr",
+    "i": "it", "p": "pt-br", "h": "hi",
+}
 DEFAULT_VOICE = "af_heart"
 
 _engine = None
@@ -87,7 +103,10 @@ class KokoroTTSProvider(TTSProvider):
             _synth_semaphore = asyncio.Semaphore(1)
 
         voice_id = voice if voice in _VOICE_IDS else DEFAULT_VOICE
-        lang = "en-gb" if voice_id.startswith("b") else "en-us"
+        # Kokoro keys the phonemizer off the voice's first letter, and getting
+        # this wrong is an accent slipping mid-sentence — or, for Spanish
+        # read as English, gibberish.
+        lang = _LANG_BY_PREFIX.get(voice_id[0], "en-us")
 
         async with _synth_semaphore:
             audio, duration_ms = await asyncio.to_thread(_render, text, voice_id, lang)

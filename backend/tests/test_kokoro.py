@@ -23,13 +23,27 @@ def test_it_is_registered_among_the_providers():
     assert any(p.name == "kokoro" for p in registry._ALL_PROVIDERS)
 
 
-async def test_voices_are_all_english_and_include_the_default():
+async def test_voices_cover_several_languages_and_include_the_default():
     voices = await KokoroTTSProvider().voices()
     assert voices == VOICES
     assert any(v.id == DEFAULT_VOICE for v in voices)
-    # Only languages the shipped phonemizer data covers are offered; a menu
-    # promising languages that then fail is worse than a short menu.
-    assert all(v.locale.startswith("en") for v in voices)
+    # Japanese and Mandarin are deliberately absent: those voices were
+    # trained with a dedicated ja/zh text processor, and this image
+    # phonemizes with espeak, which produces audio but mispronounces enough
+    # to be worse than offering nothing.
+    locales = {v.locale.split("-")[0] for v in voices}
+    assert {"en", "es", "fr", "it", "pt", "hi"} <= locales
+    assert not ({"ja", "zh"} & locales)
+
+
+async def test_every_voice_maps_to_a_phonemizer_language():
+    """Kokoro keys phonemization off the voice id's first letter. An id whose
+    prefix is unmapped would be read as English — Spanish read as English is
+    not an accent, it is gibberish."""
+    from app.services.tts.kokoro import _LANG_BY_PREFIX
+
+    for voice in VOICES:
+        assert voice.id[0] in _LANG_BY_PREFIX, voice.id
 
 
 async def test_an_unknown_voice_falls_back_rather_than_failing(monkeypatch):

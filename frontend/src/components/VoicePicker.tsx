@@ -9,6 +9,15 @@ import type { Provider, Voice } from "../lib/types";
 export const BROWSER_PROVIDER = "browser";
 export const SERVER_PROVIDER = "kokoro";
 
+export interface SpeechLanguage {
+  locale: string;
+  name: string;
+  native_name: string;
+  sample: string;
+  provider: string;
+  voice: string;
+}
+
 export interface VoiceSelection {
   provider: string;
   voice: string;
@@ -36,6 +45,14 @@ export function VoicePicker({
   onChange: (selection: VoiceSelection) => void;
 }) {
   const { t } = useTranslation();
+  // Languages the server can actually speak, each already resolved to the
+  // best provider and voice. Choosing a language is the primary act; the
+  // provider is an implementation detail the picker fills in.
+  const { data: languages } = useQuery({
+    queryKey: ["tts-languages"],
+    queryFn: () => api.get<SpeechLanguage[]>("/tts/languages"),
+  });
+
   const { data: providers } = useQuery({
     queryKey: ["tts-providers"],
     queryFn: async () => {
@@ -82,8 +99,35 @@ export function VoicePicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voices]);
 
+  const activeLanguage =
+    languages?.find((l) => l.locale === value.locale) ??
+    languages?.find((l) => l.locale.split("-")[0] === value.locale.split("-")[0]);
+
   return (
     <div className="flex flex-wrap gap-3">
+      {languages && languages.length > 1 && (
+        <div className="min-w-36 flex-1">
+          <label className="label" htmlFor="speech-language">{t("speechLanguage")}</label>
+          <select
+            id="speech-language"
+            className="input"
+            value={activeLanguage?.locale ?? ""}
+            onChange={(e) => {
+              const next = languages.find((l) => l.locale === e.target.value);
+              if (!next) return;
+              // Picking a language picks the voice too — that is the point.
+              onChange({ provider: next.provider, voice: next.voice, locale: next.locale });
+            }}
+          >
+            {languages.map((l) => (
+              <option key={l.locale} value={l.locale}>
+                {l.native_name}
+                {l.native_name === l.name ? "" : ` · ${l.name}`}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="min-w-36 flex-1">
         <label className="label" htmlFor="provider">{t("provider")}</label>
         <select
