@@ -9,11 +9,13 @@
   "scripts": {
     "typecheck": "tsc -b",
     "build": "tsc -b && esbuild src/widget.ts --bundle --format=iife --outfile=dist/liveface.js --minify && esbuild src/widget3d.ts --bundle --format=iife --outfile=dist/liveface-3d.js --minify",
-    "dev": "esbuild src/widget.ts --bundle --format=iife --outfile=dist/liveface.js --watch --servedir=."
+    "dev": "esbuild src/widget.ts --bundle --format=iife --outfile=dist/liveface.js --watch --servedir=.",
+    "test": "vitest run"
   },
   "devDependencies": {
     "esbuild": "^0.21.5",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^2.1.9"
   },
   "dependencies": {
     "@types/three": "^0.184.1",

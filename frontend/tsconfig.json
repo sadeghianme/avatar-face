@@ -20,5 +20,8 @@
       "@liveface/embed/*": ["../embed/src/*"]
     }
   },
-  "include": ["src", "../embed/src"]
+  "include": ["src", "../embed/src"],
+  // The embed package's tests are vitest-only and pull in Node types the
+  // dashboard does not have; they are typechecked by `npm test` in embed.
+  "exclude": ["../embed/src/__tests__"]
 }

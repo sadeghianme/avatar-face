@@ -17,6 +17,14 @@
 # Any of those leaves a deploy that reports success while serving stale code.
 set -euo pipefail
 
+# Keepalives, because this script hung twice after a successful deploy: a
+# build that pulls ~850MB of models can leave the connection silent for
+# minutes, and without them ssh waits forever rather than noticing. The
+# deploy had actually finished both times, which is the worst version of
+# this failure -- it looks like a broken deploy and is not.
+SSH_OPTS="-o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o ConnectTimeout=20"
+ssh() { command ssh $SSH_OPTS "$@"; }
+
 REMOTE="${REMOTE:-personal_server}"
 REMOTE_DIR="${REMOTE_DIR:-/root/projects/liveface}"
 COMPOSE="docker-compose.prod.yml"
@@ -50,6 +58,24 @@ ssh "$REMOTE" "docker exec liveface-liveface-api-1 sh -c \
 echo "==> building and restarting"
 ssh "$REMOTE" "cd $REMOTE_DIR/deploy && docker compose -f $COMPOSE up -d --build"
 
+# Wait for the API to answer before exec'ing into the container. Running
+# `docker exec` against a container that is still restarting blocks with no
+# output and no timeout -- which is what the hang looked like from here.
+echo "==> waiting for the API"
+for attempt in $(seq 1 60); do
+  if curl -sf --max-time 10 -o /dev/null https://avatar.mehdisadeghian.com/api/health; then
+    echo "  healthy after ${attempt} attempt(s)"
+    break
+  fi
+  if [ "$attempt" -eq 60 ]; then
+    echo "  API did not become healthy within 5 minutes" >&2
+    echo "  The build may still have succeeded -- check:" >&2
+    echo "    ssh $REMOTE 'docker ps --filter name=liveface'" >&2
+    exit 1
+  fi
+  sleep 5
+done
+
 echo "==> verifying"
 ssh "$REMOTE" "docker exec liveface-liveface-api-1 python -c \"
 import sqlite3
@@ -58,6 +84,6 @@ print('  alembic:', list(c.execute('select * from alembic_version'))[0][0])
 for t in ('users','organizations','avatars','api_keys'):
     print('  %-14s %d' % (t, list(c.execute('select count(*) from '+t))[0][0]))
 \""
-curl -sf -o /dev/null -w '  app %{http_code}\n' https://avatar.mehdisadeghian.com/
-curl -sf -o /dev/null -w '  api %{http_code}\n' https://avatar.mehdisadeghian.com/api/health
+curl -sf --max-time 20 -o /dev/null -w '  app %{http_code}\n' https://avatar.mehdisadeghian.com/
+curl -sf --max-time 20 -o /dev/null -w '  api %{http_code}\n' https://avatar.mehdisadeghian.com/api/health
 echo "==> done. The widget is cached for 4h — hard-refresh embedding sites."

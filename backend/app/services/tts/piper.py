@@ -35,6 +35,12 @@ from app.services.tts.visemes import cues_from_text
 
 # id -> (filename stem, display name, locale). Deliberately small: one or two
 # voices per language beats a list nobody can choose from.
+#
+# ORDER MATTERS. resolve() takes the first voice matching a locale, so the
+# first entry per language is that language's default. Persian leads with
+# Amir by the owner's choice after hearing all three fa_IR voices; a test
+# pins it so a future reorder cannot silently change which voice every
+# Persian avatar speaks in.
 CATALOGUE: dict[str, tuple[str, str, str]] = {
     "fa_amir": ("fa_IR-amir-medium", "Amir · Persian male", "fa-IR"),
     "fa_gyro": ("fa_IR-gyro-medium", "Gyro · Persian male", "fa-IR"),

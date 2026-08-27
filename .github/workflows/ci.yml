@@ -57,6 +57,10 @@ jobs:
           cache: npm
           cache-dependency-path: embed/package-lock.json
       - run: npm ci
+      # Tests before build: the engine's motion and cue logic had no
+      # automated coverage at all, and every regression in it this far has
+      # been invisible in a screenshot.
+      - run: npm test
       - run: npm run build
 
   frontend:

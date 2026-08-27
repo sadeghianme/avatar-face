@@ -84,3 +84,17 @@ async def test_cues_use_the_voice_language_not_the_callers(monkeypatch, tmp_path
     # Caller claims en-US; the Persian voice's own locale must win.
     await PiperTTSProvider().synthesize("سلام", "fa_amir", "en-US")
     assert seen["locale"] == "fa-IR"
+
+
+async def test_persian_defaults_to_amir(monkeypatch, tmp_path):
+    """Chosen by ear after comparing amir, gyro and ganji. resolve() takes the
+    first catalogue entry for a locale, so this pins that ordering — otherwise
+    a tidy-up could silently change the voice of every Persian avatar."""
+    from app.core import config
+    from app.services.tts.languages import resolve
+
+    for key in ("fa_amir", "fa_gyro"):
+        (tmp_path / f"{CATALOGUE[key][0]}.onnx").write_bytes(b"stub")
+    monkeypatch.setattr(config.get_settings(), "piper_voices_dir", str(tmp_path), raising=False)
+
+    assert await resolve("fa-IR") == ("piper", "fa_amir")
