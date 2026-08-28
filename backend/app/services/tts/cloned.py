@@ -55,17 +55,34 @@ class ClonedTTSProvider(TTSProvider):
         return []
 
     async def synthesize(self, text: str, voice: str, locale: str) -> SynthesisResult:
-        """Always a miss.
+        """A cache miss: this line was never rendered in this voice.
 
-        A cache hit never reaches a provider, so arriving here means the line
-        was not uploaded. Approximating it with a different voice would be
-        worse than failing: the whole point of a cloned voice is that it is
-        that person, and silently substituting another one is the kind of
-        thing nobody notices until a customer does.
+        Where the hardware allows, render it now — that is what makes a
+        cloned voice feel like a voice rather than a soundboard: it says
+        whatever you type, the first time costing a few seconds and every
+        repeat coming from the cache.
+
+        Where it does not (the CPU-only server), fail rather than
+        approximate. Substituting a different voice for a cloned one is the
+        kind of thing nobody notices until a customer does; callers that can
+        degrade gracefully catch this code and fall back deliberately.
         """
+        from app.services.local_render import capability, render_text
+
+        if capability()["available"]:
+            reference = await _reference_for(voice)
+            if reference is not None:
+                audio, duration_ms = await render_text(reference, text)
+                return SynthesisResult(
+                    audio=audio,
+                    audio_mime="audio/wav",
+                    duration_ms=duration_ms,
+                    cues=_cues(text, duration_ms, locale),
+                )
+
         raise NotFound404(
             f"No cloned audio for this line in voice '{voice}'. "
-            "Render it offline and upload it, or use a server voice.",
+            "Render it in the dashboard, or use a server voice.",
             code="cloned_line_missing",
         )
 
@@ -85,6 +102,35 @@ async def voices_for_org(db: AsyncSession, org_id: str) -> list[Voice]:
         _, _, label = stored.partition(":")
         out.append(Voice(id=stored, name=label, locale="", gender="neutral"))
     return out
+
+
+def _cues(text: str, duration_ms: int, locale: str) -> list[dict]:
+    from app.services.tts.visemes import cues_from_text
+
+    return cues_from_text(text, duration_ms, locale)
+
+
+async def _reference_for(voice: str) -> bytes | None:
+    """The recording this voice was cloned from, if it is still on disk.
+
+    Found by scanning the org's clone jobs for one with this voice name.
+    Jobs are few per org and this only runs on a cache miss, so a scan beats
+    another index to keep in step.
+    """
+    org_id, _, name = voice.partition(":")
+    if not org_id or not name:
+        return None
+    from app.services import clonejobs
+    from app.services.storage import get_storage
+
+    storage = get_storage()
+    for job in await clonejobs.list_jobs(storage, org_id):
+        if job.get("name") == name:
+            try:
+                return await storage.get_bytes(clonejobs.reference_key(org_id, job["id"]))
+            except Exception:
+                return None
+    return None
 
 
 async def store_line(

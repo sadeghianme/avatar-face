@@ -126,3 +126,46 @@ async def test_cloned_never_appears_in_the_global_provider_list(client):
     """It is per-org; a global entry would be empty for everyone."""
     providers = {p["name"] for p in (await client.get("/tts/providers")).json()}
     assert "cloned" not in providers
+
+
+async def test_a_missing_line_renders_on_demand_where_hardware_allows(monkeypatch):
+    """A cloned voice should be a voice, not a soundboard: on a machine that
+    can render, asking for an unrecorded line produces it."""
+    from app.services import local_render
+    from app.services.tts import cloned as cloned_module
+    from app.services.tts.cloned import ClonedTTSProvider
+
+    monkeypatch.setattr(
+        local_render, "_probe_result", {"available": True, "device": "mps", "reason": None}
+    )
+    monkeypatch.setattr(cloned_module, "_reference_for", lambda voice: _ref())
+
+    async def fake_render(reference, text):
+        assert reference == b"REFERENCE"
+        return _wav(), 1000
+
+    monkeypatch.setattr(local_render, "render_text", fake_render)
+    result = await ClonedTTSProvider().synthesize("brand new line", "org:sarah", "en-US")
+    assert result.duration_ms == 1000
+    assert result.cues and result.cues[-1]["viseme"] == "sil"
+
+
+async def _ref():
+    return b"REFERENCE"
+
+
+async def test_a_missing_line_still_fails_where_it_cannot_render(monkeypatch):
+    """On the CPU-only server, substituting a different voice for someone's
+    cloned likeness would be worse than failing."""
+    from app.core.errors import NotFound404
+    from app.services import local_render
+    from app.services.tts.cloned import ClonedTTSProvider
+
+    monkeypatch.setattr(
+        local_render,
+        "_probe_result",
+        {"available": False, "device": None, "reason": "no accelerator"},
+    )
+    with pytest.raises(NotFound404) as caught:
+        await ClonedTTSProvider().synthesize("nope", "org:sarah", "en-US")
+    assert caught.value.code == "cloned_line_missing"

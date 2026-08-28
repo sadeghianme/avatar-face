@@ -106,6 +106,23 @@ def _render_one(engine, text: str) -> tuple[bytes, int]:
     return buffer.getvalue(), int(len(pcm) * 1000 / engine.sr)
 
 
+async def render_text(reference: bytes, text: str) -> tuple[bytes, int]:
+    """Clone from `reference` and render one line. Serialised with renders.
+
+    Used for on-demand synthesis when a cloned voice is asked for a line it
+    was never given. Re-cloning per call costs ~1.5s and keeps this
+    stateless — caching a speaker embedding per voice would be faster and
+    would also mean holding one person's voice print in memory indefinitely.
+    """
+    global _render_semaphore
+    if _render_semaphore is None:
+        _render_semaphore = asyncio.Semaphore(1)
+    async with _render_semaphore:
+        engine = await asyncio.to_thread(_get_engine)
+        await asyncio.to_thread(_clone_reference, engine, reference)
+        return await asyncio.to_thread(_render_one, engine, text)
+
+
 async def render_job(org_id: str, job_id: str) -> None:
     """Background task: render one claimed job and store its lines.
 
