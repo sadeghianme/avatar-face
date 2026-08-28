@@ -139,6 +139,7 @@ const resources = {
       photofaceHDReuse: "The same voices, phoneme cues and speech queue drive the new renderer.",
       photofaceHDIsolation: "Experimental module: the established 2D renderer and embed widget are untouched.",
       members: "Members",
+      clonedVoices: "Cloned voice",
       voicesNav: "Voices",
       voicesTitle: "Cloned voices",
       voicesSubtitle:
@@ -509,6 +510,7 @@ const resources = {
       photofaceHDReuse: "Les mêmes voix, phonèmes et files de lecture pilotent le nouveau moteur.",
       photofaceHDIsolation: "Module expérimental : le moteur 2D et le widget actuels restent intacts.",
       members: "Membres",
+      clonedVoices: "Voix clonée",
       voicesNav: "Voix",
       voicesTitle: "Voix clonées",
       voicesSubtitle:

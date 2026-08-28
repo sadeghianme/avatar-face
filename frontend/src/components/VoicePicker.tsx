@@ -4,10 +4,12 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../lib/api";
+import { useOrg } from "../lib/org";
 import type { Provider, Voice } from "../lib/types";
 
 export const BROWSER_PROVIDER = "browser";
 export const SERVER_PROVIDER = "kokoro";
+export const CLONED_PROVIDER = "cloned";
 
 export interface SpeechLanguage {
   locale: string;
@@ -45,6 +47,21 @@ export function VoicePicker({
   onChange: (selection: VoiceSelection) => void;
 }) {
   const { t } = useTranslation();
+  const { current } = useOrg();
+  const orgId = current?.id;
+
+  // Cloned voices are rows in this org's speech cache, not a global list, so
+  // they come from the org-scoped endpoint and are merged in here — the
+  // generic provider listing is unauthenticated and could not scope them.
+  const { data: cloned = [] } = useQuery({
+    queryKey: ["cloned-voices", orgId],
+    queryFn: () =>
+      api.get<{ voice: string; label: string; locale: string }[]>(
+        `/orgs/${orgId}/cloned-voices`
+      ),
+    enabled: Boolean(orgId),
+  });
+
   // Languages the server can actually speak, each already resolved to the
   // best provider and voice. Choosing a language is the primary act; the
   // provider is an implementation detail the picker fills in.
@@ -63,9 +80,23 @@ export function VoicePicker({
         : server;
     },
   });
+
+  // Offered only when this org actually has one: an empty "Cloned voice"
+  // entry would be a dead end for everyone who never recorded anything.
+  const allProviders = cloned.length
+    ? [...(providers ?? []), { name: CLONED_PROVIDER, display_name: t("clonedVoices") }]
+    : providers;
   const { data: voices } = useQuery({
-    queryKey: ["tts-voices", value.provider],
+    queryKey: ["tts-voices", value.provider, cloned.length],
     queryFn: async (): Promise<Voice[]> => {
+      if (value.provider === CLONED_PROVIDER) {
+        return cloned.map((c) => ({
+          id: c.voice,
+          name: c.label,
+          locale: c.locale || "en-US",
+          gender: "neutral",
+        }));
+      }
       if (value.provider === BROWSER_PROVIDER) {
         const list = await BrowserTTS.voices();
         return list.map((v) => ({
@@ -85,23 +116,32 @@ export function VoicePicker({
   // select would show a value absent from its own options and the voice
   // query would 422.
   useEffect(() => {
-    if (providers?.length && !providers.some((p) => p.name === value.provider)) {
-      onChange({ ...value, provider: providers[0].name, voice: "" });
+    if (allProviders?.length && !allProviders.some((p) => p.name === value.provider)) {
+      onChange({ ...value, provider: allProviders[0].name, voice: "" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providers]);
+  }, [allProviders]);
 
   // Keep the voice valid when the provider (or its voice list) changes.
   useEffect(() => {
     if (voices?.length && !voices.some((v) => v.id === value.voice)) {
-      onChange({ ...value, voice: voices[0].id, locale: voices[0].locale });
+      onChange({
+        ...value,
+        voice: voices[0].id,
+        // Never undefined: a voice list without locales (an older server, a
+        // browser voice with a blank lang) would otherwise put undefined
+        // into the selection and crash the language match below.
+        locale: voices[0].locale || value.locale || "en-US",
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voices]);
 
   const activeLanguage =
     languages?.find((l) => l.locale === value.locale) ??
-    languages?.find((l) => l.locale.split("-")[0] === value.locale.split("-")[0]);
+    languages?.find(
+      (l) => l.locale.split("-")[0] === (value.locale || "").split("-")[0]
+    );
 
   return (
     <div className="flex flex-wrap gap-3">
@@ -136,7 +176,7 @@ export function VoicePicker({
           value={value.provider}
           onChange={(e) => onChange({ ...value, provider: e.target.value })}
         >
-          {providers?.map((p) => (
+          {allProviders?.map((p) => (
             <option key={p.name} value={p.name}>
               {p.display_name}
             </option>

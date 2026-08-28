@@ -45,6 +45,9 @@ class ClonedVoiceOut(BaseModel):
     label: str
     lines: int
     total_ms: int
+    # The locale its lines were rendered in, so the picker can set all three
+    # of provider/voice/locale from one selection.
+    locale: str = "en-US"
 
 
 def _wav_facts(data: bytes) -> tuple[int, int]:
@@ -74,6 +77,7 @@ async def list_cloned_voices(ctx: OrgMember, db: DB) -> list[ClonedVoiceOut]:
                 SpeechCache.voice,
                 func.count().label("lines"),
                 func.sum(SpeechCache.duration_ms).label("total_ms"),
+                func.min(SpeechCache.locale).label("locale"),
             )
             .where(
                 SpeechCache.provider == PROVIDER_NAME,
@@ -88,6 +92,7 @@ async def list_cloned_voices(ctx: OrgMember, db: DB) -> list[ClonedVoiceOut]:
             label=row.voice.partition(":")[2],
             lines=row.lines,
             total_ms=int(row.total_ms or 0),
+            locale=row.locale or "en-US",
         )
         for row in rows
     ]
@@ -157,6 +162,7 @@ async def _summarise(db, org_id: str, voice: str) -> ClonedVoiceOut:
             select(
                 func.count().label("lines"),
                 func.sum(SpeechCache.duration_ms).label("total_ms"),
+                func.min(SpeechCache.locale).label("locale"),
             ).where(SpeechCache.provider == PROVIDER_NAME, SpeechCache.voice == voice)
         )
     ).one()
@@ -165,4 +171,5 @@ async def _summarise(db, org_id: str, voice: str) -> ClonedVoiceOut:
         label=voice.partition(":")[2],
         lines=row.lines,
         total_ms=int(row.total_ms or 0),
+        locale=row.locale or "en-US",
     )
