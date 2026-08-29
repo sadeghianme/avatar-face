@@ -36,7 +36,7 @@ function useCrumb(): string {
   if (pathname.startsWith("/simulator")) return t("simulator");
   if (pathname.startsWith("/avatars/new")) return t("newAvatar");
   if (pathname.startsWith("/avatars/")) return t("avatars");
-  return t("dashboard");
+  return t("avatars");
 }
 
 export function AppShell({ children }: { children: ReactNode }) {

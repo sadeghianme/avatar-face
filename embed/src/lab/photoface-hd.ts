@@ -1,17 +1,31 @@
 /**
  * Experimental 2.5D renderer for the Photoface HD lab.
  *
- * This deliberately lives beside (not inside) AvatarEngine. The established
- * canvas renderer remains untouched while this module reuses the same rig,
- * layer assets, cue format and SpeechPlayer contract to test a depth-aware
- * representation in isolation.
+ * SEPARATION CONTRACT — the reason this file lives under lab/:
+ *
+ *   * Dependencies flow ONE WAY. This module imports stable code
+ *     (AvatarEngine helpers, HeadMotion, BodyMotion, the types); nothing
+ *     under src/ outside lab/ may ever import from lab/. Deleting this
+ *     directory must leave the product exactly as it was.
+ *   * It is not exported from index.ts and not part of the widget bundles,
+ *     so neither three.js nor any lab behaviour can reach a customer page.
+ *   * The dashboard reaches it only through the lab page's dynamic import.
+ *
+ * Reusing HeadMotion/BodyMotion is inside that contract: importing a class
+ * cannot change the class. The first version drove the head with summed
+ * sines instead — the exact approach headmotion.ts documents rejecting,
+ * because a sum of sines never stops moving and the eye learns the loop.
+ * Judging depth rendering over looping motion made every comparison unfair
+ * to the depth idea itself.
  */
 import * as THREE from "three";
 
-import { prepareCues } from "./engine";
-import type { SpeechPlayer } from "./speech";
-import type { BlendWeights, Cue, Rig } from "./types";
-import { ZERO_WEIGHTS } from "./types";
+import { BodyMotion } from "../bodymotion";
+import { prepareCues } from "../engine";
+import { HeadMotion } from "../headmotion";
+import type { SpeechPlayer } from "../speech";
+import type { BlendWeights, Cue, Rig } from "../types";
+import { ZERO_WEIGHTS } from "../types";
 
 export interface PhotoFaceHDSource {
   rigUrl: string;
@@ -21,6 +35,37 @@ export interface PhotoFaceHDSource {
     body?: string;
     head?: string;
   } | null;
+  /** Per-landmark z from MediaPipe (478 values, negative toward the camera),
+   *  served by the lab depth endpoint. Optional: without it the surface
+   *  falls back to the dome approximation. */
+  depthZ?: number[] | null;
+}
+
+/**
+ * Pose scale: HeadMotion emits -1..1 of "peak travel"; these are the peaks
+ * in radians. Chosen to match the 2D engine's apparent amplitude so the
+ * side-by-side comparison shows DEPTH difference, not amplitude difference.
+ */
+export const POSE_SCALE = {
+  yawRad: 0.05,
+  pitchRad: 0.03,
+  rollRad: 0.014,
+  swayRad: 0.008,
+  breathRise: 0.006,
+} as const;
+
+/** Pure so it is testable without a WebGL context. */
+export function poseToRotation(
+  motion: { yaw: number; pitch: number; roll: number },
+  body: { sway: number; breath: number },
+  speechEnergy: number
+): { x: number; y: number; z: number; lift: number } {
+  return {
+    y: motion.yaw * POSE_SCALE.yawRad,
+    x: motion.pitch * POSE_SCALE.pitchRad + speechEnergy * 0.018,
+    z: motion.roll * POSE_SCALE.rollRad + body.sway * POSE_SCALE.swayRad,
+    lift: body.breath * POSE_SCALE.breathRise,
+  };
 }
 
 const LEFT_UPPER = [159, 158, 157, 173];
@@ -119,6 +164,10 @@ export class PhotoFaceHDEngine implements SpeechPlayer {
   private weights: BlendWeights = { ...ZERO_WEIGHTS };
   private nextBlinkAt = performance.now() + 1800 + Math.random() * 2600;
   private blinkStartedAt = 0;
+  // The stable engine's motion drivers, reused as-is (one-way import).
+  private readonly headMotion = new HeadMotion();
+  private readonly bodyMotion = new BodyMotion();
+  private readonly baseHeadY: number;
 
   static async load(canvas: HTMLCanvasElement, source: PhotoFaceHDSource): Promise<PhotoFaceHDEngine> {
     const rigResponse = await fetch(source.rigUrl);
@@ -140,14 +189,15 @@ export class PhotoFaceHDEngine implements SpeechPlayer {
       background: loaded[1],
       body: loaded[2],
       head: loaded[3],
-    });
+    }, source.depthZ ?? null);
   }
 
   private constructor(
     canvas: HTMLCanvasElement,
     rig: Rig,
     image: THREE.Texture,
-    layers: { background: THREE.Texture | null; body: THREE.Texture | null; head: THREE.Texture | null }
+    layers: { background: THREE.Texture | null; body: THREE.Texture | null; head: THREE.Texture | null },
+    depthZ: number[] | null = null
   ) {
     this.rig = rig;
     this.textures = [image, layers.background, layers.body, layers.head].filter(
@@ -177,6 +227,7 @@ export class PhotoFaceHDEngine implements SpeechPlayer {
     this.faceWidth = ((x1 - x0) / imageWidth) * worldWidth;
     this.faceHeight = ((y1 - y0) / imageHeight) * worldHeight;
     this.head.position.set(faceCenterX, faceCenterY, 0);
+    this.baseHeadY = faceCenterY;
     this.scene.add(this.head);
 
     const makePlane = (texture: THREE.Texture, z: number, parent: THREE.Object3D, transparent: boolean) => {
@@ -209,11 +260,25 @@ export class PhotoFaceHDEngine implements SpeechPlayer {
       return 0.035 + dome * this.faceWidth * 0.18 + Math.exp(-noseDistance * 2.2) * this.faceWidth * 0.08;
     };
 
-    this.localPoints = rig.points.map(([px, py]) =>
+    // MEASURED depth when the lab endpoint supplied it, dome as fallback.
+    // MediaPipe z is negative toward the camera and scaled roughly like x,
+    // so it converts to world units with the same width ratio the x axis
+    // uses. The relief is normalised around its own median rather than used
+    // raw: absolute z from a single image is arbitrary, only the shape of
+    // the surface is trustworthy.
+    let measured: ((index: number) => number) | null = null;
+    if (depthZ && depthZ.length === rig.points.length) {
+      const sorted = [...depthZ].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+      const scale = worldWidth / imageWidth;
+      measured = (index: number) => 0.035 + Math.max(0, (median - depthZ[index]) * scale * 1.35);
+    }
+
+    this.localPoints = rig.points.map(([px, py], index) =>
       new THREE.Vector3(
         (px / imageWidth - 0.5) * worldWidth - faceCenterX,
         (0.5 - py / imageHeight) * worldHeight - faceCenterY,
-        depthAt(px, py)
+        measured ? measured(index) : depthAt(px, py)
       )
     );
     this.facePositions = new Float32Array(this.localPoints.length * 3);
@@ -452,11 +517,13 @@ export class PhotoFaceHDEngine implements SpeechPlayer {
     this.lastFrame = now;
     this.updateFace(now, dt);
 
-    const seconds = now / 1000;
-    const speechEnergy = this.weights.jawOpen * 0.45;
-    this.head.rotation.y = Math.sin(seconds * 0.47) * 0.045 + Math.sin(seconds * 0.13) * 0.025;
-    this.head.rotation.x = Math.sin(seconds * 0.31 + 0.8) * 0.018 + speechEnergy * 0.018;
-    this.head.rotation.z = Math.sin(seconds * 0.23) * 0.009;
+    this.headMotion.update(dt, now, this.speaking);
+    this.bodyMotion.update(dt, now);
+    const pose = poseToRotation(this.headMotion, this.bodyMotion, this.weights.jawOpen * 0.45);
+    this.head.rotation.x = pose.x;
+    this.head.rotation.y = pose.y;
+    this.head.rotation.z = pose.z;
+    this.head.position.y = this.baseHeadY + pose.lift;
     this.renderer.render(this.scene, this.camera);
     this.frame = requestAnimationFrame(this.loop);
   }

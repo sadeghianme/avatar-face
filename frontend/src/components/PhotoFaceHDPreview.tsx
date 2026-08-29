@@ -2,15 +2,18 @@ import type { CuePlayer, SpeechPlayer } from "@liveface/embed";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { api } from "../lib/api";
 import type { Avatar } from "../lib/types";
 
 type HDEngine = SpeechPlayer & CuePlayer & { destroy(): void };
 
 export function PhotoFaceHDPreview({
   avatar,
+  orgId,
   onEngine,
 }: {
   avatar: Avatar;
+  orgId: string;
   onEngine?: (engine: HDEngine | null) => void;
 }) {
   const { t } = useTranslation();
@@ -29,10 +32,17 @@ export function PhotoFaceHDPreview({
       if (!avatar.rig_url || !avatar.image_url || !canvasRef.current) return;
       setLoading(true);
       setError(null);
-      const { PhotoFaceHDEngine } = await import("@liveface/embed/photoface-hd");
+      const { PhotoFaceHDEngine } = await import("@liveface/embed/lab/photoface-hd");
+      // Measured relief from the lab endpoint; a miss means the dome
+      // fallback, which is an answer the comparison can still judge.
+      const depthZ = await api
+        .get<{ detected: boolean; z: number[] }>(`/orgs/${orgId}/lab/avatars/${avatar.id}/depth`)
+        .then((d) => (d.detected ? d.z : null))
+        .catch(() => null);
       const instance = await PhotoFaceHDEngine.load(canvasRef.current, {
         rigUrl: avatar.rig_url,
         imageUrl: avatar.image_url,
+        depthZ,
         layerUrls: {
           background: backgroundUrl,
           body: bodyUrl,

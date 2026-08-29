@@ -115,6 +115,7 @@ export const ICONS: Record<string, Shape[]> = {
     { rect: [3, 13, 8, 8, 2] },
     { rect: [13, 13, 8, 8, 2] },
   ],
+  search: [{ circle: [10.7, 10.7, 6.7] }, { d: "m15.6 15.6 4.9 4.9" }],
 };
 
 export type IconName = keyof typeof ICONS;

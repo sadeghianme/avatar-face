@@ -20,6 +20,7 @@ from app.api import (
     cloned_voices,
     embed,
     integrations,
+    lab,
     orgs,
     share,
     staging,
@@ -284,6 +285,8 @@ def create_app() -> FastAPI:
     app.include_router(stock.router)
     app.include_router(share.router)
     app.include_router(cloned_voices.router)
+    # Lab experiments; delete app/api/lab.py and this line to remove them.
+    app.include_router(lab.router)
     app.include_router(clone_jobs.router)
 
     return app
