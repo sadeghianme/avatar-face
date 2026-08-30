@@ -819,11 +819,22 @@ async def generate_candidates(
     rejected ones are reported rather than hidden — "the head is turned away"
     tells the user what to change; a silent retry does not.
     """
-    from app.services.imagegen import ImageGenUnavailable, generate
-    from app.services.riggable import check_image
+    from app.services.imagegen import (
+        ImageGenUnavailable,
+        configured_backends,
+        generate_with,
+    )
+    from app.services.riggable import check_image, salvage_portrait
 
     if body.style not in GEN_STYLES:
         raise Validation422(f"style must be one of {sorted(GEN_STYLES)}", code="unknown_style")
+
+    backends = configured_backends()
+    if not backends:
+        raise Conflict409(
+            "Image generation is not configured on this server",
+            code="imagegen_unavailable",
+        )
 
     storage = get_storage()
     source: bytes | None = None
@@ -833,40 +844,44 @@ async def generate_candidates(
             raise Conflict409("The source avatar is not a photo", code="not_a_photo")
         source = await storage.get_bytes(origin.image_key)
 
+    # One image per configured backend — comparing models, not variance.
     accepted: list[dict] = []
     rejected: list[str] = []
     attempts = 0
-    while len(accepted) < body.count and attempts < MAX_GENERATION_ATTEMPTS:
-        # Checked before every attempt, not once up front: the retry loop can
-        # run several times per click, and a limit that only guards the first
-        # one is not a limit.
+    for backend in backends:
+        if len(accepted) >= body.count:
+            break
         await check_image_limit(db, ctx.org.id)
         attempts += 1
         try:
-            result = await generate(body.style, source, extra=body.note)
+            result = await generate_with(backend, body.style, source, extra=body.note)
             # Recorded on success only — a request the provider rejected was
             # not billed, and counting it would spend the user's allowance on
             # our own errors.
-            await record_generation(db, ctx.org.id, "gemini")
-        except ImageGenUnavailable as exc:
-            raise Conflict409(
-                "Image generation is not configured on this server",
-                code="imagegen_unavailable",
-            ) from exc
+            await record_generation(db, ctx.org.id, backend)
+        except ImageGenUnavailable:
+            continue
         except Exception as exc:
-            logger.exception("generation attempt failed")
-            rejected.append(str(exc)[:120])
+            logger.exception("generation attempt failed (%s)", backend)
+            rejected.append(f"{backend}: {str(exc)[:110]}")
             continue
 
-        verdict = check_image(result.image)
+        image = result.image
+        verdict = check_image(image)
         if not verdict.ok:
-            rejected.append(verdict.summary)
+            # Salvage before rejecting: "face too small" proves the face was
+            # FOUND, so a crop can fix what another paid roll only gambles on.
+            salvaged = salvage_portrait(image)
+            if salvaged is not None:
+                fixed = check_image(salvaged)
+                if fixed.ok:
+                    image, verdict = salvaged, fixed
+        if not verdict.ok:
+            rejected.append(f"{backend}: {verdict.summary}")
             continue
 
-        # Candidates live outside any avatar until one is chosen, so an
-        # abandoned generation leaves no half-made avatar in the list.
         key = f"orgs/{ctx.org.id}/candidates/{uuid4().hex}.png"
-        await storage.put_bytes(key, result.image, "image/png")
+        await storage.put_bytes(key, image, "image/png")
         accepted.append(
             {
                 "key": key,

@@ -172,12 +172,24 @@ class StagedGenerate(BaseModel):
 async def generate_staged(body: StagedGenerate, ctx: OrgMember, db: DB) -> dict:
     """Same loop as the avatar-level endpoint: generate, then keep only what
     the rig can use, and report what was discarded and why."""
-    from app.services.imagegen import STYLES, ImageGenUnavailable, generate
-    from app.services.riggable import check_image
+    from app.services.imagegen import (
+        STYLES,
+        ImageGenUnavailable,
+        configured_backends,
+        generate_with,
+    )
+    from app.services.riggable import check_image, salvage_portrait
     from app.services.usage import check_image_limit, record_generation
 
     if body.style not in STYLES:
         raise Validation422(f"style must be one of {sorted(STYLES)}", code="unknown_style")
+
+    backends = configured_backends()
+    if not backends:
+        raise Conflict409(
+            "Image generation is not configured on this server",
+            code="imagegen_unavailable",
+        )
 
     storage = get_storage()
     source = None
@@ -185,30 +197,44 @@ async def generate_staged(body: StagedGenerate, ctx: OrgMember, db: DB) -> dict:
         _check_key(ctx.org.id, body.key)
         source = await storage.get_bytes(body.key)
 
+    # One image per configured backend, not N rolls of the same die: with
+    # Gemini, OpenAI and Qwen keyed, one style choice returns one take from
+    # each, and the user compares models instead of variance.
     accepted: list[dict] = []
     rejected: list[str] = []
     attempts = 0
-    while len(accepted) < body.count and attempts < 6:
+    for backend in backends:
+        if len(accepted) >= body.count:
+            break
         await check_image_limit(db, ctx.org.id)
         attempts += 1
         try:
-            result = await generate(body.style, source, extra=body.note)
-            await record_generation(db, ctx.org.id, "gemini")
-        except ImageGenUnavailable as exc:
-            raise Conflict409(
-                "Image generation is not configured on this server",
-                code="imagegen_unavailable",
-            ) from exc
+            result = await generate_with(backend, body.style, source, extra=body.note)
+            await record_generation(db, ctx.org.id, backend)
+        except ImageGenUnavailable:
+            continue
         except Exception as exc:
-            logger.exception("staged generation failed")
-            rejected.append(str(exc)[:120])
+            logger.exception("staged generation failed (%s)", backend)
+            rejected.append(f"{backend}: {str(exc)[:110]}")
             continue
 
-        verdict = check_image(result.image)
+        image = result.image
+        verdict = check_image(image)
         if not verdict.ok:
-            rejected.append(verdict.summary)
+            # A face the checker could measure is a face the crop can fix.
+            # Six paid generations were once discarded in a row for "face too
+            # small" — for framing the model was explicitly asked for.
+            salvaged = salvage_portrait(image)
+            if salvaged is not None:
+                verdict = check_image(salvaged)
+                if verdict.ok:
+                    image = salvaged
+        if not verdict.ok:
+            rejected.append(f"{backend}: {verdict.summary}")
             continue
-        staged = await _store(ctx.org.id, result.image)
-        accepted.append(staged.model_dump())
+        staged = await _store(ctx.org.id, image)
+        entry = staged.model_dump()
+        entry["provider"] = backend
+        accepted.append(entry)
 
     return {"candidates": accepted, "rejected": rejected, "attempts": attempts}

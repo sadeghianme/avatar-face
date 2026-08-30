@@ -243,3 +243,159 @@ async def verify_key() -> dict:
     if response.status_code >= 300:
         return {"ok": False, "error": f"{response.status_code}: {response.text[:160]}"}
     return {"ok": True, "model": MODEL}
+
+
+# --- Multiple image backends ------------------------------------------------
+#
+# One style choice fans out to every configured backend, one image each, so
+# the user compares what Gemini, OpenAI and Qwen make of the same face
+# instead of three rolls of the same die. Each backend is optional: only the
+# ones with keys participate, and one backend failing costs one slot, not
+# the batch.
+
+OPENAI_IMAGES_URL = "https://api.openai.com/v1"
+OPENAI_IMAGE_MODEL = "gpt-image-1"
+
+# Alibaba's international DashScope endpoint. NOTE: unverified against the
+# live service until a key exists — same policy as the Avaturn integration,
+# where the shapes were written from the published docs and confirmed on
+# first real use.
+DASHSCOPE_URL = "https://dashscope-intl.aliyuncs.com/api/v1"
+QWEN_T2I_MODEL = "qwen-image"
+QWEN_EDIT_MODEL = "qwen-image-edit"
+
+IMAGE_BACKENDS = ("gemini", "openai", "qwen")
+
+
+def _backend_key(backend: str) -> str | None:
+    from app.core.credentials import credentials
+
+    return credentials.get(
+        {
+            "gemini": "gemini_api_key",
+            # The one OpenAI key on the account: also used for their voices.
+            "openai": "openai_api_key",
+            "qwen": "dashscope_api_key",
+        }[backend]
+    )
+
+
+def configured_backends() -> list[str]:
+    return [b for b in IMAGE_BACKENDS if _backend_key(b)]
+
+
+async def generate_with(
+    backend: str, style: str, source: bytes | None = None, extra: str = ""
+) -> Generated:
+    """One image from one named backend, same style prompt for all."""
+    if backend == "gemini":
+        return await generate(style, source, extra=extra)
+
+    prompt = build_prompt(style, source is not None, extra)
+    payload = mime = None
+    if source is not None:
+        payload, mime = shrink_source(source)
+
+    if backend == "openai":
+        return await _openai_image(prompt, payload, mime)
+    if backend == "qwen":
+        return await _qwen_image(prompt, payload, mime)
+    raise ImageGenUnavailable(f"unknown image backend '{backend}'")
+
+
+async def _openai_image(prompt: str, source: bytes | None, mime: str | None) -> Generated:
+    key = _backend_key("openai")
+    if not key:
+        raise ImageGenUnavailable("openai_api_key is not set")
+    headers = {"Authorization": f"Bearer {key}"}
+    async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:
+        if source is not None:
+            response = await client.post(
+                f"{OPENAI_IMAGES_URL}/images/edits",
+                headers=headers,
+                data={"model": OPENAI_IMAGE_MODEL, "prompt": prompt, "size": "1024x1024"},
+                files={"image": ("source.png", source, mime or "image/png")},
+            )
+        else:
+            response = await client.post(
+                f"{OPENAI_IMAGES_URL}/images/generations",
+                headers=headers,
+                json={"model": OPENAI_IMAGE_MODEL, "prompt": prompt, "size": "1024x1024"},
+            )
+    if response.status_code >= 300:
+        logger.error("openai images rejected (%s): %s", response.status_code, response.text[:300])
+        raise RuntimeError(f"OpenAI image generation failed ({response.status_code})")
+    data = response.json().get("data") or []
+    if not data or not data[0].get("b64_json"):
+        raise RuntimeError("OpenAI returned no image")
+    return Generated(base64.b64decode(data[0]["b64_json"]), "image/png")
+
+
+async def _qwen_image(prompt: str, source: bytes | None, mime: str | None) -> Generated:
+    key = _backend_key("qwen")
+    if not key:
+        raise ImageGenUnavailable("dashscope_api_key is not set")
+    headers = {"Authorization": f"Bearer {key}"}
+
+    async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:
+        if source is not None:
+            # Image-to-image: the synchronous multimodal endpoint, source
+            # inlined as a data URI.
+            data_uri = f"data:{mime or 'image/png'};base64,{base64.b64encode(source).decode()}"
+            response = await client.post(
+                f"{DASHSCOPE_URL}/services/aigc/multimodal-generation/generation",
+                headers=headers,
+                json={
+                    "model": QWEN_EDIT_MODEL,
+                    "input": {
+                        "messages": [
+                            {"role": "user", "content": [{"image": data_uri}, {"text": prompt}]}
+                        ]
+                    },
+                },
+            )
+            if response.status_code >= 300:
+                logger.error("qwen edit rejected (%s): %s", response.status_code, response.text[:300])
+                raise RuntimeError(f"Qwen image generation failed ({response.status_code})")
+            content = (
+                response.json().get("output", {}).get("choices", [{}])[0]
+                .get("message", {}).get("content", [])
+            )
+            image_url = next((c["image"] for c in content if "image" in c), None)
+        else:
+            # Text-to-image is an async task: submit, then poll.
+            submitted = await client.post(
+                f"{DASHSCOPE_URL}/services/aigc/text2image/image-synthesis",
+                headers={**headers, "X-DashScope-Async": "enable"},
+                json={
+                    "model": QWEN_T2I_MODEL,
+                    "input": {"prompt": prompt},
+                    "parameters": {"size": "1024*1024", "n": 1},
+                },
+            )
+            if submitted.status_code >= 300:
+                logger.error("qwen submit rejected (%s): %s", submitted.status_code, submitted.text[:300])
+                raise RuntimeError(f"Qwen image generation failed ({submitted.status_code})")
+            task_id = submitted.json().get("output", {}).get("task_id")
+            if not task_id:
+                raise RuntimeError("Qwen returned no task id")
+            image_url = None
+            for _ in range(30):
+                import asyncio
+
+                await asyncio.sleep(2)
+                status = await client.get(f"{DASHSCOPE_URL}/tasks/{task_id}", headers=headers)
+                output = status.json().get("output", {})
+                state = output.get("task_status")
+                if state == "SUCCEEDED":
+                    results = output.get("results") or []
+                    image_url = results[0].get("url") if results else None
+                    break
+                if state in ("FAILED", "CANCELED"):
+                    raise RuntimeError(f"Qwen task {state.lower()}: {output.get('message', '')[:120]}")
+
+        if not image_url:
+            raise RuntimeError("Qwen returned no image")
+        downloaded = await client.get(image_url)
+        downloaded.raise_for_status()
+        return Generated(downloaded.content, downloaded.headers.get("content-type", "image/png"))

@@ -12,7 +12,7 @@ async def test_get_integrations_initial_state(client):
     response = await client.get(f"/orgs/{org_id}/integrations", headers=headers)
     assert response.status_code == 200
     providers = {p["provider"] for p in response.json()}
-    assert providers == {"azure", "elevenlabs", "google", "openai", "gemini", "avaturn"}
+    assert providers == {"azure", "elevenlabs", "google", "openai", "gemini", "avaturn", "qwen"}
     for provider in response.json():
         assert provider["configured"] is False
         for field in provider["fields"]:

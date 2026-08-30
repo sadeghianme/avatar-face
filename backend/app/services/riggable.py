@@ -136,3 +136,65 @@ def check_image(data: bytes) -> RigCheck:
         return RigCheck(False, "no face detected", detected=False)
 
     return check_landmarks(points, image.size, detected=True)
+
+
+def salvage_portrait(data: bytes) -> bytes | None:
+    """Crop a too-wide shot down to a usable head-and-shoulders portrait.
+
+    Image models love cinematic framing: a nurse at 15% of a 1536-wide
+    frame, failed six times in a row for being exactly what was asked for.
+    But a rejection for "face too small" already proves the detector FOUND
+    the face — so the fix is arithmetic, not another paid attempt. Crop so
+    the face carries ~30% of the width, keep room above the hair and down
+    to the chest, and let the caller re-judge the result.
+
+    None when there is nothing to salvage: no face, unreadable image, or a
+    face already so large that cropping cannot help.
+    """
+    import io
+
+    from PIL import Image
+
+    from app.core.config import get_settings
+
+    if not get_settings().rig_model_path:
+        return None
+    try:
+        image = Image.open(io.BytesIO(data)).convert("RGB")
+    except Exception:
+        return None
+
+    from app.services.rig import _mediapipe_landmarks
+
+    try:
+        points = _mediapipe_landmarks(image)
+    except Exception:
+        return None
+
+    xs, ys = points[:, 0], points[:, 1]
+    fx0, fx1 = float(xs.min()), float(xs.max())
+    fy0, fy1 = float(ys.min()), float(ys.max())
+    face_w, face_h = fx1 - fx0, fy1 - fy0
+    if face_w < 8 or face_h < 8:
+        return None
+
+    # Target: the face at ~30% of the crop's width — comfortably above the
+    # 22% floor, below "passport photo".
+    crop_w = face_w / 0.30
+    crop_h = crop_w  # square, which is what the rig pipeline frames best
+    cx = (fx0 + fx1) / 2
+    # Face centre sits in the upper third: headroom above, shoulders below.
+    top = fy0 - face_h * 0.55
+    left = cx - crop_w / 2
+
+    left = max(0.0, min(left, image.width - crop_w))
+    top = max(0.0, min(top, image.height - crop_h))
+    right = min(image.width, left + crop_w)
+    bottom = min(image.height, top + crop_h)
+    if right - left < face_w * 1.2 or bottom - top < face_h * 1.6:
+        return None  # image too tight around the face already
+
+    cropped = image.crop((int(left), int(top), int(right), int(bottom)))
+    buffer = io.BytesIO()
+    cropped.save(buffer, format="PNG")
+    return buffer.getvalue()

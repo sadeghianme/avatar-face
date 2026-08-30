@@ -20,6 +20,8 @@ import type { Avatar } from "../lib/types";
 const STYLES = ["photoreal", "illustrated", "anime", "render3d"] as const;
 
 interface Candidate {
+  /** Which image model made this one — gemini, openai or qwen. */
+  provider?: string;
   key: string;
   url: string;
   face_fraction: number;
@@ -188,7 +190,14 @@ export function GeneratePanel({ orgId }: { orgId: string }) {
                     className="group text-start disabled:opacity-50"
                   >
                     <div className="overflow-hidden rounded-xl border border-black/[0.08] transition-shadow group-hover:shadow-lg dark:border-white/[0.1]">
-                      <img src={c.url} alt="" className="block w-full" />
+                      <div className="relative">
+                        <img src={c.url} alt="" className="block w-full" />
+                        {c.provider && (
+                          <span className="absolute end-1.5 top-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-white">
+                            {c.provider}
+                          </span>
+                        )}
+                      </div>
                       {creating === c.key && (
                         <div className="grid place-items-center bg-black/60 p-4 text-white">
                           <Spinner className="h-5 w-5" />

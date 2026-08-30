@@ -32,6 +32,8 @@ CREDENTIAL_FIELDS: dict[str, list[str]] = {
     # 3D avatars from a photo. Paid-plan only on Avaturn's side, which is
     # why this is a key the operator supplies rather than a built-in.
     "avaturn": ["avaturn_api_token"],
+    # Qwen image generation via Alibaba DashScope.
+    "qwen": ["dashscope_api_key"],
 }
 ALL_CREDENTIAL_NAMES = [name for fields in CREDENTIAL_FIELDS.values() for name in fields]
 
@@ -45,6 +47,7 @@ PROVIDER_KIND: dict[str, str] = {
     "openai": "voice",
     "gemini": "image",
     "avaturn": "model",
+    "qwen": "image",
 }
 
 
