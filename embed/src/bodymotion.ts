@@ -25,6 +25,13 @@
  *   than as drift.
  * - Breathing. About fifteen a minute, and asymmetric: the inhale is quicker
  *   than the exhale.
+ * - Speech breathing, which is a different pattern altogether. Nobody speaks
+ *   on a resting rhythm: there is a quick, deeper inhale as speech begins,
+ *   then a long slow exhale for the whole phrase — speaking IS exhaling —
+ *   with quick catch-breaths at pauses, and a release when the sentence
+ *   ends. The inhale before the first word is the single most convincing
+ *   "it is alive" cue there is, and the cue track tells us exactly when it
+ *   should happen.
  */
 
 /**
@@ -60,6 +67,28 @@ export const BREATH_PERIOD_S = 4.0;
  *  is therefore slower, which is what real breathing does. */
 const INHALE_FRACTION = 0.4;
 
+/**
+ * Speech breathing, in units of the resting breath (0..1 at rest).
+ *
+ * A speech inhale is deeper than a resting one, so its peak exceeds 1 — the
+ * renderer multiplies linearly, so 1.6 is a rise 60% taller than the
+ * deepest resting breath. Not more: this is a person starting a sentence,
+ * not a swimmer surfacing.
+ */
+export const SPEECH_INHALE_PEAK = 1.6;
+/** How long the pre-speech inhale takes to reach its peak. */
+export const SPEECH_INHALE_MS = 320;
+/** Where the long exhale settles if the phrase runs on. Not zero: lungs are
+ *  never empty mid-sentence, and a chest that sinks to rest while still
+ *  talking looks deflated. */
+const SPEECH_EXHALE_FLOOR = 0.25;
+/** A catch-breath at a pause: smaller and quicker than the opening inhale. */
+const CATCH_PEAK = 1.0;
+const CATCH_MS = 220;
+/** No two catch-breaths closer than this; real pauses that close are one
+ *  breath, not two. */
+const CATCH_MIN_GAP_MS = 1200;
+
 /** Correlation time of the sway, in seconds. Higher drifts more slowly. */
 const SWAY_TAU_S = 2.6;
 
@@ -94,7 +123,79 @@ export class BodyMotion {
   private phase = 0;
   private spare: number | null = null;
 
+  // Speech breathing. Analytic in elapsed time rather than integrated, so
+  // the same utterance breathes the same way at 30fps and 144fps.
+  private speech: {
+    startedAt: number;
+    exhaleTauMs: number;
+    from: number; // breath value the inhale started from — no jump
+    catchAt: number; // when the latest catch-breath began, or -Infinity
+    catchFrom: number;
+  } | null = null;
+
   constructor(private random: () => number = Math.random) {}
+
+  /**
+   * Speech is starting: take a breath, then spend it over the phrase.
+   *
+   * `durationMs` is the utterance length when known (the last cue's time).
+   * The exhale is paced to it — a long sentence is spent slowly, a short one
+   * more freely — and clamped so a single word does not look like a gasp
+   * and a monologue does not deflate in its first seconds.
+   */
+  beginSpeech(now: number, durationMs = 4000): void {
+    this.speech = {
+      startedAt: now,
+      exhaleTauMs: Math.max(1500, Math.min(6000, durationMs * 0.6)),
+      from: this.breath,
+      catchAt: -Infinity,
+      catchFrom: 0,
+    };
+  }
+
+  /** A pause inside the phrase: a small quick breath, then carry on. */
+  catchBreath(now: number): void {
+    const sp = this.speech;
+    if (!sp) return;
+    if (now - sp.startedAt < SPEECH_INHALE_MS + CATCH_MIN_GAP_MS) return;
+    if (now - sp.catchAt < CATCH_MIN_GAP_MS) return;
+    sp.catchAt = now;
+    sp.catchFrom = this.breath;
+  }
+
+  /**
+   * Speech is over: hand the chest back to the resting rhythm exactly where
+   * it is. The resting cycle is re-phased so its exhale continues from the
+   * current value, rather than restarting at zero with a visible drop.
+   */
+  endSpeech(): void {
+    if (!this.speech) return;
+    this.speech = null;
+    this.phase = phaseForExhaleValue(this.breath);
+  }
+
+  /** The breath value during speech, as a function of time since it began. */
+  private speechBreath(now: number): number {
+    const sp = this.speech!;
+    const t = now - sp.startedAt;
+    if (t < SPEECH_INHALE_MS) {
+      return sp.from + (SPEECH_INHALE_PEAK - sp.from) * smoothstep(t / SPEECH_INHALE_MS);
+    }
+    // The long exhale: from the peak toward the floor, exponentially, so it
+    // is fastest just after the inhale — which is also how lungs empty.
+    const since = t - SPEECH_INHALE_MS;
+    let value =
+      SPEECH_EXHALE_FLOOR + (SPEECH_INHALE_PEAK - SPEECH_EXHALE_FLOOR) * Math.exp(-since / sp.exhaleTauMs);
+    const sinceCatch = now - sp.catchAt;
+    if (sinceCatch >= 0 && sinceCatch < CATCH_MS) {
+      value = sp.catchFrom + (CATCH_PEAK - sp.catchFrom) * smoothstep(sinceCatch / CATCH_MS);
+    } else if (sinceCatch >= CATCH_MS && sinceCatch < CATCH_MS + sp.exhaleTauMs * 3) {
+      // Exhale again from the catch peak, blending back onto the main curve.
+      const decay = Math.exp(-(sinceCatch - CATCH_MS) / sp.exhaleTauMs);
+      value = value + (CATCH_PEAK - value) * decay;
+    }
+    return value;
+  }
 
   /** Box-Muller. OU needs Gaussian increments; uniform noise gives the drift
    *  a boxy, mechanical quality that is visible at these low frequencies. */
@@ -139,9 +240,30 @@ export class BodyMotion {
     const follow = 1 - Math.exp(-step / SWAY_INERTIA_S);
     this.sway += (this.drift - this.sway) * follow;
 
-    this.phase = (this.phase + step / BREATH_PERIOD_S) % 1;
-    this.breath = breathCurve(this.phase);
+    if (this.speech) {
+      this.breath = this.speechBreath(now);
+    } else {
+      this.phase = (this.phase + step / BREATH_PERIOD_S) % 1;
+      this.breath = breathCurve(this.phase);
+    }
   }
+}
+
+function smoothstep(x: number): number {
+  const c = Math.max(0, Math.min(1, x));
+  return c * c * (3 - 2 * c);
+}
+
+/**
+ * The resting-cycle phase whose EXHALE side has this breath value, so a
+ * hand-back from speech continues downward from where the chest is.
+ * Values above 1 (a speech inhale is deeper than rest) map to the top.
+ */
+export function phaseForExhaleValue(value: number): number {
+  const v = Math.max(0, Math.min(1, value));
+  // breathCurve is 0.5 - 0.5cos(2π·skewed); on the exhale side skewed ∈ [0.5, 1].
+  const skewed = 1 - Math.acos(1 - 2 * v) / (2 * Math.PI);
+  return INHALE_FRACTION + ((skewed - 0.5) / 0.5) * (1 - INHALE_FRACTION);
 }
 
 /**

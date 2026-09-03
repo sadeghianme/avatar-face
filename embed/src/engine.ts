@@ -143,6 +143,18 @@ const BODY_PIVOT_DEPTH = 1.75;
  *  express the sway target in the same units it was measured in. */
 const FACE_TO_HEAD_WIDTH = 1.4;
 
+/** Silence inside speech longer than this is a pause, and a pause gets a
+ *  catch-breath. Shorter gaps are the space between words. */
+const PAUSE_BREATH_MS = 260;
+
+/** How long a cue track runs, for pacing the speech exhale. The last cue is
+ *  normally the closing silence, so its time is the utterance length. */
+function utteranceMs(cues: Cue[]): number {
+  let last = 0;
+  for (const cue of cues) if (cue.t > last) last = cue.t;
+  return last;
+}
+
 /** Sway is scaled down when the photo still has its background: moving the
  *  whole picture then reads as a wobbling camera rather than a moving person,
  *  and it drags the photo's own edge into frame. */
@@ -330,6 +342,9 @@ export class AvatarEngine {
   private cues: Cue[] = [];
   private cueStart = 0;
   private speaking = false;
+  /** When the current run of silence inside speech began, for catch-breaths;
+   *  null while a viseme is active. */
+  private silenceSince: number | null = null;
   private weights: BlendWeights = { ...ZERO_WEIGHTS };
   private targetWeights: BlendWeights = { ...ZERO_WEIGHTS };
   private energy = 0; // smoothed speech energy, drives head motion
@@ -861,6 +876,7 @@ export class AvatarEngine {
     this.onAudioEnd = onEnd ?? null;
     this.cues = prepareCues(cues);
     this.speaking = true;
+    this.body.beginSpeech(performance.now(), utteranceMs(cues));
 
     // Only reroute through the analyser when the cue track is too sparse to
     // drive the mouth (amplitude fallback needed). Rerouting risks silent
@@ -893,6 +909,7 @@ export class AvatarEngine {
     this.cues = prepareCues(cues);
     this.speaking = true;
     this.cueStart = performance.now();
+    this.body.beginSpeech(this.cueStart, utteranceMs(cues));
   }
 
   /** Re-align the cue clock to a known position in the track (ms). */
@@ -905,6 +922,7 @@ export class AvatarEngine {
     this.speaking = false;
     this.cues = [];
     this.targetWeights = { ...ZERO_WEIGHTS };
+    this.body.endSpeech();
   }
 
   isSpeaking(): boolean {
@@ -915,6 +933,7 @@ export class AvatarEngine {
     this.speaking = false;
     this.cues = [];
     this.targetWeights = { ...ZERO_WEIGHTS };
+    this.body.endSpeech();
     const cb = this.onAudioEnd;
     this.onAudioEnd = null;
     this.currentAudio = null;
@@ -1065,9 +1084,19 @@ export class AvatarEngine {
     // Viseme targets: co-articulated blend across cues (+ amplitude
     // fallback when the track is silent but audio clearly isn't).
     const visemeWeights = this.speaking ? this.blendedCueWeights(now) : { ...ZERO_WEIGHTS };
-    if (this.speaking && this.currentViseme(now) === "sil") {
+    const silent = this.speaking && this.currentViseme(now) === "sil";
+    if (silent) {
       const amp = this.amplitude();
       if (amp > 0.06) visemeWeights.jawOpen = Math.min(0.5, amp * 1.2);
+      // A pause that has lasted long enough to be a pause (not the gap
+      // between two words) gets a catch-breath. Once per run of silence.
+      if (this.silenceSince === null) this.silenceSince = now;
+      else if (now - this.silenceSince >= PAUSE_BREATH_MS) {
+        this.body.catchBreath(now);
+        this.silenceSince = Infinity; // spent for this run
+      }
+    } else {
+      this.silenceSince = null;
     }
     this.targetWeights = visemeWeights;
 
