@@ -202,7 +202,6 @@ const UPPER_LIP = new Set([
  * squash becomes visible.
  */
 const LID_VERTEX_SWEEP = 1.0;
-const NOD_MS = 1050;
 
 
 /** Pivot depth for body sway, as a multiple of canvas height. Below the
@@ -238,6 +237,67 @@ const MAX_SCLERA_CHROMA_VS_SKIN = 0.45;
 const MIN_SCLERA_LUMA_VS_SKIN = 0.75;
 
 const VOWEL_VISEMES = new Set(["aa", "E", "ih", "oh", "ou"]);
+
+/** A beat gesture is quick — a dip and back, not a slow ambient nod. */
+const BEAT_NOD_MS = 420;
+/** Ambient nods, when a cue track carries no usable emphasis. */
+const AMBIENT_NOD_MS = 1050;
+/**
+ * The head's downward motion starts a little before the syllable is heard:
+ * the gesture accompanies the accent rather than reacting to it.
+ */
+const BEAT_LEAD_MS = 80;
+/** No two beats closer than this. People accent phrases, not syllables; a
+ *  nod per stressed vowel is a bobblehead. */
+const BEAT_MIN_GAP_MS = 900;
+/** How prominent a vowel must be, relative to the track's own loudest, to
+ *  earn a beat. Relative because a quiet sentence still has accents. */
+const BEAT_THRESHOLD = 0.72;
+
+export interface Beat {
+  t: number;
+  strength: number;
+}
+
+/**
+ * Where in an utterance the head should mark the beat.
+ *
+ * Speakers move their heads down on accented syllables — it is one of the
+ * most reliable pairings in conversation, and its absence is part of why a
+ * talking head reads as a puppet with a moving mouth. The information is
+ * already in the cue track: after the server measures the rendered audio,
+ * a vowel's amplitude is how loud that syllable actually was, so the
+ * accents are the prominent vowels.
+ *
+ * A beat needs to be a LOCAL peak, not merely loud — in a uniformly
+ * emphatic sentence every vowel clears an absolute threshold and the head
+ * nods continuously. Comparing each vowel to its neighbours finds the
+ * syllable the speaker leaned on.
+ */
+export function emphasisBeats(cues: Cue[]): Beat[] {
+  const vowels: { t: number; a: number }[] = [];
+  for (const cue of cues) {
+    if (VOWEL_VISEMES.has(cue.viseme)) vowels.push({ t: cue.t, a: cue.a ?? 1 });
+  }
+  if (vowels.length < 2) return [];
+  const loudest = Math.max(...vowels.map((v) => v.a));
+  if (loudest <= 0) return [];
+
+  const beats: Beat[] = [];
+  for (let i = 0; i < vowels.length; i++) {
+    const here = vowels[i];
+    if (here.a < loudest * BEAT_THRESHOLD) continue;
+    const before = vowels[i - 1]?.a ?? 0;
+    const after = vowels[i + 1]?.a ?? 0;
+    // A peak, or level with a neighbour at the top of the track (a long
+    // accented vowel can span two cues at the same amplitude).
+    if (here.a < before || here.a < after) continue;
+    const at = Math.max(0, here.t - BEAT_LEAD_MS);
+    if (beats.length && at - beats[beats.length - 1].t < BEAT_MIN_GAP_MS) continue;
+    beats.push({ t: at, strength: Math.min(1.3, 0.7 + (here.a / loudest) * 0.6) });
+  }
+  return beats;
+}
 
 interface Point {
   x: number;
@@ -422,6 +482,12 @@ export class AvatarEngine {
   private readonly blinks = new BlinkScheduler();
   private nextNodAt = 0;
   private nodPhase = 1; // 1 = finished
+  private nodMs = AMBIENT_NOD_MS;
+  private nodStrength = 1;
+  /** Emphasis beats for the utterance in flight, and how far through them
+   *  the cue clock has walked. */
+  private beats: Beat[] = [];
+  private nextBeat = 0;
   private body = new BodyMotion();
   // The head as a movable unit. The layer is the head REGION of the photo —
   // hair, ears, skull — cut out once with feathered edges; the geometry is
@@ -701,7 +767,10 @@ export class AvatarEngine {
     const p = this.nodPhase;
     const nod = p < 1 ? Math.sin(p * Math.PI) ** 2 : 0;
     const dx = this.headDrive.yaw * g.yawPx * s;
-    const dy = (this.headDrive.pitch * g.pitchPx + nod * this.energy * g.faceH * 0.013) * s;
+    const dy =
+      (this.headDrive.pitch * g.pitchPx +
+        nod * this.nodStrength * this.energy * g.faceH * 0.013) *
+      s;
     const roll = this.headDrive.roll * 0.02 * s;
     // NO face parallax. The face mesh redrawn at its own offset over the
     // head layer duplicates whatever crosses the mesh hull — bangs over a
@@ -947,6 +1016,8 @@ export class AvatarEngine {
     this.cues = prepareCues(cues);
     this.speaking = true;
     this.body.beginSpeech(performance.now(), utteranceMs(cues));
+    this.beats = emphasisBeats(this.cues);
+    this.nextBeat = 0;
     this.gazeTarget = { x: 0, y: 0 }; // look at the person you are talking to
 
     // Only reroute through the analyser when the cue track is too sparse to
@@ -981,12 +1052,18 @@ export class AvatarEngine {
     this.speaking = true;
     this.cueStart = performance.now();
     this.body.beginSpeech(this.cueStart, utteranceMs(cues));
+    this.beats = emphasisBeats(this.cues);
+    this.nextBeat = 0;
     this.gazeTarget = { x: 0, y: 0 };
   }
 
   /** Re-align the cue clock to a known position in the track (ms). */
   syncCueTime(ms: number): void {
     this.cueStart = performance.now() - ms;
+    // Re-place the beat walker: after a seek the beats behind the new
+    // position are spent, not pending.
+    this.nextBeat = this.beats.findIndex((b) => b.t > ms);
+    if (this.nextBeat < 0) this.nextBeat = this.beats.length;
   }
 
   stopSpeech(): void {
@@ -996,6 +1073,7 @@ export class AvatarEngine {
     this.targetWeights = { ...ZERO_WEIGHTS };
     this.body.endSpeech();
     this.blinks.onSpeechEnd(performance.now());
+    this.beats = [];
   }
 
   isSpeaking(): boolean {
@@ -1008,6 +1086,7 @@ export class AvatarEngine {
     this.targetWeights = { ...ZERO_WEIGHTS };
     this.body.endSpeech();
     this.blinks.onSpeechEnd(performance.now());
+    this.beats = [];
     const cb = this.onAudioEnd;
     this.onAudioEnd = null;
     this.currentAudio = null;
@@ -1223,11 +1302,31 @@ export class AvatarEngine {
     this.blink = this.blinks.phase;
 
     // Gentle nods on a loose cadence while speaking.
-    if (this.speaking && now >= this.nextNodAt) {
+    // Emphasis beats: the head marks the syllables the voice leaned on.
+    // Walked on the CUE clock, not wall time, so a beat stays on its
+    // syllable when playback is re-synced (syncCueTime).
+    if (this.speaking && this.beats.length) {
+      const cueTime = now - this.cueStart;
+      while (this.nextBeat < this.beats.length && this.beats[this.nextBeat].t <= cueTime) {
+        const beat = this.beats[this.nextBeat++];
+        // Only if the beat is still near: after a seek, skip the ones the
+        // clock jumped over rather than firing a burst of stale nods.
+        if (cueTime - beat.t < BEAT_NOD_MS) {
+          this.nodPhase = 0;
+          this.nodMs = BEAT_NOD_MS;
+          this.nodStrength = beat.strength;
+        }
+      }
+    } else if (this.speaking && now >= this.nextNodAt) {
+      // No usable emphasis in this track (a browser voice, or a cue track
+      // with flat amplitudes): the old loose cadence still reads better
+      // than a head that never moves while talking.
       this.nextNodAt = now + 1800 + Math.random() * 2600;
       this.nodPhase = 0;
+      this.nodMs = AMBIENT_NOD_MS;
+      this.nodStrength = 1;
     }
-    if (this.nodPhase < 1) this.nodPhase = Math.min(1, this.nodPhase + dt / NOD_MS);
+    if (this.nodPhase < 1) this.nodPhase = Math.min(1, this.nodPhase + dt / this.nodMs);
 
     this.body.update(dt, now);
     this.headDrive.update(dt, now, this.speaking);
