@@ -120,7 +120,7 @@ class PiperTTSProvider(TTSProvider):
             # The voice's own locale, not the caller's: the phonemes that
             # produced this audio are that language's, so the visemes must be
             # derived the same way or the mouth drifts from the sound.
-            cues=cues_from_text(text, duration_ms, voice_locale),
+            cues=cues_from_text(text, duration_ms, voice_locale, audio=audio),
         )
 
 

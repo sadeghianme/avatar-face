@@ -77,7 +77,7 @@ class ClonedTTSProvider(TTSProvider):
                     audio=audio,
                     audio_mime="audio/wav",
                     duration_ms=duration_ms,
-                    cues=_cues(text, duration_ms, locale),
+                    cues=_cues(text, duration_ms, locale, audio=audio),
                 )
 
         raise NotFound404(
@@ -104,10 +104,12 @@ async def voices_for_org(db: AsyncSession, org_id: str) -> list[Voice]:
     return out
 
 
-def _cues(text: str, duration_ms: int, locale: str) -> list[dict]:
+def _cues(
+    text: str, duration_ms: int, locale: str, audio: bytes | None = None
+) -> list[dict]:
     from app.services.tts.visemes import cues_from_text
 
-    return cues_from_text(text, duration_ms, locale)
+    return cues_from_text(text, duration_ms, locale, audio=audio)
 
 
 async def _reference_for(voice: str) -> bytes | None:
@@ -162,7 +164,9 @@ async def store_line(
         char_count=len(text),
         audio_mime="audio/wav",
         audio=audio,
-        cues_json=json.dumps(cues_from_text(text, duration_ms, locale)),
+        cues_json=json.dumps(
+            cues_from_text(text, duration_ms, locale, audio=audio)
+        ),
         duration_ms=duration_ms,
     )
     if existing is not None:

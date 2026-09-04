@@ -105,6 +105,30 @@ export function pickScleraColour(candidates: Sample[], skin: Sample | null): str
 const LID_FOLLOW = 0.35;
 
 /**
+ * Per-shape inertia, as a multiple of the shared time constant.
+ *
+ * The jaw and the lips are not the same instrument. The jaw is a bone hung
+ * on heavy muscle and it arrives at a vowel; the lips and their ring muscle
+ * are light and they snap — which is exactly why /p/ /b/ /m/ read as
+ * closures rather than as pauses. Driving both at one rate forced a choice
+ * between a jaw that jitters through every consonant and lips too sluggish
+ * to shut between two vowels.
+ *
+ * Kept close to 1 on purpose. The smoothing sits on top of a blend that
+ * already reaches each shape in the middle of its own span, so slowing the
+ * jaw much further costs peak opening on fast speech, which is a worse
+ * fault than the one being fixed.
+ */
+const INERTIA: Record<keyof BlendWeights, number> = {
+  jawOpen: 1.3,
+  mouthClose: 0.7,
+  mouthPucker: 0.85,
+  mouthFunnel: 0.85,
+  mouthStretch: 0.8,
+  mouthSmile: 0.9,
+};
+
+/**
  * Jaw drop at full jawOpen, as a fraction of resting mouth height, for
  * every point below the seam. 0.74 is what the old gradient delivered at
  * the lip's bottom edge, so the chin travels the same distance as before;
@@ -1180,7 +1204,8 @@ export class AvatarEngine {
     const keys = Object.keys(this.weights) as (keyof BlendWeights)[];
     for (const key of keys) {
       const target = this.targetWeights[key];
-      const tau = target > this.weights[key] ? TAU_OPEN : TAU_CLOSE;
+      const tau =
+        (target > this.weights[key] ? TAU_OPEN : TAU_CLOSE) * INERTIA[key];
       const rate = 1 - Math.exp(-dt / tau);
       this.weights[key] += (target - this.weights[key]) * rate;
     }

@@ -114,7 +114,9 @@ class KokoroTTSProvider(TTSProvider):
             audio=audio,
             audio_mime="audio/wav",
             duration_ms=duration_ms,
-            cues=cues_from_text(text, duration_ms, locale),
+            # The rendered audio, so vowel openness is measured from
+            # this voice rather than predicted from spelling stress.
+            cues=cues_from_text(text, duration_ms, locale, audio=audio),
         )
 
 

@@ -62,6 +62,24 @@ ANTICIPATION_MS: dict[str, int] = {
     "ou": 70, "oh": 60, "PP": 55, "FF": 45, "CH": 40, "RR": 35,
 }
 
+# Which shapes the measured loudness is allowed to scale. Vowels carry the
+# jaw, and their openness is exactly what loudness varies. Consonants are
+# excluded on purpose: a /p/ is a SILENCE — the lips closing is what stops
+# the sound — so scaling by loudness would open the closures hardest to
+# get right. See services.tts.envelope.
+ENVELOPE_VISEMES = frozenset({"aa", "E", "ih", "oh", "ou"})
+
+# How far a measurement may move a planned amplitude. Asymmetric on
+# purpose: the model clock is fitted to the audio's total duration, so an
+# individual window can be sampled slightly off its phoneme. Losing a
+# little openness on a mis-sampled vowel is invisible; inventing a shout is
+# not, so the upper end barely moves.
+ENVELOPE_MIN_FACTOR = 0.5
+ENVELOPE_MAX_FACTOR = 1.15
+# Amplitude never falls below this: a syllable the voice rushed is a small
+# mouth, not a still one.
+MIN_AMPLITUDE = 0.25
+
 
 @dataclass
 class Segment:
@@ -104,11 +122,20 @@ def total_duration_ms(segments: list[Segment]) -> int:
     return sum(s.duration_ms for s in segments)
 
 
-def cues_from_segments(segments: list[Segment], scale: float = 1.0) -> list[dict]:
+def cues_from_segments(
+    segments: list[Segment], scale: float = 1.0, envelope=None
+) -> list[dict]:
     """Viseme cues from timed segments, with anticipatory coarticulation.
 
     `scale` retimes the model onto a known audio duration (real providers);
     the offline provider generates audio at scale 1.0 by construction.
+
+    `envelope` (services.tts.envelope.Envelope) is the loudness actually
+    rendered. Where it is present, vowel amplitude is scaled toward what
+    the voice really did instead of what the stress digits predicted. The
+    span is measured in AUDIO time — the segment's own start, before the
+    anticipation that moves the cue earlier — because the point is to ask
+    how loud the sound was, not when the lips began to reach for it.
     """
     cues: list[dict] = []
     t = 0.0
@@ -116,13 +143,41 @@ def cues_from_segments(segments: list[Segment], scale: float = 1.0) -> list[dict
     for segment in segments:
         if segment.viseme != last_viseme:
             start = t - ANTICIPATION_MS.get(segment.viseme, 0)
-            # Never precede the previous cue or run negative.
+            amplitude = segment.amplitude
+            if envelope is not None and segment.viseme in ENVELOPE_VISEMES:
+                loud = envelope.mean(t * scale, (t + segment.duration_ms) * scale)
+                factor = ENVELOPE_MIN_FACTOR + (
+                    ENVELOPE_MAX_FACTOR - ENVELOPE_MIN_FACTOR
+                ) * loud
+                amplitude = max(MIN_AMPLITUDE, min(1.0, amplitude * factor))
+            at = int(round(start * scale))
+            # A silence an approaching articulation would reach back through
+            # is SUPERSEDED, not clamped past.
+            #
+            # Anticipation moves a /p/ up to 55ms earlier, and a word gap is
+            # 55ms of silence, so the closure of a word-initial /p/ lands
+            # exactly where that silence starts. Clamping it to one
+            # millisecond after left a 1ms silence and a plosive on top of
+            # it — which the client's own cue tidying then deleted as a
+            # collision, so "picked a peck ... pool" mimed every one of its
+            # /p/s without ever shutting the lips. Measured over that
+            # sentence, five of nine closures reached under 0.09 of their
+            # shape while the four that followed a vowel reached over 0.8.
+            #
+            # Physiologically the supersede is also the truth: between two
+            # words the mouth does not relax and then close, it closes. A
+            # real pause (a comma is 180ms) is long enough that the
+            # anticipated start still falls inside it, so punctuation keeps
+            # its silence.
+            if cues and cues[-1]["viseme"] == "sil" and at <= cues[-1]["t"]:
+                at = cues[-1]["t"]
+                cues.pop()
             floor = cues[-1]["t"] + 1 if cues else 0
             cues.append(
                 {
-                    "t": max(floor, int(round(start * scale))),
+                    "t": max(floor, at),
                     "viseme": segment.viseme,
-                    "a": round(segment.amplitude, 3),
+                    "a": round(amplitude, 3),
                 }
             )
             last_viseme = segment.viseme
@@ -136,14 +191,27 @@ def cues_from_segments(segments: list[Segment], scale: float = 1.0) -> list[dict
     return cues
 
 
-def cues_for_duration(text: str, duration_ms: int, locale: str = "en-US") -> list[dict]:
+def cues_for_duration(
+    text: str, duration_ms: int, locale: str = "en-US", audio: bytes | None = None
+) -> list[dict]:
     """Cue track for audio of a KNOWN duration (real TTS providers):
-    the model's relative rhythm, retimed to fit the actual audio."""
+    the model's relative rhythm, retimed to fit the actual audio.
+
+    When the audio itself is passed, vowel amplitudes are measured from it
+    rather than predicted — see cues_from_segments.
+    """
     segments, _ = plan_utterance(text, locale)
     modelled = total_duration_ms(segments)
     if not segments or modelled <= 0 or duration_ms <= 0:
         return [{"t": 0, "viseme": "sil", "a": 1.0}]
-    return cues_from_segments(segments, scale=duration_ms / modelled)
+    envelope = None
+    if audio:
+        from app.services.tts.envelope import measure
+
+        envelope = measure(audio)
+    return cues_from_segments(
+        segments, scale=duration_ms / modelled, envelope=envelope
+    )
 
 
 def _char_word_marks(text: str) -> list[dict]:

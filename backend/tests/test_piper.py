@@ -79,11 +79,16 @@ async def test_cues_use_the_voice_language_not_the_callers(monkeypatch, tmp_path
     monkeypatch.setattr(
         piper_module,
         "cues_from_text",
-        lambda text, duration, locale: (seen.update(locale=locale) or real(text, duration, locale)),
+        lambda text, duration, locale, **kw: (
+            seen.update(locale=locale, audio=kw.get("audio")) or real(text, duration, locale, **kw)
+        ),
     )
-    # Caller claims en-US; the Persian voice's own locale must win.
+    # Caller claims en-US; the Persian voice's own locale must win — and the
+    # rendered audio rides along with it, so vowel openness is measured from
+    # this voice rather than predicted from spelling.
     await PiperTTSProvider().synthesize("سلام", "fa_amir", "en-US")
     assert seen["locale"] == "fa-IR"
+    assert seen["audio"] == b"RIFF"
 
 
 async def test_persian_defaults_to_amir(monkeypatch, tmp_path):
