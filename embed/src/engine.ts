@@ -105,6 +105,63 @@ export function pickScleraColour(candidates: Sample[], skin: Sample | null): str
 const LID_FOLLOW = 0.35;
 
 /**
+ * Jaw drop at full jawOpen, as a fraction of resting mouth height, for
+ * every point below the seam. 0.74 is what the old gradient delivered at
+ * the lip's bottom edge, so the chin travels the same distance as before;
+ * what changes is that the whole lower lip now travels with it.
+ */
+const JAW_DROP = 0.74;
+/**
+ * How much of the jaw drop a vertex takes, 0..1.
+ *
+ * One lateral taper shared by lip and skin alike: the mouth corners are
+ * anchored to the cheeks, so the drop fades from full at the centre to
+ * nothing just past the corners, and every vertex at the same x agrees —
+ * the first version tapered the lip by x but ramped the skin by y, so a
+ * lip vertex and the skin vertex beside it disagreed by 30px across one
+ * triangle, which rendered as a row of spikes along each side of the lip.
+ *
+ * - Lower lip: the taper, fully.
+ * - Corners: half. A commissure descends about half the jaw drop when the
+ *   mouth opens wide; anchoring it completely made the lip come to a
+ *   torn point.
+ * - Upper lip: still, except a small droop toward the corners, where it
+ *   is pulled by the descending commissure.
+ * - Skin: nothing above the seam; below it, the taper, once a short ramp
+ *   past the lip line has ruled out the mid-lip region.
+ */
+export function hingeShare(index: number, nx: number, ny: number, lensWidth: number): number {
+  // A LENS, not a plateau: an open mouth's lower edge is deepest at the
+  // centre and curves up to meet the corners. A flat-topped taper left the
+  // lip beside each corner dropping three quarters of the way while the
+  // corner itself stayed, and that step is what rendered as spikes.
+  // `lensWidth` narrows the lens for rounded shapes: an "oh" opens the
+  // middle of the mouth, not the corners.
+  const lateral = Math.max(0, 1 - Math.pow(Math.abs(nx) / lensWidth, 2.2));
+  if (LOWER_LIP.has(index)) return lateral;
+  if (MOUTH_CORNERS.has(index)) return 0.5 * lateral;
+  if (UPPER_LIP.has(index)) {
+    return 0.3 * Math.max(0, Math.min(1, (Math.abs(nx) - 0.4) / 0.6)) * lateral;
+  }
+  if (ny <= 0) return 0;
+  const t = Math.min(1, ny / 0.35);
+  return t * t * (3 - 2 * t) * lateral;
+}
+
+const MOUTH_CORNERS = new Set([61, 291, 78, 308, 76, 306, 62, 292]);
+
+// MediaPipe lip landmarks, outer and inner rows. Membership decides which
+// side of the hinge a vertex is on.
+const LOWER_LIP = new Set([
+  146, 91, 181, 84, 17, 314, 405, 321, 375, // outer
+  95, 88, 178, 87, 14, 317, 402, 318, 324, // inner
+]);
+const UPPER_LIP = new Set([
+  185, 40, 39, 37, 0, 267, 269, 270, 409, // outer
+  191, 80, 81, 82, 13, 312, 311, 310, 415, // inner
+]);
+
+/**
  * How far the upper lid travels, as a fraction of the way to the lower lid.
  *
  * There is no drawn lid any more. Every attempt to synthesise one from a
@@ -1213,6 +1270,10 @@ export class AvatarEngine {
     // landmarks far while their neighbours stayed put, which tore the
     // texture into visible stair-steps below the lip.
     const reach = mw * 1.15; // how far mouth motion bleeds into the face
+    // Rounded shapes open a narrower lens: at full pucker the drop reaches
+    // ~75% of the way to the corners. Narrower (0.65 was tried) turns a
+    // wide flat lip — every cartoon — into a pointed teardrop on "oh".
+    const lensWidth = 1.05 - 0.3 * Math.min(1, w.mouthPucker + w.mouthFunnel * 0.6);
     for (let i = 0; i < pts.length; i++) {
       const px = pts[i].x - mcx;
       const py = pts[i].y - mcy;
@@ -1223,11 +1284,26 @@ export class AvatarEngine {
       const falloff = t * t * (3 - 2 * t);
       const nx = px / (mw / 2);
       const ny = py / (mh / 2);
-      const below = Math.max(0, Math.min(1.2, ny));
       let dx = 0;
       let dy = 0;
-      // jawOpen: everything below the lip line drops, most at the lip.
-      dy += w.jawOpen * mh * 0.62 * below * falloff;
+      // jawOpen: the jaw is a HINGE. Everything below the lip seam drops as
+      // one unit — the lower lip keeps its thickness and travels with the
+      // chin. The previous field scaled the drop with distance below the
+      // mouth centre, which is a gradient, not a hinge: the lower lip's top
+      // edge moved a little and its bottom edge a lot, so on every open
+      // vowel the lip stretched to twice its height while the painted
+      // opening stayed a thin lens. Measured on a photograph at jawOpen
+      // 0.85: lip band 2.1x its resting height. A short ramp just below the
+      // seam takes the drop from 0 to full, so the seam itself parts
+      // cleanly instead of tearing.
+      // Assigned by IDENTITY, not by height: with the mouth closed the upper
+      // and lower inner-lip landmarks sit at the same y (measured: 0.05 vs
+      // 0.08 half-heights), so any ramp on y drags the upper lip down with
+      // the lower and the two never separate. Lower-lip landmarks drop as a
+      // unit (tapering into the anchored corners); upper-lip landmarks
+      // stay; skin takes a ramp by height.
+      const hinge = hingeShare(i, nx, ny, lensWidth);
+      dy += w.jawOpen * mh * JAW_DROP * hinge * falloff;
       if (ny < 0) dy -= w.jawOpen * mh * 0.08 * -ny * falloff;
       // pucker/funnel: narrow horizontally, round the aperture.
       dx -= (w.mouthPucker * 0.32 + w.mouthFunnel * 0.18) * nx * (mw / 2) * falloff;
@@ -1832,9 +1908,8 @@ export class AvatarEngine {
     const teethDrive = Math.max(retract, tuck);
     // A geometry floor, deliberately well below the cavity's 0.03 knee: /f/
     // gets an arch to hang teeth from, not a black hole.
-    const openHeight =
+    const synthHeight =
       Math.max(Math.max(0, openFrac), teethDrive * 0.018) * axisLen * this.tuning.mouthOpen;
-    if (openHeight < axisLen * 0.010) return; // lips together
 
     // --- Seam: midline between opposing landmarks, parameterised by t. ---
     const seam: { x: number; y: number; t: number }[] = [{ x: left.x, y: left.y, t: 0 }];
@@ -1895,12 +1970,62 @@ export class AvatarEngine {
       };
     };
 
+    // --- MEASURED parting. The jaw hinge (deformedPoints) now moves the
+    // whole lower lip, so the inner rings genuinely separate in the mesh
+    // and the triangles between them stretch. The painted cavity has to
+    // cover exactly that region, or the stretched lip texture shows as a
+    // streaked band under a too-small opening (which is what a fixed
+    // fraction of mouth width produced once the lip started to move).
+    //
+    // Fit the upper and lower rings separately as smooth curves along the
+    // mouth axis (the raw ring zigzags; that zigzag is why the aperture
+    // was synthesised in the first place), then take their separation minus
+    // the same separation at rest — a closed mouth's landmarks still sit a
+    // few pixels apart, and that must not open a hole in silence. The seam
+    // is the midpoint of each pair, so the parting splits equally above and
+    // below it. ---
+    const proj = (q: Point) =>
+      Math.max(0, Math.min(1, ((q.x - left.x) * ax + (q.y - left.y) * ay) / axisLen2));
+    const along = (q: Point) => (q.x - left.x) * axisNormX + (q.y - left.y) * axisNormY;
+    const evalQ = (c: number[], t: number) => c[0] + c[1] * t + c[2] * t * t;
+    const fitRing = (points: Point[]) =>
+      fitQuadratic(points.map(along), points.map(proj));
+    const lowerNow: Point[] = [];
+    const upperNow: Point[] = [];
+    const lowerRest: Point[] = [];
+    const upperRest: Point[] = [];
+    for (let k = 1; k < half; k++) {
+      lowerNow.push(ring[k]);
+      upperNow.push(ring[n - k]);
+      lowerRest.push(this.basePoints[this.innerRing[k]]);
+      upperRest.push(this.basePoints[this.innerRing[n - k]]);
+    }
+    // Four fits per frame, not four per sample.
+    const fits =
+      lowerNow.length >= 3
+        ? { ln: fitRing(lowerNow), un: fitRing(upperNow), lr: fitRing(lowerRest), ur: fitRing(upperRest) }
+        : null;
+    const partingHalfAt = (t: number): number => {
+      if (!fits) return 0;
+      const now = evalQ(fits.ln, t) - evalQ(fits.un, t);
+      const rest = evalQ(fits.lr, t) - evalQ(fits.ur, t);
+      return Math.max(0, (now - rest) / 2);
+    };
+    let measuredMax = 0;
+    for (let i = 0; i <= 8; i++) measuredMax = Math.max(measuredMax, partingHalfAt(0.2 + (i / 8) * 0.6));
+    const openHeight = Math.max(synthHeight, measuredMax * 2);
+    if (openHeight < axisLen * 0.010) return; // lips together
+
     // The aperture always ends INSIDE the commissures: its own rounded ends
     // then land on lip flesh, so the lips stay joined at the corners even
     // though the profile itself is blunt.
-    const spanHalf = (0.84 - rounding * 0.4) / 2;
+    // With the mesh genuinely parting, the painted opening must reach as
+    // far as the parting does — the measured profile closes on its own at
+    // the corners. Rounded shapes still narrow the synthetic profile.
+    const spanHalf = 0.97 / 2;
     const t0 = 0.5 - spanHalf;
     const t1 = 0.5 + spanHalf;
+    const synthSpanHalf = (0.84 - rounding * 0.4) / 2;
 
     // --- Sample upper and lower edges off the seam normal. ---
     const SAMPLES = 26;
@@ -1925,9 +2050,20 @@ export class AvatarEngine {
       // superellipse keeps that roundness while staying slightly fuller in
       // the middle than a circle.
       const e = Math.abs(2 * u - 1);
-      const gap = openHeight * Math.pow(Math.max(0, 1 - Math.pow(e, 2.4)), 1 / 1.9);
-      lowerPts.push({ x: here.x + nx * gap * LOWER_SHARE, y: here.y + ny * gap * LOWER_SHARE });
-      upperPts.push({ x: here.x - nx * gap * UPPER_SHARE, y: here.y - ny * gap * UPPER_SHARE });
+      // Synthetic profile lives in its own (narrower, rounding-aware) span.
+      const es = Math.min(1, Math.abs(t - 0.5) / synthSpanHalf);
+      const gap = synthHeight * Math.pow(Math.max(0, 1 - Math.pow(es, 2.4)), 1 / 1.9);
+      // Whichever is larger on each side: the mesh's own parting (the
+      // stretched triangles that must be covered) or the synthetic profile
+      // (retraction and teeth shapes, where the jaw barely moves).
+      // The measured parting is already a smooth curve that closes where
+      // the rings meet, so it is used almost to the ends: forcing it to zero
+      // early left parted mesh triangles near the corners uncovered.
+      const parted = partingHalfAt(t) * Math.pow(Math.max(0, 1 - Math.pow(e, 8)), 0.5);
+      const lowerOff = Math.max(gap * LOWER_SHARE, parted);
+      const upperOff = Math.max(gap * UPPER_SHARE, parted);
+      lowerPts.push({ x: here.x + nx * lowerOff, y: here.y + ny * lowerOff });
+      upperPts.push({ x: here.x - nx * upperOff, y: here.y - ny * upperOff });
     }
 
     // Drop the shared endpoints: at u=0 and u=1 the gap is zero, so
