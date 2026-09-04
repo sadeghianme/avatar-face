@@ -28,6 +28,11 @@ export class HeadMotion {
   private target = { yaw: 0, pitch: 0, roll: 0 };
   private nextMoveAt = 0;
 
+  /** Timestamp of the most recent move onset and how far it reaches from
+   *  the current pose, so a blink can be placed on the turn. */
+  movedAt = -Infinity;
+  moveSize = 0;
+
   /** Injectable so tests are deterministic. */
   constructor(private random: () => number = Math.random) {}
 
@@ -46,6 +51,8 @@ export class HeadMotion {
       this.target.pitch = draw() * reach * 0.7;
       // Roll follows yaw the way a neck does; independent roll is a puppet.
       this.target.roll = draw() * 0.5 + this.target.yaw * 0.35;
+      this.movedAt = now;
+      this.moveSize = Math.abs(this.target.yaw - this.yaw) + Math.abs(this.target.pitch - this.pitch);
     }
 
     // Critically damped: arrives without overshoot, which is what "settles"

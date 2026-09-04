@@ -14,6 +14,7 @@
  * - A `destroyed` flag makes mount -> unmount -> mount safe under React
  *   StrictMode.
  */
+import { BlinkScheduler, blinkEase } from "./blink";
 import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
 import { HeadMotion } from "./headmotion";
 import { BlendWeights, Cue, DEFAULT_TUNING, EngineTuning, Rig, ZERO_WEIGHTS } from "./types";
@@ -93,28 +94,16 @@ export function pickScleraColour(candidates: Sample[], skin: Sample | null): str
 // Durations for the involuntary motions, in real milliseconds. These used to
 // be per-frame increments, which made every one of them run at a speed that
 // depended on the frame rate — a blink took 440ms on a 30fps device.
-// Fast. The squash is only ever an approximation, so the less time it is on
-// screen the better; a real blink is 100-150ms anyway.
-const BLINK_MS = 150;
+// The blink's own timing lives in blink.ts.
 
 /**
- * Blink envelope, 0..1 -> 0..1, closing faster than it opens.
- *
- * A single smooth curve rather than two joined quarter-waves: the old pair
- * met at the peak with a discontinuous velocity, so the lid arrived at its
- * lowest point and reversed in one frame, which reads as a snap.
+ * How far the upper lids lower when the gaze goes down, as a fraction of
+ * the blink sweep. Eyes that look down with the lids fixed open show more
+ * white above the iris, which is the startled look; real lids follow the
+ * eye. Small: a glance down is a narrowing, not a half-blink.
  */
-function blinkEase(phase: number): number {
-  const t = Math.max(0, Math.min(1, phase));
-  // Skew time so the close occupies the first ~40% and the opening the rest,
-  // then take one raised cosine over the skewed clock.
-  const skewed = t < 0.4 ? (t / 0.4) * 0.5 : 0.5 + ((t - 0.4) / 0.6) * 0.5;
-  // No phase offset here. With one, the curve starts CLOSED, opens at the
-  // peak and shuts again at the end — and since the eye is already open at
-  // rest, a single blink then renders as shut-open-shut: several fast
-  // blinks where there should be one.
-  return 0.5 - 0.5 * Math.cos(skewed * Math.PI * 2);
-}
+const LID_FOLLOW = 0.35;
+
 /**
  * How far the upper lid travels, as a fraction of the way to the lower lid.
  *
@@ -349,7 +338,7 @@ export class AvatarEngine {
   private targetWeights: BlendWeights = { ...ZERO_WEIGHTS };
   private energy = 0; // smoothed speech energy, drives head motion
   private blink = 0;
-  private nextBlinkAt = 0;
+  private readonly blinks = new BlinkScheduler();
   private nextNodAt = 0;
   private nodPhase = 1; // 1 = finished
   private body = new BodyMotion();
@@ -425,7 +414,7 @@ export class AvatarEngine {
     this.sampleLashColour();
     this.subdivideMouthRegion();
     this.startTime = performance.now();
-    this.nextBlinkAt = this.startTime + 1200 + Math.random() * 2000;
+    this.blinks.reset(this.startTime);
     this.nextNodAt = this.startTime + 2500;
     this.nextSaccadeAt = this.startTime + 600 + Math.random() * 1200;
     this.loop = this.loop.bind(this);
@@ -877,6 +866,7 @@ export class AvatarEngine {
     this.cues = prepareCues(cues);
     this.speaking = true;
     this.body.beginSpeech(performance.now(), utteranceMs(cues));
+    this.gazeTarget = { x: 0, y: 0 }; // look at the person you are talking to
 
     // Only reroute through the analyser when the cue track is too sparse to
     // drive the mouth (amplitude fallback needed). Rerouting risks silent
@@ -910,6 +900,7 @@ export class AvatarEngine {
     this.speaking = true;
     this.cueStart = performance.now();
     this.body.beginSpeech(this.cueStart, utteranceMs(cues));
+    this.gazeTarget = { x: 0, y: 0 };
   }
 
   /** Re-align the cue clock to a known position in the track (ms). */
@@ -923,6 +914,7 @@ export class AvatarEngine {
     this.cues = [];
     this.targetWeights = { ...ZERO_WEIGHTS };
     this.body.endSpeech();
+    this.blinks.onSpeechEnd(performance.now());
   }
 
   isSpeaking(): boolean {
@@ -934,6 +926,7 @@ export class AvatarEngine {
     this.cues = [];
     this.targetWeights = { ...ZERO_WEIGHTS };
     this.body.endSpeech();
+    this.blinks.onSpeechEnd(performance.now());
     const cb = this.onAudioEnd;
     this.onAudioEnd = null;
     this.currentAudio = null;
@@ -1093,9 +1086,21 @@ export class AvatarEngine {
       if (this.silenceSince === null) this.silenceSince = now;
       else if (now - this.silenceSince >= PAUSE_BREATH_MS) {
         this.body.catchBreath(now);
+        this.blinks.onPause(now);
+        // Sometimes a pause is a thought: glance down or aside, and the
+        // next fixation (re-picked on resume) brings the eyes back.
+        if (Math.random() < 0.45) {
+          this.gazeTarget = { x: (Math.random() * 2 - 1) * 0.16, y: 0.18 + Math.random() * 0.12 };
+          this.nextSaccadeAt = now + 700 + Math.random() * 600;
+        }
         this.silenceSince = Infinity; // spent for this run
       }
     } else {
+      if (this.silenceSince === Infinity) {
+        // Speech resumed after a real pause: come back to the listener.
+        this.gazeTarget = { x: 0, y: 0 };
+        this.nextSaccadeAt = now + 900 + Math.random() * 1400;
+      }
       this.silenceSince = null;
     }
     this.targetWeights = visemeWeights;
@@ -1129,15 +1134,11 @@ export class AvatarEngine {
       : 0;
     this.energy += (instant - this.energy) * (1 - Math.exp(-dt / 270));
 
-    // Eased (sin-curve) blinks.
-    if (now >= this.nextBlinkAt) {
-      this.nextBlinkAt = now + 2200 + Math.random() * 3200;
-      this.blink = 0.0001; // arm
-    }
-    if (this.blink > 0) {
-      this.blink += dt / BLINK_MS;
-      if (this.blink >= 1) this.blink = 0;
-    }
+    // Blinks are placed by events (pauses, saccades, head turns, speech
+    // end) with a timer only as a fallback — see blink.ts. `silent` was
+    // computed above from the cue track.
+    this.blinks.update(dt, now, { speaking: this.speaking, wordActive: this.speaking && !silent });
+    this.blink = this.blinks.phase;
 
     // Gentle nods on a loose cadence while speaking.
     if (this.speaking && now >= this.nextNodAt) {
@@ -1148,6 +1149,7 @@ export class AvatarEngine {
 
     this.body.update(dt, now);
     this.headDrive.update(dt, now, this.speaking);
+    if (this.headDrive.movedAt === now && this.headDrive.moveSize > 0.35) this.blinks.onHeadTurn(now);
 
     // Saccades: eyes jump to a new fixation, then hold. While speaking the
     // gaze returns near-center more often (engaged with the listener);
@@ -1169,6 +1171,8 @@ export class AvatarEngine {
       } else {
         this.gazeTarget = { x: (Math.random() * 2 - 1) * spread, y: (Math.random() * 2 - 1) * spread * 0.5 };
       }
+      // A big jump of the eyes carries a blink with it.
+      this.blinks.onSaccade(now, Math.hypot(this.gazeTarget.x - this.gaze.x, this.gazeTarget.y - this.gaze.y));
     }
     // Saccades are ballistic: fast jump, then a still fixation.
     // A saccade is ballistic and fast — ~35ms to cross, whatever the frame rate.
@@ -1268,13 +1272,12 @@ export class AvatarEngine {
     // Eased blinks: the upper lid sweeps DOWN to the lower lid (lid skin
     // stretches over the eyeball); the lower lid rises only slightly.
     // Corner points stay pinned, mid-lid points travel furthest.
-    if (this.blink > 0) {
-      // Asymmetric ease: lids snap shut faster than they reopen.
-      const phase = this.blink;
-      // One continuous curve over the whole blink. The old piecewise
-      // sin-then-cos met at its peak with a corner in the velocity, which is
-      // what made the close read as a snap.
-      const amount = blinkEase(phase);
+    // Lids also follow a downward gaze a little (LID_FOLLOW), so the
+    // deformation runs whenever either is non-zero.
+    const lidFollow = Math.max(0, Math.min(0.5, this.gaze.y)) * LID_FOLLOW;
+    if (this.blink > 0 || lidFollow > 0) {
+      // Asymmetric ease: lids snap shut faster than they reopen — blink.ts.
+      const amount = Math.min(1, blinkEase(this.blink) + lidFollow);
       for (let e = 0; e < 2; e++) {
         const [c0, c1] = EYE_CORNERS[e];
         const ecx = (pts[c0].x + pts[c1].x) / 2;
