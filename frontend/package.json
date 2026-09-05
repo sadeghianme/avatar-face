@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "check": "node scripts/check-structure.mjs",
     "typecheck": "tsc -b",
+    "build": "npm run check && tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

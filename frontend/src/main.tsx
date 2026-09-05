@@ -3,12 +3,12 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 
-import App from "./App";
-import "./i18n";
-import "./index.css";
-import { AuthProvider } from "./lib/auth";
-import { OrgProvider } from "./lib/org";
-import { ThemeProvider } from "./lib/theme";
+import App from "@/app/App";
+import "@/i18n";
+import "@/index.css";
+import { AuthProvider } from "@/providers/auth";
+import { OrgProvider } from "@/providers/org";
+import { ThemeProvider } from "@/providers/theme";
 
 const queryClient = new QueryClient({
   defaultOptions: {

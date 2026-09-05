@@ -1,0 +1,20 @@
+/** en: lab strings. A key lives in exactly one file; add new ones here. */
+export const lab = {
+  photofaceHDAlpha: "Lab",
+  photofaceHDSubtitle: "A separate depth-aware renderer built from your existing photo, face rig and speech timing. Your current avatars and pages stay unchanged.",
+  photofaceHDPreview: "Photoface HD preview",
+  photofaceHDLoading: "Building the depth-aware preview…",
+  photofaceHDError: "The HD preview could not start",
+  photofaceHDEmptyTitle: "Choose a ready photo avatar",
+  photofaceHDEmptyBody: "Create a photo avatar first, then return here to test it in the HD renderer.",
+  photofaceHDChoose: "Photo avatar",
+  photofaceHDNoAvatars: "No ready photo avatars",
+  photofaceHDChooseHint: "This lab reads the existing assets. It does not modify or replace the original avatar.",
+  photofaceHDStableLabel: "Current engine",
+  photofaceHDLabLabel: "Photoface HD",
+  photofaceHDInside: "What is different",
+  photofaceHDDepth: "Facial relief measured from your photo's own landmarks — a dome approximation only when detection fails.",
+  photofaceHDLayers: "Background, body and head layers move independently for cleaner motion.",
+  photofaceHDReuse: "The same voices, phoneme cues and speech queue drive the new renderer.",
+  photofaceHDIsolation: "Experimental module: the established 2D renderer and embed widget are untouched.",
+} as const;
