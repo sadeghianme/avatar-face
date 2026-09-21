@@ -42,7 +42,7 @@ def prepare_photo(data: bytes, purpose: str) -> tuple[bytes, dict, str | None]:
     if width < 30:
         raise Validation422("The face is too small. Crop closer to the head and shoulders.", code="reference_face_small")
     if purpose == "mouth" and gap < .08:
-        raise Validation422("For mouth detail, use a photo saying 'ah', with the upper teeth visible.", code="reference_mouth_closed")
+        raise Validation422("For mouth detail, use a photo saying 'ee', with the upper teeth clearly visible.", code="reference_mouth_closed")
     if purpose == "portrait" and gap > .04:
         raise Validation422("Start with a relaxed, closed-mouth portrait. Add the open-mouth photo as optional mouth detail afterwards.", code="reference_mouth_open")
     verdict = check_landmarks(points, size, detected)
