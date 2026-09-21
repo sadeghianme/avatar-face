@@ -8,6 +8,9 @@ import { DentalOralSurface } from "./dental-oral-surface";
 import { ReferenceMouth } from "./reference-mouth";
 import { DEFAULT_REFERENCE_PROFILE, type ReferenceProfile } from "./reference-mouth-model";
 
+/** How much of the corners' inward travel is removed at full rounding. */
+export const CORNER_EASE = 0.4;
+
 /** A single skin/lip texture plus one stable oral interior. The shared engine
  * warps the user's ORIGINAL photo; this extension never swaps face textures. */
 export class ContinuousMouth implements MouthExtension {
@@ -74,6 +77,13 @@ export class ContinuousMouth implements MouthExtension {
         const contact = Math.exp(-(((x - cx) / (sourceWidth * .65)) ** 2 + ((y - cy) / (sourceWidth * .35)) ** 2));
         dy += sourceWidth * .05 * mix[5] * contact;
       }
+      // Rounded vowels pull the commissures inward by about a quarter of the
+      // mouth's width. On a closed-mouth photo that stretches the dark crease
+      // at each corner into streaks across the cheek. Roundness reads from
+      // the lip shape and the aperture, not from how far the corners travel,
+      // so the pull is eased toward the corners and only for rounded poses.
+      const lateral = Math.min(1, Math.abs(x - cx) / (sourceWidth * .5));
+      dx *= 1 - CORNER_EASE * (mix[3] + mix[4]) * lateral * lateral;
       const scale = width / sourceWidth * influence * this.movement;
       points[i].x = neutral[i].x + (dx * ux - dy * uy) * scale;
       points[i].y = neutral[i].y + (dx * uy + dy * ux) * scale;

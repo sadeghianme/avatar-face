@@ -4,7 +4,7 @@ import { continuousMouthMix, dampMouth, MouthMotion } from "../continuous-mouth-
 import { REFERENCE_POSES } from "../reference-mouth-model";
 import { PERFORMANCE_POSES, validatePerformanceManifest } from "../photographic-performance-model";
 import { validateOralRig } from "../photographic-oral-surface";
-import { ContinuousMouth } from "../continuous-mouth";
+import { ContinuousMouth, CORNER_EASE } from "../continuous-mouth";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
 
 const interpolate = (a: BlendWeights, b: BlendWeights, t: number) => Object.fromEntries(
@@ -58,7 +58,7 @@ describe("continuous mouth movement", () => {
     }
   });
   it("retargets only the mouth area and keeps a single skin source", () => {
-    const manifest = validatePerformanceManifest(JSON.parse(readFileSync(new URL("../../../../frontend/public/lab/reference/performance.json", import.meta.url), "utf8")));
+    const manifest = validatePerformanceManifest(JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8")));
     const mouth = new ContinuousMouth(manifest);
     const neutral = manifest.poses[0].points.map(([x, y]) => ({ x: x * 1000, y: y * 1000 }));
     const points = neutral.map(p => ({ ...p }));
@@ -67,6 +67,35 @@ describe("continuous mouth movement", () => {
     expect(points[33]).toEqual(neutral[33]);
     expect(points[14].y).toBeGreaterThan(neutral[14].y);
     expect(points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))).toBe(true);
+  });
+  it("eases the corners' inward pull on rounded vowels, and only there", () => {
+    // Found on a real closed-mouth portrait: the full pull stretched the dark
+    // crease at each commissure into streaks across the cheek.
+    const manifest = validatePerformanceManifest(JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8")));
+    const neutral = manifest.poses[0].points.map(([x, y]) => ({ x: x * 1000, y: y * 1000 }));
+    const settle = (weights: BlendWeights) => {
+      const mouth = new ContinuousMouth(manifest);
+      const points = neutral.map(p => ({ ...p }));
+      // Several steps so the mouth's own spring reaches the pose.
+      for (let i = 0; i < 400; i++) mouth.deform(points, neutral, {} as Rig, weights);
+      return points;
+    };
+    const oo = settle(REFERENCE_POSES.oo.weights);
+    const authoredWidth = (manifest.poses[3].points[291][0] - manifest.poses[3].points[61][0]) * 1000;
+    const neutralWidth = neutral[291].x - neutral[61].x;
+    const width = oo[291].x - oo[61].x;
+    // Still a pucker: clearly narrower than rest...
+    expect(width).toBeLessThan(neutralWidth * 0.95);
+    // ...but the corners stop short of the authored extreme.
+    expect(width).toBeGreaterThan(authoredWidth);
+    expect(CORNER_EASE).toBeGreaterThan(0);
+    expect(CORNER_EASE).toBeLessThan(0.6);
+
+    // A spread vowel widens the mouth; nothing about it is eased.
+    const ee = settle(REFERENCE_POSES.ee.weights);
+    expect(ee[291].x - ee[61].x).toBeGreaterThan(neutralWidth * 0.98);
+    // And the centre of the lips is untouched by a lateral ease.
+    expect(Math.abs(oo[13].x - neutral[13].x)).toBeLessThan(neutralWidth * 0.06);
   });
   it("rejects malformed mouth-detail rigs", () => {
     for (const value of [null, {}, { points: [] }, { points: Array(478).fill([NaN, 0]) }]) {

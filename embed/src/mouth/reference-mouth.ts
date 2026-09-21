@@ -94,6 +94,11 @@ export class ReferenceMouth implements MouthExtension {
       const vertices = indices.map(i => surface.vertices[i]) as [Vec3, Vec3, Vec3];
       return { vertices, material: surface.material, lower: surface.lower === true, depth: vertices.reduce((sum, p) => sum + p.z, 0) / 3 };
     })).sort((a, b2) => a.depth - b2.depth);
+    // One clip per RUN of enamel facets, not one per facet. Depth order is
+    // untouched — the tongue still passes in front of the lower teeth on TH —
+    // but save/clip/restore was the dominant cost of this path: a few hundred
+    // per frame, against a handful of runs.
+    let clipping = false;
     for (const face of faces) {
       if (face.material === "enamel" && exposure <= 0) continue;
       const [a, b2, c] = face.vertices;
@@ -103,8 +108,11 @@ export class ReferenceMouth implements MouthExtension {
       if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
       const normalLength = Math.hypot(nx, ny, nz);
       if (normalLength < 1e-10) continue;
-      const clipped = face.material === "enamel" && enamelAperture;
-      if (clipped) { ctx.save(); ctx.clip(enamelAperture); }
+      const wantsClip = Boolean(face.material === "enamel" && enamelAperture);
+      if (wantsClip !== clipping) {
+        if (wantsClip) { ctx.save(); ctx.clip(enamelAperture!); } else ctx.restore();
+        clipping = wantsClip;
+      }
       const diffuse = Math.max(0, (nx * -0.2 + ny * -0.5 + nz * 0.84) / normalLength);
       const sideShadow = Math.max(0.28, 1 - Math.abs((a.x + b2.x + c.x) / 3) * 1.7);
       // The lower arch sits behind the lower lip and under the upper teeth's
@@ -123,8 +131,8 @@ export class ReferenceMouth implements MouthExtension {
       ctx.fill();
       // Subpixel overlap prevents background-colored cracks between facets.
       ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 0.35; ctx.stroke();
-      if (clipped) ctx.restore();
     }
+    if (clipping) ctx.restore();
     const rim = (points: MouthPoint[], color: string, thickness: number) => {
       ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
       points.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
