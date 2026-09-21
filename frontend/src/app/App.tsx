@@ -4,7 +4,7 @@ import { GuestOnly, Protected } from "@/app/guards";
 import { ApiKeysPage } from "@/features/api-keys";
 import { AcceptInvitePage, ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage } from "@/features/auth";
 import { AvatarDetailPage, AvatarsPage, NewAvatarPage } from "@/features/avatars";
-import { PhotofaceHDPage } from "@/features/lab";
+import { LipSyncLabPage, PhotofaceHDPage } from "@/features/lab";
 import { LandingPage } from "@/features/landing";
 import { MembersPage } from "@/features/members";
 import { SettingsPage } from "@/features/settings";
@@ -33,6 +33,8 @@ export default function App() {
       <Route path="/avatars/new" element={<Protected><NewAvatarPage /></Protected>} />
       <Route path="/avatars/:avatarId" element={<Protected><AvatarDetailPage /></Protected>} />
       <Route path="/photoface-hd" element={<Protected><PhotofaceHDPage /></Protected>} />
+      <Route path="/lip-sync-lab" element={<Protected><LipSyncLabPage /></Protected>} />
+      <Route path="/reference-avatar" element={<Protected><LipSyncLabPage reference /></Protected>} />
       <Route path="/voices" element={<Protected><VoicesPage /></Protected>} />
       <Route path="/members" element={<Protected><MembersPage /></Protected>} />
       <Route path="/api-keys" element={<Protected><ApiKeysPage /></Protected>} />

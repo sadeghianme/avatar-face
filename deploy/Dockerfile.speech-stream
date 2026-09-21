@@ -1,0 +1,10 @@
+# Code-only lab release on the known-good runtime. The normal backend
+# Dockerfile remains the source for clean builds. Pass an immutable image tag
+# created from the running API before this release (see the work record).
+ARG BASE_IMAGE=liveface-liveface-api:before-speech-stream-20260907
+FROM ${BASE_IMAGE}
+WORKDIR /app/backend
+COPY backend/app/main.py ./app/main.py
+COPY backend/app/api/lab_speech.py ./app/api/lab_speech.py
+COPY backend/app/services/tts/lab_timing.py ./app/services/tts/lab_timing.py
+COPY backend/app/services/tts/lab_stream.py ./app/services/tts/lab_stream.py

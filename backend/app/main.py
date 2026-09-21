@@ -21,6 +21,8 @@ from app.api import (
     embed,
     integrations,
     lab,
+    lab_speech,
+    lab_reference,
     orgs,
     share,
     staging,
@@ -140,7 +142,23 @@ async def lifespan(app: FastAPI):
             sweep_forever(settings.candidate_sweep_interval_minutes * 60)
         )
 
+    # Optional lab warm-up: keep model loading/first inference out of the first
+    # visitor's speech request, without delaying the rest of the application.
+    from app.services.tts.lab_timing import warm_native
+
+    async def warm_lab():
+        try:
+            await warm_native()
+        except Exception:
+            logger.exception("Optional lab speech warm-up failed")
+
+    lab_warmup = asyncio.create_task(warm_lab())
+
     yield
+
+    lab_warmup.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await lab_warmup
 
     if sweeper is not None:
         sweeper.cancel()
@@ -287,6 +305,8 @@ def create_app() -> FastAPI:
     app.include_router(cloned_voices.router)
     # Lab experiments; delete app/api/lab.py and this line to remove them.
     app.include_router(lab.router)
+    app.include_router(lab_speech.router)
+    app.include_router(lab_reference.router)
     app.include_router(clone_jobs.router)
 
     return app

@@ -17,6 +17,8 @@
 import { BlinkScheduler, blinkEase } from "./blink";
 import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
 import { HeadMotion } from "./headmotion";
+import type { MouthExtension, MouthPose } from "./mouth-extension";
+import { centralMouthAnchors } from "./mouth-extension";
 import { BlendWeights, Cue, DEFAULT_TUNING, EngineTuning, Rig, ZERO_WEIGHTS } from "./types";
 
 // Canonical MediaPipe brow rows, inner -> outer.
@@ -438,6 +440,11 @@ function smoothClosedPath(points: { x: number; y: number }[]): Path2D {
 
 export interface EngineOptions {
   debugMesh?: boolean;
+  /** Lab-only extension points; omitted by the original page and widgets. */
+  mouthExtension?: MouthExtension;
+  pose?: () => MouthPose | null;
+  /** Opt-in lab clock, in audio milliseconds. Omitted by all existing pages. */
+  cueClock?: () => number;
   /**
    * Show the ENTIRE photo (hair, shoulders, background) with the animated
    * face composited over it, instead of cropping to the face box. Roll and
@@ -471,6 +478,9 @@ export class AvatarEngine {
   // Animation state
   private cues: Cue[] = [];
   private cueStart = 0;
+  private readonly cueClock?: () => number;
+  private readonly mouthExtension?: MouthExtension;
+  private readonly pose?: () => MouthPose | null;
   private speaking = false;
   /** When the current run of silence inside speech began, for catch-breaths;
    *  null while a viseme is active. */
@@ -551,6 +561,9 @@ export class AvatarEngine {
     this.ctx = ctx;
     this.rig = rig;
     this.texture = texture;
+    this.cueClock = opts.cueClock;
+    this.mouthExtension = opts.mouthExtension;
+    this.pose = opts.pose;
     this.debugMesh = opts.debugMesh ?? false;
     this.fullPhoto = opts.fullPhoto ?? false;
     ctx.imageSmoothingEnabled = true;
@@ -1057,6 +1070,17 @@ export class AvatarEngine {
     this.gazeTarget = { x: 0, y: 0 };
   }
 
+  /** Replace a growing external cue track without restarting articulation. */
+  updateCueTrack(cues: Cue[]): void {
+    // Opt-in streaming extension: append look-ahead without restarting body
+    // motion, the articulation smoother, or the speech clock.
+    const time = this.cueTime(performance.now());
+    this.cues = prepareCues(cues);
+    this.beats = emphasisBeats(this.cues);
+    this.nextBeat = this.beats.findIndex(b => b.t > time);
+    if (this.nextBeat < 0) this.nextBeat = this.beats.length;
+  }
+
   /** Re-align the cue clock to a known position in the track (ms). */
   syncCueTime(ms: number): void {
     this.cueStart = performance.now() - ms;
@@ -1142,9 +1166,16 @@ export class AvatarEngine {
 
   // --- Animation tick --------------------------------------------------------
 
+  private cueTime(now: number): number {
+    const external = this.cueClock?.();
+    return external !== undefined && Number.isFinite(external)
+      ? Math.max(0, external)
+      : now - this.cueStart;
+  }
+
   private currentViseme(now: number): string {
     if (!this.speaking || !this.cues.length) return "sil";
-    const t = now - this.cueStart;
+    const t = this.cueTime(now);
     let viseme = "sil";
     for (const cue of this.cues) {
       if (cue.t <= t) viseme = cue.viseme;
@@ -1159,7 +1190,7 @@ export class AvatarEngine {
    * mouths are always mid-transition, never parked on a phoneme.
    */
   private blendedCueWeights(now: number): BlendWeights {
-    const t = now - this.cueStart;
+    const t = this.cueTime(now);
     let index = -1;
     for (let i = 0; i < this.cues.length; i++) {
       if (this.cues[i].t <= t) index = i;
@@ -1236,7 +1267,7 @@ export class AvatarEngine {
   private tick(now: number): void {
     // Viseme targets: co-articulated blend across cues (+ amplitude
     // fallback when the track is silent but audio clearly isn't).
-    const visemeWeights = this.speaking ? this.blendedCueWeights(now) : { ...ZERO_WEIGHTS };
+    const visemeWeights = this.pose?.()?.weights ?? (this.speaking ? this.blendedCueWeights(now) : { ...ZERO_WEIGHTS });
     const silent = this.speaking && this.currentViseme(now) === "sil";
     if (silent) {
       const amp = this.amplitude();
@@ -1306,7 +1337,7 @@ export class AvatarEngine {
     // Walked on the CUE clock, not wall time, so a beat stays on its
     // syllable when playback is re-synced (syncCueTime).
     if (this.speaking && this.beats.length) {
-      const cueTime = now - this.cueStart;
+      const cueTime = this.cueTime(now);
       while (this.nextBeat < this.beats.length && this.beats[this.nextBeat].t <= cueTime) {
         const beat = this.beats[this.nextBeat++];
         // Only if the beat is still near: after a seek, skip the ones the
@@ -1542,6 +1573,8 @@ export class AvatarEngine {
     // see buildHeadLayer. Warping vertices for it is how the face ended up
     // sliding around inside a stationary head.
 
+    this.mouthExtension?.deform?.(pts, this.basePoints, this.rig, w);
+
     // Derived midpoint vertices (mouth subdivision) follow their parents
     // through EVERY layer above — computed last, from final positions.
     for (const [a, b] of this.derivedParents) {
@@ -1620,8 +1653,7 @@ export class AvatarEngine {
 
     this.drawEyes(pts);
     this.drawLashes(pts);
-    this.drawLipContactLine(pts);
-    this.drawMouthInterior(pts);
+    this.drawMouthSurface(pts);
 
     if (this.debugMesh) this.drawDebugMesh(pts);
     ctx.restore();
@@ -1680,11 +1712,25 @@ export class AvatarEngine {
     }
     this.drawEyes(pts);
     this.drawLashes(pts);
-    this.drawLipContactLine(pts);
-    this.drawMouthInterior(pts);
+    this.drawMouthSurface(pts);
     if (this.debugMesh) this.drawDebugMesh(pts);
     ctx.restore();
     ctx.restore();
+  }
+
+  private drawMouthSurface(pts: Point[]): void {
+    let painted = false;
+    if (this.mouthExtension?.paint) {
+      this.ctx.save();
+      try {
+        painted = this.mouthExtension.paint(this.ctx, {
+          points: pts, neutral: this.basePoints, rig: this.rig, weights: this.weights,
+          lipColour: this.lipColour,
+          viseme: this.pose?.()?.viseme ?? this.currentViseme(performance.now()),
+        });
+      } finally { this.ctx.restore(); }
+    }
+    if (!painted) { this.drawLipContactLine(pts); this.drawMouthInterior(pts); }
   }
 
   /**
@@ -2218,6 +2264,27 @@ export class AvatarEngine {
     const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
 
     const aperture = smoothClosedPath(outline);
+
+    if (this.mouthExtension) {
+      const neutralA = this.basePoints[this.innerRing[ia]];
+      const neutralB = this.basePoints[this.innerRing[ib]];
+      // A smiling/bowed seam is not its corner chord. Seat oral geometry at
+      // the measured central seam, otherwise upper incisors disappear above
+      // the aperture while the lower row appears to be the upper teeth.
+      const [anchorA, anchorB] = centralMouthAnchors(this.innerRing.map(i => this.basePoints[i]), neutralA, neutralB);
+      ctx.save();
+      try {
+        this.mouthExtension.draw(ctx, {
+          weights: this.weights,
+          viseme: this.pose?.()?.viseme ?? this.currentViseme(performance.now()),
+          upper: upperPts, lower: lowerPts, aperture,
+          neutralLeft: anchorA.x <= anchorB.x ? anchorA : anchorB,
+          neutralRight: anchorA.x <= anchorB.x ? anchorB : anchorA,
+          lipColour: this.lipColour, cavityAlpha, teethAlpha,
+        });
+      } finally { ctx.restore(); }
+      return;
+    }
 
     ctx.save();
     ctx.clip(aperture);

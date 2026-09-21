@@ -30,3 +30,6 @@ backend/models/
 
 # graphify knowledge graph output
 graphify-out/
+
+# Local audiovisual verification artifacts
+output/reference-proof*/

@@ -92,6 +92,8 @@ class Settings(BaseSettings):
     # Kokoro local TTS. Set by the Dockerfile; absent in dev unless downloaded.
     kokoro_model_path: str | None = None
     kokoro_voices_path: str | None = None
+    # Opt-in timestamp-enabled model. Used only by the lip-sync lab.
+    kokoro_lipsync_model_path: str | None = None
     # Directory of Piper .onnx voices; covers the languages Kokoro lacks.
     piper_voices_dir: str | None = None
 

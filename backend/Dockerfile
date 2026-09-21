@@ -54,6 +54,17 @@ RUN curl -fsSL -o models/kokoro-v1.0.onnx     https://github.com/thewh1teagle/ko
 ENV KOKORO_MODEL_PATH=/app/backend/models/kokoro-v1.0.onnx
 ENV KOKORO_VOICES_PATH=/app/backend/models/voices-v1.0.bin
 
+# Separate lab model; the existing provider continues using kokoro-v1.0.onnx.
+# Lazy-loaded only by the lab. Set --build-arg INCLUDE_LIPSYNC_MODEL=0 on
+# memory/disk-constrained deployments; the lab then labels its clock-only mode.
+ARG INCLUDE_LIPSYNC_MODEL=1
+RUN if [ "$INCLUDE_LIPSYNC_MODEL" = "1" ]; then \
+      curl -fsSL -o models/kokoro-timed.onnx \
+        https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX-timestamped/resolve/dd4401a9add81ac692d20e240d22ec9dda82cc29/onnx/model.onnx \
+      && echo "651ea8291843a92276a4a003581a215cb07d15e47dde6fcfb1b768f9a1682054  models/kokoro-timed.onnx" | sha256sum -c -; \
+    fi
+ENV KOKORO_LIPSYNC_MODEL_PATH=/app/backend/models/kokoro-timed.onnx
+
 # Piper voices (MIT) for the languages Kokoro does not speak — Persian first,
 # then Arabic, Turkish, Russian, German, Dutch, Polish. ~63MB each; only the
 # ones present on disk are advertised, so trimming this list is safe.

@@ -18,6 +18,8 @@ import { OrgSwitcher } from "@/components/layout/OrgSwitcher";
 const NAV: { to: string; key: string; icon: IconName }[] = [
   { to: "/app", key: "avatars", icon: "faces" },
   { to: "/photoface-hd", key: "photofaceHD", icon: "cube" },
+  { to: "/lip-sync-lab", key: "lipSyncLab", icon: "speaker" },
+  { to: "/reference-avatar", key: "referenceLab", icon: "faces" },
   { to: "/voices", key: "voicesNav", icon: "mic" },
   { to: "/members", key: "members", icon: "users" },
   { to: "/api-keys", key: "apiKeys", icon: "key" },
@@ -30,6 +32,8 @@ function useCrumb(): string {
   const { pathname } = useLocation();
   const { t } = useTranslation();
   if (pathname.startsWith("/photoface-hd")) return t("photofaceHD");
+  if (pathname.startsWith("/lip-sync-lab")) return t("lipSyncLab");
+  if (pathname.startsWith("/reference-avatar")) return t("referenceLab");
   if (pathname.startsWith("/members")) return t("members");
   if (pathname.startsWith("/api-keys")) return t("apiKeys");
   if (pathname.startsWith("/settings")) return t("settings");

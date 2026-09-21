@@ -60,12 +60,13 @@ async function tryRefresh(): Promise<boolean> {
   return refreshing;
 }
 
-async function request<T>(
+async function responseRequest(
   method: string,
   path: string,
   body?: unknown,
-  retried = false
-): Promise<T> {
+  retried = false,
+  signal?: AbortSignal,
+): Promise<Response> {
   const headers: Record<string, string> = {};
   // FormData sets its own Content-Type, including the multipart boundary.
   // Setting it by hand produces a body the server cannot parse.
@@ -78,10 +79,11 @@ async function request<T>(
     method,
     headers,
     body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
+    signal,
   });
 
   if (response.status === 401 && !retried && tokens) {
-    if (await tryRefresh()) return request<T>(method, path, body, true);
+    if (await tryRefresh()) return responseRequest(method, path, body, true, signal);
   }
 
   if (!response.ok) {
@@ -96,16 +98,24 @@ async function request<T>(
     }
     throw new ApiError(response.status, code, detail);
   }
+  return response;
+}
+
+async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await responseRequest(method, path, body, false, signal);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
 export const api = {
   get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
+  post: <T>(path: string, body?: unknown, signal?: AbortSignal) => request<T>("POST", path, body, signal),
   put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
-  postForm: <T>(path: string, form: FormData) => request<T>("POST", path, form),
+  postForm: <T>(path: string, form: FormData, signal?: AbortSignal) => request<T>("POST", path, form, signal),
+  // Refresh only on an HTTP 401 before consuming a body. Never retry a
+  // partially consumed speech stream, which could duplicate speech/usage.
+  stream: (path: string, body: unknown, signal: AbortSignal) => responseRequest("POST", path, body, false, signal),
   delete: <T>(path: string) => request<T>("DELETE", path),
 };
 

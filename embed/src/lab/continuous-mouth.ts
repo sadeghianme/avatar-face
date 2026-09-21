@@ -1,0 +1,105 @@
+import { centralMouthAnchors, type MouthExtension, type MouthPoint, type MouthSurfaceFrame } from "../mouth-extension";
+import type { BlendWeights, Rig } from "../types";
+import { MouthMotion, mouthMixWeights } from "./continuous-mouth-model";
+import { dentalOpening, openingPath } from "./lip-occlusion-model";
+import { performanceInfluence, validatePerformanceManifest, type PerformanceManifest } from "./photographic-performance-model";
+import { validateOralRig, type OralPhoto } from "./photographic-oral-surface";
+import { DentalOralSurface } from "./dental-oral-surface";
+import { ReferenceMouth } from "./reference-mouth";
+import { DEFAULT_REFERENCE_PROFILE, type ReferenceProfile } from "./reference-mouth-model";
+
+/** A single skin/lip texture plus one stable oral interior. The shared engine
+ * warps the user's ORIGINAL photo; this extension never swaps face textures. */
+export class ContinuousMouth implements MouthExtension {
+  private motion = new MouthMotion();
+  private lastTime = 0;
+  private movement = 1;
+  private geometric = new ReferenceMouth(DEFAULT_REFERENCE_PROFILE);
+  private oral?: DentalOralSurface;
+  constructor(private template: PerformanceManifest, oral?: OralPhoto) {
+    if (oral) this.oral = new DentalOralSurface(oral);
+  }
+
+  static async load(templateUrl: string, oral?: { image_url: string; rig_url: string } | "reference", signal?: AbortSignal): Promise<ContinuousMouth> {
+    const response = await fetch(templateUrl, { signal });
+    if (!response.ok) throw new Error("Mouth motion could not load");
+    const template = validatePerformanceManifest(await response.json());
+    let photo: OralPhoto | undefined;
+    if (oral) {
+      const image = new Image(); image.crossOrigin = "anonymous";
+      const source = oral === "reference" ? {
+        image_url: new URL("oral-detail-v3.webp", new URL(templateUrl, location.href)).href,
+        rig_url: new URL("oral-detail-v3.rig.json", new URL(templateUrl, location.href)).href,
+      } : oral;
+      image.src = source.image_url;
+      await image.decode();
+      const rigResponse = await fetch(source.rig_url, { signal });
+      if (!rigResponse.ok) throw new Error("Mouth detail could not load");
+      photo = { image, rig: validateOralRig(await rigResponse.json()) };
+    }
+    if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+    return new ContinuousMouth(template, photo);
+  }
+
+  setProfile(profile: ReferenceProfile): void {
+    this.movement = Math.max(.65, Math.min(1.3, profile.jawRange / .85));
+    this.geometric.setProfile(profile);
+    this.oral?.setProfile(profile);
+  }
+
+  deform(points: MouthPoint[], neutral: readonly MouthPoint[], _rig: Rig, weights: BlendWeights): void {
+    const now = performance.now();
+    const mix = this.motion.step(weights, this.lastTime ? (now - this.lastTime) / 1000 : .016);
+    this.lastTime = now;
+    const base = this.template.poses[0].points;
+    const [a, b] = [neutral[61], neutral[291]];
+    const width = Math.hypot(b.x - a.x, b.y - a.y);
+    if (width < 2 || points.length !== 478 || neutral.length !== 478) return;
+    const ux = (b.x - a.x) / width, uy = (b.y - a.y) / width;
+    const sourceWidth = this.template.mouth_width;
+    const [cx, cy] = this.template.center;
+    for (let i = 0; i < base.length; i++) {
+      const [x, y] = base[i];
+      if (Math.abs(x - cx) > sourceWidth * 1.5 || y < cy - sourceWidth || y > cy + sourceWidth * 1.5) continue;
+      const influence = performanceInfluence(x, y, this.template.center, sourceWidth);
+      let dx = 0, dy = 0;
+      for (let p = 1; p < mix.length; p++) {
+        dx += (this.template.poses[p].points[i][0] - x) * mix[p];
+        dy += (this.template.poses[p].points[i][1] - y) * mix[p];
+      }
+      if (this.oral) {
+        // The authored F/V photo over-lifts both lips relative to the fixed
+        // dental row. Bring their contact back to the incisal edge, with a
+        // smooth cheek falloff. The upper teeth themselves never translate.
+        const contact = Math.exp(-(((x - cx) / (sourceWidth * .65)) ** 2 + ((y - cy) / (sourceWidth * .35)) ** 2));
+        dy += sourceWidth * .05 * mix[5] * contact;
+      }
+      const scale = width / sourceWidth * influence * this.movement;
+      points[i].x = neutral[i].x + (dx * ux - dy * uy) * scale;
+      points[i].y = neutral[i].y + (dx * uy + dy * ux) * scale;
+    }
+  }
+
+  paint(ctx: CanvasRenderingContext2D, frame: MouthSurfaceFrame): boolean {
+    const { points, neutral, rig } = frame;
+    const ring = rig.inner_lip_ring.map(i => points[i]);
+    const baseRing = rig.inner_lip_ring.map(i => neutral[i]);
+    const [left, right] = centralMouthAnchors(baseRing, neutral[61], neutral[291]);
+    const width = Math.hypot(right.x - left.x, right.y - left.y);
+    const gap = Math.hypot(points[13].x - points[14].x, points[13].y - points[14].y);
+    if (width < 2 || gap < width * .008) return true;
+    const aperture = openingPath(ring);
+    const weights = mouthMixWeights(this.motion.values);
+    ctx.save(); ctx.clip(aperture);
+    if (this.oral) {
+      this.oral.draw(ctx, { ...frame, weights }, left, right);
+    } else {
+      this.geometric.draw(ctx, { weights, viseme: frame.viseme, aperture,
+        upper: ring.slice(10), lower: ring.slice(0, 11), neutralLeft: left, neutralRight: right,
+        lipColour: frame.lipColour ?? [150, 90, 84], cavityAlpha: 1, teethAlpha: 1 },
+      openingPath(dentalOpening(ring, left, right, weights)));
+    }
+    ctx.restore(); return true;
+  }
+  draw(): void { /* paint owns the exact measured lip aperture. */ }
+}
