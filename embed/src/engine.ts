@@ -43,6 +43,8 @@ const EYE_CORNERS: [number, number][] = [
 // points per eye. Gives the pupil's position and radius directly, so the
 // gaze shift can be confined to a circle around the iris instead of the
 // whole eye opening.
+// Mid-cheek, both sides: clear of beard, brow shadow, nose highlight.
+const CHEEK_LANDMARKS = [50, 280, 205, 425, 101, 330];
 const IRISES: [number, number[]][] = [
   [468, [469, 470, 471, 472]],
   [473, [474, 475, 476, 477]],
@@ -521,6 +523,9 @@ export class AvatarEngine {
   private nextSaccadeAt = 0;
   // Separate iris layer: sclera colour sampled per eye, iris radius in
   // texture pixels, and the texture->canvas scale factor.
+  /** Mid-cheek skin, sampled with the lips: the scene's exposure and colour
+   *  cast, which a mouth renderer needs to light anything it draws. */
+  private skinColour: [number, number, number] | null = null;
   /** The face's own lip colour, sampled at load. The mouth interior is
    * derived from it rather than hardcoded. */
   private lipColour: [number, number, number] = [150, 90, 84];
@@ -883,6 +888,24 @@ export class AvatarEngine {
       // one side and the seam shadow on the other.
       picks.sort((a, b) => a.lum - b.lum);
       this.lipColour = picks[Math.floor(picks.length / 2)].rgb;
+
+      // Cheeks, not lips, say how the face is lit: lips are darker and far
+      // more saturated than the light falling on them (lipstick more so), so
+      // teeth exposed from lip luminance came out grey on a bright face.
+      const skin: { lum: number; rgb: [number, number, number] }[] = [];
+      for (const i of CHEEK_LANDMARKS) {
+        const q = this.texPoints[i];
+        if (!q) continue;
+        const sx = Math.max(0, Math.min(off.width - 1, Math.round(q.x)));
+        const sy = Math.max(0, Math.min(off.height - 1, Math.round(q.y)));
+        const c = ctx.getImageData(sx, sy, 1, 1).data;
+        const rgb: [number, number, number] = [c[0], c[1], c[2]];
+        skin.push({ lum: luma(rgb), rgb });
+      }
+      if (skin.length) {
+        skin.sort((a, b) => a.lum - b.lum);
+        this.skinColour = skin[Math.floor(skin.length / 2)].rgb;
+      }
     } catch {
       // Tainted texture: keep the default, which is a mid warm lip.
     }
@@ -1736,6 +1759,7 @@ export class AvatarEngine {
         painted = this.mouthExtension.paint(this.ctx, {
           points: pts, neutral: this.basePoints, rig: this.rig, weights: this.weights,
           lipColour: this.lipColour,
+          skinColour: this.skinColour ?? undefined,
           viseme: this.pose?.()?.viseme ?? this.currentViseme(performance.now()),
         });
       } finally { this.ctx.restore(); }
@@ -2290,7 +2314,7 @@ export class AvatarEngine {
           upper: upperPts, lower: lowerPts, aperture,
           neutralLeft: anchorA.x <= anchorB.x ? anchorA : anchorB,
           neutralRight: anchorA.x <= anchorB.x ? anchorB : anchorA,
-          lipColour: this.lipColour, cavityAlpha, teethAlpha,
+          lipColour: this.lipColour, skinColour: this.skinColour ?? undefined, cavityAlpha, teethAlpha,
         });
       } finally { ctx.restore(); }
       return;

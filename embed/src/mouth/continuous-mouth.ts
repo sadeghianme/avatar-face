@@ -96,7 +96,7 @@ export class ContinuousMouth implements MouthExtension {
     } else {
       this.geometric.draw(ctx, { weights, viseme: frame.viseme, aperture,
         upper: ring.slice(10), lower: ring.slice(0, 11), neutralLeft: left, neutralRight: right,
-        lipColour: frame.lipColour ?? [150, 90, 84], cavityAlpha: 1, teethAlpha: 1 },
+        lipColour: frame.lipColour ?? [150, 90, 84], skinColour: frame.skinColour, cavityAlpha: 1, teethAlpha: 1 },
       openingPath(dentalOpening(ring, left, right, weights)));
     }
     ctx.restore(); return true;

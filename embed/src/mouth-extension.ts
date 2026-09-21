@@ -27,6 +27,8 @@ export interface MouthExtension {
 
 export interface MouthSurfaceFrame {
   lipColour?: [number, number, number];
+  /** Mid-cheek skin: the scene's exposure and cast. Absent on a tainted texture. */
+  skinColour?: [number, number, number];
   points: readonly MouthPoint[];
   neutral: readonly MouthPoint[];
   rig: Rig;
@@ -43,6 +45,7 @@ export interface MouthFrame {
   neutralLeft: MouthPoint;
   neutralRight: MouthPoint;
   lipColour: [number, number, number];
+  skinColour?: [number, number, number];
   cavityAlpha: number;
   teethAlpha: number;
 }

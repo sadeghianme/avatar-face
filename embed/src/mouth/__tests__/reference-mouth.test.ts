@@ -88,3 +88,63 @@ describe("reference mouth geometry", () => {
     expect(neutral[2].y).toBe(-10);
   });
 });
+
+import { LOWER_ARCH_SHADE, litEnamel, sceneLight } from "../reference-mouth";
+
+/**
+ * The fallback's teeth are generic geometry, so what makes them belong to a
+ * face is how they are lit. Found by looking at a real uploaded portrait:
+ * fixed studio-white enamel glared out of a warm, dim photo.
+ */
+describe("fallback enamel lighting", () => {
+  const dimWarm: [number, number, number] = [120, 70, 62];
+  const brightNeutral: [number, number, number] = [205, 150, 145];
+
+  it("exposes the teeth like the face: a dim portrait gets dimmer enamel", () => {
+    expect(sceneLight(dimWarm, dimWarm)).toBeLessThan(sceneLight(brightNeutral, brightNeutral));
+    const dim = litEnamel(0.5, dimWarm, sceneLight(dimWarm, dimWarm));
+    const bright = litEnamel(0.5, brightNeutral, sceneLight(brightNeutral, brightNeutral));
+    expect(dim[0]).toBeLessThan(bright[0]);
+  });
+
+  it("never blows out and never goes grey-black", () => {
+    for (const lip of [[0, 0, 0], [255, 255, 255], dimWarm, brightNeutral] as [number, number, number][]) {
+      const light = sceneLight(lip, lip);
+      expect(light).toBeGreaterThanOrEqual(0.62);
+      expect(light).toBeLessThanOrEqual(1);
+      for (const channel of litEnamel(0.5, lip, light)) {
+        expect(channel).toBeGreaterThan(110);
+        expect(channel).toBeLessThanOrEqual(255);
+      }
+    }
+  });
+
+  it("takes the scene's warmth without turning pink", () => {
+    const [r, g, b] = litEnamel(0.5, dimWarm, 1);
+    expect(r).toBeGreaterThan(b); // warm cast carried over
+    // Cream is red > green > blue. PINK is blue catching up with green, which
+    // is what a lip-coloured cast would do; red-minus-green alone also rises
+    // for a legitimately warm cream, so it is bounded loosely.
+    expect(g).toBeGreaterThan(b + 8);
+    expect(r - g).toBeLessThan(36);
+  });
+
+  it("dark lips on a bright face do not dim the teeth", () => {
+    // The measured case: lip sample [133,64,48] on a brightly lit portrait.
+    const darkLip: [number, number, number] = [133, 64, 48];
+    const brightSkin: [number, number, number] = [205, 160, 125];
+    expect(sceneLight(brightSkin, darkLip)).toBeGreaterThan(0.95);
+    // Without a skin sample the lips are read leniently, not literally.
+    expect(sceneLight(null, darkLip)).toBeGreaterThan(0.8);
+  });
+
+  it("a deep skin tone is not mistaken for a dark room", () => {
+    const deepTone: [number, number, number] = [120, 82, 60];
+    expect(sceneLight(deepTone, deepTone)).toBeGreaterThan(0.8);
+  });
+
+  it("draws the lower arch darker than the upper", () => {
+    expect(LOWER_ARCH_SHADE).toBeLessThan(1);
+    expect(LOWER_ARCH_SHADE).toBeGreaterThan(0.6);
+  });
+});
