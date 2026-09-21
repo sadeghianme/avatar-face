@@ -119,11 +119,25 @@ async def publish(avatar, storage) -> dict:
             if copied:
                 layer_keys[name] = copied
 
+    # The mouth: settings by value, the optional teeth photo by copy — same
+    # reason as everything else here, a later edit must not reach visitors.
+    from app.services.mouth import load as load_mouth
+
+    mouth = load_mouth(getattr(avatar, "mouth_config", None))
+    mouth_published = None
+    if mouth:
+        mouth_published = {"renderer": mouth["renderer"], "profile": mouth.get("profile") or {}}
+        oral_image = await copy(mouth.get("oral_image_key"), "mouth", "png")
+        oral_rig = await copy(mouth.get("oral_rig_key"), "mouth-rig", "json")
+        if oral_image and oral_rig:
+            mouth_published.update(oral_image_key=oral_image, oral_rig_key=oral_rig)
+
     config = {
         "revision": revision,
         "framing": avatar.framing,
         "face_type": getattr(avatar, "face_type", "human"),
         "voice": getattr(avatar, "voice", None),
+        "mouth": mouth_published,
         "image_key": image_key,
         "rig_key": rig_key,
         "thumbnail_key": thumbnail_key,
@@ -148,7 +162,7 @@ async def _prune(avatar, storage, keep_from: list[dict | None]) -> None:
     oldest = min(keep)
     for revision in range(max(0, oldest - KEEP_REVISIONS), oldest):
         prefix = published_prefix(avatar.org_id, avatar.id, revision)
-        for name in ("image", "rig", "thumb", *[f"layer-{n}" for n in LAYER_NAMES]):
+        for name in ("image", "rig", "thumb", "mouth", "mouth-rig", *[f"layer-{n}" for n in LAYER_NAMES]):
             for ext in ("png", "jpg", "json", "glb"):
                 key = f"{prefix}/{name}.{ext}"
                 try:
@@ -204,6 +218,18 @@ async def discard_draft(avatar, storage) -> bool:
                     await storage.get_bytes(source),
                     _content_type(source),
                 )
+    # The mouth goes back too. Its photo is restored into fresh draft keys
+    # so the draft never aliases the immutable published copy.
+    published_mouth = config.get("mouth")
+    if published_mouth:
+        restored = {"renderer": published_mouth["renderer"], "profile": published_mouth.get("profile") or {}}
+        oral_image = await restore(published_mouth.get("oral_image_key"), "mouth")
+        oral_rig = await restore(published_mouth.get("oral_rig_key"), "mouth-rig")
+        if oral_image and oral_rig:
+            restored.update(oral_image_key=oral_image, oral_rig_key=oral_rig)
+        avatar.mouth_config = json.dumps(restored)
+    else:
+        avatar.mouth_config = None
     avatar.has_layers = bool(layer_keys)
     avatar.framing = config.get("framing", avatar.framing)
     if config.get("face_type"):
@@ -238,6 +264,7 @@ async def published_view(avatar, storage) -> dict | None:
     return {
         "framing": config.get("framing", "face"),
         "voice": config.get("voice"),
+        "mouth": await _mouth_view(config.get("mouth"), storage),
         "rig_url": await storage.presign_get(config["rig_key"]) if config.get("rig_key") else "",
         "thumbnail_url": (
             await storage.presign_get(config["thumbnail_key"])
@@ -246,4 +273,17 @@ async def published_view(avatar, storage) -> dict | None:
         ),
         "image_url": image_url,
         "layer_urls": layer_urls or None,
+    }
+
+
+async def _mouth_view(mouth: dict | None, storage) -> dict | None:
+    """What a visitor's engine needs: renderer, fit, and presigned teeth."""
+    if not mouth or mouth.get("renderer") != "continuous":
+        return None
+    from app.services.mouth import photo_urls
+
+    return {
+        "renderer": "continuous",
+        "profile": mouth.get("profile") or {},
+        "oral": await photo_urls(mouth, storage),
     }

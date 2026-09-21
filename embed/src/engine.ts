@@ -440,7 +440,7 @@ function smoothClosedPath(points: { x: number; y: number }[]): Path2D {
 
 export interface EngineOptions {
   debugMesh?: boolean;
-  /** Lab-only extension points; omitted by the original page and widgets. */
+  /** Optional mouth renderer (see mouth/). Omitted means the classic mouth. */
   mouthExtension?: MouthExtension;
   pose?: () => MouthPose | null;
   /** Opt-in lab clock, in audio milliseconds. Omitted by all existing pages. */
@@ -479,7 +479,7 @@ export class AvatarEngine {
   private cues: Cue[] = [];
   private cueStart = 0;
   private readonly cueClock?: () => number;
-  private readonly mouthExtension?: MouthExtension;
+  private mouthExtension?: MouthExtension;
   private readonly pose?: () => MouthPose | null;
   private speaking = false;
   /** When the current run of silence inside speech began, for catch-breaths;
@@ -1068,6 +1068,16 @@ export class AvatarEngine {
     this.beats = emphasisBeats(this.cues);
     this.nextBeat = 0;
     this.gazeTarget = { x: 0, y: 0 };
+  }
+
+  /**
+   * Swap the mouth renderer on a live engine, or pass null for the classic
+   * drawn mouth. Progressive like setLayers: the widget is already animating
+   * on a thumbnail when the mouth bundle and its assets arrive, and an avatar
+   * that waited for them would show nothing in the meantime.
+   */
+  setMouthExtension(extension: MouthExtension | null): void {
+    this.mouthExtension = extension ?? undefined;
   }
 
   /** Replace a growing external cue track without restarting articulation. */

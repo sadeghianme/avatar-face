@@ -8,7 +8,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "typecheck": "tsc -b",
-    "build": "tsc -b && esbuild src/widget.ts --bundle --format=iife --outfile=dist/liveface.js --minify && esbuild src/widget3d.ts --bundle --format=iife --outfile=dist/liveface-3d.js --minify",
+    "build": "tsc -b && esbuild src/widget.ts --bundle --format=iife --outfile=dist/liveface.js --minify && esbuild src/widget3d.ts --bundle --format=iife --outfile=dist/liveface-3d.js --minify && esbuild src/widget-mouth.ts --bundle --format=iife --outfile=dist/liveface-mouth.js --minify && cp assets/mouth-motion.json dist/mouth-motion.json",
     "dev": "esbuild src/widget.ts --bundle --format=iife --outfile=dist/liveface.js --watch --servedir=.",
     "test": "vitest run"
   },

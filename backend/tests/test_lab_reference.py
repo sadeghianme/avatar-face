@@ -11,6 +11,7 @@ import pytest
 from PIL import Image
 
 from app.api import lab_reference
+from app.services import portrait_photo
 from app.core.errors import Validation422
 from conftest import create_org, register_and_login, sample_png
 
@@ -23,7 +24,7 @@ def mock_detection(monkeypatch, *, detected=True, gap=None):
     if gap is not None:
         width = np.linalg.norm(points[291] - points[61])
         points[14] = points[13] + [0, width * gap]
-    monkeypatch.setattr(lab_reference, "landmarks_from_image", lambda _: (points, {}, tuple(rig["image_size"]), detected))
+    monkeypatch.setattr(portrait_photo, "landmarks_from_image", lambda _: (points, {}, tuple(rig["image_size"]), detected))
 
 
 @pytest.mark.asyncio
@@ -88,6 +89,6 @@ def test_normalizes_exif_and_rejects_large_decode(monkeypatch):
     image.save(out, "JPEG", exif=exif)
     photo, _, _ = lab_reference.prepare_photo(out.getvalue(), "portrait")
     assert Image.open(io.BytesIO(photo)).size == (300, 200)
-    monkeypatch.setattr(lab_reference, "MAX_PIXELS", 10)
+    monkeypatch.setattr(portrait_photo, "MAX_PIXELS", 10)
     with pytest.raises(Validation422, match="megapixels"):
         lab_reference.prepare_photo(sample_png(), "portrait")

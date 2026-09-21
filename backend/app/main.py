@@ -241,7 +241,9 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         return {"status": "ok", "app": settings.app_name}
 
-    def _serve_widget_bundle(filename: str, request: Request):
+    def _serve_widget_bundle(
+        filename: str, request: Request, media_type: str = "application/javascript"
+    ):
         """Serve an embed bundle that revalidates instead of expiring.
 
         The URL is baked into every customer's pasted snippet, so it can never
@@ -278,7 +280,7 @@ def create_app() -> FastAPI:
         }
         if _etag_matches(request.headers.get("if-none-match"), etag):
             return Response(status_code=304, headers=headers)
-        return FileResponse(bundle, media_type="application/javascript", headers=headers)
+        return FileResponse(bundle, media_type=media_type, headers=headers)
 
     @app.get("/liveface.js", include_in_schema=False)
     async def widget_script(request: Request):
@@ -289,6 +291,17 @@ def create_app() -> FastAPI:
     async def widget_script_3d(request: Request):
         """Three.js + 3D engine, loaded only for kind=model3d avatars."""
         return _serve_widget_bundle("liveface-3d.js", request)
+
+    @app.get("/liveface-mouth.js", include_in_schema=False)
+    async def widget_script_mouth(request: Request):
+        """The continuous mouth, loaded only for avatars that use it."""
+        return _serve_widget_bundle("liveface-mouth.js", request)
+
+    @app.get("/mouth-motion.json", include_in_schema=False)
+    async def mouth_motion(request: Request):
+        """Authored mouth motion the continuous mouth retargets onto a face.
+        Served like the bundles: fixed URL, revalidated, cross-origin."""
+        return _serve_widget_bundle("mouth-motion.json", request, "application/json")
 
     app.include_router(auth.router)
     app.include_router(orgs.router)

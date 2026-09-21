@@ -37,6 +37,8 @@ export interface Invitation {
 export type AvatarStatus = "pending" | "processing" | "ready" | "failed";
 export type AvatarKind = "photo" | "model3d";
 
+export type MouthRenderer = "classic" | "continuous";
+
 export interface Avatar {
   id: string;
   org_id: string;
@@ -63,6 +65,10 @@ export interface Avatar {
   published_at?: string | null;
   /** The avatar's draft voice {provider, voice, locale}; published on Publish. */
   voice?: { provider: string; voice: string; locale: string } | null;
+  /** The DRAFT mouth; null means the classic drawn mouth. */
+  /** Detail only: presigned draft teeth photo + its rig. */
+  mouth_photo?: { image_url: string; rig_url: string } | null;
+  mouth?: { renderer: MouthRenderer; profile: Record<string, number>; has_oral_photo: boolean } | null;
   /** Set means a public page exists at /s/<token>. */
   share_token?: string | null;
   /** Background/body/head decomposition for the layered render path. */

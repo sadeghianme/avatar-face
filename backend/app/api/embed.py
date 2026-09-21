@@ -133,6 +133,7 @@ async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
         # embedding site on their next page load. A data-voice attribute on
         # the snippet still overrides — that is per-site intent.
         "voice": view.get("voice"),
+        "mouth": view.get("mouth"),
         "rig_url": view["rig_url"],
         "thumbnail_url": view["thumbnail_url"],
         "image_url": view["image_url"],

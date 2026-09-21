@@ -121,12 +121,31 @@ class AvatarOut(BaseModel):
     face_type: str = "human"
     # The DRAFT voice; what visitors hear is the published snapshot's copy.
     voice: dict | None = None
+    # The DRAFT mouth: {renderer, profile, has_oral_photo}. Null = classic.
+    mouth: dict | None = None
     # True when the draft has moved ahead of the published snapshot — the
     # dashboard shows a Publish bar on this.
     unpublished: bool = False
     published_at: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class MouthProfile(BaseModel):
+    """Fit of the oral geometry to this face. Ranges mirror PROFILE_LIMITS
+    in embed/src/mouth/reference-mouth-model.ts; the client clamps too, but
+    a published config is served to strangers and must not trust it."""
+
+    teethScale: float = Field(default=1.0, ge=0.75, le=1.2)
+    teethY: float = Field(default=0.0, ge=-0.06, le=0.06)
+    warmth: float = Field(default=0.5, ge=0.0, le=1.0)
+    lipProjection: float = Field(default=0.55, ge=0.0, le=1.0)
+    jawRange: float = Field(default=0.85, ge=0.6, le=1.1)
+
+
+class MouthUpdate(BaseModel):
+    renderer: Literal["classic", "continuous"]
+    profile: MouthProfile = Field(default_factory=MouthProfile)
 
 
 class AvatarUpdate(BaseModel):
@@ -136,6 +155,7 @@ class AvatarUpdate(BaseModel):
     framing: Literal["face", "full"] | None = None
     face_type: FaceType | None = None
     voice: VoiceConfig | None = None
+    mouth: MouthUpdate | None = None
 
 
 class AvatarCreated(BaseModel):
@@ -144,6 +164,8 @@ class AvatarCreated(BaseModel):
 
 
 class AvatarDetail(AvatarOut):
+    # Presigned {image_url, rig_url} of the draft mouth photo, when one exists.
+    mouth_photo: dict | None = None
     image_url: str | None = None
     rig_url: str | None = None
     thumbnail_url: str | None = None

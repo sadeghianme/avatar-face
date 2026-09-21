@@ -5,3 +5,4 @@ export { AvatarDetailPage } from "./pages/AvatarDetailPage";
 export { AvatarPreview } from "./components/AvatarPreview";
 export { EmbedSnippet } from "./components/EmbedSnippet";
 export { buildSnippet } from "./components/EmbedSnippet";
+export { MOUTH_MOTION_URL, useAvatarMouth } from "./hooks/useAvatarMouth";

@@ -4,7 +4,7 @@ import logging
 from urllib.parse import urlsplit
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, UploadFile
 from sqlalchemy import select
 
 from pydantic import BaseModel, Field
@@ -251,7 +251,22 @@ async def update_avatar(
         import json as _json
 
         avatar.voice_config = _json.dumps(body.voice.model_dump())
-    if body.framing is not None or body.face_type is not None or body.voice is not None:
+    if body.mouth is not None:
+        import json as _json
+
+        from app.services.mouth import load as load_mouth
+
+        # Renderer and fit change; the mouth photo is managed by its own
+        # endpoints and carried over untouched.
+        current = load_mouth(avatar.mouth_config) or {}
+        current.update(renderer=body.mouth.renderer, profile=body.mouth.profile.model_dump())
+        avatar.mouth_config = _json.dumps(current)
+    if (
+        body.framing is not None
+        or body.face_type is not None
+        or body.voice is not None
+        or body.mouth is not None
+    ):
         mark_dirty(avatar)
     if body.face_type is not None and body.face_type != avatar.face_type:
         avatar.face_type = body.face_type
@@ -773,14 +788,92 @@ async def get_avatar_detail(avatar_id: str, ctx: OrgMember, db: DB) -> AvatarDet
     from app.api.embed import _layer_urls
 
     detail.layer_urls = await _layer_urls(avatar, storage)
+    from app.services.mouth import load as load_mouth, photo_urls
+
+    detail.mouth_photo = await photo_urls(load_mouth(avatar.mouth_config), storage)
     return detail
+
+
+@router.post("/{avatar_id}/mouth-photo", response_model=AvatarOut)
+async def upload_mouth_photo(avatar_id: str, file: UploadFile, ctx: OrgMember, db: DB) -> Avatar:
+    """A second photo of the same person with teeth showing.
+
+    It supplies THEIR enamel to the continuous mouth instead of fitted
+    geometry. Validated exactly as in the lab it graduated from: a real
+    detected face, large enough, mouth actually open. A draft edit like any
+    other — visitors see it only after Publish.
+    """
+    import json as _json
+
+    from starlette.concurrency import run_in_threadpool
+
+    from app.services.mouth import load as load_mouth, oral_keys
+    from app.services.portrait_photo import MAX_BYTES, prepare_photo
+
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    if avatar.kind != AvatarKind.photo or avatar.status != AvatarStatus.ready:
+        raise Conflict409("Only a ready photo avatar can take a mouth photo", code="not_a_photo")
+    if file.content_type not in get_settings().allowed_image_types:
+        raise Validation422("Choose a JPEG, PNG or WebP photo", code="unsupported_image_type")
+    data = await file.read(MAX_BYTES + 1)
+    if len(data) > MAX_BYTES:
+        raise Validation422("Photo must be 15 MB or smaller", code="image_too_large")
+    photo, rig, _note = await run_in_threadpool(prepare_photo, data, "mouth")
+
+    storage = get_storage()
+    config = load_mouth(avatar.mouth_config) or {"renderer": "continuous", "profile": {}}
+    previous = (config.get("oral_image_key"), config.get("oral_rig_key"))
+    # Fresh keys per upload: the published snapshot may still point at
+    # copies of the old ones, and browsers cache presigned URLs by path.
+    image_key, rig_key = oral_keys(ctx.org.id, avatar.id, uuid4().hex[:8])
+    await storage.put_bytes(image_key, photo, "image/png")
+    await storage.put_bytes(rig_key, _json.dumps(rig).encode(), "application/json")
+    config.update(oral_image_key=image_key, oral_rig_key=rig_key)
+    avatar.mouth_config = _json.dumps(config)
+    mark_dirty(avatar)
+    await db.commit()
+    for key in previous:
+        if key:
+            await storage.delete(key)
+    return avatar
+
+
+@router.delete("/{avatar_id}/mouth-photo", response_model=AvatarOut)
+async def remove_mouth_photo(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
+    """Back to fitted teeth. The published snapshot keeps its own copy."""
+    import json as _json
+
+    from app.services.mouth import load as load_mouth
+
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    config = load_mouth(avatar.mouth_config)
+    if not config or not config.get("oral_image_key"):
+        return avatar
+    storage = get_storage()
+    for name in ("oral_image_key", "oral_rig_key"):
+        key = config.pop(name, None)
+        if key:
+            await storage.delete(key)
+    avatar.mouth_config = _json.dumps(config)
+    mark_dirty(avatar)
+    await db.commit()
+    return avatar
 
 
 @router.delete("/{avatar_id}", status_code=204)
 async def delete_avatar(avatar_id: str, ctx: OrgMember, db: DB):
     avatar = await _get_avatar(db, ctx.org.id, avatar_id)
     storage = get_storage()
-    for key in (avatar.image_key, avatar.rig_key, avatar.thumbnail_key):
+    from app.services.mouth import load as load_mouth
+
+    mouth = load_mouth(avatar.mouth_config) or {}
+    for key in (
+        avatar.image_key,
+        avatar.rig_key,
+        avatar.thumbnail_key,
+        mouth.get("oral_image_key"),
+        mouth.get("oral_rig_key"),
+    ):
         if key:
             await storage.delete(key)
     await db.delete(avatar)

@@ -20,6 +20,7 @@ import { AvatarEngine } from "./engine";
 import type { Avatar3DEngine } from "./engine3d";
 import { SpeechPlayer, SpeechQueue } from "./speech";
 import { listen, sttSupported, ListenOptions } from "./stt";
+import type { AvatarMouthConfig } from "./mouth";
 import { EngineTuning, Rig, SynthesisPayload } from "./types";
 
 interface LivefaceApi {
@@ -38,6 +39,10 @@ declare global {
     Liveface?: LivefaceApi;
     __Liveface3D?: {
       load: (canvas: HTMLCanvasElement, modelUrl: string) => Promise<Avatar3DEngine>;
+    };
+    /** Set by liveface-mouth.js, loaded only for avatars that use it. */
+    __LivefaceMouth?: {
+      attach: (engine: AvatarEngine, config: AvatarMouthConfig, motionUrl: string) => Promise<unknown>;
     };
   }
 }
@@ -120,6 +125,7 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     model_url?: string | null;
     layer_urls?: { background?: string; body: string; head: string } | null;
     voice?: { provider: string; voice: string; locale: string } | null;
+    mouth?: AvatarMouthConfig | null;
   } = await meta.json();
 
   if (!provider) {
@@ -164,6 +170,17 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
       })
       .catch(() => undefined); // thumbnail stays — worse, but alive
 
+
+    // Mouth upgrade, progressive as well. Any failure — bundle, template,
+    // the teeth photo — leaves the classic mouth, which always works.
+    if (info.mouth?.renderer === "continuous") {
+      const mouthConfig = info.mouth;
+      void loadScript(`${apiBase}/liveface-mouth.js`)
+        .then(() =>
+          window.__LivefaceMouth?.attach(photoEngine, mouthConfig, `${apiBase}/mouth-motion.json`)
+        )
+        .catch(() => undefined);
+    }
 
     // Layered upgrade, also progressive: the avatar is already animating on
     // the flat photo; when the background/body/head decomposition lands the

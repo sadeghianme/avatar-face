@@ -1,7 +1,7 @@
 import type { AvatarEngine } from "@liveface/embed";
-import { ReferenceMouth } from "@liveface/embed/lab/reference-mouth";
-import { REFERENCE_POSES } from "@liveface/embed/lab/reference-mouth-model";
-import { ContinuousMouth } from "@liveface/embed/lab/continuous-mouth";
+import { ReferenceMouth } from "@liveface/embed/mouth/reference-mouth";
+import { REFERENCE_POSES } from "@liveface/embed/mouth/reference-mouth-model";
+import { ContinuousMouth } from "@liveface/embed/mouth/continuous-mouth";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 

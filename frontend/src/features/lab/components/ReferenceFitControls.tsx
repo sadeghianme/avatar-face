@@ -1,4 +1,4 @@
-import { PROFILE_LIMITS, type ReferenceProfile } from "@liveface/embed/lab/reference-mouth-model";
+import { PROFILE_LIMITS, type ReferenceProfile } from "@liveface/embed/mouth/reference-mouth-model";
 import { useTranslation } from "react-i18next";
 
 const LABELS: Record<keyof ReferenceProfile, string> = {

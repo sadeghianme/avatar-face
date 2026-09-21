@@ -1,5 +1,5 @@
 import type { Avatar } from "@/lib/types";
-import { DEFAULT_REFERENCE_PROFILE } from "@liveface/embed/lab/reference-mouth-model";
+import { DEFAULT_REFERENCE_PROFILE } from "@liveface/embed/mouth/reference-mouth-model";
 
 /** Initial fitting pass for the bundled portrait, still subject to review. */
 export const REFERENCE_AVATAR_PROFILE = { ...DEFAULT_REFERENCE_PROFILE, teethY: 0.016 };

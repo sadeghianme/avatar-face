@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { REFERENCE_POSES } from "../reference-mouth-model";
-import { PERFORMANCE_POSES, performanceInfluence, performanceMix, validatePerformanceManifest } from "../photographic-performance-model";
+import { REFERENCE_POSES } from "../../mouth/reference-mouth-model";
+import { PERFORMANCE_POSES, performanceInfluence, performanceMix, validatePerformanceManifest } from "../../mouth/photographic-performance-model";
 import { ZERO_WEIGHTS } from "../../types";
 
 describe("authored photographic performance", () => {

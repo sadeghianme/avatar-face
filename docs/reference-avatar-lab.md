@@ -182,7 +182,7 @@ The original avatar editor and widgets do not opt in. The lab can adjust skin
 points before midpoint subdivision and draw under the engine's measured mouth
 aperture. Canvas save/restore is owned by the engine.
 
-The lab renderer and pure geometry/profile model live under `embed/src/lab/`.
+The lab renderer and pure geometry/profile model live under `embed/src/mouth/` (graduated from `lab/` when it became selectable on real avatars).
 The frontend lab feature owns controls, local drafts, sample metadata and page
 composition, following the existing feature boundaries and EN/FR locales.
 

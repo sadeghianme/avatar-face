@@ -78,6 +78,10 @@ class Avatar(TimestampedBase):
     # framing: changing it marks the draft dirty, and only publishing makes
     # embedding sites and share links speak with it.
     voice_config: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Which mouth renderer this avatar uses, as JSON {renderer, profile,
+    # oral_image_key, oral_rig_key}. Null means the classic drawn mouth.
+    # Draft/published like voice; see services.mouth.
+    mouth_config: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Draft/published split. `draft_revision` is bumped by every edit a
     # visitor could notice; `published_config` is the JSON snapshot the embed
     # serves. Unpublished changes are simply the two disagreeing — comparing
@@ -88,6 +92,13 @@ class Avatar(TimestampedBase):
     # JSON list of snapshots taken before each edit, oldest first. See
     # app.api.avatars._snapshot.
     edit_history: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    @property
+    def mouth(self) -> dict | None:
+        """Public view of the mouth settings — never the storage keys."""
+        from app.services.mouth import public_view
+
+        return public_view(self.mouth_config)
 
     @property
     def voice(self) -> dict | None:

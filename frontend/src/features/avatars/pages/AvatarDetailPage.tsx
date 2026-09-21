@@ -1,4 +1,5 @@
 import type { SpeechPlayer } from "@liveface/embed";
+import type { AvatarMouthConfig } from "@liveface/embed/mouth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,7 +17,9 @@ import { SharePanel } from "@/features/avatars/components/SharePanel";
 import { SpeakPanel } from "@/features/voices";
 import { defaultVoiceSelection, type VoiceSelection } from "@/features/voices";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { MouthPanel } from "@/features/avatars/components/MouthPanel";
 import { TuningPanel } from "@/features/avatars/components/TuningPanel";
+import { useAvatarMouth } from "@/features/avatars/hooks/useAvatarMouth";
 import { api } from "@/lib/api";
 import { useOrg } from "@/providers/org";
 import type { Avatar } from "@/lib/types";
@@ -38,6 +41,9 @@ export function AvatarDetailPage() {
   const [voice, setVoice] = useState<VoiceSelection>(defaultVoiceSelection);
   const seededFor = useRef<string | null>(null);
   const [busyBg, setBusyBg] = useState(false);
+  // The mouth being previewed: the panel's live state while the owner is
+  // choosing or dragging, otherwise whatever the draft has saved.
+  const [mouthPreview, setMouthPreview] = useState<AvatarMouthConfig | null | undefined>(undefined);
 
   // Native fullscreen on the preview card. The `fullscreen` state exists so
   // the toggle icon flips even when the user leaves with Esc, which never
@@ -87,6 +93,19 @@ export function AvatarDetailPage() {
       setVoice(avatar.voice as VoiceSelection);
     }
   }, [avatar]);
+
+  // Saved draft mouth unless the panel is previewing something newer. The
+  // preview resets whenever the saved copy changes (save, publish, discard).
+  const savedMouth: AvatarMouthConfig | null =
+    avatar?.mouth?.renderer === "continuous"
+      ? { renderer: "continuous", profile: avatar.mouth.profile, oral: avatar.mouth_photo ?? null }
+      : null;
+  const savedMouthKey = JSON.stringify([avatar?.mouth ?? null, Boolean(avatar?.mouth_photo)]);
+  useEffect(() => setMouthPreview(undefined), [savedMouthKey]);
+  useAvatarMouth(
+    avatar?.kind === "model3d" ? null : (engine as Parameters<typeof useAvatarMouth>[0]),
+    mouthPreview === undefined ? savedMouth : mouthPreview
+  );
 
   if (isError) {
     return <p className="field-error">{t("error")} — avatar not found in this organization.</p>;
@@ -322,6 +341,19 @@ export function AvatarDetailPage() {
               selection={voice}
               onSelectionChange={(next) => void saveVoice(next)}
             />
+            {avatar.kind !== "model3d" && (
+              <MouthPanel
+                avatar={avatar}
+                orgId={current.id}
+                onPreview={(renderer, profile) =>
+                  setMouthPreview(
+                    renderer === "continuous"
+                      ? { renderer, profile, oral: avatar.mouth_photo ?? null }
+                      : null
+                  )
+                }
+              />
+            )}
             <SharePanel avatar={avatar} orgId={current.id} />
             <TuningPanel
               engine={engine}

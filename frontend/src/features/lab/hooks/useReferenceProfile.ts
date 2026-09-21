@@ -1,4 +1,4 @@
-import { DEFAULT_REFERENCE_PROFILE, normalizeProfile, type ReferenceProfile } from "@liveface/embed/lab/reference-mouth-model";
+import { DEFAULT_REFERENCE_PROFILE, normalizeProfile, type ReferenceProfile } from "@liveface/embed/mouth/reference-mouth-model";
 import { useState } from "react";
 
 /** Explicit local drafts only. Never writes the avatar, rig, or organisation. */

@@ -1,7 +1,7 @@
 import type { MouthExtension, MouthPoint, MouthSurfaceFrame } from "../mouth-extension";
 import type { BlendWeights, Rig } from "../types";
 import { performanceInfluence, performanceMix, validatePerformanceManifest,
-  type PerformanceManifest, type XY } from "./photographic-performance-model";
+  type PerformanceManifest, type XY } from "../mouth/photographic-performance-model";
 
 interface TextureTriangle { ids: [number, number, number]; inverse: number[]; origin: XY }
 

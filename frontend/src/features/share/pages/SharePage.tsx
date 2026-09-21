@@ -1,4 +1,5 @@
 import { AvatarEngine, BrowserTTS, type Rig } from "@liveface/embed";
+import type { AvatarMouthConfig } from "@liveface/embed/mouth";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
@@ -6,6 +7,7 @@ import { useParams } from "react-router-dom";
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { loadImage } from "@/lib/image";
+import { useAvatarMouth } from "@/features/avatars";
 
 interface PublicAvatar {
   name: string;
@@ -16,6 +18,8 @@ interface PublicAvatar {
   thumbnail_url: string;
   layer_urls?: Record<string, string> | null;
   voice?: { provider: string; voice: string; locale: string } | null;
+  /** The PUBLISHED mouth; null means the classic one. */
+  mouth?: AvatarMouthConfig | null;
 }
 
 /**
@@ -34,6 +38,7 @@ export function SharePage() {
   const { token } = useParams<{ token: string }>();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<AvatarEngine | null>(null);
+  const [mouthEngine, setMouthEngine] = useState<AvatarEngine | null>(null);
   const [avatar, setAvatar] = useState<PublicAvatar | null>(null);
   const [failed, setFailed] = useState(false);
   const [text, setText] = useState("");
@@ -64,6 +69,7 @@ export function SharePage() {
         fullPhoto: info.framing === "full",
       });
       engineRef.current = engine;
+      setMouthEngine(engine);
 
       const layers = info.layer_urls;
       if (layers?.body && layers.head) {
@@ -83,10 +89,13 @@ export function SharePage() {
     boot().catch(() => !cancelled && setFailed(true));
     return () => {
       cancelled = true;
+      setMouthEngine(null);
       engineRef.current = null;
       engine?.destroy();
     };
   }, [token]);
+
+  useAvatarMouth(mouthEngine, avatar?.mouth ?? null);
 
   /**
    * Speak with the server voice, falling back to the visitor's own.
