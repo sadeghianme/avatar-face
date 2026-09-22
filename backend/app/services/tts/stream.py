@@ -1,7 +1,9 @@
-"""Bounded, phrase-level PCM streaming for the timestamp-enabled lab model.
+"""Bounded, phrase-level PCM streaming.
 
-Each packet contains audio AND its local native cues. Sample offsets, rather
-than rounded milliseconds, define the joins. The stable TTS API is unchanged.
+Each packet carries audio AND its own local cues; sample offsets, not
+rounded milliseconds, define the joins. Written for the lab's timestamped
+model and graduated unchanged: the production stream feeds the same packet
+shape from the standard cached Kokoro path, phrase by phrase.
 """
 from __future__ import annotations
 

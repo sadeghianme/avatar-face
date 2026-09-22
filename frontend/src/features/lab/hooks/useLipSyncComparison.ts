@@ -1,7 +1,7 @@
 import type { AvatarEngine } from "@liveface/embed";
 import { AudioClockComparison } from "@liveface/embed/lab/audio-clock";
 import { StreamingAudioComparison } from "@liveface/embed/lab/streaming-audio-clock";
-import { SpeechAssembly, speechEvents, bufferedRecording, type LabSpeech } from "@liveface/embed/lab/speech-stream";
+import { SpeechAssembly, speechEvents, bufferedRecording, type StreamedSpeech } from "@liveface/embed/speech-stream/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
@@ -12,7 +12,7 @@ export function useLipSyncComparison(orgId: string, baseline: AvatarEngine | nul
   const stream = useRef<StreamingAudioComparison | null>(null);
   const request = useRef<AbortController | null>(null);
   const generation = useRef(0);
-  const saved = useRef<LabSpeech | null>(null);
+  const saved = useRef<StreamedSpeech | null>(null);
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -23,7 +23,7 @@ export function useLipSyncComparison(orgId: string, baseline: AvatarEngine | nul
   const [bufferGaps, setBufferGaps] = useState(0);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [payload, setPayload] = useState<LabSpeech | null>(null);
+  const [payload, setPayload] = useState<StreamedSpeech | null>(null);
   const [lead, setLead] = useState(0);
   const [position, setPosition] = useState(0);
   const leadRef = useRef(lead);
@@ -60,7 +60,7 @@ export function useLipSyncComparison(orgId: string, baseline: AvatarEngine | nul
     return () => clearInterval(timer);
   }, [playing, busy]);
 
-  const play = async (next: LabSpeech, token: number, onMedia?: (audio: HTMLAudioElement) => void) => {
+  const play = async (next: StreamedSpeech, token: number, onMedia?: (audio: HTMLAudioElement) => void) => {
     const transport = player.current;
     if (!transport || token !== generation.current) return;
     setPlaying(true); setPaused(false); setPosition(0);
@@ -79,14 +79,14 @@ export function useLipSyncComparison(orgId: string, baseline: AvatarEngine | nul
     const deadline = window.setTimeout(() => { timedOut = true; abort.abort(); }, 180_000);
     setBusy(true); setError(null); setPayload(null); saved.current = null;
     setPosition(0); setDuration(0); setChunks(0); setBufferGaps(0); setFirstAudioMs(null); setMode(null);
-    const remember = (next: LabSpeech) => {
+    const remember = (next: StreamedSpeech) => {
       saved.current = next; setPayload(next); setDuration(next.duration_ms / 1000); setBusy(false);
     };
     try {
       // Unsupported browsers/providers retain the tested full-recording path.
       if (voice.provider !== "kokoro" || typeof AudioContext === "undefined") {
         setMode("buffered_provider");
-        const next = await api.post<LabSpeech>(`/orgs/${orgId}/lab/lip-sync/synthesize`, { text, ...voice }, abort.signal);
+        const next = await api.post<StreamedSpeech>(`/orgs/${orgId}/lab/lip-sync/synthesize`, { text, ...voice }, abort.signal);
         if (token !== generation.current) return;
         window.clearTimeout(deadline); remember(next); await play(next, token);
         return;
@@ -104,7 +104,7 @@ export function useLipSyncComparison(orgId: string, baseline: AvatarEngine | nul
       if (!response.body || !response.headers.get("content-type")?.includes("application/x-ndjson")) throw new Error("Speech streaming is unavailable");
       const assembly = new SpeechAssembly();
       let streamMode: "native_phrases" | "buffered_provider" | null = null;
-      let next: LabSpeech | null = null;
+      let next: StreamedSpeech | null = null;
       let complete = false;
       for await (const event of speechEvents(response.body)) {
         if (token !== generation.current) return;

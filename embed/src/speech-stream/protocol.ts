@@ -1,6 +1,14 @@
 import type { Cue } from "../types";
 
-export interface LabSpeech {
+/**
+ * The phrase-stream wire format, shared by the lab and the product: NDJSON
+ * frames of ordered mono 24 kHz PCM16 chunks, each with its own cues, then a
+ * terminal `done` whose totals must match what arrived. A fetch body need not
+ * align with UTF-8 characters or JSON lines; a missing terminal frame is an
+ * error, never a successful shortened recording.
+ */
+
+export interface StreamedSpeech {
   audio_b64: string;
   audio_mime: string;
   duration_ms: number;
@@ -107,7 +115,7 @@ export class SpeechAssembly {
     return { samples, offset };
   }
 
-  finish(event: Record<string, unknown>): LabSpeech {
+  finish(event: Record<string, unknown>): StreamedSpeech {
     if (event.type !== "done" || !this.chunks || event.chunks !== this.chunks
         || event.total_samples !== this.samples || event.sample_rate !== this.sampleRate) {
       throw new Error("Speech ended before all audio arrived");
@@ -127,12 +135,12 @@ export class SpeechAssembly {
   }
 }
 
-export function bufferedRecording(event: Record<string, unknown>): LabSpeech {
+export function bufferedRecording(event: Record<string, unknown>): StreamedSpeech {
   if (event.type !== "recording" || typeof event.audio_b64 !== "string" || !event.audio_b64.length
       || typeof event.audio_mime !== "string" || !event.audio_mime.startsWith("audio/")
       || !Number.isFinite(event.duration_ms) || (event.duration_ms as number) <= 0
       || event.timing_source !== "existing_provider") throw new Error("Invalid recording");
   validateCues(event.cues, event.duration_ms as number);
   validateCues(event.baseline_cues, event.duration_ms as number);
-  return event as unknown as LabSpeech;
+  return event as unknown as StreamedSpeech;
 }

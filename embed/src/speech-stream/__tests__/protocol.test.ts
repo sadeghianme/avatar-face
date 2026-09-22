@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SpeechAssembly, speechEvents } from "../speech-stream";
+import { SpeechAssembly, speechEvents } from "../protocol";
 
 const packet = (sequence = 0, start = 0) => ({ type: "chunk", sequence, start_sample: start,
   sample_count: 3, sample_rate: 24000, pcm_b64: btoa("\0\0\xff\x7f\0\x80"),

@@ -8,7 +8,7 @@ import wave
 import pytest
 
 from app.services.tts import lab_timing
-from app.services.tts.lab_stream import pcm_packet, phrase_batch_size, speech_phrases
+from app.services.tts.stream import pcm_packet, phrase_batch_size, speech_phrases
 from tests.conftest import create_org, register_and_login
 
 

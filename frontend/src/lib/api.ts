@@ -143,3 +143,33 @@ export function uploadWithProgress(
     xhr.send(file);
   });
 }
+
+
+/**
+ * An authenticated request whose body is read as a stream (NDJSON speech).
+ * The JSON client above buffers and parses; this hands the Response back
+ * untouched, after the same one-shot token refresh on a 401.
+ */
+export async function fetchStream(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
+  const attempt = () => {
+    const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/x-ndjson" };
+    const tokens = getTokens();
+    if (tokens) headers.Authorization = `Bearer ${tokens.access_token}`;
+    return fetch(`${BASE}${path}`, { method: "POST", headers, body: JSON.stringify(body), signal });
+  };
+  let response = await attempt();
+  if (response.status === 401 && (await tryRefresh())) response = await attempt();
+  if (!response.ok) {
+    let detail = response.statusText;
+    let code = "http_error";
+    try {
+      const parsed = await response.json();
+      detail = parsed.detail ?? detail;
+      code = parsed.code ?? code;
+    } catch {
+      /* not JSON */
+    }
+    throw new ApiError(response.status, code, detail);
+  }
+  return response;
+}

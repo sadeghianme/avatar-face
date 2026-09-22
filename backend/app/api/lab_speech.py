@@ -18,7 +18,7 @@ from app.core.errors import RateLimit429, Validation422
 from app.db import get_session_factory
 from app.schemas.tts import CueOut
 from app.services.tts import lab_timing
-from app.services.tts.lab_stream import pcm_packet, phrase_batch_size, speech_phrases
+from app.services.tts.stream import pcm_packet, phrase_batch_size, speech_phrases
 from app.services.tts.registry import synthesize_cached
 from app.services.usage import check_usage_limit, record_synthesis
 
