@@ -4,7 +4,7 @@ import { continuousMouthMix, dampMouth, MouthMotion } from "../continuous-mouth-
 import { REFERENCE_POSES } from "../reference-mouth-model";
 import { PERFORMANCE_POSES, validatePerformanceManifest } from "../photographic-performance-model";
 import { validateOralRig } from "../photographic-oral-surface";
-import { ContinuousMouth, CORNER_EASE } from "../continuous-mouth";
+import { ContinuousMouth, CORNER_EASE, PROTRUSION } from "../continuous-mouth";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
 
 const interpolate = (a: BlendWeights, b: BlendWeights, t: number) => Object.fromEntries(
@@ -96,6 +96,27 @@ describe("continuous mouth movement", () => {
     expect(ee[291].x - ee[61].x).toBeGreaterThan(neutralWidth * 0.98);
     // And the centre of the lips is untouched by a lateral ease.
     expect(Math.abs(oo[13].x - neutral[13].x)).toBeLessThan(neutralWidth * 0.06);
+  });
+  it("brings the lips forward on rounded vowels: a small mound, centred, gone by the cheeks", () => {
+    const manifest = validatePerformanceManifest(JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8")));
+    const neutral = manifest.poses[0].points.map(([x, y]) => ({ x: x * 1000, y: y * 1000 }));
+    const settle = (weights: BlendWeights) => {
+      const mouth = new ContinuousMouth(manifest);
+      const points = neutral.map(p => ({ ...p }));
+      for (let i = 0; i < 400; i++) mouth.deform(points, neutral, {} as Rig, weights);
+      return points;
+    };
+    const width = neutral[291].x - neutral[61].x;
+    const oo = settle(REFERENCE_POSES.oo.weights);
+    const ee = settle(REFERENCE_POSES.ee.weights);
+    // Outer lower lip (17) sits below the mouth centre: the mound pushes it
+    // further down on OO than the retargeted pose alone would, and EE is untouched
+    // by any mound.
+    const cheek = 123; // well outside the lip region
+    expect(Math.hypot(oo[cheek].x - neutral[cheek].x, oo[cheek].y - neutral[cheek].y)).toBeLessThan(width * 0.01);
+    expect(Math.hypot(ee[cheek].x - neutral[cheek].x, ee[cheek].y - neutral[cheek].y)).toBeLessThan(width * 0.01);
+    expect(PROTRUSION).toBeGreaterThan(0);
+    expect(PROTRUSION).toBeLessThanOrEqual(0.08); // 0.1 swelled like a sting
   });
   it("rejects malformed mouth-detail rigs", () => {
     for (const value of [null, {}, { points: [] }, { points: Array(478).fill([NaN, 0]) }]) {

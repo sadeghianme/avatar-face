@@ -101,9 +101,37 @@ export function rotateJaw(p: Vec3, amount: number): Vec3 {
     z: -0.65 - y * Math.sin(angle) + z * Math.cos(angle) };
 }
 
+/**
+ * The tongue tip. Not `surface()`: that generator keeps full width on every
+ * row because teeth are rectangular, so a tongue built from it rendered as a
+ * flat bar between the teeth on TH. This tapers with cos(v) into a rounded
+ * tip, slightly flatter than round, and with the faint midline groove a
+ * tongue has.
+ */
 export function createTongue(lift: number, jaw: number): OralSurface {
   const center = rotateJaw({ x: 0, y: 0.15 - lift * 0.12, z: -0.2 + lift * 0.16 }, jaw);
-  return surface(center, { x: 0.18, y: 0.055, z: 0.085 }, "tongue");
+  const radius = { x: 0.16, y: 0.062, z: 0.09 };
+  const vertices: Vec3[] = [];
+  const triangles: [number, number, number][] = [];
+  const cols = 10, rows = 6;
+  for (let row = 0; row <= rows; row++) {
+    const v = -Math.PI / 2 + Math.PI * row / rows;
+    const taper = Math.pow(Math.max(0, Math.cos(v)), 0.55);
+    for (let col = 0; col <= cols; col++) {
+      const u = -Math.PI / 2 + Math.PI * col / cols;
+      const groove = 1 - 0.12 * Math.exp(-((Math.sin(u) / 0.22) ** 2));
+      vertices.push({
+        x: center.x + radius.x * Math.sin(u) * taper,
+        y: center.y + radius.y * Math.sin(v),
+        z: center.z + radius.z * Math.cos(u) * Math.cos(v) * groove,
+      });
+      if (row < rows && col < cols) {
+        const a = row * (cols + 1) + col, b = a + cols + 1;
+        triangles.push([a, a + 1, b], [a + 1, b + 1, b]);
+      }
+    }
+  }
+  return { vertices, triangles, material: "tongue" };
 }
 
 export function projectOralPoint(p: Vec3, left: MouthPoint, right: MouthPoint): MouthPoint {
