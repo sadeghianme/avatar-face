@@ -303,7 +303,7 @@ export function emphasisBeats(cues: Cue[]): Beat[] {
   return beats;
 }
 
-interface Point {
+export interface Point {
   x: number;
   y: number;
 }
@@ -626,6 +626,32 @@ export class AvatarEngine {
     this.sampleLipColour();
     this.sampleLashColour();
     this.subdivideMouthRegion();
+  }
+
+  /**
+   * Stop or restart drawing, e.g. when the avatar scrolls out of view.
+   *
+   * Browsers already stop animation frames in hidden tabs; this covers a
+   * visible tab where the canvas is simply off-screen, which otherwise costs
+   * a full render every frame for nothing. Time does not jump on resume: the
+   * tick clamps its step, so the motion carries on rather than lurching.
+   */
+  setActive(active: boolean): void {
+    if (this.destroyed) return;
+    if (!active) {
+      cancelAnimationFrame(this.raf);
+      this.raf = 0;
+    } else if (!this.raf) {
+      this.raf = requestAnimationFrame(this.loop);
+    }
+  }
+
+  /**
+   * The 478 face landmarks at rest, in canvas pixels. Read-only, for
+   * overlays drawn in step with the face (a scan effect, a debug view).
+   */
+  landmarks(): ReadonlyArray<Readonly<Point>> {
+    return this.basePoints.slice(0, 478);
   }
 
   destroy(): void {

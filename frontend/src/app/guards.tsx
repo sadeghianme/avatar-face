@@ -1,8 +1,9 @@
-import { ReactNode } from "react";
+import { ReactNode, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useLocation } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/providers/auth";
 
 /** Already signed in? An auth page has nothing to offer — go to the app. */
@@ -24,5 +25,18 @@ export function Protected({ children }: { children: ReactNode }) {
     );
   }
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
-  return <AppShell>{children}</AppShell>;
+  // Screens are code-split: the shell stays on screen while one loads.
+  return (
+    <AppShell>
+      <Suspense
+        fallback={
+          <div className="flex min-h-[50vh] items-center justify-center text-gray-400">
+            <Spinner className="h-5 w-5" />
+          </div>
+        }
+      >
+        {children}
+      </Suspense>
+    </AppShell>
+  );
 }

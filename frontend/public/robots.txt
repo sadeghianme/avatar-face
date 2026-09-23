@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+# The dashboard and people's share links are not for search engines.
+Disallow: /app
+Disallow: /avatars/
+Disallow: /voices
+Disallow: /members
+Disallow: /api-keys
+Disallow: /settings
+Disallow: /simulator
+Disallow: /s/
+Disallow: /invite/
+Disallow: /reset-password

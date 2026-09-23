@@ -7,7 +7,9 @@ src/
 ├── features/           one folder per product area (see below)
 ├── components/         shared UI only
 │   ├── ui/             Icon, Spinner, StatusBadge — used by 3+ features
-│   └── layout/         AppShell, OrgSwitcher, LanguageMenu
+│   ├── layout/         AppShell, OrgSwitcher, LanguageMenu
+│   └── brand/          DemoAvatar: the live product avatar on landing + sign-in
+├── assets/             media imported by code — hashed names, cached forever
 ├── providers/          React contexts: auth, org, theme
 ├── lib/                framework-free code: api client, types, image, recorder
 ├── i18n/               i18next init + locales/<lang>/<feature>.ts
@@ -54,6 +56,14 @@ Enforced by `npm run check`, which runs before every build:
   needs it, export it from the owner's `index.ts` instead.
 - **Strings** go in the feature file that uses them; `common.ts` is for keys
   used by more than one feature or by shared components.
+
+## Static files: `assets/` or `public/`?
+
+Import it from `src/assets/` when code uses it (the demo portrait, its rig,
+its voices): Vite fingerprints the name, so nginx can cache it for a year and
+a new version is a new URL. Put it in `public/` only when something outside
+the bundle needs a fixed URL (favicons, `og.jpg`, `robots.txt`); those are
+served `no-cache`.
 
 ## Where things deliberately are NOT
 

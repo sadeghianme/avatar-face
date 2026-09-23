@@ -7,10 +7,35 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/brand/favicon-192.png" />
     <link rel="apple-touch-icon" href="/brand/favicon-192.png" />
     <meta name="theme-color" content="#f97316" />
-    <meta name="description" content="Liveface turns a portrait into a real-time talking avatar." />
-    <title>Liveface — Talking avatars for any website</title>
+    <script>
+      // Theme before first paint (same rule as providers/theme.tsx): a saved
+      // choice wins, otherwise follow the system. Avoids a white flash.
+      try {
+        var t = localStorage.getItem("liveface.theme");
+        if (t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches)) {
+          document.documentElement.classList.add("dark");
+        }
+      } catch (e) {}
+    </script>
+    <title>Liveface — turn one photo into a talking avatar for your website</title>
+    <meta name="description" content="Liveface turns a single portrait into a real-time talking avatar: accurate lip-sync, natural voices in 13 languages, and one script tag to put it on any website." />
+    <link rel="canonical" href="https://avatar.mehdisadeghian.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Liveface" />
+    <meta property="og:url" content="https://avatar.mehdisadeghian.com/" />
+    <meta property="og:title" content="Liveface — turn one photo into a face that talks" />
+    <meta property="og:description" content="Real-time lip-sync, natural voices in 13 languages, and one script tag to put a talking avatar on any website." />
+    <meta property="og:image" content="https://avatar.mehdisadeghian.com/og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A portrait with a face mesh traced over it, next to the words: Turn one photo into a face that talks." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Liveface — turn one photo into a face that talks" />
+    <meta name="twitter:description" content="Real-time lip-sync, natural voices in 13 languages, and one script tag to put a talking avatar on any website." />
+    <meta name="twitter:image" content="https://avatar.mehdisadeghian.com/og.jpg" />
   </head>
   <body>
+    <noscript>Liveface needs JavaScript to show its talking avatars.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
