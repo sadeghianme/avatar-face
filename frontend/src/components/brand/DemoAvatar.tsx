@@ -155,7 +155,9 @@ export function DemoAvatar({
       director.setPhase("ready");
       window.setTimeout(() => !disposed && director.start(0), scanning ? 600 : 150);
     };
-    start().catch(() => undefined);
+    start().catch(() => {
+      if (!disposed) director?.setPhase("unavailable");
+    });
 
     return () => {
       disposed = true;

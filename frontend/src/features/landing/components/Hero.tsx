@@ -110,16 +110,18 @@ function HeroStage() {
           className="w-full"
         />
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-4">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-black/45 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-white backdrop-blur-md">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 motion-safe:animate-ping" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
+        {demo.phase !== "unavailable" && (
+          <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-4">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-black/45 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-white backdrop-blur-md">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 motion-safe:animate-ping" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
+              </span>
+              {t("stageLive")}
             </span>
-            {t("stageLive")}
-          </span>
-          <SoundToggle director={director} soundOn={demo.soundOn} />
-        </div>
+            <SoundToggle director={director} soundOn={demo.soundOn} />
+          </div>
+        )}
 
         <Caption demo={demo} director={director} />
       </div>
@@ -151,6 +153,8 @@ function Caption({ demo, director }: { demo: DemoSnapshot; director: DemoDirecto
   const { t } = useTranslation();
   const line = demo.line;
   const gloss = line ? t(`demoGloss${demo.lineIndex + 1}`) : "";
+  // The engine could not load: the still portrait speaks for itself.
+  if (demo.phase === "unavailable") return null;
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/40 to-transparent px-5 pb-5 pt-20" aria-live="off">
       <div className="flex items-center gap-2.5">

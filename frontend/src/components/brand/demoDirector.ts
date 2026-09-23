@@ -28,7 +28,8 @@ export interface DemoLine {
   words: DemoWord[];
 }
 
-export type DemoPhase = "loading" | "scanning" | "ready" | "speaking" | "paused";
+/** `unavailable`: the engine could not load; the still portrait stays. */
+export type DemoPhase = "loading" | "scanning" | "ready" | "speaking" | "paused" | "unavailable";
 
 export interface DemoSnapshot {
   phase: DemoPhase;

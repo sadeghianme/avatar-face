@@ -75,6 +75,8 @@ export const common = {
   createOrg: "Create organization",
   newOrgName: "New organization name",
   loading: "Loading…",
+  errorPageBody: "We couldn't load this page. Reloading usually fixes it.",
+  reloadPage: "Reload the page",
   error: "Something went wrong",
   mine: "Created by me",
 } as const;
