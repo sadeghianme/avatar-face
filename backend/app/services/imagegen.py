@@ -32,7 +32,9 @@ logger = logging.getLogger("liveface.imagegen")
 SOURCE_MAX_EDGE = 1024
 SOURCE_QUALITY = 88
 
-MODEL = "gemini-2.5-flash-image"
+# gemini-2.5-flash-image shuts down on 2026-10-02; this is its stable
+# (non-preview) successor. https://ai.google.dev/gemini-api/docs/deprecations
+MODEL = "gemini-3.1-flash-image"
 API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
 TIMEOUT_SECONDS = 90
 
@@ -254,7 +256,9 @@ async def verify_key() -> dict:
 # the batch.
 
 OPENAI_IMAGES_URL = "https://api.openai.com/v1"
-OPENAI_IMAGE_MODEL = "gpt-image-1"
+# gpt-image-1 shuts down on 2026-10-23; same Images API, same response shape.
+# https://developers.openai.com/api/docs/deprecations
+OPENAI_IMAGE_MODEL = "gpt-image-2"
 
 # Alibaba's international DashScope endpoint. NOTE: unverified against the
 # live service until a key exists — same policy as the Avaturn integration,
