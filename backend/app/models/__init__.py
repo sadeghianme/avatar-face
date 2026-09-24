@@ -1,5 +1,6 @@
 from app.models.api_key import ApiKey, generate_api_key, hash_api_key
 from app.models.avatar import Avatar, AvatarKind, AvatarStatus
+from app.models.consent import Consent
 from app.models.base import Base, TimestampedBase, new_id, utcnow
 from app.models.creation import Creation, CreationStatus
 from app.models.org import ROLE_RANK, Invitation, Membership, Organization, Role
@@ -15,6 +16,7 @@ __all__ = [
     "AvatarKind",
     "AvatarStatus",
     "Base",
+    "Consent",
     "Creation",
     "CreationStatus",
     "Invitation",

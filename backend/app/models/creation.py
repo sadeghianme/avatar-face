@@ -67,3 +67,13 @@ class Creation(TimestampedBase):
     # Set when finishing starts, so a repeated Finish answers with the same
     # avatar instead of making a second one.
     avatar_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Every consent a step of this creation relied on, in the order used
+    # (AI adjust, AI points, generation, and the depiction statement at
+    # finish). Copied onto the avatar.
+    consent_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # What the AI steps have spent and learned: adjust rounds and point
+    # detections used against the per-creation budget, the last adjust
+    # round's outcome, and the point finder's answers cached by image hash.
+    # Written at job admission (the budget, atomically with the job) and
+    # by the job itself; see services.creations.
+    ai_usage: Mapped[dict | None] = mapped_column(JSON, nullable=True)

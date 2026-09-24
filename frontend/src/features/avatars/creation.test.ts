@@ -8,20 +8,34 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
+  ADJUST_MODES,
+  adjustModes,
+  aiEditOf,
+  aiPointsOffer,
+  aiResultInUse,
   anchorsCurrent,
   backgroundSource,
+  CANDIDATE_REASONS,
   checkFile,
   clampRoll,
   confirmedParts,
+  cutoutIdFor,
+  cutoutOf,
   draftMarksKey,
+  DRAWN_REASONS,
   errorText,
   forgetDraftMarks,
   framingChanged,
   FULL_FRAME,
+  frameOf,
   inferStep,
   initialFraming,
+  inUse,
   isBusy,
+  isCutoutId,
+  isTransparent,
   jobFailure,
+  keepChoice,
   KNOWN_ERRORS,
   loadDraftMarks,
   marksAreGuessed,
@@ -30,11 +44,20 @@ import {
   nameFromFile,
   normalizeCrop,
   pickMarks,
+  PHOTO_CHECKS,
   pollDelay,
+  preselectedMode,
+  recommendationOf,
+  REGENERATE_REASONS,
   resolveStep,
+  roundResults,
+  roundSource,
   saveDraftMarks,
+  statementNeeded,
   stabilizeUrls,
+  TOUCHUP_REASONS,
   URL_REUSE_MS,
+  WIZARD_STEPS,
 } from "./creation.ts";
 import { LINE_ORDER, LINES } from "./lines.ts";
 
@@ -48,6 +71,16 @@ const step = (id, extra = {}) => ({
   roll: null,
   ...extra,
 });
+
+const adjustedStep = (n, extra = {}) =>
+  step(`adjusted:${n}`, {
+    from: "original",
+    adjust: {
+      mode: "touchup", style: null, model: "gemini-3.1-flash-image", generated_eyes: false, rejected: null,
+      checks: { detected: true, fit_ok: true, skin_delta_e: 1.2 },
+    },
+    ...extra,
+  });
 
 const job = (extra = {}) => ({
   id: "job1",
@@ -70,6 +103,16 @@ const anchors = (extra = {}) => ({
   ...extra,
 });
 
+const ai = (extra = {}) => ({
+  enabled: true,
+  modes: ["touchup", "stylise", "regenerate"],
+  suggested: [],
+  adjust_rounds_left: 2,
+  ai_detections_left: 1,
+  last_round: null,
+  ...extra,
+});
+
 const creation = (extra = {}) => ({
   id: "c1",
   face_type: "human",
@@ -82,6 +125,8 @@ const creation = (extra = {}) => ({
   job: job(),
   avatar_id: null,
   background_removal: { available: true, reason: null },
+  background: null,
+  ai: ai(),
   created_at: "2026-09-25T10:00:00Z",
   updated_at: "2026-09-25T10:00:00Z",
   ...extra,
@@ -276,6 +321,35 @@ describe("which step opens", () => {
     );
     assert.equal(inferStep(creation()), "frame");
   });
+  it("follows the owner's order: upload, background, AI adjust, points", () => {
+    assert.deepEqual([...WIZARD_STEPS], ["frame", "background", "adjust", "points"]);
+  });
+  it("resumes on step 3 once the background is answered or AI was asked", () => {
+    assert.equal(inferStep(creation({ background: "keep" })), "background");
+    const round = {
+      mode: "touchup", style: null, source: "original", limit_reached: false,
+      candidates: [{ step: "adjusted:0", ok: true, reason: null, generated_eyes: false }],
+    };
+    assert.equal(
+      inferStep(creation({ steps: [step("original"), adjustedStep(0)], ai: ai({ last_round: round }) })),
+      "adjust"
+    );
+    // A round that made no picture at all still has its report to read.
+    assert.equal(inferStep(creation({ ai: ai({ last_round: { ...round, candidates: [] } }) })), "adjust");
+    assert.equal(inferStep(creation({ job: job({ step: "adjust", state: "running" }) })), "adjust");
+  });
+  it("keeps the owner on step 3 while a version they took is being cut out", () => {
+    const taken = creation({
+      current: "adjusted:0",
+      background: "remove",
+      steps: [step("original"), step("cutout", { from: "original", cutout: true }), adjustedStep(0)],
+      job: job({ step: "background", state: "running" }),
+    });
+    assert.equal(inferStep(taken), "adjust");
+    // Removing the photo's own background is step 2's job.
+    const own = creation({ background: "remove", job: job({ step: "background", state: "running" }) });
+    assert.equal(inferStep(own), "background");
+  });
   it("honours the step in the URL, except while the avatar is being built", () => {
     assert.equal(resolveStep(creation({ anchors: anchors() }), "background"), "background");
     assert.equal(resolveStep(creation(), "nonsense"), "frame");
@@ -401,8 +475,20 @@ describe("strings", () => {
       const keys = keysOf(lang);
       const needed = [
         ...[...KNOWN_ERRORS].map((code) => `createErr_${code}`),
-        ...["ingest", "background", "detect", "finish"].flatMap((s) => [`createJob_${s}`, `createJobDone_${s}`]),
-        ...["frame", "background", "points"].flatMap((s) => [`createStep_${s}`, `createHeading_${s}`, `createIntro_${s}`]),
+        ...["ingest", "generate", "adjust", "background", "detect", "finish"].flatMap((s) => [
+          `createJob_${s}`,
+          `createJobDone_${s}`,
+        ]),
+        ...WIZARD_STEPS.flatMap((s) => [`createStep_${s}`, `createHeading_${s}`, `createIntro_${s}`]),
+        ...[...PHOTO_CHECKS].map((code) => `photoCheck_${code}`),
+        ...ADJUST_MODES.map((mode) => `adjustMode_${mode}`),
+        ...["touchup", "stylise"].map((mode) => `adjustModeHint_${mode}`),
+        ...LINE_ORDER.map((id) => `adjustModeHint_regenerate_${id}`),
+        ...["touchup", "regenerate"].map((mode) => `adjustRecommend_${mode}`),
+        ...[...TOUCHUP_REASONS, ...REGENERATE_REASONS].map((code) => `adjustWhy_${code}`),
+        ...[...DRAWN_REASONS].map((code) => `adjustWhyDrawn_${code}`),
+        ...[...CANDIDATE_REASONS].map((code) => `adjustReason_${code}`),
+        ...["touchup", "stylise", "regenerate", "generate"].map((mode) => `aiEdited_${mode}`),
         ...LINE_ORDER.flatMap((id) => [LINES[id].summary, LINES[id].guide]),
         ...LINE_ORDER.flatMap((id) => LINES[id].marks.map((part) => `createGuessPart_${part}`)),
         ...["not_for_face_type", "segmentation_unavailable", "face_type_required"].map((r) => `createBgUnavailable_${r}`),
@@ -410,4 +496,162 @@ describe("strings", () => {
       assert.deepEqual(needed.filter((key) => !keys.has(key)), []);
     });
   }
+});
+
+describe("cut-outs", () => {
+  const steps = [
+    step("original"),
+    step("framed", { from: "original" }),
+    step("cutout", { from: "framed", cutout: true }),
+    adjustedStep(0, { from: "cutout", cutout: true }), // a touch-up of the cut-out
+    adjustedStep(1, { from: "cutout", adjust: { ...adjustedStep(1).adjust, mode: "regenerate" } }),
+    step("cutout:1", { from: "adjusted:1", cutout: true }),
+  ];
+  it("names the cut-out of each image", () => {
+    assert.equal(cutoutIdFor("framed"), "cutout");
+    assert.equal(cutoutIdFor("adjusted:7"), "cutout:7");
+    assert.ok(isCutoutId("cutout") && isCutoutId("cutout:3"));
+    assert.ok(!isCutoutId("adjusted:3") && !isCutoutId(null));
+    assert.equal(cutoutOf(creation({ steps }), "adjusted:1")?.id, "cutout:1");
+    assert.equal(cutoutOf(creation({ steps }), "adjusted:0"), null);
+    // "cutout" was cut from the framed photo, not from the original.
+    assert.equal(cutoutOf(creation({ steps }), "original"), null);
+  });
+  it("counts a touch-up of a cut-out as transparent", () => {
+    assert.ok(isTransparent(steps[3]));
+    assert.ok(!isTransparent(steps[4]));
+    assert.ok(isTransparent(steps[5]));
+    assert.ok(!isTransparent(null));
+  });
+  it("finds the opaque image behind the current one", () => {
+    assert.equal(backgroundSource(creation({ steps, current: "cutout:1" }))?.id, "adjusted:1");
+    // Through the touch-up and its cut-out, as "Keep original" goes.
+    assert.equal(backgroundSource(creation({ steps, current: "adjusted:0" }))?.id, "framed");
+    assert.equal(backgroundSource(creation({ steps, current: "adjusted:1" }))?.id, "adjusted:1");
+  });
+  it("shares a pixel frame between an image and its cut-out, never with an AI result", () => {
+    assert.equal(frameOf(creation({ steps, current: "cutout:1" })), "adjusted:1");
+    assert.equal(frameOf(creation({ steps, current: "cutout" })), "framed");
+    assert.equal(frameOf(creation({ steps, current: "adjusted:0" })), "adjusted:0");
+    const marked = creation({ steps, current: "cutout:1", anchors: anchors({ image: "adjusted:1" }) });
+    assert.ok(anchorsCurrent(marked));
+    assert.ok(!anchorsCurrent({ ...marked, current: "cutout" }));
+  });
+});
+
+describe("AI adjust", () => {
+  const round = (extra = {}) => ({
+    mode: "touchup",
+    style: null,
+    source: "cutout",
+    limit_reached: false,
+    candidates: [
+      { step: "adjusted:0", ok: true, reason: null, generated_eyes: true },
+      { step: null, ok: false, reason: { code: "safety_refused", detail: "" }, generated_eyes: false },
+    ],
+    ...extra,
+  });
+  const steps = [
+    step("original"),
+    step("cutout", { from: "original", cutout: true }),
+    adjustedStep(0, { from: "cutout", cutout: true }),
+    adjustedStep(1, { from: "cutout" }),
+    step("cutout:1", { from: "adjusted:1", cutout: true }),
+  ];
+  const recommendation = (extra = {}) => ({ image: "cutout", mode: "touchup", reasons: ["eyes_closed"], ...extra });
+  const analysed = (extra = {}) =>
+    creation({
+      current: "cutout",
+      steps,
+      analysis: { checks: [], recommendation: recommendation() },
+      ai: ai({ suggested: ["touchup"] }),
+      ...extra,
+    });
+
+  it("shows a recommendation only for the image it was made on", () => {
+    assert.deepEqual(recommendationOf(analysed()), recommendation());
+    assert.equal(recommendationOf(analysed({ current: "adjusted:0" })), null);
+    assert.equal(recommendationOf(creation()), null);
+  });
+  it("pre-selects the recommended fix, and nothing when nothing needs fixing", () => {
+    assert.equal(preselectedMode(analysed()), "touchup");
+    assert.equal(preselectedMode(analysed({ ai: ai({ suggested: [] }) })), null);
+    // Not offered on this line, or AI switched off: nothing to pre-select.
+    assert.equal(preselectedMode(analysed({ ai: ai({ suggested: ["touchup"], modes: ["regenerate"] }) })), null);
+    assert.equal(preselectedMode(analysed({ ai: ai({ suggested: ["touchup"], enabled: false }) })), null);
+  });
+  it("offers the line's modes in a fixed order, none with AI off", () => {
+    assert.deepEqual(adjustModes(creation({ ai: ai({ modes: ["regenerate", "touchup"] }) })), ["touchup", "regenerate"]);
+    assert.deepEqual(adjustModes(creation({ ai: ai({ enabled: false }) })), []);
+  });
+  it("lays out the last round, pictures and refusals alike", () => {
+    const c = analysed({ ai: ai({ last_round: round() }) });
+    assert.equal(roundSource(c)?.id, "cutout");
+    const results = roundResults(c);
+    assert.equal(results.length, 2);
+    assert.equal(results[0].step?.id, "adjusted:0");
+    assert.equal(results[1].step, null);
+    // The round's "before" can be gone (a new framing drops it).
+    assert.equal(roundSource(creation({ ai: ai({ last_round: round() }) })), null);
+  });
+  it("knows which version is on screen, through its cut-out", () => {
+    const c = analysed({ current: "cutout:1" });
+    assert.equal(aiResultInUse(c)?.id, "adjusted:1");
+    assert.ok(inUse(c, "adjusted:1"));
+    assert.ok(!inUse(c, "adjusted:0"));
+    assert.equal(aiResultInUse(analysed()), null);
+    assert.equal(aiResultInUse(analysed({ current: "adjusted:0" }))?.id, "adjusted:0");
+  });
+  it("keeps my photo by choosing what the round was made from, or nothing when it is on screen", () => {
+    const withRound = (extra) => analysed({ ai: ai({ last_round: round() }), ...extra });
+    assert.equal(keepChoice(withRound({ current: "cutout" })), null);
+    assert.equal(keepChoice(withRound({ current: "adjusted:0" })), "cutout");
+    assert.equal(keepChoice(withRound({ current: "cutout:1" })), "cutout");
+    // An opaque "before" comes back as its cut-out when the background is off.
+    const opaque = (extra) =>
+      analysed({ ai: ai({ last_round: round({ source: "original" }) }), current: "cutout:1", ...extra });
+    assert.equal(keepChoice(opaque({ background: "remove" })), "cutout");
+    assert.equal(keepChoice(opaque({ background: "keep" })), "original");
+    assert.equal(keepChoice(opaque({ current: "cutout" })), null);
+    assert.equal(keepChoice(analysed()), null);
+  });
+  it("discloses an AI edit through cut-outs, and a generated original", () => {
+    const c = analysed({ current: "cutout:1" });
+    assert.deepEqual(aiEditOf(c), { mode: "touchup", model: "gemini-3.1-flash-image", generated_eyes: false });
+    assert.equal(aiEditOf(analysed()), null);
+    const generated = creation({
+      steps: [step("original", { generated: { model: "m", style: "anime", provider: "gemini" } }), step("framed", { from: "original" })],
+      current: "framed",
+    });
+    assert.deepEqual(aiEditOf(generated), { mode: "generate", model: "m", generated_eyes: false });
+  });
+});
+
+describe("AI points", () => {
+  const offer = (line, anchorsExtra = {}, aiExtra = {}) =>
+    aiPointsOffer(creation({ face_type: line, ai: ai(aiExtra) }), { detected: false, source: "template", ...anchorsExtra });
+  it("is offered where the detector cannot see: animals, and animations it missed", () => {
+    assert.equal(offer("animal"), "offer");
+    assert.equal(offer("cartoon"), "offer");
+    assert.equal(offer("cartoon", { detected: true, source: "mediapipe" }), null);
+    assert.equal(offer("human"), null);
+  });
+  it("is not offered twice, nor with AI off; says so once the look is spent", () => {
+    assert.equal(offer("animal", { source: "ai" }), null);
+    assert.equal(offer("animal", {}, { enabled: false }), null);
+    assert.equal(offer("animal", {}, { ai_detections_left: 0 }), "spent");
+  });
+});
+
+describe("the uploader's statement", () => {
+  it("is the one the server names, whatever line the creation is on now", () => {
+    assert.equal(statementNeeded(creation({ face_type: "cartoon", statement: "depiction" })), "depiction");
+    assert.equal(statementNeeded(creation({ statement: "generated_face" })), "generated_face");
+    assert.equal(statementNeeded(creation({ face_type: "human", statement: null })), null);
+  });
+  it("falls back to asking every person, and only a person, from a server that does not say", () => {
+    assert.equal(statementNeeded(creation({ face_type: "human" })), "depiction");
+    assert.equal(statementNeeded(creation({ face_type: null })), "depiction");
+    assert.equal(statementNeeded(creation({ face_type: "animal" })), null);
+  });
 });

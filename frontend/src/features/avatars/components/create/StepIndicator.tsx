@@ -6,13 +6,14 @@ import { Icon } from "@/components/ui/Icon";
 const LABELS: Record<WizardStep, string> = {
   frame: "createStep_frame",
   background: "createStep_background",
+  adjust: "createStep_adjust",
   points: "createStep_points",
 };
 
 /**
- * 1 Upload · 2 Background · 3 Points. Steps already passed are buttons
- * back to them; the ones ahead are not, since each step's Continue is what
- * saves it and a jump forward would skip that.
+ * 1 Upload · 2 Background · 3 AI adjust · 4 Points (WIZARD_STEPS). Steps
+ * already passed are buttons back to them; the ones ahead are not, since
+ * each step's Continue is what saves it and a jump forward would skip that.
  */
 export function StepIndicator({
   step,

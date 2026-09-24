@@ -6,6 +6,8 @@ import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
 import { JobProgress } from "@/features/avatars/components/create/JobProgress";
 import {
+  aiEditOf,
+  aiPointsOffer,
   anchorsCurrent,
   confirmedParts,
   currentStep,
@@ -31,7 +33,10 @@ import {
   type FaceMarks,
   type FitReason,
 } from "@/features/avatars/face-marks";
+import type { ConsentRecord, ConsentScope } from "@/features/avatars/consent";
+import { statementNeeded } from "@/features/avatars/creation";
 import type { ActionError } from "@/features/avatars/hooks/useCreation";
+import type { WithAi } from "@/features/avatars/hooks/useConsent";
 import { LINES } from "@/features/avatars/lines";
 import { SpeakPanel } from "@/features/voices";
 import { Icon } from "@/components/ui/Icon";
@@ -61,7 +66,7 @@ type Run = <T>(
 ) => Promise<{ ok: true; result: T } | { ok: false; error: ActionError }>;
 
 /**
- * Step 3: place the points, watch the face talk, finish.
+ * Step 4: place the points, watch the face talk, finish.
  *
  * Opens by detecting the face on the current image (a job) unless the
  * creation already has marks for it. Then the marks, pre-filled, and a
@@ -79,6 +84,16 @@ type Run = <T>(
  * Marks placed so far are kept for this tab (creation.DraftMarks) until the
  * avatar is built: stepping back, reloading, or a finish a restart
  * interrupted reopens the editor on them, not on the guess.
+ *
+ * Where the detector cannot see (an animal; an animation MediaPipe finds
+ * nothing on), "Find the points with AI" asks the vision model for them,
+ * after the third-party AI statement. Its points are a better guess, not a
+ * detection: the owner still confirms every part. An avatar made from a
+ * person's photo (on any line: a stylised photo is still that person)
+ * needs the uploader's statement ticked before it is built, and one made
+ * from words the statement that it is no real person; the server says
+ * which (`creation.statement`). It is recorded for this creation at the
+ * moment of finishing and sent with it.
  */
 export function PointsStep({
   orgId,
@@ -86,6 +101,8 @@ export function PointsStep({
   busy,
   run,
   refetch,
+  withAi,
+  recordConsent,
   defaultName,
   onBack,
   onFocusLost,
@@ -95,6 +112,8 @@ export function PointsStep({
   busy: string | null;
   run: Run;
   refetch: () => unknown;
+  withAi: WithAi;
+  recordConsent: (scope: ConsentScope, creationId?: string) => Promise<ConsentRecord>;
   defaultName: string;
   onBack: () => void;
   /** Put focus somewhere sensible (the step heading): the control that had
@@ -198,6 +217,8 @@ export function PointsStep({
       busy={busy}
       run={run}
       refetch={refetch}
+      withAi={withAi}
+      recordConsent={recordConsent}
       name={name}
       onName={setName}
       onBack={onBack}
@@ -213,6 +234,8 @@ function PointsEditor({
   busy,
   run,
   refetch,
+  withAi,
+  recordConsent,
   name,
   onName,
   onBack,
@@ -224,6 +247,8 @@ function PointsEditor({
   busy: string | null;
   run: Run;
   refetch: () => unknown;
+  withAi: WithAi;
+  recordConsent: (scope: ConsentScope, creationId?: string) => Promise<ConsentRecord>;
   name: string;
   onName: (name: string) => void;
   onBack: () => void;
@@ -297,6 +322,13 @@ function PointsEditor({
   }, [marks, anchors.id, base]);
 
   const oneClick = line.oneClick && anchors.validation.one_click && !edited;
+  // The uploader's statement, when the server says the face needs one: it
+  // refuses finish without it (403 consent_required). It is recorded at the
+  // moment of finishing, for this creation, so it names the text that was
+  // on screen and the face it was about.
+  const statementScope = statementNeeded(creation);
+  const needsStatement = statementScope !== null;
+  const [statement, setStatement] = useState(false);
   const guessed = marksAreGuessed(anchors, line.oneClick);
   const confirmed = confirmedParts(line.marks, moved, ticked);
   const unplaced = guessed ? line.marks.filter((part) => !confirmed.includes(part)) : [];
@@ -307,15 +339,20 @@ function PointsEditor({
     setMissing([]);
     const outcome = await run(
       "finish",
-      () =>
-        api.post<FinishResult>(`${base}/finish`, {
+      async () => {
+        // Recorded now, under the words on screen, and only for this
+        // finish: a retry after a failure records it again.
+        const consentId = statementScope ? (await recordConsent(statementScope, creation.id)).id : undefined;
+        return api.post<FinishResult>(`${base}/finish`, {
           name: name.trim(),
           anchors_id: anchors.id,
+          ...(consentId ? { consent_id: consentId } : {}),
           // One click sends nothing: the server uses the marks it detected.
           // A guess sends only what the owner placed or ticked (all of it,
           // or the button is held); corrections of a detection send it all.
           ...(oneClick ? {} : { marks: guessed ? pickMarks(marks, confirmed) : marks }),
-        }),
+        });
+      },
       (result) => result.creation
     );
     if (outcome.ok) return;
@@ -329,6 +366,14 @@ function PointsEditor({
   };
 
   const redetect = () => void run("detect", () => api.post<Creation>(`${base}/detect`));
+  const aiOffer = aiPointsOffer(creation, anchors);
+  const findWithAi = () =>
+    void run("detect", () =>
+      withAi(t("createAiPoints"), (consentId) =>
+        api.post<Creation>(`${base}/detect`, { use_ai: true, consent_id: consentId })
+      )
+    );
+  const aiEdit = aiEditOf(creation);
 
   const reasonText = (reason: FitReason) => {
     const key = FIT_REASON_LABELS[reason.code];
@@ -352,6 +397,46 @@ function PointsEditor({
     <div className="space-y-5">
       <p className="text-sm text-gray-600 dark:text-gray-300">{t(line.guide)}</p>
       <p className="text-xs text-gray-500 dark:text-gray-400">{t("markFaceKeys")}</p>
+
+      {aiEdit && (
+        <p className="flex items-start gap-2 rounded-xl bg-brand-50 p-3 text-sm text-brand-800 dark:bg-brand-500/10 dark:text-brand-200">
+          <Icon name="sparkles" className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            {t(aiEdit.mode === "generate" ? "createAiMadeNote" : "createAiEditedNote")}
+            {aiEdit.generated_eyes && <> {t("createAiEyesNote")}</>}
+          </span>
+        </p>
+      )}
+
+      {anchors.source === "ai" && (
+        <p className="rounded-xl border border-gray-200 p-3 text-sm text-gray-700 dark:border-line dark:text-gray-300">
+          {t("createAiPointsPlaced")}
+        </p>
+      )}
+
+      {aiOffer && (
+        <div className="rounded-xl border border-gray-200 p-3 dark:border-line">
+          {aiOffer === "offer" ? (
+            <>
+              <button
+                type="button"
+                className="btn-secondary min-h-11"
+                onClick={findWithAi}
+                disabled={busy !== null || working}
+                aria-describedby="ai-points-hint"
+              >
+                {busy === "detect" ? <Spinner className="h-4 w-4" /> : <Icon name="sparkles" className="h-4 w-4" />}
+                {t("createAiPoints")}
+              </button>
+              <p id="ai-points-hint" className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                {edited || ticked.length > 0 ? t("createAiPointsReplaces") : t("createAiPointsHint")}
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-gray-500 dark:text-gray-400">{t("createAiPointsSpent")}</p>
+          )}
+        </div>
+      )}
 
       {guessed && (
         <fieldset className="rounded-xl border border-gray-200 p-3 dark:border-line">
@@ -502,6 +587,18 @@ function PointsEditor({
         </p>
       )}
 
+      {needsStatement && (
+        <label className="flex max-w-2xl cursor-pointer items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"
+            checked={statement}
+            onChange={(e) => setStatement(e.target.checked)}
+          />
+          <span>{t(statementScope === "generated_face" ? "createGeneratedFaceStatement" : "createDepictionStatement")}</span>
+        </label>
+      )}
+
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" className="btn-secondary min-h-11" onClick={onBack} disabled={busy !== null}>
           {t("createBack")}
@@ -510,7 +607,7 @@ function PointsEditor({
           type="button"
           className="btn-primary min-h-11 px-5"
           onClick={() => void finish()}
-          disabled={busy !== null || working || blocked || unplaced.length > 0 || !name.trim()}
+          disabled={busy !== null || working || blocked || unplaced.length > 0 || !name.trim() || (needsStatement && !statement)}
           aria-describedby="finish-hint"
         >
           {busy === "finish" ? <Spinner className="h-4 w-4" /> : <Icon name="check" className="h-4 w-4" strokeWidth={2} />}
@@ -521,7 +618,9 @@ function PointsEditor({
             ? t("createFixFirst")
             : unplaced.length > 0
               ? t("createPlaceFirst")
-              : oneClick
+              : needsStatement && !statement
+                ? t("createDepictionFirst")
+                : oneClick
                 ? t("createLooksRightHint")
                 : t("createSaveHint")}
         </span>

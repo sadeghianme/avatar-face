@@ -21,6 +21,16 @@ from app.schemas.org import (
 router = APIRouter(tags=["orgs"])
 
 
+def _with_role(org: Organization, role: Role) -> OrgWithRole:
+    return OrgWithRole(
+        id=org.id,
+        name=org.name,
+        created_at=org.created_at,
+        third_party_ai_enabled=org.third_party_ai_enabled,
+        role=role,
+    )
+
+
 @router.post("/orgs", response_model=OrgWithRole, status_code=201)
 async def create_org(body: OrgCreate, user: CurrentUser, db: DB) -> OrgWithRole:
     org = Organization(name=body.name)
@@ -28,7 +38,7 @@ async def create_org(body: OrgCreate, user: CurrentUser, db: DB) -> OrgWithRole:
     await db.flush()
     db.add(Membership(user_id=user.id, org_id=org.id, role=Role.owner))
     await db.commit()
-    return OrgWithRole(id=org.id, name=org.name, created_at=org.created_at, role=Role.owner)
+    return _with_role(org, Role.owner)
 
 
 @router.get("/orgs", response_model=list[OrgWithRole])
@@ -41,26 +51,29 @@ async def list_my_orgs(user: CurrentUser, db: DB) -> list[OrgWithRole]:
             .order_by(Organization.created_at)
         )
     ).all()
-    return [
-        OrgWithRole(id=org.id, name=org.name, created_at=org.created_at, role=role)
-        for org, role in rows
-    ]
+    return [_with_role(org, role) for org, role in rows]
 
 
 @router.get("/orgs/{org_id}", response_model=OrgWithRole)
 async def get_org(ctx: OrgMember) -> OrgWithRole:
-    return OrgWithRole(
-        id=ctx.org.id, name=ctx.org.name, created_at=ctx.org.created_at, role=ctx.role
-    )
+    return _with_role(ctx.org, ctx.role)
 
 
 @router.patch("/orgs/{org_id}", response_model=OrgWithRole)
-async def rename_org(body: OrgUpdate, ctx: OrgAdmin, db: DB) -> OrgWithRole:
-    ctx.org.name = body.name
+async def update_org(body: OrgUpdate, ctx: OrgAdmin, db: DB) -> OrgWithRole:
+    """Rename the organization, or switch third-party AI on or off.
+
+    Admins and owners only. Turning third-party AI off takes effect on the
+    next request: every step that would send a photo to Google is refused
+    (403 third_party_ai_disabled), including ones a member already agreed
+    to. Jobs already running finish; they were admitted while it was on.
+    """
+    if body.name is not None:
+        ctx.org.name = body.name
+    if body.third_party_ai_enabled is not None:
+        ctx.org.third_party_ai_enabled = body.third_party_ai_enabled
     await db.commit()
-    return OrgWithRole(
-        id=ctx.org.id, name=ctx.org.name, created_at=ctx.org.created_at, role=ctx.role
-    )
+    return _with_role(ctx.org, ctx.role)
 
 
 # --- Members ---
@@ -258,6 +271,4 @@ async def accept_invitation(token: str, user: CurrentUser, db: DB) -> OrgWithRol
         await db.execute(select(Organization).where(Organization.id == invitation.org_id))
     ).scalar_one()
     await db.commit()
-    return OrgWithRole(
-        id=org.id, name=org.name, created_at=org.created_at, role=invitation.role
-    )
+    return _with_role(org, invitation.role)

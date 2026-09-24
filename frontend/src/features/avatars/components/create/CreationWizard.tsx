@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
+import { AdjustStep } from "@/features/avatars/components/create/AdjustStep";
 import { BackgroundStep } from "@/features/avatars/components/create/BackgroundStep";
 import { ActionErrorNote } from "@/features/avatars/components/create/JobProgress";
 import { PointsStep } from "@/features/avatars/components/create/PointsStep";
@@ -19,25 +20,28 @@ import {
   type Framing,
   type WizardStep,
 } from "@/features/avatars/creation";
+import { consentProblem } from "@/features/avatars/consent";
 import {
   creationKey,
   draftsKey,
   useCreation,
   useCreationActions,
 } from "@/features/avatars/hooks/useCreation";
+import { useConsent } from "@/features/avatars/hooks/useConsent";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, ApiError } from "@/lib/api";
 import type { FaceType } from "@/lib/types";
 
-// The name typed nowhere yet: the upload's file name, kept for this tab so
-// a reload on step 3 still offers it. A convenience only; step 3 asks.
+// The name typed nowhere yet: the upload's file name (or the one given
+// under "Other ways"), kept for this tab so a reload on the points step
+// still offers it. A convenience only; the points step asks.
 const NAME_KEY = (id: string) => `liveface.creationName.${id}`;
 
-function rememberName(id: string, name: string): void {
+export function rememberCreationName(id: string, name: string): void {
   try {
     sessionStorage.setItem(NAME_KEY(id), name);
   } catch {
-    // storage blocked: step 3 falls back to a default name
+    // storage blocked: the points step falls back to a default name
   }
 }
 
@@ -52,11 +56,13 @@ function recalledName(id: string): string | null {
 const HEADINGS: Record<WizardStep, string> = {
   frame: "createHeading_frame",
   background: "createHeading_background",
+  adjust: "createHeading_adjust",
   points: "createHeading_points",
 };
 
 /**
- * The creation wizard: 1 Upload + frame, 2 Background, 3 Points.
+ * The creation wizard: 1 Upload + frame, 2 Background, 3 AI adjust,
+ * 4 Points (the owner's order; creation.WIZARD_STEPS).
  *
  * The creation's id is in the URL (/avatars/new/:id) and the step in the
  * query (?step=points), so a reload, a shared tab or the browser's Back
@@ -74,6 +80,11 @@ const HEADINGS: Record<WizardStep, string> = {
  *
  * Focus moves to the step's heading on every step change, and job progress
  * is announced from one live region that is always mounted.
+ *
+ * Every step that sends the picture to Google needs the member's
+ * third-party AI statement (useConsent): step 3 asks for it inline, the
+ * points step through the dialog rendered here, once, for all of them.
+ * It is asked once per member and wording; the server remembers it.
  */
 export function CreationWizard({ orgId, creationId }: { orgId: string; creationId?: string }) {
   const { t } = useTranslation();
@@ -82,6 +93,7 @@ export function CreationWizard({ orgId, creationId }: { orgId: string; creationI
   const [params] = useSearchParams();
   const { creation, error: loadError, isLoading, refetch, apply } = useCreation(orgId, creationId);
   const { busy, error, setError, run } = useCreationActions(apply, refetch);
+  const consent = useConsent(orgId);
   const base = `/orgs/${orgId}/creations/${creationId}`;
 
   const step: WizardStep = creation ? resolveStep(creation, params.get("step")) : "frame";
@@ -123,7 +135,7 @@ export function CreationWizard({ orgId, creationId }: { orgId: string; creationI
   }, [job?.id, job?.state, t]);
 
   const created = (next: Creation, file: File) => {
-    rememberName(next.id, nameFromFile(file.name));
+    rememberCreationName(next.id, nameFromFile(file.name));
     queryClient.setQueryData(creationKey(orgId, next.id), next);
     void queryClient.invalidateQueries({ queryKey: draftsKey(orgId) });
     navigate(`/avatars/new/${next.id}`, { state: { uploaded: true } });
@@ -157,7 +169,24 @@ export function CreationWizard({ orgId, creationId }: { orgId: string; creationI
     goTo("background");
   };
 
-  const retry = () => void run("retry", () => api.post<Creation>(`${base}/retry`));
+  // A job that sends pixels out (adjust, AI points, generating from a
+  // photo) is retried on the retrying member's own consent: the one it was
+  // started with may be a colleague's. Refused for that, the member is
+  // asked (or their remembered consent is used) and it is tried again;
+  // "Not now" leaves the job as it was.
+  const retry = () =>
+    void run("retry", async () => {
+      try {
+        return await api.post<Creation>(`${base}/retry`);
+      } catch (err) {
+        const problem = err instanceof ApiError ? consentProblem(err.code, err.body) : null;
+        if (problem?.kind !== "required" || problem.scope !== "third_party_ai") throw err;
+        const again = await consent.withAi(t("createRetryAi"), (consentId) =>
+          api.post<Creation>(`${base}/retry`, { consent_id: consentId })
+        );
+        return again ?? creation;
+      }
+    });
   const gone = loadError instanceof ApiError && loadError.status === 404;
   // A failed refetch keeps the creation it had (TanStack keeps `data`).
   const reconnecting = Boolean(loadError && creation && !gone);
@@ -217,8 +246,22 @@ export function CreationWizard({ orgId, creationId }: { orgId: string; creationI
         busy={busy}
         onChoose={(mode) => void run("background", () => api.post<Creation>(`${base}/background`, { mode }))}
         onRetry={retry}
-        onContinue={() => goTo("points")}
+        onContinue={() => goTo("adjust")}
         onBack={() => goTo("frame")}
+      />
+    );
+  } else if (step === "adjust") {
+    body = (
+      <AdjustStep
+        orgId={orgId}
+        creation={creation}
+        busy={busy}
+        run={run}
+        consent={consent}
+        onRetry={retry}
+        onContinue={() => goTo("points")}
+        onBack={() => goTo("background")}
+        onStartOver={() => void startOver()}
       />
     );
   } else {
@@ -229,8 +272,10 @@ export function CreationWizard({ orgId, creationId }: { orgId: string; creationI
         busy={busy}
         run={run}
         refetch={refetch}
+        withAi={consent.withAi}
+        recordConsent={consent.record}
         defaultName={recalledName(creation.id) || t("createDefaultName")}
-        onBack={() => goTo("background")}
+        onBack={() => goTo("adjust")}
         onFocusLost={focusHeading}
       />
     );
@@ -264,6 +309,7 @@ export function CreationWizard({ orgId, creationId }: { orgId: string; creationI
       <p className="sr-only" aria-live="polite" role="status">
         {reconnecting ? t("createReconnecting") : announcement}
       </p>
+      {consent.dialog}
     </div>
   );
 }

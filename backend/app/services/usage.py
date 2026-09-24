@@ -30,6 +30,16 @@ async def chars_used_this_month(db: AsyncSession, org_id: str) -> int:
 
 IMAGE_KIND = "image_generation"
 GENERATED_AVATAR_KIND = "avatar_generated"
+# A keypoint request to a vision model (services.vision_points): text out,
+# no image made, a fraction of an image's cost. Its own kind and its own
+# limit, so finding points never eats the image allowance and a loop of
+# them cannot run up a bill either.
+VISION_KIND = "vision_points"
+
+# What each image call was for, in UsageEvent.source (16 characters): the
+# same provider and kind cover an edit of someone's photo and a portrait
+# made from text, and the bill is easier to read split by purpose.
+IMAGE_CALLS = ("generate", "adjust_touchup", "adjust_stylise", "adjust_regen")
 
 
 async def _count_this_month(db: AsyncSession, org_id: str, kind: str) -> int:
@@ -61,11 +71,40 @@ async def check_image_limit(db: AsyncSession, org_id: str, incoming: int = 1) ->
         )
 
 
-async def record_generation(db: AsyncSession, org_id: str, provider: str) -> None:
+async def record_generation(
+    db: AsyncSession, org_id: str, provider: str, call: str = "dashboard"
+) -> None:
     """One row per attempt. char_count is 0 so this cannot disturb the
     character total, which is metered separately and would otherwise be
-    silently inflated by a feature that has nothing to do with speech."""
-    db.add(UsageEvent(org_id=org_id, kind=IMAGE_KIND, provider=provider, char_count=0))
+    silently inflated by a feature that has nothing to do with speech.
+    `call` names what the image was for (IMAGE_CALLS)."""
+    db.add(
+        UsageEvent(org_id=org_id, kind=IMAGE_KIND, provider=provider, char_count=0, source=call)
+    )
+    await db.commit()
+
+
+async def vision_used_this_month(db: AsyncSession, org_id: str) -> int:
+    return await _count_this_month(db, org_id, VISION_KIND)
+
+
+async def check_vision_limit(db: AsyncSession, org_id: str) -> None:
+    limit = get_settings().vision_points_monthly_limit
+    used = await vision_used_this_month(db, org_id)
+    if used + 1 > limit:
+        raise RateLimit429(
+            f"Monthly AI point-finding limit reached ({used}/{limit})",
+            code="vision_limit_reached",
+        )
+
+
+async def record_vision(db: AsyncSession, org_id: str, provider: str) -> None:
+    """One row per keypoint request the provider answered."""
+    db.add(
+        UsageEvent(
+            org_id=org_id, kind=VISION_KIND, provider=provider, char_count=0, source="detect"
+        )
+    )
     await db.commit()
 
 
@@ -129,6 +168,8 @@ async def usage_summary(db: AsyncSession, org_id: str) -> dict:
         "images_generated": images,
         "image_limit": settings.image_generation_monthly_limit,
         "avatars_generated": generated,
+        "vision_points": await vision_used_this_month(db, org_id),
+        "vision_points_limit": settings.vision_points_monthly_limit,
         "image_cost_usd": round(images * settings.image_generation_cost_usd, 2),
         "by_provider": [
             {"provider": provider, "syntheses": int(count), "chars": int(chars or 0)}

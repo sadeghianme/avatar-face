@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { Avaturn3DPanel } from "@/features/avatars/components/Avaturn3DPanel";
-import { GeneratePanel } from "@/features/avatars/components/GeneratePanel";
+import { GenerateCreation } from "@/features/avatars/components/create/GenerateCreation";
 import { Icon } from "@/components/ui/Icon";
 import { api, ApiError, uploadWithProgress } from "@/lib/api";
 import type { Avatar, StockAvatar } from "@/lib/types";
@@ -15,11 +15,14 @@ interface Created {
 }
 
 /**
- * Every way to make an avatar that is not a photo through the wizard: AI
- * generation, the stock gallery, a 3D model (a .glb file or a URL), and
- * Avaturn's 3D editor. Their behaviour is exactly what the new-avatar page
- * did before the wizard; they become creations in M4, and pass the same
- * confirmation then.
+ * Every way to make an avatar that does not start from a photo of one's
+ * own: AI generation, the stock gallery, a 3D model (a .glb file or a URL),
+ * and Avaturn's 3D editor.
+ *
+ * Generation is a creation: it starts one and continues in the wizard, so
+ * a generated face passes the same points, the same confirmation and the
+ * same statement as an upload. The others are unchanged from before the
+ * wizard.
  */
 export function OtherWays({ orgId }: { orgId: string }) {
   const { t } = useTranslation();
@@ -116,7 +119,7 @@ export function OtherWays({ orgId }: { orgId: string }) {
 
       <h3 className="mb-1 mt-8 text-lg font-medium">{t("genTitle")}</h3>
       <p className="mb-3 text-[13px] text-gray-500 dark:text-gray-400">{t("genScratchTitle")}</p>
-      <GeneratePanel orgId={orgId} />
+      <GenerateCreation orgId={orgId} name={name} />
 
       <h3 className="mb-3 mt-10 text-lg font-medium">{t("stockGallery")}</h3>
       <div className="grid grid-cols-3 gap-3 sm:grid-cols-6 sm:gap-4">

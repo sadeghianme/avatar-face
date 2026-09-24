@@ -23,6 +23,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from app.services import ai_models
+
 logger = logging.getLogger("liveface.imagegen")
 
 # The source is billed as input tokens, and a portrait carries no useful
@@ -32,10 +34,10 @@ logger = logging.getLogger("liveface.imagegen")
 SOURCE_MAX_EDGE = 1024
 SOURCE_QUALITY = 88
 
-# gemini-2.5-flash-image shuts down on 2026-10-02; this is its stable
-# (non-preview) successor. https://ai.google.dev/gemini-api/docs/deprecations
-MODEL = "gemini-3.1-flash-image"
-API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
+# Named with every other model id in services.ai_models, where startup
+# checks it still exists.
+MODEL = ai_models.IMAGE_MODEL
+API_URL = ai_models.generate_url(MODEL)
 TIMEOUT_SECONDS = 90
 
 # Everything the rig needs, stated to the model. Each line is a failure we
@@ -87,10 +89,60 @@ class ImageGenUnavailable(RuntimeError):
     """No API key configured on this instance."""
 
 
+class ImageGenRefused(RuntimeError):
+    """The provider declined on safety or policy grounds.
+
+    Separate from other failures because it must never be retried: the same
+    photo and prompt are refused the same way, and each attempt is billed.
+    `reason` is Google's own code (SAFETY, IMAGE_SAFETY, PROHIBITED_CONTENT…).
+    """
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(f"the provider declined this image ({reason})")
+
+
+class ImageGenNoImage(RuntimeError):
+    """The provider answered (HTTP 200) but sent no image and named no
+    policy reason: a text-only answer, or a finishReason such as NO_IMAGE,
+    IMAGE_OTHER or OTHER.
+
+    Separate from a transport or HTTP failure because this call WAS
+    answered, so it was billed: the photo went up and its input tokens were
+    charged. Callers meter it like any answered call, and do not ask again
+    in the same round (the same photo and prompt tend to be declined the
+    same way). `reason` is the finishReason when there was one.
+    """
+
+    answered = True
+
+    def __init__(self, reason: str | None = None):
+        self.reason = reason
+        super().__init__(f"the model returned no image ({reason or 'no reason given'})")
+
+
+# A candidate's finishReason when the answer was withheld on policy
+# grounds. (Any promptFeedback.blockReason is a refusal of the request.)
+REFUSAL_REASONS = frozenset(
+    {
+        "SAFETY",
+        "PROHIBITED_CONTENT",
+        "BLOCKLIST",
+        "SPII",
+        "RECITATION",
+        "IMAGE_SAFETY",
+        "IMAGE_PROHIBITED_CONTENT",
+        "IMAGE_RECITATION",
+    }
+)
+
+
 @dataclass
 class Generated:
     image: bytes
     mime: str
+    # The model that made it, recorded on what it made (disclosure).
+    model: str = MODEL
 
 
 def api_key() -> str | None:
@@ -107,6 +159,24 @@ def api_key() -> str | None:
 
 def configured() -> bool:
     return bool(api_key())
+
+
+def refusal_reason(body: dict) -> str | None:
+    """The policy reason a 200 response carries no image, or None.
+
+    A blocked prompt is `promptFeedback.blockReason`; a withheld answer is a
+    candidate whose `finishReason` is a policy one. Anything else (no
+    candidates, a text-only answer) is not a refusal we can name.
+    """
+    feedback = body.get("promptFeedback") or {}
+    blocked = feedback.get("blockReason")
+    if blocked and blocked != "BLOCK_REASON_UNSPECIFIED":
+        return str(blocked)
+    for candidate in body.get("candidates") or []:
+        reason = candidate.get("finishReason")
+        if reason in REFUSAL_REASONS:
+            return str(reason)
+    return None
 
 
 def shrink_source(data: bytes) -> tuple[bytes, str]:
@@ -169,6 +239,25 @@ async def generate_raw(
     return (await _request(prompt, source, source_mime)).image
 
 
+async def edit_image(prompt: str, source: bytes, source_mime: str) -> Generated:
+    """One edit of `source` from a caller-written prompt, with the model that
+    made it. For the creation wizard's AI adjust, which writes its own
+    prompts (photo_adjust) and prepares its own source: a face crop must
+    arrive at the size it was cut, not shrunk again here.
+
+    Raises ImageGenUnavailable, ImageGenRefused (never retry),
+    ImageGenNoImage (answered and billed, but no image) or RuntimeError (the
+    call was not answered).
+    """
+    return await _request(prompt, source, source_mime)
+
+
+async def create_image(prompt: str) -> Generated:
+    """One image from a caller-written prompt and no source, with the model
+    that made it (a creation generated from text)."""
+    return await _request(prompt, None, "image/png")
+
+
 async def generate(
     style: str, source: bytes | None = None, source_mime: str = "image/png", extra: str = ""
 ) -> Generated:
@@ -211,40 +300,42 @@ async def _request(prompt: str, source: bytes | None, source_mime: str) -> Gener
         logger.error("gemini rejected the request (%s): %s", response.status_code, response.text[:400])
         raise RuntimeError(f"image generation failed ({response.status_code})")
 
-    for candidate in response.json().get("candidates", []):
-        for part in candidate.get("content", {}).get("parts", []):
+    body = response.json()
+    for candidate in body.get("candidates", []):
+        for part in (candidate.get("content") or {}).get("parts", []):
             blob = part.get("inline_data") or part.get("inlineData")
             if blob and blob.get("data"):
                 return Generated(
                     base64.b64decode(blob["data"]),
                     blob.get("mime_type") or blob.get("mimeType") or "image/png",
+                    MODEL,
                 )
 
+    refused = refusal_reason(body)
+    if refused:
+        logger.info("gemini declined the image (%s)", refused)
+        raise ImageGenRefused(refused)
     # A response with only text is usually a refusal, and the text says why.
     logger.error("gemini returned no image: %s", response.text[:400])
-    raise RuntimeError("the model returned no image")
+    reasons = [c.get("finishReason") for c in body.get("candidates") or [] if c.get("finishReason")]
+    raise ImageGenNoImage(str(reasons[0]) if reasons else None)
 
 
 async def verify_key() -> dict:
     """Is the configured key usable? Cheap — no image is generated.
 
-    Fetching the model description exercises authentication and the model name
-    together, which are the two things that are actually wrong when this fails.
+    Checks every Gemini model the server calls (ai_models), not only the
+    image one: the key's test button is where an owner looks when the point
+    finder fails too. `model` stays the image model, as before.
     """
-    key = api_key()
-    if not key:
-        return {"ok": False, "error": "no API key set"}
-    try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            response = await client.get(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}",
-                headers={"x-goog-api-key": key},
-            )
-    except httpx.HTTPError as exc:
-        return {"ok": False, "error": str(exc)[:160]}
-    if response.status_code >= 300:
-        return {"ok": False, "error": f"{response.status_code}: {response.text[:160]}"}
-    return {"ok": True, "model": MODEL}
+    result = await ai_models.verify_models()
+    if not result["models"]:
+        return {"ok": False, "error": result.get("error", "no API key set")}
+    failed = [check for check in result["models"].values() if not check["ok"]]
+    out = {"ok": not failed, "model": MODEL, "models": result["models"]}
+    if failed:
+        out["error"] = f"{failed[0]['model']}: {failed[0].get('error', '')}"
+    return out
 
 
 # --- Multiple image backends ------------------------------------------------

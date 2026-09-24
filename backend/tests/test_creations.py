@@ -740,8 +740,28 @@ async def test_delete_removes_the_row_and_the_files_now(client, face):
 # --- finish -----------------------------------------------------------------------------
 
 
+async def depiction(client, headers, base: str, scope: str = "depiction") -> str:
+    """The uploader's statement by this user about this creation's face (a
+    depiction consent, by default): what the dashboard records before
+    finishing a person's avatar."""
+    from app.services.consent import TEXT_VERSIONS
+
+    org_id, creation_id = base.split("/")[2], base.split("/")[4]
+    response = await client.post(
+        f"/orgs/{org_id}/consents",
+        json={"scope": scope, "text_version": TEXT_VERSIONS[scope], "creation_id": creation_id},
+        headers=headers,
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
 async def _finish(client, headers, base, anchors_id: str, marks=None, name="Ada"):
-    payload = {"name": name, "anchors_id": anchors_id}
+    payload = {
+        "name": name,
+        "anchors_id": anchors_id,
+        "consent_id": await depiction(client, headers, base),
+    }
     if marks is not None:
         payload["marks"] = marks
     return await client.post(f"{base}/finish", json=payload, headers=headers)
@@ -792,7 +812,10 @@ async def test_a_cutout_finishes_with_its_original_and_no_room_behind_it(client,
     base, _ = await _create(client, headers, org_id)
     anchors = await _detect(client, headers, base)
     await _run(client, headers, "POST", f"{base}/background", json={"mode": "remove"})
-    finish = {"name": "Cut", "anchors_id": anchors["id"]}
+    finish = {
+        "name": "Cut", "anchors_id": anchors["id"],
+        "consent_id": await depiction(client, headers, base),
+    }
     await _run(client, headers, "POST", f"{base}/finish", json=finish)
     avatar_id = (await _get(client, headers, base))["avatar_id"]
 
@@ -1211,7 +1234,10 @@ async def test_finished_rows_do_not_count_as_drafts(client, face, monkeypatch):
     headers, org_id = await _org(client, "counted")
     base, _ = await _create(client, headers, org_id)
     anchors = await _detect(client, headers, base)
-    finish = {"name": "A", "anchors_id": anchors["id"]}
+    finish = {
+        "name": "A", "anchors_id": anchors["id"],
+        "consent_id": await depiction(client, headers, base),
+    }
     await _run(client, headers, "POST", f"{base}/finish", json=finish)
     assert (await _get(client, headers, base))["status"] == CreationStatus.finished.value
     assert (await _upload(client, headers, org_id)).status_code == 202

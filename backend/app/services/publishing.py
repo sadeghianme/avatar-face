@@ -162,6 +162,15 @@ async def publish(avatar, storage) -> dict:
         "rig_key": rig_key,
         "thumbnail_key": thumbnail_key,
         "layer_keys": layer_keys or None,
+        # What visitors are told about the picture: whether an AI made or
+        # changed it ({mode, model}, or null), and which line it is. Only
+        # snapshots published from here on carry it; older ones are served
+        # as they were (principle 6: nothing changes until its owner
+        # publishes).
+        "disclosure": {
+            "ai_edited": getattr(avatar, "ai_edited", None) or None,
+            "line": face_type,
+        },
         "published_at": datetime.now(timezone.utc).isoformat(),
     }
     previous = config_of(avatar)
@@ -294,6 +303,8 @@ async def published_view(avatar, storage) -> dict | None:
         ),
         "image_url": image_url,
         "layer_urls": layer_urls or None,
+        # Absent from snapshots published before disclosure existed.
+        "disclosure": config.get("disclosure"),
     }
 
 

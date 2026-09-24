@@ -82,6 +82,10 @@ async def public_avatar(token: str, db: DB) -> dict:
         "image_url": view["image_url"],
         "model_url": view["image_url"] if avatar.kind.value == "model3d" else None,
         "layer_urls": view["layer_urls"],
+        # Only when the published snapshot carries one (see
+        # publishing.publish); a snapshot from before has no key at all,
+        # and its visitors see exactly what they saw before.
+        **({"disclosure": view["disclosure"]} if view.get("disclosure") else {}),
     }
 
 

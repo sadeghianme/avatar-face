@@ -12,6 +12,9 @@ export interface Org {
   name: string;
   created_at: string;
   role: Role;
+  /** Owners and admins can switch off every step that sends a picture to
+   * a third-party AI (Google). Every line still works by hand without. */
+  third_party_ai_enabled?: boolean;
 }
 
 export interface Member {
@@ -85,6 +88,14 @@ export interface Avatar {
   rig_url?: string | null;
   thumbnail_url?: string | null;
   model_url?: string | null;
+  /** An AI made or changed the picture: disclosed with the avatar. */
+  ai_edited?: AiEdited | null;
+}
+
+/** How an AI was involved in an avatar's picture, as it is disclosed. */
+export interface AiEdited {
+  mode: "touchup" | "stylise" | "regenerate" | "generate";
+  model: string | null;
 }
 
 export interface Provider {
@@ -124,6 +135,9 @@ export interface Usage {
   /** Candidates actually kept as avatars. */
   avatars_generated?: number;
   image_cost_usd?: number;
+  /** AI point finding this month (a vision model call per look). */
+  vision_points?: number;
+  vision_points_limit?: number;
   month_start: string;
   chars_used: number;
   char_limit: number;

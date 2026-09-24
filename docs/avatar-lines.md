@@ -28,9 +28,10 @@ both a good upload flow and a small catalogue of ready characters.
 2. **Nothing goes live on a guess.** Every new avatar passes a "place the
    points" step (one click when the validator is happy). No route publishes a
    first build that was not confirmed. The server enforces this, not the UI.
-3. **AI prepares the photo; code animates it.** AI runs once, at creation, is
-   never pre-selected, is shown side by side with the original, and is never
-   the only copy.
+3. **AI prepares the photo; code animates it.** AI runs once, at creation,
+   when the photo check finds something to fix (recommended, with reasons;
+   the owner can keep their photo), is shown side by side with the original,
+   and is never the only copy.
 4. **Consent follows the data, not the line.** Any step that sends pixels to a
    third party requires a recorded consent naming that provider. Without it,
    every line still works by hand.
@@ -42,22 +43,38 @@ both a good upload flow and a small catalogue of ready characters.
 
 ## The creation flow
 
+The owner's order (2026-09-25): **upload → background → AI adjust → points**.
+
 ```
 1 Upload + frame   file checks, EXIF rotation, metadata stripped; crop and
-                   level pre-filled from the detected face; line suggested
-                   (face in a photo → Human, face in artwork → Animation,
-                   none → Animal), user can switch
-2 AI adjust        optional, never pre-selected, consent required:
-                   Touch up eyes & lips · Stylise (→ Animation) · Regenerate
-3 Background       Remove · Keep original (applied to the image chosen in 2)
+                   level pre-filled from the detected face (local, free);
+                   line suggested (face → Human; none → Animal or Animation),
+                   user can switch
+2 Background       Remove · Keep original
+3 AI adjust        the photo is checked locally (free): eyes closed or not on
+                   the camera, mouth open or teeth showing, head turned or
+                   tilted, face small, poor light. When something needs
+                   fixing, the fix is RECOMMENDED and pre-selected, with the
+                   reasons: Touch up eyes & lips (human), or Regenerate in the
+                   best position (frontal, level, well lit). One consent,
+                   remembered per user; then it runs, before/after, "Use this"
+                   or "Keep my photo". Nothing to fix → "No AI needed",
+                   Continue (AI stays available). Stylise (→ Animation) is
+                   always offered for human photos.
 4 Place points     pre-filled; "Looks right" when the validator passes;
-                   zoom loupe, keyboard nudging, talking preview
+                   the uploader statement for a person's photo (whatever
+                   line it ends on), or for a face generated from words
 → Avatar page      built from the confirmed points
 ```
 
-AI adjust comes before background removal: the model would otherwise see (and
-regenerate) the removed background, and removal is cheap to re-apply.
-A good photo takes two clicks: Upload → Looks right.
+AI after background removal: the model is sent the person on a flat neutral
+backdrop (never the removed background), and so is an avatar used as the
+source of a generation. A touch-up pastes eyes and lips back
+into the cut-out, so its transparency is untouched; a regenerated or
+stylised result comes back opaque on a plain backdrop, and when the owner
+chose Remove it is cut out again automatically.
+
+A photo that needs nothing takes: Upload → Continue → Continue → Looks right.
 
 Other entry points (catalogue, generate from text, stock, 3D/GLB) become
 creations too, so they pass the same consent and confirmation.
@@ -67,24 +84,44 @@ creations too, so they pass the same consent and confirmation.
 ### Creations
 
 Table `creations`: `id, org_id, created_by_id, face_type, status
-(draft|finishing|finished|expired), revision, steps (JSON: original → adjusted
-→ cutout, each {key, width, height, from}), analysis (JSON), anchors (JSON,
-bound to the image key they were placed on), consent_id, avatar_id,
-updated_at`. Choices are opaque ids (`original`, `adjusted:0`, `cutout`),
-never raw storage keys. Every query filters on `id` and `org_id`.
+(draft|finishing|finished|expired), revision, steps (JSON: original → framed
+→ cutout → adjusted:N → cutout:N, each {key, width, height, from, check};
+plus `background`, the step 2 answer), analysis (JSON, the upload's),
+anchors (JSON, bound to the image key they were placed on), consent_ids,
+avatar_id, updated_at`. Choices are opaque ids (`original`, `framed`,
+`cutout`, `adjusted:0`, `cutout:0`), never raw storage keys. Every query
+filters on `id` and `org_id`.
+
+Every image carries its photo check (`photo_analysis.check_photo`: eyes
+closed or half closed, gaze off the camera, mouth open or teeth showing,
+head turned or tilted, face small, low resolution, dark, bright, blurred)
+with a recommendation per line; `analysis.recommendation` is the current
+image's, `{image, mode: touchup | regenerate | none, reasons}`. Eyes and
+parted lips → touch-up; an open mouth (closing it raises the jaw, which a
+paste of new lips cannot follow), pose, light, size → regenerate (which
+fixes eyes and mouth too); animations → regenerate only when the face is
+not found or not frontal; animals only when a found face is not frontal
+(MediaPipe finds no face on almost any animal, and would not on a
+regenerated one either). Choosing an AI result clears the points (new pixels);
+choosing a regenerated result when the background is removed cuts it out
+again (a chained background job, `cutout:N`).
 
 | route | kind | does |
 |---|---|---|
 | `POST /creations` (file) | job | ingest (pixel cap before decode, EXIF transpose, re-encode without metadata, long edge ≤ 2048), analyse, suggest line |
 | `GET /creations?status=draft`, `GET /{id}` | – | resume list; state + job progress |
 | `PATCH /{id}` {face_type, crop, roll} | – | switch line / frame; invalidates downstream steps |
-| `POST /{id}/adjust` {mode, style?, consent_id} | job | AI adjust, ≤ 2 candidates, local checks |
-| `POST /{id}/background` {mode} | job | cut-out of the chosen image, RGB zeroed under alpha 0 |
-| `POST /{id}/choose` {choice} | – | pick a step output; clears anchors bound to another image |
-| `POST /{id}/detect` | job | the line's detector → anchors (Gemini only with consent) |
+| `POST /{id}/background` {mode} | job | cut-out of the current image, RGB zeroed under alpha 0; the answer is remembered |
+| `POST /{id}/adjust` {mode, style?, consent_id} | job | AI adjust of the current image (a cut-out on grey), ≤ 2 candidates, local checks |
+| `POST /{id}/choose` {choice} | – / job | pick a step output; clears anchors bound to another image; an opaque AI result is cut out when the background is removed (202) |
+| `POST /{id}/detect` {use_ai?, consent_id?} | job | the line's detector → anchors (Gemini only with consent) |
+| `POST /creations/generate` {face_type, style, prompt, source_avatar_id?, consent_id?} | job | the image model makes the original; the wizard continues as for an upload |
 | `POST /{id}/preview-rig` {anchors} | – | the rig finish would build, nothing saved |
 | `POST /{id}/finish` {name, anchors, image} | job | atomic draft→finishing; idempotent; builds, validates, publishes |
 | `DELETE /{id}` | – | removes row and files now |
+| `GET /consents/mine?scope=third_party_ai` | – | the caller's latest AI consent under the current wording, or null (asked once per person and wording) |
+| `POST /consents` {scope, text_version, providers?, creation_id?} | – | records a statement; one about a face names its creation and counts for it only |
+| `POST /{id}/retry` {consent_id?} | job | runs a failed job again; one that sends pixels out needs the retrying member's own consent |
 
 Races: a job records the `revision` it started from and stores its result only
 if the row is unchanged (`UPDATE … WHERE revision = :rev`). One active job per
@@ -157,12 +194,17 @@ Replace it with:
 
 ### AI adjust
 
-- Local analysis first, free: closed eyes, open mouth, tilt, small face, blur,
-  exposure. When nothing is wrong, step 2 says so and offers nothing paid.
+- Local analysis first, free: closed or half-closed eyes, gaze, open mouth or
+  teeth, turned or tilted head, small face, blur, exposure. The fix is
+  recommended and pre-selected with its reasons; when nothing is wrong,
+  step 3 says so and pushes nothing paid.
 - **Touch-up** (human): a face crop (≈1.6× face box) at 1024 px, asking for
   open eyes on the camera and relaxed closed lips, nothing else; only the eye
-  and lip regions are pasted back, aligned on stable landmarks, feathered,
-  colour- and grain-matched. Closed eyes: primary action is "use another
+  and lip regions are pasted back, aligned on stable landmarks, low-passed
+  before any shrink (the crop too), feathered short of the eyebrows,
+  colour- and grain-matched robustly (median, MAD) on a ring of skin that
+  leaves out the brows and anything outside either face. An answer whose
+  chin moved more than 4% of the face height is refused (`jaw_moved`). Closed eyes: primary action is "use another
   photo"; the AI fix is secondary and labelled as generated.
 - **Stylise** (human → animation): the existing photoreal / illustrated / anime
   / 3D styles; switches the creation's line to animation.
@@ -172,17 +214,33 @@ Replace it with:
   is not needed: the owner compares side by side).
 - Metering: every provider call is a usage event with its kind and cost; a
   per-creation budget (2 adjust rounds, 1 detection); detection cached by image
-  hash. Safety refusals are shown with a reason and never retried.
+  hash. Safety refusals are shown with a reason and never retried; an
+  answer with no image (NO_IMAGE, text only) is billed, so it is metered,
+  spends the round and is not asked again in it. The organization's switch
+  is read again before every provider call, so a job queued before it was
+  turned off sends nothing.
 - Disclosure: `ai_edited {mode, model}` on the avatar and in the published
-  config; widget and share page show a default-on "AI avatar" label.
+  config; widget and share page show a default-on "AI avatar" label (the
+  widget's turns off with `data-ai-label="off"` for a site that discloses
+  it another way; a snapshot from before disclosures shows none).
 
 ### Consent and privacy
 
 - `consents` table (append-only): org, user, scope (`third_party_ai`), provider
   list, text version, timestamp. Referenced by creation and avatar.
 - Wording is the uploader's statement: "I am this person or have their
-  permission, and they are 18 or older". Required before finishing any human
-  avatar, AI or not.
+  permission, and they are 18 or older". Required before finishing an
+  avatar made from a person's photo, AI or not, decided by where the pixels
+  came from, not by the line: a human line, or a human face the photo check
+  found on the upload, its framing or its cut-out (so a stylised or
+  line-switched photo still needs it). A face generated from words takes
+  `generated_face` instead ("made by AI, not a real, identifiable person").
+  Both are recorded for one creation (`subject_id`, migration 025) and
+  accepted for it only; neither is remembered across creations.
+- Choosing a stylised version remembers the line and background answer it
+  replaces; going back to a picture that is not stylised ("Keep my photo")
+  restores them (cutting the photo out again when the background was
+  removed), unless the owner has chosen a line since.
 - Org switch: disable third-party AI entirely.
 - Removed backgrounds: RGB set to 0 under alpha 0 (today the room stays in the
   published file). Ingest strips EXIF/GPS on every path.
@@ -216,8 +274,16 @@ Replace it with:
 
 - The stored value `cartoon` stays; only the label becomes "Animation" (no
   rename migration, no alias).
-- Migration 023: `creations`, `consents`; `avatars.upload_image_key` (the
-  untouched upload), `avatars.ai_edited`; SQLite WAL + busy timeout.
+- Migration 023: `creations`; `avatars.upload_image_key` (the untouched
+  upload); SQLite WAL + busy timeout.
+- Migration 024 (M4): `consents` (append-only; address kept only as a keyed
+  hash), `organizations.third_party_ai_enabled` (owners and admins),
+  `avatars.ai_edited` and `avatars.consent_ids`, `creations.consent_ids` and
+  `creations.ai_usage` (AI budget, last adjust round, point-finder cache).
+- Migration 025 (M4): `consents.subject_id`, the creation a statement about
+  a face was made for. The address hash needs the visitor's address:
+  production sets uvicorn's `FORWARDED_ALLOW_IPS` to the docker ranges, so
+  Caddy's X-Forwarded-For is trusted.
 
 ## Fixes to ship first (existing bugs)
 

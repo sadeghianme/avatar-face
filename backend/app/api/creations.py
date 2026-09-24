@@ -1,17 +1,28 @@
-"""The creation wizard: upload, frame, background, points, finish.
+"""The creation wizard: upload or generate, frame, background, AI adjust,
+points, finish (the owner's order, docs/avatar-lines.md "The creation flow").
 
-Heavy work (ingest, background removal, detection, finishing) is a job
-(services.jobs): the route validates, admits the job and answers 202 with
-the creation, and the client follows `job` on GET until it is done. The
-rest answers at once.
+Heavy work (ingest, generation, AI adjust, background removal, detection,
+finishing) is a job (services.jobs): the route validates, admits the job and
+answers 202 with the creation, and the client follows `job` on GET until it
+is done. The rest answers at once.
 
 Every query filters on the creation id AND the org from the path, so another
 org's creation id is simply not found. Clients name images by step id
-("original", "framed", "cutout"), never by storage key.
+("original", "framed", "cutout", "adjusted:N", "cutout:N"), never by storage
+key.
 
-The staging routes (api.staging) and /avatars/from-candidate still serve
-generation, AI restyle and the stock gallery until those become creations
-too (M4); nothing here calls them.
+Step 3's recommendation (`analysis.recommendation`) is the photo check of
+the CURRENT image on the creation's line, so it changes whenever the image
+does: framing, removing the background of a new picture, choosing an AI
+result or going back.
+
+Every step that sends pixels to Google (adjust, AI points, generation from
+a source photo) takes a third_party_ai consent id and is refused when the
+organization has switched third-party AI off, and so is a retry of one (on
+the retrying member's consent). Finishing takes the uploader's statement
+`statement` names, made for this creation (services.consent): "depiction"
+for a person's photo, whatever line it is on now, "generated_face" for a
+face made from words.
 """
 
 from __future__ import annotations
@@ -26,10 +37,13 @@ from sqlalchemy import func, select, update
 from app.api.deps import DB, OrgMember
 from app.core.config import get_settings
 from app.core.errors import Conflict409, NotFound404, Validation422
-from app.models import Avatar, AvatarKind, AvatarStatus, Creation, CreationStatus
+from app.models import Avatar, AvatarKind, AvatarStatus, Creation, CreationStatus, Organization
 from app.models.base import new_id
 from app.schemas.avatar import FaceType, FitReason
 from app.schemas.creation import (
+    AdjustRequest,
+    AdjustRoundOut,
+    AiOut,
     AnchorsOut,
     BackgroundOffer,
     BackgroundRequest,
@@ -38,11 +52,14 @@ from app.schemas.creation import (
     CreationOut,
     CreationStatusName,
     CreationUpdate,
+    DetectRequest,
     FinishOut,
     FinishRequest,
+    GenerateCreationRequest,
     JobOut,
     PreviewRigOut,
     PreviewRigRequest,
+    RetryRequest,
     StepOut,
 )
 from app.services import creations as svc
@@ -179,21 +196,59 @@ def _job_out(record: dict | None) -> JobOut | None:
 # A retry would fail the same way: the file, the marks or the line is the
 # problem, and only the owner can change it.
 NOT_RETRYABLE = frozenset(
-    {"unreadable_image", "image_too_large", "anchors_stale", "fit_invalid"}
+    {
+        "unreadable_image", "image_too_large", "anchors_stale", "fit_invalid",
+        # AI: a refusal is never asked again, and a photo the touch-up
+        # cannot use stays unusable.
+        "safety_refused", "face_turned", "no_face_for_touchup", "landmarks_unavailable",
+        "imagegen_unavailable", "source_gone",
+        # The organization turned third-party AI off while the job waited.
+        "third_party_ai_disabled",
+    }
 )
 
 
 def _background_offer(creation: Creation) -> BackgroundOffer:
-    if creation.face_type is None:
+    return _background_offer_for(creation.face_type)
+
+
+def _background_offer_for(face_type: str | None) -> BackgroundOffer:
+    if face_type is None:
         return BackgroundOffer(available=False, reason="face_type_required")
-    if not svc.rules_for(creation.face_type).background_removal:
+    if not svc.rules_for(face_type).background_removal:
         return BackgroundOffer(available=False, reason="not_for_face_type")
     if not get_settings().segment_model_path:
         return BackgroundOffer(available=False, reason="segmentation_unavailable")
     return BackgroundOffer(available=True)
 
 
-async def _out(creation: Creation) -> CreationOut:
+def _ai_out(creation: Creation, org: Organization | None, recommendation: dict | None) -> AiOut:
+    from app.services.photo_adjust import MODES_BY_LINE, ROUNDS_PER_CREATION
+
+    usage = svc.ai_usage_of(creation)
+    face_type = creation.face_type
+    modes = list(MODES_BY_LINE.get(face_type, ())) if face_type else []
+    # The recommended mode, pre-selected by the wizard; empty when the
+    # photo needs nothing (AI stays available, never pushed).
+    mode = (recommendation or {}).get("mode")
+    suggested = [mode] if mode in modes else []
+    last = usage.get("last_round")
+    if last:
+        # The round's source may have gone since (a stylised version taken
+        # drops the cut-outs); the before shown beside the results is then
+        # the image it was cut from.
+        last = {**last, "source": svc.round_source(creation.steps, last)}
+    return AiOut(
+        enabled=bool(org.third_party_ai_enabled) if org is not None else True,
+        modes=modes,
+        suggested=suggested,
+        adjust_rounds_left=max(0, ROUNDS_PER_CREATION - usage["adjust_rounds"]),
+        ai_detections_left=max(0, svc.AI_DETECTIONS_PER_CREATION - usage["detections"]),
+        last_round=AdjustRoundOut(**last) if last and last["source"] else None,
+    )
+
+
+async def _out(db: DB, creation: Creation) -> CreationOut:
     storage = get_storage()
     items = svc.step_items(creation.steps)
     steps = [
@@ -205,15 +260,22 @@ async def _out(creation: Creation) -> CreationOut:
             from_=items[step_id].get("from"),
             crop=items[step_id].get("crop"),
             roll=items[step_id].get("roll"),
+            adjust=items[step_id].get("adjust"),
+            generated=items[step_id].get("generated"),
+            cutout=svc.is_cut_out(items, step_id),
         )
-        for step_id in svc.STEP_ORDER
-        if step_id in items
+        for step_id in svc.ordered_step_ids(items)
     ]
+    recommendation = svc.recommendation_of(creation.steps, creation.face_type)
+    analysis = None
+    if creation.analysis is not None:
+        analysis = {**creation.analysis, "recommendation": recommendation}
     anchors = None
     if creation.anchors:
         frame = creation.anchors.get("frame")
         anchors = AnchorsOut(
             id=creation.anchors["id"],
+            source=creation.anchors.get("source"),
             image=next((s for s, item in items.items() if item["key"] == frame), None),
             image_size=creation.anchors["image_size"],
             detected=bool(creation.anchors.get("detected")),
@@ -227,18 +289,23 @@ async def _out(creation: Creation) -> CreationOut:
         revision=creation.revision,
         current=svc.current_step(creation.steps),
         steps=steps,
-        analysis=creation.analysis,
+        analysis=analysis,
         anchors=anchors,
         job=_job_out(creation.job),
         avatar_id=creation.avatar_id,
         background_removal=_background_offer(creation),
+        background=(creation.steps or {}).get("background"),
+        # The org was loaded by the route's membership check, in this
+        # session: this is an identity-map read, not a query.
+        ai=_ai_out(creation, await db.get(Organization, creation.org_id), recommendation),
+        statement=svc.statement_for(creation),
         created_at=creation.created_at,
         updated_at=creation.updated_at,
     )
 
 
 async def _reloaded(db: DB, creation: Creation) -> CreationOut:
-    return await _out(await _get(db, creation.org_id, creation.id))
+    return await _out(db, await _get(db, creation.org_id, creation.id))
 
 
 # --- Routes -----------------------------------------------------------------------
@@ -279,19 +346,7 @@ async def create_creation(
     if len(data) > svc.MAX_UPLOAD_BYTES:
         raise Validation422("Photo must be 15 MB or smaller", code="image_too_large")
 
-    # A soft limit: two uploads racing past it make eleven, which is fine.
-    drafts = (
-        await db.execute(
-            select(func.count())
-            .select_from(Creation)
-            .where(Creation.org_id == ctx.org.id, Creation.status == CreationStatus.draft)
-        )
-    ).scalar_one()
-    if drafts >= svc.MAX_DRAFTS_PER_ORG:
-        raise Conflict409(
-            f"You have {drafts} unfinished avatars; finish or delete one first",
-            code="too_many_drafts",
-        )
+    await _count_drafts(db, ctx.org.id)
 
     creation_id = new_id()
     # Admitted before the header is read, so the per-org cap (429) and the
@@ -322,6 +377,98 @@ async def create_creation(
     return await _reloaded(db, creation)
 
 
+async def _count_drafts(db: DB, org_id: str) -> None:
+    # A soft limit: two requests racing past it make eleven, which is fine.
+    drafts = (
+        await db.execute(
+            select(func.count())
+            .select_from(Creation)
+            .where(Creation.org_id == org_id, Creation.status == CreationStatus.draft)
+        )
+    ).scalar_one()
+    if drafts >= svc.MAX_DRAFTS_PER_ORG:
+        raise Conflict409(
+            f"You have {drafts} unfinished avatars; finish or delete one first",
+            code="too_many_drafts",
+        )
+
+
+@router.post("/generate", response_model=CreationOut, status_code=202)
+async def generate_creation(
+    body: GenerateCreationRequest, ctx: OrgMember, db: DB
+) -> CreationOut:
+    """Start a creation whose original is made by the image model (a job).
+
+    The generated picture becomes the creation's "original" and the wizard
+    continues from framing, exactly as for an upload: the same points, the
+    same confirmation, the same consent at finish. Needs the organization's
+    third-party AI switch on (403 third_party_ai_disabled). Starting from an
+    existing avatar's photo (`source_avatar_id`) sends that photo to Google
+    and needs a third_party_ai consent (403 consent_required). Metered
+    against the monthly image limit (429). A safety refusal fails the job
+    with code safety_refused, which is not retried.
+    """
+    from app.services import consent, imagegen
+    from app.services.ai_models import PROVIDER
+    from app.services.usage import check_image_limit
+
+    consent.require_ai_enabled(ctx.org)
+    consent_ids: list[str] = []
+    if body.source_avatar_id or body.consent_id:
+        agreed = await consent.require(
+            db, body.consent_id, ctx.org, ctx.membership.user_id, consent.THIRD_PARTY_AI,
+            PROVIDER,
+        )
+        consent_ids.append(agreed.id)
+    if body.source_avatar_id:
+        origin = (
+            await db.execute(
+                select(Avatar).where(
+                    Avatar.id == body.source_avatar_id, Avatar.org_id == ctx.org.id
+                )
+            )
+        ).scalar_one_or_none()
+        if origin is None:
+            raise NotFound404("Avatar not found", code="avatar_not_found")
+        if origin.kind != AvatarKind.photo or not origin.image_key:
+            raise Conflict409("The source avatar is not a photo", code="not_a_photo")
+    if not imagegen.configured():
+        raise Conflict409(
+            "Image generation is not configured on this server", code="imagegen_unavailable"
+        )
+    await _count_drafts(db, ctx.org.id)
+    await check_image_limit(db, ctx.org.id)
+
+    creation_id = new_id()
+    job = runner.reserve(ctx.org.id, creation_id, "generate", 0)
+    params = {
+        "style": body.style,
+        "prompt": body.prompt,
+        "source_avatar_id": body.source_avatar_id,
+        # What a retry checks again: sending the source photo out needs the
+        # retrying member's own consent under the current wording.
+        "consent_id": consent_ids[0] if consent_ids else None,
+    }
+    try:
+        creation = Creation(
+            id=creation_id,
+            org_id=ctx.org.id,
+            created_by_id=ctx.membership.user_id,
+            face_type=body.face_type,
+            status=CreationStatus.draft,
+            revision=0,
+            consent_ids=consent_ids or None,
+            job=svc.job_record(job, QUEUED, params),
+        )
+        db.add(creation)
+        await db.commit()
+    except BaseException:
+        runner.release(job)
+        raise
+    svc.launch(job, params)
+    return await _reloaded(db, creation)
+
+
 @router.get("", response_model=list[CreationOut])
 async def list_creations(
     ctx: OrgMember, db: DB, status: CreationStatusName | None = None
@@ -333,12 +480,12 @@ async def list_creations(
     rows = (
         await db.execute(query.order_by(Creation.updated_at.desc()).limit(LIST_LIMIT))
     ).scalars().all()
-    return [await _out(creation) for creation in rows]
+    return [await _out(db, creation) for creation in rows]
 
 
 @router.get("/{creation_id}", response_model=CreationOut)
 async def get_creation(creation_id: str, ctx: OrgMember, db: DB) -> CreationOut:
-    return await _out(await _get(db, ctx.org.id, creation_id))
+    return await _out(db, await _get(db, ctx.org.id, creation_id))
 
 
 @router.patch("/{creation_id}", response_model=CreationOut)
@@ -347,10 +494,12 @@ async def update_creation(
 ) -> CreationOut:
     """Switch the line, or frame the photo.
 
-    Framing is a new step made from the original, never an edit of it.
-    Either change invalidates what was made after it: the cut-out (made
-    from the old frame, or by the old line's segmenter) and the marks.
+    Framing is a new step made from the original, never an edit of it, with
+    its own photo check. Either change invalidates what was made after it:
+    the cut-outs (made from the old frame, or by the old line's segmenter),
+    the AI results (made from the old frame) and the marks.
     """
+    from app.services.photo_analysis import check_photo
     from app.services.photo_io import frame_photo, png_bytes
 
     creation = await _get(db, ctx.org.id, creation_id)
@@ -381,9 +530,10 @@ async def update_creation(
             pass  # never framed, and still not
         else:
             changed = clear_anchors = True
-            cutout = svc.drop_cutout(steps)
-            if cutout:
-                old_keys.append(cutout)
+            old_keys.extend(svc.drop_cutouts(steps))
+            # AI candidates were made from the old frame: a new frame is a
+            # new photo to adjust. (The rounds they cost stay spent.)
+            old_keys.extend(svc.drop_adjusted(steps))
             if previous:
                 old_keys.append(items.pop("framed")["key"])
             if unframed:
@@ -392,17 +542,17 @@ async def update_creation(
             else:
                 original = await get_storage().get_bytes(items["original"]["key"])
 
-                def frame() -> tuple[bytes, tuple[int, int]]:
+                def frame() -> tuple[bytes, tuple[int, int], dict]:
                     image = frame_photo(original, crop, roll)
-                    return png_bytes(image), image.size
+                    return png_bytes(image), image.size, svc.step_check(check_photo(image))
 
-                data, (width, height) = await run_cpu(frame)
+                data, (width, height), check = await run_cpu(frame)
                 key = svc.step_key(creation.org_id, creation.id, "framed")
                 await get_storage().put_bytes(key, data, "image/png")
                 new_keys.append(key)
                 items["framed"] = {
                     "key": key, "width": width, "height": height, "from": "original",
-                    "crop": crop, "roll": roll,
+                    "crop": crop, "roll": roll, "check": check,
                 }
                 steps["current"] = "framed"
 
@@ -410,13 +560,16 @@ async def update_creation(
     if body.face_type is not None and body.face_type != creation.face_type:
         changed = clear_anchors = True
         values["face_type"] = body.face_type
-        # Cut out by the old line's segmenter (or offered to it): gone.
-        cutout = svc.drop_cutout(steps)
-        if cutout:
-            old_keys.append(cutout)
+        # Cut out by the old line's segmenter (or offered to it): gone, and
+        # the background is asked again for the new line.
+        old_keys.extend(svc.drop_cutouts(steps))
+        steps.pop("background", None)
+        # The owner chose the line: going back from a stylised version no
+        # longer restores the one it had before.
+        steps.pop(svc.BEFORE_STYLISE, None)
 
     if not changed:
-        return await _out(creation)
+        return await _out(db, creation)
     if clear_anchors:
         values["anchors"] = None
     storage = get_storage()
@@ -433,40 +586,115 @@ async def update_creation(
 
 @router.post("/{creation_id}/choose", response_model=CreationOut)
 async def choose_step(
-    creation_id: str, body: ChooseRequest, ctx: OrgMember, db: DB
+    creation_id: str, body: ChooseRequest, ctx: OrgMember, db: DB, response: Response
 ) -> CreationOut:
-    """Make one of the step outputs the current image. Marks placed on
-    another pixel frame are cleared; an image and its cut-out share one."""
+    """Make one of the step outputs the current image (200). Marks placed on
+    another pixel frame are cleared: an AI result is new pixels, so points
+    are found again; an image and its cut-out share one frame.
+
+    An AI candidate that failed its checks is refused (422
+    candidate_rejected). A regenerated picture comes back opaque: when the
+    owner chose to remove the background, choosing it cuts it out as well,
+    a background job (202) that makes "cutout:N" the current image (at once,
+    200, if that cut-out exists already). Choosing a stylised candidate
+    moves the creation to the animation line (face_type "cartoon"), whose
+    background is kept. Nothing is ever chosen for the owner: the images
+    before AI stay, and stay choosable.
+    """
     creation = await _get(db, ctx.org.id, creation_id)
     _require_draft(creation)
     _require_image(creation)
-    if body.choice not in svc.step_items(creation.steps):
+    items = svc.step_items(creation.steps)
+    item = items.get(body.choice)
+    if item is None:
         raise Validation422("There is no such image to choose", code="unknown_choice")
+    adjust = item.get("adjust") or {}
+    if adjust.get("rejected"):
+        raise Validation422(
+            "This result failed its checks and cannot be used: "
+            + adjust["rejected"]["detail"],
+            code="candidate_rejected",
+            extra={"reason": adjust["rejected"]},
+        )
     if body.choice == svc.current_step(creation.steps):
-        return await _out(creation)
+        return await _out(db, creation)
     steps = svc.copied(creation.steps)
     steps["current"] = body.choice
     values: dict = {"steps": steps}
+    stale: list[str] = []
+    chained: dict | None = None
+    face_type = creation.face_type
+    restored = False
+    before = steps.get(svc.BEFORE_STYLISE)
+    if adjust.get("mode") == "stylise" and face_type != "cartoon":
+        # A stylised person is an animation now: rigged, marked and
+        # rendered as one. The cut-outs belonged to the photo line, whose
+        # segmenter the animation line does not use, so its backdrop (the
+        # plain one the model drew) is kept. What the creation was before
+        # is remembered, for going back to the photo.
+        steps[svc.BEFORE_STYLISE] = {"face_type": face_type, "background": steps.get("background")}
+        face_type = values["face_type"] = "cartoon"
+        stale = svc.drop_cutouts(steps)
+        steps["current"] = body.choice
+        steps["background"] = "keep"
+    elif before and face_type == "cartoon" and not svc.stylised(steps, body.choice):
+        # Back from a stylised version to a picture that is not one ("Keep
+        # my photo"): a person's photo is not rigged as a drawing, so the
+        # line and the background answer it had before the stylise return.
+        face_type = values["face_type"] = before.get("face_type") or "human"
+        steps.pop(svc.BEFORE_STYLISE)
+        if before.get("background"):
+            steps["background"] = before["background"]
+        else:
+            steps.pop("background", None)
+        restored = True
+    if (
+        (adjust or restored)
+        and not svc.is_cut_out(items, steps["current"])
+        and steps.get("background") == "remove"
+    ):
+        # An opaque AI result, or the photo whose cut-out the stylise
+        # dropped, on a creation whose background comes off.
+        cut = svc.cutout_id_for(steps["current"])
+        if cut in items and items[cut].get("from") == steps["current"]:
+            steps["current"] = cut
+        elif _background_offer_for(face_type).available:
+            chained = {"source": steps["current"]}
     anchors = creation.anchors
-    if anchors and anchors.get("frame") != svc.frame_key(steps, body.choice):
+    if anchors and (
+        face_type != creation.face_type
+        or anchors.get("frame") != svc.frame_key(steps, steps["current"])
+    ):
         values["anchors"] = None
-    await _update(db, creation, **values)
+    if chained is not None:
+        # The choice and the job in one write: a refused admission (a job
+        # already running, the queue full) leaves the choice unmade.
+        await svc.start_job(db, creation, "background", chained, values=values, bump=True)
+        response.status_code = 202
+    else:
+        await _update(db, creation, **values)
+    for key in stale:
+        await get_storage().delete(key)
     return await _reloaded(db, creation)
 
 
 async def _start_background(db: DB, creation: Creation, mode: str) -> tuple[CreationOut, int]:
+    """Step 2. The answer is remembered (`background`): choosing an AI result
+    later follows it, cutting the new picture out when it is "remove"."""
     _require_draft(creation)
     _require_image(creation)
     face_type = _require_face_type(creation)
-    source = svc.background_source(creation.steps)
+    items = svc.step_items(creation.steps)
     current = svc.current_step(creation.steps)
-    cutout = svc.step_items(creation.steps).get("cutout")
+    chosen = (creation.steps or {}).get("background")
     if mode == "keep":
-        # Nothing to compute: the image the cut-out would come from is the
-        # answer. The cut-out, if any, stays choosable.
-        if current != source:
+        # Nothing to compute: the opaque image behind the current one is
+        # the answer. The cut-outs, if any, stay choosable.
+        behind = svc.background_source(creation.steps)
+        if current != behind or chosen != "keep":
             steps = svc.copied(creation.steps)
-            steps["current"] = source
+            steps["current"] = behind
+            steps["background"] = "keep"
             await _update(db, creation, steps=steps)
         return await _reloaded(db, creation), 200
 
@@ -476,19 +704,27 @@ async def _start_background(db: DB, creation: Creation, mode: str) -> tuple[Crea
             "for animals and animations",
             code="background_not_for_face_type",
         )
-    if cutout and cutout.get("from") == source:
-        # Already cut from this image: choosing it is enough.
-        if current != "cutout":
+    if svc.is_cut_out(items, current):
+        # Already a cut-out (a touch-up of one included): nothing to remove.
+        if chosen != "remove":
             steps = svc.copied(creation.steps)
-            steps["current"] = "cutout"
+            steps["background"] = "remove"
             await _update(db, creation, steps=steps)
+        return await _reloaded(db, creation), 200
+    cut = svc.cutout_id_for(current)
+    if cut in items and items[cut].get("from") == current:
+        # Already cut from this image: choosing it is enough.
+        steps = svc.copied(creation.steps)
+        steps["current"] = cut
+        steps["background"] = "remove"
+        await _update(db, creation, steps=steps)
         return await _reloaded(db, creation), 200
     if not get_settings().segment_model_path:
         raise Conflict409(
             "Background removal is not configured on this server",
             code="segmentation_unavailable",
         )
-    await svc.start_job(db, creation, "background", {"source": source})
+    await svc.start_job(db, creation, "background", {"source": current})
     return await _reloaded(db, creation), 202
 
 
@@ -496,28 +732,169 @@ async def _start_background(db: DB, creation: Creation, mode: str) -> tuple[Crea
 async def set_background(
     creation_id: str, body: BackgroundRequest, ctx: OrgMember, db: DB, response: Response
 ) -> CreationOut:
-    """Remove the background (a job: 202), or keep it (200). Applies to the
-    current image, or to the one a current cut-out was made from. Marks
-    survive either way: no pixel moves."""
+    """Remove the background of the current image (a job: 202; 200 when it
+    is a cut-out already, or its cut-out exists), or keep it (200: back to
+    the opaque image behind a current cut-out). The answer is remembered as
+    `background`. Marks survive either way: no pixel moves."""
     creation = await _get(db, ctx.org.id, creation_id)
     out, status = await _start_background(db, creation, body.mode)
     response.status_code = status
     return out
 
 
-async def _start_detect(db: DB, creation: Creation) -> CreationOut:
+async def _image_digest(creation: Creation) -> str:
+    """SHA-256 of the current image's pixels file: the point finder's cache
+    key. Hashed off the loop (a 2048 px PNG is several MB)."""
+    import hashlib
+
+    key = svc.step_items(creation.steps)[svc.current_step(creation.steps)]["key"]
+    data = await get_storage().get_bytes(key)
+    return await asyncio.to_thread(lambda: hashlib.sha256(data).hexdigest())
+
+
+async def _start_detect(
+    db: DB, creation: Creation, body: DetectRequest, org: Organization, user_id: str
+) -> CreationOut:
+    from app.services import consent, vision_points
+
     _require_draft(creation)
     _require_image(creation)
-    _require_face_type(creation)
-    await svc.start_job(db, creation, "detect", {})
+    face_type = _require_face_type(creation)
+    params: dict = {"use_ai": body.use_ai}
+    values: dict = {}
+    if body.use_ai:
+        if face_type == "human":
+            raise Validation422(
+                "People are found by the face detector; AI points are for animals and "
+                "animations",
+                code="ai_points_not_for_face_type",
+            )
+        agreed = await consent.require(
+            db, body.consent_id, org, user_id, consent.THIRD_PARTY_AI, vision_points.PROVIDER
+        )
+        if not vision_points.configured():
+            raise Conflict409(
+                "AI point finding is not configured on this server",
+                code="ai_points_unavailable",
+            )
+        digest = await _image_digest(creation)
+        usage = svc.ai_usage_of(creation)
+        params.update(sha256=digest, consent_id=agreed.id, charged=False)
+        if svc.vision_cache_hit(usage, digest, face_type) is None:
+            if usage["detections"] >= svc.AI_DETECTIONS_PER_CREATION:
+                raise Conflict409(
+                    "The AI has already looked for this avatar's points; place them by hand",
+                    code="budget_spent",
+                )
+            # Taken with the job, atomically: two clicks cannot both pass.
+            usage["detections"] += 1
+            params["charged"] = True
+        values = {
+            "ai_usage": usage,
+            "consent_ids": consent.with_consent(creation.consent_ids, agreed.id),
+        }
+    await svc.start_job(db, creation, "detect", params, values=values)
     return await _reloaded(db, creation)
 
 
 @router.post("/{creation_id}/detect", response_model=CreationOut, status_code=202)
-async def detect_face(creation_id: str, ctx: OrgMember, db: DB) -> CreationOut:
+async def detect_face(
+    creation_id: str, ctx: OrgMember, db: DB, body: DetectRequest | None = None
+) -> CreationOut:
     """Find the face on the current image (the line's detector, else the
-    face template) and open the marks on it, with the validator's verdict."""
-    return await _start_detect(db, await _get(db, ctx.org.id, creation_id))
+    face template) and open the marks on it, with the validator's verdict.
+
+    With `use_ai` (and a third_party_ai consent), an animal, or an animation
+    the detector finds nothing on, gets the vision model's points instead of
+    the template's guess: `anchors.source` is "ai". They are a pre-fill; the
+    owner still places or ticks every part. Any failure of the model falls
+    back to the template with a warning. One AI detection per creation (409
+    budget_spent), answers cached by image hash.
+    """
+    creation = await _get(db, ctx.org.id, creation_id)
+    return await _start_detect(
+        db, creation, body or DetectRequest(), ctx.org, ctx.membership.user_id
+    )
+
+
+async def _start_adjust(
+    db: DB, creation: Creation, body: AdjustRequest, org: Organization, user_id: str
+) -> CreationOut:
+    from app.services import consent, imagegen, photo_adjust
+    from app.services.ai_models import PROVIDER
+    from app.services.usage import check_image_limit
+
+    _require_draft(creation)
+    _require_image(creation)
+    face_type = _require_face_type(creation)
+    if body.mode not in photo_adjust.MODES_BY_LINE[face_type]:
+        raise Validation422(
+            f"{body.mode} is not offered for this kind of face",
+            code="adjust_not_for_face_type",
+        )
+    if body.mode == photo_adjust.STYLISE and body.style is None:
+        raise Validation422("Choose a style", code="style_required")
+    agreed = await consent.require(
+        db, body.consent_id, org, user_id, consent.THIRD_PARTY_AI, PROVIDER
+    )
+    if not imagegen.configured():
+        raise Conflict409(
+            "AI editing is not configured on this server", code="imagegen_unavailable"
+        )
+    usage = svc.ai_usage_of(creation)
+    if usage["adjust_rounds"] >= photo_adjust.ROUNDS_PER_CREATION:
+        raise Conflict409(
+            "This avatar has used its AI adjustments; choose one of the results or the "
+            "original",
+            code="budget_spent",
+        )
+    # Refused now rather than failing in the job: nothing is spent.
+    await check_image_limit(db, creation.org_id)
+    usage["adjust_rounds"] += 1
+    params = {
+        "mode": body.mode,
+        "style": body.style,
+        "count": body.count,
+        "consent_id": agreed.id,
+        # The current image, a cut-out included: the model is shown it on
+        # a neutral grey (photo_adjust), never the removed background.
+        "source": svc.current_step(creation.steps),
+    }
+    await svc.start_job(
+        db,
+        creation,
+        "adjust",
+        params,
+        values={
+            "ai_usage": usage,
+            "consent_ids": consent.with_consent(creation.consent_ids, agreed.id),
+        },
+    )
+    return await _reloaded(db, creation)
+
+
+@router.post("/{creation_id}/adjust", response_model=CreationOut, status_code=202)
+async def adjust_photo(
+    creation_id: str, body: AdjustRequest, ctx: OrgMember, db: DB
+) -> CreationOut:
+    """One AI adjust round (a job) on the current image: up to `count`
+    candidates, each checked, stored as "adjusted:N" steps. Nothing is
+    chosen: the owner compares and picks with /choose, and the images
+    before AI always stay. `analysis.recommendation` says which mode the
+    photo check recommends, and why.
+
+    touchup (human): only the eyes and lips change, pasted onto the image
+    (into a cut-out's own pixels, transparency untouched). stylise (human):
+    the whole picture in `style`; choosing it makes the creation an
+    animation. regenerate (every line): a clean frontal picture of the same
+    subject, opaque, cut out when chosen if the background is removed. Needs a third_party_ai consent (403
+    consent_required / third_party_ai_disabled); two rounds per creation
+    (409 budget_spent); metered against the monthly image limit (429).
+    `ai.last_round` reports every candidate, including refusals and failed
+    checks with their reasons.
+    """
+    creation = await _get(db, ctx.org.id, creation_id)
+    return await _start_adjust(db, creation, body, ctx.org, ctx.membership.user_id)
 
 
 @router.post("/{creation_id}/preview-rig", response_model=PreviewRigOut)
@@ -546,19 +923,35 @@ async def preview_rig(
 async def _idempotent_finish(db: DB, creation: Creation) -> FinishOut | None:
     ended = creation.status in (CreationStatus.finishing, CreationStatus.finished)
     if ended and creation.avatar_id:
-        return FinishOut(avatar_id=creation.avatar_id, creation=await _out(creation))
+        return FinishOut(avatar_id=creation.avatar_id, creation=await _out(db, creation))
     return None
 
 
 async def _start_finish(
-    db: DB, creation: Creation, body: FinishRequest, user_id: str
+    db: DB, creation: Creation, body: FinishRequest, org: Organization, user_id: str
 ) -> FinishOut:
+    from app.services import consent
+
     repeated = await _idempotent_finish(db, creation)
     if repeated:
         return repeated
     _require_draft(creation)
     _require_image(creation)
     face_type = _require_face_type(creation)
+    consent_ids = list(creation.consent_ids or [])
+    statement = svc.statement_for(creation)
+    if statement is not None:
+        # A person's face, talking on someone's site: the uploader states
+        # they are that person or have their permission, and that the
+        # person is an adult (or, for a face made from words, that it is
+        # no real person). Decided by where the pixels came from, not by
+        # the line (a stylised photo is still that person), and made for
+        # this creation. Checked first, before any other refusal, so the
+        # dashboard asks for it once.
+        agreed = await consent.require(
+            db, body.consent_id, org, user_id, statement, subject_id=creation.id
+        )
+        consent_ids = consent.with_consent(consent_ids, agreed.id)
     anchors = _anchors_for(creation, body.anchors_id)
     marks = _check_marks(body.marks, face_type, anchors["image_size"])
     required = svc.required_marks(face_type, bool(anchors.get("detected")))
@@ -588,16 +981,29 @@ async def _start_finish(
         content_type="image/png",
         face_type=face_type,
         status=AvatarStatus.processing,
+        # The disclosure visitors see: set when the chosen picture (or what
+        # it was cut from) was made or edited by an AI.
+        ai_edited=svc.ai_edited_of(creation.steps, svc.current_step(creation.steps)),
+        consent_ids=consent_ids or None,
     )
     db.add(avatar)
-    params = {"name": body.name, "anchors_id": body.anchors_id, "marks": marks}
+    params = {
+        "name": body.name,
+        "anchors_id": body.anchors_id,
+        "marks": marks,
+        "consent_id": body.consent_id,
+    }
     try:
         await svc.start_job(
             db,
             creation,
             "finish",
             params,
-            values={"status": CreationStatus.finishing, "avatar_id": avatar.id},
+            values={
+                "status": CreationStatus.finishing,
+                "avatar_id": avatar.id,
+                "consent_ids": consent_ids or None,
+            },
         )
     except Conflict409:
         # Drops the pending avatar, which the query below would otherwise
@@ -610,7 +1016,7 @@ async def _start_finish(
             return repeated
         raise
     creation = await _get(db, creation.org_id, creation.id)
-    return FinishOut(avatar_id=avatar.id, creation=await _out(creation))
+    return FinishOut(avatar_id=avatar.id, creation=await _out(db, creation))
 
 
 @router.post("/{creation_id}/finish", response_model=FinishOut, status_code=202)
@@ -625,15 +1031,30 @@ async def finish_creation(
     refused (409 anchors_stale), as is a fit that would fold (422 with the
     reasons). Follow the creation until `status` is finished; if the job
     fails the creation is a draft again and Finish can be pressed again.
+
+    When `statement` is set, it needs that statement by this user, recorded
+    for this creation (403 consent_required, with its `scope`): a person's
+    photo on any line ("depiction"), or a face generated from words
+    ("generated_face"). The avatar records `ai_edited` when the chosen
+    image came from AI adjust or generation.
     """
     creation = await _get(db, ctx.org.id, creation_id)
-    return await _start_finish(db, creation, body, ctx.membership.user_id)
+    return await _start_finish(db, creation, body, ctx.org, ctx.membership.user_id)
 
 
 @router.post("/{creation_id}/retry", response_model=CreationOut, status_code=202)
-async def retry_job(creation_id: str, ctx: OrgMember, db: DB) -> CreationOut:
-    """Run a failed or interrupted job again, with what it was given."""
+async def retry_job(
+    creation_id: str, ctx: OrgMember, db: DB, body: RetryRequest | None = None
+) -> CreationOut:
+    """Run a failed or interrupted job again, with what it was given.
+
+    A job that sends pixels to Google (adjust, AI points, generation from a
+    photo) is a new call on the RETRYING member's word: it needs their own
+    third_party_ai consent under the current wording (`consent_id`, else
+    the one the job was started with if it is theirs; 403 consent_required
+    otherwise), and the organization's switch on."""
     creation = await _get(db, ctx.org.id, creation_id)
+    given = body.consent_id if body else None
     record = creation.job or {}
     job = _job_out(record)
     if job is None or not job.retryable:
@@ -647,16 +1068,49 @@ async def retry_job(creation_id: str, ctx: OrgMember, db: DB) -> CreationOut:
             raise Conflict409("The upload is gone; upload the photo again", code="upload_gone")
         await svc.start_job(db, creation, "ingest", {})
         return await _reloaded(db, creation)
+    if job.step == "generate":
+        _require_draft(creation)
+        if "original" in svc.step_items(creation.steps):
+            raise Conflict409("There is nothing to retry", code="nothing_to_retry")
+        from app.services import consent
+        from app.services.ai_models import PROVIDER
+
+        consent.require_ai_enabled(ctx.org)
+        values: dict = {}
+        if params.get("source_avatar_id"):
+            # The source photo goes to Google again.
+            agreed = await consent.require(
+                db, given or params.get("consent_id"), ctx.org, ctx.membership.user_id,
+                consent.THIRD_PARTY_AI, PROVIDER,
+            )
+            params = {**params, "consent_id": agreed.id}
+            values["consent_ids"] = consent.with_consent(creation.consent_ids, agreed.id)
+        await svc.start_job(db, creation, "generate", params, values=values)
+        return await _reloaded(db, creation)
     if job.step == "background":
         return (await _start_background(db, creation, "remove"))[0]
     if job.step == "detect":
-        return await _start_detect(db, creation)
+        detect = DetectRequest(
+            use_ai=bool(params.get("use_ai")), consent_id=given or params.get("consent_id")
+        )
+        return await _start_detect(db, creation, detect, ctx.org, ctx.membership.user_id)
+    if job.step == "adjust":
+        adjust = AdjustRequest(
+            mode=params["mode"],
+            style=params.get("style"),
+            consent_id=given or params.get("consent_id") or "-",
+            count=params.get("count") or 2,
+        )
+        return await _start_adjust(db, creation, adjust, ctx.org, ctx.membership.user_id)
     finish = FinishRequest(
         name=params.get("name") or "Avatar",
         anchors_id=params.get("anchors_id") or "",
         marks=params.get("marks"),
+        consent_id=params.get("consent_id"),
     )
-    return (await _start_finish(db, creation, finish, ctx.membership.user_id)).creation
+    return (
+        await _start_finish(db, creation, finish, ctx.org, ctx.membership.user_id)
+    ).creation
 
 
 @router.delete("/{creation_id}", status_code=204)

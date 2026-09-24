@@ -35,6 +35,9 @@ os.environ.update(
         "ELEVENLABS_API_KEY": "",
         "GOOGLE_TTS_CREDENTIALS_JSON": "",
         "OPENAI_API_KEY": "",
+        # No test may reach a real AI provider: providers are faked per test.
+        "GEMINI_API_KEY": "",
+        "DASHSCOPE_API_KEY": "",
         "CREDENTIAL_ENCRYPTION_KEY": "",
     }
 )

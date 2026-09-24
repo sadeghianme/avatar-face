@@ -191,7 +191,7 @@ export function AvatarsPage() {
         />
       </section>
 
-      {(usage?.images_generated ?? 0) > 0 ? (
+      {(usage?.images_generated ?? 0) > 0 || (usage?.vision_points ?? 0) > 0 ? (
         <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-brand-100 bg-brand-50/60 px-4 py-3 text-xs dark:border-brand-500/20 dark:bg-brand-500/[0.06]">
           <span className="font-semibold text-gray-900 dark:text-white">{t("aiReportTitle")}</span>
           <span className="text-gray-600 dark:text-gray-300">
@@ -206,6 +206,11 @@ export function AvatarsPage() {
           <span className="text-gray-600 dark:text-gray-300">
             {t("aiReportCost", { cost: (usage?.image_cost_usd ?? 0).toFixed(2) })}
           </span>
+          {usage?.vision_points_limit !== undefined && (
+            <span className="text-gray-600 dark:text-gray-300">
+              {t("aiReportPoints", { used: usage.vision_points ?? 0, limit: usage.vision_points_limit })}
+            </span>
+          )}
         </div>
       ) : null}
 

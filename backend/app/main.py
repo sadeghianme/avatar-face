@@ -17,6 +17,7 @@ from app.api import (
     auth,
     avatars,
     clone_jobs,
+    consents,
     creations,
     cloned_voices,
     embed,
@@ -26,7 +27,6 @@ from app.api import (
     lab_reference,
     orgs,
     share,
-    staging,
     stock,
     storage_routes,
     tts,
@@ -169,11 +169,21 @@ async def lifespan(app: FastAPI):
 
     lab_warmup = asyncio.create_task(warm_lab())
 
+    # Every Gemini model id this server calls still exists? Logged, never
+    # fatal, and off the startup path: a retired id should be a loud line
+    # in the deploy log, not a customer's failed edit, and not a slow boot.
+    from app.services.ai_models import verify_at_startup
+
+    model_check = asyncio.create_task(verify_at_startup())
+
     yield
 
     lab_warmup.cancel()
+    model_check.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await lab_warmup
+    with contextlib.suppress(asyncio.CancelledError):
+        await model_check
 
     sweeper.cancel()
     # Awaited so shutdown does not race a delete that is midway through.
@@ -326,13 +336,13 @@ def create_app() -> FastAPI:
     app.include_router(orgs.router)
     app.include_router(avatars.router)
     app.include_router(creations.router)
+    app.include_router(consents.router)
     app.include_router(storage_routes.router)
     app.include_router(tts.router)
     app.include_router(api_keys.router)
     app.include_router(embed.router)
     app.include_router(integrations.router)
     app.include_router(usage.router)
-    app.include_router(staging.router)
     app.include_router(stock.router)
     app.include_router(share.router)
     app.include_router(cloned_voices.router)

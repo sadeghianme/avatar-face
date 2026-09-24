@@ -7,7 +7,7 @@ import { Icon } from "@/components/ui/Icon";
 import { api, ApiError } from "@/lib/api";
 import { useOrg } from "@/providers/org";
 import { useTheme } from "@/providers/theme";
-import type { Integration, Usage } from "@/lib/types";
+import type { Integration, Org, Usage } from "@/lib/types";
 
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -58,6 +58,8 @@ export function SettingsPage() {
         </div>
       </section>
 
+      {current && <AiSwitchCard org={current} />}
+
       {/* Usage */}
       <section className="card">
         <h2 className="mb-3 font-medium">{t("usage")}</h2>
@@ -73,6 +75,16 @@ export function SettingsPage() {
             limit: usage?.char_limit?.toLocaleString() ?? "—",
           })}
         </p>
+        {usage && (usage.image_limit !== undefined || usage.vision_points_limit !== undefined) && (
+          <ul className="mt-2 space-y-0.5 text-sm text-gray-500">
+            {usage.image_limit !== undefined && (
+              <li>{t("usageAiImages", { used: usage.images_generated ?? 0, limit: usage.image_limit })}</li>
+            )}
+            {usage.vision_points_limit !== undefined && (
+              <li>{t("usageAiPoints", { used: usage.vision_points ?? 0, limit: usage.vision_points_limit })}</li>
+            )}
+          </ul>
+        )}
         {usage && usage.by_provider.length > 0 && (
           <ul className="mt-3 text-xs text-gray-400">
             {usage.by_provider.map((row) => (
@@ -236,6 +248,87 @@ function ProvidersCard({ orgId, kind }: { orgId: string; kind: "voice" | "image"
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+/**
+ * "Allow third-party AI (Google)": the organization's switch for every step
+ * that sends a picture to Google (touch-ups, regenerating, stylising,
+ * generating, finding an animal's points). Owners and admins change it;
+ * members see how it is set, and why an AI step may be missing.
+ *
+ * Off takes effect at once, on the server: a step already on screen is
+ * refused (403 third_party_ai_disabled) rather than trusted to hide itself,
+ * so the open wizard, the consent terms and the org are all refreshed.
+ */
+function AiSwitchCard({ org }: { org: Org }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const canChange = org.role === "owner" || org.role === "admin";
+  const on = org.third_party_ai_enabled ?? true;
+
+  const toggle = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await api.patch<Org>(`/orgs/${org.id}`, { third_party_ai_enabled: !on });
+      await queryClient.invalidateQueries({ queryKey: ["orgs"] });
+      // Owned by the avatars feature; invalidated by key so an open wizard
+      // tab shows or hides its AI steps without a reload.
+      void queryClient.invalidateQueries({ queryKey: ["consent-terms", org.id] });
+      void queryClient.invalidateQueries({ queryKey: ["creation", org.id] });
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "insufficient_role") setError(t("aiSwitchNotAllowed"));
+      else setError(err instanceof ApiError ? err.detail : t("error"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="card" aria-labelledby="ai-switch-heading">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 id="ai-switch-heading" className="font-medium">
+            {t("aiSwitchTitle")}
+          </h2>
+          <p id="ai-switch-hint" className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">
+            {t("aiSwitchHint")}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-labelledby="ai-switch-heading"
+          aria-describedby="ai-switch-hint"
+          disabled={!canChange || saving}
+          onClick={() => void toggle()}
+          className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none
+            focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${
+              on ? "bg-brand-600" : "bg-gray-300 dark:bg-white/20"
+            }`}
+        >
+          <span
+            aria-hidden="true"
+            className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform motion-reduce:transition-none ${
+              on ? "translate-x-6 rtl:-translate-x-6" : "translate-x-1 rtl:-translate-x-1"
+            }`}
+          />
+        </button>
+      </div>
+      <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+        {on ? t("aiSwitchOn") : t("aiSwitchOff")}
+        {!canChange && <> {t("aiSwitchAdminsOnly")}</>}
+      </p>
+      {error && (
+        <p role="alert" className="field-error mt-2">
+          {error}
+        </p>
+      )}
     </section>
   );
 }

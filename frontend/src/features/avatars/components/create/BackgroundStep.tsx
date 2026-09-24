@@ -1,25 +1,30 @@
 import { useTranslation } from "react-i18next";
 
+import { CHECKER } from "@/features/avatars/components/create/checker";
 import { JobProgress } from "@/features/avatars/components/create/JobProgress";
 import {
   backgroundSource,
+  currentStep,
+  cutoutOf,
   isJobActive,
+  isTransparent,
   jobFailure,
-  stepById,
   type Creation,
 } from "@/features/avatars/creation";
 import { Spinner } from "@/components/ui/Spinner";
-
-// Transparent pixels read as a checkerboard, the way every editor shows them.
-const CHECKER =
-  "bg-[repeating-conic-gradient(#00000012_0%_25%,transparent_0%_50%)] bg-[length:20px_20px] dark:bg-[repeating-conic-gradient(#ffffff14_0%_25%,transparent_0%_50%)]";
 
 /**
  * Step 2: remove the background, or keep it. Before and after side by
  * side; either is a click to choose, and the cut-out, once made, stays
  * choosable, so changing one's mind costs nothing.
  *
- * Only people in M3 (the segmenter is trained on people: on a muzzle or a
+ * It works on the picture chosen so far: the photo, or an AI version when
+ * the owner comes back here after step 3 (its cut-out is "cutout:N"). The
+ * answer is remembered (`creation.background`): a version taken in step 3
+ * later is cut out too when it is "remove". Continue without choosing
+ * keeps the background, the same as choosing Keep.
+ *
+ * Only people so far (the segmenter is trained on people: on a muzzle or a
  * drawing it cuts ears, whiskers and outlines). Other lines, and servers
  * without the segmenter, get a sentence saying so and a Continue.
  */
@@ -39,12 +44,18 @@ export function BackgroundStep({
   onBack: () => void;
 }) {
   const { t } = useTranslation();
+  const current = currentStep(creation);
   const source = backgroundSource(creation);
-  const cutout = stepById(creation, "cutout");
+  const removed = isTransparent(current);
+  // What the Remove card shows: the transparent image on screen (a
+  // touch-up of a cut-out included), else the cut-out made from the source.
+  const cutout = removed ? current : cutoutOf(creation, source?.id);
   const offer = creation.background_removal;
   const job = creation.job?.step === "background" ? creation.job : null;
   const working = isJobActive(creation.job);
-  const removed = creation.current === "cutout";
+  // "Keep" goes back to the opaque image behind the cut-out, which is the
+  // photo before a touch-up made on the cut-out: said before it happens.
+  const keepDropsTouchup = removed && Boolean(current?.adjust);
 
   const actions = (
     <div className="flex flex-wrap items-center gap-3">
@@ -125,6 +136,7 @@ export function BackgroundStep({
           )
         )}
       </div>
+      {keepDropsTouchup && <p className="text-xs text-gray-500 dark:text-gray-400">{t("createBgKeepDropsTouchup")}</p>}
       {job && (isJobActive(job) || jobFailure(job)) && (
         <JobProgress job={job} onRetry={onRetry} retrying={busy === "retry"} />
       )}

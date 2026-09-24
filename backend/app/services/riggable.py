@@ -58,6 +58,23 @@ class RigCheck:
         return self.reason or "unusable"
 
 
+def nose_offset_of(points) -> float:
+    """How far the nose tip sits from the face box's centre, as a fraction
+    of half the face width: 0 frontal, growing as the head turns."""
+    xs = [float(p[0]) for p in points]
+    x0, x1 = min(xs), max(xs)
+    half = (x1 - x0) / 2
+    if half <= 0:
+        return 0.0
+    return abs(float(points[NOSE_TIP][0]) - (x0 + x1) / 2) / half
+
+
+def head_turned(points) -> bool:
+    """Turned too far for the engine, which cannot turn a head back. The
+    creation wizard's photo check asks the same question (photo_analysis)."""
+    return len(points) > NOSE_TIP and nose_offset_of(points) > MAX_NOSE_OFFSET
+
+
 def check_landmarks(points, image_size: tuple[int, int], detected: bool) -> RigCheck:
     """Judge an already-detected mesh.
 
@@ -103,9 +120,8 @@ def check_landmarks(points, image_size: tuple[int, int], detected: bool) -> RigC
     # and drifts toward one side as the head turns.
     nose_offset = 0.0
     if len(points) > NOSE_TIP:
-        centre = (x0 + x1) / 2
-        nose_offset = abs(float(points[NOSE_TIP][0]) - centre) / (face_w / 2)
-        if nose_offset > MAX_NOSE_OFFSET:
+        nose_offset = nose_offset_of(points)
+        if head_turned(points):
             return RigCheck(
                 False,
                 "head is turned away — the avatar cannot turn it back",

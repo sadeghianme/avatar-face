@@ -8,6 +8,7 @@ import pytest
 from PIL import Image, ImageDraw
 
 from app.services import face_template, landmarks
+from app.services import photo_analysis as pan
 from app.services.photo_analysis import (
     analyse,
     eye_line_roll,
@@ -177,3 +178,268 @@ def test_a_turned_cutout_stays_transparent_and_scrubbed():
     assert framed.mode == "RGBA"
     assert np.asarray(framed)[0, 0, 3] == 0
     assert_scrubbed(png_bytes(framed))
+
+
+# --- the photo check and step 3's recommendation ------------------------------------
+#
+# The fixtures are the face template (MediaPipe's own detection of a relaxed,
+# frontal, fictional portrait) with one thing changed at a time by the
+# helpers below, each to an exact measure, so every threshold is tested on
+# both of its sides.
+
+
+def with_eyes(points: np.ndarray, aspect: float, eyes=(0, 1)) -> np.ndarray:
+    """The face with the lids of `eyes` (0 image-left, 1 image-right) moved
+    about their middles until each eye's aspect ratio is `aspect`."""
+    out = points.copy()
+    for index in eyes:
+        eye = pan.EYES[index]
+        a, b = eye["corners"]
+        width = float(np.linalg.norm(out[a] - out[b]))
+        for top, bottom in eye["lids"]:
+            middle = (out[top] + out[bottom]) / 2
+            down = np.array([0.0, 1.0])
+            out[top] = middle - down * aspect * width / 2
+            out[bottom] = middle + down * aspect * width / 2
+    return out
+
+
+def looking(points: np.ndarray, offset: float) -> np.ndarray:
+    """The face with both irises moved along their eye lines, from where the
+    template has them, by `offset` half eye widths (positive: image right)."""
+    out = points.copy()
+    for eye, ring in ((pan.EYES[0], range(468, 473)), (pan.EYES[1], range(473, 478))):
+        a, b = (out[i] for i in eye["corners"])
+        axis = (b - a) if b[0] >= a[0] else (a - b)
+        half = float(np.linalg.norm(axis)) / 2
+        shift = axis / (2 * half) * offset * half
+        for i in ring:
+            out[i] = out[i] + shift
+    return out
+
+
+def with_mouth(points: np.ndarray, gap: float) -> np.ndarray:
+    """The face with the inner lips parted to `gap` mouth widths."""
+    out = points.copy()
+    width = float(np.linalg.norm(out[61] - out[291]))
+    for top, bottom in pan.INNER_LIPS:
+        middle = (out[top] + out[bottom]) / 2
+        out[top] = middle - np.array([0.0, gap * width / 2])
+        out[bottom] = middle + np.array([0.0, gap * width / 2])
+    return out
+
+
+def turned(points: np.ndarray, offset: float) -> np.ndarray:
+    """The face with the nose tip `offset` half face widths from the middle
+    of the face box (riggable's frontality measure)."""
+    out = points.copy()
+    x0, x1 = out[:, 0].min(), out[:, 0].max()
+    out[1, 0] = (x0 + x1) / 2 + offset * (x1 - x0) / 2
+    return out
+
+
+# A photo whose face (the template in the middle) is big and sharp enough:
+# 240 px across, 40% of the width. The 400 px wide `textured()` default puts
+# a 160 px face in it, which is low resolution.
+GOOD = (600, 750)
+
+
+@pytest.fixture
+def face_is(monkeypatch):
+    """landmarks.detect answering `state["points"](box)`: the template,
+    changed, in the middle of whatever image it is shown."""
+    state = {"change": lambda p: p, "box": (0.3, 0.2, 0.7, 0.7), "seen": []}
+
+    def detect(image):
+        state["seen"].append(image)
+        if state["change"] is None:
+            return None
+        w, h = image.size
+        x0, y0, x1, y1 = state["box"]
+        points = state["change"](face_template.place((x0 * w, y0 * h, x1 * w, y1 * h)))
+        return landmarks.FaceLandmarks(points=points, z=np.zeros(len(points)))
+
+    monkeypatch.setattr(landmarks, "detect", detect)
+    return state
+
+
+def _check(face_is, change, image=None) -> dict:
+    face_is["change"] = change
+    return pan.check_photo(image or textured(*GOOD))
+
+
+def _codes(check: dict) -> set[str]:
+    return {c["code"] for c in check["checks"]}
+
+
+def test_the_template_needs_nothing_on_any_line(face_is):
+    check = _check(face_is, lambda p: p)
+    assert check["checks"] == []
+    for line in ("human", "animal", "cartoon"):
+        assert check["recommendations"][line] == {"mode": "none", "reasons": []}
+    state = check["face_state"]
+    assert not any(v for k, v in state.items() if k != "measures")
+    measures = state["measures"]
+    assert min(measures["eye_aspect"]) > pan.EYE_HALF_CLOSED_EAR
+    assert abs(measures["gaze"]) < pan.MAX_GAZE_OFFSET / 5
+    assert measures["mouth_gap"] < pan.TEETH_RATIO
+
+
+@pytest.mark.parametrize(
+    ("aspect", "code"),
+    [
+        (pan.EYE_CLOSED_EAR - 0.01, "eyes_closed"),
+        (pan.EYE_CLOSED_EAR + 0.01, "eyes_half_closed"),
+        (pan.EYE_HALF_CLOSED_EAR - 0.01, "eyes_half_closed"),
+        (pan.EYE_HALF_CLOSED_EAR + 0.01, None),
+    ],
+)
+def test_eyes_are_judged_by_their_aspect_ratio(face_is, aspect, code):
+    check = _check(face_is, lambda p: with_eyes(p, aspect))
+    assert check["face_state"]["measures"]["eye_aspect"] == [pytest.approx(aspect, abs=1e-3)] * 2
+    found = _codes(check) & {"eyes_closed", "eyes_half_closed"}
+    assert found == ({code} if code else set())
+    expected = {"mode": "touchup", "reasons": [code]} if code else {"mode": "none", "reasons": []}
+    assert check["recommendations"]["human"] == expected
+
+
+def test_one_closed_eye_is_closed_eyes(face_is):
+    check = _check(face_is, lambda p: with_eyes(p, 0.03, eyes=(1,)))
+    assert "eyes_closed" in _codes(check)
+    assert check["recommendations"]["human"]["mode"] == "touchup"
+
+
+@pytest.mark.parametrize("direction", [1, -1])
+def test_eyes_looking_away_are_named(face_is, direction):
+    template = _check(face_is, lambda p: p)["face_state"]["measures"]["gaze"]
+    near = pan.MAX_GAZE_OFFSET - 0.05 - abs(template)
+    far = pan.MAX_GAZE_OFFSET + 0.05 + abs(template)
+    assert "gaze_off_camera" not in _codes(_check(face_is, lambda p: looking(p, direction * near)))
+    away = _check(face_is, lambda p: looking(p, direction * far))
+    assert "gaze_off_camera" in _codes(away)
+    assert away["recommendations"]["human"] == {"mode": "touchup", "reasons": ["gaze_off_camera"]}
+
+
+def test_gaze_is_not_read_through_lowered_lids(face_is):
+    check = _check(face_is, lambda p: looking(with_eyes(p, 0.15), 0.6))
+    assert check["face_state"]["measures"]["gaze"] is None
+    assert "gaze_off_camera" not in _codes(check)
+
+
+@pytest.mark.parametrize(
+    ("gap", "code"),
+    [
+        (pan.TEETH_RATIO - 0.01, None),
+        (pan.TEETH_RATIO + 0.01, "teeth_showing"),
+        (pan.OPEN_MOUTH_RATIO - 0.01, "teeth_showing"),
+        (pan.OPEN_MOUTH_RATIO + 0.01, "mouth_open"),
+    ],
+)
+def test_the_mouth_is_judged_by_the_inner_lip_gap(face_is, gap, code):
+    check = _check(face_is, lambda p: with_mouth(p, gap))
+    assert check["face_state"]["measures"]["mouth_gap"] == pytest.approx(gap, abs=1e-3)
+    assert _codes(check) & {"teeth_showing", "mouth_open"} == ({code} if code else set())
+    # Parted lips are touched up; an open mouth is regenerated, because
+    # closing it moves the jaw and a paste of new lips cannot follow.
+    expected = {None: "none", "teeth_showing": "touchup", "mouth_open": "regenerate"}[code]
+    assert check["recommendations"]["human"]["mode"] == expected
+
+
+def test_a_turned_head_needs_regenerating_which_also_fixes_the_eyes(face_is):
+    from app.services.riggable import MAX_NOSE_OFFSET
+
+    assert "head_turned" not in _codes(_check(face_is, lambda p: turned(p, MAX_NOSE_OFFSET - 0.1)))
+    check = _check(face_is, lambda p: turned(with_eyes(p, 0.05), MAX_NOSE_OFFSET + 0.05))
+    assert "head_turned" in _codes(check)
+    assert check["recommendations"]["human"] == {
+        "mode": "regenerate", "reasons": ["head_turned", "eyes_closed"],
+    }
+
+
+def test_a_touchup_is_not_recommended_on_a_head_it_would_refuse(face_is):
+    """Turned past the touch-up's limit but not the rig's: regenerate."""
+    from app.services.photo_adjust import MAX_TOUCHUP_YAW
+    from app.services.riggable import MAX_NOSE_OFFSET
+
+    between = (MAX_TOUCHUP_YAW + MAX_NOSE_OFFSET) / 2
+    check = _check(face_is, lambda p: turned(with_eyes(p, 0.05), between))
+    assert check["face_state"]["measures"]["yaw"] > MAX_TOUCHUP_YAW
+    assert "head_turned" not in _codes(check)
+    assert check["recommendations"]["human"] == {
+        "mode": "regenerate", "reasons": ["head_turned", "eyes_closed"],
+    }
+    # Frontal enough, the same eyes are a touch-up.
+    assert _check(face_is, lambda p: with_eyes(p, 0.05))["recommendations"]["human"]["mode"] == (
+        "touchup"
+    )
+
+
+def test_a_tilt_left_on_the_image_needs_regenerating(face_is):
+    level = pan.MAX_HEAD_TILT_DEGREES
+    assert "head_tilted" not in _codes(_check(face_is, lambda p: rotated(p, level - 2)))
+    check = _check(face_is, lambda p: rotated(p, level + 2))
+    assert "head_tilted" in _codes(check)
+    assert check["recommendations"]["human"] == {"mode": "regenerate", "reasons": ["head_tilted"]}
+
+
+def test_a_small_face_and_poor_light_need_regenerating(face_is):
+    face_is["box"] = (0.45, 0.35, 0.55, 0.45)
+    small = _check(face_is, lambda p: p, textured(1200, 1200))
+    assert small["recommendations"]["human"] == {
+        "mode": "regenerate", "reasons": ["face_small", "low_resolution"],
+    }
+    face_is["box"] = (0.3, 0.2, 0.7, 0.7)
+    dark = _check(face_is, lambda p: with_mouth(p, 0.2), textured(*GOOD, low=0, high=30))
+    assert dark["recommendations"]["human"] == {
+        "mode": "regenerate", "reasons": ["too_dark", "mouth_open"],
+    }
+
+
+def test_no_face_on_a_person_needs_regenerating(face_is):
+    check = _check(face_is, None)
+    assert check["recommendations"]["human"] == {"mode": "regenerate", "reasons": ["no_face"]}
+
+
+def test_animals_and_animations_are_judged_on_their_pose_only(face_is):
+    # The detector is trained on people: finding no face says nothing about
+    # a dog, and a regenerated dog would not be found either. A drawing it
+    # misses may well be one it would find drawn frontally.
+    missing = _check(face_is, None)["recommendations"]
+    assert missing["animal"] == {"mode": "none", "reasons": []}
+    assert missing["cartoon"] == {"mode": "regenerate", "reasons": ["no_face"]}
+    for line in ("animal", "cartoon"):
+        side = _check(face_is, lambda p: turned(p, 0.6))["recommendations"][line]
+        assert side == {"mode": "regenerate", "reasons": ["head_turned"]}
+        # Closed eyes, an open mouth, dim light: a drawing may be drawn so.
+        odd = _check(
+            face_is, lambda p: with_mouth(with_eyes(p, 0.02), 0.3), textured(*GOOD, low=0, high=30)
+        )
+        assert odd["recommendations"][line] == {"mode": "none", "reasons": []}
+
+
+def test_without_a_detector_only_the_pixels_speak():
+    check = pan.check_photo(textured(*GOOD, low=0, high=30))
+    assert check["detector"] is None
+    human = check["recommendations"]["human"]
+    assert human["mode"] == "regenerate" and "too_dark" in human["reasons"]
+    assert "no_face" not in human["reasons"], "no model is not no face"
+    assert check["recommendations"]["animal"] == {"mode": "none", "reasons": []}
+    fine = pan.check_photo(textured(*GOOD))
+    assert fine["recommendations"]["human"] == {"mode": "none", "reasons": []}
+
+
+def test_a_cutout_is_checked_on_the_neutral_backdrop(face_is):
+    rgba = np.asarray(textured(*GOOD).convert("RGBA")).copy()
+    rgba[:, :100, 3] = 0
+    rgba[:, :100, :3] = 0
+    check = _check(face_is, lambda p: p, Image.fromarray(rgba, mode="RGBA"))
+    shown = face_is["seen"][-1]
+    assert shown.mode == "RGB"
+    assert shown.getpixel((10, 10)) == (128, 128, 128), "grey, not the black under alpha 0"
+    assert check["recommendations"]["human"]["mode"] == "none"
+
+
+def test_the_upload_analysis_carries_the_check(face_is):
+    result = analyse(png(textured(*GOOD)))
+    assert result["recommendations"]["human"] == {"mode": "none", "reasons": []}
+    assert result["face_state"]["measures"]["eye_aspect"]

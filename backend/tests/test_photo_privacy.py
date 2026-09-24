@@ -189,31 +189,6 @@ async def _stored(client, url: str) -> bytes:
     return response.content
 
 
-async def test_staging_upload_is_clean(client):
-    headers, org_id = await _org(client, "stager")
-    for data, check in ((phone_jpeg(), assert_clean_upright), (leaky_cutout(), assert_scrubbed)):
-        mime = "image/jpeg" if data[:2] == b"\xff\xd8" else "image/png"
-        staged = await client.post(
-            f"/orgs/{org_id}/staging", files={"file": ("p", data, mime)}, headers=headers
-        )
-        assert staged.status_code == 201, staged.text
-        check(await _stored(client, staged.json()["url"]))
-
-
-async def test_staging_background_removal_and_crop(client, stub_segmenter):
-    headers, org_id = await _org(client, "stagecut")
-    staged = await client.post(
-        f"/orgs/{org_id}/staging", files={"file": ("p", opaque_png(), "image/png")},
-        headers=headers,
-    )
-    cut = await client.post(
-        f"/orgs/{org_id}/staging/remove-background", json={"key": staged.json()["key"]},
-        headers=headers,
-    )
-    assert cut.status_code == 200, cut.text
-    assert_scrubbed(await _stored(client, cut.json()["url"]))
-
-
 async def test_avatar_background_removal_and_its_derivatives(client, stub_segmenter):
     """The cut-out itself, its thumbnail, and a crop of it."""
     headers, org_id = await _org(client, "avatarcut")
@@ -324,11 +299,19 @@ async def test_uploads_are_stored_no_larger_than_the_stored_size(client, monkeyp
     detail = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
     assert Image.open(io.BytesIO(await _stored(client, detail["image_url"]))).size == (8, 16)
 
-    staged = await client.post(
-        f"/orgs/{org_id}/staging", files={"file": ("p", phone_jpeg(), "image/jpeg")},
+    from app.services.jobs import runner
+
+    created = await client.post(
+        f"/orgs/{org_id}/creations", files={"file": ("p", phone_jpeg(), "image/jpeg")},
         headers=headers,
     )
-    assert (staged.json()["width"], staged.json()["height"]) == (8, 16)
+    assert created.status_code == 202, created.text
+    await runner.drain()
+    creation = (
+        await client.get(f"/orgs/{org_id}/creations/{created.json()['id']}", headers=headers)
+    ).json()
+    original = creation["steps"][0]
+    assert (original["width"], original["height"]) == (8, 16)
 
 
 async def test_a_second_put_through_the_upload_url_cannot_replace_the_live_image(client):

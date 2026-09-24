@@ -7,12 +7,17 @@
  * still belong to the image) are tested with `node --test` rather than by
  * clicking through the flow. The components only render what these say.
  */
+import type { FaceStatement } from "@/features/avatars/consent";
 import type { FaceMarks, FitReason } from "@/features/avatars/face-marks";
 import type { FaceType } from "@/lib/types";
 
 // --- API shapes -------------------------------------------------------------------
 
-export type StepId = "original" | "framed" | "cutout";
+/** The images of a creation, by opaque id. "adjusted:N" are AI adjust
+ * candidates, numbered across rounds (a second round starts after the
+ * first's numbers, so an id never names two images); "cutout:N" is the
+ * background removed from "adjusted:N", as "cutout" is from the photo. */
+export type StepId = "original" | "framed" | "cutout" | `adjusted:${number}` | `cutout:${number}`;
 
 /** A rectangle in fractions of the ORIGINAL upload. */
 export interface CropRect {
@@ -20,6 +25,22 @@ export interface CropRect {
   y: number;
   w: number;
   h: number;
+}
+
+export type AdjustMode = "touchup" | "stylise" | "regenerate";
+export type AdjustStyle = "photoreal" | "illustrated" | "anime" | "render3d";
+
+/** What AI adjust made an "adjusted:N" image from, and how it fared. */
+export interface StepAdjust {
+  mode: AdjustMode;
+  style: AdjustStyle | null;
+  model: string;
+  /** The photo's eyes were closed and these are the model's invention:
+   * the owner must be told, every time the image is shown as a choice. */
+  generated_eyes: boolean;
+  /** Failed its checks: shown with the reason, never choosable. */
+  rejected: PhotoCheck | null;
+  checks: { detected?: boolean; fit_ok?: boolean; skin_delta_e?: number };
 }
 
 export interface CreationStep {
@@ -31,6 +52,13 @@ export interface CreationStep {
   from: StepId | null;
   crop: CropRect | null;
   roll: number | null;
+  /** On "adjusted:N" only. */
+  adjust?: StepAdjust | null;
+  /** On an original the image model made (POST /creations/generate). */
+  generated?: { model: string; style: AdjustStyle; provider: "gemini" } | null;
+  /** Transparent around the subject: a background removal ("cutout",
+   * "cutout:N"), or a touch-up of one (it keeps the cut-out's alpha). */
+  cutout?: boolean;
 }
 
 export interface PhotoCheck {
@@ -47,6 +75,38 @@ export interface CreationAnalysis {
   suggested_face_type: "human" | null;
   suggested_framing: { crop: CropRect; roll: number } | null;
   checks: PhotoCheck[];
+  /** The upload's face, measured; null when no face was measured. */
+  face_state?: FaceState | null;
+  /** What step 3 recommends for the CURRENT image (unlike the rest of the
+   * analysis, which describes the upload). Null until the line is known,
+   * and on drafts older than per-image checks. */
+  recommendation?: Recommendation | null;
+}
+
+export interface FaceState {
+  eyes_closed: boolean;
+  mouth_open: boolean;
+  eyes_half_closed?: boolean;
+  gaze_off_camera?: boolean;
+  teeth_showing?: boolean;
+  head_turned?: boolean;
+  measures?: {
+    eye_aspect: [number, number];
+    gaze: number | null;
+    mouth_gap: number;
+    nose_offset: number;
+    yaw: number;
+  };
+}
+
+export type RecommendedMode = "touchup" | "regenerate" | "none";
+
+export interface Recommendation {
+  /** The step it was computed on: the current image when it is fresh. */
+  image: StepId;
+  mode: RecommendedMode;
+  /** Check codes, the regenerate ones first (see REGENERATE_REASONS). */
+  reasons: string[];
 }
 
 export interface AnchorValidation {
@@ -59,15 +119,19 @@ export interface AnchorValidation {
 
 export interface CreationAnchors {
   id: string;
+  /** Where the opening marks came from: a detection, the template's guess,
+   * or the vision model's points (a pre-fill the owner still confirms).
+   * Null on anchors made before this was recorded. */
+  source?: "mediapipe" | "template" | "ai" | null;
   /** The step whose pixels the marks are in; null once that image is gone. */
-  image: "original" | "framed" | null;
+  image: StepId | null;
   image_size: [number, number];
   detected: boolean;
   marks: FaceMarks;
   validation: AnchorValidation;
 }
 
-export type JobStep = "ingest" | "background" | "detect" | "finish";
+export type JobStep = "ingest" | "generate" | "adjust" | "background" | "detect" | "finish";
 export type JobState = "queued" | "running" | "done" | "failed" | "interrupted";
 
 export interface CreationJob {
@@ -81,6 +145,40 @@ export interface CreationJob {
 }
 
 export type CreationStatus = "draft" | "finishing" | "finished" | "expired";
+
+export interface AdjustCandidate {
+  /** The step holding the image; null when there is none to show (a
+   * safety refusal, a provider error, a result with no face in it). */
+  step: StepId | null;
+  ok: boolean;
+  reason: PhotoCheck | null;
+  generated_eyes: boolean;
+}
+
+export interface AdjustRound {
+  mode: AdjustMode;
+  style: AdjustStyle | null;
+  /** The image the round was made from. */
+  source: StepId;
+  candidates: AdjustCandidate[];
+  /** The monthly image limit stopped the round before every candidate. */
+  limit_reached: boolean;
+}
+
+/** The creation's AI step: what is offered, what is left, what happened. */
+export interface CreationAi {
+  /** False when an owner or admin has turned third-party AI off. */
+  enabled: boolean;
+  /** Adjust modes this line offers (empty until the line is known). */
+  modes: AdjustMode[];
+  /** The recommended mode, when the current image needs a fix this line
+   * offers: pre-selected. Empty when nothing needs fixing, so nothing paid
+   * is ever pre-selected on a photo that is fine. */
+  suggested: AdjustMode[];
+  adjust_rounds_left: number;
+  ai_detections_left: number;
+  last_round: AdjustRound | null;
+}
 
 export interface Creation {
   id: string;
@@ -98,6 +196,15 @@ export interface Creation {
     available: boolean;
     reason: null | "face_type_required" | "not_for_face_type" | "segmentation_unavailable";
   };
+  /** The step 2 answer; null until given, and again after a change of
+   * line. Choosing an opaque AI result follows "remove" by cutting it out. */
+  background?: "remove" | "keep" | null;
+  ai: CreationAi;
+  /** The uploader's statement finishing needs, recorded for this creation:
+   * "depiction" for a person's photo on whatever line it is on now (a
+   * stylised photo is still that person), "generated_face" for a face made
+   * from words, null for none. Absent from a server before it said so. */
+  statement?: FaceStatement | null;
   created_at: string;
   updated_at: string;
 }
@@ -142,8 +249,12 @@ export function nameFromFile(filename: string): string {
 
 // --- Steps and jobs ----------------------------------------------------------------
 
-export type WizardStep = "frame" | "background" | "points";
-export const WIZARD_STEPS: readonly WizardStep[] = ["frame", "background", "points"];
+export type WizardStep = "frame" | "background" | "adjust" | "points";
+/** 1 Upload + frame, 2 Background, 3 AI adjust, 4 Points: the owner's
+ * order (docs/avatar-lines.md). The model is sent a cut-out on plain grey,
+ * never the removed background, and a result the owner takes is cut out
+ * again when they chose Remove, so the order costs nothing in quality. */
+export const WIZARD_STEPS: readonly WizardStep[] = ["frame", "background", "adjust", "points"];
 
 const ACTIVE: ReadonlySet<JobState> = new Set(["queued", "running"]);
 
@@ -176,13 +287,49 @@ export function currentStep(creation: Creation): CreationStep | null {
   return stepById(creation, creation.current);
 }
 
+/** A background removal's output: "cutout", or "cutout:N" (of adjusted:N). */
+export function isCutoutId(id: string | null | undefined): boolean {
+  return id === "cutout" || Boolean(id?.startsWith(CUTOUT_PREFIX));
+}
+
+/** Is this image transparent around the subject? A cut-out, or a touch-up
+ * made from one (it keeps its alpha). Mirrors services.creations.is_cut_out. */
+export function isTransparent(step: CreationStep | null | undefined): boolean {
+  return Boolean(step && (step.cutout || isCutoutId(step.id)));
+}
+
+/** The id the background removal of `id` is stored under. */
+export function cutoutIdFor(id: StepId): StepId {
+  return isAdjusted(id) ? (`${CUTOUT_PREFIX}${id.slice(ADJUSTED_PREFIX.length)}` as StepId) : "cutout";
+}
+
+/** The cut-out made from `id`, when there is one. */
+export function cutoutOf(creation: Creation, id: StepId | null | undefined): CreationStep | null {
+  if (!id) return null;
+  const cut = stepById(creation, cutoutIdFor(id));
+  return cut && cut.from === id ? cut : null;
+}
+
+/** `id`, or when it is a background removal, the image it was cut from
+ * (repeatedly): the image whose pixels it shows. */
+function throughCutouts(creation: Creation, id: StepId | null | undefined): CreationStep | null {
+  const seen = new Set<string>();
+  let step = stepById(creation, id);
+  while (step && isCutoutId(step.id) && !seen.has(step.id)) {
+    seen.add(step.id);
+    const source = stepById(creation, step.from);
+    if (!source) break;
+    step = source;
+  }
+  return step;
+}
+
 /** The image whose pixel grid the current image shares: a cut-out is its
- * source's grid (no pixel moved), every other step its own. Marks placed on
- * one are valid on the other. */
+ * source's grid (no pixel moved), every other step its own, an AI result
+ * included (the model redrew it). Marks placed on one are valid on the
+ * other. Mirrors services.creations.frame_key. */
 export function frameOf(creation: Creation): StepId | null {
-  const current = currentStep(creation);
-  if (!current) return null;
-  return current.id === "cutout" ? current.from : current.id;
+  return throughCutouts(creation, creation.current)?.id ?? null;
 }
 
 /** Do the anchors belong to the image the owner is looking at? Reframing,
@@ -192,15 +339,23 @@ export function anchorsCurrent(creation: Creation): boolean {
   return Boolean(anchors && anchors.image !== null && anchors.image === frameOf(creation));
 }
 
-/** The image background removal applies to: the current one, or the one
- * the current cut-out was made from. */
+/** The opaque image behind the current one: the current image, or when
+ * that is transparent (a cut-out, or a touch-up of one), the image it was
+ * cut from. What "Keep original" goes back to, and what "Remove" cuts.
+ * Mirrors services.creations.background_source. */
 export function backgroundSource(creation: Creation): CreationStep | null {
-  const current = currentStep(creation);
-  if (current?.id === "cutout") return stepById(creation, current.from);
-  return current;
+  const seen = new Set<string>();
+  let step = currentStep(creation);
+  while (step && isTransparent(step) && !seen.has(step.id)) {
+    seen.add(step.id);
+    const source = stepById(creation, step.from);
+    if (!source) break;
+    step = source;
+  }
+  return step;
 }
 
-/** The original is stored and the line is known: steps 2 and 3 can open. */
+/** The original is stored and the line is known: the later steps can open. */
 export function pastFirstStep(creation: Creation): boolean {
   return stepById(creation, "original") !== null && creation.face_type !== null;
 }
@@ -214,11 +369,16 @@ export function inferStep(creation: Creation): WizardStep {
   if (!pastFirstStep(creation)) return "frame";
   const job = creation.job;
   if (job && (isJobActive(job) || jobFailure(job))) {
-    if (job.step === "background") return "background";
+    if (job.step === "adjust") return "adjust";
+    // Cutting out an AI result the owner just took is part of taking it.
+    if (job.step === "background") return aiResultInUse(creation) ? "adjust" : "background";
     if (job.step === "detect" || job.step === "finish") return "points";
   }
   if (creation.anchors) return "points";
-  if (stepById(creation, "cutout")) return "background";
+  // An AI round was asked for: its results wait to be compared.
+  if (adjustedSteps(creation).length > 0 || creation.ai?.last_round) return "adjust";
+  // Step 2 was worked on last: back there, to Continue from it.
+  if (creation.background || creation.steps.some((step) => isCutoutId(step.id))) return "background";
   return "frame";
 }
 
@@ -230,6 +390,218 @@ export function resolveStep(creation: Creation, requested: string | null): Wizar
   if (!asked) return inferStep(creation);
   if (asked !== "frame" && !pastFirstStep(creation)) return "frame";
   return asked;
+}
+
+// --- Photo findings -------------------------------------------------------------------
+
+/** Check codes with our own words (photoCheck_<code>); others show the
+ * server's sentence. */
+export const PHOTO_CHECKS: ReadonlySet<string> = new Set([
+  "face_small", "face_at_edge", "head_turned", "low_resolution", "no_face", "blurry", "too_dark", "too_bright",
+  "eyes_closed", "mouth_open", "eyes_half_closed", "gaze_off_camera", "teeth_showing", "head_tilted",
+  // Warnings of an AI point search that fell back to the template.
+  "ai_points_failed", "ai_no_face", "ai_points_implausible", "safety_refused", "vision_limit_reached",
+]);
+
+/** Checks that are not news on the line chosen: "no human face" on a dog
+ * is the reason it is a dog. */
+const NOT_A_PROBLEM_FOR: Record<string, readonly FaceType[]> = {
+  no_face: ["animal", "cartoon"],
+  head_turned: ["animal"],
+};
+
+/** The analysis' findings worth telling the owner of a `line` picture.
+ * With no line chosen yet, "no human face" is left out: it is asked about
+ * as a question (which line?) instead. */
+export function photoFindings(analysis: CreationAnalysis | null | undefined, line: FaceType | null): PhotoCheck[] {
+  return (analysis?.checks ?? []).filter((check) =>
+    line ? !NOT_A_PROBLEM_FOR[check.code]?.includes(line) : check.code !== "no_face"
+  );
+}
+
+// --- AI adjust ----------------------------------------------------------------------
+
+export const ADJUSTED_PREFIX = "adjusted:";
+export const CUTOUT_PREFIX = "cutout:";
+export const ADJUST_STYLES: readonly AdjustStyle[] = ["photoreal", "illustrated", "anime", "render3d"];
+/** The order the options are offered in; the server says which a line has. */
+export const ADJUST_MODES: readonly AdjustMode[] = ["touchup", "stylise", "regenerate"];
+
+/** What a touch-up fixes: the eyes and parted lips, nothing else.
+ * services.photo_analysis.TOUCHUP_REASONS. */
+export const TOUCHUP_REASONS: readonly string[] = [
+  "eyes_closed", "eyes_half_closed", "gaze_off_camera", "teeth_showing",
+];
+/** What only a regenerated picture fixes (pose, light, size, sharpness, and
+ * an open mouth: closing it moves the jaw, which pasted lips cannot follow).
+ * services.photo_analysis.REGENERATE_REASONS. */
+export const REGENERATE_REASONS: readonly string[] = [
+  "no_face", "head_turned", "head_tilted", "face_small", "low_resolution", "too_dark", "too_bright", "blurry",
+  "mouth_open",
+];
+/** The reasons an animal or an animation is judged on: a face to find,
+ * facing the camera. Worded for a drawing or a pet, not "your eyes". */
+export const DRAWN_REASONS: ReadonlySet<string> = new Set(["no_face", "head_turned"]);
+
+export function isAdjusted(id: string | null | undefined): boolean {
+  return Boolean(id && id.startsWith(ADJUSTED_PREFIX));
+}
+
+/** Every AI candidate stored so far, both rounds, in the server's order. */
+export function adjustedSteps(creation: Creation): CreationStep[] {
+  return creation.steps.filter((step) => isAdjusted(step.id));
+}
+
+/**
+ * What step 3 recommends for the image on screen, or null. Only while it
+ * was computed on the current image: a response is always fresh, but a
+ * creation held in the cache across a choice must not show the last
+ * image's reasons as this one's.
+ */
+export function recommendationOf(creation: Creation): Recommendation | null {
+  const found = creation.analysis?.recommendation ?? null;
+  return found && found.image === creation.current ? found : null;
+}
+
+/** The fix to pre-select: the recommended one, when this line offers it
+ * and AI is on. Null when the photo needs nothing: nothing paid is ever
+ * selected for the owner on a photo that is fine. */
+export function preselectedMode(creation: Creation): AdjustMode | null {
+  const offered = adjustModes(creation);
+  return (creation.ai?.suggested ?? []).find((mode) => offered.includes(mode)) ?? null;
+}
+
+/** The AI result the owner is using, seen through its cut-out ("cutout:1"
+ * shows "adjusted:1"), or null when the current image is not one. */
+export function aiResultInUse(creation: Creation): CreationStep | null {
+  const shown = throughCutouts(creation, creation.current);
+  return shown && isAdjusted(shown.id) ? shown : null;
+}
+
+/** Is `id` the picture on screen, directly or as its cut-out? */
+export function inUse(creation: Creation, id: StepId): boolean {
+  return throughCutouts(creation, creation.current)?.id === id;
+}
+
+/** The image the last AI round was made from: the "before" of the
+ * before/after. Null without a round, or once that image is gone (a new
+ * framing drops every AI result and what they were made from). */
+export function roundSource(creation: Creation): CreationStep | null {
+  const source = creation.ai?.last_round?.source;
+  return source ? stepById(creation, source) : null;
+}
+
+/** The last round's versions, each with its picture when it has one. */
+export function roundResults(creation: Creation): { candidate: AdjustCandidate; step: CreationStep | null }[] {
+  return (creation.ai?.last_round?.candidates ?? []).map((candidate) => ({
+    candidate,
+    step: candidate.step ? stepById(creation, candidate.step) : null,
+  }));
+}
+
+/**
+ * What "Keep my photo" chooses: the round's "before", as its cut-out when
+ * the owner removed the background (choosing an image never cuts it out
+ * by itself, only an AI result). Null when that picture is on screen
+ * already, so keeping it is just carrying on.
+ */
+export function keepChoice(creation: Creation): StepId | null {
+  const source = roundSource(creation);
+  if (!source) return null;
+  if (throughCutouts(creation, creation.current)?.id === throughCutouts(creation, source.id)?.id) return null;
+  if (creation.background === "remove" && !isTransparent(source)) {
+    const cut = cutoutOf(creation, source.id);
+    if (cut) return cut.id;
+  }
+  return source.id;
+}
+
+/** Can this candidate be chosen? Rejected ones are shown, never used. */
+export function choosable(step: CreationStep): boolean {
+  return !step.adjust?.rejected;
+}
+
+export interface AiEdit {
+  mode: AdjustMode | "generate";
+  model: string | null;
+  generated_eyes: boolean;
+}
+
+/**
+ * Did an AI make or change the picture `id` shows (the current one by
+ * default)? The latest AI adjust in its lineage, else a generated original;
+ * null for a photo as its owner gave it (framing and cut-outs are not AI
+ * edits). Mirrors services.creations.ai_edited_of, which decides the
+ * disclosure the published avatar carries.
+ */
+export function aiEditOf(creation: Creation, id: StepId | null = creation.current): AiEdit | null {
+  const seen = new Set<string>();
+  let step = stepById(creation, id);
+  while (step && !seen.has(step.id)) {
+    seen.add(step.id);
+    if (step.adjust) {
+      return { mode: step.adjust.mode, model: step.adjust.model, generated_eyes: step.adjust.generated_eyes };
+    }
+    if (step.generated) return { mode: "generate", model: step.generated.model, generated_eyes: false };
+    step = stepById(creation, step.from);
+  }
+  return null;
+}
+
+/** The adjust modes to offer, in order: none while AI is switched off. */
+export function adjustModes(creation: Creation): AdjustMode[] {
+  if (!creation.ai?.enabled) return [];
+  return ADJUST_MODES.filter((mode) => creation.ai.modes.includes(mode));
+}
+
+/**
+ * Whether the points step offers "Find the points with AI", and in what
+ * state. Only where the detector cannot see: always for an animal, for an
+ * animation only when MediaPipe found nothing (a detected face is better
+ * than the model's guess). Never for a person. "spent" means the one AI
+ * look this creation gets was used on other pixels.
+ */
+export type AiPointsOffer = "offer" | "spent" | null;
+
+export function aiPointsOffer(
+  creation: Creation,
+  anchors: Pick<CreationAnchors, "detected" | "source"> | null
+): AiPointsOffer {
+  if (!creation.ai?.enabled || !anchors) return null;
+  if (creation.face_type === "human" || creation.face_type === null) return null;
+  if (creation.face_type === "cartoon" && anchors.detected) return null;
+  // The model's points are already on screen: asking again is the button
+  // "Detect again" is for, and would cost the one look.
+  if (anchors.source === "ai") return null;
+  return creation.ai.ai_detections_left > 0 ? "offer" : "spent";
+}
+
+/**
+ * Which statement finishing needs, if any (the server decides, from where
+ * the pixels came from). A server that does not say yet asked it of every
+ * person, and only of a person.
+ */
+export function statementNeeded(creation: Creation): FaceStatement | null {
+  if (creation.statement !== undefined) return creation.statement;
+  return (creation.face_type ?? "human") === "human" ? "depiction" : null;
+}
+
+/** Why a candidate failed, in the owner's words (adjustReason_<code>). */
+export const CANDIDATE_REASONS: ReadonlySet<string> = new Set([
+  "safety_refused",
+  "no_image",
+  "provider_error",
+  "unreadable_result",
+  "no_face_in_result",
+  "alignment_failed",
+  "jaw_moved",
+  "fit_invalid",
+  "skin_tone_changed",
+  "check_failed",
+]);
+
+export function candidateReasonText(t: Translate, reason: PhotoCheck): string {
+  return CANDIDATE_REASONS.has(reason.code) ? t(`adjustReason_${reason.code}`) : reason.detail || t("error");
 }
 
 // --- Framing ----------------------------------------------------------------------
@@ -516,6 +888,29 @@ export const KNOWN_ERRORS: ReadonlySet<string> = new Set([
   "interrupted",
   "job_failed",
   "network_error",
+  // M4: consent, AI adjust, AI points, generation.
+  "consent_required",
+  "consent_outdated",
+  "unknown_consent_version",
+  "unknown_provider",
+  "third_party_ai_disabled",
+  "adjust_not_for_face_type",
+  "style_required",
+  "imagegen_unavailable",
+  "budget_spent",
+  "image_limit_reached",
+  "candidate_rejected",
+  "ai_points_not_for_face_type",
+  "ai_points_unavailable",
+  "face_turned",
+  "no_face_for_touchup",
+  "landmarks_unavailable",
+  "provider_error",
+  "no_image",
+  "safety_refused",
+  "source_gone",
+  "avatar_not_found",
+  "not_a_photo",
 ]);
 
 export type Translate = (key: string, options?: Record<string, unknown>) => string;

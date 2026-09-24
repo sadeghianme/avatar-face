@@ -175,6 +175,16 @@ export function AvatarDetailPage() {
           </Link>
           <h1 className="text-2xl font-semibold">{avatar.name}</h1>
           <StatusBadge status={avatar.status} />
+          {/* The same disclosure visitors get with the published avatar. */}
+          {avatar.ai_edited && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+              title={avatar.ai_edited.model ? t("aiEditedModel", { model: avatar.ai_edited.model }) : undefined}
+            >
+              <Icon name="sparkles" className="h-3.5 w-3.5" />
+              {t(`aiEdited_${avatar.ai_edited.mode}`)}
+            </span>
+          )}
         </div>
         <div className="flex gap-2">
           {avatar.kind === "photo" && (

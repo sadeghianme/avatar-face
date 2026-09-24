@@ -14,8 +14,13 @@
  *   Liveface.isSpeaking()
  *   Liveface.listen({lang}) — browser STT, resolves with the transcript
  *   Liveface.sttSupported()
+ *
+ * An avatar whose face an AI made or changed shows a small "AI avatar"
+ * label under the canvas (see disclosure.ts); data-ai-label="off" turns it
+ * off for a site that discloses it another way.
  */
 import { BrowserTTS, CuePlayer } from "./browser-tts";
+import { aiLabel, renderAiLabel, type Disclosure } from "./disclosure";
 import { AvatarEngine } from "./engine";
 import type { Avatar3DEngine } from "./engine3d";
 import { SpeechPlayer, SpeechQueue } from "./speech";
@@ -126,6 +131,8 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     layer_urls?: { background?: string; body: string; head: string } | null;
     voice?: { provider: string; voice: string; locale: string } | null;
     mouth?: AvatarMouthConfig | null;
+    /** Absent for snapshots published before disclosures were recorded. */
+    disclosure?: Disclosure;
   } = await meta.json();
 
   if (!provider) {
@@ -134,6 +141,10 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
   }
   if (!voice && provider === "offline") voice = "offline-warm";
   if (!locale) locale = info.voice?.locale ?? "en-US";
+
+  // Told before the face appears, not after it has started talking.
+  const label = aiLabel(info.disclosure, locale, script.dataset.aiLabel);
+  if (label) renderAiLabel(canvas, label);
 
   let engine: SpeechPlayer & { isSpeaking(): boolean };
   if (info.kind === "model3d" && info.model_url) {

@@ -12,7 +12,12 @@ class OrgCreate(BaseModel):
 
 
 class OrgUpdate(BaseModel):
-    name: str = Field(min_length=1, max_length=128)
+    """Omitted means unchanged."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    # May photos be sent to Google (Gemini) for the AI steps? Owners and
+    # admins only, like every change here.
+    third_party_ai_enabled: bool | None = None
 
 
 class OrgOut(BaseModel):
@@ -21,6 +26,7 @@ class OrgOut(BaseModel):
     id: str
     name: str
     created_at: datetime
+    third_party_ai_enabled: bool = True
 
 
 class OrgWithRole(OrgOut):

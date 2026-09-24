@@ -29,6 +29,17 @@ services:
       APP_BASE_URL: https://avatar.mehdisadeghian.com
       CORS_ORIGINS: https://avatar.mehdisadeghian.com
       ENVIRONMENT: production
+      # The API is reached only through Caddy on the web_proxy network (no
+      # published port), so every request's peer is Caddy's container.
+      # Trusting X-Forwarded-For from the private ranges docker assigns lets
+      # uvicorn report the address Caddy saw instead: what the consent
+      # record's keyed address hash and the share page's rate limit use.
+      # Caddy sets that header itself and ignores one sent by its client, so
+      # it cannot be forged from outside. With Cloudflare in front, that
+      # address is Cloudflare's edge, not the visitor (the visitor is in
+      # CF-Connecting-IP, which nothing reads yet): coarser than per visitor,
+      # but no longer one address for everyone.
+      FORWARDED_ALLOW_IPS: "172.16.0.0/12,10.0.0.0/8,192.168.0.0/16"
     volumes:
       - liveface_data:/data
     networks:

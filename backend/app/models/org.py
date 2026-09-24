@@ -4,7 +4,7 @@ import enum
 import secrets
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, UniqueConstraint, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import TimestampedBase
@@ -24,6 +24,13 @@ class Organization(TimestampedBase):
     __tablename__ = "organizations"
 
     name: Mapped[str] = mapped_column(String(128), nullable=False)
+    # May photos be sent to a third-party AI (Google) at all? On by default,
+    # so the AI steps work out of the box; an owner or admin turns it off
+    # for an organization whose policy forbids it, and then no route sends
+    # a pixel out, whatever consent a member gives (services.consent).
+    third_party_ai_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=true(), nullable=False
+    )
 
     memberships: Mapped[list["Membership"]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"

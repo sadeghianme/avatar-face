@@ -6,4 +6,5 @@ export const share = {
   shareGoneTitle: "This link is not available",
   shareGoneBody: "It may have been turned off by its owner.",
   shareNoVoice: "This browser has no speech voices available.",
+  shareAiAvatar: "AI avatar",
 } as const;

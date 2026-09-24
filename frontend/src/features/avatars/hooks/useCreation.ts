@@ -94,8 +94,16 @@ function toActionError(err: unknown): ActionError {
 }
 
 // The server refused because what we showed is out of date: reload it, so
-// the owner sees the real state under the explanation.
-const STALE = new Set(["creation_changed", "creation_not_draft", "creation_not_ready", "anchors_stale"]);
+// the owner sees the real state under the explanation. An organization that
+// switched AI off is one: the creation's `ai.enabled` says so once reloaded,
+// and the AI steps give way to a sentence saying why.
+const STALE = new Set([
+  "creation_changed",
+  "creation_not_draft",
+  "creation_not_ready",
+  "anchors_stale",
+  "third_party_ai_disabled",
+]);
 
 /**
  * Run the wizard's requests one at a time: which one is busy, the last
@@ -132,3 +140,6 @@ export function useCreationActions(
 
   return { busy, error, setError, run };
 }
+
+/** A step's handle on the wizard's request runner. */
+export type Run = ReturnType<typeof useCreationActions>["run"];

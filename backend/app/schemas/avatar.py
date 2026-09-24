@@ -138,6 +138,10 @@ class AvatarOut(BaseModel):
     # and have no publish date.
     published: bool = False
     published_at: str | None = None
+    # {mode, model} when an AI made or changed the picture (creation
+    # wizard: adjust or generate); null otherwise. Visitors see it through
+    # the published snapshot's disclosure.
+    ai_edited: dict | None = None
     created_at: datetime
     updated_at: datetime
 

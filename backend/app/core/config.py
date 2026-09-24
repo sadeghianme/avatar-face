@@ -131,6 +131,9 @@ class Settings(BaseSettings):
     # actual per-image rate. Nothing bills from this; it exists so the number
     # on screen means something rather than being a bare count.
     image_generation_cost_usd: float = 0.04
+    # AI point finding (vision_points): cheap per call, but still a call per
+    # click, and bounded per creation too.
+    vision_points_monthly_limit: int = 300
 
     # Staged and generated images nobody kept. A day is far longer than any
     # real editing session and still bounds the pile; 0 disables the sweep.

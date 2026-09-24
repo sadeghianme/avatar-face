@@ -20,6 +20,11 @@ interface PublicAvatar {
   voice?: { provider: string; voice: string; locale: string } | null;
   /** The PUBLISHED mouth; null means the classic one. */
   mouth?: AvatarMouthConfig | null;
+  /** Absent on snapshots published before disclosures were recorded. */
+  disclosure?: {
+    ai_edited: { mode: string; model: string | null } | null;
+    line: "human" | "animal" | "cartoon";
+  };
 }
 
 /**
@@ -194,8 +199,15 @@ export function SharePage() {
        canvas pushes the composer off the bottom of the screen. dvh so mobile
        browser chrome does not hide the input. */
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-gray-950">
-      <header className="px-5 py-4">
+      <header className="flex flex-wrap items-center gap-2 px-5 py-4">
         <h1 className="text-sm font-medium text-gray-300">{avatar?.name ?? ""}</h1>
+        {/* A visitor is told when an AI made or changed this face. */}
+        {avatar?.disclosure?.ai_edited && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium text-gray-200">
+            <Icon name="sparkles" className="h-3 w-3" />
+            {t("shareAiAvatar")}
+          </span>
+        )}
       </header>
 
       {/* The face takes whatever room is left over: min-h-0 lets this flex

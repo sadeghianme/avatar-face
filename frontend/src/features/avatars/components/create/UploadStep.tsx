@@ -6,6 +6,7 @@ import { JobProgress } from "@/features/avatars/components/create/JobProgress";
 import { LinePicker } from "@/features/avatars/components/create/LinePicker";
 import {
   ACCEPTED_TYPES,
+  adjustedSteps,
   appliedFraming,
   checkFile,
   clampRoll,
@@ -15,6 +16,8 @@ import {
   jobFailure,
   MAX_ROLL,
   normalizeCrop,
+  PHOTO_CHECKS,
+  photoFindings,
   stepById,
   type Creation,
   type Framing,
@@ -23,17 +26,6 @@ import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, postFormWithProgress } from "@/lib/api";
 import type { FaceType } from "@/lib/types";
-
-/** Checks that are not news on the line chosen: "no human face" on a dog
- * is the reason it is a dog. */
-const NOT_A_PROBLEM_FOR: Record<string, readonly FaceType[]> = {
-  no_face: ["animal", "cartoon"],
-  head_turned: ["animal"],
-};
-
-const KNOWN_CHECKS = new Set([
-  "face_small", "face_at_edge", "head_turned", "low_resolution", "no_face", "blurry", "too_dark", "too_bright",
-]);
 
 /**
  * Step 1, before there is a creation: choose a photo. Type and size are
@@ -199,7 +191,7 @@ export function FrameStep({
       />
     );
   }
-  // Still ingesting, or ingest failed.
+  // Still ingesting or generating, or that failed.
   const job = creation.job;
   const failure = jobFailure(job);
   return (
@@ -213,7 +205,7 @@ export function FrameStep({
             gone (upload_gone), and a new photo is the answer to both. */}
         {failure && (
           <button type="button" className={job?.retryable ? "btn-secondary min-h-11" : "btn-primary min-h-11"} onClick={onStartOver}>
-            {t("createUseAnother")}
+            {job?.step === "generate" ? t("createStartAgain") : t("createUseAnother")}
           </button>
         )}
       </div>
@@ -244,11 +236,7 @@ function FrameEditor({
   const analysis = creation.analysis;
   const suggested = analysis?.suggested_framing ?? null;
   const detectedRoll = analysis?.roll ?? null;
-  const checks = (analysis?.checks ?? []).filter((check) =>
-    shownLine
-      ? !NOT_A_PROBLEM_FOR[check.code]?.includes(shownLine)
-      : check.code !== "no_face" // asked about below instead
-  );
+  const checks = photoFindings(analysis, shownLine);
   const noFace = analysis?.detector === "mediapipe" && !analysis.detected;
 
   const degrees = t("createDegrees", {
@@ -258,6 +246,11 @@ function FrameEditor({
   });
   // Said only while the suggestion is what the box shows.
   const showingSuggestion = suggested !== null && !framingChanged(framing, suggested);
+  // A new framing drops every AI result (they were made from the old one):
+  // said before Continue, not discovered after.
+  const dropsAiResults =
+    adjustedSteps(creation).length > 0 &&
+    framingChanged({ crop: normalizeCrop(framing.crop), roll: clampRoll(framing.roll) }, appliedFraming(creation));
 
   const continueStep = () => {
     const change: { face_type?: FaceType; framing?: Framing } = {};
@@ -275,10 +268,13 @@ function FrameEditor({
           <ul className="mt-1 list-disc ps-5">
             {checks.map((check) => (
               <li key={check.code}>
-                {KNOWN_CHECKS.has(check.code) ? t(`photoCheck_${check.code}`) : check.detail}
+                {PHOTO_CHECKS.has(check.code) ? t(`photoCheck_${check.code}`) : check.detail}
               </li>
             ))}
           </ul>
+          {/* Step 3 checks the framed picture again and offers the fix;
+              said here so the owner does not start over for what it fixes. */}
+          {creation.ai?.enabled && <p className="mt-2">{t("createChecksAiLater")}</p>}
           <button type="button" className="btn-secondary mt-3" onClick={onStartOver} disabled={busy !== null}>
             {t("createUseAnother")}
           </button>
@@ -292,6 +288,12 @@ function FrameEditor({
         <p className="mb-3 text-[13px] text-gray-500 dark:text-gray-400">
           {showingSuggestion ? t("createFrameSuggested") : t("createFrameHint")}
         </p>
+        {original.generated && (
+          <p className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+            <Icon name="sparkles" className="h-3.5 w-3.5" />
+            {t("createGeneratedBadge")}
+          </p>
+        )}
         <div className="mx-auto max-w-xl">
           <CropBox
             src={original.url}
@@ -384,6 +386,11 @@ function FrameEditor({
         </button>
         {!shownLine && (
           <span className="text-xs text-gray-500 dark:text-gray-400">{t("createChooseLineFirst")}</span>
+        )}
+        {dropsAiResults && (
+          <span role="status" className="text-xs text-amber-700 dark:text-amber-300">
+            {t("createFrameDropsAi")}
+          </span>
         )}
       </div>
     </div>

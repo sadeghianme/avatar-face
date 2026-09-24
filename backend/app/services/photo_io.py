@@ -41,6 +41,26 @@ def has_alpha(image: Image.Image) -> bool:
     return image.mode in ("RGBA", "LA", "PA") or "transparency" in image.info
 
 
+# The flat backdrop a cut-out is shown on whenever it must be opaque: to an
+# image model, to the face detector, to the photo check. Neutral grey,
+# because black reads as a dark room and white as an overexposed one (a
+# model relights the face to match either), and because RGB under alpha 0
+# is already zero (see `png_bytes`): dropping the alpha would show black.
+NEUTRAL_BACKDROP = (128, 128, 128)
+
+
+def on_backdrop(image: Image.Image, colour: tuple[int, int, int] = NEUTRAL_BACKDROP) -> Image.Image:
+    """`image` as opaque RGB: a transparent image composited onto `colour`
+    (never its removed background, which is not in the file), an opaque
+    one converted as it is."""
+    if not has_alpha(image):
+        return image.convert("RGB")
+    rgba = image.convert("RGBA")
+    flat = Image.new("RGB", rgba.size, colour)
+    flat.paste(rgba, mask=rgba.getchannel("A"))
+    return flat
+
+
 def scrub_transparent(image: Image.Image) -> Image.Image:
     """RGBA copy of `image` with RGB set to 0 wherever alpha is 0."""
     rgba = np.array(image.convert("RGBA"))

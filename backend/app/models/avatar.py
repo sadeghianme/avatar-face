@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import enum
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import TimestampedBase
@@ -97,6 +97,15 @@ class Avatar(TimestampedBase):
     # JSON list of snapshots taken before each edit, oldest first. See
     # app.api.avatars._snapshot.
     edit_history: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # {mode, model} when the picture this avatar was built from was made or
+    # changed by an AI (the creation wizard's adjust or generate step);
+    # null for a photo as its owner gave it. Carried into every publish as
+    # the disclosure visitors see ("AI avatar").
+    ai_edited: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # The consents (app.models.consent) the creation of this avatar relied
+    # on: the depiction statement, and any third-party AI consent. Evidence,
+    # read by nothing that renders.
+    consent_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     @property
     def mouth(self) -> dict | None:
