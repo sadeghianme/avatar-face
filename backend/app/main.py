@@ -17,6 +17,7 @@ from app.api import (
     auth,
     avatars,
     clone_jobs,
+    creations,
     cloned_voices,
     embed,
     integrations,
@@ -132,25 +133,29 @@ async def lifespan(app: FastAPI):
     async with get_session_factory()() as db:
         await credentials.load(db)
 
-    # Rig jobs run in this process's background tasks, so a restart (every
-    # deploy) orphans whichever were running. Fail them retryably now rather
-    # than leave their owners watching a spinner that will never finish.
+    # Jobs run in this process, so a restart (every deploy) orphans whichever
+    # were running. Mark them interrupted and retryable now rather than leave
+    # their owners watching a spinner that will never finish. Creations
+    # first: one caught finishing loses the half-built avatar it was making,
+    # which the avatar pass would otherwise report as a failed avatar.
+    from app.services.creations import recover_interrupted
     from app.services.rig import fail_interrupted
 
+    async with get_session_factory()() as db:
+        interrupted_creations = await recover_interrupted(db)
+    if interrupted_creations:
+        logger.warning("marked %d interrupted creation job(s)", interrupted_creations)
     async with get_session_factory()() as db:
         interrupted = await fail_interrupted(db)
     if interrupted:
         logger.warning("marked %d interrupted avatar job(s) as failed", interrupted)
 
-    # Staged images nobody kept. In-process on a timer so a fresh deployment
-    # cleans up without anyone installing a cron entry — see services.sweeper
-    # for why that stops being right with more than one instance.
+    # Staged images nobody kept, and creations nobody finished. In-process on
+    # a timer so a fresh deployment cleans up without anyone installing a
+    # cron entry — see services.sweeper for why that stops being right with
+    # more than one instance.
     settings = get_settings()
-    sweeper = None
-    if settings.candidate_retention_hours > 0:
-        sweeper = asyncio.create_task(
-            sweep_forever(settings.candidate_sweep_interval_minutes * 60)
-        )
+    sweeper = asyncio.create_task(sweep_forever(settings.candidate_sweep_interval_minutes * 60))
 
     # Optional lab warm-up: keep model loading/first inference out of the first
     # visitor's speech request, without delaying the rest of the application.
@@ -170,11 +175,15 @@ async def lifespan(app: FastAPI):
     with contextlib.suppress(asyncio.CancelledError):
         await lab_warmup
 
-    if sweeper is not None:
-        sweeper.cancel()
-        # Awaited so shutdown does not race a delete that is midway through.
-        with contextlib.suppress(asyncio.CancelledError):
-            await sweeper
+    sweeper.cancel()
+    # Awaited so shutdown does not race a delete that is midway through.
+    with contextlib.suppress(asyncio.CancelledError):
+        await sweeper
+    # Jobs still running are cancelled; the next startup marks them
+    # interrupted (above), which is where a deploy lands anyway.
+    from app.services.jobs import runner
+
+    await runner.shutdown()
     await engine.dispose()
 
 
@@ -316,6 +325,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(orgs.router)
     app.include_router(avatars.router)
+    app.include_router(creations.router)
     app.include_router(storage_routes.router)
     app.include_router(tts.router)
     app.include_router(api_keys.router)

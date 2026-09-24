@@ -62,6 +62,23 @@ def png_bytes(image: Image.Image) -> bytes:
     return out.getvalue()
 
 
+def probe_photo(data: bytes) -> tuple[int, int]:
+    """(width, height) of an upload, read from its header alone.
+
+    For refusing a file at request time without paying for a decode: the
+    same two refusals as `ingest_photo`, in milliseconds, so a request that
+    cannot succeed never queues a job. Raises Validation422.
+    """
+    try:
+        with Image.open(io.BytesIO(data)) as source:
+            size = source.size
+    except Exception as exc:
+        raise Validation422("That file is not a readable photo", code="unreadable_image") from exc
+    if size[0] * size[1] > MAX_PIXELS:
+        raise Validation422("Use a photo smaller than 100 megapixels", code="image_too_large")
+    return size
+
+
 def ingest_photo(data: bytes, max_edge: int | None = None) -> bytes:
     """An uploaded photo as a clean, upright PNG.
 
@@ -97,3 +114,61 @@ def ingest_photo(data: bytes, max_edge: int | None = None) -> bytes:
         raise
     except Exception as exc:
         raise Validation422("That file is not a readable photo", code="unreadable_image") from exc
+
+
+def frame_photo(data: bytes, crop: dict[str, float], roll: float = 0.0) -> Image.Image:
+    """The crop of a stored photo, levelled by `roll` degrees.
+
+    `crop` is {x, y, w, h} in fractions of the photo. `roll` is the tilt to
+    remove (photo_analysis.eye_line_roll): the output's horizontal runs along
+    a line that slopes by `roll` in the photo, turned about the crop's centre
+    — the way a crop tool with a straighten slider behaves, where the frame
+    stays put and the picture turns under it.
+
+    Where a turned frame reaches past the photo's edge, an opaque photo is
+    extended with its own edge pixels (a black or transparent wedge in the
+    corner would be a new edge for the rig to tear on); a transparent one
+    stays transparent there, which is what its edge already is.
+    """
+    import math
+
+    with Image.open(io.BytesIO(data)) as source:
+        transparent = has_alpha(source)
+        image = source.convert("RGBA" if transparent else "RGB")
+    width, height = image.size
+    left, top = crop["x"] * width, crop["y"] * height
+    out_w = max(1, int(round(crop["w"] * width)))
+    out_h = max(1, int(round(crop["h"] * height)))
+
+    if not roll:
+        return image.crop((int(round(left)), int(round(top)), int(round(left)) + out_w,
+                           int(round(top)) + out_h))
+
+    theta = math.radians(roll)
+    cos, sin = math.cos(theta), math.sin(theta)
+    cx, cy = left + crop["w"] * width / 2, top + crop["h"] * height / 2
+    # Output (u, v) samples the photo at centre + R(roll) · (u - out_w/2, v - out_h/2).
+    a, b, d, e = cos, -sin, sin, cos
+    c = cx - a * out_w / 2 - b * out_h / 2
+    f = cy - d * out_w / 2 - e * out_h / 2
+
+    fill: tuple[int, ...] | None = (0, 0, 0, 0) if transparent else None
+    if not transparent:
+        corners = [(a * u + b * v + c, d * u + e * v + f) for u in (0, out_w) for v in (0, out_h)]
+        xs, ys = [p[0] for p in corners], [p[1] for p in corners]
+        pad_l = max(0, math.ceil(-min(xs)) + 2)
+        pad_t = max(0, math.ceil(-min(ys)) + 2)
+        pad_r = max(0, math.ceil(max(xs) - width) + 2)
+        pad_b = max(0, math.ceil(max(ys) - height) + 2)
+        if pad_l or pad_t or pad_r or pad_b:
+            pads = ((pad_t, pad_b), (pad_l, pad_r), (0, 0))
+            padded = np.pad(np.asarray(image), pads, mode="edge")
+            image = Image.fromarray(padded, mode="RGB")
+            c, f = c + pad_l, f + pad_t
+    return image.transform(
+        (out_w, out_h),
+        Image.Transform.AFFINE,
+        (a, b, c, d, e, f),
+        resample=Image.Resampling.BICUBIC,
+        fillcolor=fill,
+    )

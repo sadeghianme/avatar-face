@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
+import { DraftCreations } from "@/features/avatars/components/create/DraftCreations";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { api } from "@/lib/api";
@@ -207,6 +208,8 @@ export function AvatarsPage() {
           </span>
         </div>
       ) : null}
+
+      {current && <DraftCreations orgId={current.id} />}
 
       <section className="mt-8" aria-labelledby="avatar-library-heading">
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5 dark:border-line dark:bg-panel dark:shadow-none">

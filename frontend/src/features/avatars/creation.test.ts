@@ -1,0 +1,413 @@
+/**
+ * The wizard's decisions, without a browser: `npm test` (node --test).
+ * Node runs this file as TypeScript by stripping its types, so it imports
+ * the module by its file name and uses no syntax that needs compiling.
+ */
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { describe, it } from "node:test";
+
+import {
+  anchorsCurrent,
+  backgroundSource,
+  checkFile,
+  clampRoll,
+  confirmedParts,
+  draftMarksKey,
+  errorText,
+  forgetDraftMarks,
+  framingChanged,
+  FULL_FRAME,
+  inferStep,
+  initialFraming,
+  isBusy,
+  jobFailure,
+  KNOWN_ERRORS,
+  loadDraftMarks,
+  marksAreGuessed,
+  MAX_UPLOAD_BYTES,
+  movedParts,
+  nameFromFile,
+  normalizeCrop,
+  pickMarks,
+  pollDelay,
+  resolveStep,
+  saveDraftMarks,
+  stabilizeUrls,
+  URL_REUSE_MS,
+} from "./creation.ts";
+import { LINE_ORDER, LINES } from "./lines.ts";
+
+const step = (id, extra = {}) => ({
+  id,
+  url: `/api/storage/orgs/o/creations/c/${id}-abc.png?expires=1&signature=s`,
+  width: 800,
+  height: 1000,
+  from: null,
+  crop: null,
+  roll: null,
+  ...extra,
+});
+
+const job = (extra = {}) => ({
+  id: "job1",
+  step: "ingest",
+  state: "done",
+  error: null,
+  started_at: "2026-09-25T10:00:00Z",
+  progress: null,
+  retryable: false,
+  ...extra,
+});
+
+const anchors = (extra = {}) => ({
+  id: "a1",
+  image: "original",
+  image_size: [800, 1000],
+  detected: true,
+  marks: {},
+  validation: { ok: true, reasons: [], warnings: [], detected: true, one_click: true },
+  ...extra,
+});
+
+const creation = (extra = {}) => ({
+  id: "c1",
+  face_type: "human",
+  status: "draft",
+  revision: 1,
+  current: "original",
+  steps: [step("original")],
+  analysis: null,
+  anchors: null,
+  job: job(),
+  avatar_id: null,
+  background_removal: { available: true, reason: null },
+  created_at: "2026-09-25T10:00:00Z",
+  updated_at: "2026-09-25T10:00:00Z",
+  ...extra,
+});
+
+describe("checkFile", () => {
+  it("accepts the three photo types within the size limit", () => {
+    for (const type of ["image/jpeg", "image/png", "image/webp"]) {
+      assert.equal(checkFile({ name: "a", type, size: 1000 }), null);
+    }
+  });
+  it("refuses other types, and anything over 15 MB", () => {
+    assert.equal(checkFile({ name: "a.gif", type: "image/gif", size: 10 }), "unsupported_image_type");
+    assert.equal(checkFile({ name: "a.heic", type: "", size: 10 }), "unsupported_image_type");
+    assert.equal(
+      checkFile({ name: "a.jpg", type: "image/jpeg", size: MAX_UPLOAD_BYTES + 1 }),
+      "image_too_large"
+    );
+    assert.equal(checkFile({ name: "a.jpg", type: "image/jpeg", size: MAX_UPLOAD_BYTES }), null);
+  });
+  it("sends a 3D model to its own importer, whatever its type says", () => {
+    assert.equal(checkFile({ name: "Head.GLB", type: "", size: 10 }), "model_file");
+    assert.equal(checkFile({ name: "x", type: "model/gltf-binary", size: 10 }), "model_file");
+  });
+});
+
+describe("nameFromFile", () => {
+  it("drops the last extension only, and stays within the API's 128", () => {
+    assert.equal(nameFromFile("holiday-2024.final.jpg"), "holiday-2024.final");
+    assert.equal(nameFromFile("Ava"), "Ava");
+    assert.equal(nameFromFile(`${"x".repeat(200)}.png`).length, 128);
+  });
+});
+
+describe("jobs", () => {
+  it("is busy while a job is queued or running, or the avatar is being built", () => {
+    assert.equal(isBusy(creation({ job: job({ state: "queued" }) })), true);
+    assert.equal(isBusy(creation({ job: job({ state: "running" }) })), true);
+    assert.equal(isBusy(creation({ job: job({ state: "done" }) })), false);
+    assert.equal(isBusy(creation({ job: job({ state: "failed" }) })), false);
+    assert.equal(isBusy(creation({ job: job({ state: "interrupted" }) })), false);
+    assert.equal(isBusy(creation({ job: null, status: "finishing" })), true);
+    assert.equal(isBusy(undefined), false);
+  });
+  it("shows failures, but not a superseded result, which the owner caused", () => {
+    const failed = job({ state: "failed", error: { code: "job_failed", detail: "x" } });
+    assert.deepEqual(jobFailure(failed), { code: "job_failed", detail: "x" });
+    assert.equal(jobFailure(job({ state: "failed", error: { code: "superseded", detail: "" } })), null);
+    assert.equal(jobFailure(job({ state: "interrupted", error: null })).code, "interrupted");
+    assert.equal(jobFailure(job({ state: "running" })), null);
+    assert.equal(jobFailure(null), null);
+  });
+  it("polls quickly at first, backs off, and never waits more than 5 s", () => {
+    const delays = Array.from({ length: 12 }, (_, i) => pollDelay(i));
+    assert.equal(delays[0], 600);
+    for (let i = 1; i < delays.length; i++) assert.ok(delays[i] >= delays[i - 1]);
+    assert.equal(Math.max(...delays), 5000);
+    assert.equal(pollDelay(-3), 600);
+  });
+});
+
+describe("marks and frames", () => {
+  it("treats a cut-out as its source's pixel frame", () => {
+    const cut = creation({
+      current: "cutout",
+      steps: [step("original"), step("framed", { from: "original" }), step("cutout", { from: "framed" })],
+      anchors: anchors({ image: "framed" }),
+    });
+    assert.equal(anchorsCurrent(cut), true);
+    assert.equal(backgroundSource(cut).id, "framed");
+  });
+  it("strands marks placed on another frame, or on an image that is gone", () => {
+    const framed = creation({
+      current: "framed",
+      steps: [step("original"), step("framed", { from: "original" })],
+      anchors: anchors({ image: "original" }),
+    });
+    assert.equal(anchorsCurrent(framed), false);
+    assert.equal(anchorsCurrent(creation({ anchors: anchors({ image: null }) })), false);
+    assert.equal(anchorsCurrent(creation({ anchors: null })), false);
+  });
+  it("lists the parts the owner moved", () => {
+    const detected = { head: { left: { x: 1, y: 1 } }, chin: { x: 5, y: 5 } };
+    const marks = { head: { left: { x: 2, y: 1 } }, chin: { x: 5, y: 5 } };
+    assert.deepEqual(movedParts(marks, detected, ["head", "chin", "mouth_line"]), ["head"]);
+    assert.deepEqual(movedParts(detected, detected, ["head", "chin"]), []);
+  });
+});
+
+describe("guessed marks", () => {
+  it("are marks on the face template: an animal's always, any face the detector missed", () => {
+    assert.equal(marksAreGuessed({ detected: false }, LINES.animal.oneClick), true);
+    assert.equal(marksAreGuessed({ detected: true }, LINES.animal.oneClick), true);
+    assert.equal(marksAreGuessed({ detected: false }, LINES.human.oneClick), true);
+    assert.equal(marksAreGuessed({ detected: false }, LINES.cartoon.oneClick), true);
+    assert.equal(marksAreGuessed({ detected: true }, LINES.human.oneClick), false);
+  });
+  it("count as placed when moved or ticked, and only those are sent", () => {
+    const parts = LINES.animal.marks;
+    const confirmed = confirmedParts(parts, ["head"], ["chin"]);
+    assert.deepEqual(confirmed, ["head", "chin"]);
+    const marks = { head: { left: { x: 1, y: 2 } }, chin: { x: 5, y: 6 }, left_eye: { left: { x: 3, y: 4 } } };
+    // Nothing unconfirmed reaches finish, so the server sees it as missing.
+    assert.deepEqual(pickMarks(marks, confirmed), { head: marks.head, chin: marks.chin });
+    assert.deepEqual(pickMarks(marks, ["mouth_line"]), {});
+  });
+});
+
+/** A Web Storage stand-in: a Map with the four calls the drafts use. */
+function memoryStore(entries = []) {
+  const map = new Map(entries);
+  return {
+    map,
+    get length() {
+      return map.size;
+    },
+    key: (i) => [...map.keys()][i] ?? null,
+    getItem: (k) => (map.has(k) ? map.get(k) : null),
+    setItem: (k, v) => void map.set(k, String(v)),
+    removeItem: (k) => void map.delete(k),
+  };
+}
+
+describe("marks in progress", () => {
+  const draft = { marks: { chin: { x: 5, y: 6 } }, ticked: ["head"] };
+  it("come back for the anchors they were placed on, and no others", () => {
+    const store = memoryStore();
+    saveDraftMarks(store, "c1", "a1", draft);
+    assert.deepEqual(loadDraftMarks(store, "c1", "a1"), draft);
+    assert.equal(loadDraftMarks(store, "c1", "a2"), null);
+    assert.equal(loadDraftMarks(store, "c2", "a1"), null);
+    saveDraftMarks(store, "c1", "a1", null);
+    assert.equal(loadDraftMarks(store, "c1", "a1"), null);
+  });
+  it("are forgotten for one creation at a time", () => {
+    const store = memoryStore([["other", "kept"]]);
+    saveDraftMarks(store, "c1", "a1", draft);
+    saveDraftMarks(store, "c1", "a2", draft);
+    saveDraftMarks(store, "c2", "a1", draft);
+    forgetDraftMarks(store, "c1");
+    assert.deepEqual([...store.map.keys()].sort(), [draftMarksKey("c2", "a1"), "other"].sort());
+  });
+  it("never let a broken or foreign entry into the editor", () => {
+    const store = memoryStore([
+      [draftMarksKey("c", "bad-json"), "{"],
+      [draftMarksKey("c", "no-marks"), JSON.stringify({ ticked: [] })],
+      [draftMarksKey("c", "stray"), JSON.stringify({ marks: { chin: { x: 1, y: 1 }, nose: 1 }, ticked: ["head", "nose"] })],
+    ]);
+    assert.equal(loadDraftMarks(store, "c", "bad-json"), null);
+    assert.equal(loadDraftMarks(store, "c", "no-marks"), null);
+    assert.deepEqual(loadDraftMarks(store, "c", "stray"), { marks: { chin: { x: 1, y: 1 } }, ticked: ["head"] });
+  });
+  it("survive storage that is missing or throws", () => {
+    const throwing = {
+      length: 1,
+      key: () => {
+        throw new Error("blocked");
+      },
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("quota");
+      },
+      removeItem: () => {
+        throw new Error("blocked");
+      },
+    };
+    assert.equal(loadDraftMarks(throwing, "c", "a"), null);
+    assert.doesNotThrow(() => saveDraftMarks(throwing, "c", "a", draft));
+    assert.doesNotThrow(() => forgetDraftMarks(throwing, "c"));
+    assert.equal(loadDraftMarks(null, "c", "a"), null);
+  });
+});
+
+describe("which step opens", () => {
+  it("stays on step 1 until the photo is in and the line is known", () => {
+    assert.equal(inferStep(creation({ steps: [], current: null, job: job({ state: "running" }) })), "frame");
+    assert.equal(inferStep(creation({ face_type: null })), "frame");
+    assert.equal(resolveStep(creation({ face_type: null }), "points"), "frame");
+  });
+  it("resumes where work is running or last happened", () => {
+    assert.equal(inferStep(creation({ job: job({ step: "background", state: "running" }) })), "background");
+    assert.equal(
+      inferStep(creation({ job: job({ step: "detect", state: "failed", error: { code: "job_failed", detail: "" } }) })),
+      "points"
+    );
+    assert.equal(inferStep(creation({ anchors: anchors() })), "points");
+    assert.equal(
+      inferStep(creation({ current: "cutout", steps: [step("original"), step("cutout", { from: "original" })] })),
+      "background"
+    );
+    assert.equal(inferStep(creation()), "frame");
+  });
+  it("honours the step in the URL, except while the avatar is being built", () => {
+    assert.equal(resolveStep(creation({ anchors: anchors() }), "background"), "background");
+    assert.equal(resolveStep(creation(), "nonsense"), "frame");
+    assert.equal(resolveStep(creation(), null), "frame");
+    assert.equal(resolveStep(creation({ status: "finishing" }), "frame"), "points");
+  });
+});
+
+describe("framing", () => {
+  const suggested = { crop: { x: 0.1, y: 0.05, w: 0.7, h: 0.6 }, roll: 4.2 };
+  const analysed = (extra = {}) =>
+    creation({
+      analysis: {
+        image_size: [800, 1000], detector: "mediapipe", detected: true, face_box: null, roll: 4.2,
+        suggested_face_type: "human", suggested_framing: suggested, checks: [],
+      },
+      ...extra,
+    });
+
+  it("opens on the suggestion when nobody has touched the photo", () => {
+    assert.deepEqual(initialFraming(analysed()), suggested);
+  });
+  it("opens on what was applied, once something was", () => {
+    const crop = { x: 0.2, y: 0.2, w: 0.5, h: 0.5 };
+    const framed = analysed({
+      revision: 3,
+      current: "framed",
+      steps: [step("original"), step("framed", { from: "original", crop, roll: -2 })],
+    });
+    assert.deepEqual(initialFraming(framed), { crop, roll: -2 });
+  });
+  it("keeps the whole photo when the owner moved on without framing", () => {
+    assert.deepEqual(initialFraming(analysed({ revision: 2 })), { crop: FULL_FRAME, roll: 0 });
+    assert.deepEqual(initialFraming(analysed({ anchors: anchors() })), { crop: FULL_FRAME, roll: 0 });
+    assert.deepEqual(initialFraming(creation()), { crop: FULL_FRAME, roll: 0 });
+  });
+  it("sees a real change, not the server's rounding", () => {
+    const a = { crop: { x: 0.1, y: 0.1, w: 0.5, h: 0.5 }, roll: 0 };
+    assert.equal(framingChanged(a, { crop: { x: 0.10004, y: 0.1, w: 0.5, h: 0.5 }, roll: 0.01 }), false);
+    assert.equal(framingChanged(a, { crop: { x: 0.12, y: 0.1, w: 0.5, h: 0.5 }, roll: 0 }), true);
+    assert.equal(framingChanged(a, { ...a, roll: 1 }), true);
+  });
+  it("sends crops the server accepts: 4 decimals, inside the photo", () => {
+    const crop = normalizeCrop({ x: 0.33333333, y: 0.1, w: 0.66669999, h: 0.9000001 });
+    assert.ok(crop.x + crop.w <= 1);
+    assert.ok(crop.y + crop.h <= 1);
+    assert.equal(crop.x, 0.3333);
+    assert.deepEqual(normalizeCrop({ x: -0.01, y: 0, w: 1.02, h: 1 }), FULL_FRAME);
+  });
+  it("keeps the roll within the API's ±45°", () => {
+    assert.equal(clampRoll(50), 45);
+    assert.equal(clampRoll(-60), -45);
+    assert.equal(clampRoll(3.14159), 3.1);
+    assert.equal(clampRoll(Number.NaN), 0);
+  });
+});
+
+describe("stabilizeUrls", () => {
+  it("keeps one URL per image across polls, so nothing reloads", () => {
+    const held = new Map();
+    const first = creation();
+    assert.equal(stabilizeUrls(first, held, 0), first);
+    const repoll = creation({ steps: [step("original", { url: first.steps[0].url.replace("signature=s", "signature=t") })] });
+    const stable = stabilizeUrls(repoll, held, 1000);
+    assert.equal(stable.steps[0].url, first.steps[0].url);
+  });
+  it("takes the fresh URL once the held one is getting old", () => {
+    const held = new Map();
+    stabilizeUrls(creation(), held, 0);
+    const fresh = step("original", { url: "/api/storage/orgs/o/creations/c/original-abc.png?expires=2&signature=u" });
+    const later = stabilizeUrls(creation({ steps: [fresh] }), held, URL_REUSE_MS + 1);
+    assert.equal(later.steps[0].url, fresh.url);
+  });
+  it("never confuses two images", () => {
+    const held = new Map();
+    stabilizeUrls(creation(), held, 0);
+    const other = step("cutout", { url: "/api/storage/orgs/o/creations/c/cutout-def.png?expires=1&signature=s" });
+    const next = stabilizeUrls(creation({ steps: [step("original"), other] }), held, 10);
+    assert.equal(next.steps[1].url, other.url);
+  });
+});
+
+describe("errorText", () => {
+  const t = (key, options) => (options ? `${key}(${JSON.stringify(options)})` : key);
+  it("uses our words for a known code, the server's otherwise", () => {
+    assert.equal(errorText(t, "too_many_drafts", "You have 10"), "createErr_too_many_drafts");
+    assert.equal(errorText(t, "something_new", "Server says so"), "Server says so");
+    assert.equal(errorText(t, "something_new", ""), "error");
+  });
+  it("says how long to wait when the server did", () => {
+    assert.equal(
+      errorText(t, "job_queue_full", "", 30),
+      'createErr_job_queue_full createRetryAfter({"count":30})'
+    );
+  });
+});
+
+describe("lines", () => {
+  it("offers all three lines, labelling cartoon as its own key", () => {
+    assert.deepEqual([...LINE_ORDER], ["human", "animal", "cartoon"]);
+    assert.equal(LINES.cartoon.label, "faceType_cartoon");
+  });
+  it("matches the server's rules: people only for background removal, never one-click animals", () => {
+    assert.deepEqual(LINE_ORDER.filter((id) => LINES[id].backgroundRemoval), ["human"]);
+    assert.equal(LINES.animal.oneClick, false);
+    // services.creations.LINES["animal"].marks
+    assert.deepEqual([...LINES.animal.marks], ["head", "left_eye", "right_eye", "mouth_line", "chin"]);
+    assert.ok(!LINES.animal.marks.includes("left_pupil"));
+    assert.ok(LINES.human.marks.includes("mouth") && !LINES.human.marks.includes("mouth_line"));
+  });
+});
+
+describe("strings", () => {
+  // Read as text: importing a locale would take a path that climbs out of
+  // this feature, which the structure check forbids.
+  const keysOf = (lang) =>
+    new Set(
+      [...readFileSync(new URL(`../../i18n/locales/${lang}/avatars.ts`, import.meta.url), "utf8")
+        .matchAll(/^\s{2}([A-Za-z0-9_]+):\s/gm)].map((m) => m[1])
+    );
+  for (const lang of ["en", "fr"]) {
+    it(`has ${lang} words for every error code, job and step the wizard names`, () => {
+      const keys = keysOf(lang);
+      const needed = [
+        ...[...KNOWN_ERRORS].map((code) => `createErr_${code}`),
+        ...["ingest", "background", "detect", "finish"].flatMap((s) => [`createJob_${s}`, `createJobDone_${s}`]),
+        ...["frame", "background", "points"].flatMap((s) => [`createStep_${s}`, `createHeading_${s}`, `createIntro_${s}`]),
+        ...LINE_ORDER.flatMap((id) => [LINES[id].summary, LINES[id].guide]),
+        ...LINE_ORDER.flatMap((id) => LINES[id].marks.map((part) => `createGuessPart_${part}`)),
+        ...["not_for_face_type", "segmentation_unavailable", "face_type_required"].map((r) => `createBgUnavailable_${r}`),
+      ];
+      assert.deepEqual(needed.filter((key) => !keys.has(key)), []);
+    });
+  }
+});

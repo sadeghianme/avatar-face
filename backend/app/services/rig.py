@@ -359,13 +359,12 @@ async def _ingest_upload(avatar, storage, db, data: bytes) -> bytes:
     """
     from uuid import uuid4
 
-    from starlette.concurrency import run_in_threadpool
-
+    from app.services.jobs import run_cpu
     from app.services.photo_io import STORED_MAX_EDGE, ingest_photo
 
     # Seconds of decoding and PNG encoding for a phone photo; on the event
     # loop, every embed on every customer's site would wait for it.
-    clean = await run_in_threadpool(ingest_photo, data, STORED_MAX_EDGE)
+    clean = await run_cpu(ingest_photo, data, STORED_MAX_EDGE)
     upload_key = avatar.image_key
     key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/source-{uuid4().hex[:8]}.png"
     await storage.put_bytes(key, clean, "image/png")
@@ -377,12 +376,19 @@ async def _ingest_upload(avatar, storage, db, data: bytes) -> bytes:
 
 
 async def process_avatar(avatar_id: str) -> None:
-    """Background job: image -> landmarks -> rig JSON + thumbnail -> storage."""
+    """Background job: image -> landmarks -> rig JSON + thumbnail -> storage.
+
+    Runs as a request's background task, on the event loop; every CPU step
+    (decode, detection, triangulation, thumbnail, layers) is handed to the
+    shared CPU thread (services.jobs.run_cpu), so building one avatar never
+    stalls the widgets this process serves.
+    """
     from sqlalchemy import select
 
     from app.core.errors import Validation422
     from app.db import get_session_factory
     from app.models import Avatar, AvatarStatus
+    from app.services.jobs import run_cpu
     from app.services.storage import get_storage
 
     factory = get_session_factory()
@@ -411,13 +417,15 @@ async def process_avatar(avatar_id: str) -> None:
 
             image_bytes = await storage.get_bytes(avatar.image_key)
             if avatar.kind == AvatarKind.model3d:
-                rig = build_model_rig(image_bytes)
-                thumb, thumb_type = make_model_thumbnail(), "image/jpeg"
+                rig = await run_cpu(build_model_rig, image_bytes)
+                thumb, thumb_type = await run_cpu(make_model_thumbnail), "image/jpeg"
             else:
                 if avatar.rig_key is None:
                     image_bytes = await _ingest_upload(avatar, storage, db, image_bytes)
-                points, blendshapes, size, detected = landmarks_from_image(image_bytes)
-                points = starting_mesh(points, size, detected, avatar.face_type)
+                points, blendshapes, size, detected = await run_cpu(
+                    landmarks_from_image, image_bytes
+                )
+                points = await run_cpu(starting_mesh, points, size, detected, avatar.face_type)
 
                 # An undetected face is NOT a failure: the fallback mesh (the
                 # face template, or the synthetic mesh for a human) is a
@@ -453,9 +461,11 @@ async def process_avatar(avatar_id: str) -> None:
                     quality_note = None if verdict.ok else verdict.reason
                     confident = avatar.face_type == "human" and detected and verdict.ok
 
-                rig = build_rig(points, size, blendshapes, face_type=avatar.face_type)
+                rig = await run_cpu(
+                    build_rig, points, size, blendshapes, face_type=avatar.face_type
+                )
                 await _carry_crop_origin(avatar, storage, rig)
-                thumb, thumb_type = make_thumbnail(image_bytes)
+                thumb, thumb_type = await run_cpu(make_thumbnail, image_bytes)
                 # What every later fit starts from (services.anchor_fit),
                 # beside the rig and never in it: rig.json is published.
                 from app.services.anchor_fit import fit_base_key, fit_base_record, write_fit_base

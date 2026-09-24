@@ -192,8 +192,12 @@ async def store_layers(avatar, storage, image_bytes: bytes, face_box: list[float
     caller must be correct without them (no segmenter model, seg failure,
     weird geometry). has_layers is the caller's to set from the result.
     """
+    from app.services.jobs import run_cpu
+
     try:
-        built = build_layers(image_bytes, face_box)
+        # Segmentation, matting and the backdrop fill: seconds of CPU, on
+        # the shared CPU thread rather than the event loop.
+        built = await run_cpu(build_layers, image_bytes, face_box)
     except Exception:
         logger.exception("layer build failed for avatar %s", avatar.id)
         return False

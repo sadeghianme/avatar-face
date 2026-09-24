@@ -50,6 +50,8 @@ export default function App() {
           {/* The app itself lives under /app. */}
           <Route path="/app" element={<Protected><AvatarsPage /></Protected>} />
           <Route path="/avatars/new" element={<Protected><NewAvatarPage /></Protected>} />
+          {/* The wizard with a creation: the id is in the URL so a reload resumes it. */}
+          <Route path="/avatars/new/:creationId" element={<Protected><NewAvatarPage /></Protected>} />
           <Route path="/avatars/:avatarId" element={<Protected><AvatarDetailPage /></Protected>} />
           <Route path="/photoface-hd" element={<Protected><PhotofaceHDPage /></Protected>} />
           <Route path="/lip-sync-lab" element={<Protected><LipSyncLabPage /></Protected>} />

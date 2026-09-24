@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Icon } from "@/components/ui/Icon";
@@ -6,11 +6,25 @@ import { Icon } from "@/components/ui/Icon";
 /**
  * The crop interaction: an image, a rectangle, handles, aspect presets.
  *
- * Extracted so the avatar page and the new-avatar page share one copy. Two
+ * Extracted so the avatar page and the creation wizard share one copy. Two
  * copies of a pointer-drag would drift, and this one already carries a fix
  * that is easy to lose: the drag lives in a ref because the first
  * pointermove of a gesture arrives before React has re-rendered from
  * pointerdown, so a state-held drag drops the first movement of every drag.
+ *
+ * Two ways to use it. The avatar page applies a crop with the box's own
+ * Apply and Cancel. The wizard controls it (`value` + `onChange`, no
+ * buttons): the crop is one half of a framing whose other half, the level,
+ * is a slider next to it, and both are sent together when the step ends.
+ * `turn` shows that level: the picture turns under the frame, which stays
+ * put, exactly as the server will cut it (photo_io.frame_photo).
+ *
+ * The rectangle takes focus: arrow keys move it, Shift + arrow keys resize
+ * it from its right and bottom edges, so the crop does not need a pointer.
+ * It is an "application" region, not a group: a screen reader in browse mode
+ * keeps the arrow keys for reading unless the focused element is a widget,
+ * and the key handler would never hear them. Where the box is, and how big,
+ * is part of its description and is read out after each key.
  */
 
 /** Fractions of the image, so the rectangle survives any display size. */
@@ -32,6 +46,15 @@ const MIN_SIDE = 0.15;
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
+// One arrow key press moves or resizes the rectangle by this share of the
+// image. There is no fast variant: Shift already means resize, and 1% is
+// fine enough for a crop and quick enough to cross a photo.
+const KEY_STEP = 0.01;
+// A keyboard resize stops here; the pointer can go smaller and is told off
+// by the red outline, but a held key would otherwise collapse the box.
+const KEY_MIN_SIDE = 0.05;
+const DEFAULT_RECT: Rect = { x: 0.08, y: 0.04, w: 0.84, h: 0.92 };
+
 const ASPECTS: { key: string; ratio: number | null }[] = [
   { key: "cropFree", ratio: null },
   { key: "cropSquare", ratio: 1 },
@@ -52,15 +75,33 @@ export function CropBox({
   busy = false,
   onApply,
   onCancel,
+  value,
+  onChange,
+  turn = 0,
 }: {
   src: string;
   busy?: boolean;
-  onApply: (rect: CropRect) => void;
-  onCancel: () => void;
+  /** With onCancel, shows Apply and Cancel under the picture. */
+  onApply?: (rect: CropRect) => void;
+  onCancel?: () => void;
+  /** Controlled rectangle; the box keeps its own when omitted. */
+  value?: CropRect;
+  onChange?: (rect: CropRect) => void;
+  /** Degrees the picture is levelled by (the roll to remove). */
+  turn?: number;
 }) {
   const { t } = useTranslation();
   const frame = useRef<HTMLDivElement>(null);
-  const [rect, setRect] = useState<Rect>({ x: 0.08, y: 0.04, w: 0.84, h: 0.92 });
+  const keysHintId = useId();
+  const positionId = useId();
+  // Filled by key presses only: a pointer drag would read out every pixel.
+  const [spoken, setSpoken] = useState("");
+  const [own, setOwn] = useState<Rect>(value ?? DEFAULT_RECT);
+  const rect = value ?? own;
+  const setRect = (next: Rect) => {
+    if (value === undefined) setOwn(next);
+    onChange?.(next);
+  };
   // The drag lives in a ref, not state: the first pointermove of a gesture
   // arrives before React has re-rendered from pointerdown, so a state-held
   // drag reads null and the first movement of every drag is dropped. The
@@ -149,12 +190,37 @@ export function CropBox({
   const chooseRatio = (next: number | null) => {
     setRatio(next);
     if (next && natural) {
-      setRect((r) => {
-        const h = (r.w * natural.w) / (next * natural.h);
-        const y = Math.max(0, Math.min(1 - Math.min(h, 1), r.y));
-        return { ...r, y, h: Math.min(h, 1 - y) };
-      });
+      const h = (rect.w * natural.w) / (next * natural.h);
+      const y = Math.max(0, Math.min(1 - Math.min(h, 1), rect.y));
+      setRect({ ...rect, y, h: Math.min(h, 1 - y) });
     }
+  };
+
+  const describe = (r: Rect) => {
+    const pc = (v: number) => Math.round(v * 100);
+    const text = t("cropAreaPosition", { left: pc(r.x), top: pc(r.y), width: pc(r.w), height: pc(r.h) });
+    return natural ? `${text} (${Math.round(r.w * natural.w)} × ${Math.round(r.h * natural.h)} px)` : text;
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const dx = e.key === "ArrowLeft" ? -KEY_STEP : e.key === "ArrowRight" ? KEY_STEP : 0;
+    const dy = e.key === "ArrowUp" ? -KEY_STEP : e.key === "ArrowDown" ? KEY_STEP : 0;
+    if (!dx && !dy) return;
+    e.preventDefault();
+    let next: Rect;
+    if (e.shiftKey) {
+      const w = Math.max(KEY_MIN_SIDE, Math.min(1 - rect.x, rect.w + dx));
+      const h = Math.max(KEY_MIN_SIDE, Math.min(1 - rect.y, rect.h + dy));
+      next = applyRatio({ ...rect, w, h }, false, false);
+    } else {
+      next = {
+        ...rect,
+        x: Math.max(0, Math.min(1 - rect.w, rect.x + dx)),
+        y: Math.max(0, Math.min(1 - rect.h, rect.y + dy)),
+      };
+    }
+    setRect(next);
+    setSpoken(describe(next));
   };
 
   const tooSmall = rect.w < MIN_SIDE || rect.h < MIN_SIDE;
@@ -185,6 +251,16 @@ export function CropBox({
             })
           }
           className="block w-full"
+          style={
+            turn
+              ? {
+                  // The frame stays, the picture turns under it about the
+                  // crop's centre, as the server levels it.
+                  transform: `rotate(${-turn}deg)`,
+                  transformOrigin: `${(rect.x + rect.w / 2) * 100}% ${(rect.y + rect.h / 2) * 100}%`,
+                }
+              : undefined
+          }
         />
 
         {/* Dim the four bands outside the crop rather than putting one big
@@ -210,8 +286,15 @@ export function CropBox({
         </div>
 
         <div
-          className="absolute cursor-move"
+          className="absolute cursor-move outline-none focus-visible:ring-2 focus-visible:ring-brand-400
+            focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           style={{ left: pct(rect.x), top: pct(rect.y), width: pct(rect.w), height: pct(rect.h) }}
+          tabIndex={0}
+          role="application"
+          aria-roledescription={t("cropAreaRole")}
+          aria-label={t("cropAreaLabel")}
+          aria-describedby={`${keysHintId} ${positionId}`}
+          onKeyDown={onKeyDown}
           onPointerDown={(e) => {
             const p = at(e);
             start(e, { kind: "move", grabX: p.x, grabY: p.y, start: rect });
@@ -278,6 +361,8 @@ export function CropBox({
           {ASPECTS.map((a) => (
             <button
               key={a.key}
+              type="button"
+              aria-pressed={ratio === a.ratio}
               onClick={() => chooseRatio(a.ratio)}
               className={`px-2.5 py-1.5 text-[12.5px] font-medium transition-colors ${
                 ratio === a.ratio
@@ -290,17 +375,23 @@ export function CropBox({
           ))}
         </div>
         <span className="font-mono text-[12px] text-gray-400">{outPx}</span>
-        <div className="ms-auto flex gap-2">
-          <button className="btn-secondary" onClick={onCancel} disabled={busy}>
-            {t("cancel")}
-          </button>
-          <button className="btn-primary" disabled={busy || tooSmall} onClick={() => onApply(rect)}>
-            <Icon name="crop" className="me-1.5 inline h-4 w-4" />
-            {busy ? t("loading") : t("cropApply")}
-          </button>
-        </div>
+        {onApply && onCancel && (
+          <div className="ms-auto flex gap-2">
+            <button className="btn-secondary" onClick={onCancel} disabled={busy}>
+              {t("cancel")}
+            </button>
+            <button className="btn-primary" disabled={busy || tooSmall} onClick={() => onApply(rect)}>
+              <Icon name="crop" className="me-1.5 inline h-4 w-4" />
+              {busy ? t("loading") : t("cropApply")}
+            </button>
+          </div>
+        )}
       </div>
 
+      <p id={keysHintId} className="sr-only">{t("cropKeysHint")}</p>
+      <p id={positionId} className="sr-only">{describe(rect)}</p>
+      {/* Always mounted, so each change is read out. */}
+      <p className="sr-only" aria-live="polite" role="status">{spoken}</p>
       {tooSmall && <p className="field-error mt-2">{t("cropTooSmall")}</p>}
       {error && <p className="field-error mt-2">{error}</p>}
     </div>

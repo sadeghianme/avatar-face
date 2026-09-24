@@ -17,7 +17,11 @@ class AppError(Exception):
     code = "internal_error"
 
     def __init__(
-        self, detail: str | None = None, code: str | None = None, extra: dict | None = None
+        self,
+        detail: str | None = None,
+        code: str | None = None,
+        extra: dict | None = None,
+        headers: dict[str, str] | None = None,
     ):
         self.detail = detail or self.__class__.__name__
         if code is not None:
@@ -25,6 +29,9 @@ class AppError(Exception):
         # Machine-readable context beside the envelope (e.g. the reasons a
         # fit was refused), for clients that can do better than show prose.
         self.extra = extra or {}
+        # Response headers the status needs to be actionable: Retry-After on
+        # a 429 or 503 tells a client when to come back instead of hammering.
+        self.headers = headers or {}
         super().__init__(self.detail)
 
 
@@ -58,14 +65,21 @@ class RateLimit429(AppError):
     code = "rate_limited"
 
 
+class ServiceUnavailable503(AppError):
+    status_code = 503
+    code = "service_unavailable"
+
+
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
-        headers = {"WWW-Authenticate": "Bearer"} if exc.status_code == 401 else None
+        headers = dict(exc.headers)
+        if exc.status_code == 401:
+            headers["WWW-Authenticate"] = "Bearer"
         return JSONResponse(
             status_code=exc.status_code,
             content={**exc.extra, "detail": exc.detail, "code": exc.code},
-            headers=headers,
+            headers=headers or None,
         )
 
     @app.exception_handler(StarletteHTTPException)

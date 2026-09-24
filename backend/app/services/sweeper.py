@@ -35,21 +35,46 @@ CANDIDATE_SEGMENT = "/candidates/"
 
 
 async def sweep_once() -> int:
+    """One pass: staged images past their retention (when it is on), then
+    idle creations. Returns the staged images removed."""
     from app.core.config import get_settings
     from app.services.storage import get_storage
 
     settings = get_settings()
-    ttl = settings.candidate_retention_hours * 3600
     removed = 0
-    try:
-        removed = await get_storage().sweep(ORG_PREFIX, ttl, CANDIDATE_SEGMENT)
-    except Exception:
-        # Never fatal: a storage hiccup must not take the API with it, and the
-        # next tick will try again.
-        logger.exception("candidate sweep failed")
-    if removed:
-        logger.info("swept %d stale staged image(s)", removed)
+    if settings.candidate_retention_hours > 0:
+        ttl = settings.candidate_retention_hours * 3600
+        try:
+            removed = await get_storage().sweep(ORG_PREFIX, ttl, CANDIDATE_SEGMENT)
+        except Exception:
+            # Never fatal: a storage hiccup must not take the API with it, and
+            # the next tick will try again.
+            logger.exception("candidate sweep failed")
+        if removed:
+            logger.info("swept %d stale staged image(s)", removed)
+    await expire_creations()
     return removed
+
+
+async def expire_creations() -> int:
+    """Idle drafts expire by their rows (services.creations.expire_idle),
+    not by file age like the staging area: a draft resumed today still
+    needs the photo uploaded a week ago.
+
+    Stranded creations are recovered first: a finish whose failure could not
+    be written back is otherwise stuck until the next restart.
+    """
+    from app.services.creations import expire_idle, recover_stranded
+
+    try:
+        await recover_stranded()
+    except Exception:
+        logger.exception("creation recovery failed")
+    try:
+        return await expire_idle()
+    except Exception:
+        logger.exception("creation expiry failed")
+        return 0
 
 
 async def run_forever(interval_seconds: int) -> None:

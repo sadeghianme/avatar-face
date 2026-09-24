@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import functools
 import logging
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar
 from urllib.parse import urlsplit
 
 import httpx
@@ -49,6 +52,7 @@ from app.services.anchor_fit import (
     write_fit_base,
 )
 from app.services.segment import SegmentationUnavailable, remove_background
+from app.services.edit_locks import avatar_edits
 from app.services.publishing import confirmed, discard_draft, mark_dirty, publish
 from app.services.storage import get_storage
 
@@ -68,6 +72,31 @@ async def _get_avatar(db: DB, org_id: str, avatar_id: str) -> Avatar:
     if avatar is None:
         raise NotFound404("Avatar not found", code="avatar_not_found")
     return avatar
+
+
+R = TypeVar("R")
+
+
+def _one_edit_at_a_time(route: Callable[..., Awaitable[R]]) -> Callable[..., Awaitable[R]]:
+    """Run a route that edits an avatar's draft with that avatar's edit lock
+    held (services.edit_locks), taken before the route reads the row.
+
+    These routes rewrite files in place and commit the row last, awaiting
+    in between (seconds, for the layer build), so two of them interleaving
+    on one avatar mix one's committed row with the other's rewritten files:
+    two overlapping crops cut the image once and move the rig twice. Reads
+    that only present the draft (GET) are not held; a publish is, since it
+    snapshots the draft's files.
+    """
+
+    @functools.wraps(route)
+    async def locked(**kwargs: Any) -> R:
+        # FastAPI passes every parameter by name, and reads the signature
+        # (dependencies included) from `route` through functools.wraps.
+        async with avatar_edits.hold(kwargs["avatar_id"]):
+            return await route(**kwargs)
+
+    return locked
 
 
 @router.post("", response_model=AvatarCreated, status_code=201)
@@ -205,6 +234,7 @@ class BackgroundRequest(BaseModel):
 
 
 @router.patch("/{avatar_id}", response_model=AvatarOut)
+@_one_edit_at_a_time
 async def update_avatar(
     avatar_id: str, body: AvatarUpdate, ctx: OrgMember, db: DB
 ) -> Avatar:
@@ -293,6 +323,7 @@ async def _reprofile_visemes(avatar: Avatar) -> None:
 
 
 @router.post("/{avatar_id}/background", response_model=AvatarOut)
+@_one_edit_at_a_time
 async def set_background(
     avatar_id: str, body: BackgroundRequest, ctx: OrgMember, db: DB
 ) -> Avatar:
@@ -443,6 +474,7 @@ async def _snapshot(avatar: Avatar, storage, label: str) -> None:
 
 
 @router.post("/{avatar_id}/undo", response_model=AvatarOut)
+@_one_edit_at_a_time
 async def undo_edit(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
     """Step back one edit — crop, background, framing, whatever it was."""
     import json as _json
@@ -496,6 +528,7 @@ MIN_CROP_FRACTION = 0.15
 
 
 @router.post("/{avatar_id}/crop", response_model=AvatarOut)
+@_one_edit_at_a_time
 async def crop_avatar(
     avatar_id: str, body: CropRequest, ctx: OrgMember, db: DB
 ) -> Avatar:
@@ -837,6 +870,7 @@ def _marks_outside(body: RigFit, width: float, height: float) -> bool:
 
 
 @router.post("/{avatar_id}/rig-fit", response_model=RigFitResult)
+@_one_edit_at_a_time
 async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFitResult:
     """Rebuild the rig from hand-placed anchors (services.anchor_fit).
 
@@ -896,6 +930,7 @@ async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFi
 
 
 @router.post("/{avatar_id}/publish", response_model=AvatarOut)
+@_one_edit_at_a_time
 async def publish_avatar(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
     """Make the current draft what embedded sites and share links serve.
 
@@ -918,6 +953,7 @@ async def publish_avatar(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
 
 
 @router.post("/{avatar_id}/discard-draft", response_model=AvatarOut)
+@_one_edit_at_a_time
 async def discard_avatar_draft(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
     """Throw the draft away and go back to what is published."""
     avatar = await _get_avatar(db, ctx.org.id, avatar_id)
@@ -956,6 +992,7 @@ async def disable_share(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
 
 
 @router.post("/{avatar_id}/rig-reset", response_model=AvatarOut)
+@_one_edit_at_a_time
 async def rig_reset(
     avatar_id: str, ctx: OrgMember, db: DB, background: BackgroundTasks
 ) -> Avatar:
@@ -997,6 +1034,7 @@ async def get_avatar_detail(avatar_id: str, ctx: OrgMember, db: DB) -> AvatarDet
 
 
 @router.post("/{avatar_id}/mouth-photo", response_model=AvatarOut)
+@_one_edit_at_a_time
 async def upload_mouth_photo(avatar_id: str, file: UploadFile, ctx: OrgMember, db: DB) -> Avatar:
     """A second photo of the same person with teeth showing.
 
@@ -1047,6 +1085,7 @@ async def upload_mouth_photo(avatar_id: str, file: UploadFile, ctx: OrgMember, d
 
 
 @router.delete("/{avatar_id}/mouth-photo", response_model=AvatarOut)
+@_one_edit_at_a_time
 async def remove_mouth_photo(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
     """Back to fitted teeth. The published snapshot keeps its own copy."""
     import json as _json
@@ -1069,6 +1108,7 @@ async def remove_mouth_photo(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
 
 
 @router.delete("/{avatar_id}", status_code=204)
+@_one_edit_at_a_time
 async def delete_avatar(avatar_id: str, ctx: OrgMember, db: DB):
     """Delete the avatar and every file it owns.
 

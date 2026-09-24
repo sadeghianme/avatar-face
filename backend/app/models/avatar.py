@@ -46,6 +46,11 @@ class Avatar(TimestampedBase):
     # removal are independent — one pointer for both would make undoing a crop
     # silently restore the background too.
     precrop_image_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # The photo exactly as the creation wizard received it (cleaned of its
+    # metadata and scaled, nothing else): before framing, before the
+    # background came off. Kept so a later edit can always start over from
+    # what the owner gave us. Null on avatars made any other way.
+    upload_image_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # How the avatar is framed when rendered: "face" crops to the head, "full"
     # shows the whole photo. Stored on the avatar rather than passed per-embed
     # so changing it in the dashboard reaches every site already embedding it.

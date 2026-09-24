@@ -12,10 +12,20 @@ export class ApiError extends Error {
     public detail: string,
     /** The whole error payload, for the few errors that carry more than a
      *  sentence (a refused fit lists its reasons). */
-    public body: Record<string, unknown> = {}
+    public body: Record<string, unknown> = {},
+    /** Seconds the server asked us to wait (Retry-After on a 429 or 503),
+     *  so "busy, try again" can say when. Null when it did not say. */
+    public retryAfter: number | null = null
   ) {
     super(detail);
   }
+}
+
+/** Retry-After as seconds; the HTTP-date form is not used by this API. */
+function retryAfterSeconds(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds >= 0 ? Math.ceil(seconds) : null;
 }
 
 interface Tokens {
@@ -101,7 +111,9 @@ async function responseRequest(
     } catch {
       // non-JSON error body
     }
-    throw new ApiError(response.status, code, detail, body);
+    throw new ApiError(
+      response.status, code, detail, body, retryAfterSeconds(response.headers.get("Retry-After"))
+    );
   }
   return response;
 }
@@ -123,6 +135,75 @@ export const api = {
   stream: (path: string, body: unknown, signal: AbortSignal) => responseRequest("POST", path, body, false, signal),
   delete: <T>(path: string) => request<T>("DELETE", path),
 };
+
+/**
+ * An authenticated multipart POST that reports upload progress (0..1).
+ *
+ * fetch cannot report upload progress, and a 15 MB photo on a phone
+ * connection takes long enough that a spinner alone reads as a hang. Same
+ * contract as `api.postForm`: the bearer token, one refresh-and-retry on a
+ * 401, and failures as ApiError with the server's code, payload and
+ * Retry-After.
+ */
+export function postFormWithProgress<T>(
+  path: string,
+  form: FormData,
+  onProgress: (fraction: number) => void,
+  signal?: AbortSignal
+): Promise<T> {
+  const attempt = (retried: boolean): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${BASE}${path}`);
+      const tokens = getTokens();
+      if (tokens) xhr.setRequestHeader("Authorization", `Bearer ${tokens.access_token}`);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(event.loaded / event.total);
+      };
+      const abort = () => xhr.abort();
+      signal?.addEventListener("abort", abort, { once: true });
+      xhr.onload = () => {
+        signal?.removeEventListener("abort", abort);
+        if (xhr.status === 401 && !retried && tokens) {
+          void tryRefresh().then((ok) => {
+            if (!ok) {
+              reject(new ApiError(401, "http_401", xhr.statusText));
+              return;
+            }
+            onProgress(0);
+            attempt(true).then(resolve, reject);
+          });
+          return;
+        }
+        let payload: Record<string, unknown> = {};
+        try {
+          payload = xhr.responseText ? (JSON.parse(xhr.responseText) as Record<string, unknown>) : {};
+        } catch {
+          // non-JSON body
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(payload as T);
+          return;
+        }
+        reject(
+          new ApiError(
+            xhr.status,
+            typeof payload.code === "string" ? payload.code : `http_${xhr.status}`,
+            typeof payload.detail === "string" ? payload.detail : xhr.statusText,
+            payload,
+            retryAfterSeconds(xhr.getResponseHeader("Retry-After"))
+          )
+        );
+      };
+      xhr.onerror = () => {
+        signal?.removeEventListener("abort", abort);
+        reject(new ApiError(0, "network_error", "Upload failed"));
+      };
+      xhr.onabort = () => reject(new ApiError(0, "aborted", "Upload cancelled"));
+      xhr.send(form);
+    });
+  return attempt(false);
+}
 
 /** Raw PUT to a presigned URL via XHR, reporting upload progress 0..1. */
 export function uploadWithProgress(

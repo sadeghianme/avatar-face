@@ -47,6 +47,9 @@ class RigCheck:
     face_fraction: float = 0.0
     nose_offset: float = 0.0
     detected: bool = False
+    # Stable name of what failed, for clients that translate rather than
+    # show `reason` (the creation wizard's photo checks). None when ok.
+    code: str | None = None
 
     @property
     def summary(self) -> str:
@@ -64,11 +67,11 @@ def check_landmarks(points, image_size: tuple[int, int], detected: bool) -> RigC
     nothing that is in the picture.
     """
     if not detected:
-        return RigCheck(False, "no face detected", detected=False)
+        return RigCheck(False, "no face detected", detected=False, code="no_face")
 
     width, height = image_size
     if width <= 0 or height <= 0:
-        return RigCheck(False, "empty image", detected=detected)
+        return RigCheck(False, "empty image", detected=detected, code="empty_image")
 
     xs = [float(p[0]) for p in points]
     ys = [float(p[1]) for p in points]
@@ -77,7 +80,7 @@ def check_landmarks(points, image_size: tuple[int, int], detected: bool) -> RigC
     face_w = x1 - x0
     face_h = y1 - y0
     if face_w <= 0 or face_h <= 0:
-        return RigCheck(False, "degenerate face", detected=detected)
+        return RigCheck(False, "degenerate face", detected=detected, code="degenerate_face")
 
     fraction = face_w / width
     if fraction < MIN_FACE_FRACTION:
@@ -86,11 +89,15 @@ def check_landmarks(points, image_size: tuple[int, int], detected: bool) -> RigC
             f"face too small ({fraction:.0%} of frame; needs {MIN_FACE_FRACTION:.0%})",
             fraction,
             detected=detected,
+            code="face_small",
         )
 
     margin = face_w * MIN_EDGE_MARGIN
     if x0 < margin or y0 < margin or x1 > width - margin or y1 > height - margin:
-        return RigCheck(False, "face runs off the edge of the frame", fraction, detected=detected)
+        return RigCheck(
+            False, "face runs off the edge of the frame", fraction, detected=detected,
+            code="face_at_edge",
+        )
 
     # Frontality. The nose tip sits near the middle of a face looking at you
     # and drifts toward one side as the head turns.
@@ -105,6 +112,7 @@ def check_landmarks(points, image_size: tuple[int, int], detected: bool) -> RigC
                 fraction,
                 nose_offset,
                 detected,
+                code="head_turned",
             )
 
     return RigCheck(True, None, fraction, nose_offset, detected)
@@ -133,7 +141,7 @@ def check_image(data: bytes) -> RigCheck:
     try:
         points = _mediapipe_landmarks(image)
     except Exception:
-        return RigCheck(False, "no face detected", detected=False)
+        return RigCheck(False, "no face detected", detected=False, code="no_face")
 
     return check_landmarks(points, image.size, detected=True)
 
@@ -172,8 +180,29 @@ def salvage_portrait(data: bytes) -> bytes | None:
         return None
 
     xs, ys = points[:, 0], points[:, 1]
-    fx0, fx1 = float(xs.min()), float(xs.max())
-    fy0, fy1 = float(ys.min()), float(ys.max())
+    box = portrait_crop(
+        (float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max())), image.size
+    )
+    if box is None:
+        return None
+    left, top, right, bottom = box
+    cropped = image.crop((int(left), int(top), int(right), int(bottom)))
+    buffer = io.BytesIO()
+    cropped.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def portrait_crop(
+    face_box: tuple[float, float, float, float], image_size: tuple[int, int]
+) -> tuple[float, float, float, float] | None:
+    """The head-and-shoulders crop around a face, as (left, top, right,
+    bottom) in pixels, or None when the image cannot give the face room.
+
+    Shared by the salvage above and the creation wizard's suggested framing,
+    so a generated portrait and an upload are framed by the same arithmetic.
+    """
+    fx0, fy0, fx1, fy1 = face_box
+    width, height = image_size
     face_w, face_h = fx1 - fx0, fy1 - fy0
     if face_w < 8 or face_h < 8:
         return None
@@ -187,14 +216,10 @@ def salvage_portrait(data: bytes) -> bytes | None:
     top = fy0 - face_h * 0.55
     left = cx - crop_w / 2
 
-    left = max(0.0, min(left, image.width - crop_w))
-    top = max(0.0, min(top, image.height - crop_h))
-    right = min(image.width, left + crop_w)
-    bottom = min(image.height, top + crop_h)
+    left = max(0.0, min(left, width - crop_w))
+    top = max(0.0, min(top, height - crop_h))
+    right = min(width, left + crop_w)
+    bottom = min(height, top + crop_h)
     if right - left < face_w * 1.2 or bottom - top < face_h * 1.6:
         return None  # image too tight around the face already
-
-    cropped = image.crop((int(left), int(top), int(right), int(bottom)))
-    buffer = io.BytesIO()
-    cropped.save(buffer, format="PNG")
-    return buffer.getvalue()
+    return left, top, right, bottom

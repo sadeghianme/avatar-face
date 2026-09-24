@@ -172,3 +172,45 @@ def test_a_crop_moves_every_kind_of_mark():
     assert moved["chin"] == {"x": 15, "y": 28}
     assert moved["source"] == "owner"
     assert _move_anchors(moved, -5, -10) == anchors
+
+
+async def test_overlapping_edits_of_one_avatar_run_one_after_the_other(client, monkeypatch):
+    """The layer build waits on the shared CPU thread after crop has
+    rewritten rig.json in place but before it commits the row. A second crop
+    arriving then must start from the first's committed result, not from
+    the old image and the already-moved rig (which moved the rig twice for
+    one cut of the image: every mark 32x40 px off the face)."""
+    import asyncio
+
+    from app.services import jobs
+
+    headers, base = await _marked_animal(client, "dog-race", textured_png())
+    before = await _rig(client, headers, base)
+    real_run_cpu = jobs.run_cpu
+    busy_thread = asyncio.Event()
+
+    async def behind_other_jobs(fn, *args, **kwargs):
+        await busy_thread.wait()
+        return await real_run_cpu(fn, *args, **kwargs)
+
+    monkeypatch.setattr(jobs, "run_cpu", behind_other_jobs)
+    rect = {"x": 0.1, "y": 0.1, "width": 0.8, "height": 0.8}
+    crops = [
+        asyncio.create_task(client.post(f"{base}/crop", json=rect, headers=headers))
+        for _ in range(2)
+    ]
+    # Long enough for the second crop to reach every read it makes.
+    await asyncio.sleep(0.3)
+    busy_thread.set()
+    assert [r.status_code for r in await asyncio.gather(*crops)] == [200, 200]
+
+    rig = await _rig(client, headers, base)
+    detail = (await client.get(base, headers=headers)).json()
+    image = Image.open(io.BytesIO((await client.get(detail["image_url"])).content))
+    # Cropped twice, image and rig alike: 320x400 → 256x320 → 204x256.
+    assert list(image.size) == rig["image_size"] == [204, 256]
+    assert rig["crop_origin"] == [32 + 26, 40 + 32]
+    left, top = rig["crop_origin"]
+    assert np.allclose(
+        rig["face_box"], np.array(before["face_box"]) - [left, top, left, top], atol=1e-6
+    )
