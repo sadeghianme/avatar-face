@@ -113,7 +113,12 @@ async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
     ).scalar_one_or_none()
     if avatar is None:
         raise NotFound404("Avatar not found", code="avatar_not_found")
-    if avatar.status != AvatarStatus.ready:
+    # The draft's status says nothing about the published snapshot: a
+    # re-detect or a retry puts the DRAFT through processing (or failure)
+    # while the published copies sit untouched. Gating on it took customer
+    # sites offline for as long as an owner's edit ran. Only an avatar that
+    # was never published is judged by its status.
+    if not avatar.published_config and avatar.status != AvatarStatus.ready:
         raise NotFound404("Avatar is not ready", code="avatar_not_ready")
     storage = get_storage()
     # The PUBLISHED snapshot, never the draft. An owner mid-edit must not be

@@ -41,6 +41,14 @@ class Storage:
     async def delete(self, key: str) -> None:
         raise NotImplementedError
 
+    async def delete_prefix(self, prefix: str) -> int:
+        """Delete every object whose key starts with `prefix`; the count.
+
+        `prefix` must end in "/": it names a folder, never a key fragment,
+        so "orgs/a/avatars/1" cannot also take ".../avatars/10" with it.
+        """
+        raise NotImplementedError
+
     async def sweep(self, prefix: str, older_than_seconds: int, must_contain: str) -> int:
         """Delete objects under `prefix`, older than the cutoff, whose key
         contains `must_contain`.
@@ -97,9 +105,30 @@ class LocalStorage(Storage):
         return self._url("GET", key)
 
     async def put_bytes(self, key: str, data: bytes, content_type: str) -> None:
+        """Write via a temporary file and an atomic rename.
+
+        Several keys are rewritten in place (rig.json, layers), and a reader
+        must never see half a file: a visitor loading the rig while it is
+        being rewritten, or a crash mid-write, would otherwise leave a
+        truncated JSON or PNG behind the same key. The temporary file sits in
+        the same directory because a rename is only atomic within one
+        filesystem.
+        """
+        import os
+        from uuid import uuid4
+
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
+        # Opened by name rather than through mkstemp, whose 0600 mode would
+        # replace the permissions every stored file has had until now.
+        temp = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+        try:
+            with open(temp, "xb") as handle:
+                handle.write(data)
+            os.replace(temp, path)
+        except BaseException:
+            temp.unlink(missing_ok=True)
+            raise
 
     async def get_bytes(self, key: str) -> bytes:
         return self._path(key).read_bytes()
@@ -132,6 +161,17 @@ class LocalStorage(Storage):
         path = self._path(key)
         if path.is_file():
             path.unlink()
+
+    async def delete_prefix(self, prefix: str) -> int:
+        import shutil
+
+        _check_prefix(prefix)
+        folder = self._path(prefix)
+        if folder == self.root.resolve() or not folder.is_dir():
+            return 0
+        removed = sum(1 for path in folder.rglob("*") if path.is_file())
+        shutil.rmtree(folder)
+        return removed
 
 
 class S3Storage(Storage):
@@ -188,6 +228,20 @@ class S3Storage(Storage):
         async with self._client() as s3:
             await s3.delete_object(Bucket=self.bucket, Key=key)
 
+    async def delete_prefix(self, prefix: str) -> int:
+        _check_prefix(prefix)
+        removed = 0
+        async with self._client() as s3:
+            paginator = s3.get_paginator("list_objects_v2")
+            async for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
+                keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
+                # A listing page holds at most 1000 keys, which is exactly the
+                # most one delete_objects call accepts.
+                if keys:
+                    await s3.delete_objects(Bucket=self.bucket, Delete={"Objects": keys})
+                    removed += len(keys)
+        return removed
+
     async def sweep(self, prefix: str, older_than_seconds: int, must_contain: str) -> int:
         from datetime import datetime, timedelta, timezone
 
@@ -210,6 +264,11 @@ class S3Storage(Storage):
                     await s3.delete_objects(Bucket=self.bucket, Delete={"Objects": batch})
                     removed += len(batch)
         return removed
+
+
+def _check_prefix(prefix: str) -> None:
+    if not prefix.endswith("/") or prefix.strip("/") == "" or ".." in prefix:
+        raise ValueError(f"refusing to delete by prefix {prefix!r}")
 
 
 _storage: Storage | None = None

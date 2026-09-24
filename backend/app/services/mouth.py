@@ -11,6 +11,14 @@ import json
 
 RENDERERS = ("classic", "continuous")
 
+# The photographic ("continuous") mouth paints human enamel and lips. On an
+# animal or a drawn character that is a person's teeth in the wrong face.
+CONTINUOUS_FACE_TYPES = ("human",)
+
+
+def renderer_allowed(renderer: str, face_type: str) -> bool:
+    return renderer != "continuous" or face_type in CONTINUOUS_FACE_TYPES
+
 
 def load(raw: str | None) -> dict | None:
     try:

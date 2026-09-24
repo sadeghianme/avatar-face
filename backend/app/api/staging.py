@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import io
 import logging
-from uuid import uuid4
 
 from fastapi import APIRouter, UploadFile
 from pydantic import BaseModel, Field
@@ -30,6 +29,7 @@ from pydantic import BaseModel, Field
 from app.api.deps import DB, OrgMember
 from app.core.config import get_settings
 from app.core.errors import Conflict409, Validation422
+from app.services.candidates import candidate_prefix, generated_by, new_candidate_key
 from app.services.storage import get_storage
 
 logger = logging.getLogger("liveface.staging")
@@ -47,22 +47,21 @@ class StagedImage(BaseModel):
     height: int
 
 
-def _prefix(org_id: str) -> str:
-    return f"orgs/{org_id}/candidates/"
-
-
 def _check_key(org_id: str, key: str) -> None:
     """The key comes from the client, so it is confined to this org's own
     staging area — otherwise it would address any object in storage."""
-    if not key.startswith(_prefix(org_id)) or ".." in key:
+    if not key.startswith(candidate_prefix(org_id)) or ".." in key:
         raise Validation422("Unknown image", code="unknown_staged_image")
 
 
-async def _store(org_id: str, data: bytes) -> StagedImage:
+async def _store(org_id: str, data: bytes, generated: str | None = None) -> StagedImage:
+    """Stage `data`. `generated` names the image backend it came from, and
+    is carried through every later edit so that saving a crop of a generated
+    portrait still counts as keeping a generation."""
     from PIL import Image
 
     storage = get_storage()
-    key = f"{_prefix(org_id)}{uuid4().hex}.png"
+    key = new_candidate_key(org_id, generated)
     await storage.put_bytes(key, data, "image/png")
     with Image.open(io.BytesIO(data)) as image:
         width, height = image.size
@@ -78,26 +77,19 @@ async def upload_staged(file: UploadFile, ctx: OrgMember) -> StagedImage:
             f"content_type must be one of {settings.allowed_image_types}",
             code="unsupported_image_type",
         )
-    data = await file.read()
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(data) > MAX_UPLOAD_BYTES:
         raise Validation422("Image is too large", code="image_too_large")
 
-    from PIL import Image
+    from starlette.concurrency import run_in_threadpool
 
-    try:
-        with Image.open(io.BytesIO(data)) as image:
-            image.verify()
-    except Exception:
-        raise Validation422("That file is not a readable image", code="unreadable_image")
+    from app.services.photo_io import STORED_MAX_EDGE, ingest_photo
 
     # Normalised to PNG on the way in so every later step has one format to
-    # deal with, and so alpha survives if it was there.
-    with Image.open(io.BytesIO(data)) as image:
-        buffer = io.BytesIO()
-        image.convert("RGBA" if image.mode in ("RGBA", "LA") else "RGB").save(
-            buffer, format="PNG", optimize=True
-        )
-    return await _store(ctx.org.id, buffer.getvalue())
+    # deal with (alpha survives if it was there), turned upright, stripped
+    # of EXIF/GPS and scaled down to the stored size — see services.photo_io.
+    clean = await run_in_threadpool(ingest_photo, data, STORED_MAX_EDGE)
+    return await _store(ctx.org.id, clean)
 
 
 class StagedCrop(BaseModel):
@@ -134,9 +126,9 @@ async def crop_staged(body: StagedCrop, ctx: OrgMember) -> StagedImage:
             int(round((body.y + body.height) * h)),
         )
     )
-    buffer = io.BytesIO()
-    cropped.save(buffer, format="PNG", optimize=True)
-    return await _store(ctx.org.id, buffer.getvalue())
+    from app.services.photo_io import png_bytes
+
+    return await _store(ctx.org.id, png_bytes(cropped), generated_by(body.key))
 
 
 class StagedKey(BaseModel):
@@ -156,7 +148,7 @@ async def remove_background_staged(body: StagedKey, ctx: OrgMember) -> StagedIma
             "Background removal is not configured on this server",
             code="segmentation_unavailable",
         ) from exc
-    return await _store(ctx.org.id, cut_out)
+    return await _store(ctx.org.id, cut_out, generated_by(body.key))
 
 
 class StagedGenerate(BaseModel):
@@ -232,7 +224,7 @@ async def generate_staged(body: StagedGenerate, ctx: OrgMember, db: DB) -> dict:
         if not verdict.ok:
             rejected.append(f"{backend}: {verdict.summary}")
             continue
-        staged = await _store(ctx.org.id, image)
+        staged = await _store(ctx.org.id, image, backend)
         entry = staged.model_dump()
         entry["provider"] = backend
         accepted.append(entry)

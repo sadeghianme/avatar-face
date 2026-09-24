@@ -121,8 +121,16 @@ def sample_png() -> bytes:
     return out.getvalue()
 
 
-async def create_ready_avatar(client: AsyncClient, headers: dict, org_id: str) -> str:
-    """Full upload pipeline: create -> PUT image -> confirm -> rig runs."""
+async def create_ready_avatar(
+    client: AsyncClient, headers: dict, org_id: str, publish: bool = True
+) -> str:
+    """Full upload pipeline: create -> PUT image -> confirm -> rig runs.
+
+    Tests run without a landmark model, so no face is ever detected and the
+    first build waits for its owner instead of publishing itself (see
+    rig.process_avatar). `publish` presses Publish, as that owner would, so
+    tests about embedding and sharing start from a live avatar.
+    """
     response = await client.post(
         f"/orgs/{org_id}/avatars",
         json={"name": "Test Avatar", "content_type": "image/png"},
@@ -151,4 +159,9 @@ async def create_ready_avatar(client: AsyncClient, headers: dict, org_id: str) -
             break
         await asyncio.sleep(0.05)
     assert detail.json()["status"] == "ready", detail.text
+    if publish:
+        published = await client.post(
+            f"/orgs/{org_id}/avatars/{avatar_id}/publish", headers=headers
+        )
+        assert published.status_code == 200, published.text
     return avatar_id

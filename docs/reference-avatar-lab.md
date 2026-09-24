@@ -34,7 +34,7 @@ How to test a photo:
 
 1. Open Reference avatar and choose **Upload a photo** (or drop an image).
 2. Use a clear, front-facing, closed-mouth JPEG/PNG/WebP, up to 15 MB and
-   24 megapixels. The server corrects EXIF orientation and resizes to 1600px.
+   100 megapixels. The server corrects EXIF orientation and resizes to 1600px.
 3. Inspect AA/EE/OO/P-B-M, adjust movement/teeth, then **Generate and compare**.
 4. Optionally add a second photo of the same person saying “ee”, with clear
    upper teeth, a small inter-arch gap and matched lighting/angle, via **Add

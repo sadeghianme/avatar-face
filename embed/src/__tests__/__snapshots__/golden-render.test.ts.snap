@@ -1,0 +1,507 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`colour sampled from a position-dependent texture > human, aa (open): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23711,
+  "drawing": "83f5cca5d47d9150",
+  "leftEyeOpenPx": 18.22,
+  "lipGapPx": 22.19,
+  "mesh": "6b30b24e4990df26",
+  "vertices": 1204,
+}
+`;
+
+exports[`colour sampled from a position-dependent texture > human, blink full: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23321,
+  "drawing": "0869ef5f21efe85d",
+  "leftEyeOpenPx": 18.22,
+  "lipGapPx": -0.06,
+  "mesh": "e23a0badd2886500",
+  "vertices": 1204,
+}
+`;
+
+exports[`colour sampled from a position-dependent texture > human, rest: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23321,
+  "drawing": "0869ef5f21efe85d",
+  "leftEyeOpenPx": 18.22,
+  "lipGapPx": -0.06,
+  "mesh": "e23a0badd2886500",
+  "vertices": 1204,
+}
+`;
+
+exports[`colour sampled from a position-dependent texture > legacy animal, aa (open): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 19248,
+  "drawing": "e790ce87e7aa9b8e",
+  "leftEyeOpenPx": 26.32,
+  "lipGapPx": 28.64,
+  "mesh": "e953c69590859c61",
+  "vertices": 981,
+}
+`;
+
+exports[`colour sampled from a position-dependent texture > legacy animal, blink full: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18851,
+  "drawing": "c897404c9d8f5650",
+  "leftEyeOpenPx": 26.32,
+  "lipGapPx": 11.06,
+  "mesh": "adf4ab1f834efd2d",
+  "vertices": 981,
+}
+`;
+
+exports[`colour sampled from a position-dependent texture > legacy animal, rest: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18851,
+  "drawing": "c897404c9d8f5650",
+  "leftEyeOpenPx": 26.32,
+  "lipGapPx": 11.06,
+  "mesh": "adf4ab1f834efd2d",
+  "vertices": 981,
+}
+`;
+
+exports[`human renderer golden output > E (spread): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23711,
+  "drawing": "3e6a776f0a67f486",
+  "leftEyeOpenPx": 13.87,
+  "lipGapPx": 9.31,
+  "mesh": "4b088b08b2227959",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output > FF: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23610,
+  "drawing": "28f54d7db0065a39",
+  "leftEyeOpenPx": 14.48,
+  "lipGapPx": 2.05,
+  "mesh": "56590a5c1cba6413",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output > PP (closed): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23321,
+  "drawing": "0e02dc41968243be",
+  "leftEyeOpenPx": 14.48,
+  "lipGapPx": 1.03,
+  "mesh": "c15fc9077175ddf6",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output > aa (open): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23711,
+  "drawing": "82168c120f64057b",
+  "leftEyeOpenPx": 14.48,
+  "lipGapPx": 17.63,
+  "mesh": "29828986baa296c8",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output > blink full: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23321,
+  "drawing": "5fb64d2ffef2207b",
+  "leftEyeOpenPx": 14.48,
+  "lipGapPx": -0.04,
+  "mesh": "e7d7603dad5ba2ff",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output > blink half: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23353,
+  "drawing": "899410596d0586a5",
+  "leftEyeOpenPx": 10.3,
+  "lipGapPx": -0.04,
+  "mesh": "4005cf7b7f91ec68",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output > gaze right-up: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23371,
+  "drawing": "6d04cccf0fcd9cae",
+  "leftEyeOpenPx": 14.48,
+  "lipGapPx": -0.04,
+  "mesh": "e7d7603dad5ba2ff",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output > oh (rounded): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23444,
+  "drawing": "cf534d639bf63bde",
+  "leftEyeOpenPx": 14.48,
+  "lipGapPx": 12.43,
+  "mesh": "587a2357888be957",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output > rest: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23321,
+  "drawing": "5fb64d2ffef2207b",
+  "leftEyeOpenPx": 14.48,
+  "lipGapPx": -0.04,
+  "mesh": "e7d7603dad5ba2ff",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output > smile: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23321,
+  "drawing": "bac467d19aa672a5",
+  "leftEyeOpenPx": 13.44,
+  "lipGapPx": -0.04,
+  "mesh": "e99c0d12fbb5be6e",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output, face framing > E (spread): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23711,
+  "drawing": "2d2effae4e2c1c99",
+  "leftEyeOpenPx": 17.46,
+  "lipGapPx": 11.72,
+  "mesh": "c3a4083698d173e0",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output, face framing > FF: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23610,
+  "drawing": "5bbe468e06290a0e",
+  "leftEyeOpenPx": 18.22,
+  "lipGapPx": 2.59,
+  "mesh": "afbf6ebe834e04be",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output, face framing > PP (closed): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23321,
+  "drawing": "2e22d17e2b0eab19",
+  "leftEyeOpenPx": 18.22,
+  "lipGapPx": 1.29,
+  "mesh": "4ff2eeb2a11527af",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output, face framing > aa (open): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23711,
+  "drawing": "3c2a22b1c5a029e2",
+  "leftEyeOpenPx": 18.22,
+  "lipGapPx": 22.19,
+  "mesh": "6b30b24e4990df26",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output, face framing > blink full: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23321,
+  "drawing": "0869ef5f21efe85d",
+  "leftEyeOpenPx": 18.22,
+  "lipGapPx": -0.06,
+  "mesh": "e23a0badd2886500",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output, face framing > blink half: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23353,
+  "drawing": "a8f421df8f6aa866",
+  "leftEyeOpenPx": 12.96,
+  "lipGapPx": -0.06,
+  "mesh": "eeaa6b596345235a",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output, face framing > gaze right-up: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23371,
+  "drawing": "8cd5cfd00cb8a295",
+  "leftEyeOpenPx": 18.22,
+  "lipGapPx": -0.06,
+  "mesh": "e23a0badd2886500",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output, face framing > oh (rounded): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23444,
+  "drawing": "661bc2b200c04925",
+  "leftEyeOpenPx": 18.22,
+  "lipGapPx": 15.65,
+  "mesh": "341106f4cc113475",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output, face framing > rest: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23321,
+  "drawing": "0869ef5f21efe85d",
+  "leftEyeOpenPx": 18.22,
+  "lipGapPx": -0.06,
+  "mesh": "e23a0badd2886500",
+  "vertices": 1204,
+}
+`;
+
+exports[`human renderer golden output, face framing > smile: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 23321,
+  "drawing": "5468abc9a32e7422",
+  "leftEyeOpenPx": 16.91,
+  "lipGapPx": -0.06,
+  "mesh": "eb6f27a6401f7505",
+  "vertices": 1204,
+}
+`;
+
+exports[`legacy animal rig golden output > face, E (spread): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 19241,
+  "drawing": "db3ad6e014c65036",
+  "leftEyeOpenPx": 26.01,
+  "lipGapPx": 22.03,
+  "mesh": "333da88d162f5f76",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > face, FF: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18851,
+  "drawing": "05ccacc031687a46",
+  "leftEyeOpenPx": 26.32,
+  "lipGapPx": 9.03,
+  "mesh": "bb6303c21399b449",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > face, PP (closed): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18851,
+  "drawing": "d377c839271557b7",
+  "leftEyeOpenPx": 26.32,
+  "lipGapPx": 3.05,
+  "mesh": "344dd4a106cfa42f",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > face, aa (open): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 19248,
+  "drawing": "1bcd57ea5ed942b0",
+  "leftEyeOpenPx": 26.32,
+  "lipGapPx": 30.01,
+  "mesh": "d73e6fa3b0b74406",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > face, blink full: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18851,
+  "drawing": "c897404c9d8f5650",
+  "leftEyeOpenPx": 26.32,
+  "lipGapPx": 11.06,
+  "mesh": "adf4ab1f834efd2d",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > face, blink half: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18883,
+  "drawing": "fbdb12e265f47565",
+  "leftEyeOpenPx": 18.5,
+  "lipGapPx": 11.06,
+  "mesh": "ecbbc4dde2973a83",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > face, gaze right-up: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18901,
+  "drawing": "3263999dfb001576",
+  "leftEyeOpenPx": 26.32,
+  "lipGapPx": 11.06,
+  "mesh": "adf4ab1f834efd2d",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > face, oh (rounded): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 19248,
+  "drawing": "9581b25887f8eeae",
+  "leftEyeOpenPx": 26.32,
+  "lipGapPx": 25.02,
+  "mesh": "9a4fed7a4d8bb123",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > face, rest: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18851,
+  "drawing": "c897404c9d8f5650",
+  "leftEyeOpenPx": 26.32,
+  "lipGapPx": 11.06,
+  "mesh": "adf4ab1f834efd2d",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > face, smile: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18851,
+  "drawing": "d2470a05877f031c",
+  "leftEyeOpenPx": 24.43,
+  "lipGapPx": 11.06,
+  "mesh": "e8831674ca9a2d31",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > full photo, E (spread): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 19241,
+  "drawing": "d5ee117e3440b288",
+  "leftEyeOpenPx": 25.69,
+  "lipGapPx": 21.76,
+  "mesh": "93f6295fd6294cf0",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > full photo, FF: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18851,
+  "drawing": "bd2f6d802d82e80d",
+  "leftEyeOpenPx": 26,
+  "lipGapPx": 8.92,
+  "mesh": "3f8e70695e543558",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > full photo, PP (closed): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18851,
+  "drawing": "acc4b5623791011b",
+  "leftEyeOpenPx": 26,
+  "lipGapPx": 3.01,
+  "mesh": "e478933b72a33051",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > full photo, aa (open): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 19248,
+  "drawing": "1059efdc3421c23f",
+  "leftEyeOpenPx": 26,
+  "lipGapPx": 29.64,
+  "mesh": "a5dc0833e2eb9cc3",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > full photo, blink full: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18851,
+  "drawing": "198a8520eb4266c2",
+  "leftEyeOpenPx": 26,
+  "lipGapPx": 10.92,
+  "mesh": "31a4a907957bc892",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > full photo, blink half: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18883,
+  "drawing": "d967d3642a6e0d9a",
+  "leftEyeOpenPx": 18.27,
+  "lipGapPx": 10.92,
+  "mesh": "d9ee5e757ab3e2b5",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > full photo, gaze right-up: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18901,
+  "drawing": "d7176b9db3edd93d",
+  "leftEyeOpenPx": 26,
+  "lipGapPx": 10.92,
+  "mesh": "31a4a907957bc892",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > full photo, oh (rounded): mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 19248,
+  "drawing": "dbb17280a557b9af",
+  "leftEyeOpenPx": 26,
+  "lipGapPx": 24.72,
+  "mesh": "2b7884b2d2042bea",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > full photo, rest: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18851,
+  "drawing": "198a8520eb4266c2",
+  "leftEyeOpenPx": 26,
+  "lipGapPx": 10.92,
+  "mesh": "31a4a907957bc892",
+  "vertices": 981,
+}
+`;
+
+exports[`legacy animal rig golden output > full photo, smile: mesh and drawing are unchanged 1`] = `
+{
+  "drawCalls": 18851,
+  "drawing": "8c7ac6a3cdd680c4",
+  "leftEyeOpenPx": 24.13,
+  "lipGapPx": 10.92,
+  "mesh": "8520c515d3cf9af9",
+  "vertices": 981,
+}
+`;

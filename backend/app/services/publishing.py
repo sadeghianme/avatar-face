@@ -47,6 +47,25 @@ def _ext(key: str, default: str) -> str:
     return tail.rsplit(".", 1)[-1] if "." in tail else default
 
 
+# Appended to the quality note of a first build that did not publish itself
+# (see rig.process_avatar), and taken off again when the owner publishes.
+CONFIRM_BEFORE_PUBLISH = (
+    "It is not live yet: check the points with “Mark the face”, then press Publish."
+)
+
+
+def awaiting_confirmation(note: str | None) -> str:
+    return f"{note.rstrip('. ')}. {CONFIRM_BEFORE_PUBLISH}" if note else CONFIRM_BEFORE_PUBLISH
+
+
+def confirmed(note: str | None) -> str | None:
+    """The quality note once the owner has published: the reason stays, the
+    instruction to publish goes."""
+    if not note or not note.endswith(CONFIRM_BEFORE_PUBLISH):
+        return note
+    return note[: -len(CONFIRM_BEFORE_PUBLISH)].strip() or None
+
+
 def published_prefix(org_id: str, avatar_id: str, revision: int) -> str:
     return f"orgs/{org_id}/avatars/{avatar_id}/published/r{revision}"
 
@@ -121,11 +140,15 @@ async def publish(avatar, storage) -> dict:
 
     # The mouth: settings by value, the optional teeth photo by copy — same
     # reason as everything else here, a later edit must not reach visitors.
-    from app.services.mouth import load as load_mouth
+    from app.services.mouth import load as load_mouth, renderer_allowed
 
+    face_type = getattr(avatar, "face_type", "human")
     mouth = load_mouth(getattr(avatar, "mouth_config", None))
     mouth_published = None
-    if mouth:
+    # A mouth this face type may not use publishes as the classic one (None),
+    # whatever route put it in the draft: the photographic mouth draws human
+    # teeth, and a visitor must never see them in a muzzle.
+    if mouth and renderer_allowed(mouth["renderer"], face_type):
         mouth_published = {"renderer": mouth["renderer"], "profile": mouth.get("profile") or {}}
         oral_image = await copy(mouth.get("oral_image_key"), "mouth", "png")
         oral_rig = await copy(mouth.get("oral_rig_key"), "mouth-rig", "json")
@@ -135,7 +158,7 @@ async def publish(avatar, storage) -> dict:
     config = {
         "revision": revision,
         "framing": avatar.framing,
-        "face_type": getattr(avatar, "face_type", "human"),
+        "face_type": face_type,
         "voice": getattr(avatar, "voice", None),
         "mouth": mouth_published,
         "image_key": image_key,
@@ -206,18 +229,19 @@ async def discard_draft(avatar, storage) -> bool:
     if thumb_restored:
         avatar.thumbnail_key = thumb_restored
 
-    # Layers live at a fixed path, so they are restored in place.
-    layer_keys = config.get("layer_keys") or {}
-    if layer_keys:
-        from app.services.layers import layer_key
+    # Layers live at a fixed path, so they are restored in place, and a layer
+    # the published version does not have is deleted: going back to a
+    # cut-out must not keep the edited draft's backdrop behind it.
+    from app.services.layers import layer_key
 
-        for name, source in layer_keys.items():
-            if await storage.exists(source):
-                await storage.put_bytes(
-                    layer_key(avatar.org_id, avatar.id, name),
-                    await storage.get_bytes(source),
-                    _content_type(source),
-                )
+    layer_keys = config.get("layer_keys") or {}
+    for name in LAYER_NAMES:
+        target = layer_key(avatar.org_id, avatar.id, name)
+        source = layer_keys.get(name)
+        if source is None:
+            await storage.delete(target)
+        elif await storage.exists(source):
+            await storage.put_bytes(target, await storage.get_bytes(source), _content_type(source))
     # The mouth goes back too. Its photo is restored into fresh draft keys
     # so the draft never aliases the immutable published copy.
     published_mouth = config.get("mouth")

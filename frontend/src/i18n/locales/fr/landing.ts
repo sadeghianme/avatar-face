@@ -176,7 +176,7 @@ export const landing = {
   faqEditQ: "Puis-je modifier un avatar déjà en ligne ?",
   faqEditA: "Oui. Les changements de voix ou de bouche sont enregistrés en brouillon, que vous pouvez prévisualiser en privé. Votre site garde la version publiée jusqu'à ce que vous publiiez.",
   faqPrivacyQ: "Que deviennent les photos et les voix que je téléverse ?",
-  faqPrivacyA: "Elles restent dans votre organisation et servent uniquement à créer et animer vos avatars. Cloner une voix exige de confirmer le consentement de la personne, la parole clonée est tatouée numériquement, et vous pouvez supprimer une voix à tout moment.",
+  faqPrivacyA: "Elles restent dans votre organisation et servent uniquement à créer et animer vos avatars. Seule exception : une étape d'IA que vous choisissez, comme générer ou restyler une image — cette photo est alors envoyée au fournisseur d'IA d'images utilisé par votre organisation. Cloner une voix exige de confirmer le consentement de la personne, la parole clonée est tatouée numériquement, et vous pouvez supprimer une voix à tout moment.",
   faqFreeQ: "Combien coûte le démarrage ?",
   faqFreeA: "Rien. Créer un compte et vos premiers avatars est gratuit, sans carte bancaire.",
 

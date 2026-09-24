@@ -21,18 +21,18 @@ from app.schemas.avatar import (
     AvatarFromUrl,
     AvatarOut,
     AvatarUpdate,
-    RigAdjust,
     RigFit,
     RigFitResult,
 )
 from uuid import uuid4
 
+from app.services.candidates import candidate_prefix, generated_by, new_candidate_key
 from app.services.imagegen import STYLES as GEN_STYLES
 from app.services.rig import process_avatar
 from app.services.usage import check_image_limit, record_generated_avatar, record_generation
 from app.services.rig_fit import PupilMarks, RegionMarks, apply_anchors, current_anchors
 from app.services.segment import SegmentationUnavailable, remove_background
-from app.services.publishing import discard_draft, mark_dirty, publish
+from app.services.publishing import confirmed, discard_draft, mark_dirty, publish
 from app.services.storage import get_storage
 
 logger = logging.getLogger("liveface.avatars")
@@ -181,51 +181,6 @@ async def retry_rig(
     return avatar
 
 
-@router.post("/{avatar_id}/rig-adjust", response_model=AvatarOut)
-async def rig_adjust(avatar_id: str, body: RigAdjust, ctx: OrgMember, db: DB) -> Avatar:
-    """Manual fit correction (the auto-detected landmarks can miss on
-    stylized/rotated faces): translate+scale the mouth cluster and translate
-    each eye cluster, then persist the rewritten rig JSON."""
-    import json as _json
-
-    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
-    if avatar.kind != AvatarKind.photo or avatar.status != AvatarStatus.ready or not avatar.rig_key:
-        raise Conflict409("Avatar rig is not adjustable", code="not_adjustable")
-
-    storage = get_storage()
-    rig = _json.loads(await storage.get_bytes(avatar.rig_key))
-    points = rig["points"]
-
-    # Mouth: scale about its centroid, then translate.
-    mouth_indices = set(rig.get("mouth_indices", []))
-    if mouth_indices:
-        mcx = sum(points[i][0] for i in mouth_indices) / len(mouth_indices)
-        mcy = sum(points[i][1] for i in mouth_indices) / len(mouth_indices)
-        for i in mouth_indices:
-            points[i][0] = mcx + (points[i][0] - mcx) * body.mouth_scale + body.mouth_dx
-            points[i][1] = mcy + (points[i][1] - mcy) * body.mouth_scale + body.mouth_dy
-
-    # Eyes: translate lids + iris clusters together.
-    left_eye = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160,
-                161, 246, 468, 469, 470, 471, 472]
-    right_eye = [263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386,
-                 387, 388, 466, 473, 474, 475, 476, 477]
-    for cluster, dx, dy in (
-        (left_eye, body.left_eye_dx, body.left_eye_dy),
-        (right_eye, body.right_eye_dx, body.right_eye_dy),
-    ):
-        if dx or dy:
-            for i in cluster:
-                points[i][0] += dx
-                points[i][1] += dy
-
-    xs = [p[0] for p in points]
-    ys = [p[1] for p in points]
-    rig["face_box"] = [min(xs), min(ys), max(xs), max(ys)]
-    await storage.put_bytes(avatar.rig_key, _json.dumps(rig).encode(), "application/json")
-    return avatar
-
-
 class BackgroundRequest(BaseModel):
     """True removes the background, false restores the original photo."""
 
@@ -242,7 +197,15 @@ async def update_avatar(
     reaches sites that already have the snippet pasted in — they re-read the
     avatar on every page load, so the change lands without anyone editing HTML.
     """
+    from app.services.mouth import load as load_mouth, renderer_allowed
+
     avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    face_type = body.face_type or avatar.face_type
+    if body.mouth is not None and not renderer_allowed(body.mouth.renderer, face_type):
+        raise Validation422(
+            "The photographic mouth draws human teeth, so it is only for human faces",
+            code="mouth_not_for_face_type",
+        )
     if body.name is not None:
         avatar.name = body.name
     if body.framing is not None:
@@ -253,8 +216,6 @@ async def update_avatar(
         avatar.voice_config = _json.dumps(body.voice.model_dump())
     if body.mouth is not None:
         import json as _json
-
-        from app.services.mouth import load as load_mouth
 
         # Renderer and fit change; the mouth photo is managed by its own
         # endpoints and carried over untouched.
@@ -274,6 +235,15 @@ async def update_avatar(
         # away a hand-marked rig for a setting that has nothing to do with
         # where the landmarks are.
         await _reprofile_visemes(avatar)
+        # A face that is no longer human cannot keep human teeth; the fit
+        # and any teeth photo stay, so switching back restores nothing lost
+        # but the renderer choice.
+        mouth = load_mouth(avatar.mouth_config)
+        if mouth and not renderer_allowed(mouth["renderer"], avatar.face_type):
+            import json as _json
+
+            mouth["renderer"] = "classic"
+            avatar.mouth_config = _json.dumps(mouth)
     await db.commit()
     return avatar
 
@@ -523,10 +493,13 @@ async def crop_avatar(
         if not avatar.precrop_image_key:
             return avatar  # never cropped; nothing to undo
         await _snapshot(avatar, storage, "crop reset")
+        # Either may be the crop as cut: a background removed after
+        # cropping replaces image_key and keeps the crop as the original.
+        cropped_keys = [k for k in (avatar.image_key, avatar.original_image_key) if k]
         avatar.image_key = avatar.precrop_image_key
         avatar.precrop_image_key = None
         await _rebuild_thumbnail(avatar, storage)
-        await _rebuild_rig(avatar, storage)
+        await _uncrop_rig(avatar, storage, cropped_keys)
         await _rebuild_layers(avatar, storage)
         mark_dirty(avatar)
         await db.commit()
@@ -544,10 +517,11 @@ async def crop_avatar(
 
     from PIL import Image
 
+    from app.services.photo_io import has_alpha, png_bytes
+
     source = Image.open(io.BytesIO(await storage.get_bytes(avatar.image_key)))
     # Preserve alpha: cropping a cut-out must not paste the background back.
-    has_alpha = source.mode in ("RGBA", "LA") or "transparency" in source.info
-    source = source.convert("RGBA" if has_alpha else "RGB")
+    source = source.convert("RGBA" if has_alpha(source) else "RGB")
     width, height = source.size
 
     left = int(round(body.x * width))
@@ -556,19 +530,28 @@ async def crop_avatar(
     bottom = int(round((body.y + body.height) * height))
     cropped = source.crop((left, top, right, bottom))
 
-    buffer = io.BytesIO()
-    cropped.save(buffer, format="PNG", optimize=True)
-
     await _snapshot(avatar, storage, "crop")
     key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/source-crop.png"
-    await storage.put_bytes(key, buffer.getvalue(), "image/png")
+    await storage.put_bytes(key, png_bytes(cropped), "image/png")
+    first_crop = not avatar.precrop_image_key
     # Only the first crop records the pre-crop image, so cropping twice still
     # resets all the way back rather than to the previous crop.
-    if not avatar.precrop_image_key:
+    if first_crop:
         avatar.precrop_image_key = avatar.image_key
     avatar.image_key = key
 
-    await _translate_rig(avatar, storage, left, top, cropped.size, _json)
+    if avatar.rig_key:
+        rig = _json.loads(await storage.get_bytes(avatar.rig_key))
+        # Where this crop sits in the pre-crop photo, accumulated over
+        # repeated crops, so a reset can move the rig back exactly instead
+        # of re-detecting (which loses hand marks and, for an undetectable
+        # face, the whole fit). A rig cropped before this was recorded has
+        # no origin to add to; it stays without one and reset falls back.
+        origin = [0, 0] if first_crop else rig.get("crop_origin")
+        rig = _move_rig(rig, left, top, cropped.size)
+        if origin is not None:
+            rig["crop_origin"] = [origin[0] + left, origin[1] + top]
+        await storage.put_bytes(avatar.rig_key, _json.dumps(rig).encode(), "application/json")
     await _rebuild_thumbnail(avatar, storage)
     await _rebuild_layers(avatar, storage)
     mark_dirty(avatar)
@@ -576,41 +559,125 @@ async def crop_avatar(
     return avatar
 
 
-async def _translate_rig(avatar: Avatar, storage, left: int, top: int, size, _json) -> None:
-    """Shift every landmark by the crop origin and restate the image size."""
-    if not avatar.rig_key:
-        return
-    rig = _json.loads(await storage.get_bytes(avatar.rig_key))
-    rig["image_size"] = [size[0], size[1]]
-    rig["points"] = [[p[0] - left, p[1] - top] for p in rig.get("points", [])]
+def _move_rig(rig: dict, left: float, top: float, size: tuple[int, int]) -> dict:
+    """The rig for an image whose top-left sits at (left, top) of the
+    current one — a crop, or with a negative origin, the crop undone."""
+    moved = dict(rig)
+    moved["image_size"] = [size[0], size[1]]
+    moved["points"] = [[p[0] - left, p[1] - top] for p in rig.get("points", [])]
     box = rig.get("face_box")
     if box and len(box) == 4:
-        rig["face_box"] = [box[0] - left, box[1] - top, box[2] - left, box[3] - top]
+        moved["face_box"] = [box[0] - left, box[1] - top, box[2] - left, box[3] - top]
     # Saved hand-placed marks live in image pixels too; without this a crop
     # would reopen the marking panel with every handle off by the crop origin.
-    for region in (rig.get("user_anchors") or {}).values():
-        for pt in region.values():
-            if isinstance(pt, dict) and "x" in pt:
-                pt["x"] -= left
-                pt["y"] -= top
-    await storage.put_bytes(avatar.rig_key, _json.dumps(rig).encode(), "application/json")
+    if rig.get("user_anchors"):
+        moved["user_anchors"] = _move_anchors(rig["user_anchors"], left, top)
+    return moved
 
 
-async def _rebuild_rig(avatar: Avatar, storage) -> None:
-    """Re-detect after a reset, since the old rig is in cropped coordinates."""
-    from app.services.rig import build_rig, landmarks_from_image
+def _move_anchors(anchors: dict, left: float, top: float) -> dict:
+    return {
+        region: {
+            name: {"x": pt["x"] - left, "y": pt["y"] - top}
+            if isinstance(pt, dict) and "x" in pt
+            else pt
+            for name, pt in marks.items()
+        }
+        for region, marks in anchors.items()
+        if marks
+    }
+
+
+async def _uncrop_rig(avatar: Avatar, storage, cropped_keys: list[str]) -> None:
+    """Put the rig back into the pre-crop photo's coordinates.
+
+    A translation, not a re-detection: the rig keeps its viseme table, its
+    hand-placed marks and, for a face no detector finds, the fit the owner
+    made by hand. Rigs cropped before the origin was recorded get it from
+    the pixels — a crop is an exact sub-rectangle of the photo it was cut
+    from — and only when that fails is the face detected again.
+    """
+    import io
+    import json as _json
+
+    from PIL import Image
 
     if not avatar.rig_key or not avatar.image_key:
         return
-    import json as _json
+    rig = _json.loads(await storage.get_bytes(avatar.rig_key))
+    precrop_bytes = await storage.get_bytes(avatar.image_key)
+    precrop = Image.open(io.BytesIO(precrop_bytes))
+
+    origin = rig.get("crop_origin")
+    if origin is None:
+        for key in cropped_keys:
+            try:
+                cropped = Image.open(io.BytesIO(await storage.get_bytes(key)))
+            except Exception:
+                continue
+            origin = _locate_crop(precrop, cropped)
+            if origin is not None:
+                break
+
+    if origin is not None:
+        restored = _move_rig(rig, -origin[0], -origin[1], precrop.size)
+        restored.pop("crop_origin", None)
+    else:
+        restored = _redetect_rig(avatar, precrop_bytes, rig)
+        if restored is None:
+            return
+    await storage.put_bytes(avatar.rig_key, _json.dumps(restored).encode(), "application/json")
+
+
+def _locate_crop(outer, inner) -> tuple[int, int] | None:
+    """Where `inner` sits in `outer` pixel for pixel, or None when it does
+    not sit anywhere exactly once (not a crop of it, or a flat image where
+    every position matches and the origin is unknowable)."""
+    import numpy as np
+
+    from app.services.photo_io import scrub_transparent
+
+    # Compared as scrubbed RGBA: an older cut-out still holds colour under
+    # alpha 0, and cropping it now blanks that colour.
+    big = np.ascontiguousarray(np.asarray(scrub_transparent(outer))).view(np.uint32)[:, :, 0]
+    small = np.ascontiguousarray(np.asarray(scrub_transparent(inner))).view(np.uint32)[:, :, 0]
+    (height, width), (h, w) = big.shape, small.shape
+    if h > height or w > width:
+        return None
+    span_y, span_x = height - h + 1, width - w + 1
+    # Narrow the candidate origins with a spread of probe pixels, then check
+    # the few survivors in full.
+    candidates = np.ones((span_y, span_x), dtype=bool)
+    for py in np.linspace(0, h - 1, 5).astype(int):
+        for px in np.linspace(0, w - 1, 5).astype(int):
+            candidates &= big[py : py + span_y, px : px + span_x] == small[py, px]
+    found = [
+        (int(x), int(y))
+        for y, x in np.argwhere(candidates)[:8]
+        if np.array_equal(big[y : y + h, x : x + w], small)
+    ]
+    return found[0] if len(found) == 1 else None
+
+
+def _redetect_rig(avatar: Avatar, image_bytes: bytes, previous: dict) -> dict | None:
+    """Last resort for a crop reset with no recoverable origin.
+
+    Detection runs with the avatar's face type so the rig keeps its viseme
+    table. Hand marks cannot follow: they are in the cropped photo's
+    coordinates and nothing says where that crop was.
+    """
+    from app.services.rig import build_rig, landmarks_from_image
 
     try:
-        points, blendshapes, size, _ = landmarks_from_image(await storage.get_bytes(avatar.image_key))
-        rig = build_rig(points, size, blendshapes)
+        points, blendshapes, size, _ = landmarks_from_image(image_bytes)
     except Exception:
         logger.exception("rig rebuild failed after crop reset for avatar %s", avatar.id)
-        return
-    await storage.put_bytes(avatar.rig_key, _json.dumps(rig).encode(), "application/json")
+        return None
+    if previous.get("user_anchors"):
+        logger.warning(
+            "crop reset for avatar %s: crop origin unknown, hand marks dropped", avatar.id
+        )
+    return build_rig(points, size, blendshapes, face_type=avatar.face_type)
 
 
 @router.get("/{avatar_id}/rig-anchors")
@@ -693,6 +760,10 @@ async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFi
             avatar.rig_key, _json.dumps(adjusted).encode(), "application/json"
         )
         mark_dirty(avatar)
+        # Committed, or the dirty mark is lost with the session: the saved
+        # marks would reach visitors silently on the next unrelated publish,
+        # and the Publish bar would never say they were waiting.
+        await db.commit()
     return RigFitResult(rig=adjusted, persisted=body.persist)
 
 
@@ -711,6 +782,9 @@ async def publish_avatar(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
         await publish(avatar, get_storage())
     except ValueError as exc:
         raise Conflict409(str(exc), code="nothing_to_publish") from exc
+    # Publishing is the confirmation a held-back first build was waiting
+    # for; the note keeps its reason and loses the instruction.
+    avatar.quality_note = confirmed(avatar.quality_note)
     await db.commit()
     return avatar
 
@@ -807,12 +881,18 @@ async def upload_mouth_photo(avatar_id: str, file: UploadFile, ctx: OrgMember, d
 
     from starlette.concurrency import run_in_threadpool
 
-    from app.services.mouth import load as load_mouth, oral_keys
+    from app.services.mouth import load as load_mouth, oral_keys, renderer_allowed
     from app.services.portrait_photo import MAX_BYTES, prepare_photo
 
     avatar = await _get_avatar(db, ctx.org.id, avatar_id)
     if avatar.kind != AvatarKind.photo or avatar.status != AvatarStatus.ready:
         raise Conflict409("Only a ready photo avatar can take a mouth photo", code="not_a_photo")
+    # The photo only feeds the photographic mouth, which this face may not use.
+    if not renderer_allowed("continuous", avatar.face_type):
+        raise Validation422(
+            "The photographic mouth draws human teeth, so it is only for human faces",
+            code="mouth_not_for_face_type",
+        )
     if file.content_type not in get_settings().allowed_image_types:
         raise Validation422("Choose a JPEG, PNG or WebP photo", code="unsupported_image_type")
     data = await file.read(MAX_BYTES + 1)
@@ -862,20 +942,16 @@ async def remove_mouth_photo(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
 
 @router.delete("/{avatar_id}", status_code=204)
 async def delete_avatar(avatar_id: str, ctx: OrgMember, db: DB):
-    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
-    storage = get_storage()
-    from app.services.mouth import load as load_mouth
+    """Delete the avatar and every file it owns.
 
-    mouth = load_mouth(avatar.mouth_config) or {}
-    for key in (
-        avatar.image_key,
-        avatar.rig_key,
-        avatar.thumbnail_key,
-        mouth.get("oral_image_key"),
-        mouth.get("oral_rig_key"),
-    ):
-        if key:
-            await storage.delete(key)
+    By prefix, not by a list of keys: an avatar accumulates files no column
+    points at any more — the pre-crop and pre-cut-out photos, undo history,
+    layers, every published revision — and a hand-kept list is exactly what
+    left the published copies of "deleted" avatars in storage. The staged
+    candidate it was saved from lives elsewhere and is swept on its own.
+    """
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    await get_storage().delete_prefix(f"orgs/{avatar.org_id}/avatars/{avatar.id}/")
     await db.delete(avatar)
     await db.commit()
 
@@ -973,7 +1049,7 @@ async def generate_candidates(
             rejected.append(f"{backend}: {verdict.summary}")
             continue
 
-        key = f"orgs/{ctx.org.id}/candidates/{uuid4().hex}.png"
+        key = new_candidate_key(ctx.org.id, backend)
         await storage.put_bytes(key, image, "image/png")
         accepted.append(
             {
@@ -1004,8 +1080,7 @@ async def create_from_candidate(
     storage = get_storage()
     # The key is client-supplied, so it is checked against this org's own
     # candidate prefix — otherwise it would read any object in storage.
-    prefix = f"orgs/{ctx.org.id}/candidates/"
-    if not body.key.startswith(prefix) or ".." in body.key:
+    if not body.key.startswith(candidate_prefix(ctx.org.id)) or ".." in body.key:
         raise Validation422("Unknown candidate", code="unknown_candidate")
     if not await storage.exists(body.key):
         raise Validation422("That candidate has expired", code="unknown_candidate")
@@ -1023,6 +1098,11 @@ async def create_from_candidate(
     avatar.image_key = f"orgs/{ctx.org.id}/avatars/{avatar.id}/source.png"
     await storage.put_bytes(avatar.image_key, await storage.get_bytes(body.key), "image/png")
     await db.commit()
-    await record_generated_avatar(db, ctx.org.id, "gemini")
+    # Only a picture that came out of image generation is a kept generation;
+    # a saved upload or crop of one's own photo is not, and counting it
+    # overstated what the AI features were used for.
+    backend = generated_by(body.key)
+    if backend:
+        await record_generated_avatar(db, ctx.org.id, backend)
     background.add_task(process_avatar, avatar.id)
     return avatar

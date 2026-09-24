@@ -51,9 +51,13 @@ ssh "$REMOTE" "test -s $REMOTE_DIR/deploy/.env" || {
   exit 1
 }
 
+# Not cp: the database is in WAL mode, so recent commits live in the -wal
+# file beside it, and a copy of the main file alone silently lacks them.
+# backup_db.py uses SQLite's online backup instead; see its docstring.
 echo "==> backing up the database"
-ssh "$REMOTE" "docker exec liveface-liveface-api-1 sh -c \
-  'cp /data/liveface.sqlite3 /data/liveface.sqlite3.bak-\$(date +%Y%m%d-%H%M%S)'"
+ssh "$REMOTE" "docker exec -i liveface-liveface-api-1 sh -c \
+  'python - /data/liveface.sqlite3 /data/liveface.sqlite3.bak-\$(date +%Y%m%d-%H%M%S)'" \
+  < "$LOCAL_DIR/deploy/backup_db.py"
 
 echo "==> building and restarting"
 ssh "$REMOTE" "cd $REMOTE_DIR/deploy && docker compose -f $COMPOSE up -d --build"

@@ -15,9 +15,13 @@ import type { Avatar } from "@/lib/types";
  * can crop, re-mark, restyle and listen without a visitor ever seeing a
  * half-finished avatar.
  *
- * Shown in both states on purpose. A bar that only appears when there are
+ * Shown in every state on purpose. A bar that only appears when there are
  * changes leaves people wondering whether their last edit went live; one
  * that always says which state you are in answers that without being asked.
+ *
+ * A never-published avatar is its own state, not "unpublished changes": a
+ * first build the server was not confident about waits here for its owner,
+ * and there is no published version to discard back to.
  */
 export function PublishBar({ avatar, orgId }: { avatar: Avatar; orgId: string }) {
   const { t } = useTranslation();
@@ -25,7 +29,8 @@ export function PublishBar({ avatar, orgId }: { avatar: Avatar; orgId: string })
   const [busy, setBusy] = useState<"publish" | "discard" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const dirty = avatar.unpublished === true;
+  const neverPublished = !avatar.published;
+  const dirty = neverPublished || avatar.unpublished === true;
 
   const run = async (action: "publish" | "discard") => {
     setBusy(action);
@@ -60,23 +65,33 @@ export function PublishBar({ avatar, orgId }: { avatar: Avatar; orgId: string })
           />
           <div>
             <p className="text-sm font-medium">
-              {dirty ? t("publishDraftTitle") : t("publishLiveTitle")}
+              {neverPublished
+                ? t("publishFirstTitle")
+                : dirty
+                  ? t("publishDraftTitle")
+                  : t("publishLiveTitle")}
             </p>
             <p className="mt-0.5 text-[13px] text-gray-500 dark:text-gray-400">
-              {dirty ? t("publishDraftBody") : t("publishLiveBody")}
+              {neverPublished
+                ? t("publishFirstBody")
+                : dirty
+                  ? t("publishDraftBody")
+                  : t("publishLiveBody")}
             </p>
           </div>
         </div>
 
         {dirty && (
           <div className="flex shrink-0 gap-2">
-            <button
-              className="btn-secondary"
-              onClick={() => void run("discard")}
-              disabled={busy !== null}
-            >
-              {busy === "discard" ? <Spinner className="h-4 w-4" /> : t("publishDiscard")}
-            </button>
+            {!neverPublished && (
+              <button
+                className="btn-secondary"
+                onClick={() => void run("discard")}
+                disabled={busy !== null}
+              >
+                {busy === "discard" ? <Spinner className="h-4 w-4" /> : t("publishDiscard")}
+              </button>
+            )}
             <button
               className="btn-primary"
               onClick={() => void run("publish")}

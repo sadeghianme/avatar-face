@@ -176,7 +176,7 @@ export const landing = {
   faqEditQ: "Can I change an avatar after it's live?",
   faqEditA: "Yes. Changes to the voice or the mouth are saved as a draft that you can preview privately. Your website keeps the published version until you press Publish.",
   faqPrivacyQ: "What happens to the photos and voices I upload?",
-  faqPrivacyA: "They stay in your organization and are used only to build and run your avatars. Cloning a voice requires confirming the speaker's consent, cloned speech is watermarked, and you can delete a voice at any time.",
+  faqPrivacyA: "They stay in your organization and are used only to build and run your avatars. The one exception is an AI step you choose, such as generating or restyling an image: that photo is sent to the image-AI provider your organization uses. Cloning a voice requires confirming the speaker's consent, cloned speech is watermarked, and you can delete a voice at any time.",
   faqFreeQ: "How much does it cost to start?",
   faqFreeA: "Nothing. Creating an account and building your first avatars is free, and no credit card is needed.",
 

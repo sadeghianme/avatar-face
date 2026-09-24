@@ -7,6 +7,10 @@ import { Spinner } from "@/components/ui/Spinner";
 import { api, ApiError } from "@/lib/api";
 import type { Avatar, MouthRenderer } from "@/lib/types";
 
+/** The photographic mouth paints human teeth; the server refuses it elsewhere. */
+const rendererChoices = (avatar: Avatar): MouthRenderer[] =>
+  (avatar.face_type ?? "human") === "human" ? ["classic", "continuous"] : ["classic"];
+
 /** Lip projection belongs to the older geometric prototype only. */
 const SLIDERS: (keyof ReferenceProfile)[] = ["teethScale", "teethY", "warmth", "jawRange"];
 const LABELS: Record<keyof ReferenceProfile, string> = {
@@ -35,7 +39,10 @@ export function MouthPanel({
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const saved = avatar.mouth ?? null;
-  const [renderer, setRenderer] = useState<MouthRenderer>(saved?.renderer ?? "classic");
+  const choices = rendererChoices(avatar);
+  const savedRenderer: MouthRenderer =
+    saved && choices.includes(saved.renderer) ? saved.renderer : "classic";
+  const [renderer, setRenderer] = useState<MouthRenderer>(savedRenderer);
   const [profile, setProfile] = useState<ReferenceProfile>(() => normalizeProfile(saved?.profile));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +51,7 @@ export function MouthPanel({
   // Re-seed when the server's copy changes under us (publish, discard).
   const savedKey = JSON.stringify(saved);
   useEffect(() => {
-    setRenderer(saved?.renderer ?? "classic");
+    setRenderer(savedRenderer);
     setProfile(normalizeProfile(saved?.profile));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedKey]);
@@ -120,8 +127,12 @@ export function MouthPanel({
         <p className="mt-1 text-xs leading-relaxed text-gray-500">{t("mouthHint")}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={t("mouthTitle")}>
-        {(["classic", "continuous"] as const).map((option) => (
+      <div
+        className={`grid gap-2 ${choices.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}
+        role="radiogroup"
+        aria-label={t("mouthTitle")}
+      >
+        {choices.map((option) => (
           <button
             key={option}
             type="button"
@@ -142,6 +153,10 @@ export function MouthPanel({
           </button>
         ))}
       </div>
+
+      {choices.length === 1 && (
+        <p className="text-xs leading-relaxed text-gray-500">{t("mouthHumanOnly")}</p>
+      )}
 
       {continuous && (
         <>

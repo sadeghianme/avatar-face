@@ -122,6 +122,18 @@ class Avatar(TimestampedBase):
         return has_unpublished_changes(self)
 
     @property
+    def published(self) -> bool:
+        """Is a snapshot being served to visitors?
+
+        What embed and share gate on, and not the same question as whether
+        published_at is set: migration 020 gave every avatar live at the
+        time a snapshot with no publish date, and those are live.
+        """
+        from app.services.publishing import config_of
+
+        return config_of(self) is not None
+
+    @property
     def published_at(self) -> str | None:
         from app.services.publishing import config_of
 

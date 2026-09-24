@@ -96,8 +96,10 @@ export function AvatarDetailPage() {
 
   // Saved draft mouth unless the panel is previewing something newer. The
   // preview resets whenever the saved copy changes (save, publish, discard).
+  // Only human faces get the photographic mouth — the server publishes the
+  // classic one for anything else, and the preview must show what ships.
   const savedMouth: AvatarMouthConfig | null =
-    avatar?.mouth?.renderer === "continuous"
+    avatar?.mouth?.renderer === "continuous" && (avatar.face_type ?? "human") === "human"
       ? { renderer: "continuous", profile: avatar.mouth.profile, oral: avatar.mouth_photo ?? null }
       : null;
   const savedMouthKey = JSON.stringify([avatar?.mouth ?? null, Boolean(avatar?.mouth_photo)]);
@@ -250,11 +252,18 @@ export function AvatarDetailPage() {
       {avatar.quality_note && avatar.status === "ready" && (
         <div className="card mb-6 border-amber-300/60 dark:border-amber-500/30">
           <p className="text-[13.5px] text-amber-700 dark:text-amber-400">
-            <span className="font-medium">{t("qualityNoteTitle")}</span> {avatar.quality_note}
+            <span className="font-medium">
+              {avatar.published ? t("qualityNoteTitle") : t("qualityNoteFirstTitle")}
+            </span>{" "}
+            {avatar.quality_note}
           </p>
-          <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">
-            {t("qualityNoteHint")}
-          </p>
+          {/* "It still works" is about a live avatar; before the first
+              publish the note itself says what to do. */}
+          {avatar.published && (
+            <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">
+              {t("qualityNoteHint")}
+            </p>
+          )}
           {avatar.kind === "photo" && !adjusting && (
             <button
               className="btn-secondary mt-3 px-3 py-1.5 text-xs"

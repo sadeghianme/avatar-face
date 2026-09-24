@@ -39,6 +39,8 @@ export type AvatarKind = "photo" | "model3d";
 
 export type MouthRenderer = "classic" | "continuous";
 
+export type FaceType = "human" | "animal" | "cartoon";
+
 export interface Avatar {
   id: string;
   org_id: string;
@@ -62,7 +64,14 @@ export interface Avatar {
   undo_label?: string | null;
   /** True when the draft has unpublished changes. */
   unpublished?: boolean;
+  /** True while visitors are served a snapshot. Use this to ask "is it
+   *  live", not published_at: snapshots from before explicit publishing are
+   *  live and have no date. */
+  published?: boolean;
+  /** When the owner last pressed Publish; null for those older snapshots. */
   published_at?: string | null;
+  /** Selects the viseme table, and which mouth renderers are allowed. */
+  face_type?: FaceType;
   /** The avatar's draft voice {provider, voice, locale}; published on Publish. */
   voice?: { provider: string; voice: string; locale: string } | null;
   /** The DRAFT mouth; null means the classic drawn mouth. */

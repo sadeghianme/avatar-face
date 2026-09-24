@@ -91,16 +91,16 @@ def person_matte(image_bytes: bytes, prior_mask=None):
 
 
 def remove_background(image_bytes: bytes) -> bytes:
-    """Return a PNG of the same size with the background made transparent."""
-    import io as _io
+    """Return a PNG of the same size with the background made transparent.
 
+    Through photo_io.png_bytes, which blanks the colour under alpha 0: the
+    background is removed from the file, not merely hidden in it.
+    """
     import numpy as np
     from PIL import Image
 
+    from app.services.photo_io import png_bytes
+
     out, alpha = person_matte(image_bytes)
     rgba = np.dstack([out.astype(np.uint8), (alpha * 255).astype(np.uint8)])
-    buffer = _io.BytesIO()
-    Image.fromarray(rgba, mode="RGBA").save(buffer, format="PNG", optimize=True)
-    return buffer.getvalue()
-
-
+    return png_bytes(Image.fromarray(rgba, mode="RGBA"))

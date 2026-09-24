@@ -38,10 +38,13 @@ RUN pip install --no-cache-dir . "mediapipe==1.0.1"
 # Widget bundles served at /liveface.js and /liveface-3d.js
 COPY --from=embed-build /build/embed/dist /app/embed/dist
 
-# MediaPipe FaceLandmarker model for real photo rigging.
+# MediaPipe FaceLandmarker model for real photo rigging. Versioned URL and a
+# checksum, not /latest/: every stored rig was measured by this exact model,
+# and a silently replaced one would move the points of every re-detection.
 RUN mkdir -p models \
  && curl -fsSL -o models/face_landmarker.task \
-    https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task \
+    https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task \
+ && echo "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff  models/face_landmarker.task" | sha256sum -c - \
  && curl -fsSL -o models/selfie_segmenter.tflite \
     https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite
 ENV RIG_MODEL_PATH=/app/backend/models/face_landmarker.task

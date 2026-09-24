@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -16,10 +17,27 @@ _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
+def _tune_sqlite(dbapi_connection, _record) -> None:
+    """WAL and a busy timeout, on every new SQLite connection.
+
+    The default rollback journal locks the whole file for a write, so a
+    visitor's embed read and a background rig job's commit collide, and the
+    loser fails at once with "database is locked". WAL lets reads proceed
+    beside a write; the timeout makes a second writer wait its turn instead
+    of failing.
+    """
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=5000")
+    cursor.close()
+
+
 def get_engine() -> AsyncEngine:
     global _engine, _session_factory
     if _engine is None:
         _engine = create_async_engine(get_settings().database_url, future=True)
+        if _engine.dialect.name == "sqlite":
+            event.listen(_engine.sync_engine, "connect", _tune_sqlite)
         _session_factory = async_sessionmaker(_engine, expire_on_commit=False)
     return _engine
 

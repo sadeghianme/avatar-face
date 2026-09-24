@@ -132,6 +132,16 @@ async def lifespan(app: FastAPI):
     async with get_session_factory()() as db:
         await credentials.load(db)
 
+    # Rig jobs run in this process's background tasks, so a restart (every
+    # deploy) orphans whichever were running. Fail them retryably now rather
+    # than leave their owners watching a spinner that will never finish.
+    from app.services.rig import fail_interrupted
+
+    async with get_session_factory()() as db:
+        interrupted = await fail_interrupted(db)
+    if interrupted:
+        logger.warning("marked %d interrupted avatar job(s) as failed", interrupted)
+
     # Staged images nobody kept. In-process on a timer so a fresh deployment
     # cleans up without anyone installing a cron entry — see services.sweeper
     # for why that stops being right with more than one instance.

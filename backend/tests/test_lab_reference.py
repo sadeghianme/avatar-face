@@ -89,6 +89,8 @@ def test_normalizes_exif_and_rejects_large_decode(monkeypatch):
     image.save(out, "JPEG", exif=exif)
     photo, _, _ = lab_reference.prepare_photo(out.getvalue(), "portrait")
     assert Image.open(io.BytesIO(photo)).size == (300, 200)
-    monkeypatch.setattr(portrait_photo, "MAX_PIXELS", 10)
+    from app.services import photo_io
+
+    monkeypatch.setattr(photo_io, "MAX_PIXELS", 10)
     with pytest.raises(Validation422, match="megapixels"):
         lab_reference.prepare_photo(sample_png(), "portrait")

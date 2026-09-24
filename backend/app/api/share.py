@@ -4,8 +4,9 @@ No API key, no login, no org context supplied by the caller — the token IS
 the authorisation, and it resolves to exactly one avatar. Everything here is
 deliberately narrow because the audience is the open internet:
 
-* Only READY avatars resolve. A token for a failed or half-built avatar is a
-  404, not a broken page.
+* Only PUBLISHED avatars resolve, and they keep resolving while the owner's
+  draft is rebuilt. A token for a never-published avatar is a 404, not a
+  broken page.
 * Text is capped short. The dashboard allows long scripts; a stranger on a
   link does not need them, and every character is billed to the owner.
 * Speaking is rate-limited per token AND per client, so one shared link
@@ -27,7 +28,7 @@ from sqlalchemy import select
 
 from app.api.deps import DB
 from app.core.errors import NotFound404, RateLimit429
-from app.models import Avatar, AvatarStatus
+from app.models import Avatar
 from app.schemas.tts import CueOut
 from app.services.rate_limit import SlidingWindowRateLimiter
 from app.services.storage import get_storage
@@ -47,9 +48,13 @@ async def _resolve(token: str, db: DB) -> Avatar:
     avatar = (
         await db.execute(select(Avatar).where(Avatar.share_token == token))
     ).scalar_one_or_none()
-    # One message for "no such token" and "not ready": a visitor can do
+    # One message for "no such token" and "not published": a visitor can do
     # nothing with the difference, and it keeps token probing uninformative.
-    if avatar is None or avatar.status != AvatarStatus.ready:
+    # Published, not ready: the draft's status changes while the owner edits
+    # (a re-detect runs it through processing) and says nothing about the
+    # snapshot visitors are served. A never-published avatar has nothing to
+    # show, so its link must not speak on the owner's quota either.
+    if avatar is None or not avatar.published_config:
         raise NotFound404("This link is not available", code="share_not_found")
     return avatar
 

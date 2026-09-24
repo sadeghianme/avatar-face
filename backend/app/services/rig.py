@@ -147,25 +147,16 @@ def landmarks_from_image(
 
 
 def _mediapipe_landmarks(image: Image.Image) -> np.ndarray:
-    import mediapipe as mp
-    from mediapipe.tasks import python as mp_python
-    from mediapipe.tasks.python import vision
+    """Detected points, or ValueError when the image has no face.
 
-    options = vision.FaceLandmarkerOptions(
-        base_options=mp_python.BaseOptions(model_asset_path=get_settings().rig_model_path),
-        output_face_blendshapes=True,
-        num_faces=1,
-    )
-    with vision.FaceLandmarker.create_from_options(options) as landmarker:
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.asarray(image))
-        result = landmarker.detect(mp_image)
-    if not result.face_landmarks:
+    The model itself lives in services.landmarks, loaded once and shared.
+    """
+    from app.services.landmarks import detect
+
+    found = detect(image)
+    if found is None:
         raise ValueError("no face detected")
-    width, height = image.size
-    points = np.array(
-        [[lm.x * width, lm.y * height] for lm in result.face_landmarks[0]], dtype=np.float64
-    )
-    return points
+    return found.points
 
 
 def synthetic_face_mesh(width: int, height: int) -> np.ndarray:
@@ -288,24 +279,59 @@ def make_thumbnail(data: bytes) -> tuple[bytes, str]:
     thumbnailed as JPEG comes back with its background composited onto black
     or white — the removal silently undone in every thumbnail.
     """
+    from app.services.photo_io import has_alpha, png_bytes
+
     image = Image.open(io.BytesIO(data))
-    transparent = image.mode in ("RGBA", "LA") or "transparency" in image.info
+    transparent = has_alpha(image)
     image = image.convert("RGBA" if transparent else "RGB")
     image.thumbnail((THUMBNAIL_SIZE, THUMBNAIL_SIZE) if max(image.size) > THUMBNAIL_SIZE
                     else image.size)
     # Keep aspect; the engine maps texture coords to naturalWidth/Height.
-    out = io.BytesIO()
     if transparent:
-        image.save(out, format="PNG", optimize=True)
-        return out.getvalue(), "image/png"
+        # Resampling blends colour into pixels it leaves fully transparent.
+        return png_bytes(image), "image/png"
+    out = io.BytesIO()
     image.save(out, format="JPEG", quality=88)
     return out.getvalue(), "image/jpeg"
+
+
+async def _ingest_upload(avatar, storage, db, data: bytes) -> bytes:
+    """Replace a first build's upload with its clean, upright PNG.
+
+    The presigned upload path stores whatever the browser sent — EXIF, GPS
+    and all — under the extension the client declared. The clean copy goes
+    to a key of its own, never the upload's: the presigned URL stays valid
+    for an hour, and a second PUT through it must land beside the live image,
+    not replace it with raw bytes nothing would ever clean again.
+
+    The switch is committed before the raw object is deleted, so a restart
+    at any point leaves the row naming a file that exists, and Retry can
+    rebuild from it.
+    """
+    from uuid import uuid4
+
+    from starlette.concurrency import run_in_threadpool
+
+    from app.services.photo_io import STORED_MAX_EDGE, ingest_photo
+
+    # Seconds of decoding and PNG encoding for a phone photo; on the event
+    # loop, every embed on every customer's site would wait for it.
+    clean = await run_in_threadpool(ingest_photo, data, STORED_MAX_EDGE)
+    upload_key = avatar.image_key
+    key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/source-{uuid4().hex[:8]}.png"
+    await storage.put_bytes(key, clean, "image/png")
+    avatar.image_key = key
+    avatar.content_type = "image/png"
+    await db.commit()
+    await storage.delete(upload_key)
+    return clean
 
 
 async def process_avatar(avatar_id: str) -> None:
     """Background job: image -> landmarks -> rig JSON + thumbnail -> storage."""
     from sqlalchemy import select
 
+    from app.core.errors import Validation422
     from app.db import get_session_factory
     from app.models import Avatar, AvatarStatus
     from app.services.storage import get_storage
@@ -327,12 +353,20 @@ async def process_avatar(avatar_id: str) -> None:
             # Set before the branch: only the photo path computes one, and a
             # 3D avatar reaching the assignment below would raise.
             quality_note: str | None = None
+            # Whether a first build may go live without its owner looking at
+            # it. A GLB carries its own rig; a photo only when a human face
+            # was actually detected and passed every check — a guessed mesh
+            # published unseen is a mouth moving on a customer's site in the
+            # wrong place.
+            confident = avatar.kind == AvatarKind.model3d
 
             image_bytes = await storage.get_bytes(avatar.image_key)
             if avatar.kind == AvatarKind.model3d:
                 rig = build_model_rig(image_bytes)
                 thumb, thumb_type = make_model_thumbnail(), "image/jpeg"
             else:
+                if avatar.rig_key is None:
+                    image_bytes = await _ingest_upload(avatar, storage, db, image_bytes)
                 points, blendshapes, size, detected = landmarks_from_image(image_bytes)
 
                 # An undetected face is NOT a failure: the synthetic fallback
@@ -366,8 +400,10 @@ async def process_avatar(avatar_id: str) -> None:
                     # thresholds are heuristics that should not veto a
                     # picture the user chose.
                     quality_note = None if verdict.ok else verdict.reason
+                    confident = avatar.face_type == "human" and detected and verdict.ok
 
                 rig = build_rig(points, size, blendshapes, face_type=avatar.face_type)
+                await _carry_crop_origin(avatar, storage, rig)
                 thumb, thumb_type = make_thumbnail(image_bytes)
 
             rig_key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/rig.json"
@@ -391,20 +427,26 @@ async def process_avatar(avatar_id: str) -> None:
                 avatar.has_layers = await store_layers(
                     avatar, storage, image_bytes, rig["face_box"]
                 )
-            # A brand-new avatar publishes itself, so creating one and
-            # pasting the snippet works immediately. Only the FIRST build:
+            # A confident brand-new avatar publishes itself, so creating one
+            # and pasting the snippet works immediately. Only the FIRST build:
             # re-running the pipeline on an existing avatar (retry, re-detect)
             # is an edit, and edits wait for Publish like every other change.
+            # Anything less than confident waits for its owner to check the
+            # points and publish; embed and share answer 404 until then.
             if not avatar.published_config:
+                from app.services.publishing import awaiting_confirmation
                 from app.services.publishing import publish as publish_snapshot
 
-                try:
-                    await publish_snapshot(avatar, storage)
-                except Exception:
-                    logger.exception("first publish failed for avatar %s", avatar.id)
-        except NoFaceDetected as exc:
+                if confident:
+                    try:
+                        await publish_snapshot(avatar, storage)
+                    except Exception:
+                        logger.exception("first publish failed for avatar %s", avatar.id)
+                else:
+                    avatar.quality_note = awaiting_confirmation(quality_note)
+        except (NoFaceDetected, Validation422) as exc:
             # Expected, and the user can act on it — no stack trace.
-            logger.info("no face in avatar %s", avatar_id)
+            logger.info("avatar %s rejected: %s", avatar_id, exc)
             avatar.status = AvatarStatus.failed
             avatar.error = str(exc)
         except Exception as exc:
@@ -412,3 +454,49 @@ async def process_avatar(avatar_id: str) -> None:
             avatar.status = AvatarStatus.failed
             avatar.error = str(exc)[:1000]
         await db.commit()
+
+
+async def _carry_crop_origin(avatar, storage, rig: dict) -> None:
+    """Keep the crop origin across a re-detection.
+
+    Re-detecting a cropped photo yields points in the same cropped
+    coordinates as before, so where that crop sits in the uncropped photo is
+    unchanged — and crop reset needs it to put the rig back exactly.
+    """
+    if not avatar.rig_key:
+        return
+    try:
+        previous = json.loads(await storage.get_bytes(avatar.rig_key))
+    except Exception:
+        return  # nothing readable to carry; crop reset falls back
+    if previous.get("crop_origin"):
+        rig["crop_origin"] = previous["crop_origin"]
+
+
+# Shown on an avatar whose job a restart cut short. The retry endpoint (the
+# button beside this message) re-runs it from the stored image.
+INTERRUPTED_ERROR = (
+    "Processing was interrupted by a server restart. Press Retry to run it again."
+)
+
+
+async def fail_interrupted(db) -> int:
+    """Mark avatars left `processing` by a previous process as failed.
+
+    The job ran in a background task of a process that no longer exists, so
+    nothing will ever finish it, and the dashboard would poll a spinner
+    forever. Failed with a retryable message is the honest state. Anything
+    already published keeps being served meanwhile (embed and share read the
+    published snapshot, not the draft's status).
+    """
+    from sqlalchemy import update
+
+    from app.models import Avatar, AvatarStatus
+
+    result = await db.execute(
+        update(Avatar)
+        .where(Avatar.status == AvatarStatus.processing)
+        .values(status=AvatarStatus.failed, error=INTERRUPTED_ERROR)
+    )
+    await db.commit()
+    return result.rowcount or 0

@@ -54,6 +54,7 @@ def build_layers(image_bytes: bytes, face_box: list[float]) -> dict[str, bytes]:
     import numpy as np
     from PIL import Image
 
+    from app.services.photo_io import png_bytes
     from app.services.segment import person_matte
 
     source = Image.open(io.BytesIO(image_bytes))
@@ -121,10 +122,11 @@ def build_layers(image_bytes: bytes, face_box: list[float]) -> dict[str, bytes]:
     body_alpha = np.clip(body_alpha, 0.0, alpha)
 
     def png(colour, layer_alpha) -> bytes:
+        # png_bytes blanks the colour under alpha 0. The head layer is the
+        # whole photo above the neck at alpha 0 outside the person, so
+        # without it every layer set would carry the background it cut away.
         out = np.dstack([colour.astype(np.uint8), (layer_alpha * 255).astype(np.uint8)])
-        buf = io.BytesIO()
-        Image.fromarray(out, mode="RGBA").save(buf, format="PNG", optimize=True)
-        return buf.getvalue()
+        return png_bytes(Image.fromarray(out, mode="RGBA"))
 
     layers = {"body": png(rgb, body_alpha), "head": png(rgb, head_alpha)}
 
@@ -195,7 +197,15 @@ async def store_layers(avatar, storage, image_bytes: bytes, face_box: list[float
     except Exception:
         logger.exception("layer build failed for avatar %s", avatar.id)
         return False
-    for name, data in built.items():
-        content_type = "image/jpeg" if built[name][:3] == b"\xff\xd8\xff" else "image/png"
-        await storage.put_bytes(layer_key(avatar.org_id, avatar.id, name), data, content_type)
+    for name in LAYER_FILES:
+        key = layer_key(avatar.org_id, avatar.id, name)
+        data = built.get(name)
+        if data is None:
+            # A layer this build did not produce belongs to an earlier image.
+            # Left in place, the backdrop of the opaque photo outlives its
+            # cut-out: the removed room, served and published behind it.
+            await storage.delete(key)
+            continue
+        content_type = "image/jpeg" if data[:3] == b"\xff\xd8\xff" else "image/png"
+        await storage.put_bytes(key, data, content_type)
     return True

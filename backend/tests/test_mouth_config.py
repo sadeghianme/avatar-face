@@ -168,3 +168,68 @@ async def test_a_closed_mouth_photo_is_refused(client, setup, monkeypatch):
     )
     assert response.status_code == 422
     assert (await client.get(url, headers=headers)).json()["mouth"] is None
+
+
+@pytest.mark.parametrize("face_type", ["animal", "cartoon"])
+async def test_the_photographic_mouth_is_for_human_faces_only(client, setup, face_type):
+    """It paints human enamel and lips; in a muzzle or a drawn face those
+    are someone's teeth in the wrong face."""
+    headers, org_id, avatar_id, _ = setup
+    url = f"/orgs/{org_id}/avatars/{avatar_id}"
+    await client.patch(url, json={"face_type": face_type}, headers=headers)
+    response = await client.patch(
+        url, json={"mouth": {"renderer": "continuous"}}, headers=headers
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "mouth_not_for_face_type"
+    # Nor in one request that changes both.
+    both = await client.patch(
+        url, json={"face_type": face_type, "mouth": {"renderer": "continuous"}}, headers=headers
+    )
+    assert both.status_code == 422
+    assert (await client.patch(url, json={"mouth": {"renderer": "classic"}}, headers=headers)).status_code == 200
+
+
+async def test_a_face_that_stops_being_human_loses_the_photographic_mouth(client, setup):
+    headers, org_id, avatar_id, _ = setup
+    url = f"/orgs/{org_id}/avatars/{avatar_id}"
+    body = {"mouth": {"renderer": "continuous", "profile": {"teethScale": 1.1}}}
+    await client.patch(url, json=body, headers=headers)
+    switched = (await client.patch(url, json={"face_type": "animal"}, headers=headers)).json()
+    assert switched["mouth"]["renderer"] == "classic"
+    assert switched["mouth"]["profile"]["teethScale"] == 1.1, "the fit is kept"
+
+
+async def test_the_mouth_photo_is_refused_for_an_animal(client, setup, open_mouth_photo):
+    headers, org_id, avatar_id, _ = setup
+    url = f"/orgs/{org_id}/avatars/{avatar_id}"
+    await client.patch(url, json={"face_type": "animal"}, headers=headers)
+    response = await client.post(
+        f"{url}/mouth-photo", files={"file": ("ee.png", _png(), "image/png")}, headers=headers
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "mouth_not_for_face_type"
+
+
+async def test_publishing_never_ships_human_teeth_on_an_animal(client, setup):
+    """Whatever route put the combination in the draft — an older row, a
+    direct write — the published snapshot carries the classic mouth."""
+    import json
+
+    from sqlalchemy import update
+
+    from app.db import get_session_factory
+    from app.models import Avatar
+
+    headers, org_id, avatar_id, key = setup
+    url = f"/orgs/{org_id}/avatars/{avatar_id}"
+    async with get_session_factory()() as db:
+        await db.execute(
+            update(Avatar)
+            .where(Avatar.id == avatar_id)
+            .values(face_type="animal", mouth_config=json.dumps({"renderer": "continuous"}))
+        )
+        await db.commit()
+    await client.post(f"{url}/publish", headers=headers)
+    served = (await client.get(f"/embed/v1/avatars/{avatar_id}", headers=key)).json()
+    assert served["mouth"] is None

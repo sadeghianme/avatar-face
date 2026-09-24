@@ -334,7 +334,16 @@ function AvatarCard({
               {t("createdOn", { date: createdAt })}
             </p>
           </div>
-          <StatusBadge status={avatar.status} />
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <StatusBadge status={avatar.status} />
+            {/* Ready is not the same as live: a first build that needs its
+                points checked waits for Publish, and embeds show nothing. */}
+            {avatar.status === "ready" && !avatar.published && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                {t("notLive")}
+              </span>
+            )}
+          </div>
         </div>
         <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3 text-sm dark:border-white/[0.07]">
           <span className="font-medium text-gray-600 transition-colors group-hover:text-brand-600 dark:text-gray-300 dark:group-hover:text-brand-400">

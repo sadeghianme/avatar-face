@@ -62,35 +62,17 @@ async def landmark_depth(avatar_id: str, ctx: OrgMember, db: DB) -> dict:
 def _landmark_z(image_bytes: bytes) -> list[float]:
     """The z column the stable pipeline discards.
 
-    Mirrors rig._mediapipe_landmarks rather than modifying it: changing the
-    stable function's return shape for a lab would be exactly the coupling
-    this file exists to avoid.
+    Read from the shared landmarker (services.landmarks) rather than a
+    second one: the stable function's return shape stays untouched, and the
+    lab does not pay a model load per request.
     """
     import io
 
-    import numpy as np
     from PIL import Image
 
-    from app.core.config import get_settings
+    from app.services.landmarks import detect
 
-    model_path = get_settings().rig_model_path
-    if not model_path:
-        raise RuntimeError("no landmarker model configured")
-
-    import mediapipe as mp
-    from mediapipe.tasks import python as mp_python
-    from mediapipe.tasks.python import vision
-
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    options = vision.FaceLandmarkerOptions(
-        base_options=mp_python.BaseOptions(model_asset_path=model_path),
-        num_faces=1,
-    )
-    with vision.FaceLandmarker.create_from_options(options) as landmarker:
-        result = landmarker.detect(
-            mp.Image(image_format=mp.ImageFormat.SRGB, data=np.asarray(image))
-        )
-    if not result.face_landmarks:
+    found = detect(Image.open(io.BytesIO(image_bytes)))
+    if found is None:
         raise RuntimeError("no face detected")
-    width = image.size[0]
-    return [round(lm.z * width, 3) for lm in result.face_landmarks[0]]
+    return [round(float(z), 3) for z in found.z]

@@ -34,19 +34,6 @@ class AvatarFromUrl(BaseModel):
     name: str = Field(default="", max_length=128)
 
 
-class RigAdjust(BaseModel):
-    """Manual fit correction, in ORIGINAL-image pixels. Applied to the
-    stored rig so both texture mapping and deformation move together."""
-
-    mouth_dx: float = Field(default=0, ge=-2000, le=2000)
-    mouth_dy: float = Field(default=0, ge=-2000, le=2000)
-    mouth_scale: float = Field(default=1, ge=0.4, le=2.5)
-    left_eye_dx: float = Field(default=0, ge=-2000, le=2000)
-    left_eye_dy: float = Field(default=0, ge=-2000, le=2000)
-    right_eye_dx: float = Field(default=0, ge=-2000, le=2000)
-    right_eye_dy: float = Field(default=0, ge=-2000, le=2000)
-
-
 class AnchorPoint(BaseModel):
     x: float = Field(ge=-10000, le=10000)
     y: float = Field(ge=-10000, le=10000)
@@ -126,6 +113,10 @@ class AvatarOut(BaseModel):
     # True when the draft has moved ahead of the published snapshot — the
     # dashboard shows a Publish bar on this.
     unpublished: bool = False
+    # True while visitors are served a snapshot. Use this, not published_at,
+    # to ask "is it live": snapshots backfilled by migration 020 are live
+    # and have no publish date.
+    published: bool = False
     published_at: str | None = None
     created_at: datetime
     updated_at: datetime
