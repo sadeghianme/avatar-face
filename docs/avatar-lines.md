@@ -109,7 +109,7 @@ layers, generate checks) moves onto the same executor.
 app/lines/  base.py (Line config + registry), human.py, animal.py, animation.py
 app/services/
   landmarks.py      MediaPipe, loaded once, lock-guarded, versioned model + sha256
-  face_template.py  478-point template from MediaPipe's canonical face (Apache-2.0)
+  face_template.py  478-point template: MediaPipe's detection of a fictional portrait
   anchor_fit.py     anchors → thin-plate-spline warp of the detected or template
                     mesh → Delaunay again → validator (0 flipped triangles)
   vision_points.py  Gemini vision keypoints (named model, metered, consent-gated)
@@ -139,15 +139,21 @@ The placeholder mesh used today is not anatomical beyond lips, eyes and nose,
 and applying marks region by region folds triangles (37–147 of 918 measured).
 Replace it with:
 
-1. A 478-point template projected from MediaPipe's canonical face model, so
+1. A 478-point template, MediaPipe's own detection of a fictional frontal face, so
    every index keeps its meaning (61 is the left mouth corner, 10 the top…).
 2. One global thin-plate-spline warp from all anchors at once, always from the
    unmodified detected/template mesh, so re-saving the same marks is stable.
 3. The mouth line sets the inner lip ring (inner corners = outer corners) for
-   animal and animation; the chin sets the jaw scale.
-4. Delaunay after the warp; validator requires 0 flipped triangles.
-5. Anchors are stored in the rig in image coordinates; every rebuild (crop
-   reset, re-detect) re-applies them. Reset means "back to the confirmed marks".
+   animal and animation; the chin sets the jaw scale. Each corner is drawn
+   with its inner-corner landmark (78, 308) on both sides.
+4. Marked pupils are placed after the warp (moved and scaled as one piece),
+   never pinned in it: the iris lies under the lids, not in the skin.
+5. Delaunay after the warp; validator requires 0 flipped triangles outside
+   the iris, and each pupil inside its eye.
+6. Anchors are stored in the rig in image coordinates with `source: "owner"`;
+   every rebuild (crop reset, re-detect) re-applies them. Reset means "back to
+   the confirmed marks". Marks saved before M2 (bounding-box extremes) are
+   read off a detected rig's own landmarks instead, so a re-save moves nothing.
 
 ### AI adjust
 

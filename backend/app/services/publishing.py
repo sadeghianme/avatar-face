@@ -47,20 +47,17 @@ def _ext(key: str, default: str) -> str:
     return tail.rsplit(".", 1)[-1] if "." in tail else default
 
 
-# Appended to the quality note of a first build that did not publish itself
-# (see rig.process_avatar), and taken off again when the owner publishes.
+# Was appended to the quality note of a first build that did not publish
+# itself; notes stored then still carry it until the owner publishes.
 CONFIRM_BEFORE_PUBLISH = (
     "It is not live yet: check the points with “Mark the face”, then press Publish."
 )
 
 
-def awaiting_confirmation(note: str | None) -> str:
-    return f"{note.rstrip('. ')}. {CONFIRM_BEFORE_PUBLISH}" if note else CONFIRM_BEFORE_PUBLISH
-
-
 def confirmed(note: str | None) -> str | None:
     """The quality note once the owner has published: the reason stays, the
-    instruction to publish goes."""
+    instruction to publish goes. Only notes written before the instruction
+    moved to the dashboard's Publish bar still carry it."""
     if not note or not note.endswith(CONFIRM_BEFORE_PUBLISH):
         return note
     return note[: -len(CONFIRM_BEFORE_PUBLISH)].strip() or None

@@ -4,8 +4,10 @@ Input: an uploaded portrait image. Output: a rig JSON (v3) + 256px thumbnail
 stored in object storage.
 
 Landmarking uses MediaPipe FaceLandmarker (478 points + 52 ARKit blendshapes)
-when RIG_MODEL_PATH points at a .task model; otherwise a synthetic frontal
-mesh with valid topology keeps the whole flow working with zero setup.
+when RIG_MODEL_PATH points at a .task model. When it finds no face, animals
+and cartoons start from the face template (services.face_template) and
+humans from a synthetic frontal mesh with valid topology, so the whole flow
+works with zero setup.
 
 Rig JSON (v3) schema:
 {
@@ -20,7 +22,12 @@ Rig JSON (v3) schema:
         {"jawOpen": f, "mouthClose": f, "mouthPucker": f, "mouthFunnel": f,
          "mouthStretch": f, "mouthSmile": f}
   "blendshapes": {...} | null        # neutral ARKit weights when MediaPipe ran
+  "user_anchors": {...}              # after a fit: the owner's marks (anchor_fit)
+  "render_profile": "animal@1"       # after an animal fit; absent = today's renderer
 }
+
+The mesh fits start from is not in here: it is stored beside the rig as
+fit-base.json (services.anchor_fit), because this file is published.
 """
 from __future__ import annotations
 
@@ -144,6 +151,48 @@ def landmarks_from_image(
 
     points = synthetic_face_mesh(width, height)
     return points, None, (width, height), False
+
+
+# Lines whose undetected faces start from the face template rather than the
+# synthetic mesh. Human keeps the synthetic mesh: the stock portraits are
+# drawn to its exact proportions (see services.stock), and without a model
+# installed they are rigged from it.
+TEMPLATE_FACE_TYPES = frozenset({"animal", "cartoon"})
+
+
+def template_mesh(size: tuple[int, int]) -> np.ndarray:
+    """The face template where an undetected face is assumed to be."""
+    from app.services import face_template
+
+    return face_template.place(face_template.default_box(*size))
+
+
+def starting_mesh(
+    points: np.ndarray, size: tuple[int, int], detected: bool, face_type: str
+) -> np.ndarray:
+    """The mesh a first build rigs.
+
+    A detection stands. Without one, an animal or a cartoon gets the face
+    template: its owner has to mark it before it goes live, and the template
+    is what the marking panel and the fit understand.
+    """
+    if detected or face_type not in TEMPLATE_FACE_TYPES:
+        return points
+    return template_mesh(size)
+
+
+def fit_base_mesh(points: np.ndarray, size: tuple[int, int], detected: bool) -> np.ndarray:
+    """The mesh every fit starts from (services.anchor_fit): the detection,
+    else the template — for every line, humans included.
+
+    The fit pins marks to specific landmarks (61 the left mouth corner, 33
+    the outer corner of the image-left eye) and warps everything else with
+    them, which only works on a mesh that is a face throughout. The
+    synthetic mesh is not: its lip and eye rings run the other way round
+    and its other points are filler, so an undetected human that is marked
+    by hand is fitted from the template too.
+    """
+    return points if detected else template_mesh(size)
 
 
 def _mediapipe_landmarks(image: Image.Image) -> np.ndarray:
@@ -368,11 +417,13 @@ async def process_avatar(avatar_id: str) -> None:
                 if avatar.rig_key is None:
                     image_bytes = await _ingest_upload(avatar, storage, db, image_bytes)
                 points, blendshapes, size, detected = landmarks_from_image(image_bytes)
+                points = starting_mesh(points, size, detected, avatar.face_type)
 
-                # An undetected face is NOT a failure: the synthetic fallback
-                # mesh is a complete, well-proportioned 478-point rig (iris
-                # ring included), which is exactly what the manual marking
-                # panel needs as a starting point. Failing here used to dead-
+                # An undetected face is NOT a failure: the fallback mesh (the
+                # face template, or the synthetic mesh for a human) is a
+                # complete 478-point rig, iris ring included, which is
+                # exactly what the manual marking panel needs as a starting
+                # point. Failing here used to dead-
                 # end stylised art, mascots and animal faces that Mark the
                 # face can rescue in a minute. The note tells the user the
                 # mouth is a guess until they place it.
@@ -405,6 +456,15 @@ async def process_avatar(avatar_id: str) -> None:
                 rig = build_rig(points, size, blendshapes, face_type=avatar.face_type)
                 await _carry_crop_origin(avatar, storage, rig)
                 thumb, thumb_type = make_thumbnail(image_bytes)
+                # What every later fit starts from (services.anchor_fit),
+                # beside the rig and never in it: rig.json is published.
+                from app.services.anchor_fit import fit_base_key, fit_base_record, write_fit_base
+
+                await write_fit_base(
+                    storage,
+                    fit_base_key(avatar.org_id, avatar.id),
+                    fit_base_record(fit_base_mesh(points, size, detected), rig, detected),
+                )
 
             rig_key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/rig.json"
             thumb_key = write_thumbnail_key(avatar.org_id, avatar.id, thumb_type)
@@ -433,17 +493,17 @@ async def process_avatar(avatar_id: str) -> None:
             # is an edit, and edits wait for Publish like every other change.
             # Anything less than confident waits for its owner to check the
             # points and publish; embed and share answer 404 until then.
-            if not avatar.published_config:
-                from app.services.publishing import awaiting_confirmation
+            #
+            # The note keeps only the reason. "Not live yet — check the points,
+            # then publish" is said by the dashboard's Publish bar, translated,
+            # from `published`; repeating it here in English said it twice.
+            if not avatar.published_config and confident:
                 from app.services.publishing import publish as publish_snapshot
 
-                if confident:
-                    try:
-                        await publish_snapshot(avatar, storage)
-                    except Exception:
-                        logger.exception("first publish failed for avatar %s", avatar.id)
-                else:
-                    avatar.quality_note = awaiting_confirmation(quality_note)
+                try:
+                    await publish_snapshot(avatar, storage)
+                except Exception:
+                    logger.exception("first publish failed for avatar %s", avatar.id)
         except (NoFaceDetected, Validation422) as exc:
             # Expected, and the user can act on it — no stack trace.
             logger.info("avatar %s rejected: %s", avatar_id, exc)

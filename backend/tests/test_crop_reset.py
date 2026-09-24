@@ -152,3 +152,23 @@ def test_locating_a_crop(left, top):
     assert _locate_crop(photo, crop) == (left, top)
     flat = Image.open(io.BytesIO(sample_png()))
     assert _locate_crop(flat, flat.crop((left, top, left + 120, top + 90))) is None
+
+
+def test_a_crop_moves_every_kind_of_mark():
+    """Mouth lines and chins are marks too; the source is not a point."""
+    from app.api.avatars import _move_anchors
+
+    anchors = {
+        "head": {"left": {"x": 10, "y": 20}, "right": {"x": 30, "y": 20},
+                 "top": {"x": 20, "y": 5}, "bottom": {"x": 20, "y": 40}, "center": None},
+        "mouth_line": [{"x": 12 + i, "y": 30} for i in range(5)],
+        "chin": {"x": 20, "y": 38},
+        "source": "owner",
+    }
+    moved = _move_anchors(anchors, 5, 10)
+    assert moved["head"]["left"] == {"x": 5, "y": 10}
+    assert moved["head"]["center"] is None
+    assert [p["x"] for p in moved["mouth_line"]] == [7, 8, 9, 10, 11]
+    assert moved["chin"] == {"x": 15, "y": 28}
+    assert moved["source"] == "owner"
+    assert _move_anchors(moved, -5, -10) == anchors

@@ -33,6 +33,8 @@ LOCAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 echo "==> syncing $LOCAL_DIR -> $REMOTE:$REMOTE_DIR"
 # .env is deliberately excluded, NOT merely ignored: it exists only on the
 # server, so --delete would otherwise remove the one copy of the secret.
+# Local databases and the local image store are development data: the
+# server's live copies are under /data, and these must never travel there.
 rsync -az --delete \
   --exclude '.git' \
   --exclude '.env' \
@@ -40,6 +42,9 @@ rsync -az --delete \
   --exclude '.venv' \
   --exclude '__pycache__' \
   --exclude '*.sqlite3' \
+  --exclude '*.sqlite3-wal' \
+  --exclude '*.sqlite3-shm' \
+  --exclude 'backend/local_storage' \
   "$LOCAL_DIR/" "$REMOTE:$REMOTE_DIR/"
 
 echo "==> checking the server can still build"

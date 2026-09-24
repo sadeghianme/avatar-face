@@ -16,6 +16,9 @@ dist/
 # Env / local data
 .env
 *.sqlite3
+# WAL mode (app.db) keeps these beside the database while it is open.
+*.sqlite3-wal
+*.sqlite3-shm
 *.db
 backend/local_storage/
 backend/models/*.task

@@ -17,6 +17,7 @@
 import { BlinkScheduler, blinkEase } from "./blink";
 import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
 import { HeadMotion } from "./headmotion";
+import { kindProfile, type KindProfile } from "./kind-profile";
 import type { MouthExtension, MouthPose } from "./mouth-extension";
 import { centralMouthAnchors } from "./mouth-extension";
 import { BlendWeights, Cue, DEFAULT_TUNING, EngineTuning, Rig, ZERO_WEIGHTS } from "./types";
@@ -460,6 +461,9 @@ export class AvatarEngine {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private rig: Rig;
+  /** What the rig's line changes in the mouth; today's human renderer
+   *  unless the rig names a profile. */
+  private readonly profile: KindProfile;
   private texture: HTMLImageElement;
   /** StrictMode guard: render loop and async callbacks bail once destroyed. */
   private destroyed = false;
@@ -565,6 +569,7 @@ export class AvatarEngine {
     if (!ctx) throw new Error("2d canvas context unavailable");
     this.ctx = ctx;
     this.rig = rig;
+    this.profile = kindProfile(rig);
     this.texture = texture;
     this.cueClock = opts.cueClock;
     this.mouthExtension = opts.mouthExtension;
@@ -1790,7 +1795,10 @@ export class AvatarEngine {
         });
       } finally { this.ctx.restore(); }
     }
-    if (!painted) { this.drawLipContactLine(pts); this.drawMouthInterior(pts); }
+    if (!painted) {
+      if (this.profile.contactLine) this.drawLipContactLine(pts);
+      this.drawMouthInterior(pts);
+    }
   }
 
   /**
@@ -2358,9 +2366,10 @@ export class AvatarEngine {
     const [lr, lg, lb] = this.lipColour;
     const shade = (k: number) =>
       `rgb(${Math.round(lr * k)}, ${Math.round(lg * k * 0.86)}, ${Math.round(lb * k * 0.86)})`;
-    cavity.addColorStop(0, shade(0.3));
-    cavity.addColorStop(0.55, shade(0.46));
-    cavity.addColorStop(1, shade(0.62));
+    const [top, middle, bottom] = this.profile.cavityShade;
+    cavity.addColorStop(0, shade(top));
+    cavity.addColorStop(0.55, shade(middle));
+    cavity.addColorStop(1, shade(bottom));
     ctx.fillStyle = cavity;
     ctx.fillRect(cx - bw, midY - bh, bw * 2, bh * 2);
 
@@ -2400,7 +2409,7 @@ export class AvatarEngine {
         teethDrive * 0.75
       ) * Math.max(0, Math.min(1, 1 - rounding / 0.45));
     ctx.globalAlpha = 1;
-    if (teethAmount > 0.02 && teethAlpha > 0.02) {
+    if (this.profile.teeth && teethAmount > 0.02 && teethAlpha > 0.02) {
       const upperH = Math.min(bh * 0.3, bw * 0.04) * (0.45 + 0.55 * teethAmount);
       this.drawTeethRow(upperPts, bw, teethAlpha, teethAmount, upperH, false);
       // The lower incisors are attached to the JAW, so they ride the lower
@@ -2434,8 +2443,8 @@ export class AvatarEngine {
 
     // Tongue: a soft rise low in the cavity on genuinely open shapes.
     ctx.globalAlpha = cavityAlpha;
-    if (gapRatio > 0.26) {
-      const amount = Math.min(1, (gapRatio - 0.26) / 0.12);
+    if (gapRatio > this.profile.tongueFrom) {
+      const amount = Math.min(1, (gapRatio - this.profile.tongueFrom) / 0.12);
       const ty2 = midY + bh * 0.34;
       const tongue = ctx.createRadialGradient(cx, ty2, bh * 0.06, cx, ty2, bh * 0.6);
       tongue.addColorStop(0, `rgba(176, 92, 86, ${(0.85 * amount).toFixed(3)})`);

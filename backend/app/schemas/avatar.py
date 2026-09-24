@@ -62,16 +62,24 @@ class PupilAnchor(BaseModel):
 
 
 class RigFit(BaseModel):
-    """Hand-placed landmark anchors.
+    """Hand-placed landmark anchors, in the scheme of the avatar's line.
 
-    Every region is optional: one left out is not touched, so a user who only
-    needs to fix the mouth does not have to re-state the eyes.
+    Every region is optional: one left out keeps its saved marking (or the
+    detection, if it was never marked), so a user who only needs to fix the
+    mouth does not have to re-state the eyes.
+
+    A human mouth is marked by its edges (`mouth`). Animals and cartoons mark
+    it as a line (`mouth_line`: corner, three points along the seam, corner)
+    plus the `chin`; an edge-marked mouth sent for them is read as a line
+    through its centre. Animals have no pupils: pupil marks are ignored.
     """
 
     head: AnchorMarks | None = None
     left_eye: AnchorMarks | None = None
     right_eye: AnchorMarks | None = None
     mouth: AnchorMarks | None = None
+    mouth_line: list[AnchorPoint] | None = Field(default=None, min_length=5, max_length=5)
+    chin: AnchorPoint | None = None
     left_pupil: PupilAnchor | None = None
     right_pupil: PupilAnchor | None = None
     # False (the default) computes the corrected rig and returns it WITHOUT
@@ -79,9 +87,21 @@ class RigFit(BaseModel):
     persist: bool = False
 
 
+class FitReason(BaseModel):
+    """Why a fit cannot be saved: a stable code, prose, and a count where
+    one applies (how many triangles fold)."""
+
+    code: str
+    detail: str
+    count: int | None = None
+
+
 class RigFitResult(BaseModel):
     rig: dict
     persisted: bool
+    # Empty when the fit may be saved. A preview returns its rig either way,
+    # so the owner can see what the reasons are about.
+    reasons: list[FitReason] = Field(default_factory=list)
 
 
 class AvatarOut(BaseModel):

@@ -19,9 +19,11 @@ import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
  *
  * Pinned: a detected human rig in both framings (the whole photo, and the
  * default crop to the face), a legacy animal rig (synthetic mesh, muzzle
- * visemes, hand marks — built by backend/scripts/build_legacy_animal_rig.py
- * exactly as production builds one), and a texture whose colour changes
- * with position, so sampling colour at the wrong pixel changes the output.
+ * visemes, hand marks — built exactly as production built one before the
+ * anchor fit, by backend/scripts/build_legacy_animal_rig.py, retired with
+ * that fit: the fixture is frozen, since it stands for rigs already live),
+ * and a texture whose colour changes with position, so sampling colour at
+ * the wrong pixel changes the output.
  *
  * If a change is SUPPOSED to alter rendering, update the snapshot in the
  * same commit and say why in its message.

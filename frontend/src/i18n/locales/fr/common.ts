@@ -77,4 +77,5 @@ export const common = {
   reloadPage: "Recharger la page",
   error: "Une erreur est survenue",
   mine: "Créé par moi",
+  close: "Fermer",
 } as const;

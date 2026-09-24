@@ -20,6 +20,10 @@ export interface Rig {
   outer_lip_ring: number[];
   visemes: Record<string, Partial<BlendWeights>>;
   blendshapes?: Record<string, number> | null;
+  /** Versioned renderer settings for the face's line ("animal@1"), set by
+   *  the backend when the owner saves a fit. Absent: today's renderer. See
+   *  kind-profile.ts. */
+  render_profile?: string | null;
 }
 
 export interface Cue {

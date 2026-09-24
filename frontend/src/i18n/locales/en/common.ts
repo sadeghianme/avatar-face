@@ -79,4 +79,5 @@ export const common = {
   reloadPage: "Reload the page",
   error: "Something went wrong",
   mine: "Created by me",
+  close: "Close",
 } as const;

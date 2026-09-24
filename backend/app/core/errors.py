@@ -16,10 +16,15 @@ class AppError(Exception):
     status_code = 500
     code = "internal_error"
 
-    def __init__(self, detail: str | None = None, code: str | None = None):
+    def __init__(
+        self, detail: str | None = None, code: str | None = None, extra: dict | None = None
+    ):
         self.detail = detail or self.__class__.__name__
         if code is not None:
             self.code = code
+        # Machine-readable context beside the envelope (e.g. the reasons a
+        # fit was refused), for clients that can do better than show prose.
+        self.extra = extra or {}
         super().__init__(self.detail)
 
 
@@ -59,7 +64,7 @@ def install_error_handlers(app: FastAPI) -> None:
         headers = {"WWW-Authenticate": "Bearer"} if exc.status_code == 401 else None
         return JSONResponse(
             status_code=exc.status_code,
-            content={"detail": exc.detail, "code": exc.code},
+            content={**exc.extra, "detail": exc.detail, "code": exc.code},
             headers=headers,
         )
 

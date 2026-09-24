@@ -84,7 +84,9 @@ async def test_an_unconfirmed_first_build_waits_for_its_owner(
     assert detail["status"] == "ready"
     assert detail["published"] is False
     assert detail["published_at"] is None
-    assert "Mark the face" in detail["quality_note"] and "Publish" in detail["quality_note"]
+    # "Not live yet" is the Publish bar's to say, translated; the note keeps
+    # only the reason, if there is one.
+    assert "Publish" not in (detail["quality_note"] or "")
 
     embed = await client.get(f"/embed/v1/avatars/{avatar_id}", headers=key)
     assert embed.status_code == 404 and embed.json()["code"] == "avatar_not_published"

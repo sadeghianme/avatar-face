@@ -21,6 +21,7 @@ from app.schemas.avatar import (
     AvatarFromUrl,
     AvatarOut,
     AvatarUpdate,
+    FitReason,
     RigFit,
     RigFitResult,
 )
@@ -30,7 +31,23 @@ from app.services.candidates import candidate_prefix, generated_by, new_candidat
 from app.services.imagegen import STYLES as GEN_STYLES
 from app.services.rig import process_avatar
 from app.services.usage import check_image_limit, record_generated_avatar, record_generation
-from app.services.rig_fit import PupilMarks, RegionMarks, apply_anchors, current_anchors
+from app.services.anchor_fit import (
+    NUM_POINTS,
+    fit_base_key,
+    fit_base_points,
+    fit_base_record,
+    fit_rig,
+    marks_from_dict,
+    marks_from_mesh,
+    marks_mouth_as_line,
+    marks_to_dict,
+    merge,
+    move_fit_base,
+    read_fit_base,
+    render_profile_for,
+    saved_marks,
+    write_fit_base,
+)
 from app.services.segment import SegmentationUnavailable, remove_background
 from app.services.publishing import confirmed, discard_draft, mark_dirty, publish
 from app.services.storage import get_storage
@@ -249,7 +266,8 @@ async def update_avatar(
 
 
 async def _reprofile_visemes(avatar: Avatar) -> None:
-    """Swap the stored rig's viseme table to match the avatar's face type."""
+    """Swap the stored rig's viseme table and render profile to match the
+    avatar's face type. The draft only: visitors see it once published."""
     import json as _json
 
     from app.services.rig import VISEME_BLENDSHAPES, VISEME_PROFILES
@@ -260,6 +278,13 @@ async def _reprofile_visemes(avatar: Avatar) -> None:
     try:
         rig = _json.loads(await storage.get_bytes(avatar.rig_key))
         rig["visemes"] = VISEME_PROFILES.get(avatar.face_type, VISEME_BLENDSHAPES)
+        # A face that stops being an animal must get its incisors back, and
+        # one that becomes an animal loses them, as a fit would have done.
+        profile = render_profile_for(avatar.face_type)
+        if profile:
+            rig["render_profile"] = profile
+        else:
+            rig.pop("render_profile", None)
         await storage.put_bytes(
             avatar.rig_key, _json.dumps(rig).encode(), "application/json"
         )
@@ -548,10 +573,18 @@ async def crop_avatar(
         # face, the whole fit). A rig cropped before this was recorded has
         # no origin to add to; it stays without one and reset falls back.
         origin = [0, 0] if first_crop else rig.get("crop_origin")
+        base_key = fit_base_key(avatar.org_id, avatar.id)
+        base = await read_fit_base(storage, base_key)
+        base_follows = fit_base_points(base, rig) is not None
         rig = _move_rig(rig, left, top, cropped.size)
         if origin is not None:
             rig["crop_origin"] = [origin[0] + left, origin[1] + top]
         await storage.put_bytes(avatar.rig_key, _json.dumps(rig).encode(), "application/json")
+        # The fit base moves with its rig, so marks saved after the crop are
+        # fitted from the same mesh as before it. One that already did not
+        # match is left to be rebuilt when next needed.
+        if base_follows:
+            await write_fit_base(storage, base_key, move_fit_base(base, left, top, rig))
     await _rebuild_thumbnail(avatar, storage)
     await _rebuild_layers(avatar, storage)
     mark_dirty(avatar)
@@ -575,17 +608,16 @@ def _move_rig(rig: dict, left: float, top: float, size: tuple[int, int]) -> dict
     return moved
 
 
-def _move_anchors(anchors: dict, left: float, top: float) -> dict:
-    return {
-        region: {
-            name: {"x": pt["x"] - left, "y": pt["y"] - top}
-            if isinstance(pt, dict) and "x" in pt
-            else pt
-            for name, pt in marks.items()
-        }
-        for region, marks in anchors.items()
-        if marks
-    }
+def _move_anchors(anchors, left: float, top: float):
+    """Every {x, y} in a marking, wherever it sits: region edges, pupils,
+    the mouth line's list, the chin. Anything else (the source) is kept."""
+    if isinstance(anchors, dict):
+        if "x" in anchors and "y" in anchors:
+            return {**anchors, "x": anchors["x"] - left, "y": anchors["y"] - top}
+        return {key: _move_anchors(value, left, top) for key, value in anchors.items()}
+    if isinstance(anchors, list):
+        return [_move_anchors(value, left, top) for value in anchors]
+    return anchors
 
 
 async def _uncrop_rig(avatar: Avatar, storage, cropped_keys: list[str]) -> None:
@@ -605,6 +637,9 @@ async def _uncrop_rig(avatar: Avatar, storage, cropped_keys: list[str]) -> None:
     if not avatar.rig_key or not avatar.image_key:
         return
     rig = _json.loads(await storage.get_bytes(avatar.rig_key))
+    base_key = fit_base_key(avatar.org_id, avatar.id)
+    base = await read_fit_base(storage, base_key)
+    base_follows = fit_base_points(base, rig) is not None
     precrop_bytes = await storage.get_bytes(avatar.image_key)
     precrop = Image.open(io.BytesIO(precrop_bytes))
 
@@ -622,11 +657,15 @@ async def _uncrop_rig(avatar: Avatar, storage, cropped_keys: list[str]) -> None:
     if origin is not None:
         restored = _move_rig(rig, -origin[0], -origin[1], precrop.size)
         restored.pop("crop_origin", None)
+        base = move_fit_base(base, -origin[0], -origin[1], restored) if base_follows else None
     else:
-        restored = _redetect_rig(avatar, precrop_bytes, rig)
-        if restored is None:
+        redetected = _redetect_rig(avatar, precrop_bytes, rig)
+        if redetected is None:
             return
+        restored, base = redetected
     await storage.put_bytes(avatar.rig_key, _json.dumps(restored).encode(), "application/json")
+    if base is not None:
+        await write_fit_base(storage, base_key, base)
 
 
 def _locate_crop(outer, inner) -> tuple[int, int] | None:
@@ -659,17 +698,21 @@ def _locate_crop(outer, inner) -> tuple[int, int] | None:
     return found[0] if len(found) == 1 else None
 
 
-def _redetect_rig(avatar: Avatar, image_bytes: bytes, previous: dict) -> dict | None:
-    """Last resort for a crop reset with no recoverable origin.
+def _redetect_rig(
+    avatar: Avatar, image_bytes: bytes, previous: dict
+) -> tuple[dict, dict] | None:
+    """Last resort for a crop reset with no recoverable origin: the rig and
+    its fit base, built as a first build would build them.
 
     Detection runs with the avatar's face type so the rig keeps its viseme
-    table. Hand marks cannot follow: they are in the cropped photo's
-    coordinates and nothing says where that crop was.
+    table and an undetected animal its template. Hand marks cannot follow:
+    they are in the cropped photo's coordinates and nothing says where that
+    crop was.
     """
-    from app.services.rig import build_rig, landmarks_from_image
+    from app.services.rig import build_rig, fit_base_mesh, landmarks_from_image, starting_mesh
 
     try:
-        points, blendshapes, size, _ = landmarks_from_image(image_bytes)
+        points, blendshapes, size, detected = landmarks_from_image(image_bytes)
     except Exception:
         logger.exception("rig rebuild failed after crop reset for avatar %s", avatar.id)
         return None
@@ -677,34 +720,131 @@ def _redetect_rig(avatar: Avatar, image_bytes: bytes, previous: dict) -> dict | 
         logger.warning(
             "crop reset for avatar %s: crop origin unknown, hand marks dropped", avatar.id
         )
-    return build_rig(points, size, blendshapes, face_type=avatar.face_type)
+    rig = build_rig(
+        starting_mesh(points, size, detected, avatar.face_type), size, blendshapes,
+        face_type=avatar.face_type,
+    )
+    return rig, fit_base_record(fit_base_mesh(points, size, detected), rig, detected)
+
+
+def _clamped(value, width: float, height: float):
+    """A marking with every point pulled inside the image."""
+    if isinstance(value, dict):
+        if "x" in value and "y" in value:
+            x, y = min(max(value["x"], 0), width), min(max(value["y"], 0), height)
+            return {**value, "x": x, "y": y}
+        return {key: _clamped(v, width, height) for key, v in value.items()}
+    if isinstance(value, list):
+        return [_clamped(v, width, height) for v in value]
+    return value
 
 
 @router.get("/{avatar_id}/rig-anchors")
 async def rig_anchors(avatar_id: str, ctx: OrgMember, db: DB) -> dict:
-    """Where the detector currently believes each region's edges are.
+    """Where each handle of the avatar's line opens.
 
-    The fit UI opens with its handles already on these, so the user corrects a
-    detection instead of marking a face from scratch — on a photo where the
-    detection is good, that means dragging nothing.
+    On the owner's saved marks where there are some, returned as placed (the
+    fitted mesh only passes near a mark, it is not where the handle was
+    dropped). Anything never marked opens on the landmark it attaches to, in
+    the mesh those saved marks make from the base — so a good detection
+    means dragging nothing, and an eye left unmarked sits where the fit put
+    it. Always in the line's scheme: an animal marked before mouth lines
+    existed opens with a mouth line. Clamped to the image, because a later
+    crop can leave a saved mark outside it, where no handle could be dragged
+    from.
     """
     import json as _json
 
+    import numpy as np
+
     avatar = await _get_avatar(db, ctx.org.id, avatar_id)
-    if not avatar.rig_key:
+    if avatar.kind != AvatarKind.photo or not avatar.rig_key or not avatar.image_key:
         raise Conflict409("Avatar has no rig", code="not_adjustable")
-    rig = _json.loads(await get_storage().get_bytes(avatar.rig_key))
-    return {"anchors": current_anchors(rig), "image_size": rig["image_size"]}
+    storage = get_storage()
+    rig = _json.loads(await storage.get_bytes(avatar.rig_key))
+    if len(rig.get("points") or []) != NUM_POINTS:
+        raise Conflict409("Avatar rig is not adjustable", code="not_adjustable")
+    base, rig_on_base = await _fit_base(avatar, storage, rig)
+    saved = saved_marks(rig, avatar.face_type, rig_on_base)
+    fitted, _ = fit_rig(rig, base, saved, avatar.face_type)
+    marks = merge(
+        marks_from_mesh(np.array(fitted["points"], dtype=float), avatar.face_type), saved
+    )
+    width, height = rig["image_size"]
+    return {
+        "anchors": _clamped(marks_to_dict(marks), width, height),
+        "image_size": rig["image_size"],
+    }
+
+
+async def _fit_base(avatar: Avatar, storage, rig: dict):
+    """The mesh this rig's fits start from — the detection, else the
+    template — and whether the rig's own points number their landmarks as
+    it does (see anchor_fit.saved_marks): true of a detection, which the rig
+    was built on, and of a rig that is its own base.
+
+    Normally the stored base. A rig without one (built before bases were
+    kept) or whose base belongs to another frame (an undo or a discarded
+    draft put back an older rig) gets it rebuilt the way a first build makes
+    it — detection, else the template — which is deterministic, and stored.
+    """
+    import numpy as np
+    from starlette.concurrency import run_in_threadpool
+
+    from app.services.rig import fit_base_mesh, landmarks_from_image
+
+    key = fit_base_key(avatar.org_id, avatar.id)
+    stored = await read_fit_base(storage, key)
+    points = fit_base_points(stored, rig)
+    if points is not None:
+        return points, bool(stored.get("detected"))
+
+    def detect(data: bytes):
+        found, _, size, detected = landmarks_from_image(data)
+        return fit_base_mesh(found, size, detected), size, detected
+
+    image = await storage.get_bytes(avatar.image_key)
+    found, size, detected = await run_in_threadpool(detect, image)
+    if list(size) != list(rig["image_size"]):
+        # The photo and the rig disagree on the frame; nothing rebuilt from
+        # the photo would line up, so the rig's own mesh is the only base
+        # (and old marks read off it leave it exactly as it is).
+        logger.warning("fit base for avatar %s taken from its rig: frame mismatch", avatar.id)
+        return np.array(rig["points"], dtype=float), True
+    record = fit_base_record(found, rig, detected)
+    await write_fit_base(storage, key, record)
+    # As stored, not as computed: the next fit reads the stored copy, and the
+    # same marks must give the same rig both times.
+    return fit_base_points(record, rig), detected
+
+
+def _marks_outside(body: RigFit, width: float, height: float) -> bool:
+    """Whether any mark the client sent lies outside the image."""
+
+    def points(value):
+        if isinstance(value, dict):
+            if "x" in value and "y" in value:
+                yield value
+            else:
+                for v in value.values():
+                    yield from points(v)
+        elif isinstance(value, list):
+            for v in value:
+                yield from points(v)
+
+    marks = body.model_dump(exclude={"persist"}, exclude_none=True)
+    return any(not (0 <= p["x"] <= width and 0 <= p["y"] <= height) for p in points(marks))
 
 
 @router.post("/{avatar_id}/rig-fit", response_model=RigFitResult)
 async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFitResult:
-    """Rewrite the rig from hand-placed anchors.
+    """Rebuild the rig from hand-placed anchors (services.anchor_fit).
 
-    With `persist` false this computes the corrected rig and returns it
-    without writing, so the client can render and speak with the exact object
-    that a subsequent save would store — the preview cannot disagree with the
-    result, because it IS the result.
+    With `persist` false this computes the fitted rig and returns it without
+    writing, with the validator's reasons, so the client can render and speak
+    with the exact object a save would store — the preview cannot disagree
+    with the result, because it IS the result. With `persist` true a fit the
+    validator rejects is refused (422, with the reasons) and nothing changes.
     """
     import json as _json
 
@@ -714,48 +854,36 @@ async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFi
 
     storage = get_storage()
     rig = _json.loads(await storage.get_bytes(avatar.rig_key))
-
-    def marks(value) -> RegionMarks | None:
-        if value is None:
-            return None
-        return RegionMarks(
-            left=(value.left.x, value.left.y),
-            right=(value.right.x, value.right.y),
-            top=(value.top.x, value.top.y),
-            bottom=(value.bottom.x, value.bottom.y),
-            center=(value.center.x, value.center.y) if value.center else None,
+    if len(rig.get("points") or []) != NUM_POINTS:
+        raise Conflict409("Avatar rig is not adjustable", code="not_adjustable")
+    face_type = avatar.face_type
+    as_line = body.mouth_line is not None or body.chin is not None
+    if as_line and not marks_mouth_as_line(face_type):
+        raise Validation422(
+            "A human mouth is marked by its edges, not as a line with a chin",
+            code="mouth_line_not_for_face_type",
         )
+    width, height = rig["image_size"]
+    if _marks_outside(body, width, height):
+        raise Validation422("Every mark must be inside the image", code="mark_outside_image")
 
-    def pupil(value) -> PupilMarks | None:
-        if value is None:
-            return None
-        return PupilMarks(
-            center=(value.center.x, value.center.y), rim=(value.rim.x, value.rim.y)
-        )
-
-    adjusted = apply_anchors(
-        rig,
-        head=marks(body.head),
-        left_eye=marks(body.left_eye),
-        right_eye=marks(body.right_eye),
-        mouth=marks(body.mouth),
-        left_pupil=pupil(body.left_pupil),
-        right_pupil=pupil(body.right_pupil),
+    base, rig_on_base = await _fit_base(avatar, storage, rig)
+    # Merged over what was saved before, and always fitted from the base:
+    # the same marks give the same rig however often they are saved.
+    marks = merge(
+        saved_marks(rig, face_type, rig_on_base),
+        marks_from_dict(body.model_dump(exclude={"persist"}, exclude_none=True), face_type),
     )
-    # The marks as placed, kept verbatim so reopening the panel shows the
-    # user's own handles. The warped mesh's extremes are NOT that: regions
-    # interact through the falloff (a mouth fix drags the chin, moving where
-    # "head bottom" would be re-derived), so deriving loses the marking.
-    adjusted["user_anchors"] = {
-        **(rig.get("user_anchors") or {}),
-        **{
-            region: getattr(body, region).model_dump()
-            for region in ("head", "left_eye", "right_eye", "mouth", "left_pupil", "right_pupil")
-            if getattr(body, region) is not None
-        },
-    }
+    adjusted, problems = fit_rig(rig, base, marks, face_type)
+    reasons = [FitReason(code=p.code, detail=p.detail, count=p.count) for p in problems]
 
     if body.persist:
+        if reasons:
+            raise Validation422(
+                "These marks would distort the face: " + "; ".join(r.detail for r in reasons),
+                code="fit_invalid",
+                extra={"reasons": [r.model_dump() for r in reasons]},
+            )
         await storage.put_bytes(
             avatar.rig_key, _json.dumps(adjusted).encode(), "application/json"
         )
@@ -764,7 +892,7 @@ async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFi
         # marks would reach visitors silently on the next unrelated publish,
         # and the Publish bar would never say they were waiting.
         await db.commit()
-    return RigFitResult(rig=adjusted, persisted=body.persist)
+    return RigFitResult(rig=adjusted, persisted=body.persist, reasons=reasons)
 
 
 @router.post("/{avatar_id}/publish", response_model=AvatarOut)

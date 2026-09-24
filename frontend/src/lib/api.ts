@@ -9,7 +9,10 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     public code: string,
-    public detail: string
+    public detail: string,
+    /** The whole error payload, for the few errors that carry more than a
+     *  sentence (a refused fit lists its reasons). */
+    public body: Record<string, unknown> = {}
   ) {
     super(detail);
   }
@@ -89,14 +92,16 @@ async function responseRequest(
   if (!response.ok) {
     let code = `http_${response.status}`;
     let detail = response.statusText;
+    let body: Record<string, unknown> = {};
     try {
       const payload = (await response.json()) as { code?: string; detail?: string };
       code = payload.code ?? code;
       detail = payload.detail ?? detail;
+      body = payload;
     } catch {
       // non-JSON error body
     }
-    throw new ApiError(response.status, code, detail);
+    throw new ApiError(response.status, code, detail, body);
   }
   return response;
 }
