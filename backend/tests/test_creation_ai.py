@@ -1550,6 +1550,8 @@ async def test_a_photo_that_is_already_head_and_shoulders_is_not_asked_again(
     """When the face fills the frame the head crop is the same picture, so a
     refusal stands: asking again would be the same request."""
     images.script = ["refuse"]
+    # A face so large its head crop reaches every edge of the photo.
+    faces.by_size[(WIDTH, HEIGHT)] = face_template.place((20, 20, 380, 480))
     headers, org_id = await _org(client, "crop-same")
     base, _ = await _create(client, headers, org_id)
     await _adjust(client, headers, base, await ai_consent(client, headers, org_id),

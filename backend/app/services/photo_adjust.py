@@ -430,9 +430,10 @@ def head_crop_fallback(
         min(float(image.height), cy + width * 0.75),
     )
     crop = image.crop(tuple(int(round(v)) for v in box))
-    if crop.width * crop.height >= 0.9 * image.width * image.height:
-        # The photo is already a head-and-shoulders shot: the "crop" would
-        # be the same picture, and asking again would be the same request.
+    if crop.size == image.size:
+        # The crop box reaches every edge: it is the same picture, and asking
+        # again would be the same request. Anything smaller is worth the one
+        # retry: a crop trimming 2% off that declined portrait was accepted.
         return None
     if max(crop.size) > SOURCE_MAX_EDGE:
         crop.thumbnail((SOURCE_MAX_EDGE, SOURCE_MAX_EDGE), Image.Resampling.LANCZOS)
