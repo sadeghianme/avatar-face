@@ -138,6 +138,7 @@ async def publish(avatar, storage) -> dict:
     # The mouth: settings by value, the optional teeth photo by copy — same
     # reason as everything else here, a later edit must not reach visitors.
     from app.services.mouth import load as load_mouth, renderer_allowed
+    from app.services.mouth_photo import without_ai_teeth
 
     face_type = getattr(avatar, "face_type", "human")
     mouth = load_mouth(getattr(avatar, "mouth_config", None))
@@ -151,6 +152,21 @@ async def publish(avatar, storage) -> dict:
         oral_rig = await copy(mouth.get("oral_rig_key"), "mouth-rig", "json")
         if oral_image and oral_rig:
             mouth_published.update(oral_image_key=oral_image, oral_rig_key=oral_rig)
+        if mouth.get("teeth") is not None:
+            # Where the teeth photo came from (services.mouth_photo), kept so
+            # Discard can put it back with the photo: without it, restored AI
+            # teeth would read as the owner's upload. Owner-facing only:
+            # _mouth_view never hands it to a visitor.
+            mouth_published["teeth"] = mouth["teeth"]
+
+    # AI-made teeth are disclosed only while a visitor can see them: on the
+    # photographic mouth, with the photo. The classic mouth (chosen in the
+    # Mouth panel, or forced by a line switch) draws teeth of its own; the
+    # draft keeps the photo and its `ai_edited` entry only so that switching
+    # back brings both back.
+    ai_edited = getattr(avatar, "ai_edited", None) or None
+    if not _shows_oral_photo(mouth_published):
+        ai_edited = without_ai_teeth(ai_edited)
 
     config = {
         "revision": revision,
@@ -168,7 +184,7 @@ async def publish(avatar, storage) -> dict:
         # as they were (principle 6: nothing changes until its owner
         # publishes).
         "disclosure": {
-            "ai_edited": getattr(avatar, "ai_edited", None) or None,
+            "ai_edited": ai_edited,
             "line": face_type,
         },
         "published_at": datetime.now(timezone.utc).isoformat(),
@@ -183,6 +199,12 @@ async def publish(avatar, storage) -> dict:
     return config
 
 
+def _shows_oral_photo(mouth: dict | None) -> bool:
+    return bool(
+        mouth and mouth.get("renderer") == "continuous" and mouth.get("oral_image_key")
+    )
+
+
 async def _prune(avatar, storage, keep_from: list[dict | None]) -> None:
     """Delete published revisions older than the ones still in use."""
     keep = {c["revision"] for c in keep_from if c and "revision" in c}
@@ -192,7 +214,7 @@ async def _prune(avatar, storage, keep_from: list[dict | None]) -> None:
     for revision in range(max(0, oldest - KEEP_REVISIONS), oldest):
         prefix = published_prefix(avatar.org_id, avatar.id, revision)
         for name in ("image", "rig", "thumb", "mouth", "mouth-rig", *[f"layer-{n}" for n in LAYER_NAMES]):
-            for ext in ("png", "jpg", "json", "glb"):
+            for ext in ("png", "jpg", "webp", "json", "glb"):
                 key = f"{prefix}/{name}.{ext}"
                 try:
                     if await storage.exists(key):
@@ -251,15 +273,22 @@ async def discard_draft(avatar, storage) -> bool:
     # The mouth goes back too. Its photo is restored into fresh draft keys
     # so the draft never aliases the immutable published copy.
     published_mouth = config.get("mouth")
+    teeth = None
     if published_mouth:
         restored = {"renderer": published_mouth["renderer"], "profile": published_mouth.get("profile") or {}}
         oral_image = await restore(published_mouth.get("oral_image_key"), "mouth")
         oral_rig = await restore(published_mouth.get("oral_rig_key"), "mouth-rig")
         if oral_image and oral_rig:
             restored.update(oral_image_key=oral_image, oral_rig_key=oral_rig)
+        teeth = _restored_teeth(published_mouth.get("teeth"), config, "oral_image_key" in restored)
+        if teeth is not None:
+            restored["teeth"] = teeth
         avatar.mouth_config = json.dumps(restored)
     else:
         avatar.mouth_config = None
+    # Generating, uploading and removing a teeth photo all change the
+    # disclosure, so it goes back with the photo.
+    avatar.ai_edited = _restored_ai_edited(avatar, config, teeth)
     avatar.has_layers = bool(layer_keys)
     avatar.framing = config.get("framing", avatar.framing)
     if config.get("face_type"):
@@ -270,12 +299,52 @@ async def discard_draft(avatar, storage) -> bool:
     return True
 
 
+def _restored_teeth(published: dict | None, config: dict, has_photo: bool) -> dict | None:
+    """The draft's teeth record after a Discard: the one published with the
+    photo, or, for a snapshot published before that record was kept, what
+    its disclosure says (AI teeth are always disclosed there; any other
+    photo is the owner's). A record naming a photo that did not come back
+    is dropped: it would describe teeth the draft does not have."""
+    from app.services.mouth_photo import ai_teeth_record, upload_teeth_record
+
+    if published is not None:
+        return None if published.get("source") and not has_photo else published
+    if not has_photo:
+        return None
+    ai_teeth = ((config.get("disclosure") or {}).get("ai_edited") or {}).get("teeth")
+    return ai_teeth_record(ai_teeth.get("model")) if ai_teeth else upload_teeth_record()
+
+
+def _restored_ai_edited(avatar, config: dict, teeth: dict | None) -> dict | None:
+    """The draft's `ai_edited` after a Discard: what the snapshot disclosed,
+    with the teeth entry exactly when the restored photo is AI-made.
+
+    Left as the discarded draft had it, AI teeth brought back by the Discard
+    would go out unlabelled at the next Publish, or a label would stay for
+    teeth that are gone. The entry is re-derived rather than copied because
+    the published disclosure leaves it out while the classic mouth hides
+    the photo, and the draft keeps it with the photo."""
+    from app.services.mouth_photo import with_ai_teeth, without_ai_teeth
+
+    disclosure = config.get("disclosure")
+    if disclosure is not None:
+        ai_edited = disclosure.get("ai_edited") or None
+    else:
+        # Published before the disclosure was recorded, when nothing after
+        # finish changed `ai_edited`: the draft's own, less any teeth.
+        ai_edited = getattr(avatar, "ai_edited", None) or None
+    if teeth and teeth.get("source") == "ai":
+        return with_ai_teeth(ai_edited, teeth.get("model"))
+    return without_ai_teeth(ai_edited)
+
+
 def _content_type(key: str) -> str:
     ext = _ext(key, "")
     return {
         "png": "image/png",
         "jpg": "image/jpeg",
         "jpeg": "image/jpeg",
+        "webp": "image/webp",
         "json": "application/json",
         "glb": "model/gltf-binary",
     }.get(ext, "application/octet-stream")

@@ -11,6 +11,7 @@ import { MarkFacePanel } from "@/features/avatars/components/MarkFacePanel";
 import { Avatar3DPreview } from "@/features/avatars/components/Avatar3DPreview";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { EmbedSnippet } from "@/features/avatars/components/EmbedSnippet";
+import { FinishNotice } from "@/features/avatars/components/FinishNotice";
 import { PrepProgress } from "@/features/avatars/components/PrepProgress";
 import { PublishBar } from "@/features/avatars/components/PublishBar";
 import { SharePanel } from "@/features/avatars/components/SharePanel";
@@ -20,6 +21,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MouthPanel } from "@/features/avatars/components/MouthPanel";
 import { TuningPanel } from "@/features/avatars/components/TuningPanel";
 import { useAvatarMouth } from "@/features/avatars/hooks/useAvatarMouth";
+import { aiEditedLabels, aiEditedModels } from "@/features/avatars/teeth";
 import { api } from "@/lib/api";
 import { useOrg } from "@/providers/org";
 import type { Avatar } from "@/lib/types";
@@ -175,14 +177,20 @@ export function AvatarDetailPage() {
           </Link>
           <h1 className="text-2xl font-semibold">{avatar.name}</h1>
           <StatusBadge status={avatar.status} />
-          {/* The same disclosure visitors get with the published avatar. */}
+          {/* The same disclosure visitors get with the published avatar:
+              what the AI did to the picture, and "AI teeth" when it made the
+              teeth photo too. */}
           {avatar.ai_edited && (
             <span
               className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-              title={avatar.ai_edited.model ? t("aiEditedModel", { model: avatar.ai_edited.model }) : undefined}
+              title={
+                aiEditedModels(avatar.ai_edited).length > 0
+                  ? t("aiEditedModel", { model: aiEditedModels(avatar.ai_edited).join(", ") })
+                  : undefined
+              }
             >
               <Icon name="sparkles" className="h-3.5 w-3.5" />
-              {t(`aiEdited_${avatar.ai_edited.mode}`)}
+              {aiEditedLabels(avatar.ai_edited).map((key) => t(key)).join(" · ")}
             </span>
           )}
         </div>
@@ -296,6 +304,10 @@ export function AvatarDetailPage() {
       )}
 
       {avatar.status === "ready" && <PublishBar avatar={avatar} orgId={current.id} />}
+
+      {/* Keyed by avatar: a notice read for one avatar is not shown on the
+          next one this page opens. */}
+      {avatar.status === "ready" && <FinishNotice key={avatar.id} avatar={avatar} />}
 
       {(avatar.status === "pending" || avatar.status === "processing") && (
         <div className="mb-6">

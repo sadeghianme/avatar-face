@@ -28,13 +28,19 @@ def _png() -> bytes:
 
 @pytest.fixture
 def open_mouth_photo(monkeypatch):
-    """Skip real face detection: accept any image as a valid mouth photo."""
-    from app.services import portrait_photo
+    """Skip real face detection and the teeth test: accept any image as a
+    valid mouth photo (both are tested on real pixels in test_mouth_photo)."""
+    from app.services import mouth_photo, portrait_photo
+    from app.services.dental_photo import DentalCheck
 
     monkeypatch.setattr(
         portrait_photo,
         "prepare_photo",
         lambda data, purpose: (data, {"points": [], "inner_lip_ring": []}, None),
+    )
+    monkeypatch.setattr(
+        mouth_photo, "teeth_verdict",
+        lambda photo, rig: DentalCheck(True, 400, 20000, 0.12, 194, 193.0),
     )
 
 

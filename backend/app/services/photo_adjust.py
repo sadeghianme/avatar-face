@@ -402,23 +402,11 @@ def prepare(data: bytes, mode: str, face_type: str, style: str | None = None) ->
 FALLBACK_FACE_WIDTHS = 2.2
 
 
-def head_crop_fallback(
-    data: bytes, mode: str, face_type: str, style: str | None = None
-) -> Prepared | None:
-    """The same request on a head-and-shoulders crop, or None when there is
-    no face to crop around (animals, a missing detector) or the mode already
-    works on a crop (touch-up). CPU work."""
-    from app.services import imagegen, landmarks
-
-    if mode == TOUCHUP:
-        return None
-    image = _rgb(data)
-    try:
-        points = _detect(image)
-    except landmarks.LandmarkerUnavailable:
-        return None
-    if points is None:
-        return None
+def head_crop(image: Image.Image, points: np.ndarray) -> Image.Image | None:
+    """The head-and-shoulders crop about the face `points` (FALLBACK_FACE_WIDTHS
+    wide), at most SOURCE_MAX_EDGE; None when it would be the whole picture.
+    What a declined whole-photo edit, and a declined teeth photo
+    (services.mouth_photo), is asked again with."""
     x0, y0, side = face_crop_box(points)
     cx, cy = x0 + side / 2, y0 + side / 2
     width = side / CROP_SCALE * FALLBACK_FACE_WIDTHS
@@ -437,6 +425,29 @@ def head_crop_fallback(
         return None
     if max(crop.size) > SOURCE_MAX_EDGE:
         crop.thumbnail((SOURCE_MAX_EDGE, SOURCE_MAX_EDGE), Image.Resampling.LANCZOS)
+    return crop
+
+
+def head_crop_fallback(
+    data: bytes, mode: str, face_type: str, style: str | None = None
+) -> Prepared | None:
+    """The same request on a head-and-shoulders crop, or None when there is
+    no face to crop around (animals, a missing detector) or the mode already
+    works on a crop (touch-up). CPU work."""
+    from app.services import imagegen, landmarks
+
+    if mode == TOUCHUP:
+        return None
+    image = _rgb(data)
+    try:
+        points = _detect(image)
+    except landmarks.LandmarkerUnavailable:
+        return None
+    if points is None:
+        return None
+    crop = head_crop(image, points)
+    if crop is None:
+        return None
     whole = prepare(data, mode, face_type, style)
     return Prepared(
         prompt=whole.prompt,

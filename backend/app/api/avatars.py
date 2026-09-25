@@ -1039,18 +1039,44 @@ async def upload_mouth_photo(avatar_id: str, file: UploadFile, ctx: OrgMember, d
     """A second photo of the same person with teeth showing.
 
     It supplies THEIR enamel to the continuous mouth instead of fitted
-    geometry. Validated exactly as in the lab it graduated from: a real
-    detected face, large enough, mouth actually open. A draft edit like any
-    other — visitors see it only after Publish.
+    geometry. Validated exactly as in the lab it graduated from (a real
+    detected face, large enough, mouth actually open) and by the browser's
+    own teeth test (422 mouth_teeth_unclear: the upper row too small, or
+    only its tips), through services.mouth_photo, the path AI-made teeth
+    take too. A draft edit like any other — visitors see it only after
+    Publish.
     """
-    import json as _json
-
     from starlette.concurrency import run_in_threadpool
 
-    from app.services.mouth import load as load_mouth, oral_keys, renderer_allowed
-    from app.services.portrait_photo import MAX_BYTES, prepare_photo
+    from app.services import mouth_photo
+    from app.services.portrait_photo import MAX_BYTES
 
     avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    _require_teeth_photo_allowed(avatar)
+    if file.content_type not in get_settings().allowed_image_types:
+        raise Validation422("Choose a JPEG, PNG or WebP photo", code="unsupported_image_type")
+    data = await file.read(MAX_BYTES + 1)
+    if len(data) > MAX_BYTES:
+        raise Validation422("Photo must be 15 MB or smaller", code="image_too_large")
+    photo, rig = await run_in_threadpool(mouth_photo.prepare_mouth_photo, data)
+
+    storage = get_storage()
+    previous = await mouth_photo.store(
+        avatar, storage, photo, rig, mouth_photo.upload_teeth_record()
+    )
+    # The owner's own teeth replace any the AI made: the mouth is no longer
+    # AI-made, and the disclosure stops saying so (from the next Publish).
+    avatar.ai_edited = mouth_photo.without_ai_teeth(avatar.ai_edited)
+    mark_dirty(avatar)
+    await db.commit()
+    for key in previous:
+        await storage.delete(key)
+    return avatar
+
+
+def _require_teeth_photo_allowed(avatar: Avatar) -> None:
+    from app.services.mouth import renderer_allowed
+
     if avatar.kind != AvatarKind.photo or avatar.status != AvatarStatus.ready:
         raise Conflict409("Only a ready photo avatar can take a mouth photo", code="not_a_photo")
     # The photo only feeds the photographic mouth, which this face may not use.
@@ -1059,28 +1085,96 @@ async def upload_mouth_photo(avatar_id: str, file: UploadFile, ctx: OrgMember, d
             "The photographic mouth draws human teeth, so it is only for human faces",
             code="mouth_not_for_face_type",
         )
-    if file.content_type not in get_settings().allowed_image_types:
-        raise Validation422("Choose a JPEG, PNG or WebP photo", code="unsupported_image_type")
-    data = await file.read(MAX_BYTES + 1)
-    if len(data) > MAX_BYTES:
-        raise Validation422("Photo must be 15 MB or smaller", code="image_too_large")
-    photo, rig, _note = await run_in_threadpool(prepare_photo, data, "mouth")
 
+
+class TeethRequest(BaseModel):
+    # A third_party_ai consent naming google, by this user (POST /consents).
+    consent_id: str = Field(min_length=1, max_length=64)
+
+
+# Avatars whose AI teeth are being made in this process: a second press
+# while the first call is out would be a second paid call for one photo.
+# One uvicorn process serves the API, so a set is the whole truth.
+_teeth_in_flight: set[str] = set()
+
+
+@router.post("/{avatar_id}/mouth-photo/generate", response_model=AvatarOut)
+async def generate_mouth_photo(
+    avatar_id: str, body: TeethRequest, ctx: OrgMember, db: DB
+) -> Avatar:
+    """Make the person's own teeth with AI: an "ee" photo of the avatar's
+    picture from the image model, admitted exactly like an uploaded mouth
+    photo (services.mouth_photo). What a new avatar gets when it is
+    finished, for avatars made before, or whose teeth could not be made then.
+
+    Needs the caller's third_party_ai consent (403 consent_required) and the
+    organization's switch on (403 third_party_ai_disabled); metered against
+    the monthly image limit (429 image_limit_reached). One call, and one
+    more on a head-and-shoulders crop if the AI declines (422
+    safety_refused after that). A photo the teeth checks refuse is a 422
+    with their code (mouth_teeth_unclear, reference_mouth_closed...).
+    Synchronous (about ten seconds; 409 teeth_in_progress while one is being
+    made). A DRAFT edit: visitors get the new teeth, and the disclosure that
+    AI made them, when the owner publishes.
+    """
+    from app.core.errors import AppError
+    from app.services import consent, imagegen, mouth_photo
+    from app.services.ai_models import PROVIDER
+    from app.services.usage import check_image_limit
+
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    _require_teeth_photo_allowed(avatar)
+    agreed = await consent.require(
+        db, body.consent_id, ctx.org, ctx.membership.user_id, consent.THIRD_PARTY_AI, PROVIDER
+    )
+    if not imagegen.configured():
+        raise Conflict409("AI editing is not configured on this server", code="imagegen_unavailable")
+    await check_image_limit(db, ctx.org.id)
     storage = get_storage()
-    config = load_mouth(avatar.mouth_config) or {"renderer": "continuous", "profile": {}}
-    previous = (config.get("oral_image_key"), config.get("oral_rig_key"))
-    # Fresh keys per upload: the published snapshot may still point at
-    # copies of the old ones, and browsers cache presigned URLs by path.
-    image_key, rig_key = oral_keys(ctx.org.id, avatar.id, uuid4().hex[:8])
-    await storage.put_bytes(image_key, photo, "image/png")
-    await storage.put_bytes(rig_key, _json.dumps(rig).encode(), "application/json")
-    config.update(oral_image_key=image_key, oral_rig_key=rig_key)
-    avatar.mouth_config = _json.dumps(config)
-    mark_dirty(avatar)
-    await db.commit()
+    if not avatar.image_key or not await storage.exists(avatar.image_key):
+        raise Conflict409("The avatar's picture is gone", code="source_gone")
+    if avatar_id in _teeth_in_flight:
+        raise Conflict409("The teeth are already being made", code="teeth_in_progress")
+    org_id, consent_id, source_key = ctx.org.id, agreed.id, avatar.image_key
+    _teeth_in_flight.add(avatar_id)
+    try:
+        source = await storage.get_bytes(source_key)
+        # No connection held while the provider thinks.
+        await db.rollback()
+
+        async def sending() -> None:
+            # The consent that lets the picture go is on the avatar as it
+            # goes: a refusal or an answer the teeth test rejects still
+            # sent a photo, and an audit must find what allowed it. Not a
+            # change a visitor sees, so the draft stays clean.
+            async with avatar_edits.hold(avatar_id):
+                row = await _get_avatar(db, org_id, avatar_id)
+                row.consent_ids = consent.with_consent(row.consent_ids, consent_id)
+                await db.commit()
+
+        made = await mouth_photo.make_teeth(org_id, source, on_send=sending)
+    except mouth_photo.TeethFailure as exc:
+        error = AppError(exc.detail, code=exc.code)
+        error.status_code = exc.status
+        raise error from exc
+    finally:
+        _teeth_in_flight.discard(avatar_id)
+
+    # Stored under the edit lock like any other draft edit; the seconds of
+    # the call itself are not held against the owner's other edits.
+    async with avatar_edits.hold(avatar_id):
+        avatar = await _get_avatar(db, org_id, avatar_id)
+        _require_teeth_photo_allowed(avatar)
+        previous = await mouth_photo.store(
+            avatar, storage, made.photo, made.rig, mouth_photo.ai_teeth_record(made.model)
+        )
+        # AI made part of what visitors will see: disclosed from the next
+        # Publish.
+        avatar.ai_edited = mouth_photo.with_ai_teeth(avatar.ai_edited, made.model)
+        mark_dirty(avatar)
+        await db.commit()
     for key in previous:
-        if key:
-            await storage.delete(key)
+        await storage.delete(key)
     return avatar
 
 
@@ -1091,6 +1185,7 @@ async def remove_mouth_photo(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
     import json as _json
 
     from app.services.mouth import load as load_mouth
+    from app.services.mouth_photo import without_ai_teeth
 
     avatar = await _get_avatar(db, ctx.org.id, avatar_id)
     config = load_mouth(avatar.mouth_config)
@@ -1101,7 +1196,10 @@ async def remove_mouth_photo(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
         key = config.pop(name, None)
         if key:
             await storage.delete(key)
+    config.pop("teeth", None)
     avatar.mouth_config = _json.dumps(config)
+    # Teeth the AI made are gone, and so is their disclosure (next Publish).
+    avatar.ai_edited = without_ai_teeth(avatar.ai_edited)
     mark_dirty(avatar)
     await db.commit()
     return avatar

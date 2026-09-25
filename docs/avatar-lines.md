@@ -286,6 +286,100 @@ unchanged changes nothing. A head sent without diagonals keeps the saved ones.
 - The Gemini project must be on the paid tier (inputs not used for training);
   consent text and the landing FAQ state what is actually true.
 
+### A new person's mouth (2026-09-26)
+
+Why an uploaded photo looked worse than the Reference avatar (`/reference-avatar`):
+it spoke with the classic drawn mouth, generic teeth, a cue clock started at
+`play()` and never re-read, and cues stretched to the audio's length; the
+Reference has the photographic mouth, a photo of its own teeth, the audio
+position read every frame, and the model's own phoneme timings. Now, for
+NEW human avatars (existing avatars and published snapshots are unchanged,
+except for the clock, a bug fix every avatar gets):
+
+- **Photographic mouth by default.** Finish writes `mouth_config
+  {renderer: "continuous", profile: {}}` for a line allowed it (human);
+  every other line keeps the classic mouth (null). The Mouth panel still
+  switches.
+- **Their own teeth, made by AI, before the first publish**
+  (`services.mouth_photo`, `services.creations._own_teeth`). When the
+  organization allows third-party AI and the finishing member has a current
+  `third_party_ai` consent, the finish job sends the chosen picture's face
+  crop (the touch-up's: 1.6 face boxes, 1024 px, a cut-out on grey) with
+  a prompt modelled on the touch-up's and on oral-detail-v3's ("ee", whole
+  upper crowns, the person's own natural shade, change nothing else). A
+  refusal is asked once more on the head-and-shoulders crop. The answer is
+  admitted exactly like an uploaded mouth photo: `prepare_photo(…,
+  "mouth")`, then the browser's own teeth test ported to the server
+  (`services.dental_photo`: `DentalPhotoError`'s width, count and crown
+  coverage), so no photo is stored that the widget would drop. It is not
+  pasted back into the portrait: the renderer registers a mouth photo by its
+  own landmarks, in its own mouth widths. Metered as an image generation
+  (source `teeth`), under the monthly limit and the org switch; disclosed as
+  `ai_edited.teeth` (`{mode: "teeth"}` when nothing else was AI-made).
+  Its consent is added to the avatar's and the creation's as the picture
+  is sent (`make_teeth(on_send=…)`; the generate endpoint does the same),
+  so a refusal or a rejected answer still leaves the record of what let
+  the photo out, and a finish that sent nothing records nothing. The calls wait outside the job runner's slot
+  (`JobRunner.outside_slot`), so a finish waiting on Google never holds
+  another person's upload queued. Anything short of that (no consent,
+  AI off, the limit, a refusal, a photo the teeth test rejects, a crash)
+  publishes with generic teeth and records why in `mouth_config.teeth.note`,
+  which the Mouth panel shows. Never fails the finish.
+- **Stored as WebP** (`mouth_photo.encode_for_visitors`, quality 90, same
+  size so the rig holds): every visitor downloads the mouth photo before
+  the photographic mouth attaches, and a 1024 px crop is about 1.3 MB as
+  PNG, about 160 KB as WebP. The teeth test runs on the WebP bytes, so what
+  passed is what is served.
+- **The consent covers it.** `third_party_ai` wording 2026-09-26 says that
+  pictures also go without a further question for the wizard's lip
+  touch-up and a person's teeth at Finish, and that those teeth are kept
+  and published with the finished avatar; the Settings switch hint and the
+  landing FAQ say the same. Agreements to the 2026-09-25 text no longer
+  count, so everyone is asked the new question before anything is sent.
+- **Disclosure follows what is shown.** Publish drops `teeth` from the
+  disclosure (a teeth-only one entirely) unless the published mouth is the
+  photographic one with the photo; the draft keeps both, so switching back
+  restores both. The published mouth carries its `teeth` record (never
+  served to visitors), and Discard restores it with the photo, and
+  `ai_edited` from the snapshot's disclosure, with the teeth entry exactly
+  when the restored photo is AI-made: a discarded upload, removal or AI
+  generation never leaves AI teeth unlabelled or a label on teeth that are
+  gone.
+- `POST /orgs/{org}/avatars/{id}/mouth-photo/generate {consent_id}` makes
+  the same photo for an existing avatar (or one whose teeth failed): a draft
+  edit, synchronous, 409 `teeth_in_progress` while one is out. An owner's
+  own photo (`POST …/mouth-photo`, now also refused by the teeth test with
+  422 `mouth_teeth_unclear`) replaces AI teeth and their disclosure;
+  removing the photo removes both.
+- **Teeth height is not fitted from the photo.** On the lab's two AI "ee"
+  photos of one person, the upper incisal edge mapped into the portrait
+  through the skull (stable landmarks) gives teethY −0.034 and −0.010 where
+  the hand fit is 0.016, and the edge below the upper lip measures 0.080
+  and 0.143 mouth widths: the value follows how much crown the model drew,
+  not the person. The default (0) stays; the slider is the fit.
+- **Parted lips are fixed without a press.** When the current image of a
+  person shows `teeth_showing` (a touch-up), `ai.auto_adjust` offers it and
+  the wizard starts it (`POST /adjust {mode: "touchup", auto: true}`) on
+  the member's own remembered consent, never asking on their behalf: 409
+  `auto_adjust_not_applicable` unless the offer stands, once per photo
+  (`ai_usage.auto_adjusted`), never on an AI picture or one already
+  adjusted. The owner still chooses the result.
+- **Finish warns** (`warnings: [{code, detail}]`, `mouth_open` or
+  `teeth_showing`) when the picture still shows them; it is not a refusal.
+- **Dashboard.** The finish progress names its stages from the job's
+  progress label (`creation.finishStage`: "Adding realistic teeth…" while
+  the teeth are made); an unknown label shows no stage. The points step
+  says the mouth warning before the press, from the current image's check
+  (`expectedMouthWarnings`, with the way back to AI adjust), and the finish
+  answer's warnings while it builds; they are kept for the tab
+  (sessionStorage, `rememberFinishNotice`) and shown on the avatar's page
+  with the teeth note, until dismissed. The Mouth panel names the teeth in
+  use (AI-generated / your photo / standard), makes them with AI on the
+  member's consent (`useConsent.withAi`), words each refusal of either
+  route, and prompts Publish beside the change. The disclosure badge reads
+  "AI touch-up · AI teeth" when both apply. AI adjust starts the offered
+  touch-up by itself (`autoAdjustToStart`) and says why while it runs.
+
 ## Embed engine
 
 - Render profile lives in rig.json (`render_profile: "animal@1"`); published
@@ -303,6 +397,18 @@ unchanged changes nothing. A head sent without diagonals keeps the saved ones.
   mesh blink when the band is not flat.
 - Performance: cap mouth subdivision by face size; share one downscaled
   sampling canvas.
+- Speech clock (2026-09-26, every avatar): `playAudio` without a
+  `cueClock` times the cues by the audio element (`media-clock.ts`): held
+  at 0 until `playing`, re-anchored on `playing` and `seeked`, following
+  `currentTime` every frame (at most 250 ms of frame-clock extrapolation
+  between its updates, never backwards within a run), and closing the mouth
+  while the element is paused. Before, the clock started at `play()`, so
+  the whole utterance ran ahead of the voice by its start-up delay. Golden
+  renders are unchanged (no frame depends on the clock).
+- Native timing in production (2026-09-26): the Kokoro provider speaks with
+  the timestamped model when it is installed and serves its own phoneme
+  spans as cues (`lab_timing.native_cues`), falling back to the stretched
+  table on any error; see docs/lip-sync-lab.md.
 
 ## Data changes
 

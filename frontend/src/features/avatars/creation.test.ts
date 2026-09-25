@@ -14,6 +14,8 @@ import {
   aiPointsOffer,
   aiResultInUse,
   anchorsCurrent,
+  autoAdjustKey,
+  autoAdjustToStart,
   backgroundSource,
   CANDIDATE_REASONS,
   checkFile,
@@ -24,7 +26,13 @@ import {
   draftMarksKey,
   DRAWN_REASONS,
   errorText,
+  expectedMouthWarnings,
+  FINISH_STAGES,
+  finishNoticeFor,
+  finishNoticeKey,
+  finishStage,
   forgetDraftMarks,
+  forgetFinishNotice,
   framingChanged,
   FULL_FRAME,
   frameOf,
@@ -49,6 +57,7 @@ import {
   preselectedMode,
   recommendationOf,
   REGENERATE_REASONS,
+  rememberFinishNotice,
   resolveStep,
   roundResults,
   roundSource,
@@ -488,14 +497,41 @@ describe("strings", () => {
         ...[...TOUCHUP_REASONS, ...REGENERATE_REASONS].map((code) => `adjustWhy_${code}`),
         ...[...DRAWN_REASONS].map((code) => `adjustWhyDrawn_${code}`),
         ...[...CANDIDATE_REASONS].map((code) => `adjustReason_${code}`),
-        ...["touchup", "stylise", "regenerate", "generate"].map((mode) => `aiEdited_${mode}`),
+        ...["touchup", "stylise", "regenerate", "generate", "teeth"].map((mode) => `aiEdited_${mode}`),
         ...LINE_ORDER.flatMap((id) => [LINES[id].summary, LINES[id].guide]),
         ...LINE_ORDER.flatMap((id) => LINES[id].marks.map((part) => `createGuessPart_${part}`)),
         ...["not_for_face_type", "segmentation_unavailable", "face_type_required"].map((r) => `createBgUnavailable_${r}`),
+        ...FINISH_STAGES.map((stage) => `createFinishStage_${stage}`),
+        "adjustAutoStarted",
+        "adjustAutoReady",
       ];
       assert.deepEqual(needed.filter((key) => !keys.has(key)), []);
     });
   }
+});
+
+describe("the touch-up started without a press", () => {
+  const offer = { mode: "touchup", image: "original", reasons: ["teeth_showing"] };
+  const offered = (extra = {}) => creation({ ai: ai({ auto_adjust: offer }), ...extra });
+
+  it("starts what the server offers, on the member's own consent", () => {
+    assert.deepEqual(autoAdjustToStart(offered(), "consent-1", new Set()), offer);
+  });
+  it("never asks for consent on the member's behalf, nor guesses while it loads", () => {
+    assert.equal(autoAdjustToStart(offered(), null, new Set()), null);
+    assert.equal(autoAdjustToStart(offered(), undefined, new Set()), null);
+  });
+  it("waits for a running job, and starts once per image in a tab", () => {
+    assert.equal(autoAdjustToStart(offered({ job: job({ step: "background", state: "running" }) }), "c", new Set()), null);
+    const started = new Set([autoAdjustKey(offered(), offer)]);
+    assert.equal(autoAdjustToStart(offered(), "c", started), null);
+    const other = { ...offer, image: "cutout" };
+    assert.deepEqual(autoAdjustToStart(creation({ ai: ai({ auto_adjust: other }) }), "c", started), other);
+  });
+  it("does nothing without an offer, or once the creation is being built", () => {
+    assert.equal(autoAdjustToStart(creation(), "c", new Set()), null);
+    assert.equal(autoAdjustToStart(offered({ status: "finishing" }), "c", new Set()), null);
+  });
 });
 
 describe("cut-outs", () => {
@@ -653,5 +689,95 @@ describe("the uploader's statement", () => {
     assert.equal(statementNeeded(creation({ face_type: "human" })), "depiction");
     assert.equal(statementNeeded(creation({ face_type: null })), "depiction");
     assert.equal(statementNeeded(creation({ face_type: "animal" })), null);
+  });
+});
+
+describe("building the avatar", () => {
+  const running = (label, extra = {}) =>
+    job({ step: "finish", state: "running", progress: { fraction: 0.65, label }, ...extra });
+
+  it("names the stage a finish is at, the teeth among them", () => {
+    assert.equal(finishStage(running("copying images")), "copy");
+    assert.equal(finishStage(running("building the rig")), "rig");
+    assert.equal(finishStage(running("building layers")), "layers");
+    assert.equal(finishStage(running("making the teeth")), "teeth");
+    assert.equal(finishStage(running("publishing")), "publish");
+  });
+  it("names nothing it does not know, nor for another job or a finish not running", () => {
+    assert.equal(finishStage(running("polishing the chrome")), null);
+    assert.equal(finishStage(running(null)), null);
+    assert.equal(finishStage(job({ step: "finish", state: "running" })), null);
+    assert.equal(finishStage(running("making the teeth", { state: "queued" })), null);
+    assert.equal(finishStage(running("making the teeth", { state: "done" })), null);
+    assert.equal(finishStage(running("making the teeth", { step: "adjust" })), null);
+    assert.equal(finishStage(null), null);
+  });
+});
+
+describe("the mouth, before finishing", () => {
+  const checked = (reasons, extra = {}) =>
+    creation({ analysis: { checks: [], recommendation: { image: "original", mode: "touchup", reasons } }, ...extra });
+
+  it("says what the finish answer will warn about", () => {
+    assert.deepEqual(expectedMouthWarnings(checked(["eyes_closed", "teeth_showing"])), ["teeth_showing"]);
+    assert.deepEqual(expectedMouthWarnings(checked(["mouth_open"])), ["mouth_open"]);
+  });
+  it("names an open mouth alone, as the server does", () => {
+    assert.deepEqual(expectedMouthWarnings(checked(["mouth_open", "teeth_showing"])), ["mouth_open"]);
+  });
+  it("says nothing when the check found neither, or is about another image", () => {
+    assert.deepEqual(expectedMouthWarnings(checked(["eyes_closed"])), []);
+    assert.deepEqual(expectedMouthWarnings(checked(["teeth_showing"], { current: "cutout" })), []);
+    assert.deepEqual(expectedMouthWarnings(creation()), []);
+  });
+});
+
+describe("the finish notice", () => {
+  const warnings = [{ code: "teeth_showing", detail: "The lips are parted" }];
+
+  it("reaches the avatar's page, for that avatar only, until dismissed", () => {
+    const store = memoryStore();
+    rememberFinishNotice(store, "av1", warnings);
+    assert.deepEqual(finishNoticeFor(store, "av1"), { warnings });
+    assert.equal(finishNoticeFor(store, "av2"), null);
+    forgetFinishNotice(store, "av1");
+    assert.equal(finishNoticeFor(store, "av1"), null);
+  });
+  it("is kept with no warnings: arriving from the wizard is itself news", () => {
+    const store = memoryStore();
+    rememberFinishNotice(store, "av1", []);
+    assert.deepEqual(finishNoticeFor(store, "av1"), { warnings: [] });
+  });
+  it("lets nothing malformed through", () => {
+    const store = memoryStore([
+      [finishNoticeKey("bad"), "{"],
+      [finishNoticeKey("none"), JSON.stringify({})],
+      [finishNoticeKey("mixed"), JSON.stringify({ warnings: [null, 3, { code: 1 }, { code: "mouth_open" }, ...warnings] })],
+    ]);
+    assert.equal(finishNoticeFor(store, "bad"), null);
+    assert.equal(finishNoticeFor(store, "none"), null);
+    assert.deepEqual(finishNoticeFor(store, "mixed"), {
+      warnings: [{ code: "mouth_open", detail: "" }, ...warnings],
+    });
+  });
+  it("survives storage that is missing or throws", () => {
+    const throwing = {
+      length: 0,
+      key: () => null,
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("quota");
+      },
+      removeItem: () => {
+        throw new Error("blocked");
+      },
+    };
+    rememberFinishNotice(throwing, "av1", warnings);
+    forgetFinishNotice(throwing, "av1");
+    assert.equal(finishNoticeFor(throwing, "av1"), null);
+    rememberFinishNotice(null, "av1", warnings);
+    assert.equal(finishNoticeFor(null, "av1"), null);
   });
 });

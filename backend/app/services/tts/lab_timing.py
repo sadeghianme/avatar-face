@@ -1,4 +1,12 @@
-"""Lab-only native phoneme timing. Never changes a stored avatar or stable cue cache."""
+"""Native phoneme timing: cues from the timestamped Kokoro model's own spans.
+
+The lip-sync lab introduced it; the Kokoro provider (services.tts.kokoro)
+now speaks through the same model and `native_cues`, so what visitors hear
+is timed by the model that made it rather than by a duration table
+stretched to the audio's length. The lab keeps its own uncached comparison
+path (`synthesize_native`), which also returns the stretched baseline.
+Never changes a stored avatar.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -124,6 +132,7 @@ _semaphore: asyncio.Semaphore | None = None
 
 
 def configured() -> bool:
+    """Are the timestamped model and the voices installed?"""
     settings = get_settings()
     return bool(settings.kokoro_lipsync_model_path
                 and os.path.isfile(settings.kokoro_lipsync_model_path)
@@ -150,20 +159,27 @@ def _get_engine():
         return _engine
 
 
-def _render(text: str, voice: str) -> tuple[bytes, int, list[dict], list[dict]]:
+def render_timed(text: str, voice_id: str, lang: str) -> tuple[bytes, int, list[PhoneSpan]]:
+    """One synthesis with the timestamped model: 16-bit WAV, its length in
+    ms, and the phoneme spans the model placed in it. Blocking CPU work,
+    one inference at a time (the lab and the provider share the engine)."""
     import numpy as np
     import soundfile as sf
 
-    chosen = next((v for v in VOICES if v.id == voice), next(v for v in VOICES if v.id == DEFAULT_VOICE))
     with _render_lock:
         samples, rate, timings = _get_engine().create_timed(
-            text, voice=chosen.id, speed=1.0, lang=_LANG_BY_PREFIX[chosen.id[0]],
+            text, voice=voice_id, speed=1.0, lang=lang,
         )
     buffer = io.BytesIO()
     sf.write(buffer, np.asarray(samples), rate, format="WAV", subtype="PCM_16")
-    audio = buffer.getvalue()
     duration = round(len(samples) * 1000 / rate)
-    cues = native_cues([PhoneSpan(t.phoneme, t.start, t.end) for t in timings], duration, audio)
+    return buffer.getvalue(), duration, [PhoneSpan(t.phoneme, t.start, t.end) for t in timings]
+
+
+def _render(text: str, voice: str) -> tuple[bytes, int, list[dict], list[dict]]:
+    chosen = next((v for v in VOICES if v.id == voice), next(v for v in VOICES if v.id == DEFAULT_VOICE))
+    audio, duration, spans = render_timed(text, chosen.id, _LANG_BY_PREFIX[chosen.id[0]])
+    cues = native_cues(spans, duration, audio)
     baseline = cues_from_text(text, duration, chosen.locale, audio=audio)
     return audio, duration, cues, baseline
 

@@ -14,6 +14,11 @@ from app.services.storage import LocalStorage, get_storage
 
 router = APIRouter(prefix="/storage", tags=["storage"])
 
+# Python 3.12's built-in table has no .webp, and the slim image has no
+# /etc/mime.types to add it, so mouth photos would go out as
+# application/octet-stream.
+mimetypes.add_type("image/webp", ".webp")
+
 
 def _local() -> LocalStorage:
     storage = get_storage()

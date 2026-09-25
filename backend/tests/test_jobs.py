@@ -153,3 +153,68 @@ async def test_building_an_avatar_does_its_cpu_work_off_the_loop(client, monkeyp
     await create_ready_avatar(client, headers, org_id, publish=False)
     assert seen["detect"].startswith(CPU_THREAD_PREFIX)
     assert seen["thumbnail"].startswith(CPU_THREAD_PREFIX)
+
+
+async def test_a_job_waiting_on_the_network_lends_its_slot_back():
+    """A finish waiting on Google gives its slot to the next job, and takes
+    one back (after it, if the slots are taken) to carry on."""
+    runner = JobRunner(max_running=1, max_per_org=10)
+    order: list[str] = []
+    answered = asyncio.Event()
+
+    async def waits_on_google(job):
+        order.append("finish starts")
+        async with runner.outside_slot(job):
+            assert not job.holds_slot
+            await answered.wait()
+        assert job.holds_slot
+        order.append("finish ends")
+
+    async def upload(job):
+        order.append("upload runs")
+        answered.set()
+
+    finish = runner.reserve("org", "f", "finish", 0)
+    runner.start(finish, waits_on_google)
+    await asyncio.sleep(0.01)
+    runner.start(runner.reserve("org", "u", "ingest", 0), upload)
+    await runner.drain()
+    assert order == ["finish starts", "upload runs", "finish ends"]
+    # Every slot came back: one job can run again.
+    assert runner._running_slots()._value == 1
+
+
+async def test_lending_a_slot_is_a_no_op_outside_a_running_job():
+    runner = JobRunner(max_running=1)
+    async with runner.outside_slot(None):
+        pass
+    queued = runner.reserve("org", "s", "detect", 0)
+    async with runner.outside_slot(queued):
+        pass
+    assert runner._slots is None, "never minted a slot"
+
+
+async def test_a_job_cancelled_while_taking_its_slot_back_mints_none():
+    runner = JobRunner(max_running=1, max_per_org=10)
+    lent = asyncio.Event()
+    hold = asyncio.Event()
+
+    async def lender(job):
+        async with runner.outside_slot(job):
+            lent.set()
+            await asyncio.sleep(0)
+        # Only reached once the other job lets go.
+
+    async def hog(job):
+        await hold.wait()
+
+    job = runner.reserve("org", "a", "finish", 0)
+    task = runner.start(job, lender)
+    await lent.wait()
+    runner.start(runner.reserve("org", "b", "ingest", 0), hog)
+    await asyncio.sleep(0.01)  # the hog holds the slot; the lender waits for it
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    hold.set()
+    await runner.drain()
+    assert runner._running_slots()._value == 1

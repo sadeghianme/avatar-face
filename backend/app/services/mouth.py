@@ -29,19 +29,31 @@ def load(raw: str | None) -> dict | None:
 
 
 def public_view(raw: str | None) -> dict | None:
+    """What the dashboard is told (never the storage keys). `teeth` says
+    where the mouth photo came from, or why a new avatar has none
+    (services.mouth_photo): {source: "ai" | "upload" | null, note}."""
     config = load(raw)
     if config is None:
         return None
+    teeth = config.get("teeth") or {}
+    has_photo = bool(config.get("oral_image_key") and config.get("oral_rig_key"))
     return {
         "renderer": config["renderer"],
         "profile": config.get("profile") or {},
-        "has_oral_photo": bool(config.get("oral_image_key") and config.get("oral_rig_key")),
+        "has_oral_photo": has_photo,
+        "teeth": {
+            # An upload from before the record existed is still an upload.
+            "source": teeth.get("source") or ("upload" if has_photo else None),
+            "note": teeth.get("note"),
+        },
     }
 
 
 def oral_keys(org_id: str, avatar_id: str, stamp: str) -> tuple[str, str]:
+    # WebP (services.mouth_photo.MOUTH_PHOTO_TYPE). Photos stored as PNG
+    # before keep their keys; everything downstream reads the extension.
     base = f"orgs/{org_id}/avatars/{avatar_id}/mouth-{stamp}"
-    return f"{base}.png", f"{base}.json"
+    return f"{base}.webp", f"{base}.json"
 
 
 async def photo_urls(config: dict | None, storage) -> dict | None:

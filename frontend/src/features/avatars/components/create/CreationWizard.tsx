@@ -12,6 +12,7 @@ import { DropZone, FrameStep } from "@/features/avatars/components/create/Upload
 import {
   errorText,
   forgetDraftMarks,
+  finishStage,
   isJobActive,
   jobFailure,
   nameFromFile,
@@ -124,15 +125,21 @@ export function CreationWizard({ orgId, creationId }: { orgId: string; creationI
   }, [creation?.status, creation?.avatar_id, orgId, navigate, queryClient]);
 
   const job = creation?.job ?? null;
+  // A finish's stages are transitions too ("Adding realistic teeth…"):
+  // a screen reader hears the same as the bar shows.
+  const stage = finishStage(job);
   const announcement = useMemo(() => {
     if (!job) return "";
-    if (isJobActive(job)) return job.state === "queued" ? t("createJobQueued") : t(`createJob_${job.step}`);
+    if (isJobActive(job)) {
+      if (job.state === "queued") return t("createJobQueued");
+      return stage ? t(`createFinishStage_${stage}`) : t(`createJob_${job.step}`);
+    }
     const failure = jobFailure(job);
     if (failure) return errorText(t, failure.code, failure.detail);
     return job.state === "done" ? t(`createJobDone_${job.step}`) : "";
     // Announce transitions, not every poll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job?.id, job?.state, t]);
+  }, [job?.id, job?.state, stage, t]);
 
   const created = (next: Creation, file: File) => {
     rememberCreationName(next.id, nameFromFile(file.name));

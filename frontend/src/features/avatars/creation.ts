@@ -178,6 +178,18 @@ export interface CreationAi {
   adjust_rounds_left: number;
   ai_detections_left: number;
   last_round: AdjustRound | null;
+  /** A touch-up the wizard starts by itself (see autoAdjustToStart); null
+   * otherwise. Absent from a server before it offered one. */
+  auto_adjust?: AutoAdjust | null;
+}
+
+/** The server's offer of a touch-up nobody has to press for: a person whose
+ * parted lips show their teeth (they would stay painted on the lips as the
+ * avatar talks). Once per photo; the owner still chooses the result. */
+export interface AutoAdjust {
+  mode: "touchup";
+  image: StepId;
+  reasons: string[];
 }
 
 export interface Creation {
@@ -214,9 +226,18 @@ export interface PreviewRig {
   reasons: FitReason[];
 }
 
+/** Something the finished picture still shows around the mouth
+ * ("mouth_open", "teeth_showing"): said, not refused. */
+export interface FinishWarning {
+  code: string;
+  detail: string;
+}
+
 export interface FinishResult {
   avatar_id: string;
   creation: Creation;
+  /** Absent from a server before it said so. */
+  warnings?: FinishWarning[];
 }
 
 // --- Upload ---------------------------------------------------------------------
@@ -266,6 +287,123 @@ export function isJobActive(job: CreationJob | null | undefined): boolean {
  * a job, or a finish (which is a job, but also a status). Poll while so. */
 export function isBusy(creation: Creation | null | undefined): boolean {
   return Boolean(creation && (isJobActive(creation.job) || creation.status === "finishing"));
+}
+
+/** Which offer a tab has acted on: one creation's image. */
+export const autoAdjustKey = (creation: Creation, offer: AutoAdjust) => `${creation.id}:${offer.image}`;
+
+/**
+ * The touch-up to start without a press, or null.
+ *
+ * Only what the server offers (ai.auto_adjust), only on the member's own
+ * remembered consent (a string: while it is loading, or when they have not
+ * agreed yet, nothing starts, and nothing asks for it on their behalf),
+ * never while something else runs, and once per image in this tab (the
+ * server holds to once per photo for every tab).
+ */
+export function autoAdjustToStart(
+  creation: Creation,
+  consentId: string | null | undefined,
+  started: ReadonlySet<string>
+): AutoAdjust | null {
+  const offer = creation.ai?.auto_adjust ?? null;
+  if (!offer || typeof consentId !== "string" || creation.status !== "draft") return null;
+  if (isJobActive(creation.job) || started.has(autoAdjustKey(creation, offer))) return null;
+  return offer;
+}
+
+/** What building an avatar goes through, in order: its own words for each
+ * (`createFinishStage_<stage>`), so the owner sees where the seconds go,
+ * the teeth above all (an image-model call, the longest of them). */
+export const FINISH_STAGES = ["copy", "rig", "layers", "teeth", "publish"] as const;
+export type FinishStage = (typeof FINISH_STAGES)[number];
+
+// The labels services.creations._build_avatar reports its progress with
+// (job.report). They are the server's log words, not a contract of their
+// own: one this does not know shows no stage line, never a wrong one.
+const FINISH_STAGE_LABELS: Readonly<Record<string, FinishStage>> = {
+  "copying images": "copy",
+  "building the rig": "rig",
+  "building layers": "layers",
+  "making the teeth": "teeth",
+  publishing: "publish",
+};
+
+/** The stage a running finish is at, or null (another job, queued, done,
+ * or a label from a newer server). */
+export function finishStage(job: CreationJob | null | undefined): FinishStage | null {
+  if (!job || job.step !== "finish" || job.state !== "running") return null;
+  const label = job.progress?.label;
+  return label ? FINISH_STAGE_LABELS[label] ?? null : null;
+}
+
+/**
+ * What finishing the current image will warn about its mouth, known before
+ * the press: the codes of the warnings the server's finish answer carries
+ * (services.creations.mouth_warnings), read off the photo check of the
+ * image on screen. An open mouth says it all (it is also why the lips are
+ * parted), so it alone is named, as the server does. Empty when the check
+ * is not about this image, or found neither.
+ */
+export function expectedMouthWarnings(creation: Creation): string[] {
+  const reasons = recommendationOf(creation)?.reasons ?? [];
+  if (reasons.includes("mouth_open")) return ["mouth_open"];
+  if (reasons.includes("teeth_showing")) return ["teeth_showing"];
+  return [];
+}
+
+// --- After finishing -----------------------------------------------------------
+
+/**
+ * What the owner is told on the avatar's page when they arrive from the
+ * wizard: the finish answer's warnings. The wizard navigates by itself once
+ * the avatar is built, so the answer would die with the step; it is kept
+ * for this tab under the avatar's id (sessionStorage), until dismissed.
+ */
+export interface FinishNotice {
+  warnings: FinishWarning[];
+}
+
+const FINISH_NOTICE_PREFIX = "liveface.finishNotice.";
+
+export const finishNoticeKey = (avatarId: string) => `${FINISH_NOTICE_PREFIX}${avatarId}`;
+
+/** Keep the finish answer's warnings for the avatar's page. Kept even when
+ * there are none: arriving from the wizard is itself worth knowing (the
+ * page also says why the teeth are standard, if they are). */
+export function rememberFinishNotice(store: DraftStore | null, avatarId: string, warnings: FinishWarning[]): void {
+  try {
+    store?.setItem(finishNoticeKey(avatarId), JSON.stringify({ warnings }));
+  } catch {
+    // best effort: without it the page shows what the avatar itself says
+  }
+}
+
+/** The notice kept for this avatar, or null. Only well-formed warnings
+ * come back: the entry is a tab's storage, which anything can edit. */
+export function finishNoticeFor(store: DraftStore | null, avatarId: string): FinishNotice | null {
+  try {
+    const raw = store?.getItem(finishNoticeKey(avatarId));
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    const list = (parsed as { warnings?: unknown } | null)?.warnings;
+    if (!Array.isArray(list)) return null;
+    const warnings = list.filter(
+      (w): w is FinishWarning =>
+        Boolean(w) && typeof w.code === "string" && typeof (w.detail ?? "") === "string"
+    ).map((w) => ({ code: w.code, detail: w.detail ?? "" }));
+    return { warnings };
+  } catch {
+    return null;
+  }
+}
+
+export function forgetFinishNotice(store: DraftStore | null, avatarId: string): void {
+  try {
+    store?.removeItem(finishNoticeKey(avatarId));
+  } catch {
+    // best effort
+  }
 }
 
 /**

@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import {
   errorText,
+  finishStage,
   isJobActive,
   jobFailure,
   type CreationJob,
@@ -33,12 +34,24 @@ export function JobProgress({
   if (isJobActive(job)) {
     const fraction = job.progress?.fraction ?? null;
     const label = job.state === "queued" ? t("createJobQueued") : t(`createJob_${job.step}`);
+    // Building an avatar says which part it is at: "Adding realistic
+    // teeth…" is an image-model call that can take half a minute, and a bar
+    // that sits still without a word looks stuck.
+    const stage = finishStage(job);
     return (
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-line dark:bg-white/[0.03]">
         <p className="flex items-center gap-2 text-sm font-medium">
           <Spinner className="h-4 w-4 shrink-0 text-brand-600" />
           {label}
         </p>
+        {stage && (
+          <p className="mt-1 ps-6 text-[13px] text-gray-600 dark:text-gray-300">
+            {t(`createFinishStage_${stage}`)}
+            {stage === "teeth" && (
+              <span className="block text-xs text-gray-500 dark:text-gray-400">{t("createFinishStageHint_teeth")}</span>
+            )}
+          </p>
+        )}
         <div
           className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-white/[0.08]"
           role="progressbar"

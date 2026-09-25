@@ -18,6 +18,7 @@ import { BlinkScheduler, blinkEase } from "./blink";
 import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
 import { HeadMotion } from "./headmotion";
 import { kindProfile, type KindProfile } from "./kind-profile";
+import { MediaClock } from "./media-clock";
 import type { MouthExtension, MouthPose } from "./mouth-extension";
 import { centralMouthAnchors } from "./mouth-extension";
 import { BlendWeights, Cue, DEFAULT_TUNING, EngineTuning, Rig, ZERO_WEIGHTS } from "./types";
@@ -546,6 +547,8 @@ export class AvatarEngine {
   private analyser: AnalyserNode | null = null;
   private analyserData: Uint8Array | null = null;
   private currentAudio: HTMLAudioElement | null = null;
+  /** Cue time of the audio playing now, when no external cueClock is given. */
+  private audioClock: MediaClock | null = null;
   private onAudioEnd: (() => void) | null = null;
 
   debugMesh: boolean;
@@ -1074,11 +1077,30 @@ export class AvatarEngine {
 
   // --- Public speech API -----------------------------------------------------
 
-  /** Play base64 audio with a viseme cue track. Resolves onEnd (also on stop()). */
+  /**
+   * Play base64 audio with a viseme cue track. Resolves onEnd (also on stop()).
+   *
+   * Without a `cueClock` option (every page but the lab) cue time is the
+   * audio element's own position (media-clock.ts): held at 0 until the voice
+   * is actually playing, re-anchored on `playing` and `seeked`, followed
+   * every frame, and standing still with the mouth closed while the element
+   * is paused. A clock started at play() ran ahead of the voice by however
+   * long the audio took to start, for the whole utterance.
+   */
   playAudio(audioB64: string, mime: string, cues: Cue[], onEnd?: () => void): void {
     this.stopAudio();
     const audio = new Audio(`data:${mime};base64,${audioB64}`);
     this.currentAudio = audio;
+    const clock = this.cueClock ? null : new MediaClock(audio);
+    this.audioClock = clock;
+    if (clock) {
+      const sync = () => {
+        if (audio !== this.currentAudio) return;
+        this.placeBeatWalker(clock.sync(performance.now()));
+      };
+      audio.addEventListener("playing", sync);
+      audio.addEventListener("seeked", sync);
+    }
     this.onAudioEnd = onEnd ?? null;
     this.cues = prepareCues(cues);
     this.speaking = true;
@@ -1148,8 +1170,12 @@ export class AvatarEngine {
   /** Re-align the cue clock to a known position in the track (ms). */
   syncCueTime(ms: number): void {
     this.cueStart = performance.now() - ms;
-    // Re-place the beat walker: after a seek the beats behind the new
-    // position are spent, not pending.
+    this.placeBeatWalker(ms);
+  }
+
+  /** Re-place the beat walker at `ms`: after a seek the beats behind the new
+   *  position are spent, not pending. */
+  private placeBeatWalker(ms: number): void {
     this.nextBeat = this.beats.findIndex((b) => b.t > ms);
     if (this.nextBeat < 0) this.nextBeat = this.beats.length;
   }
@@ -1178,10 +1204,13 @@ export class AvatarEngine {
     const cb = this.onAudioEnd;
     this.onAudioEnd = null;
     this.currentAudio = null;
+    this.audioClock = null;
     if (cb && !this.destroyed) cb();
   }
 
   private stopAudio(): void {
+    // Cue time goes back to the frame clock (playCues, the next playAudio).
+    this.audioClock = null;
     if (this.currentAudio) {
       const audio = this.currentAudio;
       this.currentAudio = null;
@@ -1232,13 +1261,19 @@ export class AvatarEngine {
 
   private cueTime(now: number): number {
     const external = this.cueClock?.();
-    return external !== undefined && Number.isFinite(external)
-      ? Math.max(0, external)
-      : now - this.cueStart;
+    if (external !== undefined && Number.isFinite(external)) return Math.max(0, external);
+    if (this.audioClock) return this.audioClock.read(now);
+    return now - this.cueStart;
+  }
+
+  /** The voice is paused mid-utterance (the page, the OS, a headset): the
+   *  mouth closes rather than freezing on whatever shape it was making. */
+  private voicePaused(): boolean {
+    return this.audioClock?.paused ?? false;
   }
 
   private currentViseme(now: number): string {
-    if (!this.speaking || !this.cues.length) return "sil";
+    if (!this.speaking || !this.cues.length || this.voicePaused()) return "sil";
     const t = this.cueTime(now);
     let viseme = "sil";
     for (const cue of this.cues) {
@@ -1254,6 +1289,7 @@ export class AvatarEngine {
    * mouths are always mid-transition, never parked on a phoneme.
    */
   private blendedCueWeights(now: number): BlendWeights {
+    if (this.voicePaused()) return { ...ZERO_WEIGHTS };
     const t = this.cueTime(now);
     let index = -1;
     for (let i = 0; i < this.cues.length; i++) {

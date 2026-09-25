@@ -12,6 +12,7 @@ import {
   confirmedParts,
   currentStep,
   errorText,
+  expectedMouthWarnings,
   forgetDraftMarks,
   isJobActive,
   jobFailure,
@@ -19,11 +20,13 @@ import {
   marksAreGuessed,
   movedParts,
   pickMarks,
+  rememberFinishNotice,
   saveDraftMarks,
   type Creation,
   type CreationAnchors,
   type DraftStore,
   type FinishResult,
+  type FinishWarning,
   type MarkPart,
   type PreviewRig,
 } from "@/features/avatars/creation";
@@ -129,6 +132,17 @@ export function PointsStep({
   // Held here, not in the editor: "Detect again" brings new anchors and a
   // fresh editor, and the name typed so far should survive that.
   const [name, setName] = useState(defaultName);
+  // What finishing said about the mouth of the picture (an open mouth,
+  // teeth between parted lips): shown while the avatar is built, and kept
+  // for the avatar's page, where the wizard lands by itself once it is.
+  // Null until the answer came: a tab reloaded mid-build never saw it, and
+  // shows what the photo check says the answer was instead.
+  const [finishWarnings, setFinishWarnings] = useState<FinishWarning[] | null>(null);
+  const finished = (result: FinishResult) => {
+    const warnings = result.warnings ?? [];
+    setFinishWarnings(warnings);
+    rememberFinishNotice(tabStore(), result.avatar_id, warnings);
+  };
 
   // Built: the marks in progress have done their job.
   useEffect(() => {
@@ -175,6 +189,9 @@ export function PointsStep({
           </p>
         )}
         <p className="text-xs text-gray-500 dark:text-gray-400">{t("createFinishingHint")}</p>
+        <MouthWarnings
+          warnings={finishWarnings ?? expectedMouthWarnings(creation).map((code) => ({ code, detail: "" }))}
+        />
       </div>
     );
   }
@@ -223,6 +240,7 @@ export function PointsStep({
       onName={setName}
       onBack={onBack}
       onRetry={retry}
+      onFinished={finished}
     />
   );
 }
@@ -240,6 +258,7 @@ function PointsEditor({
   onName,
   onBack,
   onRetry,
+  onFinished,
 }: {
   orgId: string;
   creation: Creation;
@@ -253,6 +272,8 @@ function PointsEditor({
   onName: (name: string) => void;
   onBack: () => void;
   onRetry: () => void;
+  /** The finish was accepted: the avatar is being built. */
+  onFinished: (result: FinishResult) => void;
 }) {
   const { t } = useTranslation();
   const base = `/orgs/${orgId}/creations/${creation.id}`;
@@ -355,7 +376,10 @@ function PointsEditor({
       },
       (result) => result.creation
     );
-    if (outcome.ok) return;
+    if (outcome.ok) {
+      onFinished(outcome.result);
+      return;
+    }
     const body = outcome.error.body;
     if (outcome.error.code === "fit_invalid" && Array.isArray(body.reasons)) {
       setReasons(body.reasons as FitReason[]);
@@ -392,6 +416,9 @@ function PointsEditor({
   const working = isJobActive(creation.job);
   const blocked = reasons.length > 0;
   const texture = image?.url ?? "";
+  // Step 3 can still close parted lips or regenerate an open mouth: worth
+  // pointing back to while a round is left and AI is on.
+  const canFixMouth = Boolean(creation.ai?.enabled) && (creation.ai?.adjust_rounds_left ?? 0) > 0;
 
   return (
     <div className="space-y-5">
@@ -567,6 +594,13 @@ function PointsEditor({
         />
       )}
 
+      <MouthWarnings
+        warnings={expectedMouthWarnings(creation).map((code) => ({ code, detail: "" }))}
+        before
+        onFix={canFixMouth ? onBack : undefined}
+        disabled={busy !== null}
+      />
+
       <div className="max-w-sm">
         <label className="label" htmlFor="creation-name">
           {t("avatarName")}
@@ -625,6 +659,49 @@ function PointsEditor({
                 : t("createSaveHint")}
         </span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * What the picture will show around the mouth once built: before the
+ * press, from the photo check (with the way back to AI adjust, which can
+ * fix it), and after, from the finish answer. Information, not a refusal:
+ * the avatar is built either way.
+ */
+function MouthWarnings({
+  warnings,
+  before = false,
+  onFix,
+  disabled = false,
+}: {
+  warnings: FinishWarning[];
+  /** Said before finishing: the owner can still act on it. */
+  before?: boolean;
+  onFix?: () => void;
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation();
+  if (warnings.length === 0) return null;
+  return (
+    <div
+      className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+      // After the press it arrives while the page is being watched; before
+      // it, it is part of the page, read in order like the rest.
+      role={before ? undefined : "status"}
+    >
+      <p className="font-medium">{t(before ? "finishWarningsBeforeTitle" : "finishWarningsTitle")}</p>
+      <ul className="mt-1 list-disc space-y-1 ps-5">
+        {warnings.map((warning) => (
+          <li key={warning.code}>{t(`finishWarning_${warning.code}`, { defaultValue: warning.detail })}</li>
+        ))}
+      </ul>
+      {before && onFix && (
+        <button type="button" className="btn-secondary mt-3 min-h-11" onClick={onFix} disabled={disabled}>
+          <Icon name="sparkles" className="h-4 w-4" />
+          {t("finishWarningsFix")}
+        </button>
+      )}
     </div>
   );
 }

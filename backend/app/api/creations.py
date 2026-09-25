@@ -45,6 +45,7 @@ from app.schemas.creation import (
     AdjustRoundOut,
     AiOut,
     AnchorsOut,
+    AutoAdjustOut,
     BackgroundOffer,
     BackgroundRequest,
     ChooseRequest,
@@ -55,6 +56,7 @@ from app.schemas.creation import (
     DetectRequest,
     FinishOut,
     FinishRequest,
+    FinishWarning,
     GenerateCreationRequest,
     JobOut,
     PreviewRigOut,
@@ -238,14 +240,29 @@ def _ai_out(creation: Creation, org: Organization | None, recommendation: dict |
         # drops the cut-outs); the before shown beside the results is then
         # the image it was cut from.
         last = {**last, "source": svc.round_source(creation.steps, last)}
+    enabled = bool(org.third_party_ai_enabled) if org is not None else True
     return AiOut(
-        enabled=bool(org.third_party_ai_enabled) if org is not None else True,
+        enabled=enabled,
         modes=modes,
         suggested=suggested,
         adjust_rounds_left=max(0, ROUNDS_PER_CREATION - usage["adjust_rounds"]),
         ai_detections_left=max(0, svc.AI_DETECTIONS_PER_CREATION - usage["detections"]),
         last_round=AdjustRoundOut(**last) if last and last["source"] else None,
+        auto_adjust=_auto_adjust(creation) if enabled else None,
     )
+
+
+def _auto_adjust(creation: Creation) -> AutoAdjustOut | None:
+    """services.creations.auto_adjust_of, while nothing else runs and the
+    server can make it."""
+    from app.services import imagegen
+
+    if (creation.job or {}).get("state") in ACTIVE_STATES or creation.status != CreationStatus.draft:
+        return None
+    offer = svc.auto_adjust_of(creation)
+    if offer is None or not imagegen.configured():
+        return None
+    return AutoAdjustOut(**offer)
 
 
 async def _out(db: DB, creation: Creation) -> CreationOut:
@@ -832,6 +849,18 @@ async def _start_adjust(
             f"{body.mode} is not offered for this kind of face",
             code="adjust_not_for_face_type",
         )
+    auto_frame: str | None = None
+    if body.auto:
+        # The wizard acting on its own: only the offer as it stands now
+        # (a stale tab, a second tab, a result that still shows teeth: none
+        # of them starts another paid round).
+        offer = svc.auto_adjust_of(creation)
+        if offer is None or offer["mode"] != body.mode:
+            raise Conflict409(
+                "Nothing here is fixed automatically; choose the fix yourself",
+                code="auto_adjust_not_applicable",
+            )
+        auto_frame = svc.frame_key(creation.steps, svc.current_step(creation.steps))
     if body.mode == photo_adjust.STYLISE and body.style is None:
         raise Validation422("Choose a style", code="style_required")
     agreed = await consent.require(
@@ -851,6 +880,10 @@ async def _start_adjust(
     # Refused now rather than failing in the job: nothing is spent.
     await check_image_limit(db, creation.org_id)
     usage["adjust_rounds"] += 1
+    if auto_frame is not None:
+        # Taken with the job, atomically: the offer is spent for this photo
+        # whatever the round brings.
+        usage["auto_adjusted"] = [*(usage.get("auto_adjusted") or []), auto_frame]
     params = {
         "mode": body.mode,
         "style": body.style,
@@ -892,6 +925,11 @@ async def adjust_photo(
     (409 budget_spent); metered against the monthly image limit (429).
     `ai.last_round` reports every candidate, including refusals and failed
     checks with their reasons.
+
+    `auto: true` is the wizard starting the touch-up `ai.auto_adjust`
+    offers (a person whose parted lips show their teeth) without a press,
+    on the member's own consent: 409 auto_adjust_not_applicable unless that
+    offer stands for the current image, and then never again for it.
     """
     creation = await _get(db, ctx.org.id, creation_id)
     return await _start_adjust(db, creation, body, ctx.org, ctx.membership.user_id)
@@ -920,10 +958,19 @@ async def preview_rig(
     )
 
 
+async def _finish_out(db: DB, creation: Creation, avatar_id: str) -> FinishOut:
+    return FinishOut(
+        avatar_id=avatar_id,
+        creation=await _out(db, creation),
+        # About the picture being finished, so the same on a repeated press.
+        warnings=[FinishWarning(**w) for w in svc.mouth_warnings(creation)],
+    )
+
+
 async def _idempotent_finish(db: DB, creation: Creation) -> FinishOut | None:
     ended = creation.status in (CreationStatus.finishing, CreationStatus.finished)
     if ended and creation.avatar_id:
-        return FinishOut(avatar_id=creation.avatar_id, creation=await _out(db, creation))
+        return await _finish_out(db, creation, creation.avatar_id)
     return None
 
 
@@ -1016,7 +1063,7 @@ async def _start_finish(
             return repeated
         raise
     creation = await _get(db, creation.org_id, creation.id)
-    return FinishOut(avatar_id=avatar.id, creation=await _out(db, creation))
+    return await _finish_out(db, creation, avatar.id)
 
 
 @router.post("/{creation_id}/finish", response_model=FinishOut, status_code=202)
@@ -1037,6 +1084,14 @@ async def finish_creation(
     photo on any line ("depiction"), or a face generated from words
     ("generated_face"). The avatar records `ai_edited` when the chosen
     image came from AI adjust or generation.
+
+    A person's avatar starts with the photographic mouth, and, when the
+    organization allows third-party AI and this member has agreed to send
+    photos to Google, with their own teeth made by AI from the chosen
+    picture before it is published (services.creations._own_teeth; the
+    avatar's `mouth.teeth` says which, or why not). `warnings` names what
+    the picture will still show around the mouth (mouth_open,
+    teeth_showing): information, not a refusal.
     """
     creation = await _get(db, ctx.org.id, creation_id)
     return await _start_finish(db, creation, body, ctx.org, ctx.membership.user_id)

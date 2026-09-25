@@ -8,6 +8,8 @@ import {
   ADJUST_STYLES,
   adjustModes,
   aiEditOf,
+  autoAdjustKey,
+  autoAdjustToStart,
   currentStep,
   aiResultInUse,
   candidateReasonText,
@@ -192,6 +194,68 @@ export function AdjustStep({
     if (outcome.ok) setOpen(false);
   };
 
+  // Parted lips over the teeth: the server offers a touch-up that closes
+  // them (ai.auto_adjust), and it starts here without a press when the
+  // member has already agreed to send photos to Google. Never asked for on
+  // their behalf, once per image; the result waits beside the photo for the
+  // owner to choose, like any round.
+  const autoStarted = useRef(new Set<string>());
+  const [autoRan, setAutoRan] = useState(false);
+  useEffect(() => {
+    const offer = autoAdjustToStart(creation, consent.aiConsentId, autoStarted.current);
+    const consentId = consent.aiConsentId;
+    if (!offer || !consentId || busy !== null) return;
+    autoStarted.current.add(autoAdjustKey(creation, offer));
+    touched.current = true;
+    setChoice(offer.mode);
+    // The options would offer to start what is already running: the round's
+    // progress, then its versions beside the photo, take their place.
+    setOpen(false);
+    setAutoRan(true);
+    void run("adjust", async () => {
+      try {
+        return await api.post<Creation>(`${base}/adjust`, {
+          mode: offer.mode,
+          consent_id: consentId,
+          count: 2,
+          auto: true,
+        });
+      } catch (err) {
+        // The offer went (another tab took it, the image changed): nothing
+        // to report, the step is as it was.
+        if (err instanceof ApiError && err.code === "auto_adjust_not_applicable") {
+          setAutoRan(false);
+          return undefined;
+        }
+        if (err instanceof ApiError && consentProblem(err.code, err.body)?.kind === "required") {
+          consent.forgetAi();
+        }
+        throw err;
+      }
+    }).then((outcome) => {
+      // Refused (the monthly limit, AI switched off meanwhile): the wizard
+      // shows why, and the step goes back to offering the fix by hand.
+      if (!outcome.ok) {
+        setAutoRan(false);
+        setOpen(true);
+      }
+    });
+    // `creation` changes identity on every poll; the offer and the job are
+    // what decide.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creation.ai?.auto_adjust?.image, creation.job?.state, creation.status, consent.aiConsentId, busy]);
+
+  // Why a round is on screen that nobody pressed for: while it runs, and
+  // once its versions wait beside the photo. A failed round speaks for
+  // itself (JobProgress).
+  const autoNote = !autoRan
+    ? null
+    : adjustJob && isJobActive(adjustJob)
+      ? "adjustAutoStarted"
+      : hasRound && !failure
+        ? "adjustAutoReady"
+        : null;
+
   // "Use this": taken, and on to the points, unless it is being cut out
   // (the background was removed), which the step waits for.
   const use = async (id: StepId) => {
@@ -310,6 +374,16 @@ export function AdjustStep({
           />
         </div>
       </div>
+
+      {autoNote && (
+        <p className="flex items-start gap-2 rounded-xl bg-brand-500/10 p-3 text-sm text-gray-700 dark:text-gray-200">
+          <Icon name="sparkles" className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+          {/* Its progress is announced by the wizard's live region; this
+              says why it started without a press, and that the owner still
+              chooses. */}
+          <span>{t(autoNote)}</span>
+        </p>
+      )}
 
       {adjustJob && (
         <JobProgress job={adjustJob} onRetry={onRetry} retrying={busy === "retry"}>
