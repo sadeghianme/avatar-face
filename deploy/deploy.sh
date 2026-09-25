@@ -35,8 +35,11 @@ echo "==> syncing $LOCAL_DIR -> $REMOTE:$REMOTE_DIR"
 # server, so --delete would otherwise remove the one copy of the secret.
 # Local databases and the local image store are development data: the
 # server's live copies are under /data, and these must never travel there.
+# .claude is local tooling, including whole worktrees of this repository
+# that builds run in: copies of the tree that have no business on the server.
 rsync -az --delete \
   --exclude '.git' \
+  --exclude '.claude' \
   --exclude '.env' \
   --exclude 'node_modules' \
   --exclude '.venv' \
