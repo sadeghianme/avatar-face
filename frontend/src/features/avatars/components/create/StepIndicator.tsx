@@ -8,12 +8,15 @@ const LABELS: Record<WizardStep, string> = {
   background: "createStep_background",
   adjust: "createStep_adjust",
   points: "createStep_points",
+  prepare: "createStep_prepare",
 };
 
 /**
- * 1 Upload · 2 Background · 3 AI adjust · 4 Points (WIZARD_STEPS). Steps
- * already passed are buttons back to them; the ones ahead are not, since
- * each step's Continue is what saves it and a jump forward would skip that.
+ * 1 Upload · 2 Background · 3 AI adjust · 4 Points · 5 Prepare
+ * (WIZARD_STEPS). Steps already passed are buttons back to them; the ones
+ * ahead are not, since each step's Continue is what saves it and a jump
+ * forward would skip that. Step 5 is reached only by finishing, and while
+ * the avatar is built nothing behind it may be revisited (`locked`).
  */
 export function StepIndicator({
   step,
@@ -29,7 +32,9 @@ export function StepIndicator({
   const at = WIZARD_STEPS.indexOf(step);
   return (
     <nav aria-label={t("createStepsLabel")} className="mb-6">
-      <ol className="flex items-center gap-1.5 sm:gap-3">
+      {/* Five steps and the current one's name share a phone's width: the
+          gaps and connectors are short there, and gone on the narrowest. */}
+      <ol className="flex items-center gap-1 sm:gap-3">
         {WIZARD_STEPS.map((id, i) => {
           const done = i < at;
           const current = i === at;
@@ -48,7 +53,11 @@ export function StepIndicator({
             </span>
           );
           const text = (
-            <span className={`text-[13px] sm:text-sm ${current ? "font-semibold" : "text-gray-500 dark:text-gray-400"}`}>
+            <span
+              className={`whitespace-nowrap text-[13px] sm:text-sm ${
+                current ? "font-semibold" : "text-gray-500 dark:text-gray-400"
+              }`}
+            >
               <span className="sr-only">{t("createStepN", { n: i + 1, total: WIZARD_STEPS.length })} </span>
               {/* On a phone only the current step is named; the others are
                   their numbers, and screen readers still hear every name. */}
@@ -57,7 +66,7 @@ export function StepIndicator({
             </span>
           );
           return (
-            <li key={id} className="flex min-w-0 items-center gap-1.5 sm:gap-3" aria-current={current ? "step" : undefined}>
+            <li key={id} className="flex min-w-0 items-center gap-1 sm:gap-3" aria-current={current ? "step" : undefined}>
               {done && onGo && !locked ? (
                 <button
                   type="button"
@@ -75,7 +84,10 @@ export function StepIndicator({
                 </span>
               )}
               {i < WIZARD_STEPS.length - 1 && (
-                <span className="h-px w-3 shrink-0 bg-gray-300 sm:w-8 dark:bg-white/[0.15]" aria-hidden="true" />
+                <span
+                  className="hidden h-px w-2 shrink-0 bg-gray-300 min-[360px]:block sm:w-8 dark:bg-white/[0.15]"
+                  aria-hidden="true"
+                />
               )}
             </li>
           );

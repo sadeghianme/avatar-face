@@ -4,9 +4,10 @@ import type { Avatar, TeethRecord } from "@/lib/types";
  * Whose teeth the photographic mouth shows, for the Mouth panel.
  *
  * A new person's avatar gets its own teeth made by AI when it is finished
- * (an "ee" photo of the person, from their picture), or generic teeth with
- * a note saying why not; an owner can also add their own photo. The server
- * says which in `mouth.teeth` (services.mouth_photo).
+ * (the "ee" of the mouth shapes step 5 makes from their picture, or an "ee"
+ * photo alone where the server cannot make the shapes), or generic teeth
+ * with a note saying why not; an owner can also add their own photo. The
+ * server says which in `mouth.teeth` (services.mouth_photo, mouth_kit).
  */
 export type TeethView =
   | { kind: "ai" }
@@ -15,7 +16,8 @@ export type TeethView =
 
 /** Why a new avatar has generic teeth, by the note's code. Each has its
  * words (`mouthTeethNote_<code>`); a code not here shows the server's own
- * sentence. */
+ * sentence. The kit's "ee" not usable as teeth is its own reason, or
+ * `teeth_photo_rejected` (it failed its checks) or `mouth_teeth_unclear`. */
 export const TEETH_NOTE_CODES = [
   "no_ai_consent",
   "third_party_ai_disabled",
@@ -24,7 +26,9 @@ export const TEETH_NOTE_CODES = [
   "safety_refused",
   "no_image",
   "provider_error",
+  "timeout",
   "mouth_teeth_unclear",
+  "teeth_photo_rejected",
   "reference_no_face",
   "reference_mouth_closed",
   "reference_face_small",
@@ -58,8 +62,9 @@ export const FINISH_WARNINGS = ["mouth_open", "teeth_showing"] as const;
 export const TEETH_KINDS = ["ai", "upload", "generic"] as const;
 
 /** Refusals about the mouth photo itself, which read differently when it
- * is the owner's upload ("your photo") or the AI's ("the AI's photo"):
- * `mouthErr_<action>_<code>`. */
+ * is the owner's upload ("your photo") or the AI's ("the AI's photo", the
+ * teeth alone the Mouth panel's job makes where the server cannot make the
+ * shapes): `mouthErr_<action>_<code>`. */
 export const MOUTH_PHOTO_CODES = [
   "mouth_teeth_unclear",
   "reference_no_face",
@@ -67,10 +72,11 @@ export const MOUTH_PHOTO_CODES = [
   "reference_face_small",
 ] as const;
 
-/** Every other refusal of the teeth routes (POST …/mouth-photo and
- * …/mouth-photo/generate) with words of its own: `mouthErr_<code>`. A code
- * not here shows the server's sentence. consent_required never reaches the
- * panel: useConsent.withAi asks again instead. */
+/** Every other refusal of the mouth routes (POST …/mouth-photo, POST
+ * …/mouth-kit) and failure of the teeth alone, with words of its own:
+ * `mouthErr_<code>`. A code not here shows the server's sentence.
+ * consent_required never reaches the panel: useConsent.withAi asks again
+ * instead. */
 export const MOUTH_ERROR_CODES = [
   "third_party_ai_disabled",
   "imagegen_unavailable",
@@ -81,18 +87,22 @@ export const MOUTH_ERROR_CODES = [
   "no_face_for_teeth",
   "face_turned",
   "landmarks_unavailable",
-  "teeth_in_progress",
   "not_a_photo",
   "source_gone",
+  "avatar_not_found",
   "mouth_not_for_face_type",
   "unsupported_image_type",
   "image_too_large",
   "consent_outdated",
+  "too_many_jobs",
+  "job_queue_full",
 ] as const;
 
 const PHOTO_CODES: ReadonlySet<string> = new Set(MOUTH_PHOTO_CODES);
 const ERROR_CODES: ReadonlySet<string> = new Set(MOUTH_ERROR_CODES);
 
+/** Who made the mouth photo a refusal is about: the owner's upload, or the
+ * AI (the teeth alone, in the Mouth panel's job). */
 export type MouthAction = "upload" | "generate";
 
 /** The translation key for a refused mouth photo, or null to show the
@@ -105,19 +115,23 @@ export function mouthErrorKey(code: string, action: MouthAction): string | null 
 /**
  * The disclosure an avatar carries, as translation keys: what the AI did to
  * the picture, then "AI teeth" when the teeth photo was made by AI as well
- * (`ai_edited.teeth`; on its own the mode is "teeth"). Visitors are told
- * the same, from the published snapshot.
+ * (`ai_edited.teeth`), then "AI mouth shapes" when some of the mouth shapes
+ * were (`ai_edited.mouth_shapes`). Each is said once: on its own, it is
+ * the mode. Visitors are told the same, from the published snapshot.
  */
 export function aiEditedLabels(edited: Avatar["ai_edited"]): string[] {
   if (!edited) return [];
   const keys = [`aiEdited_${edited.mode}`];
   if (edited.teeth && edited.mode !== "teeth") keys.push("aiEdited_teeth");
+  if (edited.mouth_shapes && edited.mode !== "mouth_shapes") keys.push("aiEdited_mouth_shapes");
   return keys;
 }
 
 /** The models behind the disclosure, each once, for its tooltip. */
 export function aiEditedModels(edited: Avatar["ai_edited"]): string[] {
   if (!edited) return [];
-  const models = [edited.model, edited.teeth?.model].filter((m): m is string => Boolean(m));
+  const models = [edited.model, edited.teeth?.model, edited.mouth_shapes?.model].filter(
+    (m): m is string => Boolean(m)
+  );
   return [...new Set(models)];
 }

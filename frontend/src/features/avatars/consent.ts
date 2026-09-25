@@ -2,8 +2,9 @@
  * Consents, as the dashboard asks for them.
  *
  * Three statements (services.consent on the server): `third_party_ai`,
- * before a photo is sent to Google to be edited or to have its points
- * found; `depiction`, the uploader's statement before a person's face is
+ * before a photo is sent to Google to be edited, to have its points found,
+ * or to have a person's teeth and mouth shapes made from it (step 5, the
+ * Mouth panel); `depiction`, the uploader's statement before a person's face is
  * built; and `generated_face`, in its place for a face the image model made
  * from words. The last two are about one face: each is recorded for one
  * creation, which the server says needs it (`Creation.statement`).

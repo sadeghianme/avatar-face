@@ -21,7 +21,13 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MouthPanel } from "@/features/avatars/components/MouthPanel";
 import { TuningPanel } from "@/features/avatars/components/TuningPanel";
 import { useAvatarMouth } from "@/features/avatars/hooks/useAvatarMouth";
-import { draftMouthConfig, savedMouthKey } from "@/features/avatars/mouth-config";
+import {
+  draftMouthConfig,
+  previewMotion,
+  savedMouthKey,
+  urlIdentity,
+  type MotionChoice,
+} from "@/features/avatars/mouth-config";
 import { aiEditedLabels, aiEditedModels } from "@/features/avatars/teeth";
 import { api } from "@/lib/api";
 import { useOrg } from "@/providers/org";
@@ -47,6 +53,9 @@ export function AvatarDetailPage() {
   // The mouth being previewed: the panel's live state while the owner is
   // choosing or dragging, otherwise whatever the draft has saved.
   const [mouthPreview, setMouthPreview] = useState<AvatarMouthConfig | null | undefined>(undefined);
+  // Which mouth shapes the preview plays: the avatar's own, or the standard
+  // ones to compare them with. The preview only; nothing is saved.
+  const [motion, setMotion] = useState<MotionChoice>("own");
 
   // Native fullscreen on the preview card. The `fullscreen` state exists so
   // the toggle icon flips even when the user leaves with Esc, which never
@@ -104,9 +113,12 @@ export function AvatarDetailPage() {
   const savedMouth = draftMouthConfig(avatar);
   const savedKey = savedMouthKey(avatar);
   useEffect(() => setMouthPreview(undefined), [savedKey]);
+  // New shapes (a kit made, rebased or discarded) are heard as they are.
+  const motionIdentity = urlIdentity(avatar?.mouth?.motion_url);
+  useEffect(() => setMotion("own"), [motionIdentity]);
   useAvatarMouth(
     avatar?.kind === "model3d" ? null : (engine as Parameters<typeof useAvatarMouth>[0]),
-    mouthPreview === undefined ? savedMouth : mouthPreview
+    previewMotion(mouthPreview === undefined ? savedMouth : mouthPreview, motion)
   );
 
   if (isError) {
@@ -161,7 +173,10 @@ export function AvatarDetailPage() {
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        {/* Both rows wrap: on a phone the title's disclosure and the row of
+            tools are each wider than the screen, and one that cannot wrap
+            widens the whole page under it. */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
           {/* Back before the title, not buried in the sidebar: a detail page
               reached from a list needs a way out of it that is where the eye
               already is. */}
@@ -176,8 +191,8 @@ export function AvatarDetailPage() {
           <h1 className="text-2xl font-semibold">{avatar.name}</h1>
           <StatusBadge status={avatar.status} />
           {/* The same disclosure visitors get with the published avatar:
-              what the AI did to the picture, and "AI teeth" when it made the
-              teeth photo too. */}
+              what the AI did to the picture, "AI teeth" when it made the
+              teeth photo too, "AI mouth shapes" when it made some of them. */}
           {avatar.ai_edited && (
             <span
               className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
@@ -192,7 +207,7 @@ export function AvatarDetailPage() {
             </span>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {avatar.kind === "photo" && (
           <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-line">
             <button
@@ -305,7 +320,9 @@ export function AvatarDetailPage() {
 
       {/* Keyed by avatar: a notice read for one avatar is not shown on the
           next one this page opens. */}
-      {avatar.status === "ready" && <FinishNotice key={avatar.id} avatar={avatar} />}
+      {avatar.status === "ready" && (
+        <FinishNotice key={avatar.id} avatar={avatar} aiEnabled={current.third_party_ai_enabled ?? true} />
+      )}
 
       {(avatar.status === "pending" || avatar.status === "processing") && (
         <div className="mb-6">
@@ -320,7 +337,9 @@ export function AvatarDetailPage() {
       )}
 
       {avatar.status === "ready" && avatar.rig_url && avatar.thumbnail_url && (
-        <div className="grid gap-6 lg:grid-cols-2">
+        // One column on a phone, sized to the screen (minmax(0, 1fr)): an
+        // implicit column would grow to the embed snippet's longest line.
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div
             ref={previewBoxRef}
             className={`card relative ${fullscreen ? "preview-fullscreen" : ""}`}
@@ -375,6 +394,8 @@ export function AvatarDetailPage() {
                 avatar={avatar}
                 orgId={current.id}
                 onPreview={(renderer, profile) => setMouthPreview(draftMouthConfig(avatar, renderer, profile))}
+                motion={motion}
+                onMotion={setMotion}
               />
             )}
             <SharePanel avatar={avatar} orgId={current.id} />

@@ -131,8 +131,17 @@ export interface CreationAnchors {
   validation: AnchorValidation;
 }
 
-export type JobStep = "ingest" | "generate" | "adjust" | "background" | "detect" | "finish";
+/** A job's step: a creation's, or "mouth_kit", an avatar's mouth made from
+ * its photo in the Mouth panel (the same JobOut shape, schemas/job.py). */
+export type JobStep = "ingest" | "generate" | "adjust" | "background" | "detect" | "finish" | "mouth_kit";
 export type JobState = "queued" | "running" | "done" | "failed" | "interrupted";
+
+/** How far a counted stage is: "3 of 6" mouth shapes settled (made, or
+ * given up on for the standard one). */
+export interface JobCount {
+  done: number;
+  total: number;
+}
 
 export interface CreationJob {
   id: string;
@@ -140,7 +149,10 @@ export interface CreationJob {
   state: JobState;
   error: PhotoCheck | null;
   started_at: string;
-  progress: { fraction: number; label: string | null } | null;
+  /** Live while queued or running, null once the job has ended. `count`
+   * belongs to its label only (a new label clears it); absent from a
+   * server before it counted anything. */
+  progress: { fraction: number; label: string | null; count?: JobCount | null } | null;
   retryable: boolean;
 }
 
@@ -270,12 +282,14 @@ export function nameFromFile(filename: string): string {
 
 // --- Steps and jobs ----------------------------------------------------------------
 
-export type WizardStep = "frame" | "background" | "adjust" | "points";
-/** 1 Upload + frame, 2 Background, 3 AI adjust, 4 Points: the owner's
- * order (docs/avatar-lines.md). The model is sent a cut-out on plain grey,
- * never the removed background, and a result the owner takes is cut out
- * again when they chose Remove, so the order costs nothing in quality. */
-export const WIZARD_STEPS: readonly WizardStep[] = ["frame", "background", "adjust", "points"];
+export type WizardStep = "frame" | "background" | "adjust" | "points" | "prepare";
+/** 1 Upload + frame, 2 Background, 3 AI adjust, 4 Points, 5 Preparing
+ * your avatar: the owner's order (docs/avatar-lines.md). The model is sent
+ * a cut-out on plain grey, never the removed background, and a result the
+ * owner takes is cut out again when they chose Remove, so the order costs
+ * nothing in quality. Step 5 is the finish itself: it is where a creation
+ * being built is, never a step anyone opens or saves. */
+export const WIZARD_STEPS: readonly WizardStep[] = ["frame", "background", "adjust", "points", "prepare"];
 
 const ACTIVE: ReadonlySet<JobState> = new Set(["queued", "running"]);
 
@@ -313,9 +327,12 @@ export function autoAdjustToStart(
 }
 
 /** What building an avatar goes through, in order: its own words for each
- * (`createFinishStage_<stage>`), so the owner sees where the seconds go,
- * the teeth above all (an image-model call, the longest of them). */
-export const FINISH_STAGES = ["copy", "rig", "layers", "teeth", "publish"] as const;
+ * (`createFinishStage_<stage>`), so the owner sees where the seconds go. A
+ * person's mouth takes the longest of them: "shapes" is their teeth and
+ * six mouth shapes, made by AI from the picture (counted, "3 of 6"), "fit"
+ * the mouth fitted to them from those shapes, and "teeth" the teeth alone,
+ * where the server cannot make the shapes (services.creations._own_mouth). */
+export const FINISH_STAGES = ["copy", "rig", "layers", "shapes", "fit", "teeth", "publish"] as const;
 export type FinishStage = (typeof FINISH_STAGES)[number];
 
 // The labels services.creations._build_avatar reports its progress with
@@ -325,6 +342,8 @@ const FINISH_STAGE_LABELS: Readonly<Record<string, FinishStage>> = {
   "copying images": "copy",
   "building the rig": "rig",
   "building layers": "layers",
+  "making the mouth shapes": "shapes",
+  "fitting the mouth": "fit",
   "making the teeth": "teeth",
   publishing: "publish",
 };
@@ -335,6 +354,95 @@ export function finishStage(job: CreationJob | null | undefined): FinishStage | 
   if (!job || job.step !== "finish" || job.state !== "running") return null;
   const label = job.progress?.label;
   return label ? FINISH_STAGE_LABELS[label] ?? null : null;
+}
+
+/** How far a job's counted stage is ("3 of 6"), or null: only while it
+ * runs, and only a count that adds up (the server's, but a shown "7 of 6"
+ * would be worse than none). */
+export function stageCount(job: CreationJob | null | undefined): JobCount | null {
+  const count = job?.progress?.count;
+  if (!count || job?.state !== "running") return null;
+  const { done, total } = count;
+  const whole = Number.isInteger(done) && Number.isInteger(total);
+  return whole && total > 0 && done >= 0 && done <= total ? { done, total } : null;
+}
+
+/**
+ * Will finishing this creation make the person's own mouth, as far as this
+ * page can tell? A person (the photographic mouth), the organization's AI
+ * switch on, and the member's own remembered consent (a string; unknown
+ * while it loads): what the server checks too (services.creations
+ * ._ai_allowed), less what only it knows (its image model, the monthly
+ * image limit). Step 5 lists the mouth ahead of time on this; what the
+ * server then reports always wins (finishRows).
+ */
+export function mouthExpected(creation: Creation, consentId: string | null | undefined): boolean {
+  return creation.face_type === "human" && Boolean(creation.ai?.enabled) && typeof consentId === "string";
+}
+
+/** The rows step 5 lists, in order (`createFinishPhase_<phase>`): copying,
+ * rigging and layering are one ("build"); a person's mouth is "shapes"
+ * (their teeth and mouth shapes, counted) then "fit", or "teeth" alone
+ * where the server cannot make the shapes. */
+export const FINISH_PHASES = ["build", "shapes", "fit", "teeth", "publish"] as const;
+export type FinishPhase = (typeof FINISH_PHASES)[number];
+
+const PHASE_OF: Readonly<Record<FinishStage, FinishPhase>> = {
+  copy: "build",
+  rig: "build",
+  layers: "build",
+  shapes: "shapes",
+  fit: "fit",
+  teeth: "teeth",
+  publish: "publish",
+};
+const MOUTH_PHASES: readonly FinishPhase[] = ["shapes", "fit", "teeth"];
+
+export interface FinishRow {
+  phase: FinishPhase;
+  state: "done" | "current" | "pending";
+  /** The current "shapes" row's count ("3 of 6"); null on every other. */
+  count: JobCount | null;
+}
+
+/**
+ * Step 5's checklist for a finish: which rows it lists, and where the
+ * build is. Empty for anything but a finish that is queued or running.
+ *
+ * The mouth rows are listed ahead of time when the finish will make the
+ * person's mouth as far as the page knows (`expected`, mouthExpected).
+ * What the server reports wins: a mouth stage it is at, or was seen at
+ * (`seen`, the stages this page has watched go by), is listed whether
+ * expected or not, and a teeth-only mouth replaces the shapes and their
+ * fitting. Nothing is ticked that nobody saw happen: once the finish is
+ * publishing, the mouth rows stay (done) only if a mouth stage was seen,
+ * and are dropped otherwise, since the server may have had no AI to make
+ * them with (the avatar's page then says why). A stage this page does not
+ * know, or a queue, leaves every row pending: no stage, never a wrong one.
+ */
+export function finishRows(
+  job: CreationJob | null | undefined,
+  expected: boolean,
+  seen: ReadonlySet<FinishStage> = new Set()
+): FinishRow[] {
+  if (!job || job.step !== "finish" || !isJobActive(job)) return [];
+  const stage = finishStage(job);
+  const current = stage ? PHASE_OF[stage] : null;
+  const phases = new Set<FinishPhase>([...seen].map((s) => PHASE_OF[s]));
+  if (current) phases.add(current);
+  const mouthSeen = MOUTH_PHASES.some((phase) => phases.has(phase));
+  const beforeMouth = current === null || current === "build";
+  const order: FinishPhase[] = ["build"];
+  if (mouthSeen || (expected && beforeMouth)) {
+    order.push(...(phases.has("teeth") ? (["teeth"] as const) : (["shapes", "fit"] as const)));
+  }
+  order.push("publish");
+  const at = current ? order.indexOf(current) : -1;
+  return order.map((phase, i) => ({
+    phase,
+    state: at === -1 || i > at ? "pending" : i < at ? "done" : "current",
+    count: phase === "shapes" && i === at ? stageCount(job) : null,
+  }));
 }
 
 /**
@@ -359,6 +467,7 @@ export function expectedMouthWarnings(creation: Creation): string[] {
  * wizard: the finish answer's warnings. The wizard navigates by itself once
  * the avatar is built, so the answer would die with the step; it is kept
  * for this tab under the avatar's id (sessionStorage), until dismissed.
+ * Step 5 reads it back too, so a tab reloaded mid-build still says them.
  */
 export interface FinishNotice {
   warnings: FinishWarning[];
@@ -370,7 +479,8 @@ export const finishNoticeKey = (avatarId: string) => `${FINISH_NOTICE_PREFIX}${a
 
 /** Keep the finish answer's warnings for the avatar's page. Kept even when
  * there are none: arriving from the wizard is itself worth knowing (the
- * page also says why the teeth are standard, if they are). */
+ * page also says what step 5 gave a person's mouth: their own shapes and
+ * teeth, or standard ones and why). */
 export function rememberFinishNotice(store: DraftStore | null, avatarId: string, warnings: FinishWarning[]): void {
   try {
     store?.setItem(finishNoticeKey(avatarId), JSON.stringify({ warnings }));
@@ -498,12 +608,18 @@ export function pastFirstStep(creation: Creation): boolean {
   return stepById(creation, "original") !== null && creation.face_type !== null;
 }
 
+/** The avatar is being built from this creation, or has been: step 5. */
+function building(creation: Creation): boolean {
+  return creation.status === "finishing" || creation.status === "finished";
+}
+
 /**
  * The step a creation opens on when the URL does not say (resuming from the
- * avatar list). Wherever work is running, or was last done.
+ * avatar list). Wherever work is running, or was last done. A finish that
+ * failed is back on the points, where it is retried from what is on screen.
  */
 export function inferStep(creation: Creation): WizardStep {
-  if (creation.status === "finishing" || creation.status === "finished") return "points";
+  if (building(creation)) return "prepare";
   if (!pastFirstStep(creation)) return "frame";
   const job = creation.job;
   if (job && (isJobActive(job) || jobFailure(job))) {
@@ -521,11 +637,13 @@ export function inferStep(creation: Creation): WizardStep {
 }
 
 /** The step to show: the one asked for (in the URL) when the creation can
- * be there, else the inferred one. A finishing creation is always on points. */
+ * be there, else the inferred one. A creation being built is always on
+ * step 5, whatever the URL says, and only such a creation is: asking for
+ * "prepare" is never a way to skip the points. */
 export function resolveStep(creation: Creation, requested: string | null): WizardStep {
-  if (creation.status === "finishing" || creation.status === "finished") return "points";
+  if (building(creation)) return "prepare";
   const asked = WIZARD_STEPS.find((step) => step === requested);
-  if (!asked) return inferStep(creation);
+  if (!asked || asked === "prepare") return inferStep(creation);
   if (asked !== "frame" && !pastFirstStep(creation)) return "frame";
   return asked;
 }
@@ -811,15 +929,22 @@ export function clampRoll(degrees: number): number {
 const POLL_FIRST_MS = 600;
 const POLL_FACTOR = 1.5;
 const POLL_MAX_MS = 5000;
+/** A finish backs off no further than this: step 5 counts the mouth
+ * shapes as they are made ("3 of 6", one every few seconds), and a count
+ * that jumps by three at a time does not look live. A minute of it is
+ * about thirty requests. */
+export const FINISH_POLL_MAX_MS = 2000;
 
 /**
  * Delay before the `attempt`-th poll (0-based) of one job. Ingest and
  * detection are about a second, so the first answers come quickly; a
  * background removal or a queue wait can take a minute, and a tab left
- * open on it should not ask twice a second the whole time.
+ * open on it should not ask twice a second the whole time. A finish
+ * (`finishing`) is watched more closely (FINISH_POLL_MAX_MS).
  */
-export function pollDelay(attempt: number): number {
-  return Math.min(POLL_MAX_MS, Math.round(POLL_FIRST_MS * POLL_FACTOR ** Math.max(0, attempt)));
+export function pollDelay(attempt: number, finishing = false): number {
+  const ceiling = finishing ? FINISH_POLL_MAX_MS : POLL_MAX_MS;
+  return Math.min(ceiling, Math.round(POLL_FIRST_MS * POLL_FACTOR ** Math.max(0, attempt)));
 }
 
 // --- Stable image URLs --------------------------------------------------------------

@@ -58,10 +58,23 @@ describe("teeth", () => {
   it("words a refused teeth photo by who made it", () => {
     assert.equal(mouthErrorKey("mouth_teeth_unclear", "upload"), "mouthErr_upload_mouth_teeth_unclear");
     assert.equal(mouthErrorKey("mouth_teeth_unclear", "generate"), "mouthErr_generate_mouth_teeth_unclear");
-    assert.equal(mouthErrorKey("teeth_in_progress", "generate"), "mouthErr_teeth_in_progress");
     assert.equal(mouthErrorKey("image_limit_reached", "generate"), "mouthErr_image_limit_reached");
     // Unknown: the server's sentence is shown.
     assert.equal(mouthErrorKey("something_new", "upload"), null);
+  });
+  it("words every refusal of the mouth kit's request", () => {
+    for (const code of [
+      "third_party_ai_disabled", "imagegen_unavailable", "image_limit_reached", "source_gone", "not_a_photo",
+      "mouth_not_for_face_type", "avatar_not_found", "too_many_jobs", "job_queue_full", "consent_outdated",
+    ]) {
+      assert.equal(mouthErrorKey(code, "generate"), `mouthErr_${code}`);
+    }
+    // The synchronous teeth route is gone, and its "already making them".
+    assert.equal(mouthErrorKey("teeth_in_progress", "generate"), null);
+  });
+  it("words the new reasons a person's teeth are standard", () => {
+    assert.equal(teethNoteKey("teeth_photo_rejected"), "mouthTeethNote_teeth_photo_rejected");
+    assert.equal(teethNoteKey("timeout"), "mouthTeethNote_timeout");
   });
 
   it("discloses AI teeth beside what the AI did to the picture", () => {
@@ -75,10 +88,37 @@ describe("teeth", () => {
     assert.deepEqual(aiEditedLabels({ mode: "teeth", model: "m", teeth: { model: "m" } }), ["aiEdited_teeth"]);
   });
 
+  it("discloses AI mouth shapes beside the rest, once", () => {
+    const shapes = { model: "img-1", generated: 5 };
+    assert.deepEqual(
+      aiEditedLabels({ mode: "touchup", model: "m", teeth: { model: "m" }, mouth_shapes: shapes }),
+      ["aiEdited_touchup", "aiEdited_teeth", "aiEdited_mouth_shapes"]
+    );
+    assert.deepEqual(
+      aiEditedLabels({ mode: "teeth", model: "m", teeth: { model: "m" }, mouth_shapes: shapes }),
+      ["aiEdited_teeth", "aiEdited_mouth_shapes"]
+    );
+    // Shapes alone: the mode says it.
+    assert.deepEqual(aiEditedLabels({ mode: "mouth_shapes", model: "img-1", mouth_shapes: shapes }), [
+      "aiEdited_mouth_shapes",
+    ]);
+  });
+
   it("names each model behind the disclosure once", () => {
     assert.deepEqual(aiEditedModels({ mode: "teeth", model: "img-1", teeth: { model: "img-1" } }), ["img-1"]);
     assert.deepEqual(aiEditedModels({ mode: "regenerate", model: "img-1", teeth: { model: "img-2" } }), ["img-1", "img-2"]);
     assert.deepEqual(aiEditedModels({ mode: "touchup", model: null }), []);
+    assert.deepEqual(
+      aiEditedModels({
+        mode: "regenerate", model: "img-1", teeth: { model: "img-2" }, mouth_shapes: { model: "img-3", generated: 6 },
+      }),
+      ["img-1", "img-2", "img-3"]
+    );
+    assert.deepEqual(
+      aiEditedModels({ mode: "mouth_shapes", model: "img-2", mouth_shapes: { model: "img-2", generated: 2 } }),
+      ["img-2"]
+    );
+    assert.deepEqual(aiEditedModels({ mode: "mouth_shapes", model: null, mouth_shapes: { model: null, generated: 1 } }), []);
   });
 
   const keysOf = (lang) =>
@@ -96,6 +136,7 @@ describe("teeth", () => {
         ...MOUTH_ERROR_CODES.map((code) => mouthErrorKey(code, "generate")),
         ...MOUTH_PHOTO_CODES.flatMap((code) => [mouthErrorKey(code, "upload"), mouthErrorKey(code, "generate")]),
         "aiEdited_teeth",
+        "aiEdited_mouth_shapes",
       ];
       assert.deepEqual(needed.filter((key) => !keys.has(key)), []);
     });

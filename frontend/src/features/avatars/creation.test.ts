@@ -27,9 +27,12 @@ import {
   DRAWN_REASONS,
   errorText,
   expectedMouthWarnings,
+  FINISH_PHASES,
+  FINISH_POLL_MAX_MS,
   FINISH_STAGES,
   finishNoticeFor,
   finishNoticeKey,
+  finishRows,
   finishStage,
   forgetDraftMarks,
   forgetFinishNotice,
@@ -49,6 +52,7 @@ import {
   marksAreGuessed,
   MAX_UPLOAD_BYTES,
   movedParts,
+  mouthExpected,
   nameFromFile,
   normalizeCrop,
   pickMarks,
@@ -62,6 +66,7 @@ import {
   roundResults,
   roundSource,
   saveDraftMarks,
+  stageCount,
   statementNeeded,
   stabilizeUrls,
   TOUCHUP_REASONS,
@@ -194,6 +199,18 @@ describe("jobs", () => {
     for (let i = 1; i < delays.length; i++) assert.ok(delays[i] >= delays[i - 1]);
     assert.equal(Math.max(...delays), 5000);
     assert.equal(pollDelay(-3), 600);
+  });
+  it("watches a finish closely enough for its count to move", () => {
+    const delays = Array.from({ length: 40 }, (_, i) => pollDelay(i, true));
+    assert.equal(delays[0], 600);
+    for (let i = 1; i < delays.length; i++) assert.ok(delays[i] >= delays[i - 1]);
+    assert.equal(Math.max(...delays), FINISH_POLL_MAX_MS);
+    assert.equal(FINISH_POLL_MAX_MS, 2000);
+    // A minute of it is about thirty requests, not one a second.
+    let elapsed = 0;
+    let polls = 0;
+    while (elapsed < 60_000) elapsed += pollDelay(polls++, true);
+    assert.ok(polls <= 35, `polls: ${polls}`);
   });
 });
 
@@ -330,8 +347,8 @@ describe("which step opens", () => {
     );
     assert.equal(inferStep(creation()), "frame");
   });
-  it("follows the owner's order: upload, background, AI adjust, points", () => {
-    assert.deepEqual([...WIZARD_STEPS], ["frame", "background", "adjust", "points"]);
+  it("follows the owner's order: upload, background, AI adjust, points, preparing the avatar", () => {
+    assert.deepEqual([...WIZARD_STEPS], ["frame", "background", "adjust", "points", "prepare"]);
   });
   it("resumes on step 3 once the background is answered or AI was asked", () => {
     assert.equal(inferStep(creation({ background: "keep" })), "background");
@@ -363,7 +380,30 @@ describe("which step opens", () => {
     assert.equal(resolveStep(creation({ anchors: anchors() }), "background"), "background");
     assert.equal(resolveStep(creation(), "nonsense"), "frame");
     assert.equal(resolveStep(creation(), null), "frame");
-    assert.equal(resolveStep(creation({ status: "finishing" }), "frame"), "points");
+    assert.equal(resolveStep(creation({ status: "finishing" }), "frame"), "prepare");
+    assert.equal(resolveStep(creation({ status: "finishing" }), "points"), "prepare");
+    assert.equal(resolveStep(creation({ status: "finished" }), null), "prepare");
+  });
+  it("opens step 5 for a creation being built, a reloaded tab included", () => {
+    const building = creation({ status: "finishing", anchors: anchors(), job: job({ step: "finish", state: "running" }) });
+    assert.equal(inferStep(building), "prepare");
+    assert.equal(resolveStep(building, "prepare"), "prepare");
+    assert.equal(inferStep(creation({ status: "finished" })), "prepare");
+  });
+  it("never opens step 5 on a draft: finishing is the only way there", () => {
+    assert.equal(resolveStep(creation({ anchors: anchors() }), "prepare"), "points");
+    assert.equal(resolveStep(creation(), "prepare"), "frame");
+    assert.equal(resolveStep(creation({ face_type: null }), "prepare"), "frame");
+  });
+  it("brings a finish that failed back to the points, to be retried from there", () => {
+    const failed = creation({
+      anchors: anchors(),
+      job: job({ step: "finish", state: "failed", error: { code: "job_failed", detail: "" }, retryable: true }),
+    });
+    assert.equal(inferStep(failed), "points");
+    // The URL still says step 5 after a reload: the draft is not there.
+    assert.equal(resolveStep(failed, "prepare"), "points");
+    assert.equal(resolveStep(failed, "points"), "points");
   });
 });
 
@@ -502,6 +542,10 @@ describe("strings", () => {
         ...LINE_ORDER.flatMap((id) => LINES[id].marks.map((part) => `createGuessPart_${part}`)),
         ...["not_for_face_type", "segmentation_unavailable", "face_type_required"].map((r) => `createBgUnavailable_${r}`),
         ...FINISH_STAGES.map((stage) => `createFinishStage_${stage}`),
+        ...FINISH_PHASES.map((phase) => `createFinishPhase_${phase}`),
+        ...["shapes", "teeth"].map((phase) => `createFinishPhaseHint_${phase}`),
+        ...["done", "current", "pending"].map((state) => `createFinishPhaseState_${state}`),
+        "mouthShapesCount",
         "adjustAutoStarted",
         "adjustAutoReady",
       ];
@@ -696,12 +740,15 @@ describe("building the avatar", () => {
   const running = (label, extra = {}) =>
     job({ step: "finish", state: "running", progress: { fraction: 0.65, label }, ...extra });
 
-  it("names the stage a finish is at, the teeth among them", () => {
+  it("names the stage a finish is at, a person's mouth among them", () => {
     assert.equal(finishStage(running("copying images")), "copy");
     assert.equal(finishStage(running("building the rig")), "rig");
     assert.equal(finishStage(running("building layers")), "layers");
+    assert.equal(finishStage(running("making the mouth shapes")), "shapes");
+    assert.equal(finishStage(running("fitting the mouth")), "fit");
     assert.equal(finishStage(running("making the teeth")), "teeth");
     assert.equal(finishStage(running("publishing")), "publish");
+    assert.deepEqual([...FINISH_STAGES], ["copy", "rig", "layers", "shapes", "fit", "teeth", "publish"]);
   });
   it("names nothing it does not know, nor for another job or a finish not running", () => {
     assert.equal(finishStage(running("polishing the chrome")), null);
@@ -711,6 +758,111 @@ describe("building the avatar", () => {
     assert.equal(finishStage(running("making the teeth", { state: "done" })), null);
     assert.equal(finishStage(running("making the teeth", { step: "adjust" })), null);
     assert.equal(finishStage(null), null);
+  });
+});
+
+describe("step 5, counted", () => {
+  const counted = (done, total = 6, extra = {}) =>
+    job({
+      step: "finish",
+      state: "running",
+      progress: { fraction: 0.7, label: "making the mouth shapes", count: { done, total } },
+      ...extra,
+    });
+
+  it("reads how many of the six shapes are settled", () => {
+    assert.deepEqual(stageCount(counted(0)), { done: 0, total: 6 });
+    assert.deepEqual(stageCount(counted(3)), { done: 3, total: 6 });
+    assert.deepEqual(stageCount(counted(6)), { done: 6, total: 6 });
+  });
+  it("shows no count that does not add up, nor one for a job not running", () => {
+    assert.equal(stageCount(counted(7)), null);
+    assert.equal(stageCount(counted(-1)), null);
+    assert.equal(stageCount(counted(2, 0)), null);
+    assert.equal(stageCount(counted(1.5)), null);
+    assert.equal(stageCount(counted(3, 6, { state: "queued" })), null);
+    assert.equal(stageCount(counted(3, 6, { state: "done", progress: null })), null);
+    assert.equal(stageCount(job({ step: "finish", state: "running", progress: { fraction: 0.4, label: "building layers" } })), null);
+    assert.equal(stageCount(job({ step: "finish", state: "running", progress: { fraction: 0.4, label: "x", count: null } })), null);
+    assert.equal(stageCount(null), null);
+  });
+});
+
+describe("step 5, listed", () => {
+  const at = (label, extra = {}) =>
+    job({ step: "finish", state: "running", progress: { fraction: 0.5, label }, ...extra });
+  const rows = (list) => list.map((row) => `${row.phase}:${row.state}`);
+  const seen = (...stages) => new Set(stages);
+
+  it("lists a person's mouth ahead of time when it will be made", () => {
+    assert.deepEqual(rows(finishRows(at("copying images"), true)), [
+      "build:current", "shapes:pending", "fit:pending", "publish:pending",
+    ]);
+    assert.deepEqual(rows(finishRows(at("building the rig"), false)), ["build:current", "publish:pending"]);
+  });
+  it("counts the shapes on their own row, and on no other", () => {
+    const list = finishRows(
+      at("making the mouth shapes", { progress: { fraction: 0.7, label: "making the mouth shapes", count: { done: 3, total: 6 } } }),
+      true
+    );
+    assert.deepEqual(rows(list), ["build:done", "shapes:current", "fit:pending", "publish:pending"]);
+    assert.deepEqual(list[1].count, { done: 3, total: 6 });
+    assert.deepEqual(list.filter((row) => row.count).map((row) => row.phase), ["shapes"]);
+  });
+  it("ticks the shapes once the mouth is being fitted, and everything before publishing", () => {
+    assert.deepEqual(rows(finishRows(at("fitting the mouth"), true)), [
+      "build:done", "shapes:done", "fit:current", "publish:pending",
+    ]);
+    assert.deepEqual(rows(finishRows(at("publishing"), true, seen("layers", "shapes"))), [
+      "build:done", "shapes:done", "fit:done", "publish:current",
+    ]);
+  });
+  it("lists the mouth the server makes even when this page did not expect it", () => {
+    assert.deepEqual(rows(finishRows(at("making the mouth shapes"), false)), [
+      "build:done", "shapes:current", "fit:pending", "publish:pending",
+    ]);
+  });
+  it("puts the teeth alone in place of the shapes and their fitting", () => {
+    assert.deepEqual(rows(finishRows(at("making the teeth"), true)), ["build:done", "teeth:current", "publish:pending"]);
+    assert.deepEqual(rows(finishRows(at("publishing"), true, seen("teeth"))), ["build:done", "teeth:done", "publish:current"]);
+  });
+  it("never ticks a mouth nobody saw being made", () => {
+    // Expected, but the server had no AI to make it with (its image model,
+    // the monthly limit): straight from the layers to publishing.
+    assert.deepEqual(rows(finishRows(at("publishing"), true, seen("copy", "rig", "layers"))), [
+      "build:done", "publish:current",
+    ]);
+  });
+  it("leaves every row pending while queued, or at a stage it does not know", () => {
+    assert.deepEqual(rows(finishRows(job({ step: "finish", state: "queued" }), true)), [
+      "build:pending", "shapes:pending", "fit:pending", "publish:pending",
+    ]);
+    assert.deepEqual(rows(finishRows(at("polishing the chrome"), false)), ["build:pending", "publish:pending"]);
+  });
+  it("lists nothing for another job, or a finish that has ended", () => {
+    assert.deepEqual(finishRows(at("building layers", { step: "detect" }), true), []);
+    assert.deepEqual(finishRows(job({ step: "finish", state: "done" }), true), []);
+    assert.deepEqual(finishRows(job({ step: "finish", state: "failed" }), true), []);
+    assert.deepEqual(finishRows(null, true), []);
+  });
+  it("names every row it can list", () => {
+    assert.deepEqual([...FINISH_PHASES], ["build", "shapes", "fit", "teeth", "publish"]);
+  });
+});
+
+describe("a person's mouth, expected", () => {
+  it("when the line is a person, AI is on and the member has agreed", () => {
+    assert.equal(mouthExpected(creation(), "consent-1"), true);
+  });
+  it("not without the member's own consent, or while it loads", () => {
+    assert.equal(mouthExpected(creation(), null), false);
+    assert.equal(mouthExpected(creation(), undefined), false);
+  });
+  it("not when the organization turned AI off, nor for another line", () => {
+    assert.equal(mouthExpected(creation({ ai: ai({ enabled: false }) }), "consent-1"), false);
+    assert.equal(mouthExpected(creation({ face_type: "animal" }), "consent-1"), false);
+    assert.equal(mouthExpected(creation({ face_type: "cartoon" }), "consent-1"), false);
+    assert.equal(mouthExpected(creation({ face_type: null }), "consent-1"), false);
   });
 });
 

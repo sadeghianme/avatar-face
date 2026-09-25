@@ -7,6 +7,7 @@ import { AdjustStep } from "@/features/avatars/components/create/AdjustStep";
 import { BackgroundStep } from "@/features/avatars/components/create/BackgroundStep";
 import { ActionErrorNote } from "@/features/avatars/components/create/JobProgress";
 import { PointsStep } from "@/features/avatars/components/create/PointsStep";
+import { PrepareStep } from "@/features/avatars/components/create/PrepareStep";
 import { StepIndicator } from "@/features/avatars/components/create/StepIndicator";
 import { DropZone, FrameStep } from "@/features/avatars/components/create/UploadStep";
 import {
@@ -15,8 +16,10 @@ import {
   finishStage,
   isJobActive,
   jobFailure,
+  mouthExpected,
   nameFromFile,
   resolveStep,
+  stageCount,
   type Creation,
   type Framing,
   type WizardStep,
@@ -59,11 +62,15 @@ const HEADINGS: Record<WizardStep, string> = {
   background: "createHeading_background",
   adjust: "createHeading_adjust",
   points: "createHeading_points",
+  prepare: "createHeading_prepare",
 };
 
 /**
  * The creation wizard: 1 Upload + frame, 2 Background, 3 AI adjust,
- * 4 Points (the owner's order; creation.WIZARD_STEPS).
+ * 4 Points, 5 Preparing your avatar (the owner's order;
+ * creation.WIZARD_STEPS). Finishing on the points is what opens step 5,
+ * which follows the build (a person's own teeth and mouth shapes, their
+ * mouth fitted, publishing) until the avatar's page opens by itself.
  *
  * The creation's id is in the URL (/avatars/new/:id) and the step in the
  * query (?step=points), so a reload, a shared tab or the browser's Back
@@ -115,31 +122,40 @@ export function CreationWizard({ orgId, creationId }: { orgId: string; creationI
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
-  // Built: open the avatar. Also where a finished creation's old wizard URL
-  // leads.
+  // Built: open the avatar, the marks in progress having done their job.
+  // Also where a finished creation's old wizard URL leads.
   useEffect(() => {
     if (creation?.status !== "finished" || !creation.avatar_id) return;
+    try {
+      forgetDraftMarks(window.sessionStorage, creation.id);
+    } catch {
+      // storage blocked: nothing was kept
+    }
     void queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
     void queryClient.invalidateQueries({ queryKey: draftsKey(orgId) });
     navigate(`/avatars/${creation.avatar_id}`, { replace: true });
-  }, [creation?.status, creation?.avatar_id, orgId, navigate, queryClient]);
+  }, [creation?.status, creation?.avatar_id, creation?.id, orgId, navigate, queryClient]);
 
   const job = creation?.job ?? null;
-  // A finish's stages are transitions too ("Adding realistic teeth…"):
-  // a screen reader hears the same as the bar shows.
+  // A finish's stages are transitions too ("Making your teeth and mouth
+  // shapes… 3 of 6"): a screen reader hears what the list shows, each
+  // shape as it is settled.
   const stage = finishStage(job);
+  const count = stage === "shapes" ? stageCount(job) : null;
   const announcement = useMemo(() => {
     if (!job) return "";
     if (isJobActive(job)) {
       if (job.state === "queued") return t("createJobQueued");
-      return stage ? t(`createFinishStage_${stage}`) : t(`createJob_${job.step}`);
+      if (!stage) return t(`createJob_${job.step}`);
+      const words = t(`createFinishStage_${stage}`);
+      return count ? `${words} ${t("mouthShapesCount", { done: count.done, total: count.total })}` : words;
     }
     const failure = jobFailure(job);
     if (failure) return errorText(t, failure.code, failure.detail);
     return job.state === "done" ? t(`createJobDone_${job.step}`) : "";
     // Announce transitions, not every poll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job?.id, job?.state, stage, t]);
+  }, [job?.id, job?.state, stage, count?.done, t]);
 
   const created = (next: Creation, file: File) => {
     rememberCreationName(next.id, nameFromFile(file.name));
@@ -271,6 +287,8 @@ export function CreationWizard({ orgId, creationId }: { orgId: string; creationI
         onStartOver={() => void startOver()}
       />
     );
+  } else if (step === "prepare") {
+    body = <PrepareStep creation={creation} mouthExpected={mouthExpected(creation, consent.aiConsentId)} />;
   } else {
     body = (
       <PointsStep

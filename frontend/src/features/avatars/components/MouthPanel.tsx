@@ -5,8 +5,22 @@ import { useTranslation } from "react-i18next";
 
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
+import { ProgressBar, ShapeTicks } from "@/features/avatars/components/create/JobProgress";
 import { publishDraft } from "@/features/avatars/components/PublishBar";
+import { stageCount } from "@/features/avatars/creation";
 import { useConsent } from "@/features/avatars/hooks/useConsent";
+import { useMouthKit, type KitEnding } from "@/features/avatars/hooks/useMouthKit";
+import type { MotionChoice } from "@/features/avatars/mouth-config";
+import {
+  canCompareShapes,
+  droppedText,
+  kitFailureText,
+  kitTeethReason,
+  kitTeethText,
+  shapesLabel,
+  shapesView,
+  standardShapeText,
+} from "@/features/avatars/mouth-kit";
 import { mouthErrorKey, teethNoteKey, teethView, type MouthAction } from "@/features/avatars/teeth";
 import { api, ApiError } from "@/lib/api";
 import type { Avatar, MouthRenderer } from "@/lib/types";
@@ -22,6 +36,12 @@ const LABELS: Record<keyof ReferenceProfile, string> = {
   lipProjection: "mouthTeethSize", jawRange: "mouthJaw",
 };
 
+const MOTION_CHOICES: readonly MotionChoice[] = ["own", "standard"];
+
+/** What changed in this visit that visitors do not see yet: the kit the
+ * panel's job made, or a teeth photo the owner uploaded. */
+type Changed = "kit" | "upload" | null;
+
 /**
  * Which mouth this avatar speaks with, and how it is fitted.
  *
@@ -30,22 +50,33 @@ const LABELS: Record<keyof ReferenceProfile, string> = {
  * the owner publishes. Sliders preview live through `onPreview` and are
  * saved when released, so dragging does not write on every tick.
  *
- * The photographic mouth says whose teeth it shows: made by AI from the
- * avatar's picture (what a new person's avatar gets when it is built), the
- * owner's own "ee" photo, or standard ones, with the reason AI teeth could
- * not be made when that is why. "Make my teeth with AI" makes them here, on
- * the member's third-party AI consent (asked once, useConsent.withAi); a
- * new teeth photo, made or uploaded, is followed by a Publish prompt beside
- * it, since the bar that also offers it may be a long scroll away.
+ * The photographic mouth says where its mouth shapes come from (made by AI
+ * from the avatar's picture, all six or some of them with why the rest are
+ * standard, or the standard ones) next to whose teeth it shows (the AI's
+ * "ee", the owner's own photo, or standard ones with why). Its one AI
+ * action makes the person's mouth shapes and teeth from this photo, what
+ * step 5 of the wizard does, as a job it follows until it ends (useMouthKit),
+ * on the member's third-party AI consent (asked once, useConsent.withAi);
+ * teeth the owner uploaded are kept, so the action says it makes the shapes
+ * only. What it made, or a teeth photo uploaded, is followed by a Publish
+ * prompt beside it, since the bar that also offers it may be a long scroll
+ * away. A compare switch plays the standard shapes in the preview instead
+ * of the person's own (`motion`), so the same sentence can be heard both
+ * ways; it changes nothing saved or published.
  */
 export function MouthPanel({
   avatar,
   orgId,
   onPreview,
+  motion,
+  onMotion,
 }: {
   avatar: Avatar;
   orgId: string;
   onPreview: (renderer: MouthRenderer, profile: ReferenceProfile) => void;
+  /** The mouth shapes the dashboard preview plays (the compare switch). */
+  motion: MotionChoice;
+  onMotion: (choice: MotionChoice) => void;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -57,17 +88,17 @@ export function MouthPanel({
   const [renderer, setRenderer] = useState<MouthRenderer>(savedRenderer);
   const [profile, setProfile] = useState<ReferenceProfile>(() => normalizeProfile(saved?.profile));
   const [busy, setBusy] = useState(false);
-  const [making, setMaking] = useState(false);
-  // A teeth photo changed in this visit (made, uploaded): prompt Publish
-  // until the draft is live.
-  const [changed, setChanged] = useState(false);
+  // The kit is being asked for (the consent dialog, the POST): not the wait.
+  const [starting, setStarting] = useState(false);
+  const [changed, setChanged] = useState<Changed>(null);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // A refused teeth request is said beside its buttons, not under the
-  // sliders: on a phone those are a screen apart.
+  // A refused or failed mouth request is said beside its buttons, not under
+  // the sliders: on a phone those are a screen apart.
   const [teethError, setTeethError] = useState<string | null>(null);
   const consent = useConsent(orgId);
   const base = `/orgs/${orgId}/avatars/${avatar.id}`;
+  const human = (avatar.face_type ?? "human") === "human";
 
   // Re-seed when the server's copy changes under us (publish, discard).
   const savedKey = JSON.stringify(saved);
@@ -83,17 +114,36 @@ export function MouthPanel({
       queryClient.invalidateQueries({ queryKey: ["avatars", orgId] }),
     ]);
 
-  /** A refused teeth request in words: the panel's own for what it knows,
-   * the server's sentence otherwise. */
-  const refusal = (err: unknown, action: MouthAction | null) => {
+  /** A refused mouth request in words: the panel's own for what it knows,
+   * the server's sentence otherwise, and how long to wait when it said. */
+  const refusal = (err: unknown, action: MouthAction) => {
     if (!(err instanceof ApiError)) return t("error");
-    const key = action ? mouthErrorKey(err.code, action) : null;
-    return key ? t(key) : err.detail || t("error");
+    const key = mouthErrorKey(err.code, action);
+    const text = key ? t(key) : err.detail || t("error");
+    return err.retryAfter ? `${text} ${t("createRetryAfter", { count: err.retryAfter })}` : text;
   };
 
-  /** One teeth request; resolves to its answer, or null when it failed (the
-   * error is shown) or nothing was sent ("Not now"). */
-  const run = async <T,>(work: () => Promise<T | null>, action: MouthAction | null): Promise<T | null> => {
+  /** How the kit job this tab followed ended: made (the avatar is fetched
+   * again, and Publish offered beside it), or why not. */
+  const ended = (ending: KitEnding) => {
+    if (ending.kind === "done") {
+      setTeethError(null);
+      void refresh().then(() => setChanged("kit"));
+      return;
+    }
+    const failure = ending.kind === "interrupted" ? { code: "interrupted", detail: "" } : ending.error;
+    setTeethError(
+      kitFailureText(t, failure, (code) => mouthErrorKey(code, "generate"), ending.lastStage === "teeth")
+    );
+    // The switch was turned off meanwhile: the action gives way.
+    if (failure.code === "third_party_ai_disabled") consent.refreshAiSwitch();
+  };
+  const kit = useMouthKit(orgId, avatar.id, avatar.kind === "photo" && human, ended);
+  const running = kit.running;
+
+  /** One teeth photo request; resolves to its answer, or null when it
+   * failed (the error is shown). */
+  const run = async <T,>(work: () => Promise<T>, action: MouthAction): Promise<T | null> => {
     setBusy(true);
     setTeethError(null);
     try {
@@ -148,33 +198,47 @@ export function MouthPanel({
     const form = new FormData();
     form.append("file", file);
     void run(() => api.postForm<Avatar>(`${base}/mouth-photo`, form), "upload").then((done) => {
-      if (done) setChanged(true);
+      if (done) setChanged("upload");
     });
   };
 
+  const continuous = renderer === "continuous";
+  const hasPhoto = Boolean(saved?.has_oral_photo);
+  const teeth = teethView(saved);
+  const aiTeeth = teeth?.kind === "ai";
+  const ownTeeth = teeth?.kind === "upload";
+  const note = teeth?.kind === "generic" ? teeth.note : null;
+  const noteKey = note ? teethNoteKey(note.code) : null;
+  const shapes = shapesView(saved);
+  const standardShapes = shapes && shapes.kind !== "own" ? shapes.standard : [];
+  const shapesDropped = shapes ? droppedText(t, shapes) : null;
+  const teethReason = kitTeethReason(saved, teeth);
+  const compare = canCompareShapes(saved);
+  const actionKey = ownTeeth ? "mouthKitMakeShapes" : "mouthKitMake";
+  // Offered while the organization allows third-party AI; the server
+  // refuses otherwise anyway (and says so). Over the owner's own teeth
+  // photo too: it is kept, and only the shapes are made.
+  const canMakeKit = consent.aiEnabled && continuous && human;
+  const working = running !== null;
+
   /**
-   * The person's own teeth, made by AI from this avatar's picture: what a
-   * new avatar gets when it is made, for one made before, or whose teeth
-   * could not be made then. A draft edit, like the upload; the member's
-   * remembered consent is used, or asked for once (useConsent.withAi), and
-   * "Not now" sends nothing.
+   * The person's mouth shapes and teeth, made by AI from this avatar's
+   * picture, what a new avatar gets when it is built: for one built before,
+   * whose mouth could not be made then, or whose picture changed since. A
+   * draft edit; the member's remembered consent is used, or asked for once
+   * (useConsent.withAi), and "Not now" sends nothing.
    */
-  const makeTeeth = () => {
-    void run(
-      () =>
-        consent.withAi(t("mouthTeethGenerate"), async (consentId) => {
-          // Only once the member has agreed: the dialog is not the wait.
-          setMaking(true);
-          try {
-            return await api.post<Avatar>(`${base}/mouth-photo/generate`, { consent_id: consentId });
-          } finally {
-            setMaking(false);
-          }
-        }),
-      "generate"
-    ).then((done) => {
-      if (done) setChanged(true);
-    });
+  const makeKit = async () => {
+    setStarting(true);
+    setTeethError(null);
+    setChanged((now) => (now === "kit" ? null : now));
+    try {
+      await consent.withAi(t(actionKey), (consentId) => kit.start(consentId));
+    } catch (err) {
+      setTeethError(refusal(err, "generate"));
+    } finally {
+      setStarting(false);
+    }
   };
 
   const publish = async () => {
@@ -182,7 +246,7 @@ export function MouthPanel({
     setTeethError(null);
     try {
       await publishDraft(queryClient, orgId, avatar.id);
-      setChanged(false);
+      setChanged(null);
     } catch (err) {
       setTeethError(err instanceof ApiError ? err.detail : t("error"));
     } finally {
@@ -190,21 +254,31 @@ export function MouthPanel({
     }
   };
 
-  const continuous = renderer === "continuous";
-  const hasPhoto = Boolean(saved?.has_oral_photo);
-  const teeth = teethView(saved);
-  const aiTeeth = teeth?.kind === "ai";
-  const note = teeth?.kind === "generic" ? teeth.note : null;
-  const noteKey = note ? teethNoteKey(note.code) : null;
-  // Offered while the organization allows third-party AI; the server
-  // refuses otherwise anyway (and says so). Never over the owner's own
-  // photo: they chose it, and removing it first is one press.
-  const canMakeTeeth = consent.aiEnabled && renderer === "continuous" && (!hasPhoto || aiTeeth);
-  // Until the draft with the new teeth is live.
-  const promptPublish = changed && (avatar.unpublished === true || !avatar.published);
-  // One region, always mounted, says what happens to the teeth: a region
+  // Where the running job is, in words: queued, its stage (the shapes
+  // counted), or nothing known beyond that it runs.
+  const stage = kit.stage;
+  const count = stage === "shapes" ? stageCount(running) : null;
+  const progressText = !running
+    ? ""
+    : running.state === "queued"
+      ? t("createJobQueued")
+      : stage
+        ? t(`mouthKitStage_${stage}`)
+        : t("mouthKitWorking");
+  const progressSpoken = count
+    ? `${progressText} ${t("mouthShapesCount", { done: count.done, total: count.total })}`
+    : progressText;
+  // Until the draft with the new mouth is live.
+  const promptPublish = changed !== null && (avatar.unpublished === true || !avatar.published);
+  const madeText =
+    changed === "upload"
+      ? t("mouthTeethMade")
+      : saved?.kit?.state === "made"
+        ? t(saved.kit.teeth?.used ? "mouthKitMadeTeeth" : "mouthKitMade")
+        : t("mouthTeethMade");
+  // One region, always mounted, says what happens to the mouth: a region
   // mounted with its text is not reliably read out.
-  const spoken = making ? t("mouthTeethGenerating") : promptPublish ? t("mouthTeethMade") : "";
+  const spoken = running ? progressSpoken : promptPublish ? madeText : "";
 
   return (
     <section id="mouth-panel" tabIndex={-1} className="card space-y-4 outline-none" aria-label={t("mouthTitle")}>
@@ -246,99 +320,182 @@ export function MouthPanel({
 
       {continuous && (
         <>
-          <div className="rounded-xl bg-black/[0.03] p-3 dark:bg-white/[0.04]" id="mouth-teeth">
-            {teeth && (
-              <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                {t("mouthTeethInUse")}
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                    teeth.kind === "generic"
-                      ? "bg-gray-200 text-gray-700 dark:bg-white/10 dark:text-gray-200"
-                      : "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-                  }`}
-                >
-                  {teeth.kind === "ai" && <Icon name="sparkles" className="h-3.5 w-3.5" />}
-                  {t(`mouthTeethKind_${teeth.kind}`)}
-                </span>
-              </p>
-            )}
-            <p className="mt-1 text-xs leading-relaxed text-gray-500">
-              {t(aiTeeth ? "mouthTeethAiHint" : hasPhoto ? "mouthPhotoActive" : "mouthPhotoHint")}
-            </p>
-            {note && (
-              <p className="mt-1.5 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
-                {noteKey ? t(noteKey) : `${t("mouthTeethGeneric")} ${note.detail}`}
-              </p>
-            )}
-            {canMakeTeeth && (
-              <p id="mouth-teeth-generate-hint" className="mt-1.5 text-xs leading-relaxed text-gray-500">
-                {t("mouthTeethGenerateHint")}
-              </p>
-            )}
-            {making && (
-              <p className="mt-1.5 flex items-center gap-2 text-xs text-gray-500" aria-hidden="true">
-                <Spinner className="h-3.5 w-3.5" />
-                {t("mouthTeethGenerating")}
-              </p>
-            )}
-            <div className="mt-2.5 flex flex-wrap gap-2">
-              {canMakeTeeth && (
-                <button
-                  type="button"
-                  className="btn-secondary min-h-11"
-                  disabled={busy}
-                  onClick={makeTeeth}
-                  aria-describedby="mouth-teeth-generate-hint"
-                >
-                  {making ? <Spinner className="h-4 w-4" /> : <Icon name="sparkles" className="h-4 w-4" />}
-                  {t(aiTeeth ? "mouthTeethRegenerate" : "mouthTeethGenerate")}
-                </button>
-              )}
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={(event) => {
-                  upload(event.target.files?.[0]);
-                  event.target.value = "";
-                }}
-              />
-              <button type="button" className="btn-secondary min-h-11" disabled={busy} onClick={() => fileRef.current?.click()}>
-                {busy && !making ? <Spinner className="h-4 w-4" /> : null}
-                {t(hasPhoto && !aiTeeth ? "mouthPhotoReplace" : "mouthPhotoAdd")}
-              </button>
-              {hasPhoto && (
-                <button
-                  type="button"
-                  className="btn-secondary min-h-11"
-                  disabled={busy}
-                  onClick={() => void run(() => api.delete(`${base}/mouth-photo`), null)}
-                >
-                  {t("mouthPhotoRemove")}
-                </button>
-              )}
-            </div>
-            {teethError && (
-              <p className="field-error mt-2.5 text-xs leading-relaxed" role="alert">
-                {teethError}
-              </p>
-            )}
-            {promptPublish && (
-              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300/70 p-2.5 dark:border-amber-500/40">
-                <p className="min-w-0 flex-1 text-xs leading-relaxed text-gray-700 dark:text-gray-200">
-                  {t("mouthTeethMade")}
+          <div className="divide-y divide-black/[0.06] rounded-xl bg-black/[0.03] dark:divide-white/[0.06] dark:bg-white/[0.04]" id="mouth-teeth">
+            {shapes && (
+              <div className="p-3">
+                <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                  {t("mouthShapesInUse")}
+                  <SourceChip made={shapes.kind !== "standard"}>{shapesLabel(t, shapes)}</SourceChip>
                 </p>
-                <button type="button" className="btn-primary min-h-11" disabled={publishing || busy} onClick={() => void publish()}>
-                  {publishing ? <Spinner className="h-4 w-4" /> : null}
-                  {t("publish")}
-                </button>
+                <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                  {shapesDropped ?? t(shapes.kind === "standard" ? "mouthShapesStandardHint" : "mouthShapesAiHint")}
+                </p>
+                {standardShapes.length > 0 && (
+                  <div className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
+                    <p className="font-medium">{t("mouthShapesWhy")}</p>
+                    <ul className="mt-0.5 list-disc space-y-0.5 ps-4">
+                      {standardShapes.map((shape) => (
+                        <li key={shape.shape}>{standardShapeText(t, shape)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {compare && (
+                  <div className="mt-3">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                      <span id="mouth-compare-label" className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                        {t("mouthCompare")}
+                      </span>
+                      <div
+                        role="radiogroup"
+                        aria-labelledby="mouth-compare-label"
+                        aria-describedby="mouth-compare-hint"
+                        className="inline-flex rounded-lg border border-black/10 bg-white p-0.5 dark:border-white/10 dark:bg-panel"
+                      >
+                        {MOTION_CHOICES.map((choice) => (
+                          <button
+                            key={choice}
+                            type="button"
+                            role="radio"
+                            aria-checked={motion === choice}
+                            onClick={() => motion !== choice && onMotion(choice)}
+                            className={`min-h-11 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                              motion === choice
+                                ? "bg-brand-600 text-white"
+                                : "text-gray-600 hover:bg-black/[0.04] dark:text-gray-300 dark:hover:bg-white/[0.06]"
+                            }`}
+                          >
+                            {t(`mouthCompare_${choice}`)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <p id="mouth-compare-hint" className="mt-1.5 text-xs leading-relaxed text-gray-500">
+                      {t("mouthCompareHint")}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
-            <p className="sr-only" role="status" aria-live="polite">
-              {spoken}
-            </p>
+
+            <div className="p-3">
+              {teeth && (
+                <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                  {t("mouthTeethInUse")}
+                  <SourceChip made={teeth.kind !== "generic"} ai={teeth.kind === "ai"}>
+                    {t(`mouthTeethKind_${teeth.kind}`)}
+                  </SourceChip>
+                </p>
+              )}
+              <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                {t(aiTeeth ? "mouthTeethAiHint" : hasPhoto ? "mouthPhotoActive" : "mouthPhotoHint")}
+              </p>
+              {note && (
+                <p className="mt-1.5 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+                  {noteKey ? t(noteKey) : `${t("mouthTeethGeneric")} ${note.detail}`}
+                </p>
+              )}
+              {teethReason && (
+                <p className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
+                  {kitTeethText(t, teethReason)}
+                </p>
+              )}
+            </div>
+
+            <div className="p-3">
+              {canMakeKit && (
+                <>
+                  <button
+                    type="button"
+                    className="btn-secondary min-h-11 max-w-full text-start"
+                    disabled={busy || starting || working}
+                    onClick={() => void makeKit()}
+                    aria-describedby="mouth-kit-hint"
+                  >
+                    {starting || working ? (
+                      <Spinner className="h-4 w-4 shrink-0" />
+                    ) : (
+                      <Icon name="sparkles" className="h-4 w-4 shrink-0" />
+                    )}
+                    {t(actionKey)}
+                  </button>
+                  <p id="mouth-kit-hint" className="mt-1.5 text-xs leading-relaxed text-gray-500">
+                    {t(ownTeeth ? "mouthKitHintShapes" : "mouthKitHint")}
+                  </p>
+                </>
+              )}
+              {running && (
+                <div className="mt-2.5 rounded-lg border border-black/10 bg-white p-2.5 dark:border-white/10 dark:bg-panel" aria-hidden="true">
+                  <p className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs font-medium">
+                    <span className="flex items-center gap-2">
+                      <Spinner className="h-3.5 w-3.5 shrink-0 text-brand-600" />
+                      {progressText}
+                    </span>
+                    {count && (
+                      <span className="tabular-nums text-brand-700 dark:text-brand-300">
+                        {t("mouthShapesCount", { done: count.done, total: count.total })}
+                      </span>
+                    )}
+                  </p>
+                  {count && <ShapeTicks count={count} />}
+                  <ProgressBar fraction={running.progress?.fraction ?? null} label={progressText} />
+                </div>
+              )}
+              <div className={`flex flex-wrap gap-2 ${canMakeKit || running ? "mt-2.5" : ""}`}>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(event) => {
+                    upload(event.target.files?.[0]);
+                    event.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn-secondary min-h-11"
+                  disabled={busy || working}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  {busy ? <Spinner className="h-4 w-4" /> : null}
+                  {t(ownTeeth ? "mouthPhotoReplace" : "mouthPhotoAdd")}
+                </button>
+                {hasPhoto && (
+                  <button
+                    type="button"
+                    className="btn-secondary min-h-11"
+                    disabled={busy || working}
+                    onClick={() => void run(() => api.delete(`${base}/mouth-photo`), "upload")}
+                  >
+                    {t("mouthPhotoRemove")}
+                  </button>
+                )}
+              </div>
+              {teethError && (
+                <p className="field-error mt-2.5 text-xs leading-relaxed" role="alert">
+                  {teethError}
+                </p>
+              )}
+              {promptPublish && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300/70 p-2.5 dark:border-amber-500/40">
+                  <p className="min-w-0 flex-1 text-xs leading-relaxed text-gray-700 dark:text-gray-200">{madeText}</p>
+                  <button
+                    type="button"
+                    className="btn-primary min-h-11"
+                    disabled={publishing || busy || working}
+                    onClick={() => void publish()}
+                  >
+                    {publishing ? <Spinner className="h-4 w-4" /> : null}
+                    {t("publish")}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
+          <p className="sr-only" role="status" aria-live="polite">
+            {spoken}
+          </p>
 
           {SLIDERS.map((key) => {
             const [min, max, step] = PROFILE_LIMITS[key];
@@ -382,5 +539,22 @@ export function MouthPanel({
       {error && <p className="field-error" role="alert">{error}</p>}
       {consent.dialog}
     </section>
+  );
+}
+
+/** Where a part of the mouth comes from, as a chip: this photo's (made by
+ * AI, with its mark; or the owner's own photo), or standard. */
+function SourceChip({ made, ai = made, children }: { made: boolean; ai?: boolean; children: React.ReactNode }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+        made
+          ? "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+          : "bg-gray-200 text-gray-700 dark:bg-white/10 dark:text-gray-200"
+      }`}
+    >
+      {ai && <Icon name="sparkles" className="h-3.5 w-3.5" />}
+      {children}
+    </span>
   );
 }

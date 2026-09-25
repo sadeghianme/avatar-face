@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
 import { JobProgress } from "@/features/avatars/components/create/JobProgress";
+import { MouthWarnings } from "@/features/avatars/components/create/MouthWarnings";
 import {
   aiEditOf,
   aiPointsOffer,
@@ -13,7 +14,6 @@ import {
   currentStep,
   errorText,
   expectedMouthWarnings,
-  forgetDraftMarks,
   isJobActive,
   jobFailure,
   loadDraftMarks,
@@ -26,7 +26,6 @@ import {
   type CreationAnchors,
   type DraftStore,
   type FinishResult,
-  type FinishWarning,
   type MarkPart,
   type PreviewRig,
 } from "@/features/avatars/creation";
@@ -69,7 +68,10 @@ type Run = <T>(
 ) => Promise<{ ok: true; result: T } | { ok: false; error: ActionError }>;
 
 /**
- * Step 4: place the points, watch the face talk, finish.
+ * Step 4: place the points, watch the face talk, finish. The finish is
+ * step 5 ("Preparing your avatar", PrepareStep), where the wizard goes as
+ * soon as the creation is being built; a finish that fails comes back
+ * here, to be retried from what is on screen.
  *
  * Opens by detecting the face on the current image (a job) unless the
  * creation already has marks for it. Then the marks, pre-filled, and a
@@ -126,28 +128,18 @@ export function PointsStep({
   const { t } = useTranslation();
   const base = `/orgs/${orgId}/creations/${creation.id}`;
   const job = creation.job;
-  const finishing = creation.status === "finishing" || creation.status === "finished";
   const current = anchorsCurrent(creation) ? creation.anchors : null;
   const working = isJobActive(job);
   // Held here, not in the editor: "Detect again" brings new anchors and a
   // fresh editor, and the name typed so far should survive that.
   const [name, setName] = useState(defaultName);
   // What finishing said about the mouth of the picture (an open mouth,
-  // teeth between parted lips): shown while the avatar is built, and kept
-  // for the avatar's page, where the wizard lands by itself once it is.
-  // Null until the answer came: a tab reloaded mid-build never saw it, and
-  // shows what the photo check says the answer was instead.
-  const [finishWarnings, setFinishWarnings] = useState<FinishWarning[] | null>(null);
+  // teeth between parted lips), kept for this tab under the avatar's id:
+  // step 5 says it while the avatar is built, and the avatar's page, where
+  // the wizard lands by itself once it is, says it again.
   const finished = (result: FinishResult) => {
-    const warnings = result.warnings ?? [];
-    setFinishWarnings(warnings);
-    rememberFinishNotice(tabStore(), result.avatar_id, warnings);
+    rememberFinishNotice(tabStore(), result.avatar_id, result.warnings ?? []);
   };
-
-  // Built: the marks in progress have done their job.
-  useEffect(() => {
-    if (creation.status === "finished") forgetDraftMarks(tabStore(), creation.id);
-  }, [creation.status, creation.id]);
 
   // New anchors ("Detect again", Retry, Find the face) remount the editor,
   // and the button that was pressed goes with it. Focus left on the page's
@@ -168,33 +160,14 @@ export function PointsStep({
   // loop; a reload tries again once, which is what a reload is for.
   const asked = useRef(new Set<number>());
   useEffect(() => {
-    if (finishing || current || working || creation.status !== "draft") return;
+    if (current || working || creation.status !== "draft") return;
     if (asked.current.has(creation.revision)) return;
     if (job?.step === "detect" && jobFailure(job)) return;
     asked.current.add(creation.revision);
     void run("detect", () => api.post<Creation>(`${base}/detect`));
-  }, [finishing, current, working, creation.status, creation.revision, job, run, base]);
+  }, [current, working, creation.status, creation.revision, job, run, base]);
 
   const retry = () => void run("retry", () => api.post<Creation>(`${base}/retry`));
-
-  if (finishing) {
-    return (
-      <div className="space-y-4">
-        {job && isJobActive(job) ? (
-          <JobProgress job={job} />
-        ) : (
-          <p className="flex items-center gap-2 text-sm">
-            <Spinner className="h-4 w-4" />
-            {creation.status === "finished" ? t("createFinished") : t("createJob_finish")}
-          </p>
-        )}
-        <p className="text-xs text-gray-500 dark:text-gray-400">{t("createFinishingHint")}</p>
-        <MouthWarnings
-          warnings={finishWarnings ?? expectedMouthWarnings(creation).map((code) => ({ code, detail: "" }))}
-        />
-      </div>
-    );
-  }
 
   if (!current) {
     const shown = job && (isJobActive(job) || jobFailure(job)) ? job : null;
@@ -659,49 +632,6 @@ function PointsEditor({
                 : t("createSaveHint")}
         </span>
       </div>
-    </div>
-  );
-}
-
-/**
- * What the picture will show around the mouth once built: before the
- * press, from the photo check (with the way back to AI adjust, which can
- * fix it), and after, from the finish answer. Information, not a refusal:
- * the avatar is built either way.
- */
-function MouthWarnings({
-  warnings,
-  before = false,
-  onFix,
-  disabled = false,
-}: {
-  warnings: FinishWarning[];
-  /** Said before finishing: the owner can still act on it. */
-  before?: boolean;
-  onFix?: () => void;
-  disabled?: boolean;
-}) {
-  const { t } = useTranslation();
-  if (warnings.length === 0) return null;
-  return (
-    <div
-      className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
-      // After the press it arrives while the page is being watched; before
-      // it, it is part of the page, read in order like the rest.
-      role={before ? undefined : "status"}
-    >
-      <p className="font-medium">{t(before ? "finishWarningsBeforeTitle" : "finishWarningsTitle")}</p>
-      <ul className="mt-1 list-disc space-y-1 ps-5">
-        {warnings.map((warning) => (
-          <li key={warning.code}>{t(`finishWarning_${warning.code}`, { defaultValue: warning.detail })}</li>
-        ))}
-      </ul>
-      {before && onFix && (
-        <button type="button" className="btn-secondary mt-3 min-h-11" onClick={onFix} disabled={disabled}>
-          <Icon name="sparkles" className="h-4 w-4" />
-          {t("finishWarningsFix")}
-        </button>
-      )}
     </div>
   );
 }

@@ -39,7 +39,8 @@ const outdated = () =>
  * - `forgetAi()`: a step refused the remembered id (consent_required: the
  *   wording changed, or it was withdrawn); ask again.
  * - `withAi(purpose, send)`: for a step that asks through a dialog (finding
- *   an animal's points, generating from a photo). Uses the remembered
+ *   an animal's points, generating from a photo, making a person's mouth
+ *   shapes and teeth in the Mouth panel). Uses the remembered
  *   consent, or shows AiConsentDialog and records one; "Not now" resolves
  *   to null and nothing is sent. A consent_required answer asks once more
  *   and retries once. The AI adjust step asks inline instead (AdjustStep).

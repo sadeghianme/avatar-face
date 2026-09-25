@@ -19,7 +19,8 @@ export const draftsKey = (orgId: string | undefined) => ["creations", orgId, "dr
  *
  * Heavy steps are jobs: the route answers 202 and the creation changes
  * later. While a job is queued or running (or the avatar is being built)
- * this polls, quickly at first and backing off (creation.pollDelay), and
+ * this polls, quickly at first and backing off (creation.pollDelay; a
+ * finish no slower than every two seconds, so step 5's count moves), and
  * stops by itself once the job is done, failed or interrupted. A hidden
  * tab does not poll (TanStack's default), and catches up when shown.
  *
@@ -52,7 +53,7 @@ export function useCreation(orgId: string | undefined, id: string | undefined) {
       if (watching.current?.job !== job) {
         watching.current = { job, since: q.state.dataUpdateCount };
       }
-      return pollDelay(q.state.dataUpdateCount - watching.current.since);
+      return pollDelay(q.state.dataUpdateCount - watching.current.since, data!.status === "finishing");
     },
   });
 

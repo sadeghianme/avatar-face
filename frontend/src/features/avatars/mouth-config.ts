@@ -69,6 +69,23 @@ export function draftMouthConfig(
 }
 
 /**
+ * Which mouth shapes the dashboard preview plays: the avatar's own (its
+ * draft motion, what visitors get once published) or the standard ones
+ * (the bundled Reference motion, retargeted, what every avatar played
+ * before it had its own). The Mouth panel's compare switch, so the owner
+ * can hear the same sentence both ways. Never saved or published.
+ */
+export type MotionChoice = "own" | "standard";
+
+/** `config` with the motion the owner chose to hear: the standard shapes
+ * are the config without its own motion, as the loader reads it. The same
+ * config for "own", and whenever there is no motion of its own to swap. */
+export function previewMotion(config: AvatarMouthConfig | null, choice: MotionChoice): AvatarMouthConfig | null {
+  if (!config || choice === "own" || !config.motion_url) return config;
+  return { ...config, motion_url: null };
+}
+
+/**
  * Changes whenever the saved mouth does (save, publish, discard), so an
  * unsaved preview is dropped; but not when a refetch only re-signs its URLs.
  */

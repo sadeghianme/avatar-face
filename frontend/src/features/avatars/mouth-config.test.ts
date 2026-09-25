@@ -9,6 +9,7 @@ import {
   draftMouthConfig,
   mouthConfigToLoad,
   mouthLoadIdentity,
+  previewMotion,
   savedMouthKey,
   urlIdentity,
 } from "./mouth-config.ts";
@@ -96,5 +97,51 @@ describe("the owner's draft mouth", () => {
     assert.equal(savedMouthKey(first), savedMouthKey(again));
     assert.notEqual(savedMouthKey(first), savedMouthKey(avatar(signed("/kit-2/motion.json", "a"))));
     assert.notEqual(savedMouthKey(first), savedMouthKey({ ...first, mouth: { ...first.mouth, profile: { jawRange: 1 } } }));
+  });
+});
+
+describe("comparing the mouth shapes in the preview", () => {
+  const own = {
+    renderer: "continuous" as const,
+    profile,
+    oral: oral(),
+    motion_url: signed("/kit/mouth-motion-1a2b.json", "a"),
+  };
+
+  it("plays the standard shapes by dropping the avatar's own motion, and nothing else", () => {
+    const standard = previewMotion(own, "standard");
+    assert.deepEqual(standard, { ...own, motion_url: null });
+    // The loader then plays the bundled motion, with the same teeth and fit.
+    assert.equal(mouthConfigToLoad(standard).motion_url, null);
+    assert.deepEqual(mouthConfigToLoad(standard).oral, own.oral);
+    assert.deepEqual(mouthConfigToLoad(standard).profile, own.profile);
+    // The config the choice came from is not touched: nothing is saved.
+    assert.equal(own.motion_url, signed("/kit/mouth-motion-1a2b.json", "a"));
+  });
+
+  it("reloads the mouth when the choice flips, and back", () => {
+    const mine = mouthLoadIdentity(previewMotion(own, "own"));
+    const standard = mouthLoadIdentity(previewMotion(own, "standard"));
+    assert.notEqual(mine, standard);
+    assert.equal(mine, mouthLoadIdentity(own));
+    // A fresh signature on the same motion is still the same mouth.
+    assert.equal(mine, mouthLoadIdentity(previewMotion({ ...own, motion_url: signed("/kit/mouth-motion-1a2b.json", "b") }, "own")));
+  });
+
+  it("changes nothing for its own shapes, or when there is nothing to swap", () => {
+    assert.equal(previewMotion(own, "own"), own);
+    const bundled = { ...own, motion_url: null };
+    assert.equal(previewMotion(bundled, "standard"), bundled);
+    assert.equal(previewMotion(null, "standard"), null);
+  });
+
+  it("composes with an unsaved slider preview", () => {
+    const previewed = draftMouthConfig(
+      { face_type: "human", mouth_photo: oral(), mouth: { renderer: "continuous", profile, motion_url: own.motion_url } },
+      "continuous",
+      { jawRange: 1 }
+    );
+    assert.deepEqual(previewMotion(previewed, "standard"), { ...previewed, motion_url: null });
+    assert.deepEqual(previewMotion(previewed, "standard")?.profile, { jawRange: 1 });
   });
 });

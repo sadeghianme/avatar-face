@@ -8,7 +8,10 @@ import { Icon } from "@/components/ui/Icon";
  * The third-party AI statement: what is sent, to whom, what is kept, and
  * that it is optional. One wording, shown two ways: inline in the AI adjust
  * step (a checkbox beside "Fix it with AI"), and as a dialog before the
- * other AI calls (finding an animal's points, generating from a photo).
+ * other AI calls (finding an animal's points, generating from a photo,
+ * making a person's mouth shapes and teeth in the Mouth panel). It also
+ * covers what is sent without a further press: the wizard's lip touch-up,
+ * and a person's teeth and mouth shapes made at step 5.
  *
  * The words are versioned (consent.CONSENT_TEXT_VERSIONS.third_party_ai):
  * changing what they say means bumping that version here and on the
