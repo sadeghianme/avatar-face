@@ -4,8 +4,10 @@ Route: `/lip-sync-lab`. Organization membership is required.
 
 This is a timing experiment, not a replacement for the existing avatar page,
 Photoface HD, or embed widget. It reuses `AvatarEngine` and saved face assets.
-The only change in the shared renderer is an optional `cueClock` callback;
-without it, the existing clock and animation behavior remain the same.
+The shared renderer takes an optional `cueClock` callback. Without one,
+`playAudio` (the share page, the widget) now times cues by the audio
+element's position too (`embed/src/media-clock.ts`, since 2026-09-26),
+which is what this lab showed to matter.
 
 ## What the comparison means
 
@@ -31,14 +33,34 @@ without it, the existing clock and animation behavior remain the same.
 ## Model and runtime
 
 The Docker build includes a separate timestamp-enabled Kokoro model by default
-(~326 MB on disk), verified by SHA-256. It is loaded lazily by the lab only.
-Budget roughly another 1 GB of resident memory per backend worker after use;
-measure on the target host before broad rollout. Requests within one worker
-are serialized. Existing Kokoro uses its original model and cache.
+(~326 MB on disk), verified by SHA-256, and production states it explicitly
+(`deploy/docker-compose.prod.yml`, `INCLUDE_LIPSYNC_MODEL: "1"`). It is
+warmed at startup. Requests within one worker are serialized.
+
+Since 2026-09-26 the product speaks through it too (services.tts.kokoro):
+when it is installed, the Kokoro provider makes every recording with this
+model, streamed phrases included, and serves the model's own phoneme spans
+as cues (`native_cues`). Unusable spans keep the audio and fall back to
+the stretched cues; a model that fails falls back to kokoro-v1.0.onnx,
+which is then loaded (and that recording is not cached). Speech cache rows
+made this way are keyed with `native-1` (`cache_version`), so no recording
+cached with stretched cues is served as a native one. `KOKORO_NATIVE_TIMING=false`
+switches it off.
+
+Memory: a normal server now holds ONE Kokoro session (the timed model,
+roughly 1 GB resident; measure on the target host), where it used to hold
+two once both had been used. kokoro-v1.0.onnx stays in the image as the
+fallback. Whether it can leave the image depends on whether the two exports
+make the same speech: `scripts/compare_kokoro_models.py` measures it on a
+machine with both models (it was not run when this changed: the models were
+not on the development machine, and nothing was downloaded to check). By
+construction the served audio differs in one known way: kokoro-onnx tops up
+the pause after every comma and full stop only for a model that reports
+timings, so the timed model's clause pauses are longer.
 
 For constrained hosts, build with `--build-arg INCLUDE_LIPSYNC_MODEL=0`.
-The lab remains usable as a clock-only comparison. No model is downloaded
-at request time.
+Speech then uses kokoro-v1.0.onnx with stretched cues, and the lab remains
+usable as a clock-only comparison. No model is downloaded at request time.
 
 Local configuration:
 
@@ -54,9 +76,9 @@ Stress/length tokens are attached to their phonemes instead of becoming fake
 silences. Invalid or unmapped timing returns an explicit error, not a silent
 fallback labeled as native.
 
-Native synthesis is lab-only, uncached, and uses the normal organization
-usage check/accounting. It never writes native cues to the stable speech
-cache. Browser and cloned voices are intentionally unavailable in this lab.
+The lab's own native synthesis (with its stretched baseline beside it) is
+uncached and uses the normal organization usage check/accounting. Browser
+and cloned voices are intentionally unavailable in this lab.
 
 ## Verification
 

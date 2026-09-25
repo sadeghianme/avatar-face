@@ -23,6 +23,9 @@ class SynthesisResult:
     duration_ms: int
     # [{"t": ms, "viseme": "aa"}, ...] always starting at t=0, ending at "sil"
     cues: list[dict] = field(default_factory=list)
+    # False: serve this result, but keep it out of the speech cache (a
+    # fallback made while the provider's usual path was failing).
+    cacheable: bool = True
 
 
 class TTSProvider:
@@ -41,3 +44,9 @@ class TTSProvider:
 
     async def synthesize(self, text: str, voice: str, locale: str) -> SynthesisResult:
         raise NotImplementedError
+
+    def cache_version(self) -> str:
+        """Part of the speech cache key, changed when what this provider
+        returns for the same text changes meaning (new timing, new model),
+        so an old row is never served as a new one. Empty for most."""
+        return ""

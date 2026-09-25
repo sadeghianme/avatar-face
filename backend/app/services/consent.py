@@ -96,6 +96,21 @@ def require_ai_enabled(org: Organization) -> None:
         )
 
 
+async def ai_switched_off(org_id: str) -> bool:
+    """Has the organization turned third-party AI off? Read in a session of
+    its own, so work that waited (a queued job, a provider call 90 s after
+    the last) asks the database as it is now, not as its request saw it."""
+    from app.db import get_session_factory
+
+    async with get_session_factory()() as db:
+        enabled = (
+            await db.execute(
+                select(Organization.third_party_ai_enabled).where(Organization.id == org_id)
+            )
+        ).scalar_one_or_none()
+    return not enabled
+
+
 async def record(
     db: AsyncSession,
     org: Organization,

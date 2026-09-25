@@ -14,6 +14,8 @@ import {
   aiPointsOffer,
   aiResultInUse,
   anchorsCurrent,
+  autoAdjustKey,
+  autoAdjustToStart,
   backgroundSource,
   CANDIDATE_REASONS,
   checkFile,
@@ -488,7 +490,7 @@ describe("strings", () => {
         ...[...TOUCHUP_REASONS, ...REGENERATE_REASONS].map((code) => `adjustWhy_${code}`),
         ...[...DRAWN_REASONS].map((code) => `adjustWhyDrawn_${code}`),
         ...[...CANDIDATE_REASONS].map((code) => `adjustReason_${code}`),
-        ...["touchup", "stylise", "regenerate", "generate"].map((mode) => `aiEdited_${mode}`),
+        ...["touchup", "stylise", "regenerate", "generate", "teeth"].map((mode) => `aiEdited_${mode}`),
         ...LINE_ORDER.flatMap((id) => [LINES[id].summary, LINES[id].guide]),
         ...LINE_ORDER.flatMap((id) => LINES[id].marks.map((part) => `createGuessPart_${part}`)),
         ...["not_for_face_type", "segmentation_unavailable", "face_type_required"].map((r) => `createBgUnavailable_${r}`),
@@ -496,6 +498,30 @@ describe("strings", () => {
       assert.deepEqual(needed.filter((key) => !keys.has(key)), []);
     });
   }
+});
+
+describe("the touch-up started without a press", () => {
+  const offer = { mode: "touchup", image: "original", reasons: ["teeth_showing"] };
+  const offered = (extra = {}) => creation({ ai: ai({ auto_adjust: offer }), ...extra });
+
+  it("starts what the server offers, on the member's own consent", () => {
+    assert.deepEqual(autoAdjustToStart(offered(), "consent-1", new Set()), offer);
+  });
+  it("never asks for consent on the member's behalf, nor guesses while it loads", () => {
+    assert.equal(autoAdjustToStart(offered(), null, new Set()), null);
+    assert.equal(autoAdjustToStart(offered(), undefined, new Set()), null);
+  });
+  it("waits for a running job, and starts once per image in a tab", () => {
+    assert.equal(autoAdjustToStart(offered({ job: job({ step: "background", state: "running" }) }), "c", new Set()), null);
+    const started = new Set([autoAdjustKey(offered(), offer)]);
+    assert.equal(autoAdjustToStart(offered(), "c", started), null);
+    const other = { ...offer, image: "cutout" };
+    assert.deepEqual(autoAdjustToStart(creation({ ai: ai({ auto_adjust: other }) }), "c", started), other);
+  });
+  it("does nothing without an offer, or once the creation is being built", () => {
+    assert.equal(autoAdjustToStart(creation(), "c", new Set()), null);
+    assert.equal(autoAdjustToStart(offered({ status: "finishing" }), "c", new Set()), null);
+  });
 });
 
 describe("cut-outs", () => {

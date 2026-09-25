@@ -17,20 +17,44 @@ throttling, not an oversight: on a 4-core box, two parallel syntheses slow
 each other AND starve the API workers, whereas queueing keeps latency
 predictable and the speech cache means each phrase is ever synthesized once.
 
-Timing note: cues are derived from the same phoneme model every other
-provider uses (cues_from_text over the measured audio duration). Kokoro's
-own pacing tracks espeak phonemization closely — it phonemizes with espeak
-too — so the alignment is as good as the paid providers'.
+Timing: when the timestamped export (kokoro-timed.onnx, the lip-sync lab's
+model) is installed, speech is made with it and its cues are the model's own
+phoneme spans (lab_timing.native_cues): each sound starts when the model
+says it does, and pauses stay where they are. The fallback, and the only
+path without that model, is the one every other provider uses: a duration
+table stretched to the measured audio length (cues_from_text), which drifts
+inside a sentence wherever the voice's pacing differs from the table's.
+
+The two models do not make the same audio. kokoro-onnx tops up the pause
+after every comma and full stop when the model reports timings, and only at
+batch joins when it does not, so the timed model's clause pauses are longer
+by construction (and the files are two separate exports). Cues are
+therefore always computed from the audio they are served with, never
+borrowed from the other model. The original model is loaded only when the
+timed path fails, so a normal server holds one Kokoro session (~1 GB
+resident), not two.
+
+Speech cache: rows made on one path are keyed apart from the other's
+(`cache_version`), so turning native timing on never serves an old recording
+with stretched cues; a recording made by the fallback is not cached at all
+(the next request tries the timed model again).
 """
 from __future__ import annotations
 
 import asyncio
 import io
+import logging
 import threading
 
 from app.core.config import get_settings
 from app.services.tts.base import SynthesisResult, TTSProvider, Voice
 from app.services.tts.visemes import cues_from_text
+
+logger = logging.getLogger("liveface.tts.kokoro")
+
+# Bumped whenever what a native-timed recording's cues mean changes: the
+# speech cache keys Kokoro rows by it (registry.cache_key).
+NATIVE_CACHE_VERSION = "native-1"
 
 # A curated slice of Kokoro's 54 voices: one or two per language, not fifty
 # near-identical English ones. Japanese and Mandarin are deliberately absent
@@ -84,15 +108,12 @@ class KokoroTTSProvider(TTSProvider):
     display_name = "Server voice (built-in)"
 
     def is_configured(self) -> bool:
-        import os
+        """Either model, with the voices: a server may ship only one."""
+        return _original_configured() or native_timing_enabled()
 
-        settings = get_settings()
-        return bool(
-            settings.kokoro_model_path
-            and settings.kokoro_voices_path
-            and os.path.isfile(settings.kokoro_model_path)
-            and os.path.isfile(settings.kokoro_voices_path)
-        )
+    def cache_version(self) -> str:
+        """Native-timed recordings are keyed apart from stretched ones."""
+        return NATIVE_CACHE_VERSION if native_timing_enabled() else ""
 
     async def voices(self) -> list[Voice]:
         return VOICES
@@ -109,6 +130,16 @@ class KokoroTTSProvider(TTSProvider):
         lang = _LANG_BY_PREFIX.get(voice_id[0], "en-us")
 
         async with _synth_semaphore:
+            fell_back = False
+            if native_timing_enabled():
+                native = await _synthesize_native(text, voice_id, lang, locale)
+                if native is not None:
+                    return native
+                if not _original_configured():
+                    raise RuntimeError(
+                        "the timestamped Kokoro model failed and no other Kokoro model is installed"
+                    )
+                fell_back = True
             audio, duration_ms = await asyncio.to_thread(_render, text, voice_id, lang)
         return SynthesisResult(
             audio=audio,
@@ -117,7 +148,55 @@ class KokoroTTSProvider(TTSProvider):
             # The rendered audio, so vowel openness is measured from
             # this voice rather than predicted from spelling stress.
             cues=cues_from_text(text, duration_ms, locale, audio=audio),
+            # Keyed as a native recording (the timed model is installed), so
+            # a fallback must not be kept: the next request tries native again.
+            cacheable=not fell_back,
         )
+
+
+def _original_configured() -> bool:
+    """Is kokoro-v1.0.onnx installed, with the voices?"""
+    import os
+
+    settings = get_settings()
+    return bool(
+        settings.kokoro_model_path
+        and settings.kokoro_voices_path
+        and os.path.isfile(settings.kokoro_model_path)
+        and os.path.isfile(settings.kokoro_voices_path)
+    )
+
+
+def native_timing_enabled() -> bool:
+    """Speak with the timestamped model? Installed, and not switched off."""
+    from app.services.tts import lab_timing
+
+    return bool(get_settings().kokoro_native_timing) and lab_timing.configured()
+
+
+async def _synthesize_native(
+    text: str, voice_id: str, lang: str, locale: str
+) -> SynthesisResult | None:
+    """Speech from the timestamped model, timed by the model's own spans, or
+    None when the model could not speak (the caller falls back to the
+    original one). Spans the timings cannot use (an unmapped phoneme, spans
+    out of order) keep this audio and time it the stretched way instead:
+    the recording is good, only its timestamps are not."""
+    from app.services.tts import lab_timing
+
+    try:
+        audio, duration_ms, spans = await asyncio.to_thread(
+            lab_timing.render_timed, text, voice_id, lang
+        )
+    except Exception:
+        logger.exception("timestamped Kokoro synthesis failed; using the original model")
+        return None
+    try:
+        cues = lab_timing.native_cues(spans, duration_ms, audio)
+    except ValueError as exc:
+        logger.warning("native timings unusable (%s); fitting cues to the audio instead", exc)
+        cues = cues_from_text(text, duration_ms, locale, audio=audio)
+    return SynthesisResult(audio=audio, audio_mime="audio/wav", duration_ms=duration_ms, cues=cues)
 
 
 def _render(text: str, voice_id: str, lang: str) -> tuple[bytes, int]:

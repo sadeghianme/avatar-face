@@ -67,6 +67,11 @@ class AdjustRequest(BaseModel):
     consent_id: str = Field(min_length=1, max_length=64)
     # How many candidates to ask for (each is a paid call).
     count: int = Field(default=2, ge=1, le=2)
+    # Started by the wizard on its own, acting on `ai.auto_adjust`, not by
+    # the owner's press: accepted only while that offer stands for the
+    # current image (409 auto_adjust_not_applicable otherwise), and once per
+    # image. The owner still chooses between the result and their photo.
+    auto: bool = False
 
 
 class DetectRequest(BaseModel):
@@ -215,6 +220,20 @@ class AdjustRoundOut(BaseModel):
     limit_reached: bool = False
 
 
+class AutoAdjustOut(BaseModel):
+    """A fix the wizard may start by itself: the current image of a person
+    shows teeth between parted lips (the photographic mouth would paint them
+    on the lips when it closes), which a touch-up closes. The wizard starts
+    it only with the member's own current third_party_ai consent (GET
+    /consents/mine), sending `auto: true`; the result is offered, never
+    chosen."""
+
+    mode: Literal["touchup"]
+    # The step it applies to, and the photo check's reasons (check codes).
+    image: str
+    reasons: list[str]
+
+
 class AiOut(BaseModel):
     """The creation's AI step: what is offered, what is left, what happened."""
 
@@ -229,6 +248,9 @@ class AiOut(BaseModel):
     adjust_rounds_left: int
     ai_detections_left: int
     last_round: AdjustRoundOut | None = None
+    # Set when the wizard should start a touch-up on its own (see
+    # AutoAdjustOut); null otherwise, and once one was started for this image.
+    auto_adjust: AutoAdjustOut | None = None
 
 
 class CreationOut(BaseModel):
@@ -267,6 +289,15 @@ class PreviewRigOut(BaseModel):
     reasons: list[FitReason] = Field(default_factory=list)
 
 
+class FinishWarning(BaseModel):
+    # "mouth_open" or "teeth_showing": the picture being finished still shows
+    # it, so the avatar rests with its mouth open, or with its own teeth
+    # painted on its lips. Not a refusal: the avatar is built anyway.
+    code: str
+    detail: str
+
+
 class FinishOut(BaseModel):
     avatar_id: str
     creation: CreationOut
+    warnings: list[FinishWarning] = Field(default_factory=list)

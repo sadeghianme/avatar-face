@@ -11,6 +11,11 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
+      args:
+        # The timestamped Kokoro model: production speech is timed by it
+        # (services.tts.kokoro). The Dockerfile's default, stated here so a
+        # change of default cannot silently drop native timing.
+        INCLUDE_LIPSYNC_MODEL: "1"
     restart: unless-stopped
     environment:
       PUBLIC_BASE_URL: https://avatar.mehdisadeghian.com/api

@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Spinner } from "@/components/ui/Spinner";
+import { useConsent } from "@/features/avatars/hooks/useConsent";
+import { teethNoteKey, teethView } from "@/features/avatars/teeth";
 import { api, ApiError } from "@/lib/api";
 import type { Avatar, MouthRenderer } from "@/lib/types";
 
@@ -45,7 +47,9 @@ export function MouthPanel({
   const [renderer, setRenderer] = useState<MouthRenderer>(savedRenderer);
   const [profile, setProfile] = useState<ReferenceProfile>(() => normalizeProfile(saved?.profile));
   const [busy, setBusy] = useState(false);
+  const [making, setMaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const consent = useConsent(orgId);
   const base = `/orgs/${orgId}/avatars/${avatar.id}`;
 
   // Re-seed when the server's copy changes under us (publish, discard).
@@ -117,8 +121,31 @@ export function MouthPanel({
     void run(() => api.postForm(`${base}/mouth-photo`, form));
   };
 
+  /**
+   * The person's own teeth, made by AI from this avatar's picture: what a
+   * new avatar gets when it is made, for one made before, or whose teeth
+   * could not be made then. A draft edit, like the upload; the member's
+   * remembered consent is used, or asked for once (useConsent.withAi), and
+   * "Not now" sends nothing.
+   */
+  const makeTeeth = () => {
+    setMaking(true);
+    void run(() =>
+      consent.withAi(t("mouthTeethGenerate"), (consentId) =>
+        api.post<Avatar>(`${base}/mouth-photo/generate`, { consent_id: consentId })
+      )
+    ).finally(() => setMaking(false));
+  };
+
   const continuous = renderer === "continuous";
   const hasPhoto = Boolean(saved?.has_oral_photo);
+  const teeth = teethView(saved);
+  const aiTeeth = teeth?.kind === "ai";
+  const note = teeth?.kind === "generic" ? teeth.note : null;
+  const noteKey = note ? teethNoteKey(note.code) : null;
+  // Offered while the organization allows third-party AI; the server
+  // refuses otherwise anyway (and says so).
+  const canMakeTeeth = consent.aiEnabled && renderer === "continuous";
 
   return (
     <section className="card space-y-4" aria-label={t("mouthTitle")}>
@@ -161,9 +188,32 @@ export function MouthPanel({
       {continuous && (
         <>
           <div className="rounded-xl bg-black/[0.03] p-3 dark:bg-white/[0.04]">
-            <p className="text-sm font-medium">{t(hasPhoto ? "mouthPhotoActive" : "mouthPhotoTitle")}</p>
-            <p className="mt-1 text-xs leading-relaxed text-gray-500">{t("mouthPhotoHint")}</p>
+            <p className="text-sm font-medium">
+              {t(aiTeeth ? "mouthTeethAiTitle" : hasPhoto ? "mouthPhotoActive" : "mouthPhotoTitle")}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-gray-500">
+              {t(aiTeeth ? "mouthTeethAiHint" : "mouthPhotoHint")}
+            </p>
+            {note && (
+              <p className="mt-1.5 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+                {noteKey ? t(noteKey) : `${t("mouthTeethGeneric")} ${note.detail}`}
+              </p>
+            )}
+            {canMakeTeeth && !hasPhoto && (
+              <p className="mt-1.5 text-xs leading-relaxed text-gray-500">{t("mouthTeethGenerateHint")}</p>
+            )}
+            {making && (
+              <p className="mt-1.5 flex items-center gap-2 text-xs text-gray-500" role="status">
+                <Spinner className="h-3.5 w-3.5" />
+                {t("mouthTeethGenerating")}
+              </p>
+            )}
             <div className="mt-2.5 flex flex-wrap gap-2">
+              {canMakeTeeth && (!hasPhoto || aiTeeth) && (
+                <button type="button" className="btn-secondary" disabled={busy} onClick={makeTeeth}>
+                  {t(aiTeeth ? "mouthTeethRegenerate" : "mouthTeethGenerate")}
+                </button>
+              )}
               <input
                 ref={fileRef}
                 type="file"
@@ -226,6 +276,7 @@ export function MouthPanel({
         </>
       )}
       {error && <p className="field-error" role="alert">{error}</p>}
+      {consent.dialog}
     </section>
   );
 }

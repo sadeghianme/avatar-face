@@ -585,15 +585,9 @@ async def _ai_switched_off(org_id: str) -> bool:
     on, not from the next request. So it is read again before every
     provider call, next to the image limit.
     """
-    from app.models import Organization
+    from app.services.consent import ai_switched_off
 
-    async with get_session_factory()() as db:
-        enabled = (
-            await db.execute(
-                select(Organization.third_party_ai_enabled).where(Organization.id == org_id)
-            )
-        ).scalar_one_or_none()
-    return not enabled
+    return await ai_switched_off(org_id)
 
 
 def _ai_disabled_error() -> AppError:
@@ -1046,6 +1040,74 @@ ADJUST_CALLS = {
 }
 
 
+# What the wizard may fix without being asked: a person whose lips are
+# parted over their teeth. Those teeth are pixels of the photo, painted on
+# the lips, so the photographic mouth shows them on closed lips as it talks;
+# a touch-up closes the lips and nothing else. Everything else the check
+# finds (eyes, pose, light) stays a recommendation the owner acts on.
+AUTO_ADJUST_REASON = "teeth_showing"
+
+
+def auto_adjust_of(creation: Creation) -> dict | None:
+    """{mode, image, reasons}: the touch-up the wizard may start by itself
+    on the current image, or None.
+
+    Only on a person's photo whose check recommends a touch-up because the
+    teeth show, while a round is left, and at most once per photo: never on
+    a picture an AI already made (the result is the owner's to judge, even
+    if its lips are still parted), nor on one the owner has already
+    adjusted, nor again on one it was started for (`auto_adjusted`, the
+    pixel frames it ran on). The organization's switch, the server's image
+    model and the member's consent are the caller's to check.
+    """
+    from app.services.photo_adjust import ROUNDS_PER_CREATION, TOUCHUP
+
+    if creation.face_type != "human":
+        return None
+    steps = creation.steps
+    recommendation = recommendation_of(steps, "human")
+    if (
+        not recommendation
+        or recommendation["mode"] != TOUCHUP
+        or AUTO_ADJUST_REASON not in recommendation["reasons"]
+    ):
+        return None
+    current = current_step(steps)
+    if ai_edited_of(steps, current) is not None:
+        return None
+    usage = ai_usage_of(creation)
+    if usage["adjust_rounds"] >= ROUNDS_PER_CREATION:
+        return None
+    frame = frame_key(steps, current)
+    if frame in (usage.get("auto_adjusted") or []):
+        return None
+    last = usage.get("last_round")
+    if last and frame_key(steps, round_source(steps, last)) == frame:
+        return None
+    return {"mode": TOUCHUP, "image": current, "reasons": list(recommendation["reasons"])}
+
+
+def mouth_warnings(creation: Creation) -> list[dict]:
+    """What finishing the current image will look like around the mouth, as
+    {code, detail} warnings: an open mouth rests open, and parted lips keep
+    the photo's teeth painted on them. Empty when the check found neither,
+    or has not looked (no face, a draft from before checks were kept)."""
+    state = (check_of(creation.steps, current_step(creation.steps)) or {}).get("face_state") or {}
+    if state.get("mouth_open"):
+        return [error_record(
+            "mouth_open",
+            "The mouth is open in this picture, so the avatar rests with it open; "
+            "regenerate the photo or use one with the lips closed",
+        )]
+    if state.get("teeth_showing"):
+        return [error_record(
+            "teeth_showing",
+            "The lips are parted in this picture, so its own teeth stay painted on them "
+            "as the avatar talks; a touch-up closes them",
+        )]
+    return []
+
+
 def _refund_round(usage: dict) -> None:
     usage["adjust_rounds"] = max(0, usage["adjust_rounds"] - 1)
 
@@ -1482,6 +1544,8 @@ async def _build_avatar(
         # working single-photo avatar.
         avatar.has_layers = await store_layers(avatar, storage, image, rig["face_box"])
 
+    await _own_teeth(job, avatar, image, storage)
+
     warnings = (anchors.get("validation") or {}).get("warnings") or []
     avatar.rig_key = rig_key
     avatar.thumbnail_key = thumb_key
@@ -1491,6 +1555,79 @@ async def _build_avatar(
     avatar.quality_note = warnings[0]["detail"] if warnings else None
     job.report(0.8, "publishing")
     await publish(avatar, storage)
+
+
+TEETH_FAILED = error_record(
+    "teeth_failed", "The teeth could not be made, so this avatar uses standard teeth"
+)
+
+
+async def _own_teeth(job: Job, avatar: Avatar, image: bytes, storage) -> None:
+    """The mouth a new avatar speaks with, set before its first publish.
+
+    A person gets the photographic mouth (services.mouth_photo.default_config;
+    every other line keeps the classic one, mouth_config null), and, when the
+    organization allows third-party AI and the member finishing it has agreed
+    to send photos to Google, their own teeth: an "ee" photo the image model
+    makes from `image`, the picture just chosen, admitted exactly like an
+    uploaded mouth photo. Anything short of that (no consent, AI off, the
+    limit, a refusal, a photo the teeth test rejects, a crash) publishes
+    with the renderer's generic teeth and records why in the teeth note.
+    Never fails the finish: the avatar is worth having without its teeth.
+    """
+    from app.services import consent, mouth_photo
+
+    config = mouth_photo.default_config(avatar.face_type)
+    if config is None:
+        return
+    avatar.mouth_config = json.dumps(config)
+    job.report(0.65, "making the teeth")
+    try:
+        consent_id = await _teeth_consent(avatar)
+        made = await mouth_photo.make_teeth(avatar.org_id, image)
+        await mouth_photo.store(
+            avatar, storage, made.photo, made.rig, mouth_photo.ai_teeth_record(made.model)
+        )
+    except mouth_photo.TeethFailure as exc:
+        logger.info("finish %s: standard teeth (%s)", job.id, exc.code)
+        note = exc.note()
+    except Exception:
+        logger.exception("finish %s: making the teeth failed", job.id)
+        note = TEETH_FAILED
+    else:
+        # AI made part of what visitors see: the disclosure says so.
+        avatar.ai_edited = mouth_photo.with_ai_teeth(avatar.ai_edited, made.model)
+        avatar.consent_ids = consent.with_consent(avatar.consent_ids, consent_id)
+        return
+    config["teeth"] = mouth_photo.generic_teeth_record(note)
+    avatar.mouth_config = json.dumps(config)
+
+
+async def _teeth_consent(avatar: Avatar) -> str:
+    """The finishing member's current third_party_ai consent, in an
+    organization that allows third-party AI; else TeethFailure (nothing is
+    sent without both)."""
+    from app.models import Organization
+    from app.services import consent
+    from app.services.ai_models import PROVIDER
+    from app.services.mouth_photo import TeethFailure
+
+    async with get_session_factory()() as db:
+        org = await db.get(Organization, avatar.org_id)
+        if org is None or not org.third_party_ai_enabled:
+            raise TeethFailure(
+                "third_party_ai_disabled",
+                "Your organization has turned off third-party AI, so standard teeth are used",
+                403,
+            )
+        agreed = await consent.latest(db, org, avatar.created_by_id, consent.THIRD_PARTY_AI)
+    if agreed is None or PROVIDER not in (agreed.providers or []):
+        raise TeethFailure(
+            "no_ai_consent",
+            "You have not agreed to send photos to Google, so standard teeth are used",
+            403,
+        )
+    return agreed.id
 
 
 def _over(cut_out: bytes, backdrop: bytes) -> bytes | None:

@@ -92,8 +92,14 @@ class Settings(BaseSettings):
     # Kokoro local TTS. Set by the Dockerfile; absent in dev unless downloaded.
     kokoro_model_path: str | None = None
     kokoro_voices_path: str | None = None
-    # Opt-in timestamp-enabled model. Used only by the lip-sync lab.
+    # The timestamp-enabled Kokoro export (kokoro-timed.onnx). When present,
+    # the Kokoro provider speaks with it and takes its cues from the model's
+    # own phoneme timings (services.tts.kokoro); the lip-sync lab uses it too.
     kokoro_lipsync_model_path: str | None = None
+    # Off: the Kokoro provider goes back to the original model and cues
+    # fitted to the audio's length, whatever models are installed. A rollback
+    # switch, not a tuning knob.
+    kokoro_native_timing: bool = True
     # Directory of Piper .onnx voices; covers the languages Kokoro lacks.
     piper_voices_dir: str | None = None
 

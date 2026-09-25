@@ -157,8 +157,10 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     sweeper = asyncio.create_task(sweep_forever(settings.candidate_sweep_interval_minutes * 60))
 
-    # Optional lab warm-up: keep model loading/first inference out of the first
-    # visitor's speech request, without delaying the rest of the application.
+    # Warm the timestamped Kokoro model, which the Kokoro provider speaks
+    # with when it is installed (and the lab too): keep model loading and the
+    # first inference out of the first visitor's speech request, without
+    # delaying the rest of the application.
     from app.services.tts.lab_timing import warm_native
 
     async def warm_lab():

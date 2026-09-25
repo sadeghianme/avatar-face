@@ -129,6 +129,9 @@ export function PointsStep({
   // Held here, not in the editor: "Detect again" brings new anchors and a
   // fresh editor, and the name typed so far should survive that.
   const [name, setName] = useState(defaultName);
+  // What finishing said about the mouth of the picture (an open mouth,
+  // teeth between parted lips): shown while the avatar is built.
+  const [finishWarnings, setFinishWarnings] = useState<NonNullable<FinishResult["warnings"]>>([]);
 
   // Built: the marks in progress have done their job.
   useEffect(() => {
@@ -175,6 +178,16 @@ export function PointsStep({
           </p>
         )}
         <p className="text-xs text-gray-500 dark:text-gray-400">{t("createFinishingHint")}</p>
+        {finishWarnings.length > 0 && (
+          <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200" role="status">
+            <p className="font-medium">{t("finishWarningsTitle")}</p>
+            <ul className="mt-1 list-disc space-y-1 ps-5">
+              {finishWarnings.map((warning) => (
+                <li key={warning.code}>{t(`finishWarning_${warning.code}`, { defaultValue: warning.detail })}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     );
   }
@@ -223,6 +236,7 @@ export function PointsStep({
       onName={setName}
       onBack={onBack}
       onRetry={retry}
+      onWarnings={setFinishWarnings}
     />
   );
 }
@@ -240,6 +254,7 @@ function PointsEditor({
   onName,
   onBack,
   onRetry,
+  onWarnings,
 }: {
   orgId: string;
   creation: Creation;
@@ -253,6 +268,7 @@ function PointsEditor({
   onName: (name: string) => void;
   onBack: () => void;
   onRetry: () => void;
+  onWarnings: (warnings: NonNullable<FinishResult["warnings"]>) => void;
 }) {
   const { t } = useTranslation();
   const base = `/orgs/${orgId}/creations/${creation.id}`;
@@ -355,7 +371,10 @@ function PointsEditor({
       },
       (result) => result.creation
     );
-    if (outcome.ok) return;
+    if (outcome.ok) {
+      onWarnings(outcome.result.warnings ?? []);
+      return;
+    }
     const body = outcome.error.body;
     if (outcome.error.code === "fit_invalid" && Array.isArray(body.reasons)) {
       setReasons(body.reasons as FitReason[]);

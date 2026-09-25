@@ -57,9 +57,12 @@ RUN curl -fsSL -o models/kokoro-v1.0.onnx     https://github.com/thewh1teagle/ko
 ENV KOKORO_MODEL_PATH=/app/backend/models/kokoro-v1.0.onnx
 ENV KOKORO_VOICES_PATH=/app/backend/models/voices-v1.0.bin
 
-# Separate lab model; the existing provider continues using kokoro-v1.0.onnx.
-# Lazy-loaded only by the lab. Set --build-arg INCLUDE_LIPSYNC_MODEL=0 on
-# memory/disk-constrained deployments; the lab then labels its clock-only mode.
+# The timestamped Kokoro export. When present, the Kokoro provider speaks
+# with it and times the mouth by the model's own phoneme spans
+# (services.tts.kokoro); kokoro-v1.0.onnx above is then loaded only if it
+# fails. Warmed at startup, ~1 GB resident. INCLUDE_LIPSYNC_MODEL=0 builds
+# without it: speech falls back to kokoro-v1.0.onnx with cues fitted to the
+# audio's length, and the lab labels its clock-only mode.
 ARG INCLUDE_LIPSYNC_MODEL=1
 RUN if [ "$INCLUDE_LIPSYNC_MODEL" = "1" ]; then \
       curl -fsSL -o models/kokoro-timed.onnx \

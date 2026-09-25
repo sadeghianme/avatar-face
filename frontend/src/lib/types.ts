@@ -80,7 +80,15 @@ export interface Avatar {
   /** The DRAFT mouth; null means the classic drawn mouth. */
   /** Detail only: presigned draft teeth photo + its rig. */
   mouth_photo?: { image_url: string; rig_url: string } | null;
-  mouth?: { renderer: MouthRenderer; profile: Record<string, number>; has_oral_photo: boolean } | null;
+  mouth?: {
+    renderer: MouthRenderer;
+    profile: Record<string, number>;
+    has_oral_photo: boolean;
+    /** Where the teeth photo came from ("ai": made from the avatar's
+     *  picture; "upload": the owner's), or null with the reason a new avatar
+     *  has generic teeth. Absent from a server before it said so. */
+    teeth?: TeethRecord;
+  } | null;
   /** Set means a public page exists at /s/<token>. */
   share_token?: string | null;
   /** Background/body/head decomposition for the layered render path. */
@@ -92,10 +100,19 @@ export interface Avatar {
   ai_edited?: AiEdited | null;
 }
 
-/** How an AI was involved in an avatar's picture, as it is disclosed. */
+/** How an AI was involved in an avatar's picture, as it is disclosed.
+ *  `teeth`: the mouth's teeth photo was made by AI too ("teeth" is the mode
+ *  when nothing else was). */
 export interface AiEdited {
-  mode: "touchup" | "stylise" | "regenerate" | "generate";
+  mode: "touchup" | "stylise" | "regenerate" | "generate" | "teeth";
   model: string | null;
+  teeth?: { model: string | null };
+}
+
+/** The avatar's teeth photo: who made it, or why there is none. */
+export interface TeethRecord {
+  source: "ai" | "upload" | null;
+  note: { code: string; detail: string } | null;
 }
 
 export interface Provider {

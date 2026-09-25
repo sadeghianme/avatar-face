@@ -53,16 +53,26 @@ def get_provider(name: str) -> TTSProvider:
     raise NotFound404(f"Unknown TTS provider '{name}'", code="unknown_provider")
 
 
-def cache_key(provider: str, voice: str, locale: str, text: str) -> str:
-    payload = "\x1f".join((provider, voice, locale, text))
+def cache_key(provider: str, voice: str, locale: str, text: str, version: str = "") -> str:
+    """The speech cache row for this text. `version` is the provider's
+    cache_version(); empty keeps the key every older row was stored under."""
+    parts = (provider, voice, locale, text) + ((version,) if version else ())
+    payload = "\x1f".join(parts)
     return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _cache_version(provider_name: str) -> str:
+    for provider in _ALL_PROVIDERS:
+        if provider.name == provider_name:
+            return provider.cache_version()
+    return ""
 
 
 async def synthesize_cached(
     db: AsyncSession, provider_name: str, voice: str, locale: str, text: str
 ) -> tuple[SynthesisResult, bool]:
     """Synthesize through the cache. Returns (result, was_cached)."""
-    key = cache_key(provider_name, voice, locale, text)
+    key = cache_key(provider_name, voice, locale, text, _cache_version(provider_name))
     row = (
         await db.execute(select(SpeechCache).where(SpeechCache.cache_key == key))
     ).scalar_one_or_none()
@@ -79,6 +89,8 @@ async def synthesize_cached(
 
     provider = get_provider(provider_name)
     result = await provider.synthesize(text, voice, locale)
+    if not result.cacheable:
+        return result, False
     db.add(
         SpeechCache(
             cache_key=key,

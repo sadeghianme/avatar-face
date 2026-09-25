@@ -178,6 +178,18 @@ export interface CreationAi {
   adjust_rounds_left: number;
   ai_detections_left: number;
   last_round: AdjustRound | null;
+  /** A touch-up the wizard starts by itself (see autoAdjustToStart); null
+   * otherwise. Absent from a server before it offered one. */
+  auto_adjust?: AutoAdjust | null;
+}
+
+/** The server's offer of a touch-up nobody has to press for: a person whose
+ * parted lips show their teeth (they would stay painted on the lips as the
+ * avatar talks). Once per photo; the owner still chooses the result. */
+export interface AutoAdjust {
+  mode: "touchup";
+  image: StepId;
+  reasons: string[];
 }
 
 export interface Creation {
@@ -217,6 +229,9 @@ export interface PreviewRig {
 export interface FinishResult {
   avatar_id: string;
   creation: Creation;
+  /** What the finished picture still shows around the mouth
+   * ("mouth_open", "teeth_showing"): said, not refused. */
+  warnings?: { code: string; detail: string }[];
 }
 
 // --- Upload ---------------------------------------------------------------------
@@ -266,6 +281,29 @@ export function isJobActive(job: CreationJob | null | undefined): boolean {
  * a job, or a finish (which is a job, but also a status). Poll while so. */
 export function isBusy(creation: Creation | null | undefined): boolean {
   return Boolean(creation && (isJobActive(creation.job) || creation.status === "finishing"));
+}
+
+/** Which offer a tab has acted on: one creation's image. */
+export const autoAdjustKey = (creation: Creation, offer: AutoAdjust) => `${creation.id}:${offer.image}`;
+
+/**
+ * The touch-up to start without a press, or null.
+ *
+ * Only what the server offers (ai.auto_adjust), only on the member's own
+ * remembered consent (a string: while it is loading, or when they have not
+ * agreed yet, nothing starts, and nothing asks for it on their behalf),
+ * never while something else runs, and once per image in this tab (the
+ * server holds to once per photo for every tab).
+ */
+export function autoAdjustToStart(
+  creation: Creation,
+  consentId: string | null | undefined,
+  started: ReadonlySet<string>
+): AutoAdjust | null {
+  const offer = creation.ai?.auto_adjust ?? null;
+  if (!offer || typeof consentId !== "string" || creation.status !== "draft") return null;
+  if (isJobActive(creation.job) || started.has(autoAdjustKey(creation, offer))) return null;
+  return offer;
 }
 
 /**
