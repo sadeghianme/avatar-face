@@ -557,6 +557,10 @@ async def test_an_animal_is_placed_from_the_template_and_never_one_click(client,
     # The line's detector is the template, even with a face detector present.
     assert anchors["detected"] is False
     assert set(anchors["marks"]) == {"head", "left_eye", "right_eye", "mouth_line", "chin"}
+    # The head is eight points: its edges, its temples and its jaw corners.
+    assert set(anchors["marks"]["head"]) == {
+        "left", "right", "top", "bottom", "upper_left", "upper_right", "lower_right", "lower_left",
+    }
     assert anchors["validation"]["ok"] is True
     assert anchors["validation"]["one_click"] is False
 

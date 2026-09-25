@@ -777,10 +777,11 @@ async def rig_anchors(avatar_id: str, ctx: OrgMember, db: DB) -> dict:
     dropped). Anything never marked opens on the landmark it attaches to, in
     the mesh those saved marks make from the base — so a good detection
     means dragging nothing, and an eye left unmarked sits where the fit put
-    it. Always in the line's scheme: an animal marked before mouth lines
-    existed opens with a mouth line. Clamped to the image, because a later
-    crop can leave a saved mark outside it, where no handle could be dragged
-    from.
+    it; a head saved with four points opens with its outline diagonals on
+    the fitted mesh. Always in the line's scheme: an animal marked before
+    mouth lines existed opens with a mouth line. Clamped to the image,
+    because a later crop can leave a saved mark outside it, where no handle
+    could be dragged from.
     """
     import json as _json
 
@@ -796,6 +797,10 @@ async def rig_anchors(avatar_id: str, ctx: OrgMember, db: DB) -> dict:
     base, rig_on_base = await _fit_base(avatar, storage, rig)
     saved = saved_marks(rig, avatar.face_type, rig_on_base)
     fitted, _ = fit_rig(rig, base, saved, avatar.face_type)
+    # A head saved before it had diagonals opens with them where its fit put
+    # them (merge keeps the mesh's diagonals under a head that has none), so
+    # all eight handles are there, and the panel, which sends a head it did
+    # not touch without them, saves it exactly as it was.
     marks = merge(
         marks_from_mesh(np.array(fitted["points"], dtype=float), avatar.face_type), saved
     )

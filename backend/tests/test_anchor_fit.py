@@ -27,9 +27,14 @@ from app.services.anchor_fit import (
     RIGHT_COMMISSURE,
     RIGHT_IRIS,
     SEAM_GAP,
+    FACE_OVAL,
+    HEAD_DIAGONALS,
+    HEAD_OUTLINE,
+    HEAD_OUTLINE_EDGES,
     FaceMarks,
     PupilMarks,
     RegionMarks,
+    catmull_rom,
     correspondences,
     fit_base_points,
     fit_base_record,
@@ -40,10 +45,12 @@ from app.services.anchor_fit import (
     marks_to_dict,
     merge,
     move_fit_base,
+    outline_crossed,
     part_lips,
     saved_marks,
     validate,
     warp,
+    with_head_outline,
 )
 from app.services.rig import build_rig, template_mesh
 
@@ -597,3 +604,204 @@ def test_two_line_marks_on_the_same_pixel_do_not_crash_the_fit():
     marks = replace(line_marks("dog wide muzzle"), mouth_line=line)
     out, _problems = fit_rig(rig, base, marks, "animal")
     assert np.isfinite(np.array(out["points"], dtype=float)).all()
+
+
+# --- the head outline -------------------------------------------------------------
+
+# The test head's ellipse (centre 500,500, half-axes 300 by 350) at 45
+# degrees: where an owner tracing an oval face puts the temples and the jaw.
+_R = 1 / math.sqrt(2)
+OVAL_DIAGONALS = {
+    "upper_left": (500 - 300 * _R, 500 - 350 * _R),
+    "upper_right": (500 + 300 * _R, 500 - 350 * _R),
+    "lower_right": (500 + 300 * _R, 500 + 350 * _R),
+    "lower_left": (500 - 300 * _R, 500 + 350 * _R),
+}
+HEAD8 = replace(HEAD, **OVAL_DIAGONALS)
+
+
+def outline_marks(layout: str, chin=(500, 850), **diagonals) -> FaceMarks:
+    return replace(line_marks(layout, chin=chin), head=replace(HEAD8, **diagonals))
+
+
+def test_the_head_diagonals_are_the_oval_landmarks_nearest_the_box_diagonals():
+    """On an ellipse the point halfway between two edges lies on the
+    diagonal of its box; on the template, these are the oval's landmarks
+    nearest those diagonals. Pinned: stored marks name these landmarks."""
+    assert HEAD_DIAGONALS == {
+        "upper_left": 54, "upper_right": 284, "lower_right": 365, "lower_left": 136,
+    }
+    unit = face_template.normalised()
+    cx, cy = (unit[234][0] + unit[454][0]) / 2, (unit[10][1] + unit[152][1]) / 2
+    hw, hh = (unit[454][0] - unit[234][0]) / 2, (unit[152][1] - unit[10][1]) / 2
+
+    def angle(i: int) -> float:
+        return math.atan2((unit[i][1] - cy) / hh, (unit[i][0] - cx) / hw)
+
+    wanted = {
+        "upper_left": (-1, -1), "upper_right": (1, -1), "lower_right": (1, 1), "lower_left": (-1, 1),
+    }
+    for name, (dx, dy) in wanted.items():
+        target = math.atan2(dy, dx)
+        off = lambda i: abs(math.remainder(angle(i) - target, math.tau))  # noqa: E731
+        assert min(FACE_OVAL, key=off) == HEAD_DIAGONALS[name], name
+
+
+def test_each_diagonal_lies_on_the_oval_between_its_neighbouring_marks():
+    positions = [FACE_OVAL.index(i) for i in HEAD_OUTLINE]
+    assert positions == sorted(positions)  # clockwise from the top, no overtaking
+    assert HEAD_OUTLINE[0] == 10 and len(set(HEAD_OUTLINE)) == 8
+    # Mirror pairs, as the template's near-symmetric face shows them.
+    unit = face_template.normalised()
+    cx = (unit[234][0] + unit[454][0]) / 2
+    for left, right in ((54, 284), (136, 365)):
+        assert abs((cx - unit[left][0]) - (unit[right][0] - cx)) < 0.05
+        assert abs(unit[left][1] - unit[right][1]) < 0.05
+
+
+def test_the_panels_curve_is_catmull_rom():
+    """The same numbers features/avatars/face-marks.test.ts checks: the
+    outline the owner sees is the curve the oval is fitted to."""
+    p = [(0, 0), (1, 0), (2, 1), (3, 1)]
+    assert catmull_rom(*p, 0.0) == pytest.approx((1, 0))
+    assert catmull_rom(*p, 1.0) == pytest.approx((2, 1))
+    assert catmull_rom(*p, 0.5) == pytest.approx((1.5, 0.5))
+
+
+def test_eight_head_marks_pin_their_landmarks():
+    marks = outline_marks("dog wide muzzle")
+    pinned = dict(correspondences(template_rig()[1], marks, "animal"))
+    for name, i in HEAD_DIAGONALS.items():
+        assert pinned[i] == pytest.approx(OVAL_DIAGONALS[name])
+    # And the whole oval, between them, with them.
+    assert set(FACE_OVAL) <= set(pinned)
+
+
+def _curve(ring: np.ndarray, steps: int = 200) -> np.ndarray:
+    n = len(ring)
+    return np.array([
+        catmull_rom(ring[(k - 1) % n], ring[k], ring[(k + 1) % n], ring[(k + 2) % n], t)
+        for k in range(n) for t in np.linspace(0, 1, steps, endpoint=False)
+    ])
+
+
+def _off_curve(points: np.ndarray, ring: np.ndarray) -> float:
+    curve = _curve(ring)
+    return max(float(np.min(np.linalg.norm(curve - p, axis=1))) for p in points)
+
+
+def test_the_oval_follows_the_outline_the_owner_sees():
+    """The oval keeps the distance from the curve it had in the base (a
+    detected jaw is not exactly a spline), scaled with the head: never
+    further off the drawn outline than that."""
+    rig, base = template_rig()
+    marks = outline_marks("dog wide muzzle")
+    fitted = np.array(fit_rig(rig, base, marks, "animal")[0]["points"])
+    ring = np.array([getattr(marks.head, e) for e in HEAD_OUTLINE_EDGES])
+    before = _off_curve(base[FACE_OVAL], base[HEAD_OUTLINE])
+    assert _off_curve(fitted[FACE_OVAL], ring) <= before * 1.2 + 0.5
+
+
+@pytest.mark.parametrize("on", ["template", "detected"])
+@pytest.mark.parametrize("chin", [(500, 850), (500, 790)], ids=["chin on head", "jowls below"])
+@pytest.mark.parametrize("face_type", ["animal", "cartoon"])
+@pytest.mark.parametrize("layout", LAYOUTS)
+def test_the_m2_layouts_fold_nothing_with_the_outline_marked(layout, face_type, chin, on):
+    """The temples and the jaw corners on the head's ellipse. Pinning only
+    those eight folded the "toon big grin" cheek (its corners reach within
+    a few pixels of the jaw corner); the oval on the curve folds nothing."""
+    rig, base = template_rig() if on == "template" else human_rig()
+    out, problems = fit_rig(rig, base, outline_marks(layout, chin=chin), face_type)
+    assert problems == []
+    assert flipped_triangles(part_lips(base), np.array(out["points"])) == 0
+
+
+def test_a_human_opened_with_eight_head_marks_and_saved_does_not_move():
+    rig, base = human_rig()
+    marks = marks_from_mesh(base, "human")
+    assert set(marks.head.diagonals()) == set(HEAD_DIAGONALS)
+    out, problems = fit_rig(rig, base, marks, "human")
+    assert problems == []
+    assert np.abs(np.array(out["points"]) - base).max() < 0.01
+
+
+def test_a_head_marked_with_four_points_fits_as_it_always_did():
+    """Stored before the diagonals: nothing of the outline is pinned but the
+    four edges (the embed fixture test above holds the fit to the byte)."""
+    marks = line_marks("toon big grin")
+    stored = marks_to_dict(marks)
+    assert set(stored["head"]) == {"left", "right", "top", "bottom"}
+    assert marks_from_dict(stored, "cartoon").head.diagonals() == {}
+    pinned = {i for i, _ in correspondences(template_rig()[1], marks, "cartoon")}
+    assert pinned & set(FACE_OVAL) == {10, 234, 454, 152}
+
+
+def test_a_four_point_head_opens_with_eight_and_saves_untouched_as_it_was():
+    """The handles open where its fit put the diagonals; the panel sends a
+    head it did not touch without them, and the saved ones (none) stand."""
+    rig, base = template_rig()
+    saved = line_marks("dog wide muzzle")
+    first, _ = fit_rig(rig, base, saved, "animal")
+    points = np.array(first["points"])
+    opened = merge(marks_from_mesh(points, "animal"), saved)
+    for name, i in HEAD_DIAGONALS.items():
+        assert getattr(opened.head, name) == pytest.approx(tuple(points[i]))
+    assert opened == with_head_outline(saved, points)
+    untouched = replace(opened.head, **{d: None for d in HEAD_DIAGONALS})
+    again, _ = fit_rig(rig, base, merge(saved, replace(opened, head=untouched)), "animal")
+    assert again["points"] == first["points"]
+
+
+def test_a_head_sent_without_diagonals_keeps_the_saved_ones():
+    older = outline_marks("dog wide muzzle")
+    moved = RegionMarks((190, 500), (810, 500), (500, 140), (500, 860))
+    merged = merge(older, FaceMarks(head=moved))
+    assert merged.head.left == (190, 500)
+    assert merged.head.diagonals() == OVAL_DIAGONALS
+    # A diagonal that is sent wins.
+    merged = merge(older, FaceMarks(head=replace(moved, upper_left=(280, 240))))
+    assert merged.head.upper_left == (280, 240)
+    assert merged.head.upper_right == OVAL_DIAGONALS["upper_right"]
+
+
+def test_eight_head_marks_survive_a_round_trip():
+    marks = outline_marks("cat small mouth")
+    stored = marks_to_dict(marks)
+    assert set(stored["head"]) == {"left", "right", "top", "bottom", *HEAD_DIAGONALS}
+    back = marks_from_dict(stored, "animal").head.diagonals()
+    for name, p in OVAL_DIAGONALS.items():
+        assert back[name] == pytest.approx(p, abs=0.01)  # stored to the hundredth
+
+
+def test_a_crossed_outline_is_refused():
+    """The temple and the jaw corner of one side swapped: the curve through
+    them crosses itself."""
+    rig, base = template_rig()
+    swapped = outline_marks(
+        "dog wide muzzle",
+        upper_right=OVAL_DIAGONALS["lower_right"], lower_right=OVAL_DIAGONALS["upper_right"],
+    )
+    assert "outline_crossed" in codes(fit_rig(rig, base, swapped, "animal")[1])
+
+
+def test_an_outline_out_of_order_is_refused():
+    """A temple dragged just past the top of the head zigzags back without
+    crossing anything: uncrossed, but not in order round the face."""
+    _, base = template_rig()
+    fitted = base.copy()
+    fitted[HEAD_DIAGONALS["upper_right"]] = base[10] + (-40, 30)
+    found = codes(validate(base, fitted))
+    assert "outline_out_of_order" in found and "outline_crossed" not in found
+    # Dragged further, the curve crosses: one reason, the one that says so.
+    rig, _ = template_rig()
+    past_the_top = outline_marks("dog wide muzzle", upper_right=(430, 180))
+    found = codes(fit_rig(rig, base, past_the_top, "animal")[1])
+    assert "outline_crossed" in found and "outline_out_of_order" not in found
+
+
+def test_outline_crossing_is_crossing_not_touching():
+    square = np.array([(0, 0), (1, 0), (1, 1), (0, 1)], dtype=float)
+    assert not outline_crossed(square)
+    assert outline_crossed(square[[0, 2, 1, 3]])  # a bow tie
+    # A corner dropped on its neighbour's edge is degenerate, not crossed.
+    assert not outline_crossed(np.array([(0, 0), (1, 0), (0.5, 0), (0, 1)], dtype=float))

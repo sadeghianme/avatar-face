@@ -777,7 +777,7 @@ export function pickMarks(marks: FaceMarks, parts: readonly MarkPart[]): Partial
  * Nothing is saved on the server until Finish (preview-rig saves nothing),
  * yet the editor unmounts whenever the owner steps back to check the
  * background, reloads, or waits out a finish a restart then interrupts. An
- * animal's eighteen hand-placed points must not fall back to the template's
+ * animal's twenty-two hand-placed points must not fall back to the template's
  * guess each time. Keyed by the anchors they were placed on, so marks for
  * an image that has since been reframed or re-detected are never restored.
  */

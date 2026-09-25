@@ -159,7 +159,7 @@ app/services/
 | | human | animal | animation |
 |---|---|---|---|
 | detect | MediaPipe | Gemini points *if consented*, else template | MediaPipe → validator; Gemini points if consented, else template |
-| anchors placed | head, eyes, mouth (as today), pupils | head, eyes, **mouth line** (2 corners + 3 along) + **chin**, no pupils | head, eyes, mouth line + chin, **iris ellipses** |
+| anchors placed | head (8-point outline), eyes, mouth (as today), pupils | head (8-point outline), eyes, **mouth line** (2 corners + 3 along) + **chin**, no pupils | head (8-point outline), eyes, mouth line + chin, **iris ellipses** |
 | confirm step | always shown | always, never one-click | always shown |
 | render profile | `human@1` | `animal@1` (muzzle) | `toon@1` (flat art) / `human@1` (shaded renders) |
 | mouth renderers allowed | classic, photographic | muzzle | toon, classic |
@@ -191,6 +191,40 @@ Replace it with:
    every rebuild (crop reset, re-detect) re-applies them. Reset means "back to
    the confirmed marks". Marks saved before M2 (bounding-box extremes) are
    read off a detected rig's own landmarks instead, so a re-save moves nothing.
+7. The head is an outline of eight marks, drawn as a smooth closed curve
+   (uniform Catmull-Rom) through them rather than a diamond through four. With
+   all eight marked, every face-oval landmark between them is placed on that
+   same curve (keeping its offset from the base's own curve, scaled with the
+   head), so the mesh's edge is the outline the owner sees; pinning only the
+   eight folded the cheek of the "toon big grin" layout. The validator refuses
+   an outline that crosses itself (`outline_crossed`) or goes round the face
+   out of order (`outline_out_of_order`).
+
+The anchors, in MediaPipe landmark indices ("left" and "right" are the
+image's). The head means the face: forehead to chin, cheek to cheek, not the
+hair or the ears.
+
+| mark | landmarks |
+|---|---|
+| head: top, right, bottom, left | 10, 454, 152, 234 |
+| head: upper left / upper right (temples) | 54 / 284 |
+| head: lower right / lower left (jaw corners) | 365 / 136 |
+| eye on the left: left, right, top, bottom | 33, 133, 159, 145 |
+| eye on the right: left, right, top, bottom | 362, 263, 386, 374 |
+| mouth (human): left, right, top, bottom; centre | 61, 291, 0, 17; the seam 13/14 |
+| mouth line (animal, animation): corners; seam | commissures 61…78 and 291…308; inner lip rings |
+| chin (animal, animation) | 152 |
+| pupils | iris 468–472, 473–477 (placed after the warp) |
+
+The four head diagonals are the face-oval landmarks nearest the diagonals of
+the head's box, seen from its centre, on the face template: on an ellipse the
+point halfway between two edges lies exactly there, so the eight marks are an
+ellipse's eight points (`tests/test_anchor_fit.py` pins them). Each is
+optional in the rig-fit and creation schemas: marks saved with a four-point
+head keep fitting exactly as before (the diagonals are not pinned and follow
+the warp); rig-anchors opens them where that fit put them, and the Mark the
+face panel sends a head it did not touch without its diagonals, so saving it
+unchanged changes nothing. A head sent without diagonals keeps the saved ones.
 
 ### AI adjust
 

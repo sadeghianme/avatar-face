@@ -8,7 +8,12 @@ import type { AvatarEngine } from "@liveface/embed";
 
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
-import { FIT_REASON_LABELS, type FaceMarks, type FitReason } from "@/features/avatars/face-marks";
+import {
+  FIT_REASON_LABELS,
+  marksToSend,
+  type FaceMarks,
+  type FitReason,
+} from "@/features/avatars/face-marks";
 import { SpeakPanel } from "@/features/voices";
 
 interface AnchorsResponse {
@@ -106,7 +111,7 @@ export function MarkFacePanel({
       try {
         const result = await api.post<FitResponse>(
           `/orgs/${orgId}/avatars/${avatar.id}/rig-fit`,
-          { ...marks, persist: false }
+          { ...(data ? marksToSend(marks, data.anchors) : marks), persist: false }
         );
         if (request !== latest.current) return;
         const blob = new Blob([JSON.stringify(result.rig)], { type: "application/json" });
@@ -133,7 +138,9 @@ export function MarkFacePanel({
     setError(null);
     try {
       await api.post<FitResponse>(`/orgs/${orgId}/avatars/${avatar.id}/rig-fit`, {
-        ...marks,
+        // A head the owner did not touch goes without its outline diagonals,
+        // which the server then keeps as saved (see marksToSend).
+        ...marksToSend(marks, data.anchors),
         persist: true,
       });
       await queryClient.invalidateQueries({ queryKey: ["avatar", orgId, avatar.id] });

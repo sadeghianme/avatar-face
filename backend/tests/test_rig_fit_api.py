@@ -91,6 +91,58 @@ async def test_a_cartoon_marks_a_mouth_line_and_pupils(client):
     assert "mouth" not in anchors
 
 
+EDGES = ("left", "right", "top", "bottom")
+HEAD_POINTS = {*EDGES, "upper_left", "upper_right", "lower_right", "lower_left"}
+
+
+async def test_every_line_opens_with_an_eight_point_head(client):
+    for who, face_type in (("human8", "human"), ("animal8", "animal"), ("cartoon8", "cartoon")):
+        headers, _, _, base = await _setup(client, who, face_type)
+        head = (await _anchors(client, headers, base))["head"]
+        assert set(head) == HEAD_POINTS, face_type
+        # Clockwise from the top: each temple beside the top, each jaw
+        # corner below its side.
+        assert head["upper_left"]["x"] < head["top"]["x"] < head["upper_right"]["x"]
+        assert head["lower_left"]["y"] > head["left"]["y"]
+        assert head["lower_right"]["y"] > head["right"]["y"]
+
+
+async def test_a_head_saved_with_four_points_reopens_with_eight_and_resaves_unchanged(client):
+    """Marks saved before the diagonals: the handles open where the fit put
+    them, and the panel, sending a head it did not touch without them,
+    saves the rig exactly as it was."""
+    headers, _, _, base = await _setup(client, "dog4", "animal")
+    anchors = await _anchors(client, headers, base)
+    four = _moved({**anchors, "head": {e: anchors["head"][e] for e in EDGES}}, dy=6)
+    saved = (await _fit(client, headers, base, four, True)).json()["rig"]
+    assert set(saved["user_anchors"]["head"]) == set(EDGES)
+
+    reopened = await _anchors(client, headers, base)
+    assert set(reopened["head"]) == HEAD_POINTS
+    assert reopened["head"]["upper_left"] == {
+        "x": round(saved["points"][54][0], 2), "y": round(saved["points"][54][1], 2)
+    }
+    untouched = {**reopened, "head": {e: reopened["head"][e] for e in EDGES}}
+    again = (await _fit(client, headers, base, untouched, True)).json()["rig"]
+    assert again["points"] == saved["points"]
+    # A diagonal the owner does move is theirs from then on.
+    temple = _moved(reopened["head"]["upper_left"], dx=-4)
+    moved = {**reopened, "head": {**reopened["head"], "upper_left": temple}}
+    body = (await _fit(client, headers, base, moved, True)).json()
+    assert body["rig"]["points"][54] == [temple["x"], temple["y"]]
+    assert set(body["rig"]["user_anchors"]["head"]) == HEAD_POINTS
+
+
+async def test_a_crossed_head_outline_is_refused(client):
+    headers, _, _, base = await _setup(client, "crossed", "cartoon")
+    anchors = await _anchors(client, headers, base)
+    head = anchors["head"]
+    swapped = {**head, "upper_right": head["lower_right"], "lower_right": head["upper_right"]}
+    response = await _fit(client, headers, base, {"head": swapped}, True)
+    assert response.status_code == 422
+    assert "outline_crossed" in {r["code"] for r in response.json()["reasons"]}
+
+
 async def test_opening_and_saving_folds_nothing(client):
     """The commonest path: the handles open where the fit wants them."""
     for who, face_type in (("human1", "human"), ("animal1", "animal"), ("cartoon1", "cartoon")):

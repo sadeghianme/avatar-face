@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from app.services import ai_models, face_template, vision_points as vp
-from app.services.anchor_fit import HEAD, LEFT_EYE, MOUTH, RIGHT_EYE
+from app.services.anchor_fit import HEAD, HEAD_DIAGONALS, LEFT_EYE, MOUTH, RIGHT_EYE
 
 SIZE = (600, 800)  # not square, so a transposed answer cannot pass by symmetry
 
@@ -249,6 +249,9 @@ def test_a_good_answer_becomes_anchors_that_fit(face_type):
     assert len(anchors["base"]) == 478
     assert ("left_pupil" in anchors["marks"]) is (face_type == "cartoon")
     assert "mouth_line" in anchors["marks"] and "chin" in anchors["marks"]
+    # The model names the head's edges; the outline between them opens
+    # where the fit of those edges put it, so all eight handles are there.
+    assert set(anchors["marks"]["head"]) == {"left", "right", "top", "bottom", *HEAD_DIAGONALS}
     # The base is the template over the head the model found.
     base = np.array(anchors["base"])
     assert base[:, 0].min() == pytest.approx(anchors["marks"]["head"]["left"]["x"], abs=3)

@@ -15,13 +15,23 @@ export interface Pt {
 }
 
 /** A region's extremes as FREE 2D points, so a mouth can curve and an eye
- * can tilt. A box forced both corners to the same height. */
+ * can tilt. A box forced both corners to the same height.
+ *
+ * The head also has its outline between the edges: the temples (upper) and
+ * the jaw corners (lower), image left and right. Four edges drew it as a
+ * diamond; eight points on a smooth curve draw the oval of the face, and
+ * the server fits the face's own oval to that curve (anchor_fit). Marks
+ * saved before there were diagonals come without them. */
 export interface RegionMarks {
   left: Pt;
   right: Pt;
   top: Pt;
   bottom: Pt;
   center?: Pt;
+  upper_left?: Pt;
+  upper_right?: Pt;
+  lower_right?: Pt;
+  lower_left?: Pt;
 }
 
 /** A pupil is a circle: its center, and one point on its rim for radius. */
@@ -45,7 +55,17 @@ export interface FaceMarks {
 export type RegionId = "head" | "left_eye" | "right_eye" | "mouth";
 export type PupilId = "left_pupil" | "right_pupil";
 export type GroupId = RegionId | PupilId | "mouth_line" | "chin";
-type Edge = "left" | "right" | "top" | "bottom" | "center";
+type Diagonal = "upper_left" | "upper_right" | "lower_right" | "lower_left";
+type Edge = "left" | "right" | "top" | "bottom" | "center" | Diagonal;
+
+export const DIAGONALS: readonly Diagonal[] = ["upper_left", "upper_right", "lower_right", "lower_left"];
+
+/** The head's points in order around the face, clockwise on screen from
+ * the top: the order its outline is drawn in, the server checks it in
+ * (anchor_fit.HEAD_OUTLINE_EDGES), and the keyboard visits its handles. */
+export const HEAD_OUTLINE: readonly Edge[] = [
+  "top", "upper_right", "right", "lower_right", "bottom", "lower_left", "left", "upper_left",
+];
 
 export const GROUP_COLOURS: Record<GroupId, string> = {
   head: "#a78bfa",
@@ -76,6 +96,10 @@ const EDGE_LABELS: Record<Edge, string> = {
   top: "markEdgeTop",
   bottom: "markEdgeBottom",
   center: "markEdgeCenter",
+  upper_left: "markEdgeUpperLeft",
+  upper_right: "markEdgeUpperRight",
+  lower_right: "markEdgeLowerRight",
+  lower_left: "markEdgeLowerLeft",
 };
 
 export interface Handle {
@@ -92,7 +116,12 @@ export interface Handle {
 }
 
 function regionHandles(group: RegionId, region: RegionMarks): Handle[] {
-  const edges: Edge[] = ["left", "right", "top", "bottom"];
+  // The head's handles go round its outline, so Tab walks the face's edge;
+  // a head saved with four points has only those four.
+  const edges: Edge[] =
+    group === "head"
+      ? HEAD_OUTLINE.filter((edge) => region[edge] !== undefined)
+      : ["left", "right", "top", "bottom"];
   if (region.center) edges.push("center");
   return edges.map((edge) => ({
     id: `${group}.${edge}`,
@@ -212,6 +241,69 @@ export function clampToImage(p: Pt, width: number, height: number): Pt {
   return { x: Math.max(0, Math.min(width, p.x)), y: Math.max(0, Math.min(height, p.y)) };
 }
 
+// --- The head's outline -------------------------------------------------------------
+
+/** The head's marked points in outline order (eight, or the four edges of
+ * a head saved before the diagonals). */
+export function headOutline(head: RegionMarks): Pt[] {
+  return HEAD_OUTLINE.map((edge) => head[edge]).filter((p): p is Pt => p !== undefined);
+}
+
+/**
+ * The uniform Catmull-Rom curve from p1 to p2, at t in [0, 1]. The server
+ * fits the face's oval to exactly this curve (anchor_fit.catmull_rom), so
+ * the outline drawn here is the edge the mesh will have.
+ */
+export function catmullRom(p0: Pt, p1: Pt, p2: Pt, p3: Pt, t: number): Pt {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const at = (a: number, b: number, c: number, d: number) =>
+    0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (3 * b - a - 3 * c + d) * t3);
+  return { x: at(p0.x, p1.x, p2.x, p3.x), y: at(p0.y, p1.y, p2.y, p3.y) };
+}
+
+/**
+ * An SVG path for the smooth closed curve through `points`: each span a
+ * Catmull-Rom segment, written as the cubic Bezier it is equal to (control
+ * points a sixth of the neighbours' chord along), so the browser draws the
+ * very curve `catmullRom` describes. Round and still the face: it passes
+ * through every mark rather than approximating them.
+ */
+export function closedCurvePath(points: Pt[]): string {
+  const n = points.length;
+  if (n < 3) return "";
+  const at = (i: number) => points[((i % n) + n) % n];
+  const f = (v: number) => Number(v.toFixed(2));
+  let d = `M${f(at(0).x)},${f(at(0).y)}`;
+  for (let i = 0; i < n; i++) {
+    const [p0, p1, p2, p3] = [at(i - 1), at(i), at(i + 1), at(i + 2)];
+    const c1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 };
+    const c2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 };
+    d += `C${f(c1.x)},${f(c1.y)} ${f(c2.x)},${f(c2.y)} ${f(p2.x)},${f(p2.y)}`;
+  }
+  return `${d}Z`;
+}
+
+const samePoint = (a?: Pt, b?: Pt) => a?.x === b?.x && a?.y === b?.y;
+
+/**
+ * What the avatar's marking panel sends for the head. A head the owner did
+ * not touch goes without its diagonals: the server keeps the saved ones, or
+ * — for a head saved before there were any, whose diagonals only open where
+ * its fit put them — leaves them to the warp, so saving it changes nothing.
+ * Once any head point moves, all eight are the owner's and all are sent.
+ */
+export function marksToSend(marks: FaceMarks, opened: FaceMarks): FaceMarks {
+  const head = marks.head;
+  const untouched = (Object.keys({ ...head, ...opened.head }) as Edge[]).every((edge) =>
+    samePoint(head[edge], opened.head[edge])
+  );
+  if (!untouched) return marks;
+  const edgesOnly = { ...head };
+  for (const d of DIAGONALS) delete edgesOnly[d];
+  return { ...marks, head: edgesOnly };
+}
+
 /** What rig-fit refuses a fit for; see services/anchor_fit.validate. */
 export interface FitReason {
   code: string;
@@ -226,5 +318,7 @@ export const FIT_REASON_LABELS: Record<string, string> = {
   eyes_out_of_order: "fitEyesOrder",
   mouth_reversed: "fitMouthReversed",
   outside_head: "fitOutsideHead",
+  outline_crossed: "fitOutlineCrossed",
+  outline_out_of_order: "fitOutlineOrder",
   pupil_outside_eye: "fitPupilOutsideEye",
 };

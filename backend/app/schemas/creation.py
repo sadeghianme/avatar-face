@@ -7,7 +7,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.avatar import AnchorMarks, AnchorPoint, FaceType, FitReason, PupilAnchor
+from app.schemas.avatar import (
+    AnchorMarks,
+    AnchorPoint,
+    FaceType,
+    FitReason,
+    HeadAnchorMarks,
+    PupilAnchor,
+)
 
 CreationStatusName = Literal["draft", "finishing", "finished", "expired"]
 
@@ -18,7 +25,7 @@ class CreationMarks(BaseModel):
     persist flag). Every region is optional: one left out keeps the marking
     detect opened it on."""
 
-    head: AnchorMarks | None = None
+    head: HeadAnchorMarks | None = None
     left_eye: AnchorMarks | None = None
     right_eye: AnchorMarks | None = None
     mouth: AnchorMarks | None = None

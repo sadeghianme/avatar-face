@@ -54,6 +54,21 @@ class AnchorMarks(BaseModel):
     center: AnchorPoint | None = None
 
 
+class HeadAnchorMarks(AnchorMarks):
+    """The head: its four edges, and the outline between them at the
+    temples (upper) and the jaw corners (lower), image left and right.
+
+    The diagonals are optional so a client that sends four points, as every
+    client did before them, still fits: a diagonal left out is not pinned
+    and follows the warp (services.anchor_fit.HEAD_DIAGONALS).
+    """
+
+    upper_left: AnchorPoint | None = None
+    upper_right: AnchorPoint | None = None
+    lower_right: AnchorPoint | None = None
+    lower_left: AnchorPoint | None = None
+
+
 class PupilAnchor(BaseModel):
     """A pupil as the user marked it: center, and one point on the rim."""
 
@@ -74,7 +89,7 @@ class RigFit(BaseModel):
     through its centre. Animals have no pupils: pupil marks are ignored.
     """
 
-    head: AnchorMarks | None = None
+    head: HeadAnchorMarks | None = None
     left_eye: AnchorMarks | None = None
     right_eye: AnchorMarks | None = None
     mouth: AnchorMarks | None = None

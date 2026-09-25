@@ -394,7 +394,12 @@ def anchors_from_points(
     the one the owner's marks will face.
     """
     from app.services import face_template
-    from app.services.anchor_fit import fit_rig, marks_from_dict, marks_to_dict
+    from app.services.anchor_fit import (
+        fit_rig,
+        marks_from_dict,
+        marks_to_dict,
+        with_head_outline,
+    )
     from app.services.rig import build_rig
 
     marks = to_marks(points, size, face_type)
@@ -404,8 +409,14 @@ def anchors_from_points(
     head = marks["head"]
     box = (head["left"]["x"], head["top"]["y"], head["right"]["x"], head["bottom"]["y"])
     base = np.round(np.asarray(face_template.place(box), dtype=np.float64), 3)
-    stored = marks_to_dict(marks_from_dict(marks, face_type))
     skeleton = build_rig(base, size, None, face_type=face_type)
+    # The model names the head's edges only; its outline diagonals open
+    # where a fit of those edges puts them. Eight marks then set the whole
+    # oval, so what is validated is the fit of the eight, stored form and
+    # all, exactly as finish will read them back.
+    edges_only = marks_from_dict(marks, face_type)
+    fitted, _ = fit_rig(skeleton, base, edges_only, face_type)
+    stored = marks_to_dict(with_head_outline(edges_only, np.array(fitted["points"])))
     _, fit_problems = fit_rig(skeleton, base, marks_from_dict(stored, face_type), face_type)
     if fit_problems:
         return PointsResult(None, [p.detail for p in fit_problems])

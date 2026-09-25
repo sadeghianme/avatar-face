@@ -5,7 +5,7 @@ HUMAN face, or — for an animal or a cartoon nothing detects — from the face
 template. Either way it is a guess until the owner has placed the head, the
 eyes and the mouth, and this turns those marks into the rig.
 
-Three decisions carry the module.
+These decisions carry the module.
 
 **One global warp, always from the base.** The fit this replaces corrected
 region by region, each correction a local warp chained on the last one's
@@ -33,9 +33,16 @@ lids in every detection (an eye shows part of its iris), so as a warp
 constraint it counted any lid moved past its rim, or any pupil drawn
 smaller than the detected one, as skin folded over the eye.
 
+**The head is its outline.** Eight marks round the face (its four edges,
+the temples and the jaw corners), and with all eight marked every oval
+landmark between them goes on the smooth curve the owner sees through them
+(`_outline_pairs`), so the mesh's edge is that outline. Marks saved with a
+four-point head pin those four only and fit exactly as they always did.
+
 **A fit that folds is refused, not saved.** `validate` names what is wrong
 (folded triangles, lids upside down, eyes or mouth corners out of order,
-features outside the head, a pupil outside its eye) and rig-fit refuses to
+features outside the head, a head outline that crosses itself or goes round
+the face out of order, a pupil outside its eye) and rig-fit refuses to
 store such a rig. The preview still returns it, with the reasons, so the
 owner sees what to move.
 
@@ -67,6 +74,30 @@ NUM_POINTS = 478
 # "right" are the IMAGE's: 33 is the outer corner of the eye on the image's
 # left, which is the subject's right eye.
 HEAD = {"left": 234, "right": 454, "top": 10, "bottom": 152}
+# MediaPipe's face oval, clockwise on screen from the top of the forehead.
+FACE_OVAL = [
+    10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377,
+    152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
+]
+# The head's outline between its four edges: the temples above, the jaw
+# corners below. Four edges alone drew the head as a diamond, and a warp
+# pinned only there was free to bulge or pinch the cheeks and the jaw
+# wherever a face is not diamond-shaped, which is every face and every muzzle.
+#
+# Each is the oval landmark nearest the DIAGONAL of the head's box, seen
+# from its centre, on the face template. On an ellipse the point halfway
+# round between two edges (parameter 45 degrees) lies exactly on that
+# diagonal, so the eight marks are an ellipse's eight points and a smooth
+# closed curve through them draws the oval. The two sides are MediaPipe's
+# mirror pairs (54 and 284, 136 and 365); tests/test_anchor_fit pins them.
+HEAD_DIAGONALS = {"upper_left": 54, "upper_right": 284, "lower_right": 365, "lower_left": 136}
+DIAGONALS = tuple(HEAD_DIAGONALS)
+# The eight head marks in order around the face, clockwise on screen from
+# the top: the order the outline is drawn in, and checked in.
+HEAD_OUTLINE_EDGES = (
+    "top", "upper_right", "right", "lower_right", "bottom", "lower_left", "left", "upper_left",
+)
+HEAD_OUTLINE = [{**HEAD, **HEAD_DIAGONALS}[edge] for edge in HEAD_OUTLINE_EDGES]
 LEFT_EYE = {"left": 33, "right": 133, "top": 159, "bottom": 145}
 RIGHT_EYE = {"left": 362, "right": 263, "top": 386, "bottom": 374}
 MOUTH = {"left": 61, "right": 291, "top": 0, "bottom": 17}
@@ -166,13 +197,27 @@ def render_profile_for(face_type: str) -> str | None:
 @dataclass(frozen=True)
 class RegionMarks:
     """A region's extremes as FREE 2D points: a tilted eye or a curved mouth
-    keeps its tilt. `center` is the mouth's seam centre, human line only."""
+    keeps its tilt. `center` is the mouth's seam centre, human line only.
+
+    The head also has its diagonals (HEAD_DIAGONALS), each optional: marks
+    saved before there were any have none, and a diagonal nobody marked is
+    not pinned. The warp carries it with the rest of the face, exactly as it
+    did before the head had diagonals, so those marks fit as they always did.
+    """
 
     left: Point
     right: Point
     top: Point
     bottom: Point
     center: Point | None = None
+    upper_left: Point | None = None
+    upper_right: Point | None = None
+    lower_right: Point | None = None
+    lower_left: Point | None = None
+
+    def diagonals(self) -> dict[str, Point]:
+        """The diagonals that are marked, by name."""
+        return {d: getattr(self, d) for d in DIAGONALS if getattr(self, d) is not None}
 
 
 @dataclass(frozen=True)
@@ -205,13 +250,16 @@ def _point(value) -> Point | None:
     return None
 
 
-def _region(value) -> RegionMarks | None:
+def _region(value, diagonals: bool = False) -> RegionMarks | None:
+    """A region from JSON; with `diagonals` (the head), whichever of its
+    diagonals are there too."""
     if not isinstance(value, dict):
         return None
     edges = [_point(value.get(edge)) for edge in ("left", "right", "top", "bottom")]
     if any(edge is None for edge in edges):
         return None
-    return RegionMarks(*edges, center=_point(value.get("center")))
+    extra = {d: _point(value.get(d)) for d in DIAGONALS} if diagonals else {}
+    return RegionMarks(*edges, center=_point(value.get("center")), **extra)
 
 
 def _pupil(value) -> PupilMarks | None:
@@ -263,7 +311,7 @@ def marks_from_dict(data: dict | None, face_type: str) -> FaceMarks:
     format, expressed in `face_type`'s scheme. Unknown keys are ignored."""
     data = data or {}
     marks = FaceMarks(
-        head=_region(data.get("head")),
+        head=_region(data.get("head"), diagonals=True),
         left_eye=_region(data.get("left_eye")),
         right_eye=_region(data.get("right_eye")),
         mouth=_region(data.get("mouth")),
@@ -314,6 +362,8 @@ def marks_to_dict(marks: FaceMarks) -> dict:
             }
             if region.center is not None:
                 out[name]["center"] = pt(region.center)
+            for diagonal, p in region.diagonals().items():
+                out[name][diagonal] = pt(p)
     if marks.mouth_line is not None:
         out["mouth_line"] = [pt(p) for p in marks.mouth_line]
     if marks.chin is not None:
@@ -327,12 +377,38 @@ def marks_to_dict(marks: FaceMarks) -> dict:
 
 def merge(older: FaceMarks, newer: FaceMarks) -> FaceMarks:
     """Region by region, the newer marks win; a region the newer set leaves
-    out keeps its older marking. Lets a client re-send only what moved."""
+    out keeps its older marking. Lets a client re-send only what moved.
+
+    The head's diagonals the same way, one by one: a head sent without them
+    keeps the older head's. The marking panel sends a head it did not touch
+    without them, so a head saved before there were diagonals (they are
+    only shown where its fit put them) saves exactly as it did."""
     def pick(name: str) -> object:
         value = getattr(newer, name)
         return value if value is not None else getattr(older, name)
 
-    return FaceMarks(**{f.name: pick(f.name) for f in fields(FaceMarks)})
+    merged = FaceMarks(**{f.name: pick(f.name) for f in fields(FaceMarks)})
+    if newer.head is not None and older.head is not None:
+        kept = {d: p for d, p in older.head.diagonals().items() if getattr(newer.head, d) is None}
+        if kept:
+            merged = replace(merged, head=replace(newer.head, **kept))
+    return merged
+
+
+def with_head_outline(marks: FaceMarks, points: np.ndarray) -> FaceMarks:
+    """`marks` with every head diagonal they lack read off `points`, the
+    mesh those marks made: where the warp took the landmark while nothing
+    pinned it, which is where a handle for it opens (the point finder names
+    only the head's edges)."""
+    head = marks.head
+    if head is None:
+        return marks
+    missing = {
+        d: (float(points[i][0]), float(points[i][1]))
+        for d, i in HEAD_DIAGONALS.items()
+        if getattr(head, d) is None
+    }
+    return replace(marks, head=replace(head, **missing)) if missing else marks
 
 
 def seam_line(points: np.ndarray) -> tuple[Point, ...]:
@@ -365,6 +441,8 @@ def marks_from_mesh(points: np.ndarray, face_type: str) -> FaceMarks:
     def region(idx: dict[str, int]) -> RegionMarks:
         return RegionMarks(at(idx["left"]), at(idx["right"]), at(idx["top"]), at(idx["bottom"]))
 
+    head = replace(region(HEAD), **{d: at(i) for d, i in HEAD_DIAGONALS.items()})
+
     def pupil(ring: list[int]) -> PupilMarks:
         c = points[ring[0]]
         radius = max(float(np.mean([np.linalg.norm(points[j] - c) for j in ring[1:]])), 2.0)
@@ -372,7 +450,7 @@ def marks_from_mesh(points: np.ndarray, face_type: str) -> FaceMarks:
 
     seam = (points[SEAM[0]] + points[SEAM[1]]) / 2
     marks = FaceMarks(
-        head=region(HEAD),
+        head=head,
         left_eye=region(LEFT_EYE),
         right_eye=region(RIGHT_EYE),
         mouth=replace(region(MOUTH), center=(float(seam[0]), float(seam[1]))),
@@ -393,11 +471,14 @@ def _head_carry(base: np.ndarray, head: RegionMarks | None):
     The least-squares affine taking the base's head landmarks to the head
     marks, so an eye the owner never touched still sits where it sat relative
     to the head they moved. Without head marks, unmarked regions stay put.
+    Marked diagonals take part: they say where the cheeks and the jaw went.
     """
     if head is None:
         return lambda p: p
-    src = np.array([base[HEAD[e]] for e in ("left", "right", "top", "bottom")])
-    dst = np.array([getattr(head, e) for e in ("left", "right", "top", "bottom")])
+    edges = {e: HEAD[e] for e in ("left", "right", "top", "bottom")}
+    edges.update({d: HEAD_DIAGONALS[d] for d in head.diagonals()})
+    src = np.array([base[i] for i in edges.values()])
+    dst = np.array([getattr(head, e) for e in edges])
     design = np.column_stack((src, np.ones(len(src))))
     affine, *_ = np.linalg.lstsq(design, dst, rcond=None)
     return lambda p: np.append(p, 1.0) @ affine
@@ -569,6 +650,57 @@ def pupil_pairs(
     return pairs
 
 
+def catmull_rom(p0, p1, p2, p3, t: float) -> np.ndarray:
+    """The uniform Catmull-Rom curve from p1 to p2 at `t` in [0, 1]: the
+    curve the marking panel draws through the head's eight marks (as the
+    Bezier segments this is equal to; features/avatars/face-marks.ts)."""
+    p0, p1, p2, p3 = (np.asarray(p, dtype=np.float64) for p in (p0, p1, p2, p3))
+    t2, t3 = t * t, t * t * t
+    return 0.5 * (
+        2 * p1
+        + (p2 - p0) * t
+        + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2
+        + (3 * p1 - p0 - 3 * p2 + p3) * t3
+    )
+
+
+def _outline_pairs(base: np.ndarray, ring: np.ndarray) -> list[tuple[int, np.ndarray]]:
+    """Every face-oval landmark between the head's eight marks, placed on
+    the closed curve through `ring` (HEAD_OUTLINE order).
+
+    Eight pinned points alone leave the 28 oval landmarks between them to
+    the warp, and a toon's wide grin then pushes the cheek past a jaw corner
+    marked where the face really turns (measured: one fold on the "toon big
+    grin" layout, with the corners on the head's ellipse). Placed on the
+    drawn curve instead, the mesh's edge is the outline the owner sees.
+
+    Each landmark keeps its place along the curve between its two marks (by
+    length along the base's oval) and its offset from the base's own curve,
+    scaled with the head: a detection's oval is not exactly a Catmull-Rom
+    curve, and marks left where they were detected must move nothing.
+    """
+    base_ring = base[HEAD_OUTLINE]
+
+    def perimeter(r: np.ndarray) -> float:
+        return float(np.linalg.norm(r - np.roll(r, -1, axis=0), axis=1).sum())
+
+    scale = perimeter(ring) / max(perimeter(base_ring), 1e-9)
+    n, k = len(FACE_OVAL), len(HEAD_OUTLINE)
+    position = {i: FACE_OVAL.index(i) for i in HEAD_OUTLINE}
+    pairs: list[tuple[int, np.ndarray]] = []
+    for s in range(k):
+        start, end = position[HEAD_OUTLINE[s]], position[HEAD_OUTLINE[(s + 1) % k]]
+        chain = [FACE_OVAL[(start + j) % n] for j in range((end - start) % n + 1)]
+        lengths = np.linalg.norm(np.diff(base[chain], axis=0), axis=1)
+        along = np.cumsum(lengths) / max(float(lengths.sum()), 1e-9)
+        quad = [(s - 1) % k, s, (s + 1) % k, (s + 2) % k]
+        for i, t in zip(chain[1:-1], along[:-1]):
+            on_base = catmull_rom(*base_ring[quad], float(t))
+            on_marks = catmull_rom(*ring[quad], float(t))
+            pairs.append((i, on_marks + (base[i] - on_base) * scale))
+    return pairs
+
+
 def correspondences(
     base: np.ndarray, marks: FaceMarks, face_type: str
 ) -> list[tuple[int, np.ndarray]]:
@@ -592,11 +724,24 @@ def correspondences(
         # A distinct chin takes 152; the head's bottom edge then only bounds
         # the head (a dog's jowls or ruff hang below its jaw, and no landmark
         # of a face mesh sits there).
-        if chin is not None and math.dist(chin, head.bottom) > CHIN_MERGE * height:
+        distinct_chin = chin is not None and math.dist(chin, head.bottom) > CHIN_MERGE * height
+        if distinct_chin:
             marked(HEAD, head, skip=("bottom",))
             pairs.append((CHIN, np.array(chin)))
         else:
             marked(HEAD, head)
+        # The outline between the edges, where it is marked; a diagonal left
+        # out (marks from before there were any) rides with the warp.
+        diagonals = head.diagonals()
+        pairs.extend((HEAD_DIAGONALS[d], np.array(p)) for d, p in diagonals.items())
+        if len(diagonals) == len(DIAGONALS):
+            # The whole oval follows the curve the owner sees. Its bottom is
+            # the chin where one is marked apart: the mesh ends at the jaw,
+            # never at the ruff below it.
+            ring = {e: getattr(head, e) for e in HEAD_OUTLINE_EDGES}
+            if distinct_chin:
+                ring["bottom"] = chin
+            pairs.extend(_outline_pairs(base, np.array([ring[e] for e in HEAD_OUTLINE_EDGES])))
     else:
         carried([HEAD["left"], HEAD["right"], HEAD["top"]])
         if chin is not None:
@@ -690,6 +835,50 @@ def flipped_triangles(
     return int(np.sum(measurable & (np.sign(before) != np.sign(after))))
 
 
+def _cross(o: np.ndarray, a: np.ndarray, b: np.ndarray) -> float:
+    return float((a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]))
+
+
+def _segments_cross(p1, p2, q1, q2) -> bool:
+    """Whether two segments cross at a point inside both (touching ends, or
+    running along each other, is not crossing: a mark nudged onto its
+    neighbour's line is a degenerate outline, not a crossed one)."""
+    d1, d2 = _cross(q1, q2, p1), _cross(q1, q2, p2)
+    d3, d4 = _cross(p1, p2, q1), _cross(p1, p2, q2)
+    return d1 * d2 < 0 and d3 * d4 < 0
+
+
+def outline_crossed(ring: np.ndarray) -> bool:
+    """Whether a closed polygon crosses itself: any two edges that do not
+    share a corner intersect."""
+    n = len(ring)
+    for i in range(n):
+        for j in range(i + 2, n):
+            if i == 0 and j == n - 1:
+                continue  # the closing edge shares corner 0 with the first
+            if _segments_cross(ring[i], ring[(i + 1) % n], ring[j], ring[(j + 1) % n]):
+                return True
+    return False
+
+
+def _turns(ring: np.ndarray) -> np.ndarray:
+    """The angle each corner of a closed ring turns on to the next, as seen
+    from the ring's centre, in (-pi, pi]."""
+    centre = ring.mean(axis=0)
+    angles = np.arctan2(ring[:, 1] - centre[1], ring[:, 0] - centre[0])
+    steps = np.diff(np.append(angles, angles[0]))
+    return (steps + np.pi) % (2 * np.pi) - np.pi
+
+
+def outline_in_order(base_ring: np.ndarray, ring: np.ndarray) -> bool:
+    """Whether the corners of `ring` go round its centre one way, the way
+    the base's do. A temple dragged past the top of the head can leave the
+    outline uncrossed (it zigzags back) yet out of order, and the warp then
+    stretches the forehead across itself."""
+    direction = np.sign(_turns(base_ring).sum())
+    return bool(np.all(_turns(ring) * direction > 0))
+
+
 def validate(base: np.ndarray, fitted: np.ndarray, pupils: bool = True) -> list[FitProblem]:
     """Everything wrong with a fit, or nothing. Shared by preview and save.
     `pupils` is whether the line has pupils to check (an animal's are never
@@ -733,6 +922,22 @@ def validate(base: np.ndarray, fitted: np.ndarray, pupils: bool = True) -> list[
     if outside:
         problems.append(FitProblem(
             "outside_head", "The eyes and the mouth must be inside the head"
+        ))
+
+    # The head's eight marks are drawn as one closed curve; a curve that
+    # crosses itself, or goes round the face out of order, is a head turned
+    # inside out somewhere, whether or not a triangle there is big enough
+    # for the fold count to see it.
+    ring = fitted[HEAD_OUTLINE]
+    if outline_crossed(ring):
+        problems.append(FitProblem(
+            "outline_crossed", "The head's outline crosses itself"
+        ))
+    elif not outline_in_order(base[HEAD_OUTLINE], ring):
+        problems.append(FitProblem(
+            "outline_out_of_order",
+            "The head's outline points must go round the face in order: top, temple, side, "
+            "jaw corner, chin, and back up the other side",
         ))
 
     # The fold count no longer sees the iris, so a pupil dragged onto the
