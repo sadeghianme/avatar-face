@@ -208,6 +208,9 @@ export function AdjustStep({
     autoStarted.current.add(autoAdjustKey(creation, offer));
     touched.current = true;
     setChoice(offer.mode);
+    // The options would offer to start what is already running: the round's
+    // progress, then its versions beside the photo, take their place.
+    setOpen(false);
     setAutoRan(true);
     void run("adjust", async () => {
       try {
@@ -229,11 +232,29 @@ export function AdjustStep({
         }
         throw err;
       }
+    }).then((outcome) => {
+      // Refused (the monthly limit, AI switched off meanwhile): the wizard
+      // shows why, and the step goes back to offering the fix by hand.
+      if (!outcome.ok) {
+        setAutoRan(false);
+        setOpen(true);
+      }
     });
     // `creation` changes identity on every poll; the offer and the job are
     // what decide.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creation.ai?.auto_adjust?.image, creation.job?.state, creation.status, consent.aiConsentId, busy]);
+
+  // Why a round is on screen that nobody pressed for: while it runs, and
+  // once its versions wait beside the photo. A failed round speaks for
+  // itself (JobProgress).
+  const autoNote = !autoRan
+    ? null
+    : adjustJob && isJobActive(adjustJob)
+      ? "adjustAutoStarted"
+      : hasRound && !failure
+        ? "adjustAutoReady"
+        : null;
 
   // "Use this": taken, and on to the points, unless it is being cut out
   // (the background was removed), which the step waits for.
@@ -354,9 +375,13 @@ export function AdjustStep({
         </div>
       </div>
 
-      {autoRan && (
-        <p className="rounded-xl bg-brand-500/10 p-3 text-sm text-gray-700 dark:text-gray-200" role="status">
-          {t("adjustAutoStarted")}
+      {autoNote && (
+        <p className="flex items-start gap-2 rounded-xl bg-brand-500/10 p-3 text-sm text-gray-700 dark:text-gray-200">
+          <Icon name="sparkles" className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+          {/* Its progress is announced by the wizard's live region; this
+              says why it started without a press, and that the owner still
+              chooses. */}
+          <span>{t(autoNote)}</span>
         </p>
       )}
 

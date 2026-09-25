@@ -307,6 +307,19 @@ except for the clock, a bug fix every avatar gets):
   adjusted. The owner still chooses the result.
 - **Finish warns** (`warnings: [{code, detail}]`, `mouth_open` or
   `teeth_showing`) when the picture still shows them; it is not a refusal.
+- **Dashboard.** The finish progress names its stages from the job's
+  progress label (`creation.finishStage`: "Adding realistic teeth…" while
+  the teeth are made); an unknown label shows no stage. The points step
+  says the mouth warning before the press, from the current image's check
+  (`expectedMouthWarnings`, with the way back to AI adjust), and the finish
+  answer's warnings while it builds; they are kept for the tab
+  (sessionStorage, `rememberFinishNotice`) and shown on the avatar's page
+  with the teeth note, until dismissed. The Mouth panel names the teeth in
+  use (AI-generated / your photo / standard), makes them with AI on the
+  member's consent (`useConsent.withAi`), words each refusal of either
+  route, and prompts Publish beside the change. The disclosure badge reads
+  "AI touch-up · AI teeth" when both apply. AI adjust starts the offered
+  touch-up by itself (`autoAdjustToStart`) and says why while it runs.
 
 ## Embed engine
 

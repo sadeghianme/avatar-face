@@ -6,7 +6,18 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-import { FINISH_WARNINGS, TEETH_NOTE_CODES, teethNoteKey, teethView } from "./teeth.ts";
+import {
+  aiEditedLabels,
+  aiEditedModels,
+  FINISH_WARNINGS,
+  MOUTH_ERROR_CODES,
+  MOUTH_PHOTO_CODES,
+  mouthErrorKey,
+  TEETH_KINDS,
+  TEETH_NOTE_CODES,
+  teethNoteKey,
+  teethView,
+} from "./teeth.ts";
 
 const mouth = (extra = {}) => ({
   renderer: "continuous",
@@ -44,6 +55,32 @@ describe("teeth", () => {
     assert.equal(teethNoteKey("something_new"), null);
   });
 
+  it("words a refused teeth photo by who made it", () => {
+    assert.equal(mouthErrorKey("mouth_teeth_unclear", "upload"), "mouthErr_upload_mouth_teeth_unclear");
+    assert.equal(mouthErrorKey("mouth_teeth_unclear", "generate"), "mouthErr_generate_mouth_teeth_unclear");
+    assert.equal(mouthErrorKey("teeth_in_progress", "generate"), "mouthErr_teeth_in_progress");
+    assert.equal(mouthErrorKey("image_limit_reached", "generate"), "mouthErr_image_limit_reached");
+    // Unknown: the server's sentence is shown.
+    assert.equal(mouthErrorKey("something_new", "upload"), null);
+  });
+
+  it("discloses AI teeth beside what the AI did to the picture", () => {
+    assert.deepEqual(aiEditedLabels(null), []);
+    assert.deepEqual(aiEditedLabels({ mode: "touchup", model: "m" }), ["aiEdited_touchup"]);
+    assert.deepEqual(
+      aiEditedLabels({ mode: "touchup", model: "m", teeth: { model: "m" } }),
+      ["aiEdited_touchup", "aiEdited_teeth"]
+    );
+    // Teeth alone: said once.
+    assert.deepEqual(aiEditedLabels({ mode: "teeth", model: "m", teeth: { model: "m" } }), ["aiEdited_teeth"]);
+  });
+
+  it("names each model behind the disclosure once", () => {
+    assert.deepEqual(aiEditedModels({ mode: "teeth", model: "img-1", teeth: { model: "img-1" } }), ["img-1"]);
+    assert.deepEqual(aiEditedModels({ mode: "regenerate", model: "img-1", teeth: { model: "img-2" } }), ["img-1", "img-2"]);
+    assert.deepEqual(aiEditedModels({ mode: "touchup", model: null }), []);
+  });
+
   const keysOf = (lang) =>
     new Set(
       [...readFileSync(new URL(`../../i18n/locales/${lang}/avatars.ts`, import.meta.url), "utf8")
@@ -55,6 +92,9 @@ describe("teeth", () => {
       const needed = [
         ...TEETH_NOTE_CODES.map((code) => `mouthTeethNote_${code}`),
         ...FINISH_WARNINGS.map((code) => `finishWarning_${code}`),
+        ...TEETH_KINDS.map((kind) => `mouthTeethKind_${kind}`),
+        ...MOUTH_ERROR_CODES.map((code) => mouthErrorKey(code, "generate")),
+        ...MOUTH_PHOTO_CODES.flatMap((code) => [mouthErrorKey(code, "upload"), mouthErrorKey(code, "generate")]),
         "aiEdited_teeth",
       ];
       assert.deepEqual(needed.filter((key) => !keys.has(key)), []);

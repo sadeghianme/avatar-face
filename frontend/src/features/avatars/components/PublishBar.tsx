@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -6,6 +6,17 @@ import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, ApiError } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
+
+/**
+ * Publish the draft, then show the page what is live now. What the bar's
+ * button does, for a panel that prompts it next to the edit that needs it
+ * (on a phone the bar is a long scroll away).
+ */
+export async function publishDraft(queryClient: QueryClient, orgId: string, avatarId: string): Promise<void> {
+  await api.post(`/orgs/${orgId}/avatars/${avatarId}/publish`, {});
+  await queryClient.invalidateQueries({ queryKey: ["avatar", orgId, avatarId] });
+  await queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
+}
 
 /**
  * The line between editing and shipping.
@@ -36,12 +47,13 @@ export function PublishBar({ avatar, orgId }: { avatar: Avatar; orgId: string })
     setBusy(action);
     setError(null);
     try {
-      await api.post(
-        `/orgs/${orgId}/avatars/${avatar.id}/${action === "publish" ? "publish" : "discard-draft"}`,
-        {}
-      );
-      await queryClient.invalidateQueries({ queryKey: ["avatar", orgId, avatar.id] });
-      await queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
+      if (action === "publish") {
+        await publishDraft(queryClient, orgId, avatar.id);
+      } else {
+        await api.post(`/orgs/${orgId}/avatars/${avatar.id}/discard-draft`, {});
+        await queryClient.invalidateQueries({ queryKey: ["avatar", orgId, avatar.id] });
+        await queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));
     } finally {
