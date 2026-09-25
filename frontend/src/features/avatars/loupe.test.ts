@@ -7,11 +7,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  LOUPE_FRAME,
   LOUPE_INSET,
   LOUPE_SIZE,
   LOUPE_ZOOM,
   loupeCorner,
   loupeCovers,
+  loupeInner,
   loupeOrigin,
   loupeSize,
   loupeView,
@@ -103,5 +105,21 @@ describe("what the zoom shows", () => {
     // are 160 / 3 / 0.25 image pixels.
     assert.ok(Math.abs(w - 160 / 3 / scale) < 0.01 && Math.abs(h - 120 / 3 / scale) < 0.01);
     assert.ok(Math.abs(x + w / 2 - 1000) < 0.01 && Math.abs(y + h / 2 - 800) < 0.01);
+  });
+
+  it("is three times inside the frame, keeping the zoom's shape", () => {
+    for (const canvas of CANVASES) {
+      const size = loupeSize(canvas);
+      const inner = loupeInner(size);
+      assert.equal(inner.width, size.width - 2 * LOUPE_FRAME);
+      assert.equal(inner.height, size.height - 2 * LOUPE_FRAME);
+      const scale = canvas.width / 1200;
+      const [, , w, h] = loupeView({ x: 600, y: 700 }, scale, inner).split(" ").map(Number);
+      // The frame's pixels show nothing: the image inside it is exactly
+      // LOUPE_ZOOM times the photo on screen, the same on both axes.
+      assert.ok(Math.abs((inner.width / w) / scale - LOUPE_ZOOM) < 0.01, JSON.stringify(canvas));
+      assert.ok(Math.abs((inner.height / h) / scale - LOUPE_ZOOM) < 0.01, JSON.stringify(canvas));
+    }
+    assert.deepEqual(loupeInner({ width: 3, height: 2 }), { width: 0, height: 0 });
   });
 });

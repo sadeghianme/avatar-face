@@ -100,6 +100,20 @@ describe("the head's outline", () => {
     assert.deepEqual(headOutline(HEAD8), HEAD_OUTLINE.map((edge) => HEAD8[edge]));
   });
 
+  it("runs through a chin marked below the head's bottom edge, as the fit does", () => {
+    const chin = pt(500, 800); // a dog's jaw, above the ruff the bottom edge bounds
+    const ring = headOutline(HEAD8, chin);
+    assert.deepEqual(ring[HEAD_OUTLINE.indexOf("bottom")], chin);
+    assert.deepEqual(
+      ring.filter((_, i) => HEAD_OUTLINE[i] !== "bottom"),
+      HEAD_OUTLINE.filter((edge) => edge !== "bottom").map((edge) => HEAD8[edge])
+    );
+    // Within a hundredth of the head's height it is the bottom edge itself.
+    const onEdge = pt(HEAD8.bottom.x + 3, HEAD8.bottom.y);
+    assert.deepEqual(headOutline(HEAD8, onEdge), headOutline(HEAD8));
+    assert.deepEqual(headOutline(HEAD4, chin)[2], chin);
+  });
+
   it("draws a head saved with four points through those four", () => {
     assert.deepEqual(headOutline(HEAD4), [HEAD4.top, HEAD4.right, HEAD4.bottom, HEAD4.left]);
     assert.equal(segments(closedCurvePath(headOutline(HEAD4))).length, 4);

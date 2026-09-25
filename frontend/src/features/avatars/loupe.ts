@@ -31,6 +31,9 @@ export const LOUPE_ZOOM = 3;
 export const LOUPE_SIZE: Size = { width: 160, height: 120 };
 /** Between the zoom and the photo's edge, in CSS pixels. */
 export const LOUPE_INSET = 8;
+/** The zoom's white frame, in CSS pixels, inside its size: what it shows
+ * fills the rest (`loupeInner`). */
+export const LOUPE_FRAME = 2;
 // The zoom never takes more than this share of the canvas on either axis,
 // so the corner opposite the pointer always leaves the pointer uncovered: a
 // zoom narrower than half the canvas (less the inset) cannot reach the
@@ -74,6 +77,15 @@ export function loupeCorner(at: Pt, canvas: Size, size: Size, previous: Corner |
   return {
     top: side(at.y, canvas.height, size.height, previous?.top),
     left: side(at.x, canvas.width, size.width, previous?.left),
+  };
+}
+
+/** What the zoom shows, inside its frame: the size to hand `loupeView`,
+ * so what the eye sees is exactly LOUPE_ZOOM times the photo. */
+export function loupeInner(size: Size): Size {
+  return {
+    width: Math.max(0, size.width - 2 * LOUPE_FRAME),
+    height: Math.max(0, size.height - 2 * LOUPE_FRAME),
   };
 }
 

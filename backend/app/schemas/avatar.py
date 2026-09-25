@@ -60,7 +60,9 @@ class HeadAnchorMarks(AnchorMarks):
 
     The diagonals are optional so a client that sends four points, as every
     client did before them, still fits: a diagonal left out is not pinned
-    and follows the warp (services.anchor_fit.HEAD_DIAGONALS).
+    and follows the warp (services.anchor_fit.HEAD_DIAGONALS). Sent with the
+    very edges saved before, the head keeps the diagonals saved with them
+    (services.anchor_fit.merge).
     """
 
     upper_left: AnchorPoint | None = None

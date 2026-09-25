@@ -15,9 +15,11 @@ import {
 } from "@/features/avatars/face-marks";
 import {
   loupeCorner,
+  loupeInner,
   loupeOrigin,
   loupeSize,
   loupeView,
+  LOUPE_FRAME,
   LOUPE_ZOOM,
   type Corner,
 } from "@/features/avatars/loupe";
@@ -41,6 +43,8 @@ const LENS_DASH_PX = 6;
 // The crosshair's arms stop this far from the centre, so the pixel being
 // placed stays visible between them.
 const CROSSHAIR_GAP_PX = 7;
+// Between the zoom and the caption hanging off it, in CSS pixels.
+const CAPTION_GAP_PX = 4;
 
 const REGION_IDS = ["left_eye", "right_eye", "mouth"] as const;
 
@@ -59,7 +63,7 @@ function Outlines({ marks, dash }: { marks: FaceMarks; dash: number }) {
   });
   return (
     <>
-      <path d={closedCurvePath(headOutline(marks.head))} {...stroke(GROUP_COLOURS.head)} />
+      <path d={closedCurvePath(headOutline(marks.head, marks.chin))} {...stroke(GROUP_COLOURS.head)} />
       {REGION_IDS.map((id) => {
         const m = marks[id];
         if (!m) return null;
@@ -112,8 +116,10 @@ const find = (handles: Handle[], id: string | null) => handles.find((h) => h.id 
  * pointer move, and a render per pixel would make dragging stutter. */
 interface Lens {
   /** The pointer over the photo (a mouse or pen hovering, a finger down),
-   * in image pixels; null when there is none. */
-  pointer: Pt | null;
+   * in CLIENT pixels, read into the photo whenever the zoom is painted: a
+   * page scrolled under a pointer that stays still moves the photo, and no
+   * pointer event says so. Null when there is none. */
+  client: Pt | null;
   /** A finger, not a hovering pointer: it ends when the finger lifts. */
   touch: boolean;
 }
@@ -163,7 +169,7 @@ export function MarkCanvas({
   // zoom follows the keys (Tab, or a nudge) until the pointer moves again.
   const pressing = useRef(false);
   const [fromKeys, setFromKeys] = useState(false);
-  const lens = useRef<Lens>({ pointer: null, touch: false });
+  const lens = useRef<Lens>({ client: null, touch: false });
   const corner = useRef<Corner | null>(null);
   const frame = useRef<number | null>(null);
   const width = useWidth(containerRef);
@@ -172,16 +178,37 @@ export function MarkCanvas({
   const canvas = { width, height: imgW > 0 ? (width * imgH) / imgW : 0 };
   const scale = imgW > 0 ? width / imgW : 0;
   const size = loupeSize(canvas);
+  const inner = loupeInner(size);
 
   const describe = (h: Handle) =>
     t("markHandleLabel", { part: t(GROUP_LABELS[h.group]), point: t(h.label, h.labelParams) });
 
   // This render's values, for the frame callback and the pointer handlers,
   // which run between renders.
-  const live = useRef({ marks, handles, onChange, dragging, focused, fromKeys, scale, canvas, size, describe });
+  const live = useRef({ marks, handles, onChange, dragging, focused, fromKeys, scale, canvas, size, inner, describe });
   useLayoutEffect(() => {
-    live.current = { marks, handles, onChange, dragging, focused, fromKeys, scale, canvas, size, describe };
+    live.current = { marks, handles, onChange, dragging, focused, fromKeys, scale, canvas, size, inner, describe };
   });
+
+  /** A point in client pixels, in image pixels. */
+  const toImage = (client: Pt): Pt => {
+    const rect = containerRef.current!.getBoundingClientRect();
+    return {
+      x: ((client.x - rect.left) / rect.width) * imgW,
+      y: ((client.y - rect.top) / rect.height) * imgH,
+    };
+  };
+
+  /** Where the pointer is over the photo now, in image pixels: null when
+   * there is none, or when the page scrolled the photo out from under it
+   * (a drag, which has the pointer captured, follows it anywhere). */
+  const pointerNow = (): Pt | null => {
+    const client = lens.current.client;
+    if (!client || !containerRef.current) return null;
+    const p = toImage(client);
+    const over = p.x >= 0 && p.y >= 0 && p.x <= imgW && p.y <= imgH;
+    return over || held.current ? p : null;
+  };
 
   /** Put the zoom where it belongs now, straight into the DOM. */
   const paint = () => {
@@ -195,7 +222,7 @@ export function MarkCanvas({
     // Dragging centres on the handle, a pointer on itself, the keys on the
     // handle they move; the caption names the handle in question, if any.
     const dragged = find(s.handles, held.current);
-    const pointer = lens.current.pointer;
+    const pointer = pointerNow();
     let center: Pt | null = null;
     let named: Handle | null = null;
     if (dragged) {
@@ -203,7 +230,8 @@ export function MarkCanvas({
       named = dragged;
     } else if (pointer) {
       center = pointer;
-      named = handleAt(s.handles, s.marks, pointer, { x: s.scale, y: s.scale }, REACH_PX);
+      // The handle a press here would pick up, stack order and all.
+      named = handleAt(s.handles, s.marks, pointer, { x: s.scale, y: s.scale }, REACH_PX, s.focused);
     } else if (s.fromKeys && s.focused) {
       named = find(s.handles, s.focused);
       center = named?.at(s.marks) ?? null;
@@ -220,10 +248,16 @@ export function MarkCanvas({
     const origin = loupeOrigin(corner.current, s.canvas, s.size);
     box.style.transform = `translate(${origin.x}px, ${origin.y}px)`;
     box.style.opacity = "1";
-    view.setAttribute("viewBox", loupeView(center, s.scale, s.size));
+    view.setAttribute("viewBox", loupeView(center, s.scale, s.inner));
     caption.textContent = named ? s.describe(named) : "";
     // Not `hidden`: line-clamp sets a display of its own, which wins over it.
     caption.style.display = named ? "" : "none";
+    // The caption hangs off the zoom's side toward the middle of the photo,
+    // never over what the zoom shows. As wide as the zoom, it cannot cover
+    // the pointer either: that is always beside the zoom (loupeCorner).
+    const gap = `${s.size.height + CAPTION_GAP_PX}px`;
+    caption.style.top = corner.current.top ? gap : "auto";
+    caption.style.bottom = corner.current.top ? "auto" : gap;
   };
 
   /** Moves are coalesced to one per frame: the drag, and the zoom. */
@@ -231,7 +265,7 @@ export function MarkCanvas({
     frame.current = null;
     const s = live.current;
     const dragged = find(s.handles, held.current);
-    const pointer = lens.current.pointer;
+    const pointer = pointerNow();
     if (dragged && pointer) {
       const to = clampToImage({ x: pointer.x + grab.current.x, y: pointer.y + grab.current.y }, imgW, imgH);
       const at = dragged.at(s.marks);
@@ -249,6 +283,16 @@ export function MarkCanvas({
   useEffect(() => () => {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
   }, []);
+  // Scrolling moves the photo under a pointer that stays still: the zoom
+  // follows on the scroll itself (a drag moves its handle along too).
+  useEffect(() => {
+    const onScroll = () => {
+      if (lens.current.client) schedule();
+    };
+    window.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => window.removeEventListener("scroll", onScroll, { capture: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imgW, imgH]);
 
   const place = (h: Handle, to: Pt) => onChange(h.move(marks, clampToImage(to, imgW, imgH)));
 
@@ -256,16 +300,13 @@ export function MarkCanvas({
   const pointerAt = (event: React.PointerEvent) => {
     const rect = containerRef.current!.getBoundingClientRect();
     return {
-      at: {
-        x: ((event.clientX - rect.left) / rect.width) * imgW,
-        y: ((event.clientY - rect.top) / rect.height) * imgH,
-      },
+      at: toImage({ x: event.clientX, y: event.clientY }),
       scale: { x: rect.width / imgW, y: rect.height / imgH },
     };
   };
 
   const follow = (event: React.PointerEvent) => {
-    lens.current = { pointer: pointerAt(event).at, touch: event.pointerType === "touch" };
+    lens.current = { client: { x: event.clientX, y: event.clientY }, touch: event.pointerType === "touch" };
     // The pointer took over from the keys.
     if (live.current.fromKeys) setFromKeys(false);
     schedule();
@@ -293,7 +334,7 @@ export function MarkCanvas({
     if (held.current && event.type === "pointerup") {
       // The handle lands where it was let go, not where the last frame
       // before the release left it.
-      lens.current = { ...lens.current, pointer: pointerAt(event).at };
+      lens.current = { ...lens.current, client: { x: event.clientX, y: event.clientY } };
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       flush();
     }
@@ -301,7 +342,7 @@ export function MarkCanvas({
     setDragging(null);
     // A finger lifted is no longer anywhere; a mouse still hovers.
     if (event.pointerType === "touch" || event.type === "pointercancel") {
-      lens.current = { pointer: null, touch: false };
+      lens.current = { client: null, touch: false };
     }
     schedule();
   };
@@ -309,7 +350,7 @@ export function MarkCanvas({
   const leave = () => {
     // A captured drag keeps its zoom until it is released.
     if (held.current) return;
-    lens.current = { pointer: null, touch: false };
+    lens.current = { client: null, touch: false };
     schedule();
   };
 
@@ -317,7 +358,7 @@ export function MarkCanvas({
     const step = KEYS[event.key];
     if (!step) return;
     event.preventDefault();
-    lens.current = { pointer: null, touch: false };
+    lens.current = { client: null, touch: false };
     setFromKeys(true);
     const by = event.shiftKey ? NUDGE_FAST : NUDGE;
     const at = handle.at(marks);
@@ -330,13 +371,13 @@ export function MarkCanvas({
   // sized in, so they read the same at every photo size.
   const lensPx = scale > 0 ? 1 / (scale * LOUPE_ZOOM) : 1;
   const active = dragging ?? (fromKeys ? focused : null);
-  const cx = size.width / 2;
-  const cy = size.height / 2;
+  const cx = inner.width / 2;
+  const cy = inner.height / 2;
   const arms = [
     [0, cy, cx - CROSSHAIR_GAP_PX, cy],
-    [cx + CROSSHAIR_GAP_PX, cy, size.width, cy],
+    [cx + CROSSHAIR_GAP_PX, cy, inner.width, cy],
     [cx, 0, cx, cy - CROSSHAIR_GAP_PX],
-    [cx, cy + CROSSHAIR_GAP_PX, cx, size.height],
+    [cx, cy + CROSSHAIR_GAP_PX, cx, inner.height],
   ];
 
   return (
@@ -381,7 +422,7 @@ export function MarkCanvas({
             onFocus={() => {
               setFocused(h.id);
               if (!pressing.current) {
-                lens.current = { pointer: null, touch: false };
+                lens.current = { client: null, touch: false };
                 setFromKeys(true);
               }
             }}
@@ -402,52 +443,62 @@ export function MarkCanvas({
           only what changes with the marks. */}
       <div
         ref={loupeRef}
-        className="pointer-events-none absolute left-0 top-0 overflow-hidden border-2 border-white bg-gray-900
-          opacity-0 shadow-lg ring-1 ring-black/40 motion-safe:transition-opacity motion-safe:duration-100"
-        style={{ width: size.width, height: size.height, borderRadius: 10 }}
+        className="pointer-events-none absolute left-0 top-0 opacity-0 motion-safe:transition-opacity
+          motion-safe:duration-100"
+        style={{ width: size.width, height: size.height }}
         aria-hidden="true"
       >
-        <svg ref={lensRef} className="block h-full w-full" preserveAspectRatio="none">
-          <image href={imageUrl} x={0} y={0} width={imgW} height={imgH} preserveAspectRatio="none" />
-          <Outlines marks={marks} dash={LENS_DASH_PX * lensPx} />
-          {handles.map((h) => {
-            const p = h.at(marks);
-            return (
-              <circle
-                key={h.id}
-                cx={p.x}
-                cy={p.y}
-                r={(h.id === active ? LENS_DOT_ACTIVE_PX : LENS_DOT_PX) * lensPx}
-                fill={GROUP_COLOURS[h.group]}
-                stroke="white"
-                strokeWidth={1}
-                vectorEffect="non-scaling-stroke"
-              />
-            );
-          })}
-        </svg>
-        {/* The crosshair marks the zoom's centre: the pixel under the
-            pointer, or the handle's exact spot. A dark line under a light
-            one, so it shows on skin, fur and a white backdrop alike. */}
-        <svg
-          className="absolute inset-0 h-full w-full"
-          viewBox={`0 0 ${size.width} ${size.height}`}
-          preserveAspectRatio="none"
+        {/* The frame is inside the zoom's size, and what it shows fills
+            the rest (loupeInner): exactly three times the photo. */}
+        <div
+          className="relative h-full w-full overflow-hidden border-white bg-gray-900 shadow-lg ring-1
+            ring-black/40"
+          style={{ borderRadius: 10, borderWidth: LOUPE_FRAME }}
         >
-          {arms.map(([x1, y1, x2, y2], i) => (
-            <g key={i}>
-              <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="black" strokeOpacity={0.45} strokeWidth={3} />
-              <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="white" strokeWidth={1} />
-            </g>
-          ))}
-        </svg>
-        {/* Two lines at most: a phone's zoom is under 100px wide, and a
-            caption that grew further would hide what it names. */}
+          <svg ref={lensRef} className="block h-full w-full" preserveAspectRatio="none">
+            <image href={imageUrl} x={0} y={0} width={imgW} height={imgH} preserveAspectRatio="none" />
+            <Outlines marks={marks} dash={LENS_DASH_PX * lensPx} />
+            {handles.map((h) => {
+              const p = h.at(marks);
+              return (
+                <circle
+                  key={h.id}
+                  cx={p.x}
+                  cy={p.y}
+                  r={(h.id === active ? LENS_DOT_ACTIVE_PX : LENS_DOT_PX) * lensPx}
+                  fill={GROUP_COLOURS[h.group]}
+                  stroke="white"
+                  strokeWidth={1}
+                  vectorEffect="non-scaling-stroke"
+                />
+              );
+            })}
+          </svg>
+          {/* The crosshair marks the zoom's centre: the pixel under the
+              pointer, or the handle's exact spot. A dark line under a light
+              one, so it shows on skin, fur and a white backdrop alike. */}
+          <svg
+            className="absolute inset-0 h-full w-full"
+            viewBox={`0 0 ${inner.width} ${inner.height}`}
+            preserveAspectRatio="none"
+          >
+            {arms.map(([x1, y1, x2, y2], i) => (
+              <g key={i}>
+                <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="black" strokeOpacity={0.45} strokeWidth={3} />
+                <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="white" strokeWidth={1} />
+              </g>
+            ))}
+          </svg>
+        </div>
+        {/* What the pointer would pick up, or is moving, under the zoom (or
+            over it, for a zoom at the bottom), not on it: a caption inside
+            hid the half of what it named on a phone. Three lines hold the
+            longest name on the narrowest zoom a phone shows. */}
         <p
           ref={captionRef}
           style={{ display: "none" }}
-          className="absolute inset-x-0 bottom-0 line-clamp-2 bg-gray-900/80 px-1.5 py-0.5 text-center
-            text-[10px] font-medium leading-tight text-white"
+          className="absolute inset-x-0 line-clamp-3 rounded-md bg-gray-900/85 px-1.5 py-1 text-center
+            text-[11px] font-medium leading-tight text-white shadow"
         />
       </div>
     </div>

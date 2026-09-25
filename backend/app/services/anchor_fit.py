@@ -379,20 +379,35 @@ def merge(older: FaceMarks, newer: FaceMarks) -> FaceMarks:
     """Region by region, the newer marks win; a region the newer set leaves
     out keeps its older marking. Lets a client re-send only what moved.
 
-    The head's diagonals the same way, one by one: a head sent without them
-    keeps the older head's. The marking panel sends a head it did not touch
-    without them, so a head saved before there were diagonals (they are
-    only shown where its fit put them) saves exactly as it did."""
+    The head's diagonals one by one, but only under the same four edges: a
+    head re-sent unchanged without them keeps the older head's (the marking
+    panel sends a head it did not touch that way, so a head saved before
+    there were diagonals saves exactly as it did), while a head whose edges
+    moved leaves the ones it does not send to the warp, as every head did
+    before there were diagonals: an outline pinned where the old edges had
+    it would pull the new ones out of shape."""
     def pick(name: str) -> object:
         value = getattr(newer, name)
         return value if value is not None else getattr(older, name)
 
     merged = FaceMarks(**{f.name: pick(f.name) for f in fields(FaceMarks)})
-    if newer.head is not None and older.head is not None:
+    if newer.head is not None and older.head is not None and _same_edges(newer.head, older.head):
         kept = {d: p for d, p in older.head.diagonals().items() if getattr(newer.head, d) is None}
         if kept:
             merged = replace(merged, head=replace(newer.head, **kept))
     return merged
+
+
+# Marks are stored to the hundredth of a pixel (marks_to_dict): two edges
+# closer than that are the same edge sent back.
+SAME_MARK_PX = 0.01
+
+
+def _same_edges(a: RegionMarks, b: RegionMarks) -> bool:
+    return all(
+        math.dist(getattr(a, e), getattr(b, e)) <= SAME_MARK_PX
+        for e in ("left", "right", "top", "bottom")
+    )
 
 
 def with_head_outline(marks: FaceMarks, points: np.ndarray) -> FaceMarks:

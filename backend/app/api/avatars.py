@@ -45,6 +45,7 @@ from app.services.anchor_fit import (
     read_fit_base,
     render_profile_for,
     saved_marks,
+    with_head_outline,
     write_fit_base,
 )
 from app.services.segment import SegmentationUnavailable, remove_background
@@ -798,12 +799,10 @@ async def rig_anchors(avatar_id: str, ctx: OrgMember, db: DB) -> dict:
     saved = saved_marks(rig, avatar.face_type, rig_on_base)
     fitted, _ = fit_rig(rig, base, saved, avatar.face_type)
     # A head saved before it had diagonals opens with them where its fit put
-    # them (merge keeps the mesh's diagonals under a head that has none), so
-    # all eight handles are there, and the panel, which sends a head it did
-    # not touch without them, saves it exactly as it was.
-    marks = merge(
-        marks_from_mesh(np.array(fitted["points"], dtype=float), avatar.face_type), saved
-    )
+    # them, so all eight handles are there, and the panel, which sends a head
+    # it did not touch without them, saves it exactly as it was.
+    points = np.array(fitted["points"], dtype=float)
+    marks = with_head_outline(merge(marks_from_mesh(points, avatar.face_type), saved), points)
     width, height = rig["image_size"]
     return {
         "anchors": _clamped(marks_to_dict(marks), width, height),

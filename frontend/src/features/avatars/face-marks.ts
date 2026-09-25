@@ -243,10 +243,24 @@ export function clampToImage(p: Pt, width: number, height: number): Pt {
 
 // --- The head's outline -------------------------------------------------------------
 
-/** The head's marked points in outline order (eight, or the four edges of
- * a head saved before the diagonals). */
-export function headOutline(head: RegionMarks): Pt[] {
-  return HEAD_OUTLINE.map((edge) => head[edge]).filter((p): p is Pt => p !== undefined);
+// A chin this close to the head's bottom edge, as a share of the head's
+// height, is the same mark (anchor_fit.CHIN_MERGE).
+const CHIN_MERGE = 0.01;
+
+/**
+ * The head's outline as the fit lays the face's edge on it: the marked
+ * points in outline order (eight, or the four edges of a head saved before
+ * the diagonals), with a `chin` marked apart from the head's bottom edge in
+ * that edge's place. The face ends at the jaw; the bottom edge then only
+ * bounds the head (a dog's ruff hangs below its jaw), as on the server.
+ */
+export function headOutline(head: RegionMarks, chin?: Pt): Pt[] {
+  const height = Math.max(Math.abs(head.bottom.y - head.top.y), 1);
+  const distinctChin =
+    chin !== undefined && Math.hypot(chin.x - head.bottom.x, chin.y - head.bottom.y) > CHIN_MERGE * height;
+  return HEAD_OUTLINE.map((edge) => (edge === "bottom" && distinctChin ? chin : head[edge])).filter(
+    (p): p is Pt => p !== undefined
+  );
 }
 
 /**

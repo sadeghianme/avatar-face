@@ -743,7 +743,7 @@ def test_a_four_point_head_opens_with_eight_and_saves_untouched_as_it_was():
     saved = line_marks("dog wide muzzle")
     first, _ = fit_rig(rig, base, saved, "animal")
     points = np.array(first["points"])
-    opened = merge(marks_from_mesh(points, "animal"), saved)
+    opened = with_head_outline(merge(marks_from_mesh(points, "animal"), saved), points)
     for name, i in HEAD_DIAGONALS.items():
         assert getattr(opened.head, name) == pytest.approx(tuple(points[i]))
     assert opened == with_head_outline(saved, points)
@@ -752,16 +752,30 @@ def test_a_four_point_head_opens_with_eight_and_saves_untouched_as_it_was():
     assert again["points"] == first["points"]
 
 
-def test_a_head_sent_without_diagonals_keeps_the_saved_ones():
+def test_a_head_sent_back_without_diagonals_keeps_the_saved_ones():
+    older = outline_marks("dog wide muzzle")
+    edges_only = replace(older.head, **{d: None for d in HEAD_DIAGONALS})
+    assert merge(older, FaceMarks(head=edges_only)).head == older.head
+    # To the hundredth of a pixel, the precision marks are stored at.
+    nudged = replace(edges_only, left=(older.head.left[0] + 0.005, older.head.left[1]))
+    assert merge(older, FaceMarks(head=nudged)).head.diagonals() == OVAL_DIAGONALS
+    # A diagonal that is sent wins; the others stand.
+    merged = merge(older, FaceMarks(head=replace(edges_only, upper_left=(280, 240))))
+    assert merged.head.upper_left == (280, 240)
+    assert merged.head.upper_right == OVAL_DIAGONALS["upper_right"]
+
+
+def test_a_head_moved_without_diagonals_leaves_them_to_the_warp():
+    """A client that knows four points moves the edges: the outline follows
+    the warp, as before there were diagonals, instead of staying pinned
+    where the old edges had it."""
     older = outline_marks("dog wide muzzle")
     moved = RegionMarks((190, 500), (810, 500), (500, 140), (500, 860))
     merged = merge(older, FaceMarks(head=moved))
-    assert merged.head.left == (190, 500)
-    assert merged.head.diagonals() == OVAL_DIAGONALS
-    # A diagonal that is sent wins.
+    assert merged.head == moved
+    assert merged.head.diagonals() == {}
     merged = merge(older, FaceMarks(head=replace(moved, upper_left=(280, 240))))
-    assert merged.head.upper_left == (280, 240)
-    assert merged.head.upper_right == OVAL_DIAGONALS["upper_right"]
+    assert merged.head.diagonals() == {"upper_left": (280, 240)}
 
 
 def test_eight_head_marks_survive_a_round_trip():
