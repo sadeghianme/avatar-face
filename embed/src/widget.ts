@@ -45,7 +45,9 @@ declare global {
     __Liveface3D?: {
       load: (canvas: HTMLCanvasElement, modelUrl: string) => Promise<Avatar3DEngine>;
     };
-    /** Set by liveface-mouth.js, loaded only for avatars that use it. */
+    /** Set by liveface-mouth.js, loaded only for avatars that use it.
+     *  `motionUrl` is the bundled Reference motion; `config.motion_url`, when
+     *  present, is the avatar's own. */
     __LivefaceMouth?: {
       attach: (engine: AvatarEngine, config: AvatarMouthConfig, motionUrl: string) => Promise<unknown>;
     };
@@ -185,6 +187,9 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     // Mouth upgrade, progressive as well. Any failure — bundle, template,
     // the teeth photo — leaves the classic mouth, which always works.
     if (info.mouth?.renderer === "continuous") {
+      // The config goes through whole: an avatar with its own performance
+      // kit names its manifest in `motion_url`, and the bundled Reference
+      // motion below is what every other avatar plays (and the fallback).
       const mouthConfig = info.mouth;
       void loadScript(`${apiBase}/liveface-mouth.js`)
         .then(() =>

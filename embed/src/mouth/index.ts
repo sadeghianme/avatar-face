@@ -18,19 +18,41 @@ export interface AvatarMouthConfig {
   profile?: Partial<ReferenceProfile> | null;
   /** The person's own teeth, when they supplied a second photo. */
   oral?: { image_url: string; rig_url: string } | null;
+  /**
+   * The avatar's own performance manifest (version 2: its six mouth shapes,
+   * made from its photo by the backend's performance kit). Absent or null:
+   * the bundled Reference motion, retargeted, as every avatar had before.
+   */
+  motion_url?: string | null;
 }
 
 /**
  * Build the mouth an avatar's config asks for. `motionUrl` is the authored
- * motion template (`<api>/mouth-motion.json`). Rejects on any failure; the
- * caller keeps the classic mouth, which is always a working fallback.
+ * motion template (`<api>/mouth-motion.json`), played when the config names
+ * no manifest of its own. Rejects on any failure; the caller keeps the
+ * classic mouth, which is always a working fallback.
  */
 export async function loadAvatarMouth(
   config: AvatarMouthConfig,
   motionUrl: string,
   signal?: AbortSignal
 ): Promise<ContinuousMouth> {
-  const mouth = await ContinuousMouth.load(motionUrl, config.oral ?? undefined, signal);
+  const oral = config.oral ?? undefined;
+  let mouth: ContinuousMouth;
+  if (config.motion_url) {
+    try {
+      mouth = await ContinuousMouth.load(config.motion_url, oral, signal);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      // The avatar's own motion did not load (an expired link, a network
+      // blip, a manifest from a newer backend). The Reference motion fits
+      // any face: a continuous mouth that is not quite theirs beats the
+      // classic one, and far beats none.
+      mouth = await ContinuousMouth.load(motionUrl, oral, signal);
+    }
+  } else {
+    mouth = await ContinuousMouth.load(motionUrl, oral, signal);
+  }
   mouth.setProfile(normalizeProfile(config.profile));
   return mouth;
 }
