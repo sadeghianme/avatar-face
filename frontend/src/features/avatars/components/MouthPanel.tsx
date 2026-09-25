@@ -425,7 +425,7 @@ export function MouthPanel({
                 </>
               )}
               {running && (
-                <div className="mt-2.5 rounded-lg border border-black/10 bg-white p-2.5 dark:border-white/10 dark:bg-panel" aria-hidden="true">
+                <div className="mt-2.5 rounded-lg border border-black/10 bg-white p-2.5 dark:border-white/10 dark:bg-panel">
                   <p className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs font-medium">
                     <span className="flex items-center gap-2">
                       <Spinner className="h-3.5 w-3.5 shrink-0 text-brand-600" />
