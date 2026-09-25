@@ -80,7 +80,14 @@ export interface Avatar {
   /** The DRAFT mouth; null means the classic drawn mouth. */
   /** Detail only: presigned draft teeth photo + its rig. */
   mouth_photo?: { image_url: string; rig_url: string } | null;
-  mouth?: { renderer: MouthRenderer; profile: Record<string, number>; has_oral_photo: boolean } | null;
+  mouth?: {
+    renderer: MouthRenderer;
+    profile: Record<string, number>;
+    has_oral_photo: boolean;
+    /** Presigned: the avatar's own performance manifest, once the backend
+     *  serves one (docs/performance-kit.md). Absent: the bundled motion. */
+    motion_url?: string | null;
+  } | null;
   /** Set means a public page exists at /s/<token>. */
   share_token?: string | null;
   /** Background/body/head decomposition for the layered render path. */

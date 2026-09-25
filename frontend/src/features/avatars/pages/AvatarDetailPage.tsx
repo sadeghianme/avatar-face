@@ -20,6 +20,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MouthPanel } from "@/features/avatars/components/MouthPanel";
 import { TuningPanel } from "@/features/avatars/components/TuningPanel";
 import { useAvatarMouth } from "@/features/avatars/hooks/useAvatarMouth";
+import { draftMouthConfig, savedMouthKey } from "@/features/avatars/mouth-config";
 import { api } from "@/lib/api";
 import { useOrg } from "@/providers/org";
 import type { Avatar } from "@/lib/types";
@@ -96,14 +97,11 @@ export function AvatarDetailPage() {
 
   // Saved draft mouth unless the panel is previewing something newer. The
   // preview resets whenever the saved copy changes (save, publish, discard).
-  // Only human faces get the photographic mouth — the server publishes the
-  // classic one for anything else, and the preview must show what ships.
-  const savedMouth: AvatarMouthConfig | null =
-    avatar?.mouth?.renderer === "continuous" && (avatar.face_type ?? "human") === "human"
-      ? { renderer: "continuous", profile: avatar.mouth.profile, oral: avatar.mouth_photo ?? null }
-      : null;
-  const savedMouthKey = JSON.stringify([avatar?.mouth ?? null, Boolean(avatar?.mouth_photo)]);
-  useEffect(() => setMouthPreview(undefined), [savedMouthKey]);
+  // Only human faces get the photographic mouth, and it carries the avatar's
+  // own motion: the preview must show what ships (draftMouthConfig).
+  const savedMouth = draftMouthConfig(avatar);
+  const savedKey = savedMouthKey(avatar);
+  useEffect(() => setMouthPreview(undefined), [savedKey]);
   useAvatarMouth(
     avatar?.kind === "model3d" ? null : (engine as Parameters<typeof useAvatarMouth>[0]),
     mouthPreview === undefined ? savedMouth : mouthPreview
@@ -364,13 +362,7 @@ export function AvatarDetailPage() {
               <MouthPanel
                 avatar={avatar}
                 orgId={current.id}
-                onPreview={(renderer, profile) =>
-                  setMouthPreview(
-                    renderer === "continuous"
-                      ? { renderer, profile, oral: avatar.mouth_photo ?? null }
-                      : null
-                  )
-                }
+                onPreview={(renderer, profile) => setMouthPreview(draftMouthConfig(avatar, renderer, profile))}
               />
             )}
             <SharePanel avatar={avatar} orgId={current.id} />

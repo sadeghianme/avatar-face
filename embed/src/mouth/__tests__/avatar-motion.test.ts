@@ -168,4 +168,65 @@ describe("a per-avatar manifest in the continuous mouth", () => {
   });
 });
 
+/** Written by the backend from a kit whose own AA opens 75% as far as the
+ *  Reference's (so its jaw range is fitted at 0.6375) and whose EE, OH and
+ *  TH were retargeted: backend/tests/test_performance_kit.py. */
+const fittedManifest = (): AvatarPerformanceManifest =>
+  JSON.parse(readFileSync(new URL("./fixtures/avatar-motion-fitted.json", import.meta.url), "utf8"));
+
+describe("a retargeted pose in an avatar's kit", () => {
+  const LIPS = [13, 14, 0, 17, 61, 291, 78, 308, 81, 311, 178, 402];
+  /** Where the lips settle for `id`, as displacements in the neutral
+   *  mouth's own frame, in its widths: comparable across manifests. */
+  const played = (value: unknown, jawRange: number, id: string) => {
+    const manifest = validateMotionManifest(value);
+    const mouth = new ContinuousMouth(manifest);
+    mouth.setProfile(normalizeProfile({ jawRange }));
+    const neutral = manifest.poses[0].points.map(([x, y]) => ({ x: x * 800, y: y * 800 }));
+    clock = 1000;
+    let points = neutral;
+    for (let i = 0; i < 400; i++) {
+      clock += 1000 / 60;
+      points = neutral.map(p => ({ ...p }));
+      mouth.deform(points, neutral, {} as Rig, REFERENCE_POSES[id].weights);
+    }
+    const a = neutral[61], b = neutral[291], width = Math.hypot(b.x - a.x, b.y - a.y);
+    const ux = (b.x - a.x) / width, uy = (b.y - a.y) / width;
+    return LIPS.map(i => {
+      const dx = points[i].x - neutral[i].x, dy = points[i].y - neutral[i].y;
+      return [(dx * ux + dy * uy) / width, (-dx * uy + dy * ux) / width];
+    });
+  };
+
+  it("is fitted at a jaw range other than the Reference's", () => {
+    const manifest = validateMotionManifest(fittedManifest()) as AvatarPerformanceManifest;
+    expect(manifest.jaw_range).toBeCloseTo(.6375, 3);
+    expect(manifest.poses.map(p => p.provenance)).toEqual(
+      ["base", "generated", "retargeted", "generated", "retargeted", "generated", "retargeted"]);
+  });
+
+  // The fixture's face is the Reference, so the bundled motion on it is the
+  // truth: at the kit's own fit, and at any other profile, a retargeted
+  // pose must open as far as the Reference's does. Baked at the Reference's
+  // size instead, OH would open a third too far here. (Within 1%: the
+  // bundled motion keeps the Reference's 0.3 degree lean, which a kit's
+  // levelled frame does not, so its sideways parts differ by up to 0.3
+  // degrees of the vertical ones, and its falloff is sampled 0.3 degrees
+  // round.)
+  it.each([["oh", .6375], ["th", .6375], ["ee", .6375], ["oh", .75], ["th", .7]])(
+    "plays %s as the bundled Reference does on the same face, at jawRange %s", (id, jawRange) => {
+      const mine = played(fittedManifest(), jawRange, id);
+      const reference = played(bundled(), jawRange, id);
+      const near = (value: number, expected: number) =>
+        expect(Math.abs(value - expected)).toBeLessThan(.01 * Math.abs(expected) + 2e-4);
+      mine.forEach(([x, y], k) => {
+        const [rx, ry] = reference[k];
+        near(Math.hypot(x, y), Math.hypot(rx, ry));
+        near(y, ry);
+        expect(x).toBeCloseTo(rx, 2);
+      });
+      expect(Math.abs(reference[1][1])).toBeGreaterThan(.02);
+    });
+});
+
 afterEach(() => { clock = 0; });

@@ -16,16 +16,21 @@ confirmed the points:
    nothing else;
 2. each answer detected (services.landmarks), mapped back through the crop,
    registered on the eye corners and nose bridge (the Reference's ANCHORS,
-   the same function scripts/build_reference_performance.py uses), and
-   refused when the registration is poor or the face drifted: eyes or nose
-   moved, head scaled, rotated or turned, skin relit, or the mouth is not in
-   the shape that was asked for;
-3. any shape that is missing or refused filled from the Reference's pose,
-   retargeted to this face (`retarget_reference_pose`);
-4. a per-avatar manifest in the format ContinuousMouth loads (version 2,
-   character "avatar-v1:<kit id>", see `build_manifest`);
-5. the mouth profile fitted from the EE and AA shapes (`fit_profile`), and
-   the EE answer handed back as the teeth photo (`TeethSource`).
+   the same function scripts/build_reference_performance.py uses) onto the
+   detector's own view of the base photo, and refused when the
+   registration is poor or the face drifted: eyes or nose moved, head
+   scaled, rotated or turned, skin relit, or the mouth is not in the shape
+   that was asked for. What an answer moved is then added to the owner's
+   confirmed points (`register_answer`), so a corrected mark is never
+   mistaken for motion;
+3. the mouth profile fitted from the EE and AA shapes (`fit_profile`), and
+   the EE answer handed back as the teeth photo (`TeethSource`) only when
+   the embed would draw it (services.dental_photo);
+4. any shape that is missing or refused filled from the Reference's pose,
+   retargeted to this face at the fitted jaw range
+   (`retarget_reference_pose`);
+5. a per-avatar manifest in the format ContinuousMouth loads (version 2,
+   character "avatar-v1:<kit id>", see `build_manifest`).
 
 `build_kit` runs all of it with an INJECTED edit function, so the creation
 finish job passes imagegen.edit_image and tests pass fakes. Nothing here
@@ -148,7 +153,7 @@ def pose_prompt(shape: str) -> str:
     )
 
 
-# --- 3a. Registration, shared with scripts/build_reference_performance.py ------------
+# --- 2a. Registration, shared with scripts/build_reference_performance.py ------------
 
 # Stable eye corners and nose bridge. The mouth and chin cannot bias the
 # registration, because they are what each pose changes.
@@ -318,7 +323,7 @@ class ManifestFrame:
         return cls(np.hstack((linear, offset[:, None])), (int(image_size[0]), int(image_size[1])))
 
 
-# --- 2. Request preparation ---------------------------------------------------------------
+# --- 1b. Request preparation ---------------------------------------------------------------
 
 FACE_CROP = "face_crop"
 HEAD_CROP = "head_crop"
@@ -404,7 +409,7 @@ def _checked_points(points) -> np.ndarray:
     return array
 
 
-# --- 3b. Registering an answer ----------------------------------------------------------------
+# --- 2b. Registering an answer ----------------------------------------------------------------
 
 # Drift guards, measured on the Reference's six poses (registered, as a
 # fraction of the face width, 234 to 454) and set with a wide margin:
@@ -492,6 +497,7 @@ def register_answer(
     base_points: np.ndarray,
     frame: ManifestFrame,
     detect: Detector,
+    base_detected: np.ndarray | None = None,
 ) -> PoseRegistration:
     """Detect the pose in `answer`, carry it onto the base photo and check it.
 
@@ -500,9 +506,20 @@ def register_answer(
     zoomed or shifted the head a little, and the anchors are what a pose
     must not move. Returns per-landmark targets in base pixels, or the
     first reason the answer cannot be used. CPU work.
+
+    `base_points` are the owner's CONFIRMED points (the rig), which may
+    differ from what the detector sees wherever the owner corrected a mark,
+    and four of the eight anchors are eye corners the owner may well have
+    moved. So the answer is compared with `base_detected`, the same
+    detector's view of the base photo: detector against detector, every
+    guard and the registration measure only what the model changed. The
+    targets are the confirmed points plus that change, which is exactly
+    the registered answer when nothing was corrected. Without a detection
+    of the base (none found) the confirmed points stand in for it.
     """
     from app.services import photo_adjust
 
+    base_view = base_points if base_detected is None else base_detected
     result = PoseRegistration(request.shape)
     try:
         with Image.open(io.BytesIO(answer)) as decoded:
@@ -523,7 +540,7 @@ def register_answer(
     to_base = request.to_base(image.size)
     mapped = points @ to_base[:, :2].T + to_base[:, 2]
     try:
-        similarity = similarity_on_anchors(mapped, base_points)
+        similarity = similarity_on_anchors(mapped, base_view)
     except MirroredPose:
         result.reason = _reason("mirrored", "The answer is a mirror image of the face")
         return result
@@ -535,7 +552,7 @@ def register_answer(
         return result
 
     registered = similarity.apply(mapped)
-    rms = registration_rms(registered, base_points) * frame.units_per_px
+    rms = registration_rms(registered, base_view) * frame.units_per_px
     checks["rms"] = round(rms, 6)
     if rms > MAX_REGISTRATION_RMS:
         result.reason = _reason(
@@ -543,10 +560,10 @@ def register_answer(
         )
         return result
 
-    face = float(np.linalg.norm(base_points[FACE_RIGHT] - base_points[FACE_LEFT]))
-    nose = float(np.linalg.norm(registered[NOSE_GUARD] - base_points[NOSE_GUARD], axis=1).max()) / face
-    eyes = float(np.linalg.norm(registered[EYE_GUARD] - base_points[EYE_GUARD], axis=1).mean()) / face
-    yaw = abs(photo_adjust.yaw_offset(points) - photo_adjust.yaw_offset(base_points))
+    face = float(np.linalg.norm(base_view[FACE_RIGHT] - base_view[FACE_LEFT]))
+    nose = float(np.linalg.norm(registered[NOSE_GUARD] - base_view[NOSE_GUARD], axis=1).max()) / face
+    eyes = float(np.linalg.norm(registered[EYE_GUARD] - base_view[EYE_GUARD], axis=1).mean()) / face
+    yaw = abs(photo_adjust.yaw_offset(points) - photo_adjust.yaw_offset(base_view))
     checks.update(nose=round(nose, 4), eyes=round(eyes, 4), yaw=round(yaw, 4))
     if nose > MAX_NOSE_SHIFT:
         result.reason = _reason("nose_moved", "The AI moved or reshaped the nose")
@@ -558,25 +575,26 @@ def register_answer(
         result.reason = _reason("head_turned", "The AI turned the head")
         return result
 
-    drift = photo_adjust.skin_drift(base_image, base_points, image, points)
+    drift = photo_adjust.skin_drift(base_image, base_view, image, points)
     if drift is not None:
         checks["skin_delta_e"] = round(drift, 2)
         if drift > MAX_POSE_SKIN_DELTA_E:
             result.reason = _reason("skin_tone_changed", "The AI changed the skin tone or light")
             return result
 
-    rest_width = float(np.linalg.norm(base_points[MOUTH_RIGHT] - base_points[MOUTH_LEFT]))
+    rest_width = float(np.linalg.norm(base_view[MOUTH_RIGHT] - base_view[MOUTH_LEFT]))
     gap, width = _gap_and_width(registered, rest_width)
     checks.update(gap=round(gap, 3), width=round(width, 3))
     missed = _shape_reached(request.shape, gap, width)
     if missed:
         result.reason = _reason("pose_not_reached", f"Not the {request.shape.upper()} shape: {missed}")
         return result
-    result.targets, result.rms = registered, rms
+    # What the model moved, applied to the confirmed points.
+    result.targets, result.rms = base_points + (registered - base_view), rms
     return result
 
 
-# --- 5. Retarget fallback -----------------------------------------------------------------------
+# --- 4. Retarget fallback -----------------------------------------------------------------------
 
 # Vertical lip movement follows each lip's own height, but never further
 # from the width-based scale than this: a detector that finds a hairline
@@ -601,7 +619,7 @@ def _lip_heights(points: np.ndarray) -> tuple[float, float, float]:
 
 
 def retarget_reference_pose(
-    shape: str, base_points: np.ndarray, reference: ReferenceMotion
+    shape: str, base_points: np.ndarray, reference: ReferenceMotion, amplitude: float = 1.0
 ) -> np.ndarray:
     """The Reference's `shape`, moved onto this face: targets in base pixels.
 
@@ -615,6 +633,14 @@ def retarget_reference_pose(
     it (performanceInfluence) to every pose, on the manifest's rest points,
     which in a per-avatar manifest are this face's own neutral points. So a
     retargeted pose is baked in full, and the embed needs no retarget code.
+
+    `amplitude` scales the whole movement. The Reference's poses are true
+    at jawRange 0.85 (REFERENCE_JAW_RANGE); a manifest records the jaw range
+    ITS poses are true at (`jaw_range`: the one fitted from this face's own
+    AA) and the engine plays every pose at jawRange / jaw_range. A
+    retargeted pose baked into it at jaw_range / 0.85 therefore plays, at
+    any profile, as the same Reference pose does through the bundled
+    motion, and keeps its size relative to the generated poses.
     """
     rest, pose = reference.rest, reference.poses[shape]
     ref_level = _level(_corner_angle(rest))
@@ -635,24 +661,27 @@ def retarget_reference_pose(
     seam = (neutral[UPPER_INNER, 1] + neutral[LOWER_INNER, 1]) / 2
     below = _smoothstep((neutral[:, 1] - seam) / (2 * LIP_BLEND * ref_width) + 0.5)
     sy = lip_scale(upper, ref_upper) * (1 - below) + lip_scale(lower, ref_lower) * below
-    local = np.stack((displacement[:, 0] * sx, displacement[:, 1] * sy), axis=-1)
+    local = np.stack((displacement[:, 0] * sx, displacement[:, 1] * sy), axis=-1) * amplitude
     to_face = _level(-_corner_angle(base_points))  # R(+theta)
     return base_points + local @ to_face.T
 
 
-# --- 6. Mouth profile fit -----------------------------------------------------------------------
+# --- 3. Mouth profile fit -----------------------------------------------------------------------
 
-# The embed's upper arch seat: dentalPlacement puts the upper incisal edge
-# this far below the neutral lip seam, plus teethY (neutral mouth widths).
+# The jaw range the Reference's motion is true at: the profile default, and
+# the embed's divisor for a version 1 manifest (ContinuousMouth.setProfile).
+REFERENCE_JAW_RANGE = 0.85
+# The embed's upper arch seat: dentalPlacement draws the bottom of the upper
+# arch this far below the neutral lip seam, plus teethY (neutral mouth
+# widths; the seam is centralMouthAnchors' corner line moved onto 13/14).
 UPPER_SEAT = 0.055
-# The enamel classifier's seed threshold (embed dental-texture-model.ts).
-ENAMEL_SEED = 0.35
-# Columns either side of the centre the incisal edge is measured over, in
-# the photo's mouth widths (the central incisors), and how many must show
-# enamel for the measurement to count.
-INCISAL_HALF_SPAN = 0.06
-MIN_INCISAL_COLUMNS = 10
-_SAMPLES_PER_WIDTH = 400
+# How much lower than the teeth photo's own registration the Reference's
+# hand tuning draws its teeth. The Reference renders oral-detail-v3 with
+# teethY 0.016, which puts that photo's arch edge 0.071 below the neutral
+# seam; registered onto the Reference portrait on the ANCHORS, the photo
+# itself puts it 0.0467 below. Every fitted face gets the same allowance,
+# so a photo like v3 fits the Reference's value (tests/test_performance_kit.py).
+REFERENCE_TEETH_DROP = 0.0243
 
 
 def _profile_defaults() -> tuple[dict, dict[str, tuple[float, float]]]:
@@ -670,77 +699,32 @@ def _profile_defaults() -> tuple[dict, dict[str, tuple[float, float]]]:
     return MouthProfile().model_dump(), limits
 
 
-def _smooth(a: float, b: float, n: np.ndarray) -> np.ndarray:
-    return _smoothstep((n - a) / (b - a))
+def _down(points: np.ndarray) -> tuple[np.ndarray, float]:
+    """The unit vector down the face, perpendicular to the corner line, and
+    the corner-to-corner width."""
+    d = points[MOUTH_RIGHT] - points[MOUTH_LEFT]
+    width = float(np.linalg.norm(d))
+    ux = d / width
+    return np.array([-ux[1], ux[0]]), width
 
 
-def enamel_mask(rgb: np.ndarray) -> np.ndarray:
-    """The embed's enamelMask (dental-texture-model.ts), vectorised: bright,
-    and neither too red nor too yellow for a tooth."""
-    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
-    red = np.maximum(r, 1.0)
-    return (_smooth(70, 130, np.minimum(np.minimum(r, g), b))
-            * _smooth(0.72, 0.86, g / red) * _smooth(0.57, 0.76, b / red))
-
-
-def upper_incisal_offset(image: Image.Image, points: np.ndarray) -> tuple[float | None, int]:
-    """How far below the inner upper lip (13) the upper teeth's biting edge
-    shows in this photo, in this photo's mouth widths, and over how many
-    columns it was found. None when fewer than MIN_INCISAL_COLUMNS showed
-    enamel. CPU work.
-
-    Sampled in the mouth's own frame (corner line horizontal), over the
-    central incisors. In each column the dark gap between the arches is
-    found as the embed finds it (dental-texture-model.ts: the darkest green
-    between 28% and 82% of the opening, preferring 60%), and the lowest
-    enamel pixel above it is the edge.
-    """
-    from scipy.ndimage import map_coordinates
-
-    rgb = np.asarray(image.convert("RGB"), dtype=np.float64)
+def neutral_seam(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
+    """Where the embed seats the teeth from: the embed's centralMouthAnchors
+    (mouth-extension.ts), the corner line moved perpendicular onto the two
+    inner-lip points nearest the mouth's centre line. Returns its middle,
+    the unit vector down the face, and the mouth width."""
     left, right = points[MOUTH_LEFT], points[MOUTH_RIGHT]
-    width = float(np.linalg.norm(right - left))
-    if width < 2:
-        return None, 0
-    ux = (right - left) / width
-    uy = np.array([-ux[1], ux[0]])  # down the face
-    origin = points[UPPER_INNER]
-    us = np.arange(-INCISAL_HALF_SPAN - 0.01, INCISAL_HALF_SPAN + 0.01, 1 / _SAMPLES_PER_WIDTH)
-    vs = np.arange(-0.1, 0.6, 1 / _SAMPLES_PER_WIDTH)
-    grid_u, grid_v = np.meshgrid(us, vs)
-    xs = origin[0] + (grid_u * ux[0] + grid_v * uy[0]) * width
-    ys = origin[1] + (grid_u * ux[1] + grid_v * uy[1]) * width
-    sampled = np.stack(
-        [map_coordinates(rgb[..., k], [ys, xs], order=1, mode="nearest") for k in range(3)], -1
-    )
-    enamel = enamel_mask(sampled)
-    green = sampled[..., 1]
-
-    ring = (points[INNER_LIP_RING] - origin) @ np.stack((ux, uy), axis=1) / width
-    upper = ring[[*range(10, 20), 0]]
-    lower = ring[:11]
-    upper, lower = upper[np.argsort(upper[:, 0])], lower[np.argsort(lower[:, 0])]
-    edges = []
-    for j, u in enumerate(us):
-        if abs(u) > INCISAL_HALF_SPAN:
-            continue
-        top = float(np.interp(u, upper[:, 0], upper[:, 1]))
-        bottom = float(np.interp(u, lower[:, 0], lower[:, 1]))
-        span = bottom - top
-        if span < 0.01:
-            continue
-        lo, hi = max(0, j - 2), min(len(us), j + 3)
-        darkness = green[:, lo:hi].mean(axis=1) + np.abs((vs - top) / span - 0.6) * 20
-        window = (vs >= top + span * 0.28) & (vs < bottom - span * 0.18)
-        if not window.any():
-            continue
-        split = vs[window][np.argmin(darkness[window])]
-        teeth = (vs >= top) & (vs < split) & (enamel[:, j] >= ENAMEL_SEED)
-        if teeth.any():
-            edges.append(float(vs[teeth].max()))
-    if len(edges) < MIN_INCISAL_COLUMNS:
-        return None, len(edges)
-    return float(np.median(edges)), len(edges)
+    if left[0] > right[0]:
+        left, right = right, left
+    d = right - left
+    width = float(np.linalg.norm(d))
+    ux = d / width
+    down = np.array([-ux[1], ux[0]])
+    centre = (left + right) / 2
+    ring = points[INNER_LIP_RING]
+    central = ring[np.argsort(np.abs((ring - centre) @ ux), kind="stable")[:2]]
+    bow = float(((central - centre) @ down).mean())
+    return centre + down * bow, down, width
 
 
 @dataclass
@@ -749,9 +733,13 @@ class ProfileFit:
     measurements: dict = field(default_factory=dict)
     # One entry per value left at its default or clamped, with why.
     reasons: list[dict] = field(default_factory=list)
+    # True when the profile is fitted for the teeth photo, which the embed
+    # accepts: the caller hands the photo on only then.
+    teeth_photo: bool = False
 
     def as_dict(self) -> dict:
-        return {"profile": self.profile, "measurements": self.measurements, "reasons": self.reasons}
+        return {"profile": self.profile, "measurements": self.measurements, "reasons": self.reasons,
+                "teeth_photo": self.teeth_photo}
 
 
 @dataclass(frozen=True)
@@ -772,29 +760,33 @@ def fit_profile(
 
     `generated` holds the REGISTERED targets (base pixels) of the shapes
     the model made; retargeted shapes are not measurements of this face and
-    must not be passed. Each value is clamped to the API's range, and one
-    that cannot be measured stays at its default, with the reason.
+    must not be passed. `teeth_photo` is the photo `generated["ee"]` was
+    registered from. Each value is clamped to the API's range, and one that
+    cannot be measured stays at its default, with the reason.
 
-    teethY: the upper incisal edge's distance below the inner upper lip in
-      the teeth photo (the EE answer), converted to rest mouth widths
-      (times the EE mouth width over the rest width, both registered), less
-      UPPER_SEAT. The renderer seats the edge that far below the NEUTRAL
-      seam: it shows the teeth as the photo showed them below the lip. On
-      the Reference's own EE this gives 0.0159 against the hand-tuned 0.016
-      (tests/test_performance_kit.py). A fully registered position (the
-      edge where the skull puts it, below the EE's raised upper lip) would
-      give -0.033, 0.049 mouth widths higher: the Reference's EE lifts its
-      upper lip by that much, and the hand tuning did not follow the lift.
+    The teeth photo counts only if the embed would draw it
+    (dental_photo.accept_teeth_photo: DentalOralSurface's own test); one it
+    would refuse leaves the geometric teeth, and the fit is for those.
+
+    teethY: where the teeth photo's upper arch ends (the bottom of the arch
+      the embed extracts, which is what dentalPlacement seats), carried by
+      the EE registration onto the base, measured below the neutral seam in
+      rest mouth widths: skull-fixed, so the EE's lifted upper lip is not
+      taken for lower teeth. Plus REFERENCE_TEETH_DROP, less UPPER_SEAT: on
+      oral-detail-v3 registered onto the Reference portrait this gives the
+      hand-tuned 0.016 the Reference renders that photo with.
     teethScale: with a teeth photo, its mouth width over the rest mouth
       width (both registered): the photo's teeth are sized in its own mouth
       widths and drawn in rest widths, so this draws them at their true
-      size (1.05 on the Reference's EE; hand value 1.00, set for a
-      different teeth photo). Without one the drawn teeth are geometric and
-      sized in mouth widths, so the scale is the Reference's mouth-to-face
-      width ratio over this face's (exactly 1 on the Reference).
+      size. (The Reference renders v3 at the default 1.00, never tuned; v3
+      would fit 1.13.) Without one the drawn teeth are geometric and sized
+      in mouth widths, so the scale is the Reference's mouth-to-face width
+      ratio over this face's (exactly 1 on the Reference).
     jawRange: the default (0.85) times this face's AA lip opening over the
       Reference's AA opening, both in rest mouth widths.
     """
+    from app.services import dental_photo
+
     defaults, limits = _profile_defaults()
     fit = ProfileFit(profile=dict(defaults))
     width, _, _ = _lip_heights(base_points)
@@ -813,22 +805,40 @@ def fit_profile(
         fit.profile[name] = round(clamped, 4)
 
     ee = generated.get("ee")
-    offset = None
+    acceptance = None
     if ee is not None and teeth_photo is not None:
-        offset, columns = upper_incisal_offset(teeth_photo.image, teeth_photo.points)
-        fit.measurements["incisal_columns"] = columns
-    if ee is not None and teeth_photo is not None and offset is not None:
-        ee_width = float(np.linalg.norm(ee[MOUTH_RIGHT] - ee[MOUTH_LEFT])) / width
-        fit.measurements.update(incisal_below_lip=round(offset, 4), ee_width=round(ee_width, 4))
-        settle("teethY", offset * ee_width - UPPER_SEAT)
+        acceptance = dental_photo.accept_teeth_photo(teeth_photo.image, teeth_photo.points,
+                                                     INNER_LIP_RING)
+        fit.measurements["teeth_photo"] = acceptance.as_dict()
+    if acceptance is not None and acceptance.accepted:
+        down_ee, ee_px = _down(ee)
+        # The arch's end in the photo's mouth frame (origin 13, corner line
+        # level, in its mouth widths); the registration is a similarity, so
+        # the same frame on the registered EE landmarks places it on the base.
+        edge = ee[UPPER_INNER] + acceptance.upper_edge * ee_px * down_ee
+        seam, down, _ = neutral_seam(base_points)
+        below = float((edge - seam) @ down) / width
+        ee_width = ee_px / width
+        fit.teeth_photo = True
+        fit.measurements.update(teeth_edge_below_seam=round(below, 4), ee_width=round(ee_width, 4))
+        settle("teethY", below + REFERENCE_TEETH_DROP - UPPER_SEAT)
         settle("teethScale", ee_width)
     else:
         if ee is None:
             why = _reason("ee_not_generated", "No EE photo of this face")
         elif teeth_photo is None:
             why = _reason("no_teeth_photo", "The EE photo cannot serve as the teeth photo")
-        else:
+        elif acceptance.arch_pixels == 0:
             why = _reason("no_teeth_visible", "The EE photo shows no upper teeth")
+        else:
+            why = _reason(
+                "teeth_photo_refused",
+                "The EE photo shows too little of the upper teeth for the photographic mouth "
+                f"(central crown {acceptance.crown_coverage:.3f} of the mouth width, arch "
+                f"{acceptance.arch_width} px, {acceptance.arch_pixels} px of enamel; the embed "
+                f"needs {dental_photo.MIN_CROWN_COVERAGE}, {dental_photo.MIN_ARCH_WIDTH} and "
+                f"{dental_photo.MIN_ARCH_PIXELS})",
+            )
         settle("teethY", None, why)
         # The geometric teeth are sized in mouth widths, for the Reference's
         # mouth-to-face proportion.
@@ -842,13 +852,13 @@ def fit_profile(
         ref_aa = reference.poses["aa"]
         ref_gap = float(np.linalg.norm(ref_aa[UPPER_INNER] - ref_aa[LOWER_INNER])) / ref_width
         fit.measurements.update(aa_gap=round(gap, 4), reference_aa_gap=round(ref_gap, 4))
-        settle("jawRange", defaults["jawRange"] * gap / ref_gap)
+        settle("jawRange", REFERENCE_JAW_RANGE * gap / ref_gap)
     else:
         settle("jawRange", None, _reason("aa_not_generated", "No AA photo of this face"))
     return fit
 
 
-# --- 4. Manifest ----------------------------------------------------------------------------------
+# --- 5. Manifest ----------------------------------------------------------------------------------
 
 GENERATED = "generated"
 RETARGETED = "retargeted"
@@ -934,7 +944,7 @@ def build_manifest(
     }
 
 
-# --- 7. The orchestrator ------------------------------------------------------------------------------
+# --- 6. The orchestrator ------------------------------------------------------------------------------
 
 
 class KitUnavailable(RuntimeError):
@@ -969,13 +979,18 @@ class KitResult:
     calls: int
     billed_calls: int
     call_log: list[dict]
+    # Whether the answers were registered on the detector's view of the
+    # base photo (True) or, with no usable detection, on the confirmed
+    # points themselves.
+    base_detected: bool = False
 
 
 EditImage = Callable[[str, bytes, str], Awaitable[object]]
 Progress = Callable[[float, str], object]
 
-# Minimum lip gap for the EE answer to be handed on as the teeth photo: the
-# mouth-photo upload's own threshold (portrait_photo.prepare_photo).
+# Minimum lip gap for the EE answer to be considered as the teeth photo: the
+# mouth-photo upload's own threshold (portrait_photo.prepare_photo). It must
+# then also pass the embed's own test (fit_profile, dental_photo).
 TEETH_PHOTO_MIN_GAP = 0.08
 
 
@@ -998,11 +1013,11 @@ def _png(image: Image.Image) -> bytes:
     return png_bytes(image)
 
 
-def _usable_as_teeth_photo(registration: PoseRegistration) -> bool:
+def _teeth_gap(registration: PoseRegistration) -> float:
+    """The answer's lip gap (13 to 14) in its own mouth widths."""
     points = registration.answer_points
     width = float(np.linalg.norm(points[MOUTH_RIGHT] - points[MOUTH_LEFT]))
-    gap = float(np.linalg.norm(points[UPPER_INNER] - points[LOWER_INNER])) / max(width, 1.0)
-    return gap >= TEETH_PHOTO_MIN_GAP
+    return float(np.linalg.norm(points[UPPER_INNER] - points[LOWER_INNER])) / max(width, 1.0)
 
 
 def _teeth_source(registration: PoseRegistration) -> TeethSource:
@@ -1019,35 +1034,71 @@ def _finish(
     reference: ReferenceMotion,
     kit_id: str,
 ) -> tuple[dict, ProfileFit, TeethSource | None]:
-    """Everything after the provider calls: fallbacks, fit, manifest. CPU work."""
+    """Everything after the provider calls: fit, fallbacks, manifest. CPU work."""
+    generated = {shape: registrations[shape].targets for shape in SHAPES
+                 if shape in registrations and registrations[shape].ok}
+    # The profile is fitted for the teeth that will be drawn: the EE photo's
+    # when the embed would draw it, the geometric ones otherwise. It is
+    # fitted first because the fallbacks below are baked at its jaw range.
+    teeth_photo = None
+    ee = registrations.get("ee")
+    ee_ok = ee is not None and ee.ok
+    if ee_ok and _teeth_gap(ee) >= TEETH_PHOTO_MIN_GAP:
+        teeth_photo = TeethPhoto(ee.answer_image, ee.answer_points)
+    fit = fit_profile(base_points, generated, reference, teeth_photo)
+    teeth = _teeth_source(ee) if fit.teeth_photo else None
+    if ee_ok and teeth is None:
+        if teeth_photo is None:
+            why = _reason("teeth_gap_small",
+                          "The EE photo's lips are too close to use it as the teeth photo")
+        else:
+            why = next({k: v for k, v in r.items() if k != "field"}
+                       for r in fit.reasons if r["field"] == "teethY")
+        fit.reasons.append({"field": "teeth_source", **why})
+
+    # The manifest's poses must all be true at the jaw range it records, as
+    # the generated ones are (they are this face's own AA's scale); see
+    # retarget_reference_pose.
+    amplitude = fit.profile["jawRange"] / REFERENCE_JAW_RANGE
     entries: dict[str, PoseEntry] = {}
-    generated: dict[str, np.ndarray] = {}
     for shape in SHAPES:
         registration = registrations.get(shape)
-        if registration is not None and registration.ok:
+        if shape in generated:
             size = np.asarray(registration.answer_size, dtype=np.float64)
             entries[shape] = PoseEntry(registration.targets, GENERATED, registration.rms,
                                        registration.answer_points / size)
-            generated[shape] = registration.targets
         else:
-            entries[shape] = PoseEntry(retarget_reference_pose(shape, base_points, reference),
-                                       RETARGETED)
-    # The profile is fitted for the teeth that will be drawn: the EE photo's
-    # when it is handed on as the teeth photo, the geometric ones otherwise.
-    teeth = None
-    teeth_photo = None
-    ee = registrations.get("ee")
-    if ee is not None and ee.ok and _usable_as_teeth_photo(ee):
-        teeth_photo = TeethPhoto(ee.answer_image, ee.answer_points)
-    fit = fit_profile(base_points, generated, reference, teeth_photo)
-    if teeth_photo is not None and "incisal_below_lip" in fit.measurements:
-        teeth = _teeth_source(ee)
-    elif ee is not None and ee.ok and teeth_photo is None:
-        fit.reasons.append({"field": "teeth_source", **_reason(
-            "teeth_gap_small", "The EE photo's lips are too close to use it as the teeth photo")})
+            entries[shape] = PoseEntry(
+                retarget_reference_pose(shape, base_points, reference, amplitude), RETARGETED)
     manifest = build_manifest(base_points, image_size, entries, reference,
                               kit_id=kit_id, jaw_range=fit.profile["jawRange"])
     return manifest, fit, teeth
+
+
+# The detector's view of the base photo is used only when it is the face the
+# owner confirmed: its points on average within this many face widths of the
+# confirmed ones. Owner corrections are a few hundredths; anything further
+# is another face, or a detection that failed, and the confirmed points
+# stand in for it.
+MAX_BASE_DETECTION_SHIFT = 0.15
+
+
+def _detect_base(detect: Detector, image: Image.Image, base_points: np.ndarray) -> np.ndarray | None:
+    """The detector's own landmarks on the base photo (register_answer's
+    `base_detected`), or None. CPU work."""
+    points = detect(image)
+    if points is None:
+        return None
+    points = np.asarray(points, dtype=np.float64)
+    if points.shape != (478, 2) or not np.isfinite(points).all():
+        return None
+    face = float(np.linalg.norm(base_points[FACE_RIGHT] - base_points[FACE_LEFT]))
+    shift = float(np.linalg.norm(points - base_points, axis=1).mean()) / max(face, 1.0)
+    if shift > MAX_BASE_DETECTION_SHIFT:
+        logger.warning("performance kit: the base detection is %.3f face widths from the "
+                       "confirmed points; registering on the confirmed points", shift)
+        return None
+    return points
 
 
 async def build_kit(
@@ -1077,6 +1128,11 @@ async def build_kit(
     filled from the Reference, so the kit is always complete: with no
     provider at all it is the Reference retargeted, per avatar.
 
+    The base photo is detected once as well, with the same detector as the
+    answers: they are registered on that view of it and their movement is
+    added to the confirmed points (register_answer), so the owner's
+    corrections to the marks are kept and never read as motion.
+
     `on_progress(fraction, message)` is called as shapes finish (it may be
     a coroutine function). `detect` replaces MediaPipe and `reference` the
     bundled Reference motion (tests). Raises ValueError for malformed
@@ -1094,6 +1150,8 @@ async def build_kit(
     kit_id = kit_id or uuid.uuid4().hex
     base_image = await run_cpu(_base_image, base_png)
     frame = ManifestFrame.from_base(points, base_image.size, reference)
+    # Once, before any call: every answer is compared with this.
+    base_detected = await run_cpu(_detect_base, detect, base_image, points)
 
     semaphore = asyncio.Semaphore(max(1, int(concurrency)))
     crops: dict[str, asyncio.Future] = {}
@@ -1179,7 +1237,8 @@ async def build_kit(
             state["billed"] += 1
             record.update(outcome="image", billed=True, model=getattr(generated, "model", None))
             registration = await run_cpu(
-                register_answer, generated.image, request, base_image, points, frame, detect
+                register_answer, generated.image, request, base_image, points, frame, detect,
+                base_detected,
             )
             entry.update(outcome="generated" if registration.ok else "rejected",
                          reason=registration.reason, checks=registration.checks)
@@ -1220,4 +1279,5 @@ async def build_kit(
         calls=state["calls"],
         billed_calls=state["billed"],
         call_log=call_log,
+        base_detected=base_detected is not None,
     )
