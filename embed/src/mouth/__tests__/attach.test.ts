@@ -53,6 +53,50 @@ describe("attachAvatarMouth", () => {
     expect(engine.tuning.mouthOpen).toBeLessThanOrEqual(1.1);
   });
 
+  it("without a manifest of its own, loads the bundled motion exactly as before", async () => {
+    const { attachAvatarMouth } = await import("../index");
+    const { ContinuousMouth } = await import("../continuous-mouth");
+    const load = ContinuousMouth.load as ReturnType<typeof vi.fn>;
+    load.mockClear();
+    const oral = { image_url: "/teeth.png", rig_url: "/teeth.json" };
+    await attachAvatarMouth(host(), { renderer: "continuous", oral, motion_url: null }, "/motion.json");
+    expect(load.mock.calls).toEqual([["/motion.json", oral, undefined]]);
+  });
+
+  it("loads the avatar's own performance manifest when its config names one", async () => {
+    const { attachAvatarMouth } = await import("../index");
+    const { ContinuousMouth } = await import("../continuous-mouth");
+    const load = ContinuousMouth.load as ReturnType<typeof vi.fn>;
+    load.mockClear();
+    await attachAvatarMouth(host(), { renderer: "continuous", motion_url: "https://s/kit.json" }, "/motion.json");
+    expect(load.mock.calls).toEqual([["https://s/kit.json", undefined, undefined]]);
+  });
+
+  it("falls back to the bundled motion when the avatar's own does not load", async () => {
+    const { attachAvatarMouth } = await import("../index");
+    const { ContinuousMouth } = await import("../continuous-mouth");
+    const load = ContinuousMouth.load as ReturnType<typeof vi.fn>;
+    load.mockClear();
+    load.mockRejectedValueOnce(new Error("expired link"));
+    const engine = host();
+    await attachAvatarMouth(engine, { renderer: "continuous", motion_url: "https://s/kit.json" }, "/motion.json");
+    expect(load.mock.calls.map(call => call[0])).toEqual(["https://s/kit.json", "/motion.json"]);
+    expect(engine.setMouthExtension).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fall back once the caller has cancelled", async () => {
+    const { loadAvatarMouth } = await import("../index");
+    const { ContinuousMouth } = await import("../continuous-mouth");
+    const load = ContinuousMouth.load as ReturnType<typeof vi.fn>;
+    load.mockClear();
+    load.mockRejectedValueOnce(new DOMException("Cancelled", "AbortError"));
+    const controller = new AbortController();
+    controller.abort();
+    await expect(loadAvatarMouth({ renderer: "continuous", motion_url: "https://s/kit.json" }, "/motion.json", controller.signal))
+      .rejects.toThrow("Cancelled");
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
   it("a failed load leaves the engine exactly as it was", async () => {
     const { attachAvatarMouth } = await import("../index");
     const { ContinuousMouth } = await import("../continuous-mouth");

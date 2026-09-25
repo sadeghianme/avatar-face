@@ -170,14 +170,18 @@ def without_ai_teeth(ai_edited: dict | None) -> dict | None:
 
 
 def teeth_verdict(photo: bytes, rig: dict):
-    """services.dental_photo.check of a prepared mouth photo. CPU work."""
+    """services.dental_photo.accept_teeth_photo of a prepared mouth photo:
+    the embed's own test, so the performance kit's teeth and these pass the
+    same way. CPU work."""
     from PIL import Image
 
     from app.services import dental_photo
 
     with Image.open(io.BytesIO(photo)) as image:
         image.load()
-        return dental_photo.check(image, np.asarray(rig["points"]), rig["inner_lip_ring"])
+        return dental_photo.accept_teeth_photo(
+            image, np.asarray(rig["points"]), rig["inner_lip_ring"]
+        )
 
 
 def encode_for_visitors(photo: bytes) -> bytes:
@@ -208,14 +212,14 @@ def prepare_mouth_photo(data: bytes) -> tuple[bytes, dict]:
     photo, rig, _note = portrait_photo.prepare_photo(data, "mouth")
     photo = encode_for_visitors(photo)
     verdict = teeth_verdict(photo, rig)
-    if not verdict.ok:
+    if not verdict.accepted:
         raise Validation422(
             TEETH_UNCLEAR,
             code="mouth_teeth_unclear",
             extra={
-                "upper_width": verdict.upper_width,
-                "upper_count": verdict.upper_count,
-                "coverage": verdict.coverage,
+                "upper_width": verdict.arch_width,
+                "upper_count": verdict.arch_pixels,
+                "coverage": round(verdict.crown_coverage, 4),
             },
         )
     return photo, rig

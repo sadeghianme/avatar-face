@@ -31,7 +31,7 @@ def open_mouth_photo(monkeypatch):
     """Skip real face detection and the teeth test: accept any image as a
     valid mouth photo (both are tested on real pixels in test_mouth_photo)."""
     from app.services import mouth_photo, portrait_photo
-    from app.services.dental_photo import DentalCheck
+    from app.services.dental_photo import Acceptance
 
     monkeypatch.setattr(
         portrait_photo,
@@ -40,7 +40,7 @@ def open_mouth_photo(monkeypatch):
     )
     monkeypatch.setattr(
         mouth_photo, "teeth_verdict",
-        lambda photo, rig: DentalCheck(True, 400, 20000, 0.12, 194, 193.0),
+        lambda photo, rig: Acceptance(True, 400, 20000, 0.12, 0.14),
     )
 
 

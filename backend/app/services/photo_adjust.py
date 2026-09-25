@@ -402,21 +402,30 @@ def prepare(data: bytes, mode: str, face_type: str, style: str | None = None) ->
 FALLBACK_FACE_WIDTHS = 2.2
 
 
-def head_crop(image: Image.Image, points: np.ndarray) -> Image.Image | None:
-    """The head-and-shoulders crop about the face `points` (FALLBACK_FACE_WIDTHS
-    wide), at most SOURCE_MAX_EDGE; None when it would be the whole picture.
-    What a declined whole-photo edit, and a declined teeth photo
-    (services.mouth_photo), is asked again with."""
+def head_crop_box(
+    image_size: tuple[int, int], points: np.ndarray
+) -> tuple[float, float, float, float]:
+    """(x0, y0, x1, y1): the head-and-shoulders crop FALLBACK_FACE_WIDTHS
+    face widths wide, clipped to the photo. Shared with the performance kit
+    (services.performance_kit), whose declined pose edits retry on it."""
     x0, y0, side = face_crop_box(points)
     cx, cy = x0 + side / 2, y0 + side / 2
     width = side / CROP_SCALE * FALLBACK_FACE_WIDTHS
     # More room below the face than above: shoulders, not sky.
-    box = (
+    return (
         max(0.0, cx - width / 2),
         max(0.0, cy - width / 2.4),
-        min(float(image.width), cx + width / 2),
-        min(float(image.height), cy + width * 0.75),
+        min(float(image_size[0]), cx + width / 2),
+        min(float(image_size[1]), cy + width * 0.75),
     )
+
+
+def head_crop(image: Image.Image, points: np.ndarray) -> Image.Image | None:
+    """The head-and-shoulders crop about the face `points` (head_crop_box),
+    at most SOURCE_MAX_EDGE; None when it would be the whole picture.
+    What a declined whole-photo edit, and a declined teeth photo
+    (services.mouth_photo), is asked again with."""
+    box = head_crop_box(image.size, points)
     crop = image.crop(tuple(int(round(v)) for v in box))
     if crop.size == image.size:
         # The crop box reaches every edge: it is the same picture, and asking

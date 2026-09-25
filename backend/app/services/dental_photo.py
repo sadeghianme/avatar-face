@@ -1,35 +1,19 @@
-"""The browser's teeth check, on the server: will a mouth photo draw teeth?
+"""The embed's teeth-photo acceptance, ported: will this photo be drawn?
 
-A mouth photo ("ee", upper teeth showing) feeds the photographic mouth
-(embed/src/mouth/dental-oral-surface.ts). The browser lifts the enamel out
-of it and refuses a photo whose upper row is too small, too sparse or only
-the tips of the teeth (`DentalPhotoError`). That refusal happens on every
-visitor's page, and it is silent there: the widget keeps the classic mouth.
+The continuous mouth draws a person's own teeth from a photo of them
+(`oral`: an image and its rig). DentalOralSurface (embed/src/mouth/
+dental-oral-surface.ts) cuts the upper and lower arches out of it with
+extractDentalLayers (dental-texture-model.ts) and throws DentalPhotoError
+unless the upper arch is wide, solid and shows enough of the central
+crowns. That error drops the whole avatar to the classic mouth, and the
+bundled-motion fallback reuses the same photo, so it fails again.
 
-For a photo a person uploads the owner sees the refusal in the Mouth panel.
-A photo the server makes itself (the AI "ee" photo, services.mouth_photo)
-has no one looking at it before it is published, so the server applies the
-browser's own test first and never stores a photo the browser would drop.
-This module is that test, ported line for line:
-
-- `mouth_canvas`: the 640x480 canvas the browser draws, the source photo
-  rotated onto the mouth axis, 512 px per mouth width (61 to 291), the
-  centre of the upper inner lip (13) at (320, 120), clipped to the inner
-  lip ring;
-- `extract_dental_layers`: dental-texture-model.ts `extractDentalLayers`
-  (colour seeds, the dark inter-arch split, speck removal, column and
-  notch bridging);
-- `dental_crown_coverage` and the thresholds of the DentalOralSurface
-  constructor.
-
-The one place it cannot be exact is the rasterisation (a browser's canvas
-smoothing and anti-aliased clip against Pillow's bilinear warp and hard
-polygon), which moves a few edge pixels; the thresholds are counts of
-hundreds and a width of 110 px, so that does not decide a photo.
-
-It also measures where the upper incisal edge is (`upper_incisal_edge`), in
-the source photo's pixels: what services.mouth_photo fits the teeth height
-from. Everything here is CPU work.
+The backend therefore asks the embed's own question before it hands a photo
+on as the teeth photo: this module reproduces the extraction canvas (the
+photo turned into the mouth's frame, a mouth width to 512 pixels, clipped to
+the inner lip ring) and the layer extraction step for step, and applies the
+same three limits. Keep it in step with those two files: the constants and
+the order of every pass are theirs.
 """
 
 from __future__ import annotations
@@ -40,43 +24,26 @@ from dataclasses import dataclass
 import numpy as np
 from PIL import Image, ImageDraw
 
-# The browser's extraction canvas (DentalOralSurface).
+MOUTH_LEFT, MOUTH_RIGHT, UPPER_INNER = 61, 291, 13
+
+# DentalOralSurface's extraction canvas: 640 x 480, the inner upper lip (13)
+# at (320, 120), one mouth width (61 to 291) = 512 pixels, corners level.
 CANVAS_WIDTH, CANVAS_HEIGHT = 640, 480
-MOUTH_PIXELS = 512
-ORIGIN = (320.0, 120.0)
-# DentalOralSurface's refusal: an upper row narrower than this, with fewer
-# opaque pixels than this, or whose central crowns are shorter than this
-# fraction of the mouth width, is `DentalPhotoError`.
-MIN_UPPER_WIDTH = 110
-MIN_UPPER_COUNT = 180
+CANVAS_ORIGIN = (320.0, 120.0)
+CANVAS_MOUTH_WIDTH = 512.0
+
+# Its acceptance limits for the upper arch.
+MIN_ARCH_WIDTH = 110
+MIN_ARCH_PIXELS = 180
 MIN_CROWN_COVERAGE = 0.10
-# A pixel counts as drawn from this alpha (the extraction's own threshold),
-# and as solid enamel from this one (the coverage and incisal measures).
-DRAWN_ALPHA = 40
-SOLID_ALPHA = 150
 
-
-@dataclass
-class DentalLayer:
-    """One arch lifted out of the canvas: RGBA pixels, bounding box (x, y,
-    width, height; width 0 when empty) and the number of drawn pixels."""
-
-    pixels: np.ndarray
-    box: tuple[int, int, int, int]
-    count: int
-
-
-@dataclass
-class DentalCheck:
-    ok: bool
-    upper_width: int
-    upper_count: int
-    coverage: float
-    # The upper row's lowest drawn row + 1 (its bounding box's bottom), and
-    # the median incisal edge of the central incisors, in canvas pixels;
-    # None when the upper row is empty.
-    upper_bottom: int | None
-    central_edge: float | None
+# extractDentalLayers.
+_ALPHA_SEED = 40
+_ENAMEL_SEED = 0.35
+_MIN_COMPONENT = (150, 12)  # upper, lower
+_CROWN_ALPHA = 150
+# Anti-aliasing of the canvas clip: sub-samples per pixel side.
+_CLIP_SUPERSAMPLE = 4
 
 
 def _smooth(a: float, b: float, n: np.ndarray) -> np.ndarray:
@@ -85,240 +52,252 @@ def _smooth(a: float, b: float, n: np.ndarray) -> np.ndarray:
 
 
 def enamel_mask(rgb: np.ndarray) -> np.ndarray:
-    """dental-texture-model.ts `enamelMask`, over an (..., 3) array."""
-    rgb = np.asarray(rgb, dtype=np.float64)
+    """dental-texture-model.ts enamelMask, vectorised over (..., 3)."""
     r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
     red = np.maximum(r, 1.0)
-    return (
-        _smooth(70, 130, np.minimum(np.minimum(r, g), b))
-        * _smooth(0.72, 0.86, g / red)
-        * _smooth(0.57, 0.76, b / red)
-    )
+    return (_smooth(70, 130, np.minimum(np.minimum(r, g), b))
+            * _smooth(0.72, 0.86, g / red) * _smooth(0.57, 0.76, b / red))
 
 
 def _js_round(value: float) -> int:
-    """Math.round: halves go up (Python's round goes to even)."""
     return int(math.floor(value + 0.5))
 
 
-def mouth_frame(points: np.ndarray) -> tuple[float, float, float, float, float]:
-    """(cx, cy, ux, uy, scale): the canvas transform of a photo whose
-    landmarks are `points`, as DentalOralSurface builds it."""
-    a, b = points[61], points[291]
+@dataclass(frozen=True)
+class Layer:
+    """One arch as extractDentalLayers returns it: RGBA pixels (H, W, 4),
+    the bounding box of its opaque pixels and how many there are."""
+
+    pixels: np.ndarray
+    box: tuple[int, int, int, int]  # x, y, width, height
+    count: int
+
+
+@dataclass(frozen=True)
+class Acceptance:
+    """What DentalOralSurface would decide about this photo."""
+
+    accepted: bool
+    arch_width: int
+    arch_pixels: int
+    crown_coverage: float
+    # The upper arch's lowest opaque row below the inner upper lip, in the
+    # photo's mouth widths: the edge the renderer seats. None without teeth.
+    upper_edge: float | None
+
+    def as_dict(self) -> dict:
+        return {"accepted": self.accepted, "arch_width": self.arch_width,
+                "arch_pixels": self.arch_pixels, "crown_coverage": round(self.crown_coverage, 4),
+                "upper_edge": None if self.upper_edge is None else round(self.upper_edge, 4)}
+
+
+def _mouth_axes(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, float] | None:
+    a, b = points[MOUTH_LEFT], points[MOUTH_RIGHT]
     width = float(math.hypot(b[0] - a[0], b[1] - a[1]))
-    if width < 2:
-        raise ValueError("mouth too small")
-    ux, uy = (b[0] - a[0]) / width, (b[1] - a[1]) / width
-    return float(points[13][0]), float(points[13][1]), float(ux), float(uy), MOUTH_PIXELS / width
+    if not width > 0:
+        return None
+    ux = (b - a) / width
+    return ux, np.array([-ux[1], ux[0]]), width
 
 
-def to_canvas(frame, x: float, y: float) -> tuple[float, float]:
-    cx, cy, ux, uy, scale = frame
-    return (
-        ORIGIN[0] + ((x - cx) * ux + (y - cy) * uy) * scale,
-        ORIGIN[1] + (-(x - cx) * uy + (y - cy) * ux) * scale,
-    )
+def extraction_canvas(image: Image.Image, points: np.ndarray, inner_ring: list[int]) -> tuple[np.ndarray, np.ndarray]:
+    """The canvas DentalOralSurface reads: RGBA (480, 640, 4) uint8, and the
+    inner lip ring in canvas pixels.
+
+    The browser draws the photo through the mouth-frame transform with
+    bilinear smoothing, clipped (anti-aliased) to the inner lip ring; here
+    every canvas pixel centre is mapped back into the photo and sampled
+    bilinearly, and the clip's coverage is the ring's polygon drawn at
+    _CLIP_SUPERSAMPLE times the resolution and averaged.
+    """
+    from scipy.ndimage import map_coordinates
+
+    axes = _mouth_axes(points)
+    if axes is None:
+        raise ValueError("the teeth photo's mouth has no width")
+    ux, uy, width = axes
+    scale = CANVAS_MOUTH_WIDTH / width
+    centre = points[UPPER_INNER]
+    ox, oy = CANVAS_ORIGIN
+
+    def to_canvas(p: np.ndarray) -> np.ndarray:
+        d = p - centre
+        return np.stack((ox + (d @ ux) * scale, oy + (d @ uy) * scale), axis=-1)
+
+    ring = to_canvas(points[inner_ring])
+
+    rgb = np.asarray(image.convert("RGB"), dtype=np.float64)
+    height, width_px = rgb.shape[:2]
+    cx, cy = np.meshgrid(np.arange(CANVAS_WIDTH) + 0.5, np.arange(CANVAS_HEIGHT) + 0.5)
+    # Canvas to photo: the inverse of the similarity above.
+    u, v = (cx - ox) / scale, (cy - oy) / scale
+    px = centre[0] + u * ux[0] + v * uy[0]
+    py = centre[1] + u * ux[1] + v * uy[1]
+    # Photo pixel i covers [i, i + 1): its centre is i + 0.5.
+    inside = (px >= 0) & (px <= width_px) & (py >= 0) & (py <= height)
+    sampled = np.stack([
+        map_coordinates(rgb[..., k], [py - 0.5, px - 0.5], order=1, mode="nearest") for k in range(3)
+    ], axis=-1)
+
+    s = _CLIP_SUPERSAMPLE
+    mask = Image.new("L", (CANVAS_WIDTH * s, CANVAS_HEIGHT * s), 0)
+    ImageDraw.Draw(mask).polygon([(float(x) * s, float(y) * s) for x, y in ring], fill=255)
+    coverage = np.asarray(mask, dtype=np.float64).reshape(CANVAS_HEIGHT, s, CANVAS_WIDTH, s).mean(axis=(1, 3))
+    alpha = np.where(inside, coverage, 0.0)
+
+    canvas = np.zeros((CANVAS_HEIGHT, CANVAS_WIDTH, 4), dtype=np.uint8)
+    canvas[..., :3] = np.clip(np.round(sampled), 0, 255).astype(np.uint8)
+    canvas[..., 3] = np.clip(np.round(alpha), 0, 255).astype(np.uint8)
+    canvas[canvas[..., 3] == 0] = 0  # a transparent canvas pixel is (0, 0, 0, 0)
+    return canvas, ring
 
 
-def from_canvas(frame, x: float, y: float) -> tuple[float, float]:
-    """The inverse of `to_canvas`: canvas pixels back to the photo's."""
-    cx, cy, ux, uy, scale = frame
-    dx, dy = (x - ORIGIN[0]) / scale, (y - ORIGIN[1]) / scale
-    return cx + dx * ux - dy * uy, cy + dx * uy + dy * ux
-
-
-def mouth_canvas(image: Image.Image, points: np.ndarray, inner_ring: list[int]) -> np.ndarray:
-    """The browser's extraction canvas: (480, 640, 4) uint8 RGBA, transparent
-    outside the inner lip ring and outside the photo."""
-    frame = mouth_frame(points)
-    cx, cy, ux, uy, scale = frame
-    # Pillow's affine takes the inverse map, canvas → photo.
-    inverse = (
-        ux / scale, -uy / scale, cx - (ORIGIN[0] * ux - ORIGIN[1] * uy) / scale,
-        uy / scale, ux / scale, cy - (ORIGIN[0] * uy + ORIGIN[1] * ux) / scale,
-    )
-    size = (CANVAS_WIDTH, CANVAS_HEIGHT)
-    rgb = image.convert("RGB").transform(
-        size, Image.Transform.AFFINE, inverse, resample=Image.Resampling.BILINEAR
-    )
-    inside_photo = Image.new("L", image.size, 255).transform(
-        size, Image.Transform.AFFINE, inverse, resample=Image.Resampling.NEAREST
-    )
-    clip = Image.new("L", size, 0)
-    ImageDraw.Draw(clip).polygon(
-        [to_canvas(frame, *points[i]) for i in inner_ring], fill=255
-    )
-    alpha = np.minimum(np.asarray(clip), np.asarray(inside_photo))
-    out = np.zeros((CANVAS_HEIGHT, CANVAS_WIDTH, 4), dtype=np.uint8)
-    out[..., :3] = np.asarray(rgb)
-    out[..., 3] = alpha
-    out[alpha == 0] = 0
-    return out
-
-
-def _boundary(contour: list[tuple[float, float]], x: float) -> float:
+def _boundary(contour: np.ndarray, x: float) -> float:
+    """dental-texture-model.ts boundary(): `contour` sorted by x."""
     for i in range(1, len(contour)):
-        if x <= contour[i][0]:
-            (ax, ay), (bx, by) = contour[i - 1], contour[i]
-            t = max(0.0, min(1.0, (x - ax) / max(0.001, bx - ax)))
-            return ay + (by - ay) * t
-    return contour[-1][1]
+        if x <= contour[i, 0]:
+            a, b = contour[i - 1], contour[i]
+            t = min(1.0, max(0.0, (x - a[0]) / max(0.001, b[0] - a[0])))
+            return float(a[1] + (b[1] - a[1]) * t)
+    return float(contour[-1, 1])
 
 
-def extract_dental_layers(
-    image: np.ndarray,
-    upper_contour: list[tuple[float, float]],
-    lower_contour: list[tuple[float, float]],
-) -> tuple[DentalLayer, DentalLayer]:
-    """dental-texture-model.ts `extractDentalLayers` on an (H, W, 4) uint8
-    canvas: the upper and lower arches."""
+def extract_dental_layers(image: np.ndarray, upper_contour: np.ndarray,
+                          lower_contour: np.ndarray) -> tuple[Layer, Layer]:
+    """dental-texture-model.ts extractDentalLayers, pass for pass.
+
+    `image` is RGBA (H, W, 4) uint8; contours are (n, 2) canvas points."""
     from scipy.ndimage import label
 
     height, width = image.shape[:2]
-    if len(upper_contour) < 2 or len(lower_contour) < 2:
-        raise ValueError("Invalid dental image or lip contours")
-    upper = sorted(upper_contour, key=lambda p: p[0])
-    lower = sorted(lower_contour, key=lambda p: p[0])
-    source_alpha = image[..., 3].astype(np.int32)
-    seeds = (source_alpha >= DRAWN_ALPHA) & (enamel_mask(image[..., :3]) >= 0.35)
-    # The split search averages green over five columns, clamped at the edges.
-    green = np.pad(image[..., 1].astype(np.float64), ((0, 0), (2, 2)), mode="edge")
-    green5 = sum(green[:, i:i + width] for i in range(5))
+    upper = np.asarray(upper_contour, dtype=np.float64)
+    lower = np.asarray(lower_contour, dtype=np.float64)
+    # JavaScript's sort is stable: keep equal x in their given order.
+    upper = upper[np.argsort(upper[:, 0], kind="stable")]
+    lower = lower[np.argsort(lower[:, 0], kind="stable")]
+    data = [np.zeros_like(image), np.zeros_like(image)]
+    x0 = math.ceil(max(upper[0, 0], lower[0, 0]))
+    x1 = math.floor(min(upper[-1, 0], lower[-1, 0]))
+    green = image[..., 1].astype(np.float64)
+    enamel = enamel_mask(image[..., :3].astype(np.float64))
+    source_alpha = image[..., 3]
 
-    drawn = [np.zeros((height, width), dtype=bool), np.zeros((height, width), dtype=bool)]
-    x0 = math.ceil(max(upper[0][0], lower[0][0]))
-    x1 = math.floor(min(upper[-1][0], lower[-1][0]))
     for x in range(max(0, x0), min(width - 1, x1) + 1):
         top, bottom = _boundary(upper, x), _boundary(lower, x)
         if bottom - top < 2:
             continue
-        # The dark gap between the arches, not a rectangular crop.
-        split = top + (bottom - top) * 0.6
-        start = max(0, math.ceil(top + (bottom - top) * 0.28))
-        stop = min(height, bottom - (bottom - top) * 0.18)
-        ys = np.arange(start, math.ceil(stop)) if stop > start else np.arange(0)
-        ys = ys[ys < stop]
+        # The dark inter-arch gap: the lowest green (5 columns, clamped at
+        # the edges) near 60% of the opening.
+        split, best = top + (bottom - top) * 0.6, math.inf
+        y_from = max(0, math.ceil(top + (bottom - top) * 0.28))
+        y_to = min(height, bottom - (bottom - top) * 0.18)
+        ys = np.arange(y_from, math.ceil(y_to)) if y_to > y_from else np.arange(0)
+        ys = ys[ys < y_to]
         if len(ys):
-            score = green5[ys, x] / 5 + np.abs((ys - top) / (bottom - top) - 0.6) * 20
-            split = float(ys[int(np.argmin(score))])
-        first = max(0, math.ceil(top))
-        rows = np.arange(first, math.ceil(min(height, bottom)))
-        rows = rows[rows < min(height, bottom)]
-        if not len(rows):
-            continue
-        hit = rows[seeds[rows, x]]
-        drawn[0][hit[hit < split], x] = True
-        drawn[1][hit[hit >= split], x] = True
+            columns = np.clip(np.arange(x - 2, x + 3), 0, width - 1)
+            value = green[np.ix_(ys, columns)].sum(axis=1) / 5
+            score = value + np.abs((ys - top) / (bottom - top) - 0.6) * 20
+            k = int(np.argmin(score))  # the first minimum, as the strict `<`
+            if score[k] < best:
+                split = float(ys[k])
+        rows = np.arange(max(0, math.ceil(top)), min(height, math.ceil(bottom)))
+        rows = rows[rows < bottom]
+        keep = rows[(source_alpha[rows, x] >= _ALPHA_SEED) & (enamel[rows, x] >= _ENAMEL_SEED)]
+        for index, chosen in enumerate((keep[keep < split], keep[keep >= split])):
+            data[index][chosen, x] = image[chosen, x]
 
     layers = []
-    for index, mask in enumerate(drawn):
-        # Isolated highlights are not teeth.
-        labels, found = label(mask)
+    for index, layer in enumerate(data):
+        # Isolated highlights: 4-connected components below the size limit.
+        opaque = layer[..., 3] >= _ALPHA_SEED
+        labels, found = label(opaque)
         if found:
             sizes = np.bincount(labels.ravel())
-            small = sizes < (150 if index == 0 else 12)
+            small = sizes < _MIN_COMPONENT[index]
             small[0] = False
-            mask = mask & ~small[labels]
-        # Columns: the source's own shading from the top drawn pixel to the
-        # bottom one, short unseeded runs of columns bridged.
-        any_col = mask.any(axis=0)
+            layer[..., 3][small[labels]] = 0
+        opaque = layer[..., 3] >= _ALPHA_SEED
+        any_column = opaque.any(axis=0)
         tops = np.full(width, np.nan)
         bottoms = np.full(width, np.nan)
-        cols = np.flatnonzero(any_col)
-        if len(cols):
-            tops[cols] = mask[:, cols].argmax(axis=0)
-            bottoms[cols] = height - 1 - mask[::-1, cols].argmax(axis=0)
+        tops[any_column] = np.argmax(opaque, axis=0)[any_column]
+        bottoms[any_column] = (height - 1 - np.argmax(opaque[::-1], axis=0))[any_column]
+
+        # Bridge short unseeded columns (interdental shadows).
         bridge = max(2, _js_round((x1 - x0) * 0.035))
         previous = -1
-        for x in cols:
+        for x in range(width):
+            if not math.isfinite(tops[x]):
+                continue
             if previous >= 0 and x - previous <= bridge:
                 for n in range(previous + 1, x):
                     t = (n - previous) / (x - previous)
                     tops[n] = tops[previous] * (1 - t) + tops[x] * t
                     bottoms[n] = bottoms[previous] * (1 - t) + bottoms[x] * t
             previous = x
-        region = np.zeros((height, width), dtype=bool)
-        ys = np.arange(height)[:, None]
-        finite = np.isfinite(tops)
-        region[:, finite] = (ys >= np.ceil(tops[finite])) & (ys <= np.floor(bottoms[finite]))
-        opaque = region & (source_alpha >= DRAWN_ALPHA)
-        # Rows: short notches between crowns closed with their own pixels.
-        filled = opaque.copy()
-        for y in np.flatnonzero(opaque.any(axis=1)):
-            xs = np.flatnonzero(opaque[y])
+
+        # Refill each column's span from the photo, shading and all.
+        filled = np.zeros_like(image)
+        for x in range(width):
+            if not math.isfinite(tops[x]):
+                continue
+            y0, y1 = math.ceil(tops[x]), math.floor(bottoms[x])
+            if y1 >= y0:
+                filled[y0:y1 + 1, x] = image[y0:y1 + 1, x]
+
+        # Close short horizontal notches with their original pixels. A
+        # filled pixel lies behind the scan, so each row's gaps are those
+        # between the opaque pixels it had before the pass.
+        for y in range(height):
+            xs = np.flatnonzero(filled[y, :, 3] >= _ALPHA_SEED)
+            if len(xs) < 2:
+                continue
             gaps = np.flatnonzero((np.diff(xs) > 1) & (np.diff(xs) <= bridge))
             for g in gaps:
-                filled[y, xs[g] + 1:xs[g + 1]] = True
-        copied = region | filled
-        pixels = np.zeros_like(image)
-        pixels[copied] = image[copied]
-        final = pixels[..., 3] >= DRAWN_ALPHA
-        count = int(final.sum())
+                a, b = xs[g] + 1, xs[g + 1]
+                filled[y, a:b] = image[y, a:b]
+
+        opaque = filled[..., 3] >= _ALPHA_SEED
+        count = int(opaque.sum())
         if count:
-            ys_, xs_ = np.nonzero(final)
-            box = (int(xs_.min()), int(ys_.min()),
-                   int(xs_.max() - xs_.min() + 1), int(ys_.max() - ys_.min() + 1))
+            ys, xs = np.nonzero(opaque)
+            box = (int(xs.min()), int(ys.min()), int(xs.max() - xs.min() + 1), int(ys.max() - ys.min() + 1))
         else:
             box = (width, height, 0, 0)
-        layers.append(DentalLayer(pixels, box, count))
+        layers.append(Layer(filled, box, count))
     return layers[0], layers[1]
 
 
-def _central_columns(center: float, mouth_width: float, width: int) -> range:
-    return range(max(0, math.ceil(center - mouth_width * 0.025)),
-                 min(width - 1, math.floor(center + mouth_width * 0.025)) + 1)
-
-
-def dental_crown_coverage(layer: DentalLayer, center: float = ORIGIN[0],
-                          mouth_width: float = MOUTH_PIXELS) -> float:
-    """dental-texture-model.ts `dentalCrownCoverage`: the median height of
-    the central crowns, as a fraction of the mouth width."""
-    solid = layer.pixels[..., 3] >= SOLID_ALPHA
+def crown_coverage(layer: Layer, centre: float = CANVAS_ORIGIN[0],
+                   mouth_width: float = CANVAS_MOUTH_WIDTH) -> float:
+    """dental-texture-model.ts dentalCrownCoverage: the median height of
+    solid (alpha >= 150) enamel over the central 5% of the mouth, in mouth
+    widths."""
+    height, width = layer.pixels.shape[:2]
+    solid = layer.pixels[..., 3] >= _CROWN_ALPHA
     heights = []
-    for x in _central_columns(center, mouth_width, solid.shape[1]):
+    x = max(0, math.ceil(centre - mouth_width * 0.025))
+    while x <= min(width - 1, centre + mouth_width * 0.025):
         rows = np.flatnonzero(solid[:, x])
-        heights.append(int(rows[-1] - rows[0] + 1) if len(rows) else 0)
+        heights.append(0 if len(rows) == 0 else int(rows[-1] - rows[0] + 1))
+        x += 1
     if not heights or mouth_width <= 0:
         return 0.0
     return sorted(heights)[len(heights) // 2] / mouth_width
 
 
-def upper_incisal_edge(layer: DentalLayer) -> float | None:
-    """The median bottom (+1) of the solid upper enamel over the central
-    columns, in canvas rows: the edge of the central incisors. None when
-    fewer than half the central columns have enamel."""
-    solid = layer.pixels[..., 3] >= SOLID_ALPHA
-    columns = list(_central_columns(ORIGIN[0], MOUTH_PIXELS, solid.shape[1]))
-    edges = []
-    for x in columns:
-        rows = np.flatnonzero(solid[:, x])
-        if len(rows):
-            edges.append(float(rows[-1] + 1))
-    if len(edges) * 2 < len(columns):
-        return None
-    return float(np.median(edges))
-
-
-def check(image: Image.Image, points: np.ndarray, inner_ring: list[int]) -> DentalCheck:
-    """The DentalOralSurface constructor's verdict on a mouth photo, with
-    the measures behind it. CPU work."""
+def accept_teeth_photo(image: Image.Image, points: np.ndarray, inner_ring: list[int]) -> Acceptance:
+    """DentalOralSurface's constructor test on this photo and its rig's
+    points: the upper arch at least MIN_ARCH_WIDTH canvas pixels wide, with
+    MIN_ARCH_PIXELS of enamel and MIN_CROWN_COVERAGE mouth widths of
+    central crown. CPU work (about a tenth of a second)."""
     points = np.asarray(points, dtype=np.float64)
-    canvas = mouth_canvas(image, points, inner_ring)
-    frame = mouth_frame(points)
-    ring = [to_canvas(frame, *points[i]) for i in inner_ring]
-    upper_layer, _ = extract_dental_layers(canvas, ring[10:] + [ring[0]], ring[:11])
-    x, y, width, height = upper_layer.box
-    coverage = dental_crown_coverage(upper_layer)
-    ok = (
-        width >= MIN_UPPER_WIDTH
-        and upper_layer.count >= MIN_UPPER_COUNT
-        and coverage >= MIN_CROWN_COVERAGE
-    )
-    return DentalCheck(
-        ok=ok,
-        upper_width=width,
-        upper_count=upper_layer.count,
-        coverage=round(coverage, 4),
-        upper_bottom=y + height if width else None,
-        central_edge=upper_incisal_edge(upper_layer) if width else None,
-    )
+    if _mouth_axes(points) is None:
+        return Acceptance(False, 0, 0, 0.0, None)
+    canvas, ring = extraction_canvas(image, points, inner_ring)
+    upper, _ = extract_dental_layers(canvas, np.vstack((ring[10:], ring[:1])), ring[:11])
+    coverage = crown_coverage(upper)
+    x, y, w, h = upper.box
+    edge = None if upper.count == 0 else (y + h - CANVAS_ORIGIN[1]) / CANVAS_MOUTH_WIDTH
+    accepted = w >= MIN_ARCH_WIDTH and upper.count >= MIN_ARCH_PIXELS and coverage >= MIN_CROWN_COVERAGE
+    return Acceptance(accepted, w, upper.count, coverage, edge)

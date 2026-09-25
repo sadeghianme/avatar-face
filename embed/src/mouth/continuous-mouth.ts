@@ -2,7 +2,7 @@ import { centralMouthAnchors, type MouthExtension, type MouthPoint, type MouthSu
 import type { BlendWeights, Rig } from "../types";
 import { MouthMotion, mouthMixWeights } from "./continuous-mouth-model";
 import { dentalOpening, openingPath } from "./lip-occlusion-model";
-import { performanceInfluence, validatePerformanceManifest, type PerformanceManifest } from "./photographic-performance-model";
+import { performanceInfluence, validateMotionManifest, type AvatarPerformanceManifest, type MotionManifest } from "./photographic-performance-model";
 import { validateOralRig, type OralPhoto } from "./photographic-oral-surface";
 import { DentalOralSurface } from "./dental-oral-surface";
 import { ReferenceMouth } from "./reference-mouth";
@@ -23,14 +23,16 @@ export class ContinuousMouth implements MouthExtension {
   private rounding = 0;
   private geometric = new ReferenceMouth(DEFAULT_REFERENCE_PROFILE);
   private oral?: DentalOralSurface;
-  constructor(private template: PerformanceManifest, oral?: OralPhoto) {
+  constructor(private template: MotionManifest, oral?: OralPhoto) {
     if (oral) this.oral = new DentalOralSurface(oral);
   }
 
+  /** `templateUrl` is the bundled Reference motion (mouth-motion.json) or an
+   *  avatar's own performance manifest (version 2); both play the same way. */
   static async load(templateUrl: string, oral?: { image_url: string; rig_url: string } | "reference", signal?: AbortSignal): Promise<ContinuousMouth> {
     const response = await fetch(templateUrl, { signal });
     if (!response.ok) throw new Error("Mouth motion could not load");
-    const template = validatePerformanceManifest(await response.json());
+    const template = validateMotionManifest(await response.json());
     let photo: OralPhoto | undefined;
     if (oral) {
       const image = new Image(); image.crossOrigin = "anonymous";
@@ -49,7 +51,12 @@ export class ContinuousMouth implements MouthExtension {
   }
 
   setProfile(profile: ReferenceProfile): void {
-    this.movement = Math.max(.65, Math.min(1.3, profile.jawRange / .85));
+    // The jaw range the template's geometry is true at. The Reference's
+    // motion was authored for the default 0.85. An avatar's own kit records
+    // the range fitted from its own AA, so at that fit its poses play
+    // exactly as photographed, and the owner's slider scales from there.
+    const measured = this.template.version === 2 ? (this.template as AvatarPerformanceManifest).jaw_range : .85;
+    this.movement = Math.max(.65, Math.min(1.3, profile.jawRange / measured));
     this.geometric.setProfile(profile);
     this.oral?.setProfile(profile);
   }

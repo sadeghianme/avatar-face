@@ -88,6 +88,9 @@ export interface Avatar {
      *  picture; "upload": the owner's), or null with the reason a new avatar
      *  has generic teeth. Absent from a server before it said so. */
     teeth?: TeethRecord;
+    /** Presigned: the avatar's own performance manifest, once the backend
+     *  serves one (docs/performance-kit.md). Absent: the bundled motion. */
+    motion_url?: string | null;
   } | null;
   /** Set means a public page exists at /s/<token>. */
   share_token?: string | null;
