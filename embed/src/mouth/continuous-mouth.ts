@@ -14,6 +14,15 @@ export const CORNER_EASE = 0.4;
  *  lips visibly swelled like a bee sting rather than coming forward. */
 export const PROTRUSION = 0.05;
 
+/** Where a teeth photo is: the photo, and its rig (the landmarks on it). */
+export interface OralPhotoSource { image_url: string; rig_url: string }
+
+/** The Reference's own teeth photo, served beside its motion (the lab). */
+function referenceTeeth(templateUrl: string): OralPhotoSource {
+  const base = new URL(templateUrl, location.href);
+  return { image_url: new URL("oral-detail-v3.webp", base).href, rig_url: new URL("oral-detail-v3.rig.json", base).href };
+}
+
 /** A single skin/lip texture plus one stable oral interior. The shared engine
  * warps the user's ORIGINAL photo; this extension never swaps face textures. */
 export class ContinuousMouth implements MouthExtension {
@@ -23,31 +32,40 @@ export class ContinuousMouth implements MouthExtension {
   private rounding = 0;
   private geometric = new ReferenceMouth(DEFAULT_REFERENCE_PROFILE);
   private oral?: DentalOralSurface;
+  /** Throws DentalPhotoError for a teeth photo that does not show the upper
+   *  teeth clearly enough to draw them from. */
   constructor(private template: MotionManifest, oral?: OralPhoto) {
     if (oral) this.oral = new DentalOralSurface(oral);
   }
 
   /** `templateUrl` is the bundled Reference motion (mouth-motion.json) or an
    *  avatar's own performance manifest (version 2); both play the same way. */
-  static async load(templateUrl: string, oral?: { image_url: string; rig_url: string } | "reference", signal?: AbortSignal): Promise<ContinuousMouth> {
-    const response = await fetch(templateUrl, { signal });
-    if (!response.ok) throw new Error("Mouth motion could not load");
-    const template = validateMotionManifest(await response.json());
-    let photo: OralPhoto | undefined;
-    if (oral) {
-      const image = new Image(); image.crossOrigin = "anonymous";
-      const source = oral === "reference" ? {
-        image_url: new URL("oral-detail-v3.webp", new URL(templateUrl, location.href)).href,
-        rig_url: new URL("oral-detail-v3.rig.json", new URL(templateUrl, location.href)).href,
-      } : oral;
-      image.src = source.image_url;
-      await image.decode();
-      const rigResponse = await fetch(source.rig_url, { signal });
-      if (!rigResponse.ok) throw new Error("Mouth detail could not load");
-      photo = { image, rig: validateOralRig(await rigResponse.json()) };
-    }
+  static async load(templateUrl: string, oral?: OralPhotoSource | "reference", signal?: AbortSignal): Promise<ContinuousMouth> {
+    const template = await ContinuousMouth.loadMotion(templateUrl, signal);
+    const photo = oral
+      ? await ContinuousMouth.loadOralPhoto(oral === "reference" ? referenceTeeth(templateUrl) : oral, signal)
+      : undefined;
     if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
     return new ContinuousMouth(template, photo);
+  }
+
+  /** Fetch a motion and check that this mouth can play it: rejects on a
+   *  failed request and on a manifest validateMotionManifest refuses. */
+  static async loadMotion(url: string, signal?: AbortSignal): Promise<MotionManifest> {
+    const response = await fetch(url, { signal });
+    if (!response.ok) throw new Error("Mouth motion could not load");
+    return validateMotionManifest(await response.json());
+  }
+
+  /** Decode a teeth photo and fetch its rig. Whether the photo shows the
+   *  teeth well enough is decided when the mouth is built, not here. */
+  static async loadOralPhoto(source: OralPhotoSource, signal?: AbortSignal): Promise<OralPhoto> {
+    const image = new Image(); image.crossOrigin = "anonymous";
+    image.src = source.image_url;
+    await image.decode();
+    const rigResponse = await fetch(source.rig_url, { signal });
+    if (!rigResponse.ok) throw new Error("Mouth detail could not load");
+    return { image, rig: validateOralRig(await rigResponse.json()) };
   }
 
   setProfile(profile: ReferenceProfile): void {
