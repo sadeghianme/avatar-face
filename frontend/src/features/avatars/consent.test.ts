@@ -49,7 +49,7 @@ describe("recording a consent", () => {
   it("matches the server's wording versions (services.consent.TEXT_VERSIONS)", () => {
     assert.deepEqual(
       { ...CONSENT_TEXT_VERSIONS },
-      { third_party_ai: "2026-09-25", depiction: "2026-09-25", generated_face: "2026-09-25" }
+      { third_party_ai: "2026-09-26", depiction: "2026-09-25", generated_face: "2026-09-25" }
     );
   });
   it("notices when the words in force are not the ones on screen", () => {

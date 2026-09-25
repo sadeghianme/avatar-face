@@ -50,8 +50,10 @@ def public_view(raw: str | None) -> dict | None:
 
 
 def oral_keys(org_id: str, avatar_id: str, stamp: str) -> tuple[str, str]:
+    # WebP (services.mouth_photo.MOUTH_PHOTO_TYPE). Photos stored as PNG
+    # before keep their keys; everything downstream reads the extension.
     base = f"orgs/{org_id}/avatars/{avatar_id}/mouth-{stamp}"
-    return f"{base}.png", f"{base}.json"
+    return f"{base}.webp", f"{base}.json"
 
 
 async def photo_urls(config: dict | None, storage) -> dict | None:

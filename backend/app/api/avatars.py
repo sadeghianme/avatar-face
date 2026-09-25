@@ -1137,7 +1137,18 @@ async def generate_mouth_photo(
         source = await storage.get_bytes(source_key)
         # No connection held while the provider thinks.
         await db.rollback()
-        made = await mouth_photo.make_teeth(org_id, source)
+
+        async def sending() -> None:
+            # The consent that lets the picture go is on the avatar as it
+            # goes: a refusal or an answer the teeth test rejects still
+            # sent a photo, and an audit must find what allowed it. Not a
+            # change a visitor sees, so the draft stays clean.
+            async with avatar_edits.hold(avatar_id):
+                row = await _get_avatar(db, org_id, avatar_id)
+                row.consent_ids = consent.with_consent(row.consent_ids, consent_id)
+                await db.commit()
+
+        made = await mouth_photo.make_teeth(org_id, source, on_send=sending)
     except mouth_photo.TeethFailure as exc:
         error = AppError(exc.detail, code=exc.code)
         error.status_code = exc.status
@@ -1154,9 +1165,8 @@ async def generate_mouth_photo(
             avatar, storage, made.photo, made.rig, mouth_photo.ai_teeth_record(made.model)
         )
         # AI made part of what visitors will see: disclosed from the next
-        # Publish, with the consent that let the photo go out.
+        # Publish.
         avatar.ai_edited = mouth_photo.with_ai_teeth(avatar.ai_edited, made.model)
-        avatar.consent_ids = consent.with_consent(avatar.consent_ids, consent_id)
         mark_dirty(avatar)
         await db.commit()
     for key in previous:

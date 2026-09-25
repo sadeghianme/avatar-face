@@ -11,9 +11,11 @@ second photo from the owner; AI makes it for them.
 **One path in.** Whatever the source, a mouth photo is admitted by
 `prepare_mouth_photo`: the portrait checks every mouth photo has always had
 (portrait_photo.prepare_photo: a real detected face, big enough, the mouth
-actually open), then the browser's own teeth test (services.dental_photo:
-the upper row wide, dense and tall enough, or `DentalPhotoError` on every
-visitor's page), and `store` writes it as the draft's oral photo. The owner
+actually open), an encoding for visitors (`encode_for_visitors`, below),
+then the browser's own teeth test on exactly those bytes
+(services.dental_photo: the upper row wide, dense and tall enough, or
+`DentalPhotoError` on every visitor's page), and `store` writes it as the
+draft's oral photo. The owner
 upload and the AI path differ only in where the bytes come from and in the
 `teeth` record they leave (below).
 
@@ -30,8 +32,9 @@ input, never the same request again. Every answered call is metered as an
 image generation (source "teeth") after the monthly limit and the
 organization's switch are read again, as for every AI step.
 
-**The teeth record** (`mouth_config["teeth"]`, owner-facing only; the
-published snapshot copies the renderer, the fit and the files, never this):
+**The teeth record** (`mouth_config["teeth"]`, owner-facing only: the
+published snapshot keeps it beside the files so Discard can restore it,
+and never hands it to a visitor):
 `{"source": "ai", "model"}` for AI teeth, `{"source": "upload"}` for the
 owner's photo, or `{"source": null, "note": {code, detail}}` when an avatar
 was finished with generic teeth, saying why, for the avatar page.
@@ -56,6 +59,8 @@ import io
 import json
 import logging
 from dataclasses import dataclass
+
+from collections.abc import Awaitable, Callable
 
 import numpy as np
 
@@ -87,6 +92,15 @@ TEETH_PROMPT = (
     "across them. Photorealistic, indistinguishable from the original photo "
     "except for the mouth."
 )
+
+# Every visitor of the avatar downloads the mouth photo before the
+# photographic mouth attaches, and presigned URLs change with each config
+# fetch, so neither the browser nor a CDN keeps it between visits. As the
+# PNG ingest_photo makes, a 1024 px "ee" face crop is about 1.3 MB; as
+# WebP at this quality, about 160 KB, with the enamel's edges intact for
+# the teeth test and the renderer (which samples only inside the lips).
+MOUTH_PHOTO_TYPE = "image/webp"
+MOUTH_PHOTO_QUALITY = 90
 
 TEETH_UNCLEAR = (
     "The mouth photo needs a clearer view of the upper teeth: the whole upper front "
@@ -166,13 +180,33 @@ def teeth_verdict(photo: bytes, rig: dict):
         return dental_photo.check(image, np.asarray(rig["points"]), rig["inner_lip_ring"])
 
 
+def encode_for_visitors(photo: bytes) -> bytes:
+    """`photo` (a clean PNG from ingest_photo) as the WebP visitors are
+    served: the same pixel size, so the rig stays valid, and the same colour
+    profile. CPU work."""
+    from PIL import Image
+
+    with Image.open(io.BytesIO(photo)) as image:
+        image.load()
+        icc = image.info.get("icc_profile")
+        out = io.BytesIO()
+        image.save(
+            out, format="WEBP", quality=MOUTH_PHOTO_QUALITY, method=4,
+            **({"icc_profile": icc} if icc else {}),
+        )
+    return out.getvalue()
+
+
 def prepare_mouth_photo(data: bytes) -> tuple[bytes, dict]:
     """(photo, rig) of a mouth photo fit to store, or Validation422 saying
     what is wrong with it. The one admission of every mouth photo, uploaded
-    or AI-made. CPU work."""
+    or AI-made. The photo is the WebP visitors get, and the teeth test runs
+    on it, not on the lossless original: what passed is what is shown.
+    CPU work."""
     from app.services import portrait_photo
 
     photo, rig, _note = portrait_photo.prepare_photo(data, "mouth")
+    photo = encode_for_visitors(photo)
     verdict = teeth_verdict(photo, rig)
     if not verdict.ok:
         raise Validation422(
@@ -200,7 +234,7 @@ async def store(avatar, storage, photo: bytes, rig: dict, teeth: dict) -> list[s
     # Fresh keys per photo: the published snapshot may still point at copies
     # of the old ones, and browsers cache presigned URLs by path.
     image_key, rig_key = oral_keys(avatar.org_id, avatar.id, uuid4().hex[:8])
-    await storage.put_bytes(image_key, photo, "image/png")
+    await storage.put_bytes(image_key, photo, MOUTH_PHOTO_TYPE)
     await storage.put_bytes(rig_key, json.dumps(rig).encode(), "application/json")
     config.update(oral_image_key=image_key, oral_rig_key=rig_key, teeth=teeth)
     avatar.mouth_config = json.dumps(config)
@@ -293,11 +327,17 @@ async def _meter(org_id: str) -> None:
         await record_generation(db, org_id, "gemini", TEETH_CALL)
 
 
-async def make_teeth(org_id: str, source: bytes) -> AiTeeth:
+async def make_teeth(
+    org_id: str, source: bytes, on_send: Callable[[], Awaitable[None]] | None = None
+) -> AiTeeth:
     """An "ee" photo of the person in `source` (the avatar's final picture),
     made by the image model and admitted like an upload, or TeethFailure.
 
-    The caller has checked consent: this only sends what it is given."""
+    The caller has checked consent: this only sends what it is given.
+    `on_send` is awaited once, right before the first picture leaves, so
+    the caller can record the consent that let it go whatever the answer
+    (a refusal, an answer the teeth test rejects, an error), and not when
+    nothing was sent at all (no face, the limit, AI switched off)."""
     from app.services import imagegen
     from app.services.jobs import run_cpu
 
@@ -309,6 +349,9 @@ async def make_teeth(org_id: str, source: bytes) -> AiTeeth:
     tried_crop = False
     while True:
         await _may_call(org_id)
+        if on_send is not None:
+            await on_send()
+            on_send = None
         try:
             generated = await imagegen.edit_image(TEETH_PROMPT, request.payload, request.mime)
         except imagegen.ImageGenRefused as exc:

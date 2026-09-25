@@ -21,7 +21,11 @@ MAX_PER_ORG active per organization (one busy customer cannot fill the
 queue), and at most MAX_ACTIVE in the whole process (503 with Retry-After
 beyond that, so a burst degrades into "try again shortly" instead of memory
 growing without bound). At most MAX_RUNNING run at once; the rest wait
-queued.
+queued. A job that waits on the network for long (an image-model call in
+a finish) gives its slot back for the wait (`JobRunner.outside_slot`):
+the slot bounds work on this box, and a finish waiting half a minute on
+Google must not hold the next person's upload at "waiting for a free
+worker".
 
 Progress lives here, in memory, keyed by job id. Writing every tick to the
 database would be a commit per tick on a SQLite file that the widget reads
@@ -33,9 +37,10 @@ why callers mark jobs left queued or running as interrupted at startup.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -118,6 +123,9 @@ class Job:
     fraction: float = 0.0
     label: str | None = None
     task: asyncio.Task | None = field(default=None, repr=False)
+    # Whether it holds one of the runner's running slots right now (not
+    # while queued, nor while `outside_slot` has lent it back).
+    holds_slot: bool = field(default=False, repr=False)
 
     def report(self, fraction: float, label: str | None = None) -> None:
         """Record progress. Monotonic: a later, smaller report is ignored,
@@ -190,10 +198,19 @@ class JobRunner:
         """
 
         async def body() -> None:
+            slots = self._running_slots()
             try:
-                async with self._running_slots():
+                await slots.acquire()
+                job.holds_slot = True
+                try:
                     job.state = RUNNING
                     await work(job)
+                finally:
+                    # Not held when cancelled while taking it back after
+                    # `outside_slot`: releasing then would mint a slot.
+                    if job.holds_slot:
+                        job.holds_slot = False
+                        slots.release()
             except asyncio.CancelledError:
                 # Shutdown. The subject is left queued or running on purpose:
                 # the next startup marks it interrupted.
@@ -205,6 +222,29 @@ class JobRunner:
 
         job.task = asyncio.create_task(body(), name=f"job-{job.step}-{job.id}")
         return job.task
+
+    @contextlib.asynccontextmanager
+    async def outside_slot(self, job: Job | None) -> AsyncIterator[None]:
+        """Lend `job`'s running slot back for a wait on the network, and
+        take one again after (queueing behind others if they took them).
+
+        For long provider calls inside a job. Its CPU work still runs on
+        the one CPU thread (`run_cpu`), which is the bound that protects
+        speech; the slot only decides whose work goes next, and a call
+        that waits on Google does not need one. A no-op for a job that
+        holds no slot, or none at all.
+        """
+        if job is None or not job.holds_slot or self._slots is None:
+            yield
+            return
+        slots = self._slots
+        job.holds_slot = False
+        slots.release()
+        try:
+            yield
+        finally:
+            await slots.acquire()
+            job.holds_slot = True
 
     def _running_slots(self) -> asyncio.Semaphore:
         # Created on first use, so it belongs to the loop that runs the jobs.

@@ -1544,7 +1544,7 @@ async def _build_avatar(
         # working single-photo avatar.
         avatar.has_layers = await store_layers(avatar, storage, image, rig["face_box"])
 
-    await _own_teeth(job, avatar, image, storage)
+    await _own_teeth(job, creation, avatar, image, storage)
 
     warnings = (anchors.get("validation") or {}).get("warnings") or []
     avatar.rig_key = rig_key
@@ -1562,7 +1562,7 @@ TEETH_FAILED = error_record(
 )
 
 
-async def _own_teeth(job: Job, avatar: Avatar, image: bytes, storage) -> None:
+async def _own_teeth(job: Job, creation: Creation, avatar: Avatar, image: bytes, storage) -> None:
     """The mouth a new avatar speaks with, set before its first publish.
 
     A person gets the photographic mouth (services.mouth_photo.default_config;
@@ -1574,6 +1574,13 @@ async def _own_teeth(job: Job, avatar: Avatar, image: bytes, storage) -> None:
     limit, a refusal, a photo the teeth test rejects, a crash) publishes
     with the renderer's generic teeth and records why in the teeth note.
     Never fails the finish: the avatar is worth having without its teeth.
+
+    The consent that lets the picture go is recorded on the avatar and the
+    creation as it is sent, not with the result: a refusal, an answer the
+    teeth test rejects or a provider error still sent a photo, and an audit
+    must find what allowed it. The calls wait outside the
+    runner's slot (JobRunner.outside_slot): up to two image-model calls of
+    up to 90 s each, which would otherwise hold every other job back.
     """
     from app.services import consent, mouth_photo
 
@@ -1584,7 +1591,13 @@ async def _own_teeth(job: Job, avatar: Avatar, image: bytes, storage) -> None:
     job.report(0.65, "making the teeth")
     try:
         consent_id = await _teeth_consent(avatar)
-        made = await mouth_photo.make_teeth(avatar.org_id, image)
+
+        async def sending() -> None:
+            avatar.consent_ids = consent.with_consent(avatar.consent_ids, consent_id)
+            creation.consent_ids = consent.with_consent(creation.consent_ids, consent_id)
+
+        async with runner.outside_slot(job):
+            made = await mouth_photo.make_teeth(avatar.org_id, image, on_send=sending)
         await mouth_photo.store(
             avatar, storage, made.photo, made.rig, mouth_photo.ai_teeth_record(made.model)
         )
@@ -1597,7 +1610,6 @@ async def _own_teeth(job: Job, avatar: Avatar, image: bytes, storage) -> None:
     else:
         # AI made part of what visitors see: the disclosure says so.
         avatar.ai_edited = mouth_photo.with_ai_teeth(avatar.ai_edited, made.model)
-        avatar.consent_ids = consent.with_consent(avatar.consent_ids, consent_id)
         return
     config["teeth"] = mouth_photo.generic_teeth_record(note)
     avatar.mouth_config = json.dumps(config)

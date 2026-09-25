@@ -281,11 +281,36 @@ except for the clock, a bug fix every avatar gets):
   pasted back into the portrait: the renderer registers a mouth photo by its
   own landmarks, in its own mouth widths. Metered as an image generation
   (source `teeth`), under the monthly limit and the org switch; disclosed as
-  `ai_edited.teeth` (`{mode: "teeth"}` when nothing else was AI-made);
-  its consent is added to the avatar's. Anything short of that (no consent,
+  `ai_edited.teeth` (`{mode: "teeth"}` when nothing else was AI-made).
+  Its consent is added to the avatar's and the creation's as the picture
+  is sent (`make_teeth(on_send=…)`; the generate endpoint does the same),
+  so a refusal or a rejected answer still leaves the record of what let
+  the photo out, and a finish that sent nothing records nothing. The calls wait outside the job runner's slot
+  (`JobRunner.outside_slot`), so a finish waiting on Google never holds
+  another person's upload queued. Anything short of that (no consent,
   AI off, the limit, a refusal, a photo the teeth test rejects, a crash)
   publishes with generic teeth and records why in `mouth_config.teeth.note`,
   which the Mouth panel shows. Never fails the finish.
+- **Stored as WebP** (`mouth_photo.encode_for_visitors`, quality 90, same
+  size so the rig holds): every visitor downloads the mouth photo before
+  the photographic mouth attaches, and a 1024 px crop is about 1.3 MB as
+  PNG, about 160 KB as WebP. The teeth test runs on the WebP bytes, so what
+  passed is what is served.
+- **The consent covers it.** `third_party_ai` wording 2026-09-26 says that
+  pictures also go without a further question for the wizard's lip
+  touch-up and a person's teeth at Finish, and that those teeth are kept
+  and published with the finished avatar; the Settings switch hint and the
+  landing FAQ say the same. Agreements to the 2026-09-25 text no longer
+  count, so everyone is asked the new question before anything is sent.
+- **Disclosure follows what is shown.** Publish drops `teeth` from the
+  disclosure (a teeth-only one entirely) unless the published mouth is the
+  photographic one with the photo; the draft keeps both, so switching back
+  restores both. The published mouth carries its `teeth` record (never
+  served to visitors), and Discard restores it with the photo, and
+  `ai_edited` from the snapshot's disclosure, with the teeth entry exactly
+  when the restored photo is AI-made: a discarded upload, removal or AI
+  generation never leaves AI teeth unlabelled or a label on teeth that are
+  gone.
 - `POST /orgs/{org}/avatars/{id}/mouth-photo/generate {consent_id}` makes
   the same photo for an existing avatar (or one whose teeth failed): a draft
   edit, synchronous, 409 `teeth_in_progress` while one is out. An owner's

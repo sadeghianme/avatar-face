@@ -26,7 +26,7 @@ from PIL import Image
 from sqlalchemy import select
 
 from app.db import get_session_factory
-from app.models import Avatar
+from app.models import Avatar, Creation
 from app.services import face_template, imagegen, mouth_photo, portrait_photo
 from app.services import photo_adjust as pa
 from app.services.usage import IMAGE_KIND
@@ -109,8 +109,12 @@ async def _finished_person(client, headers, org_id) -> tuple[str, Avatar, dict]:
 
 def test_a_full_crown_photo_is_admitted(mouth_detector):
     photo, rig = mouth_photo.prepare_mouth_photo(FULL_CROWNS)
-    assert Image.open(io.BytesIO(photo)).size == (1254, 1254)
+    stored = Image.open(io.BytesIO(photo))
+    assert stored.size == (1254, 1254), "the rig's pixel coordinates still hold"
     assert len(rig["points"]) == 478
+    # What every visitor downloads: WebP, a fraction of the lossless PNG.
+    assert stored.format == "WEBP"
+    assert len(photo) < len(FULL_CROWNS) / 4
 
 
 def test_a_tips_only_photo_is_refused_as_the_browser_would(mouth_detector):
@@ -188,7 +192,10 @@ async def test_without_the_members_consent_nothing_is_sent(client, faces, images
     assert "oral_image_key" not in config
     assert config["teeth"]["source"] is None
     assert config["teeth"]["note"]["code"] == "no_ai_consent"
-    assert published["mouth"] == {"renderer": "continuous", "profile": {}}
+    assert "oral_image_key" not in published["mouth"]
+    assert published["mouth"]["renderer"] == "continuous"
+    # The note is kept with the snapshot (for Discard), never served.
+    assert published["mouth"]["teeth"]["note"]["code"] == "no_ai_consent"
     assert avatar.ai_edited is None
 
 
@@ -264,7 +271,7 @@ async def test_a_photo_the_teeth_test_refuses_is_not_used(client, faces, images,
 async def test_a_crash_while_making_teeth_never_fails_the_finish(
     client, faces, images, monkeypatch
 ):
-    async def broken(org_id, source):
+    async def broken(org_id, source, on_send=None):
         raise RuntimeError("disk full")
 
     monkeypatch.setattr(mouth_photo, "make_teeth", broken)
@@ -405,3 +412,262 @@ async def test_removing_ai_teeth_removes_their_disclosure(client, faces, images,
                                   headers=headers)
     assert removed.json()["ai_edited"] is None
     assert removed.json()["mouth"]["has_oral_photo"] is False
+
+
+# --- the consent that let a photo out ------------------------------------------------------
+
+
+async def _creation(base: str) -> Creation:
+    async with get_session_factory()() as db:
+        creation_id = base.rsplit("/", 1)[1]
+        return (await db.execute(select(Creation).where(Creation.id == creation_id))).scalar_one()
+
+
+async def test_a_refused_finish_still_records_the_consent_that_sent_the_photo(
+    client, faces, images
+):
+    headers, org_id = await _org(client, "audited")
+    consent_id = await ai_consent(client, headers, org_id)
+    images.script = ["refuse"]
+    faces.by_size[(WIDTH, HEIGHT)] = face_template.place((150, 150, 250, 270))
+    base, _ = await _create(client, headers, org_id)
+    body = await _finish_and_wait(client, headers, base)
+    assert len(images.calls) == 2, "two photos went to Google"
+    avatar = await _avatar(body["avatar_id"])
+    assert json.loads(avatar.mouth_config)["teeth"]["note"]["code"] == "safety_refused"
+    assert consent_id in avatar.consent_ids
+    assert consent_id in (await _creation(base)).consent_ids
+
+
+async def test_a_consent_that_sent_nothing_is_not_recorded(client, faces, images, monkeypatch):
+    headers, org_id = await _org(client, "unsent")
+    consent_id = await ai_consent(client, headers, org_id)
+    monkeypatch.setattr(imagegen, "configured", lambda: False)
+    base, _ = await _create(client, headers, org_id)
+    body = await _finish_and_wait(client, headers, base)
+    avatar = await _avatar(body["avatar_id"])
+    assert json.loads(avatar.mouth_config)["teeth"]["note"]["code"] == "imagegen_unavailable"
+    assert consent_id not in (avatar.consent_ids or [])
+    assert consent_id not in ((await _creation(base)).consent_ids or [])
+
+
+async def test_a_failed_generate_still_records_the_consent_that_sent_the_photo(
+    client, faces, images, mouth_detector
+):
+    headers, org_id = await _org(client, "audited2")
+    avatar_id, avatar, _ = await _finished_person(client, headers, org_id)
+    assert not avatar.consent_ids or len(avatar.consent_ids) == 1, "the depiction statement"
+    consent_id = await ai_consent(client, headers, org_id)
+    images.script = [TIPS_ONLY]
+    unclear = await _generate(client, headers, org_id, avatar_id, consent_id)
+    assert unclear.status_code == 422
+    row = await _avatar(avatar_id)
+    assert consent_id in row.consent_ids
+    assert "oral_image_key" not in json.loads(row.mouth_config)
+    assert row.draft_revision == avatar.draft_revision, "not a change a visitor sees"
+
+
+async def test_the_teeth_are_made_outside_the_runners_slot(client, faces, images, monkeypatch):
+    """Up to two image-model calls of up to 90 s: holding one of the two
+    running slots through them would queue everyone else's uploads."""
+    from app.services.jobs import runner
+
+    seen = {}
+    real = mouth_photo.make_teeth
+
+    async def watched(org_id, source, on_send=None):
+        job = next(j for j in runner._jobs.values() if j.step == "finish")
+        seen["holds_slot"] = job.holds_slot
+        return await real(org_id, source, on_send=on_send)
+
+    monkeypatch.setattr(mouth_photo, "make_teeth", watched)
+    headers, org_id = await _org(client, "slotless")
+    await ai_consent(client, headers, org_id)
+    images.script = ["refuse"]
+    await _finished_person(client, headers, org_id)
+    assert seen == {"holds_slot": False}
+
+
+# --- stored for visitors -------------------------------------------------------------------
+
+
+async def test_the_mouth_photo_is_stored_and_served_as_webp(
+    client, faces, images, mouth_detector
+):
+    from app.services.storage import get_storage
+
+    headers, org_id = await _org(client, "slim")
+    await ai_consent(client, headers, org_id)
+    images.script = [FULL_CROWNS]
+    avatar_id, avatar, published = await _finished_person(client, headers, org_id)
+    draft_key = json.loads(avatar.mouth_config)["oral_image_key"]
+    published_key = published["mouth"]["oral_image_key"]
+    assert draft_key.endswith(".webp") and published_key.endswith(".webp")
+    data = await get_storage().get_bytes(published_key)
+    assert Image.open(io.BytesIO(data)).format == "WEBP"
+
+    detail = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
+    url = detail["mouth_photo"]["image_url"]
+    served = await client.get(url[url.index("/storage/"):])
+    assert served.status_code == 200
+    assert served.headers["content-type"] == "image/webp"
+
+
+# --- the disclosure follows the teeth through Publish and Discard ---------------------------
+
+
+async def _publish(client, headers, url):
+    response = await client.post(f"{url}/publish", headers=headers)
+    assert response.status_code == 200, response.text
+
+
+async def _discard(client, headers, url):
+    response = await client.post(f"{url}/discard-draft", headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+async def _later_edit(client, headers, url):
+    """Any edit a visitor would notice, so the next Publish writes a snapshot."""
+    response = await client.patch(
+        url, json={"mouth": {"renderer": "continuous", "profile": {"teethY": 0.01}}},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+
+
+async def _served_disclosure(avatar_id):
+    return json.loads((await _avatar(avatar_id)).published_config)["disclosure"]["ai_edited"]
+
+
+async def _ai_teeth_person(client, headers, org_id):
+    """A person finished with AI teeth (the caller scripts the answer)."""
+    await ai_consent(client, headers, org_id)
+    avatar_id, avatar, published = await _finished_person(client, headers, org_id)
+    assert published["disclosure"]["ai_edited"]["mode"] == "teeth"
+    return avatar_id, f"/orgs/{org_id}/avatars/{avatar_id}"
+
+
+async def test_discarding_an_upload_brings_ai_teeth_back_labelled(
+    client, faces, images, mouth_detector
+):
+    headers, org_id = await _org(client, "undoupload")
+    images.script = [FULL_CROWNS]
+    avatar_id, url = await _ai_teeth_person(client, headers, org_id)
+    uploaded = await client.post(
+        f"{url}/mouth-photo", files={"file": ("ee.png", FULL_CROWNS, "image/png")},
+        headers=headers,
+    )
+    assert uploaded.json()["ai_edited"] is None
+
+    discarded = await _discard(client, headers, url)
+    assert discarded["mouth"]["teeth"]["source"] == "ai", "not the owner's photo"
+    assert discarded["mouth"]["has_oral_photo"] is True
+    assert discarded["ai_edited"]["teeth"] == {"model": imagegen.MODEL}
+
+    await _later_edit(client, headers, url)
+    await _publish(client, headers, url)
+    assert (await _served_disclosure(avatar_id))["mode"] == "teeth"
+
+
+async def test_discarding_a_removal_brings_ai_teeth_back_labelled(
+    client, faces, images, mouth_detector
+):
+    headers, org_id = await _org(client, "undoremove")
+    images.script = [FULL_CROWNS]
+    avatar_id, url = await _ai_teeth_person(client, headers, org_id)
+    await client.delete(f"{url}/mouth-photo", headers=headers)
+
+    discarded = await _discard(client, headers, url)
+    assert discarded["mouth"]["teeth"]["source"] == "ai"
+    assert discarded["ai_edited"]["mode"] == "teeth"
+    await _later_edit(client, headers, url)
+    await _publish(client, headers, url)
+    assert (await _served_disclosure(avatar_id))["mode"] == "teeth"
+
+
+async def test_discarding_generated_teeth_takes_their_label_with_them(
+    client, faces, images, mouth_detector
+):
+    headers, org_id = await _org(client, "undogenerate")
+    avatar_id, _, _ = await _finished_person(client, headers, org_id)
+    url = f"/orgs/{org_id}/avatars/{avatar_id}"
+    consent_id = await ai_consent(client, headers, org_id)
+    images.script = [FULL_CROWNS]
+    made = await _generate(client, headers, org_id, avatar_id, consent_id)
+    assert made.json()["ai_edited"]["mode"] == "teeth"
+
+    discarded = await _discard(client, headers, url)
+    assert discarded["ai_edited"] is None
+    assert discarded["mouth"]["has_oral_photo"] is False
+    assert discarded["mouth"]["teeth"]["source"] is None
+    await _later_edit(client, headers, url)
+    await _publish(client, headers, url)
+    assert await _served_disclosure(avatar_id) is None
+
+
+async def test_ai_teeth_the_classic_mouth_hides_are_not_disclosed(
+    client, faces, images, mouth_detector
+):
+    headers, org_id = await _org(client, "classic")
+    images.script = [FULL_CROWNS]
+    avatar_id, url = await _ai_teeth_person(client, headers, org_id)
+
+    await client.patch(url, json={"mouth": {"renderer": "classic"}}, headers=headers)
+    await _publish(client, headers, url)
+    assert await _served_disclosure(avatar_id) is None, "every visible pixel is the photo"
+    row = await _avatar(avatar_id)
+    assert row.ai_edited["mode"] == "teeth", "the draft keeps it with the photo"
+
+    # A Discard from here keeps the draft's photo and its label together.
+    await _later_edit(client, headers, url)
+    discarded = await _discard(client, headers, url)
+    assert discarded["mouth"]["renderer"] == "classic"
+    assert discarded["mouth"]["teeth"]["source"] == "ai"
+    assert discarded["ai_edited"]["mode"] == "teeth"
+
+    # Back to the photographic mouth: the AI teeth show again, labelled.
+    await _later_edit(client, headers, url)
+    await _publish(client, headers, url)
+    assert (await _served_disclosure(avatar_id))["mode"] == "teeth"
+
+
+async def test_other_ai_edits_stay_disclosed_under_the_classic_mouth():
+    from types import SimpleNamespace
+
+    from app.services import publishing
+    from app.services.storage import get_storage
+
+    storage = get_storage()
+    await storage.put_bytes("orgs/o/avatars/a/source.png", _png("oral-detail-v3"), "image/png")
+    avatar = SimpleNamespace(
+        id="a", org_id="o", draft_revision=3, image_key="orgs/o/avatars/a/source.png",
+        rig_key=None, thumbnail_key=None, has_layers=False, framing="face",
+        face_type="human", voice=None, published_config=None,
+        mouth_config=json.dumps({"renderer": "classic", "profile": {}}),
+        ai_edited=mouth_photo.with_ai_teeth({"mode": "touchup", "model": "m1"}, "m2"),
+    )
+    config = await publishing.publish(avatar, storage)
+    assert config["disclosure"]["ai_edited"] == {"mode": "touchup", "model": "m1"}
+
+
+def test_a_snapshot_from_before_the_teeth_record_is_restored_from_its_disclosure():
+    from types import SimpleNamespace
+
+    from app.services import publishing
+
+    ai = mouth_photo.with_ai_teeth(None, "m")
+    labelled = {"disclosure": {"ai_edited": ai}}
+    assert publishing._restored_teeth(None, labelled, True) == {"source": "ai", "model": "m"}
+    assert publishing._restored_teeth(None, {"disclosure": {"ai_edited": None}}, True) == {
+        "source": "upload"
+    }
+    assert publishing._restored_teeth(None, labelled, False) is None
+    gone = {"source": "ai", "model": "m"}
+    assert publishing._restored_teeth(gone, labelled, False) is None, "no photo came back"
+    note = {"source": None, "note": {"code": "no_ai_consent", "detail": "x"}}
+    assert publishing._restored_teeth(note, labelled, False) == note
+
+    # Published before disclosures: the draft's own, less teeth it no longer has.
+    draft = SimpleNamespace(ai_edited={"mode": "touchup", "model": "m1", "teeth": {"model": "m"}})
+    assert publishing._restored_ai_edited(draft, {}, None) == {"mode": "touchup", "model": "m1"}

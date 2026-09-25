@@ -20,7 +20,11 @@ Three scopes:
 - `third_party_ai`: "this photo will be sent to Google (Gemini) to edit it
   or to find its points". Refused outright (403 third_party_ai_disabled)
   when the organization has turned third-party AI off. About sending photos,
-  not about one photo, so it is remembered per person and wording.
+  not about one photo, so it is remembered per person and wording. Since
+  2026-09-26 its wording also covers the sends nobody presses a button for
+  (the wizard's own lip touch-up, a person's teeth made at Finish) and says
+  those teeth are kept and published with the finished avatar: agreements
+  to the earlier text, which promised neither, no longer count.
 - `depiction`: "I am this person or have their permission, and they are 18
   or older". Required to finish a creation made from a person's photo, AI
   or not, on whatever line it ends up (services.creations.statement_for):
@@ -58,7 +62,7 @@ SUBJECT_SCOPES = frozenset({DEPICTION, GENERATED_FACE})
 # whenever its text changes in meaning (en and fr together): every consent
 # given under the old text stops being accepted, and people are asked again.
 TEXT_VERSIONS: dict[str, str] = {
-    THIRD_PARTY_AI: "2026-09-25",
+    THIRD_PARTY_AI: "2026-09-26",
     DEPICTION: "2026-09-25",
     GENERATED_FACE: "2026-09-25",
 }
