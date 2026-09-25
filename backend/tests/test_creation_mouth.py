@@ -169,3 +169,76 @@ async def test_a_closed_mouth_finishes_without_warnings(client, faces):
     response = await _finish(client, headers, base)
     assert response.status_code == 202
     assert response.json()["warnings"] == []
+
+
+# --- once per photo, and only for the lips -----------------------------------------------
+
+
+async def test_parted_lips_with_eyes_to_fix_too_stay_the_owners_choice(
+    client, faces, images, monkeypatch
+):
+    """A touch-up redraws the eyes as well as the lips. With the eyes
+    flagged too (here looking away), it would invent eyes the owner never
+    asked about: it stays the pre-selected recommendation they start."""
+    from tests.test_photo_analysis import looking
+
+    monkeypatch.setitem(CHANGES, "lips_and_gaze", lambda p: with_mouth(looking(p, 0.6), 0.07))
+    faces.changes[GOOD] = "lips_and_gaze"
+    headers, org_id, base, body = await _person(client, "eyesandlips")
+    recommendation = body["analysis"]["recommendation"]
+    assert recommendation["mode"] == "touchup"
+    assert recommendation["reasons"] == ["gaze_off_camera", "teeth_showing"]
+    assert body["ai"]["suggested"] == ["touchup"], "pre-selected for the owner"
+    assert body["ai"]["auto_adjust"] is None
+    response = await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
+                             auto=True)
+    assert response.status_code == 409 and response.json()["code"] == "auto_adjust_not_applicable"
+    assert images.calls == []
+
+
+async def test_the_offer_is_once_per_photo_however_it_is_cropped(client, teeth, images):
+    """Each crop of a photo is a new pixel frame; it is still the same
+    photo, and the wizard does not start a second paid round on it. (The
+    first failed without an answer: its round was given back, and only the
+    spent offer remembers it.)"""
+    headers, org_id, base, _ = await _person(client, "recropped")
+    images.script = ["error"]
+    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
+                  auto=True, count=1)
+    body = await _get(client, headers, base)
+    assert body["ai"]["auto_adjust"] is None and body["ai"]["adjust_rounds_left"] == 2
+    # The framed picture still shows the teeth.
+    framed = (round(GOOD[0] * 0.9), round(GOOD[1] * 0.9))
+    teeth.changes[framed] = "teeth"
+    reframed = await client.patch(
+        base, json={"crop": {"x": 0.05, "y": 0.05, "w": 0.9, "h": 0.9}}, headers=headers)
+    assert reframed.status_code == 200, reframed.text
+    body = reframed.json()
+    assert body["current"] == "framed"
+    assert body["analysis"]["recommendation"]["reasons"] == ["teeth_showing"]
+    assert body["ai"]["auto_adjust"] is None, "not offered again for the same photo"
+    assert body["ai"]["suggested"] == ["touchup"], "still recommended, for the owner to start"
+
+
+def test_an_offer_spent_before_sources_were_recorded_stays_spent():
+    """Offers spent by an older server were recorded by pixel frame."""
+    from types import SimpleNamespace
+
+    from app.services import creations as svc
+
+    check = {"detector": "mediapipe", "detected": True, "checks": [{"code": "teeth_showing"}],
+             "face_state": {}, "recommendations": {
+                 "human": {"mode": "touchup", "reasons": ["teeth_showing"]}}}
+    steps = {"current": "framed", "items": {
+        "original": {"key": "orgs/o/creations/c/original-1.png", "from": None, "check": check},
+        "framed": {"key": "orgs/o/creations/c/framed-2.png", "from": "original", "check": check},
+    }}
+
+    def creation(auto_adjusted):
+        return SimpleNamespace(face_type="human", steps=steps,
+                               ai_usage={"adjust_rounds": 0, "auto_adjusted": auto_adjusted})
+
+    assert svc.auto_adjust_of(creation([])) is not None
+    assert svc.auto_adjust_of(creation(["orgs/o/creations/c/framed-2.png"])) is None
+    assert svc.auto_adjust_of(creation(["orgs/o/creations/c/original-1.png"])) is None
+    assert svc.source_photo_key(steps, "framed") == "orgs/o/creations/c/original-1.png"

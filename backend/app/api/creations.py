@@ -849,18 +849,18 @@ async def _start_adjust(
             f"{body.mode} is not offered for this kind of face",
             code="adjust_not_for_face_type",
         )
-    auto_frame: str | None = None
+    auto_source: str | None = None
     if body.auto:
         # The wizard acting on its own: only the offer as it stands now
-        # (a stale tab, a second tab, a result that still shows teeth: none
-        # of them starts another paid round).
+        # (a stale tab, a second tab, a result that still shows teeth, the
+        # same photo cropped again: none of them starts another paid round).
         offer = svc.auto_adjust_of(creation)
         if offer is None or offer["mode"] != body.mode:
             raise Conflict409(
                 "Nothing here is fixed automatically; choose the fix yourself",
                 code="auto_adjust_not_applicable",
             )
-        auto_frame = svc.frame_key(creation.steps, svc.current_step(creation.steps))
+        auto_source = svc.source_photo_key(creation.steps, svc.current_step(creation.steps))
     if body.mode == photo_adjust.STYLISE and body.style is None:
         raise Validation422("Choose a style", code="style_required")
     agreed = await consent.require(
@@ -880,10 +880,10 @@ async def _start_adjust(
     # Refused now rather than failing in the job: nothing is spent.
     await check_image_limit(db, creation.org_id)
     usage["adjust_rounds"] += 1
-    if auto_frame is not None:
+    if auto_source is not None:
         # Taken with the job, atomically: the offer is spent for this photo
-        # whatever the round brings.
-        usage["auto_adjusted"] = [*(usage.get("auto_adjusted") or []), auto_frame]
+        # (every crop of it) whatever the round brings.
+        usage["auto_adjusted"] = [*(usage.get("auto_adjusted") or []), auto_source]
     params = {
         "mode": body.mode,
         "style": body.style,
@@ -1087,11 +1087,13 @@ async def finish_creation(
 
     A person's avatar starts with the photographic mouth, and, when the
     organization allows third-party AI and this member has agreed to send
-    photos to Google, with their own teeth made by AI from the chosen
-    picture before it is published (services.creations._own_teeth; the
-    avatar's `mouth.teeth` says which, or why not). `warnings` names what
-    the picture will still show around the mouth (mouth_open,
-    teeth_showing): information, not a refusal.
+    photos to Google, is "prepared" before it is published: its own mouth
+    shapes, its teeth and a mouth profile fitted to it, made by AI from the
+    chosen picture and the confirmed points (services.creations._own_mouth,
+    services.mouth_kit; the job's progress counts the shapes, and the
+    avatar's `mouth.kit` and `mouth.teeth` say what was made, or why not).
+    `warnings` names what the picture will still show around the mouth
+    (mouth_open, teeth_showing): information, not a refusal.
     """
     creation = await _get(db, ctx.org.id, creation_id)
     return await _start_finish(db, creation, body, ctx.org, ctx.membership.user_id)

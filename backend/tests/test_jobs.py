@@ -99,7 +99,18 @@ def test_progress_only_moves_forward():
     job.report(0.5, "halfway")
     job.report(0.2)
     job.report(7)
-    assert job.progress() == {"fraction": 1.0, "label": "halfway"}
+    assert job.progress() == {"fraction": 1.0, "label": "halfway", "count": None}
+
+
+def test_a_counted_stage_says_how_far_it_is_and_the_next_label_forgets_it():
+    job = JobRunner().reserve("org", "s", "finish", 0)
+    job.report(0.6, "making the mouth shapes", count=(0, 6))
+    job.report(0.7, count=(3, 6))
+    assert job.progress() == {
+        "fraction": 0.7, "label": "making the mouth shapes", "count": {"done": 3, "total": 6},
+    }
+    job.report(0.9, "fitting the mouth")
+    assert job.progress()["count"] is None
 
 
 async def test_cpu_work_runs_on_the_one_cpu_thread():

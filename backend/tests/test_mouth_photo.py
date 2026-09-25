@@ -4,8 +4,13 @@ Finishing a person's creation gives the avatar the photographic mouth and,
 when the organization allows third-party AI and the member has agreed to
 send photos to Google, an "ee" photo the image model makes of them, admitted
 like an uploaded mouth photo. Everything short of that publishes with the
-renderer's generic teeth and a note saying why. The generate endpoint does
-the same for an existing avatar, as a draft edit.
+renderer's generic teeth and a note saying why. The Mouth panel's action
+(POST /avatars/{id}/mouth-kit, a job) does the same for an existing avatar,
+as a draft edit.
+
+These are the single "ee" photo's tests: what a finish (or the panel) makes
+where the performance kit cannot be made, which is the case here, with no
+landmark model configured (tests.test_mouth_kit gives the kit a detector).
 
 No provider is called: `images` (tests.test_creation_ai.FakeImages) answers
 with the Reference avatar's own AI "ee" photos, oral-detail-v3 (full crowns,
@@ -304,11 +309,16 @@ async def test_an_animal_keeps_the_classic_mouth_and_sends_nothing(client, image
 # --- on an existing avatar ---------------------------------------------------------------
 
 
-async def _generate(client, headers, org_id, avatar_id, consent_id):
-    return await client.post(
-        f"/orgs/{org_id}/avatars/{avatar_id}/mouth-photo/generate",
-        json={"consent_id": consent_id}, headers=headers,
-    )
+async def _generate(client, headers, org_id, avatar_id, consent_id) -> dict:
+    """The Mouth panel's AI action, run to its end: the job as it ended.
+    Without a landmark model it makes the teeth alone."""
+    from app.services.jobs import runner
+
+    url = f"/orgs/{org_id}/avatars/{avatar_id}/mouth-kit"
+    started = await client.post(url, json={"consent_id": consent_id}, headers=headers)
+    assert started.status_code == 202, started.text
+    await runner.drain()
+    return (await client.get(url, headers=headers)).json()["job"]
 
 
 async def test_existing_avatars_get_ai_teeth_as_a_draft_edit(
@@ -318,15 +328,16 @@ async def test_existing_avatars_get_ai_teeth_as_a_draft_edit(
     avatar_id, avatar, published = await _finished_person(client, headers, org_id)
     assert "oral_image_key" not in published["mouth"]
 
-    missing = await _generate(client, headers, org_id, avatar_id, "nope")
+    missing = await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/mouth-kit",
+                                json={"consent_id": "nope"}, headers=headers)
     assert missing.status_code == 403 and missing.json()["code"] == "consent_required"
     assert images.calls == []
 
     consent_id = await ai_consent(client, headers, org_id)
     images.script = [FULL_CROWNS]
-    made = await _generate(client, headers, org_id, avatar_id, consent_id)
-    assert made.status_code == 200, made.text
-    body = made.json()
+    job = await _generate(client, headers, org_id, avatar_id, consent_id)
+    assert job["state"] == "done", job
+    body = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
     assert body["mouth"]["teeth"] == {"source": "ai", "note": None}
     assert body["mouth"]["has_oral_photo"] is True
     assert body["unpublished"] is True
@@ -343,34 +354,35 @@ async def test_existing_avatars_get_ai_teeth_as_a_draft_edit(
     assert json.loads(row.published_config)["disclosure"]["ai_edited"]["mode"] == "teeth"
 
 
-async def test_generating_teeth_reports_why_it_could_not(client, faces, images, mouth_detector):
+async def test_making_teeth_reports_why_it_could_not(client, faces, images, mouth_detector):
     headers, org_id = await _org(client, "unlucky")
     avatar_id, _, _ = await _finished_person(client, headers, org_id)
     consent_id = await ai_consent(client, headers, org_id)
 
     images.script = ["refuse"]
     refused = await _generate(client, headers, org_id, avatar_id, consent_id)
-    assert refused.status_code == 422 and refused.json()["code"] == "safety_refused"
+    assert refused["state"] == "failed" and refused["error"]["code"] == "safety_refused"
 
     images.calls.clear()
     images.script = [TIPS_ONLY]
     unclear = await _generate(client, headers, org_id, avatar_id, consent_id)
-    assert unclear.status_code == 422 and unclear.json()["code"] == "mouth_teeth_unclear"
+    assert unclear["state"] == "failed" and unclear["error"]["code"] == "mouth_teeth_unclear"
     row = await _avatar(avatar_id)
     assert "oral_image_key" not in json.loads(row.mouth_config), "the draft is untouched"
 
 
-async def test_generating_teeth_needs_the_server_and_a_person(client, faces, images, monkeypatch):
+async def test_making_teeth_needs_the_server_and_a_person(client, faces, images, monkeypatch):
     headers, org_id = await _org(client, "nokey")
     avatar_id, _, _ = await _finished_person(client, headers, org_id)
     consent_id = await ai_consent(client, headers, org_id)
+    url = f"/orgs/{org_id}/avatars/{avatar_id}/mouth-kit"
     monkeypatch.setattr(imagegen, "configured", lambda: False)
-    response = await _generate(client, headers, org_id, avatar_id, consent_id)
+    response = await client.post(url, json={"consent_id": consent_id}, headers=headers)
     assert response.status_code == 409 and response.json()["code"] == "imagegen_unavailable"
 
     await client.patch(f"/orgs/{org_id}/avatars/{avatar_id}", json={"face_type": "animal"},
                        headers=headers)
-    response = await _generate(client, headers, org_id, avatar_id, consent_id)
+    response = await client.post(url, json={"consent_id": consent_id}, headers=headers)
     assert response.status_code == 422 and response.json()["code"] == "mouth_not_for_face_type"
     assert images.calls == []
 
@@ -451,7 +463,7 @@ async def test_a_consent_that_sent_nothing_is_not_recorded(client, faces, images
     assert consent_id not in ((await _creation(base)).consent_ids or [])
 
 
-async def test_a_failed_generate_still_records_the_consent_that_sent_the_photo(
+async def test_teeth_that_failed_still_record_the_consent_that_sent_the_photo(
     client, faces, images, mouth_detector
 ):
     headers, org_id = await _org(client, "audited2")
@@ -460,7 +472,7 @@ async def test_a_failed_generate_still_records_the_consent_that_sent_the_photo(
     consent_id = await ai_consent(client, headers, org_id)
     images.script = [TIPS_ONLY]
     unclear = await _generate(client, headers, org_id, avatar_id, consent_id)
-    assert unclear.status_code == 422
+    assert unclear["state"] == "failed"
     row = await _avatar(avatar_id)
     assert consent_id in row.consent_ids
     assert "oral_image_key" not in json.loads(row.mouth_config)
@@ -595,7 +607,8 @@ async def test_discarding_generated_teeth_takes_their_label_with_them(
     consent_id = await ai_consent(client, headers, org_id)
     images.script = [FULL_CROWNS]
     made = await _generate(client, headers, org_id, avatar_id, consent_id)
-    assert made.json()["ai_edited"]["mode"] == "teeth"
+    assert made["state"] == "done"
+    assert (await _avatar(avatar_id)).ai_edited["mode"] == "teeth"
 
     discarded = await _discard(client, headers, url)
     assert discarded["ai_edited"] is None

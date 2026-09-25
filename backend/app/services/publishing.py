@@ -135,9 +135,11 @@ async def publish(avatar, storage) -> dict:
             if copied:
                 layer_keys[name] = copied
 
-    # The mouth: settings by value, the optional teeth photo by copy — same
-    # reason as everything else here, a later edit must not reach visitors.
+    # The mouth: settings by value, the optional teeth photo and the
+    # avatar's own motion by copy — same reason as everything else here, a
+    # later edit must not reach visitors.
     from app.services.mouth import load as load_mouth, renderer_allowed
+    from app.services.mouth_kit import without_ai_shapes
     from app.services.mouth_photo import without_ai_teeth
 
     face_type = getattr(avatar, "face_type", "human")
@@ -152,21 +154,31 @@ async def publish(avatar, storage) -> dict:
         oral_rig = await copy(mouth.get("oral_rig_key"), "mouth-rig", "json")
         if oral_image and oral_rig:
             mouth_published.update(oral_image_key=oral_image, oral_rig_key=oral_rig)
+        motion = await copy(mouth.get("motion_key"), "mouth-motion", "json")
+        if motion:
+            mouth_published["motion_key"] = motion
         if mouth.get("teeth") is not None:
             # Where the teeth photo came from (services.mouth_photo), kept so
             # Discard can put it back with the photo: without it, restored AI
             # teeth would read as the owner's upload. Owner-facing only:
             # _mouth_view never hands it to a visitor.
             mouth_published["teeth"] = mouth["teeth"]
+        if mouth.get("kit") is not None:
+            # What the motion is made of (services.mouth_kit), for Discard
+            # likewise, and as owner-facing.
+            mouth_published["kit"] = mouth["kit"]
 
     # AI-made teeth are disclosed only while a visitor can see them: on the
     # photographic mouth, with the photo. The classic mouth (chosen in the
     # Mouth panel, or forced by a line switch) draws teeth of its own; the
     # draft keeps the photo and its `ai_edited` entry only so that switching
-    # back brings both back.
+    # back brings both back. AI-made mouth shapes likewise: only on the
+    # photographic mouth playing the avatar's own motion.
     ai_edited = getattr(avatar, "ai_edited", None) or None
     if not _shows_oral_photo(mouth_published):
         ai_edited = without_ai_teeth(ai_edited)
+    if not _plays_own_motion(mouth_published):
+        ai_edited = without_ai_shapes(ai_edited)
 
     config = {
         "revision": revision,
@@ -205,6 +217,17 @@ def _shows_oral_photo(mouth: dict | None) -> bool:
     )
 
 
+def _plays_own_motion(mouth: dict | None) -> bool:
+    return bool(mouth and mouth.get("renderer") == "continuous" and mouth.get("motion_key"))
+
+
+# The files a published revision may hold (`publish`'s copies), by name.
+PUBLISHED_NAMES = (
+    "image", "rig", "thumb", "mouth", "mouth-rig", "mouth-motion",
+    *[f"layer-{n}" for n in LAYER_NAMES],
+)
+
+
 async def _prune(avatar, storage, keep_from: list[dict | None]) -> None:
     """Delete published revisions older than the ones still in use."""
     keep = {c["revision"] for c in keep_from if c and "revision" in c}
@@ -213,7 +236,7 @@ async def _prune(avatar, storage, keep_from: list[dict | None]) -> None:
     oldest = min(keep)
     for revision in range(max(0, oldest - KEEP_REVISIONS), oldest):
         prefix = published_prefix(avatar.org_id, avatar.id, revision)
-        for name in ("image", "rig", "thumb", "mouth", "mouth-rig", *[f"layer-{n}" for n in LAYER_NAMES]):
+        for name in PUBLISHED_NAMES:
             for ext in ("png", "jpg", "webp", "json", "glb"):
                 key = f"{prefix}/{name}.{ext}"
                 try:
@@ -270,10 +293,12 @@ async def discard_draft(avatar, storage) -> bool:
             await storage.delete(target)
         elif await storage.exists(source):
             await storage.put_bytes(target, await storage.get_bytes(source), _content_type(source))
-    # The mouth goes back too. Its photo is restored into fresh draft keys
-    # so the draft never aliases the immutable published copy.
+    # The mouth goes back too. Its photo and its motion are restored into
+    # fresh draft keys so the draft never aliases the immutable published
+    # copies.
     published_mouth = config.get("mouth")
     teeth = None
+    kit = None
     if published_mouth:
         restored = {"renderer": published_mouth["renderer"], "profile": published_mouth.get("profile") or {}}
         oral_image = await restore(published_mouth.get("oral_image_key"), "mouth")
@@ -283,12 +308,19 @@ async def discard_draft(avatar, storage) -> bool:
         teeth = _restored_teeth(published_mouth.get("teeth"), config, "oral_image_key" in restored)
         if teeth is not None:
             restored["teeth"] = teeth
+        motion = await restore(published_mouth.get("motion_key"), "mouth-motion")
+        if motion:
+            restored["motion_key"] = motion
+        kit = _restored_kit(published_mouth.get("kit"), motion is not None)
+        if kit is not None:
+            restored["kit"] = kit
         avatar.mouth_config = json.dumps(restored)
     else:
         avatar.mouth_config = None
-    # Generating, uploading and removing a teeth photo all change the
-    # disclosure, so it goes back with the photo.
-    avatar.ai_edited = _restored_ai_edited(avatar, config, teeth)
+    # Generating, uploading and removing a teeth photo, and making or
+    # dropping the mouth shapes, all change the disclosure, so it goes back
+    # with them.
+    avatar.ai_edited = _restored_ai_edited(avatar, config, teeth, kit)
     avatar.has_layers = bool(layer_keys)
     avatar.framing = config.get("framing", avatar.framing)
     if config.get("face_type"):
@@ -315,15 +347,34 @@ def _restored_teeth(published: dict | None, config: dict, has_photo: bool) -> di
     return ai_teeth_record(ai_teeth.get("model")) if ai_teeth else upload_teeth_record()
 
 
-def _restored_ai_edited(avatar, config: dict, teeth: dict | None) -> dict | None:
+def _restored_kit(published: dict | None, has_motion: bool) -> dict | None:
+    """The draft's kit record after a Discard: the one published with the
+    motion. A record of a kit whose motion did not come back says so
+    (dropped), as for a kit the picture left behind; a dropped one stays
+    as it was."""
+    if published is None:
+        return None
+    if has_motion or published.get("state") == "dropped":
+        return published
+    return {**published, "state": "dropped",
+            "dropped": {"code": "motion_missing", "detail": "The mouth shapes' file is gone"}}
+
+
+def _restored_ai_edited(
+    avatar, config: dict, teeth: dict | None, kit: dict | None = None
+) -> dict | None:
     """The draft's `ai_edited` after a Discard: what the snapshot disclosed,
-    with the teeth entry exactly when the restored photo is AI-made.
+    with the teeth entry exactly when the restored photo is AI-made, and
+    the mouth-shapes entry exactly when the restored motion has shapes an
+    AI made.
 
     Left as the discarded draft had it, AI teeth brought back by the Discard
     would go out unlabelled at the next Publish, or a label would stay for
-    teeth that are gone. The entry is re-derived rather than copied because
-    the published disclosure leaves it out while the classic mouth hides
-    the photo, and the draft keeps it with the photo."""
+    teeth that are gone (the shapes likewise). The entries are re-derived
+    rather than copied because the published disclosure leaves them out
+    while the classic mouth hides them, and the draft keeps them with the
+    files."""
+    from app.services.mouth_kit import with_ai_shapes, without_ai_shapes
     from app.services.mouth_photo import with_ai_teeth, without_ai_teeth
 
     disclosure = config.get("disclosure")
@@ -334,8 +385,12 @@ def _restored_ai_edited(avatar, config: dict, teeth: dict | None) -> dict | None
         # finish changed `ai_edited`: the draft's own, less any teeth.
         ai_edited = getattr(avatar, "ai_edited", None) or None
     if teeth and teeth.get("source") == "ai":
-        return with_ai_teeth(ai_edited, teeth.get("model"))
-    return without_ai_teeth(ai_edited)
+        ai_edited = with_ai_teeth(ai_edited, teeth.get("model"))
+    else:
+        ai_edited = without_ai_teeth(ai_edited)
+    if kit and kit.get("state") != "dropped" and kit.get("generated"):
+        return with_ai_shapes(ai_edited, kit.get("model"), int(kit["generated"]))
+    return without_ai_shapes(ai_edited)
 
 
 def _content_type(key: str) -> str:
@@ -378,13 +433,18 @@ async def published_view(avatar, storage) -> dict | None:
 
 
 async def _mouth_view(mouth: dict | None, storage) -> dict | None:
-    """What a visitor's engine needs: renderer, fit, and presigned teeth."""
+    """What a visitor's engine needs: renderer, fit, presigned teeth, and
+    the presigned motion (`motion_url`: the avatar's own performance
+    manifest; null, the bundled Reference motion). The engine fetch()es the
+    motion cross-origin from the customer's page, which the storage route
+    allows (/storage/ is on main.PublicCorsMiddleware's public surface)."""
     if not mouth or mouth.get("renderer") != "continuous":
         return None
-    from app.services.mouth import photo_urls
+    from app.services.mouth import motion_url, photo_urls
 
     return {
         "renderer": "continuous",
         "profile": mouth.get("profile") or {},
         "oral": await photo_urls(mouth, storage),
+        "motion_url": await motion_url(mouth, storage),
     }

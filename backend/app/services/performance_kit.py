@@ -18,11 +18,11 @@ confirmed the points:
    registered on the eye corners and nose bridge (the Reference's ANCHORS,
    the same function scripts/build_reference_performance.py uses) onto the
    detector's own view of the base photo, and refused when the
-   registration is poor or the face drifted: eyes or nose moved, head
-   scaled, rotated or turned, skin relit, or the mouth is not in the shape
-   that was asked for. What an answer moved is then added to the owner's
-   confirmed points (`register_answer`), so a corrected mark is never
-   mistaken for motion;
+   registration is poor or the face drifted: a picture of another shape
+   than the (square) one sent, eyes or nose moved, head scaled, rotated or
+   turned, skin relit, or the mouth is not in the shape that was asked
+   for. What an answer moved is then added to the owner's confirmed points
+   (`register_answer`), so a corrected mark is never mistaken for motion;
 3. the mouth profile fitted from the EE and AA shapes (`fit_profile`), and
    the EE answer handed back as the teeth photo (`TeethSource`) only when
    the embed would draw it (services.dental_photo);
@@ -33,8 +33,11 @@ confirmed the points:
    character "avatar-v1:<kit id>", see `build_manifest`).
 
 `build_kit` runs all of it with an INJECTED edit function, so the creation
-finish job passes imagegen.edit_image and tests pass fakes. Nothing here
-stores, meters or publishes: the caller does, from what `KitResult` reports.
+finish job and the Mouth panel's job (services.mouth_kit) pass
+imagegen.edit_image, guarded, and tests pass fakes. Nothing here stores,
+meters or publishes: the caller does, from what `KitResult` reports.
+`rebase_manifest` moves a stored kit onto points the owner re-confirmed on
+the same picture, with no AI call.
 
 Coordinates. Registration works in base-photo pixels. The manifest is in
 "manifest units": the base photo levelled about its mouth (the corner line
@@ -49,16 +52,19 @@ thing for every face, whatever its framing.
 from __future__ import annotations
 
 import asyncio
+import copy
 import inspect
 import io
 import json
 import logging
 import math
+import re
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import httpx
 import numpy as np
 from PIL import Image
 
@@ -69,7 +75,10 @@ logger = logging.getLogger("liveface.performance_kit")
 # The kit's own recipe: bump when prompts, checks or the fit change what a
 # kit contains, so a stored kit says which recipe made it.
 KIT_VERSION = 1
-PROMPTS_VERSION = "pose-prompts@1"
+# @2 (2026-09-26): AA, TH and F/V reworded after the first run on real
+# Gemini (fictional faces): AA came back yawn-wide, TH with the tongue far
+# out, F/V ambiguous.
+PROMPTS_VERSION = "pose-prompts@2"
 # The manifest format ContinuousMouth accepts for a per-avatar kit. Version 1
 # is the Reference's own (character "lab-reference-v1"), bundled with the
 # embed as mouth-motion.json; version 2 adds provenance, the frame and the
@@ -77,6 +86,10 @@ PROMPTS_VERSION = "pose-prompts@1"
 MANIFEST_VERSION = 2
 CHARACTER_PREFIX = "avatar-v1:"
 REFERENCE_CHARACTER = "lab-reference-v1"
+# The kit id in "avatar-v1:<kit id>", exactly as the embed accepts it
+# (AVATAR_CHARACTER): ASCII only. str.isalnum would also let through
+# letters and digits of every other script, which the embed refuses.
+KIT_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 SHAPES = ("aa", "ee", "oo", "oh", "fv", "th")
 # The manifest's pose order: embed PERFORMANCE_POSES.
@@ -91,6 +104,7 @@ MOUTH_LEFT, MOUTH_RIGHT = 61, 291
 UPPER_INNER, LOWER_INNER = 13, 14
 UPPER_OUTER, LOWER_OUTER = 0, 17
 FACE_LEFT, FACE_RIGHT = 234, 454
+NOSE_TIP = 1
 
 
 # --- 1. Pose prompts ---------------------------------------------------------------
@@ -112,11 +126,20 @@ _KEEP = (
 # One sentence per shape: the anatomy of that sound, as the Reference's
 # poses show it. EE also serves as the person's teeth photo (the continuous
 # mouth's oral texture), so it asks for the upper teeth in full.
+#
+# Tuned on real Gemini (gemini-3.1-flash-image, two fictional faces, twelve
+# poses, all registered within the Reference's gate): asked only for a
+# dropped jaw, AA opened to a yawn (0.39 and 0.63 mouth widths against the
+# Reference's 0.29); asked for the tongue "between the teeth", TH pushed it
+# far out; and F/V was ambiguous until the teeth were said to press on the
+# lower lip. Hence the "not a yawn or a shout", "the very tip" and
+# "pressing gently" below.
 POSE_PROMPTS: dict[str, str] = {
     "aa": (
-        'saying the open vowel "ah" as in "father": the jaw dropped and the lips '
-        "relaxed and open, the opening about a third as tall as the mouth is wide, the "
-        "tips of the upper front teeth just visible, the tongue resting low and flat"
+        'saying the open vowel "ah" as in "father": the mouth moderately open, as in '
+        "normal conversation, not a yawn or a shout, the opening about a third as tall "
+        "as the mouth is wide, the lips relaxed, the tips of the upper front teeth just "
+        "visible, the tongue resting low and flat"
     ),
     "ee": (
         'saying "ee" as in "see": the lips drawn wide in a broad, smile-like spread, '
@@ -134,13 +157,12 @@ POSE_PROMPTS: dict[str, str] = {
         'wide, the jaw lowered, less pushed forward than for "oo"'
     ),
     "fv": (
-        'saying "f" as in "five": the upper front teeth resting lightly on the lower '
-        "lip, the lower lip tucked slightly under them, the mouth otherwise nearly "
-        "closed"
+        'saying "f" as in "five": the upper front teeth pressing gently on the lower '
+        "lip; the lips otherwise relaxed"
     ),
     "th": (
-        'saying "th" as in "think": the tip of the tongue visible between the upper '
-        "and lower front teeth, the mouth slightly open"
+        'saying "th" as in "think": only the very tip of the tongue, barely visible '
+        "between the front teeth, the mouth slightly open"
     ),
 }
 
@@ -338,12 +360,21 @@ class PoseRequest:
     prompt: str
     payload: bytes
     mime: str
-    # The rectangle of the base photo the payload shows, in base pixels.
+    # The rectangle of the base photo the payload shows, in base pixels:
+    # a square for either kind (it may reach past the photo's edge).
     box: tuple[float, float, float, float]
+
+    @property
+    def aspect(self) -> float:
+        """Width over height of what was sent (1 for both crops)."""
+        x0, y0, x1, y1 = self.box
+        return (x1 - x0) / (y1 - y0)
 
     def to_base(self, answer_size: tuple[int, int]) -> np.ndarray:
         """2x3 matrix from answer pixels to base pixels, assuming the answer
-        shows the same rectangle (the registration corrects what it does not)."""
+        shows the same rectangle (the registration corrects what it does not).
+        An answer of another shape never gets here (register_answer refuses
+        it, aspect_changed), so both axes get the same scale."""
         x0, y0, x1, y1 = self.box
         width, height = answer_size
         return np.array([[(x1 - x0) / width, 0.0, x0], [0.0, (y1 - y0) / height, y0]])
@@ -364,10 +395,35 @@ def _base_image(base_png: bytes) -> Image.Image:
     return photo_adjust._rgb(base_png)
 
 
+def head_square(
+    image_size: tuple[int, int], points: np.ndarray
+) -> tuple[float, float, float] | None:
+    """(x0, y0, side): AI adjust's head-and-shoulders crop
+    (photo_adjust.head_crop_box, clipped to the photo) padded to a square
+    about its centre, reaching past the photo's edge where it must (filled
+    with the photo's own edge, as the face crop is). None when that crop is
+    the whole photo: the same picture again would be the same request.
+
+    Square, like the face crop, because the head box itself is 6:7 (5:6 or
+    so once clipped), a shape the model does not answer in: a model that
+    keeps the head's proportions and reframes to its own aspect, rather
+    than stretching, would map back with a different scale per axis
+    (PoseRequest.to_base) and put the mouth 0.1-0.2 mouth widths off while
+    passing every guard. A square is answered as a square, and an answer
+    that is not is refused (register_answer, aspect_changed)."""
+    from app.services import photo_adjust
+
+    x0, y0, x1, y1 = (float(int(round(v))) for v in photo_adjust.head_crop_box(image_size, points))
+    if (x0, y0, x1, y1) == (0.0, 0.0, float(image_size[0]), float(image_size[1])):
+        return None
+    width, height = x1 - x0, y1 - y0
+    side = max(width, height)
+    return x0 - (side - width) / 2, y0 - (side - height) / 2, side
+
+
 def _crop(image: Image.Image, points: np.ndarray, kind: str) -> _Crop | None:
-    """The picture sent for `kind`, reusing AI adjust's crops. None when the
-    head crop would be the whole photo: the same picture again would be the
-    same request."""
+    """The picture sent for `kind`, reusing AI adjust's crops, both square.
+    None when the head crop would be the whole photo (head_square)."""
     from app.services import imagegen, photo_adjust
 
     if kind == FACE_CROP:
@@ -375,14 +431,16 @@ def _crop(image: Image.Image, points: np.ndarray, kind: str) -> _Crop | None:
         payload = photo_adjust._jpeg(photo_adjust.crop_face(image, (x0, y0, side)),
                                      photo_adjust.CROP_QUALITY)
         return _Crop(kind, payload, (x0, y0, x0 + side, y0 + side))
-    box = tuple(float(int(round(v))) for v in photo_adjust.head_crop_box(image.size, points))
-    crop = image.crop(tuple(int(v) for v in box))
-    if crop.size == image.size:
+    square = head_square(image.size, points)
+    if square is None:
         return None
-    if max(crop.size) > photo_adjust.SOURCE_MAX_EDGE:
-        edge = photo_adjust.SOURCE_MAX_EDGE
-        crop.thumbnail((edge, edge), Image.Resampling.LANCZOS)
-    return _Crop(kind, photo_adjust._jpeg(crop, imagegen.SOURCE_QUALITY), box)
+    x0, y0, side = square
+    # At the photo's own resolution, as before it was squared: never
+    # enlarged, at most the edge a source is sent at.
+    edge = min(int(round(side)), photo_adjust.SOURCE_MAX_EDGE)
+    crop = photo_adjust.crop_face(image, square, size=edge)
+    return _Crop(kind, photo_adjust._jpeg(crop, imagegen.SOURCE_QUALITY),
+                 (x0, y0, x0 + side, y0 + side))
 
 
 def prepare_pose_request(
@@ -390,8 +448,8 @@ def prepare_pose_request(
 ) -> PoseRequest | None:
     """The edit for one shape: the face crop (the same kind AI adjust's
     touch-up sends, 1.6 face boxes at 1024 px), or after a refusal the
-    head-and-shoulders crop. None only for a head crop that would be the
-    whole photo. CPU work."""
+    head-and-shoulders crop, squared (head_square). None only for a head
+    crop that would be the whole photo. CPU work."""
     if shape not in POSE_PROMPTS:
         raise ValueError(f"unknown shape {shape!r}")
     crop = _crop(_base_image(base_png), _checked_points(base_points), kind)
@@ -427,6 +485,10 @@ MAX_EYE_SHIFT = 0.015
 MAX_YAW_CHANGE = 0.08
 # Tighter than a regenerate's 12: a pose asks for no relighting at all.
 MAX_POSE_SKIN_DELTA_E = 8.0
+# An answer whose width over height differs from what was sent by more
+# than this was reframed, not edited (see head_square). JPEG and the
+# model's own sizes round a square to within a pixel or two of 1024.
+MAX_ASPECT_CHANGE = 0.01
 
 # Did the answer make the shape it was asked for? Lip gap (13 to 14) and
 # corner-to-corner width, in rest mouth widths, after registration. The
@@ -473,6 +535,19 @@ def _gap_and_width(points: np.ndarray, rest_width: float) -> tuple[float, float]
     gap = float(np.linalg.norm(points[UPPER_INNER] - points[LOWER_INNER])) / rest_width
     width = float(np.linalg.norm(points[MOUTH_RIGHT] - points[MOUTH_LEFT])) / rest_width
     return gap, width
+
+
+def signed_yaw(points: np.ndarray) -> float:
+    """Where the nose tip is between the cheeks (234, 454), signed: 0
+    frontal, +1 at the image-right cheek, -1 at the left. photo_adjust's
+    yaw_offset is its absolute value, which cannot tell a head turned a
+    little one way from the same turn the other way: compared unsigned, a
+    base at +0.05 and an answer at -0.05 are "unchanged"."""
+    left, right = points[FACE_LEFT][0], points[FACE_RIGHT][0]
+    half = abs(right - left) / 2
+    if half <= 0:
+        return 1.0
+    return float((points[NOSE_TIP][0] - (left + right) / 2) / half)
 
 
 def _shape_reached(shape: str, gap: float, width: float) -> str | None:
@@ -527,6 +602,15 @@ def register_answer(
     except Exception:
         result.reason = _reason("unreadable_result", "The AI returned no usable image")
         return result
+    aspect = image.width / image.height
+    result.checks["aspect"] = round(aspect / request.aspect, 4)
+    if abs(aspect / request.aspect - 1) > MAX_ASPECT_CHANGE:
+        # Mapped back per axis, a reframed answer would pass the guards with
+        # its mouth in the wrong place (head_square).
+        result.reason = _reason(
+            "aspect_changed", "The AI answered with a picture of another shape than it was sent"
+        )
+        return result
     points = detect(image)
     if points is None:
         result.reason = _reason("no_face_in_result", "No face was found in the answer")
@@ -563,7 +647,7 @@ def register_answer(
     face = float(np.linalg.norm(base_view[FACE_RIGHT] - base_view[FACE_LEFT]))
     nose = float(np.linalg.norm(registered[NOSE_GUARD] - base_view[NOSE_GUARD], axis=1).max()) / face
     eyes = float(np.linalg.norm(registered[EYE_GUARD] - base_view[EYE_GUARD], axis=1).mean()) / face
-    yaw = abs(photo_adjust.yaw_offset(points) - photo_adjust.yaw_offset(base_view))
+    yaw = abs(signed_yaw(points) - signed_yaw(base_view))
     checks.update(nose=round(nose, 4), eyes=round(eyes, 4), yaw=round(yaw, 4))
     if nose > MAX_NOSE_SHIFT:
         result.reason = _reason("nose_moved", "The AI moved or reshaped the nose")
@@ -750,6 +834,31 @@ class TeethPhoto:
     points: np.ndarray
 
 
+def geometric_teeth_scale(base_points: np.ndarray, reference: ReferenceMotion) -> float:
+    """teethScale for the drawn (geometric) teeth: they are sized in mouth
+    widths for the Reference's mouth-to-face proportion, so the Reference's
+    ratio over this face's (exactly 1 on the Reference). Unclamped."""
+    width, _, _ = _lip_heights(base_points)
+    face = float(np.linalg.norm(base_points[FACE_RIGHT] - base_points[FACE_LEFT]))
+    ref_width, _, _ = _lip_heights(reference.rest)
+    return (ref_width / reference.face_width) / (width / face)
+
+
+def for_drawn_teeth(profile: dict, base_points, reference: ReferenceMotion) -> dict:
+    """A fitted `profile` as fit_profile makes it without a teeth photo:
+    teethY at its default and teethScale for the drawn teeth (clamped);
+    jawRange and the rest unchanged. For a kit whose teeth photo the caller
+    could not keep after all (services.mouth_kit: the WebP visitors get is
+    tested again, and a photo on the very edge of the embed's limits can
+    fail there): a profile fitted for teeth that are not drawn would seat
+    and size the drawn ones wrongly."""
+    defaults, limits = _profile_defaults()
+    low, high = limits["teethScale"]
+    scale = geometric_teeth_scale(_checked_points(base_points), reference)
+    return {**profile, "teethY": defaults["teethY"],
+            "teethScale": round(min(high, max(low, scale)), 4)}
+
+
 def fit_profile(
     base_points: np.ndarray,
     generated: dict[str, np.ndarray],
@@ -790,7 +899,6 @@ def fit_profile(
     defaults, limits = _profile_defaults()
     fit = ProfileFit(profile=dict(defaults))
     width, _, _ = _lip_heights(base_points)
-    face = float(np.linalg.norm(base_points[FACE_RIGHT] - base_points[FACE_LEFT]))
     ref_width, _, _ = _lip_heights(reference.rest)
 
     def settle(name: str, value: float | None, why: dict | None = None) -> None:
@@ -840,9 +948,7 @@ def fit_profile(
                 f"{dental_photo.MIN_ARCH_PIXELS})",
             )
         settle("teethY", None, why)
-        # The geometric teeth are sized in mouth widths, for the Reference's
-        # mouth-to-face proportion.
-        ratio = (ref_width / reference.face_width) / (width / face)
+        ratio = geometric_teeth_scale(base_points, reference)
         fit.measurements["mouth_to_face_vs_reference"] = round(1 / ratio, 4)
         settle("teethScale", ratio)
 
@@ -905,8 +1011,8 @@ def build_manifest(
     """
     if set(poses) != set(SHAPES):
         raise ValueError("every shape needs a pose")
-    if not kit_id or len(kit_id) > 64 or not all(c.isalnum() or c in "-_" for c in kit_id):
-        raise ValueError("kit_id must be 1-64 letters, digits, '-' or '_'")
+    if not isinstance(kit_id, str) or not KIT_ID.fullmatch(kit_id):
+        raise ValueError("kit_id must be 1-64 ASCII letters, digits, '-' or '_'")
     frame = ManifestFrame.from_base(base_points, image_size, reference)
     rest = frame.apply(base_points)
     width, cx, cy = mouth_frame(rest, OUTER_LIP_RING)
@@ -944,6 +1050,85 @@ def build_manifest(
     }
 
 
+def manifest_to_base(manifest: dict) -> Callable[[object], np.ndarray]:
+    """The inverse of a version 2 manifest's frame: manifest units back to
+    the base photo's pixels."""
+    frame = np.asarray(manifest["frame"]["to_manifest"], dtype=np.float64)
+    inverse = np.linalg.inv(frame[:, :2])
+    offset = frame[:, 2]
+
+    def to_base(points) -> np.ndarray:
+        return (np.asarray(points, dtype=np.float64) - offset) @ inverse.T
+
+    return to_base
+
+
+def is_kit_manifest(manifest: object) -> bool:
+    """A per-avatar manifest this module wrote (version 2, avatar-v1:...)."""
+    return (
+        isinstance(manifest, dict)
+        and manifest.get("version") == MANIFEST_VERSION
+        and str(manifest.get("character", "")).startswith(CHARACTER_PREFIX)
+        and isinstance(manifest.get("frame"), dict)
+    )
+
+
+# Re-confirmed points this close to the manifest's own rest (base pixels)
+# are the same points: the rest pose round-trips through manifest units at
+# seven decimals, about 1e-4 px.
+SAME_POINTS_PX = 1e-3
+
+
+def rebase_manifest(
+    manifest: dict, base_points, reference: ReferenceMotion | None = None
+) -> dict:
+    """The kit `manifest` moved onto re-confirmed points, with no AI call.
+
+    The owner re-marked the face (Mark the face, a re-detection) on the SAME
+    picture: its rest pose is now `base_points`, the rig's 478 points in the
+    picture's pixels. Every shape keeps the displacement from rest it had,
+    in base pixels (recovered through the old frame's `to_manifest`): the
+    answer moved the mouth that far, wherever the marks now say it rests,
+    exactly as register_answer adds an answer's movement to the confirmed
+    points. The frame is recomputed from the new points (build_manifest),
+    so the manifest stays in the Reference's units and validates as any
+    kit does; provenance, sources, registration, the kit id, the recipe
+    that made the poses (`kit`) and the jaw range are kept.
+
+    Onto the manifest's own rest points it returns the manifest unchanged.
+    Raises ValueError for a manifest this module did not write, or points
+    that are not 478 finite pixels. CPU work (the triangulation).
+    """
+    points = _checked_points(base_points)
+    if not is_kit_manifest(manifest):
+        raise ValueError("not a performance kit manifest")
+    to_base = manifest_to_base(manifest)
+    poses = {pose["id"]: pose for pose in manifest["poses"]}
+    rest = to_base(poses["rest"]["points"])
+    if np.abs(rest - points).max() <= SAME_POINTS_PX:
+        return copy.deepcopy(manifest)
+    reference = reference or load_reference()
+    entries = {}
+    for shape in SHAPES:
+        pose = poses[shape]
+        source = pose.get("source")
+        entries[shape] = PoseEntry(
+            points + (to_base(pose["points"]) - rest),
+            pose["provenance"],
+            pose.get("registration_rms"),
+            None if source is None else np.asarray(source, dtype=np.float64),
+        )
+    image_size = tuple(int(v) for v in manifest["frame"]["image_size"])
+    rebased = build_manifest(
+        points, image_size, entries, reference,
+        kit_id=manifest["character"][len(CHARACTER_PREFIX):],
+        jaw_range=float(manifest["jaw_range"]),
+    )
+    # The recipe that made these poses, not today's.
+    rebased["kit"] = copy.deepcopy(manifest.get("kit", rebased["kit"]))
+    return rebased
+
+
 # --- 6. The orchestrator ------------------------------------------------------------------------------
 
 
@@ -954,6 +1139,21 @@ class KitUnavailable(RuntimeError):
         self.code = code
         self.detail = detail
         super().__init__(detail)
+
+
+class KitFailed(RuntimeError):
+    """Something other than a provider call failed while the kit was being
+    made (a crop, a progress callback, ...). Every call still in flight was
+    cancelled and awaited before this is raised, so nothing more is sent;
+    the calls that were sent are accounted for here, as in KitResult (a
+    cancelled call is in `call_log` as outcome "cancelled", billed null:
+    sent, and possibly billed). The original error is the __cause__."""
+
+    def __init__(self, calls: int, billed_calls: int, call_log: list[dict]):
+        self.calls = calls
+        self.billed_calls = billed_calls
+        self.call_log = call_log
+        super().__init__(f"the performance kit failed after {calls} call(s)")
 
 
 @dataclass(frozen=True)
@@ -986,7 +1186,43 @@ class KitResult:
 
 
 EditImage = Callable[[str, bytes, str], Awaitable[object]]
-Progress = Callable[[float, str], object]
+# on_progress(fraction, message, shapes_done): shapes_done is how many of
+# the six shapes are settled (made, or given up on and to be retargeted).
+Progress = Callable[[float, str, int], object]
+
+
+def call_billing(error: BaseException | None) -> bool | None:
+    """Was a provider call that ended with `error` (None: it returned an
+    image) billed? True for any answer: an image, a refusal, an answer
+    without an image. None when it was sent and may have been answered:
+    it timed out, while or after it was written (the kit's own bound, or
+    httpx's read or write timeout, which is how a real 90 s imagegen
+    timeout arrives), or it was cancelled in flight. False when nothing
+    was sent (ImageGenUnavailable, httpx never connected) or the provider
+    failed without answering (an HTTP error, a broken connection).
+
+    The one classification the kit's call_log and a caller metering its
+    calls as they end (services.mouth_kit) both use, so they agree."""
+    from app.services import imagegen
+
+    if error is None or isinstance(error, (imagegen.ImageGenRefused, imagegen.ImageGenNoImage)):
+        return True
+    if isinstance(error, (httpx.ConnectTimeout, httpx.PoolTimeout)):
+        return False
+    if isinstance(error, (TimeoutError, httpx.TimeoutException, asyncio.CancelledError)):
+        return None
+    return False
+
+
+def stop_reason(error: BaseException) -> dict:
+    """Why no more calls are sent, from the ImageGenUnavailable that said
+    so: the `code` and `detail` a caller's edit function gave it (its AI
+    switch turned off, the monthly image limit reached), else imagegen's
+    own meaning, no provider configured."""
+    return _reason(
+        getattr(error, "code", None) or "imagegen_unavailable",
+        getattr(error, "detail", None) or "AI editing is not configured on this server",
+    )
 
 # Minimum lip gap for the EE answer to be considered as the teeth photo: the
 # mouth-photo upload's own threshold (portrait_photo.prepare_photo). It must
@@ -1107,7 +1343,7 @@ async def build_kit(
     edit_image: EditImage,
     *,
     concurrency: int = 3,
-    per_call_timeout: float = 120.0,
+    per_call_timeout: float | None = None,
     on_progress: Progress | None = None,
     kit_id: str | None = None,
     detect: Detector | None = None,
@@ -1117,26 +1353,35 @@ async def build_kit(
 
     `base_png` is the photo the avatar is rigged on and `base_points` its
     478 confirmed landmarks in its pixels. `edit_image(prompt, payload,
-    mime)` is imagegen.edit_image or a fake: it returns an object with
-    `.image` (bytes) and `.model`, and raises imagegen's ImageGenRefused,
-    ImageGenNoImage, ImageGenUnavailable or anything else for a failed call.
+    mime)` is imagegen.edit_image or a wrapper of it: it returns an object
+    with `.image` (bytes) and `.model`, and raises imagegen's
+    ImageGenRefused, ImageGenNoImage, ImageGenUnavailable or anything else
+    for a failed call. ImageGenUnavailable means nothing was sent and
+    nothing more may be: that shape and every one not yet asked are
+    retargeted, and their reason is the exception's `code` and `detail`
+    when it carries them (a caller that stops at its AI switch or its
+    image limit), else "imagegen_unavailable".
 
     Up to `concurrency` edits are in flight at once, each bounded by
-    `per_call_timeout` seconds. A refused edit is asked once more on the
-    head-and-shoulders crop (a different input: photo_adjust's fallback);
-    nothing else is ever asked twice. A shape that fails for any reason is
-    filled from the Reference, so the kit is always complete: with no
-    provider at all it is the Reference retargeted, per avatar.
+    `per_call_timeout` seconds (imagegen's own timeout by default, so the
+    two bounds agree: either way the call is a "timeout", sent and possibly
+    billed). A refused edit is asked once more on the head-and-shoulders
+    crop (a different input: photo_adjust's fallback); nothing else is ever
+    asked twice. A shape that fails for any reason, its answer's checks
+    included, is filled from the Reference, so the kit is always complete:
+    with no provider at all it is the Reference retargeted, per avatar.
 
     The base photo is detected once as well, with the same detector as the
     answers: they are registered on that view of it and their movement is
     added to the confirmed points (register_answer), so the owner's
     corrections to the marks are kept and never read as motion.
 
-    `on_progress(fraction, message)` is called as shapes finish (it may be
-    a coroutine function). `detect` replaces MediaPipe and `reference` the
-    bundled Reference motion (tests). Raises ValueError for malformed
-    points and KitUnavailable (before any call) when there is no detector.
+    `on_progress(fraction, message, shapes_done)` is called as shapes
+    settle (it may be a coroutine function). `detect` replaces MediaPipe
+    and `reference` the bundled Reference motion (tests). Raises ValueError
+    for malformed points and KitUnavailable (before any call) when there is
+    no detector. Any other failure cancels and awaits every call still in
+    flight and raises KitFailed, which accounts for every call sent.
     """
     from app.services import imagegen
     from app.services.jobs import run_cpu
@@ -1145,6 +1390,8 @@ async def build_kit(
     if detect is None:
         _require_landmarker()
         detect = _default_detect
+    if per_call_timeout is None:
+        per_call_timeout = imagegen.TIMEOUT_SECONDS
     if reference is None:
         reference = await run_cpu(load_reference)
     kit_id = kit_id or uuid.uuid4().hex
@@ -1156,20 +1403,28 @@ async def build_kit(
     semaphore = asyncio.Semaphore(max(1, int(concurrency)))
     crops: dict[str, asyncio.Future] = {}
     call_log: list[dict] = []
-    state = {"calls": 0, "billed": 0, "unavailable": False, "done": 0}
+    state: dict = {"calls": 0, "billed": 0, "stopped": None, "done": 0}
 
-    async def report_progress(message: str) -> None:
+    async def report_progress(message: str, fraction: float | None = None) -> None:
         if on_progress is None:
             return
-        outcome = on_progress(0.95 * state["done"] / len(SHAPES), message)
+        done = state["done"]
+        if fraction is None:
+            fraction = 0.95 * done / len(SHAPES)
+        outcome = on_progress(fraction, message, done)
         if inspect.isawaitable(outcome):
             await outcome
 
     async def crop_for(kind: str) -> _Crop | None:
-        # One crop per kind, shared by every shape that needs it.
+        # One crop per kind, shared by every shape that needs it; shielded,
+        # so a shape torn down while it waits does not cancel it for the
+        # others (and a crop nobody waits for any more is not left with an
+        # unretrieved error).
         if kind not in crops:
-            crops[kind] = asyncio.ensure_future(run_cpu(_crop, base_image, points, kind))
-        return await crops[kind]
+            future = asyncio.ensure_future(run_cpu(_crop, base_image, points, kind))
+            future.add_done_callback(lambda done: done.cancelled() or done.exception())
+            crops[kind] = future
+        return await asyncio.shield(crops[kind])
 
     async def one(shape: str) -> tuple[PoseRegistration | None, dict]:
         entry: dict = {"attempts": []}
@@ -1182,9 +1437,8 @@ async def build_kit(
                 return None, entry
             request = _request(shape, crop)
             async with semaphore:
-                if state["unavailable"]:
-                    entry.update(outcome="unavailable", reason=_reason(
-                        "imagegen_unavailable", "AI editing is not configured on this server"))
+                if state["stopped"] is not None:
+                    entry.update(outcome="unavailable", reason=state["stopped"])
                     return None, entry
                 state["calls"] += 1
                 record = {"shape": shape, "kind": kind, "model": None}
@@ -1212,23 +1466,31 @@ async def build_kit(
                     entry.update(outcome="no_image", reason=_reason(
                         "no_image", "The AI answered without an image, so it was not asked again"))
                     return None, entry
-                except imagegen.ImageGenUnavailable:
-                    # Nothing was sent: there is no provider to send to.
+                except imagegen.ImageGenUnavailable as exc:
+                    # Nothing was sent: no provider, or the caller sends no
+                    # more (its switch, its limit). Nothing more is asked.
                     state["calls"] -= 1
                     call_log.remove(record)
                     entry["attempts"].pop()
-                    state["unavailable"] = True
-                    entry.update(outcome="unavailable", reason=_reason(
-                        "imagegen_unavailable", "AI editing is not configured on this server"))
+                    reason = stop_reason(exc)
+                    state["stopped"] = state["stopped"] or reason
+                    entry.update(outcome="unavailable", reason=reason)
                     return None, entry
-                except asyncio.TimeoutError:
-                    # Sent, and possibly billed: the caller decides how to
-                    # meter it. Never asked again.
-                    record.update(outcome="timeout", billed=None)
-                    entry.update(outcome="timeout", reason=_reason(
-                        "timeout", "The AI did not answer in time"))
-                    return None, entry
-                except Exception:
+                except asyncio.CancelledError:
+                    # Torn down (another shape failed) or the caller was
+                    # cancelled: this call was sent, and may be billed.
+                    record.update(outcome="cancelled", billed=None)
+                    raise
+                except Exception as exc:
+                    if call_billing(exc) is None:
+                        # Sent, and possibly billed: the kit's own bound, or
+                        # the provider's read or write timeout (imagegen's
+                        # 90 s arrives as httpx's). Never asked again; the
+                        # caller decides how to meter it.
+                        record.update(outcome="timeout", billed=None)
+                        entry.update(outcome="timeout", reason=_reason(
+                            "timeout", "The AI did not answer in time"))
+                        return None, entry
                     logger.exception("performance kit: the %s edit failed", shape)
                     record.update(outcome="provider_error", billed=False)
                     entry.update(outcome="provider_error", reason=_reason(
@@ -1236,10 +1498,18 @@ async def build_kit(
                     return None, entry
             state["billed"] += 1
             record.update(outcome="image", billed=True, model=getattr(generated, "model", None))
-            registration = await run_cpu(
-                register_answer, generated.image, request, base_image, points, frame, detect,
-                base_detected,
-            )
+            try:
+                registration = await run_cpu(
+                    register_answer, generated.image, request, base_image, points, frame, detect,
+                    base_detected,
+                )
+            except Exception:
+                # A check that breaks on an answer is a check the answer did
+                # not pass: retargeted, like any rejected one, and the other
+                # shapes' paid calls carry on.
+                logger.exception("performance kit: checking the %s answer failed", shape)
+                registration = PoseRegistration(shape, reason=_reason(
+                    "check_failed", "The AI's answer could not be checked, so it was not used"))
             entry.update(outcome="generated" if registration.ok else "rejected",
                          reason=registration.reason, checks=registration.checks)
             return registration, entry
@@ -1251,25 +1521,32 @@ async def build_kit(
         return result
 
     await report_progress("asking the AI for the mouth shapes")
-    results = await asyncio.gather(*(tracked(shape) for shape in SHAPES))
-    registrations = {shape: reg for shape, (reg, _) in zip(SHAPES, results) if reg is not None}
-    manifest, fit, teeth = await run_cpu(
-        _finish, points, base_image.size, registrations, reference, kit_id
-    )
-    report = {}
-    for shape, (registration, entry) in zip(SHAPES, results):
-        ok = registration is not None and registration.ok
-        report[shape] = {
-            "status": "ok" if ok else "retargeted",
-            "outcome": entry["outcome"],
-            "reason": entry.get("reason"),
-            "attempts": entry["attempts"],
-            "checks": entry.get("checks", {}),
-        }
-    if on_progress is not None:
-        outcome = on_progress(1.0, "mouth kit ready")
-        if inspect.isawaitable(outcome):
-            await outcome
+    try:
+        # A task group, not gather: should anything here fail, gather would
+        # leave the other shapes' paid calls running, unaccounted for; the
+        # group cancels and awaits them first.
+        async with asyncio.TaskGroup() as group:
+            tasks = [group.create_task(tracked(shape)) for shape in SHAPES]
+        results = [task.result() for task in tasks]
+        registrations = {shape: reg for shape, (reg, _) in zip(SHAPES, results) if reg is not None}
+        manifest, fit, teeth = await run_cpu(
+            _finish, points, base_image.size, registrations, reference, kit_id
+        )
+        report = {}
+        for shape, (registration, entry) in zip(SHAPES, results):
+            ok = registration is not None and registration.ok
+            report[shape] = {
+                "status": "ok" if ok else "retargeted",
+                "outcome": entry["outcome"],
+                "reason": entry.get("reason"),
+                "attempts": entry["attempts"],
+                "checks": entry.get("checks", {}),
+            }
+        await report_progress("mouth kit ready", 1.0)
+    except Exception as exc:
+        cause = exc.exceptions[0] if isinstance(exc, ExceptionGroup) else exc
+        logger.error("performance kit failed after %d call(s): %r", state["calls"], cause)
+        raise KitFailed(state["calls"], state["billed"], call_log) from cause
     return KitResult(
         manifest=manifest,
         profile=fit.profile,

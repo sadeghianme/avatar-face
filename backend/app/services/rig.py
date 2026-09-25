@@ -400,6 +400,9 @@ async def process_avatar(avatar_id: str) -> None:
             return
         avatar.status = AvatarStatus.processing
         await db.commit()
+        # The avatar's own motion files a re-detection replaced, deleted
+        # once the row naming their successors is committed.
+        stale: list[str] = []
 
         try:
             from app.models import AvatarKind
@@ -486,6 +489,13 @@ async def process_avatar(avatar_id: str) -> None:
             avatar.status = AvatarStatus.ready
             avatar.error = None
             avatar.quality_note = quality_note
+            if avatar.kind != AvatarKind.model3d:
+                # Re-detecting the same picture (Re-detect, a retry) moves
+                # the rig's points: the mouth kit's rest pose follows them,
+                # with no AI call (services.mouth_kit).
+                from app.services import mouth_kit
+
+                stale = await mouth_kit.follow_points(avatar, storage, rig["points"])
 
             # Layer decomposition, photo avatars only. Optional by contract:
             # a failure (no segmenter, odd geometry) leaves a working
@@ -524,6 +534,8 @@ async def process_avatar(avatar_id: str) -> None:
             avatar.status = AvatarStatus.failed
             avatar.error = str(exc)[:1000]
         await db.commit()
+        for key in stale:
+            await storage.delete(key)
 
 
 async def _carry_crop_origin(avatar, storage, rig: dict) -> None:

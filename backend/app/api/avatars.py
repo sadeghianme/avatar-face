@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, UploadFile
+from fastapi.routing import APIRoute
 from sqlalchemy import select
 
 from pydantic import BaseModel, Field
@@ -24,9 +25,12 @@ from app.schemas.avatar import (
     AvatarOut,
     AvatarUpdate,
     FitReason,
+    MouthKitOut,
+    MouthKitRequest,
     RigFit,
     RigFitResult,
 )
+from app.schemas.job import JobOut
 from uuid import uuid4
 
 from app.services.rig import process_avatar
@@ -50,11 +54,49 @@ from app.services.anchor_fit import (
 )
 from app.services.segment import SegmentationUnavailable, remove_background
 from app.services.edit_locks import avatar_edits
+from app.services import mouth_kit
 from app.services.publishing import confirmed, discard_draft, mark_dirty, publish
 from app.services.storage import get_storage
 
 logger = logging.getLogger("liveface.avatars")
-router = APIRouter(prefix="/orgs/{org_id}/avatars", tags=["avatars"])
+
+
+async def _sign_motion(result: Any) -> None:
+    """Sign the draft motion of every avatar in `result` (one, or a list)
+    onto the instance, for its `mouth.motion_url` (Avatar.mouth)."""
+    from app.services.mouth import load as load_mouth, motion_url
+
+    storage = get_storage()
+    for avatar in result if isinstance(result, list) else [result]:
+        if isinstance(avatar, Avatar) and getattr(avatar, "signed_motion_url", None) is None:
+            avatar.signed_motion_url = await motion_url(load_mouth(avatar.mouth_config), storage)
+
+
+class _SignedMouthRoute(APIRoute):
+    """A route whose avatars carry their draft motion's presigned URL
+    (AvatarOut.mouth.motion_url), whichever route answers.
+
+    Presigning is async; AvatarOut reads the ORM object's `mouth` property,
+    which is not. So the URL is signed onto the instance after the route
+    returns and before FastAPI serializes it. Without it, a route that
+    changed something else (a slider, a rename) would answer with a mouth
+    without its motion, and a dashboard merging that answer into what it
+    shows would preview the bundled motion while visitors get the avatar's
+    own."""
+
+    def __init__(self, path: str, endpoint: Callable[..., Awaitable[Any]], **kwargs: Any):
+        @functools.wraps(endpoint)
+        async def signed(**values: Any) -> Any:
+            result = await endpoint(**values)
+            await _sign_motion(result)
+            return result
+
+        super().__init__(path, signed, **kwargs)
+
+
+router = APIRouter(
+    prefix="/orgs/{org_id}/avatars", tags=["avatars"], route_class=_SignedMouthRoute
+)
 
 GLB_CONTENT_TYPE = "model/gltf-binary"
 MAX_MODEL_BYTES = 30 * 1024 * 1024
@@ -329,7 +371,9 @@ async def set_background(
     The rig is untouched on purpose. Removing a background does not move a
     single landmark — the face is in exactly the same place — so re-detecting
     would only risk a worse fit than the one already there, possibly one the
-    user corrected by hand.
+    user corrected by hand. The mouth kit stays for the same reason: its
+    shapes are the face's movements, and a cut-out moves no pixel of the
+    face.
     """
     avatar = await _get_avatar(db, ctx.org.id, avatar_id)
     if avatar.kind != AvatarKind.photo or not avatar.image_key:
@@ -495,18 +539,34 @@ async def undo_edit(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
         avatar.framing = entry["framing"]
 
     snapshot = entry.get("rig_snapshot_key")
+    stale: list[str] = []
     if snapshot and avatar.rig_key:
+        before = restored = None
         try:
-            await storage.put_bytes(
-                avatar.rig_key, await storage.get_bytes(snapshot), "application/json"
-            )
+            before = _json.loads(await storage.get_bytes(avatar.rig_key))
+        except Exception:
+            logger.exception("rig read failed for avatar %s", avatar.id)
+        try:
+            restored = await storage.get_bytes(snapshot)
+            await storage.put_bytes(avatar.rig_key, restored, "application/json")
         except Exception:
             logger.exception("rig restore failed for avatar %s", avatar.id)
+            restored = None
+        if restored is not None:
+            try:
+                after = _json.loads(restored)
+            except ValueError:
+                after = None
+            # Undoing a crop puts another picture back (the mouth kit goes);
+            # undoing a background change the same one (it stays).
+            stale = await mouth_kit.follow_rig(avatar, storage, before, after)
 
     avatar.edit_history = _json.dumps(history)
     await _rebuild_layers(avatar, storage)
     mark_dirty(avatar)
     await db.commit()
+    for key in stale:
+        await storage.delete(key)
     return avatar
 
 
@@ -556,8 +616,12 @@ async def crop_avatar(
         await _rebuild_thumbnail(avatar, storage)
         await _uncrop_rig(avatar, storage, cropped_keys)
         await _rebuild_layers(avatar, storage)
+        # Another picture than the one the mouth kit was made from.
+        stale = mouth_kit.drop(avatar)
         mark_dirty(avatar)
         await db.commit()
+        for key in stale:
+            await storage.delete(key)
         return avatar
 
     if body.x + body.width > 1.0 or body.y + body.height > 1.0:
@@ -617,8 +681,13 @@ async def crop_avatar(
             await write_fit_base(storage, base_key, move_fit_base(base, left, top, rig))
     await _rebuild_thumbnail(avatar, storage)
     await _rebuild_layers(avatar, storage)
+    # A new picture: the mouth kit belonged to the one before. Its teeth
+    # photo stays (registered by its own landmarks, whatever the portrait).
+    stale = mouth_kit.drop(avatar)
     mark_dirty(avatar)
     await db.commit()
+    for key in stale:
+        await storage.delete(key)
     return avatar
 
 
@@ -921,11 +990,16 @@ async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFi
         await storage.put_bytes(
             avatar.rig_key, _json.dumps(adjusted).encode(), "application/json"
         )
+        # The mouth kit's rest pose is the rig's points: it follows the
+        # marks, on the same picture, with no AI call.
+        stale = await mouth_kit.follow_points(avatar, storage, adjusted["points"])
         mark_dirty(avatar)
         # Committed, or the dirty mark is lost with the session: the saved
         # marks would reach visitors silently on the next unrelated publish,
         # and the Publish bar would never say they were waiting.
         await db.commit()
+        for key in stale:
+            await storage.delete(key)
     return RigFitResult(rig=adjusted, persisted=body.persist, reasons=reasons)
 
 
@@ -1015,6 +1089,9 @@ async def rig_reset(
 async def get_avatar_detail(avatar_id: str, ctx: OrgMember, db: DB) -> AvatarDetail:
     avatar = await _get_avatar(db, ctx.org.id, avatar_id)
     storage = get_storage()
+    # Before the model reads `mouth`: the detail is built here, not by the
+    # route class.
+    await _sign_motion(avatar)
     detail = AvatarDetail.model_validate(avatar)
     if avatar.image_key and await storage.exists(avatar.image_key):
         detail.image_url = await storage.presign_get(avatar.image_key)
@@ -1067,6 +1144,7 @@ async def upload_mouth_photo(avatar_id: str, file: UploadFile, ctx: OrgMember, d
     # The owner's own teeth replace any the AI made: the mouth is no longer
     # AI-made, and the disclosure stops saying so (from the next Publish).
     avatar.ai_edited = mouth_photo.without_ai_teeth(avatar.ai_edited)
+    mouth_kit.teeth_replaced(avatar, mouth_kit.OWNER_PHOTO)
     mark_dirty(avatar)
     await db.commit()
     for key in previous:
@@ -1087,38 +1165,27 @@ def _require_teeth_photo_allowed(avatar: Avatar) -> None:
         )
 
 
-class TeethRequest(BaseModel):
-    # A third_party_ai consent naming google, by this user (POST /consents).
-    consent_id: str = Field(min_length=1, max_length=64)
+@router.post("/{avatar_id}/mouth-kit", response_model=MouthKitOut, status_code=202)
+async def make_mouth_kit(
+    avatar_id: str, body: MouthKitRequest, ctx: OrgMember, db: DB
+) -> MouthKitOut:
+    """Make the person's mouth shapes and teeth from this photo: the Mouth
+    panel's one AI action, what finishing a person now does (the
+    performance kit, services.mouth_kit), for avatars made before it, or
+    whose kit could not be made then, or whose picture changed since.
 
-
-# Avatars whose AI teeth are being made in this process: a second press
-# while the first call is out would be a second paid call for one photo.
-# One uvicorn process serves the API, so a set is the whole truth.
-_teeth_in_flight: set[str] = set()
-
-
-@router.post("/{avatar_id}/mouth-photo/generate", response_model=AvatarOut)
-async def generate_mouth_photo(
-    avatar_id: str, body: TeethRequest, ctx: OrgMember, db: DB
-) -> Avatar:
-    """Make the person's own teeth with AI: an "ee" photo of the avatar's
-    picture from the image model, admitted exactly like an uploaded mouth
-    photo (services.mouth_photo). What a new avatar gets when it is
-    finished, for avatars made before, or whose teeth could not be made then.
-
-    Needs the caller's third_party_ai consent (403 consent_required) and the
-    organization's switch on (403 third_party_ai_disabled); metered against
-    the monthly image limit (429 image_limit_reached). One call, and one
-    more on a head-and-shoulders crop if the AI declines (422
-    safety_refused after that). A photo the teeth checks refuse is a 422
-    with their code (mouth_teeth_unclear, reference_mouth_closed...).
-    Synchronous (about ten seconds; 409 teeth_in_progress while one is being
-    made). A DRAFT edit: visitors get the new teeth, and the disclosure that
-    AI made them, when the owner publishes.
+    A job (202, `job`), followed with GET below: six image-model calls take
+    tens of seconds, longer than a request may wait behind the proxy. 409
+    mouth_kit_in_progress while one runs for this avatar (and the runner's
+    429 too_many_jobs, 503 job_queue_full). Needs the caller's
+    third_party_ai consent (403 consent_required) and the organization's
+    switch on (403 third_party_ai_disabled); metered against the monthly
+    image limit (429 image_limit_reached, and read again before each call).
+    Teeth the owner uploaded are kept: the kit then brings its shapes and
+    its jaw range only. A DRAFT edit: visitors get the new mouth, and the
+    disclosure that AI made it, when the owner publishes.
     """
-    from app.core.errors import AppError
-    from app.services import consent, imagegen, mouth_photo
+    from app.services import consent, imagegen
     from app.services.ai_models import PROVIDER
     from app.services.usage import check_image_limit
 
@@ -1131,51 +1198,25 @@ async def generate_mouth_photo(
         raise Conflict409("AI editing is not configured on this server", code="imagegen_unavailable")
     await check_image_limit(db, ctx.org.id)
     storage = get_storage()
-    if not avatar.image_key or not await storage.exists(avatar.image_key):
+    if (
+        not avatar.image_key
+        or not avatar.rig_key
+        or not await storage.exists(avatar.image_key)
+    ):
         raise Conflict409("The avatar's picture is gone", code="source_gone")
-    if avatar_id in _teeth_in_flight:
-        raise Conflict409("The teeth are already being made", code="teeth_in_progress")
-    org_id, consent_id, source_key = ctx.org.id, agreed.id, avatar.image_key
-    _teeth_in_flight.add(avatar_id)
-    try:
-        source = await storage.get_bytes(source_key)
-        # No connection held while the provider thinks.
-        await db.rollback()
+    return MouthKitOut(job=JobOut(**mouth_kit.start(avatar, agreed.id)))
 
-        async def sending() -> None:
-            # The consent that lets the picture go is on the avatar as it
-            # goes: a refusal or an answer the teeth test rejects still
-            # sent a photo, and an audit must find what allowed it. Not a
-            # change a visitor sees, so the draft stays clean.
-            async with avatar_edits.hold(avatar_id):
-                row = await _get_avatar(db, org_id, avatar_id)
-                row.consent_ids = consent.with_consent(row.consent_ids, consent_id)
-                await db.commit()
 
-        made = await mouth_photo.make_teeth(org_id, source, on_send=sending)
-    except mouth_photo.TeethFailure as exc:
-        error = AppError(exc.detail, code=exc.code)
-        error.status_code = exc.status
-        raise error from exc
-    finally:
-        _teeth_in_flight.discard(avatar_id)
-
-    # Stored under the edit lock like any other draft edit; the seconds of
-    # the call itself are not held against the owner's other edits.
-    async with avatar_edits.hold(avatar_id):
-        avatar = await _get_avatar(db, org_id, avatar_id)
-        _require_teeth_photo_allowed(avatar)
-        previous = await mouth_photo.store(
-            avatar, storage, made.photo, made.rig, mouth_photo.ai_teeth_record(made.model)
-        )
-        # AI made part of what visitors will see: disclosed from the next
-        # Publish.
-        avatar.ai_edited = mouth_photo.with_ai_teeth(avatar.ai_edited, made.model)
-        mark_dirty(avatar)
-        await db.commit()
-    for key in previous:
-        await storage.delete(key)
-    return avatar
+@router.get("/{avatar_id}/mouth-kit", response_model=MouthKitOut)
+async def mouth_kit_job(avatar_id: str, ctx: OrgMember, db: DB) -> MouthKitOut:
+    """The avatar's mouth-kit job: its progress while it runs ("making the
+    mouth shapes", with how many of the six are settled, "fitting the
+    mouth", "saving"; "making the teeth" where only the teeth can be made),
+    then done or failed with the reason. Null when this server ran none for
+    it (a restart forgets jobs). Once done, the avatar's draft has it."""
+    await _get_avatar(db, ctx.org.id, avatar_id)
+    view = mouth_kit.job_view(avatar_id)
+    return MouthKitOut(job=JobOut(**view) if view else None)
 
 
 @router.delete("/{avatar_id}/mouth-photo", response_model=AvatarOut)
@@ -1200,6 +1241,7 @@ async def remove_mouth_photo(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
     avatar.mouth_config = _json.dumps(config)
     # Teeth the AI made are gone, and so is their disclosure (next Publish).
     avatar.ai_edited = without_ai_teeth(avatar.ai_edited)
+    mouth_kit.teeth_replaced(avatar, mouth_kit.TEETH_REMOVED)
     mark_dirty(avatar)
     await db.commit()
     return avatar

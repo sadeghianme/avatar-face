@@ -38,15 +38,32 @@ async def storage_get(
         raise NotFound404("Object not found", code="object_not_found")
     data = await storage.get_bytes(key)
     media_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
-    # Rig JSON is mutable (manual fit adjustments rewrite it in place); a
-    # cached copy would make saved adjustments invisible until expiry.
-    cache = "no-cache" if key.endswith(".json") else "private, max-age=300"
     return Response(
         content=data,
         media_type=media_type,
-        # Third-party embed pages fetch textures/audio cross-origin.
-        headers={"Access-Control-Allow-Origin": "*", "Cache-Control": cache},
+        # Third-party embed pages fetch textures, audio and JSON (the rig,
+        # the mouth photo's rig, the avatar's own motion) cross-origin.
+        # PublicCorsMiddleware (app.main) reflects the page's origin over
+        # this for every /storage/ response.
+        headers={"Access-Control-Allow-Origin": "*", "Cache-Control": cache_control(key)},
     )
+
+
+def cache_control(key: str) -> str:
+    """How long a browser may keep a stored file.
+
+    A draft's rig JSON is mutable (manual fit adjustments rewrite rig.json
+    in place); a cached copy would make saved adjustments invisible until
+    expiry, so draft JSON is revalidated. A published snapshot's files are
+    copies no edit writes again (every revision publishes to keys of its
+    own, services.publishing), JSON included (its rig, the mouth photo's
+    rig, the avatar's own motion), so they are cached like its images: the
+    widget fetches the motion and the rigs cross-origin on every attach.
+    (A presigned URL changes with every config fetch anyway, so a cached
+    copy only ever serves the page that fetched it.)"""
+    if key.endswith(".json") and "/published/" not in key:
+        return "no-cache"
+    return "private, max-age=300"
 
 
 @router.put("/{key:path}")

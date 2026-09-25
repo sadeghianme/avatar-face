@@ -84,8 +84,8 @@ class Avatar(TimestampedBase):
     # embedding sites and share links speak with it.
     voice_config: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Which mouth renderer this avatar uses, as JSON {renderer, profile,
-    # oral_image_key, oral_rig_key}. Null means the classic drawn mouth.
-    # Draft/published like voice; see services.mouth.
+    # oral_image_key, oral_rig_key, motion_key, teeth, kit}. Null means the
+    # classic drawn mouth. Draft/published like voice; see services.mouth.
     mouth_config: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Draft/published split. `draft_revision` is bumped by every edit a
     # visitor could notice; `published_config` is the JSON snapshot the embed
@@ -109,10 +109,13 @@ class Avatar(TimestampedBase):
 
     @property
     def mouth(self) -> dict | None:
-        """Public view of the mouth settings — never the storage keys."""
+        """Public view of the mouth settings — never the storage keys. Its
+        `motion_url` is the presigned URL the owner API signed for this
+        instance (api.avatars: presigning is async, a property is not), or
+        null."""
         from app.services.mouth import public_view
 
-        return public_view(self.mouth_config)
+        return public_view(self.mouth_config, getattr(self, "signed_motion_url", None))
 
     @property
     def voice(self) -> dict | None:

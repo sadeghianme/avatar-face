@@ -20,11 +20,16 @@ Three scopes:
 - `third_party_ai`: "this photo will be sent to Google (Gemini) to edit it
   or to find its points". Refused outright (403 third_party_ai_disabled)
   when the organization has turned third-party AI off. About sending photos,
-  not about one photo, so it is remembered per person and wording. Since
-  2026-09-26 its wording also covers the sends nobody presses a button for
-  (the wizard's own lip touch-up, a person's teeth made at Finish) and says
-  those teeth are kept and published with the finished avatar: agreements
-  to the earlier text, which promised neither, no longer count.
+  not about one photo, so it is remembered per person and wording. Its
+  wording of 2026-09-26 also covers what is sent without a further press:
+  the wizard's own lip touch-up, and a person's mouth made from their
+  picture, at Finish ("Preparing your avatar") or by the Mouth panel's one
+  AI action: their teeth and their mouth shapes (a crop of the face sent
+  for each of six speech sounds, and once more for a sound the AI
+  declined; services.mouth_kit). It says those teeth and mouth shapes are
+  kept with the avatar and published with it, labelled as made by AI.
+  Agreements to the earlier text, which promised none of this, no longer
+  count.
 - `depiction`: "I am this person or have their permission, and they are 18
   or older". Required to finish a creation made from a person's photo, AI
   or not, on whatever line it ends up (services.creations.statement_for):

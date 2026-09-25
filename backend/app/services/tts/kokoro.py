@@ -31,8 +31,10 @@ batch joins when it does not, so the timed model's clause pauses are longer
 by construction (and the files are two separate exports). Cues are
 therefore always computed from the audio they are served with, never
 borrowed from the other model. The original model is loaded only when the
-timed path fails, so a normal server holds one Kokoro session (~1 GB
-resident), not two.
+timed model or its runtime fails, so a normal server holds one Kokoro
+session (~1 GB resident), not two; text neither model can speak (no
+phonemes) is refused as the caller's error (422 nothing_to_speak) without
+loading it.
 
 Speech cache: rows made on one path are keyed apart from the other's
 (`cache_version`), so turning native timing on never serves an old recording
@@ -47,6 +49,7 @@ import logging
 import threading
 
 from app.core.config import get_settings
+from app.core.errors import Validation422
 from app.services.tts.base import SynthesisResult, TTSProvider, Voice
 from app.services.tts.visemes import cues_from_text
 
@@ -140,7 +143,13 @@ class KokoroTTSProvider(TTSProvider):
                         "the timestamped Kokoro model failed and no other Kokoro model is installed"
                     )
                 fell_back = True
-            audio, duration_ms = await asyncio.to_thread(_render, text, voice_id, lang)
+            try:
+                audio, duration_ms = await asyncio.to_thread(_render, text, voice_id, lang)
+            except ValueError as exc:
+                refused = _unspeakable(exc)
+                if refused is not None:
+                    raise refused from exc
+                raise
         return SynthesisResult(
             audio=audio,
             audio_mime="audio/wav",
@@ -174,6 +183,25 @@ def native_timing_enabled() -> bool:
     return bool(get_settings().kokoro_native_timing) and lab_timing.configured()
 
 
+# kokoro-onnx's own words for text no Kokoro model can speak: espeak turned
+# it into no phonemes at all, or into none the vocabulary knows. Both models
+# share the phonemizer and the vocabulary, so the original model would fail
+# the same way, after loading a second ~1 GB session for the life of the
+# process while every other synthesis waits on the semaphore.
+_UNSPEAKABLE = ("Nothing to synthesize", "No phonemes of")
+
+
+def _unspeakable(exc: Exception) -> Validation422 | None:
+    """The client error for text no Kokoro model can speak, or None for a
+    failure of the model or its runtime (which the other model may not
+    share)."""
+    if isinstance(exc, ValueError) and str(exc).startswith(_UNSPEAKABLE):
+        return Validation422(
+            "This text has nothing to say aloud (no speakable words)", code="nothing_to_speak"
+        )
+    return None
+
+
 async def _synthesize_native(
     text: str, voice_id: str, lang: str, locale: str
 ) -> SynthesisResult | None:
@@ -181,14 +209,19 @@ async def _synthesize_native(
     None when the model could not speak (the caller falls back to the
     original one). Spans the timings cannot use (an unmapped phoneme, spans
     out of order) keep this audio and time it the stretched way instead:
-    the recording is good, only its timestamps are not."""
+    the recording is good, only its timestamps are not. Text no model can
+    speak is the caller's error (422 nothing_to_speak), not the model's,
+    and never reaches the original model."""
     from app.services.tts import lab_timing
 
     try:
         audio, duration_ms, spans = await asyncio.to_thread(
             lab_timing.render_timed, text, voice_id, lang
         )
-    except Exception:
+    except Exception as exc:
+        refused = _unspeakable(exc)
+        if refused is not None:
+            raise refused from exc
         logger.exception("timestamped Kokoro synthesis failed; using the original model")
         return None
     try:

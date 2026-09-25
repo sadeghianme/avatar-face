@@ -295,10 +295,13 @@ def face_crop_box(points: np.ndarray) -> tuple[float, float, float]:
     return float(cx - side / 2), float(cy - side / 2), float(side)
 
 
-def crop_face(image: Image.Image, box: tuple[float, float, float]) -> Image.Image:
-    """The crop square resampled to CROP_SIZE. Past the photo's edge it is
-    filled with the photo's own edge pixels: a black band would be a new
-    edge the model might draw into the face.
+def crop_face(
+    image: Image.Image, box: tuple[float, float, float], size: int = CROP_SIZE
+) -> Image.Image:
+    """The crop square resampled to `size` (CROP_SIZE: the face crop). Past
+    the photo's edge it is filled with the photo's own edge pixels: a black
+    band would be a new edge the model might draw into the face. The
+    performance kit squares its head-and-shoulders crop the same way.
 
     Lanczos through `resize`, not a fixed-kernel transform: a face wider
     than about 640 px makes a crop larger than CROP_SIZE, and a shrink that
@@ -313,7 +316,7 @@ def crop_face(image: Image.Image, box: tuple[float, float, float]) -> Image.Imag
         source = Image.fromarray(padded)
         x0, y0 = x0 + pad, y0 + pad
     return source.resize(
-        (CROP_SIZE, CROP_SIZE),
+        (size, size),
         Image.Resampling.LANCZOS,
         box=(x0, y0, x0 + side, y0 + side),
     )

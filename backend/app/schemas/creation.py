@@ -16,6 +16,10 @@ from app.schemas.avatar import (
     PupilAnchor,
 )
 
+# The job shapes live in app.schemas.job (an avatar's mouth kit is a job
+# too); imported here for this module's own models and its importers.
+from app.schemas.job import JobCount, JobError, JobOut, JobProgress  # noqa: F401
+
 CreationStatusName = Literal["draft", "finishing", "finished", "expired"]
 
 
@@ -77,7 +81,8 @@ class AdjustRequest(BaseModel):
     # Started by the wizard on its own, acting on `ai.auto_adjust`, not by
     # the owner's press: accepted only while that offer stands for the
     # current image (409 auto_adjust_not_applicable otherwise), and once per
-    # image. The owner still chooses between the result and their photo.
+    # photo, however it is cropped. The owner still chooses between the
+    # result and their photo.
     auto: bool = False
 
 
@@ -159,28 +164,6 @@ class StepOut(BaseModel):
     cutout: bool = False
 
 
-class JobError(BaseModel):
-    code: str
-    detail: str
-
-
-class JobProgress(BaseModel):
-    fraction: float
-    label: str | None = None
-
-
-class JobOut(BaseModel):
-    id: str
-    step: Literal["ingest", "generate", "adjust", "background", "detect", "finish"]
-    state: Literal["queued", "running", "done", "failed", "interrupted"]
-    error: JobError | None = None
-    started_at: str
-    # Live, while the job is queued or running in this process.
-    progress: JobProgress | None = None
-    # POST /retry would run it again.
-    retryable: bool = False
-
-
 class Validation(BaseModel):
     ok: bool
     reasons: list[FitReason] = Field(default_factory=list)
@@ -230,10 +213,10 @@ class AdjustRoundOut(BaseModel):
 class AutoAdjustOut(BaseModel):
     """A fix the wizard may start by itself: the current image of a person
     shows teeth between parted lips (the photographic mouth would paint them
-    on the lips when it closes), which a touch-up closes. The wizard starts
-    it only with the member's own current third_party_ai consent (GET
-    /consents/mine), sending `auto: true`; the result is offered, never
-    chosen."""
+    on the lips when it closes), and nothing else a touch-up would change,
+    which a touch-up closes. The wizard starts it only with the member's own
+    current third_party_ai consent (GET /consents/mine), sending `auto:
+    true`; the result is offered, never chosen. Offered once per photo."""
 
     mode: Literal["touchup"]
     # The step it applies to, and the photo check's reasons (check codes).

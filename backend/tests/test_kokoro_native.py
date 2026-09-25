@@ -8,6 +8,7 @@ apart.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import wave
 
@@ -201,3 +202,80 @@ async def test_streamed_phrases_are_timed_natively_too(client, monkeypatch, time
     lines = [json.loads(line) for line in response.text.splitlines() if line]
     chunk = next(line for line in lines if line["type"] == "chunk")
     assert next(c["t"] for c in chunk["cues"] if c["viseme"] == "PP") == 120
+
+
+# --- text no model can speak ------------------------------------------------------------
+
+
+@pytest.mark.parametrize("error", [
+    "Nothing to synthesize, '...' produced no phonemes",
+    "No phonemes of '…' are in the model vocabulary",
+])
+async def test_text_no_model_can_speak_is_the_callers_error(timed, monkeypatch, error):
+    """Both models share the phonemizer and the vocabulary, so the original
+    would fail the same way, after loading a second ~1 GB session for the
+    life of the process while every other synthesis waits: it is refused
+    at once, and the original model is never touched (`timed` makes it
+    raise if it is)."""
+    from app.core.errors import Validation422
+
+    def unspeakable(text, voice_id, lang):
+        raise ValueError(error)
+
+    monkeypatch.setattr(lab_timing, "render_timed", unspeakable)
+    with pytest.raises(Validation422) as refused:
+        await KokoroTTSProvider().synthesize("...", DEFAULT_VOICE, "en-US")
+    assert refused.value.code == "nothing_to_speak"
+    # The semaphore was given back: the next synthesis is not held.
+    monkeypatch.setattr(lab_timing, "render_timed", lambda *_: (_wav(1000), 1000, list(SPANS)))
+    result = await asyncio.wait_for(KokoroTTSProvider().synthesize("pa", DEFAULT_VOICE, "en-US"), 1)
+    assert result.duration_ms == 1000
+
+
+async def test_a_model_that_cannot_time_its_speech_still_falls_back(monkeypatch):
+    """A ValueError of the model's own (an export without durations) is a
+    model failure: the original model may speak where this one cannot."""
+
+    def no_durations(*_args):
+        raise ValueError("Lab model/runtime does not expose phoneme durations")
+
+    used: list[str] = []
+    monkeypatch.setattr(lab_timing, "configured", lambda: True)
+    monkeypatch.setattr(lab_timing, "render_timed", no_durations)
+    monkeypatch.setattr(kokoro, "_original_configured", lambda: True)
+    monkeypatch.setattr(kokoro, "_render", lambda text, v, lang: used.append(v) or (_wav(900), 900))
+    result = await KokoroTTSProvider().synthesize("hello", DEFAULT_VOICE, "en-US")
+    assert used == [DEFAULT_VOICE] and result.cacheable is False
+
+
+async def test_the_original_model_refuses_unspeakable_text_the_same_way(monkeypatch):
+    from app.core.errors import Validation422
+
+    def unspeakable(*_args):
+        raise ValueError("Nothing to synthesize, '' produced no phonemes")
+
+    monkeypatch.setattr(lab_timing, "configured", lambda: False)
+    monkeypatch.setattr(kokoro, "_render", unspeakable)
+    with pytest.raises(Validation422) as refused:
+        await KokoroTTSProvider().synthesize("?!", DEFAULT_VOICE, "en-US")
+    assert refused.value.code == "nothing_to_speak"
+
+
+async def test_unspeakable_text_is_a_422_over_the_api(client, monkeypatch):
+    from tests.conftest import create_org, register_and_login
+
+    def unspeakable(*_args):
+        raise ValueError("Nothing to synthesize, '...' produced no phonemes")
+
+    monkeypatch.setattr(lab_timing, "configured", lambda: True)
+    monkeypatch.setattr(lab_timing, "render_timed", unspeakable)
+    monkeypatch.setattr(kokoro, "_original_configured", lambda: True)
+    headers = await register_and_login(client, "silent")
+    org_id = await create_org(client, headers)
+    response = await client.post(
+        f"/tts/orgs/{org_id}/synthesize",
+        json={"text": "...", "provider": "kokoro", "voice": DEFAULT_VOICE, "locale": "en-US"},
+        headers=headers,
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "nothing_to_speak"

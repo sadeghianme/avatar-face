@@ -1,7 +1,11 @@
 # Performance kit: the Reference's mouth kit, from a person's photo
 
-Status: building blocks, 2026-09-26. Not wired into the finish job, the API or
-the UI yet; the creation finish job orchestrates them in a later step.
+Status: wired, 2026-09-26 (Step 5, "Preparing your avatar"). Finishing a
+person makes their kit before the first publish; the Mouth panel makes it
+for an existing avatar; publishing serves it to the widget and the share
+page. `services/performance_kit.py` makes a kit; `services/mouth_kit.py` is
+everything around it (who may send, metering, storage, disclosure, later
+edits). See "Wired" below.
 
 The Reference avatar (see [reference-avatar-lab.md](reference-avatar-lab.md))
 talks well because it was built from a kit: a neutral portrait, six photos of
@@ -15,15 +19,16 @@ photo once its owner has confirmed the points.
 
 | Piece | Function | Notes |
 |---|---|---|
-| Prompts | `POSE_PROMPTS`, `pose_prompt(shape)`, `PROMPTS_VERSION` | same person, pose, framing, light; only mouth and jaw change. EE asks for the upper teeth in full: it doubles as the teeth photo |
-| Request | `prepare_pose_request(base_png, base_points, shape, kind)` → `PoseRequest` | AI adjust's face crop (1.6 face boxes, 1024 px); after a refusal, its head-and-shoulders crop (`photo_adjust.head_crop_box`). `to_base(answer_size)` maps answer pixels back |
+| Prompts | `POSE_PROMPTS`, `pose_prompt(shape)`, `PROMPTS_VERSION` (`pose-prompts@2`) | same person, pose, framing, light; only mouth and jaw change. EE asks for the upper teeth in full: it doubles as the teeth photo. @2 after the first run on real Gemini: AA "moderately open, as in normal conversation, not a yawn or a shout" (it came back yawn-wide), TH "only the very tip of the tongue, barely visible between the front teeth", F/V "the upper front teeth pressing gently on the lower lip; the lips otherwise relaxed" |
+| Request | `prepare_pose_request(base_png, base_points, shape, kind)` → `PoseRequest` | AI adjust's face crop (1.6 face boxes, 1024 px); after a refusal, its head-and-shoulders crop (`photo_adjust.head_crop_box`) padded to a square (`head_square`, at the photo's own resolution, the photo's edge filled in like the face crop's). Both are square because the model answers a square with a square: the 6:7 head box would come back reframed to the model's own aspect and map back with a scale per axis (`to_base`), the mouth 0.1-0.2 mouth widths off |
 | Registration | `similarity_on_anchors`, `register`, `registration_rms` | moved out of `scripts/build_reference_performance.py`, which still writes the identical `performance.json` (tested byte for byte) |
-| Checks | `register_answer(...)` → `PoseRegistration` | detect, map back, register on eye corners + nose bridge onto the detector's own view of the base photo (`base_detected`), RMS ≤ 0.007 in manifest units; refuses head zoom/tilt, moved nose or eyes, turned head, skin ΔE > 8, or a mouth not in the asked shape. Targets = confirmed points + (registered − detected base), so the owner's corrections to the marks are kept and never read as motion |
+| Checks | `register_answer(...)` → `PoseRegistration` | refuses an answer whose aspect differs from what was sent by more than 1% (`aspect_changed`); detect, map back, register on eye corners + nose bridge onto the detector's own view of the base photo (`base_detected`), RMS ≤ 0.007 in manifest units; refuses head zoom/tilt, moved nose or eyes, a head turned (the nose tip's SIGNED offset between the cheeks, `signed_yaw`: unsigned, a turn one way and the same turn the other read the same), skin ΔE > 8, or a mouth not in the asked shape. Targets = confirmed points + (registered − detected base), so the owner's corrections to the marks are kept and never read as motion. A check that raises is a rejected answer (`check_failed`) |
 | Fallback | `retarget_reference_pose(shape, base_points, reference, amplitude)` | Reference displacement, horizontal × mouth-width ratio, vertical × upper / lower lip-height ratio (blended across the seam, bounded to 0.6–1.6 × the width ratio), × `amplitude` = fitted jawRange / 0.85 so it is true at the manifest's `jaw_range`. Baked by the backend: the embed has no retarget code |
 | Fit | `fit_profile(...)` → `ProfileFit` | teethY, teethScale, jawRange; clamped to `MouthProfile`'s ranges; defaults with a reason when unmeasurable. `teeth_photo` says whether it is fitted for the EE photo (handed on) or the geometric teeth |
 | Teeth photo test | `dental_photo.accept_teeth_photo(image, points, inner_ring)` → `Acceptance` | the embed's DentalOralSurface test, ported pass for pass (extraction canvas, `extractDentalLayers`, `dentalCrownCoverage`): arch ≥ 110/512 wide, ≥ 180 px of enamel, central crown ≥ 0.10 mouth widths. Pixel-exact against the embed's code (`dental-extraction.json` fixture) |
-| Manifest | `build_manifest(...)` | version 2, see below |
-| Orchestrator | `build_kit(base_png, base_points, edit_image, *, concurrency=3, per_call_timeout=120, on_progress=None, kit_id=None, detect=None, reference=None)` → `KitResult` | injected edit function; concurrency bound; refusal → one head-crop retry; nothing else asked twice |
+| Manifest | `build_manifest(...)` | version 2, see below; the kit id is ASCII `[A-Za-z0-9_-]{1,64}` exactly as the embed accepts it |
+| Rebase | `rebase_manifest(manifest, base_points)` | the same kit on re-confirmed points of the same picture, no AI call (see "Wired") |
+| Orchestrator | `build_kit(base_png, base_points, edit_image, *, concurrency=3, per_call_timeout=None, on_progress=None, kit_id=None, detect=None, reference=None)` → `KitResult` | injected edit function; concurrency bound; refusal → one head-crop retry; nothing else asked twice; the shapes run in a task group, so a failure that is not a provider call's cancels and awaits the calls in flight and raises `KitFailed` with every call sent accounted for. `per_call_timeout` defaults to imagegen's own 90 s, and a timeout either way (asyncio's, or httpx's read/write timeout) is `timeout`, billed null; a connect timeout never reached Google (`provider_error`, billed false): `call_billing(error)` is the one classification. `on_progress(fraction, message, shapes_done)` |
 
 ## Manifest version 2
 
@@ -48,7 +53,10 @@ Everything ContinuousMouth reads keeps the Reference's meaning (seven poses in
 The embed accepts it through `validateMotionManifest` (continuous mouth only;
 the lab's crossfade player keeps `validatePerformanceManifest`, version 1).
 `embed/src/mouth/__tests__/fixtures/avatar-motion.json` is written by the
-backend builder and checked by both test suites.
+backend builder and checked by both test suites (the backend compares it
+byte for byte but for `kit.prompts`, provenance the embed never reads, so a
+new wording of the prompts does not oblige the embed's fixtures to be
+rewritten; `LIVEFACE_WRITE_FIXTURES=1` rewrites them).
 
 ## Profile fit, and the Reference
 
@@ -83,42 +91,83 @@ backend builder and checked by both test suites.
   and keeps its size relative to the person's own shapes (tested through
   the real `ContinuousMouth` with `avatar-motion-fitted.json`).
 
-## For the integration (finish job)
+## Wired (services/mouth_kit.py)
 
-- Pass `imagegen.edit_image` wrapped: check the organisation's AI switch and
-  the image limit before each call and raise `imagegen.ImageGenUnavailable`
-  to stop (nothing more is sent; the shape and all later ones are
-  retargeted). Requires the `third_party_ai` consent: face crops leave the
-  server.
-- `build_kit` raises `KitUnavailable` (no detector) before any call, and
-  `ValueError` for points that are not 478 finite pixels. `base_points` must be
-  the rig's points on `base_png` (the published rig, as the owner confirmed
-  them), so the manifest's rest pose is the engine's neutral. `build_kit`
-  detects `base_png` itself once; `KitResult.base_detected` says whether that
-  detection was used (false: no face found, or one far from the confirmed
-  points, and the answers were registered on the confirmed points).
-- Meter from `KitResult`: `billed_calls` (answered: image, refusal, or no
-  image) and `call_log` (per call `billed: true | false | null`; null is a
-  timeout that may have been billed).
-- Store and publish: the manifest JSON, the teeth photo (`teeth_source.png`,
-  `teeth_source.rig`, present only when the embed accepts it) as the existing
-  `oral_image_key` / `oral_rig_key`, and `profile`. The mouth config needs a new key for the manifest (for example
-  `motion_key`), copied on publish like the teeth photo, and served by
-  `publishing._mouth_view` as `motion_url` (a presigned URL; the storage
-  bucket must allow cross-origin `fetch` of JSON, not only images). The
-  embed reads `mouth.motion_url`; absent, it plays the bundled motion as
-  today, and it falls back to it if the avatar's manifest fails to load.
-- The dashboard previews through the same loader and must get the same
-  config: `useAvatarMouth` passes `motion_url` on (reloading only when its
-  path changes, not on a re-signed URL), the share page gets it from the
-  published `mouth`, and the owner's detail page takes it from
-  `avatar.mouth.motion_url` (`draftMouthConfig`). So the owner API's avatar
-  detail must return the DRAFT `mouth.motion_url` as well, or the owner tunes
-  the profile against the bundled motion while visitors get the kit.
-- A re-confirmed set of points changes the rest pose: rebuild the manifest,
-  moving each pose by what it moved from the old points (targets − old
-  confirmed points, recoverable through `frame.to_manifest`) onto the new
-  ones.
+**When.** At Finish, for a person (`services.creations._own_mouth`), and by the
+Mouth panel's one AI action (`POST /orgs/{org}/avatars/{id}/mouth-kit`). AI
+is allowed exactly as for every step: the organization's switch, the image
+model configured, the monthly image limit, the member's current
+`third_party_ai` consent. Not allowed: the photographic mouth with generic
+teeth, the reason in `mouth_config.teeth.note`, the bundled motion. The kit
+is made from the avatar's picture as rigged and the rig's 478 points.
+
+**Calls.** `CallGuard` wraps `imagegen.edit_image`: before each call, under
+one lock, the switch and the limit are read again, the limit counting this
+kit's calls still in flight (so three concurrent calls never pass its last
+unit together); a switch turned off or a limit reached raises
+`ImageGenUnavailable` with `code`/`detail`, and every shape not yet
+answered is retargeted with that reason, nothing more sent. The consent is
+recorded on the avatar (and the creation) once, as the first picture
+leaves. Each call is metered as it ends (usage source `mouth_shapes`,
+classified by `call_billing`: an answer, a timeout and a cancelled call
+count; nothing sent or an HTTP failure does not). Concurrency 3; the whole
+kit waits outside the job runner's slot (`JobRunner.outside_slot`).
+
+**Where it lives.** `mouth_config.motion_key` =
+`orgs/<org>/avatars/<id>/mouth-motion-<stamp>.json` (compact JSON, a fresh
+key each time, beside the teeth photo's `mouth-<stamp>.webp/.json`).
+`mouth_config.profile` = the kit's fit (with the owner's own teeth photo:
+only `jawRange`; the teeth fit stays theirs). The kit's EE is stored as the
+teeth photo through `mouth_photo.admit_photo` (the WebP visitors get, the
+teeth test on those bytes; were the WebP refused where the PNG passed, the
+profile is refitted for the drawn teeth: `for_drawn_teeth`) with the record
+`{source: "ai", model}`; the owner's upload is never replaced. No teeth
+photo: standard teeth with a note, never a second call. `mouth_config.kit`
+is the owner-facing record: id, recipe, model, per-shape provenance with
+the reason a shape was retargeted, `teeth: {used, reason}`, calls, `state`
+("made" or "dropped", with `dropped: {code, detail}`) and `rebased_at`.
+
+**Publish.** The motion is copied to `published/r<rev>/mouth-motion.json`
+like the teeth photo (pruned with its revision, deleted with the avatar,
+restored into a fresh draft key by Discard with the kit record), and
+`publishing._mouth_view` serves it as `mouth.motion_url` to the widget and
+the share page. It is fetched cross-origin from customers' pages: the
+local storage route is on `PublicCorsMiddleware`'s public surface (the
+page's origin reflected, preflights answered), and a published copy's JSON
+is cached like its images (`private, max-age=300`; the draft's JSON stays
+`no-cache`, since the draft rig is rewritten in place). An S3/R2 bucket
+needs the same CORS rule for JSON. The owner API returns the DRAFT
+`mouth.motion_url` on every route that returns an avatar
+(`api.avatars._SignedMouthRoute`), so the dashboard previews what
+visitors will get.
+
+**Disclosure.** `ai_edited.mouth_shapes = {model, generated}` when the kit
+has shapes an AI made (retargeted ones are the Reference's movement, not
+AI pixels); mode `mouth_shapes` when nothing else was AI-made (teeth win:
+`mouth_photo.mouth_disclosure`). Publish drops it unless the published
+mouth is continuous and plays its own motion (the teeth entry's rule);
+Discard re-derives it from the restored kit record.
+
+**Later edits.** Points re-confirmed on the same picture (Mark the face's
+save, Re-detect): `rebase_manifest` makes the new points the rest pose and
+moves every shape from it by the displacement it had (in base pixels,
+through the old frame), with the frame recomputed; onto the same points it
+is the identity. A new picture (a crop, a crop reset, an undo that puts
+another picture back: a rig of another size) drops the kit: the motion is
+deleted (the bundled one plays), the shapes' disclosure goes, the record
+says `picture_changed`. The teeth photo stays: the renderer registers it
+by its own landmarks, whatever the portrait. A background change keeps the
+kit (no pixel of the face moves).
+
+**The Mouth panel's job.** `POST /orgs/{org}/avatars/{id}/mouth-kit
+{consent_id}` → 202 `{job}` (step `mouth_kit`), polled with `GET` on the same
+path (`{job}`: live progress, then done or failed; null when this process
+ran none). 409 `mouth_kit_in_progress` while one runs. A draft edit: the
+owner publishes. A kit that made none of the six shapes fails with the
+reason and leaves the draft alone. Where no kit can be made on the server
+(no face detector), the single "ee" photo instead (`mouth_photo.make_teeth`),
+unless the owner uploaded teeth.
+
 - The continuous mouth's F/V lip-contact correction (tuned for the
   Reference's F/V photo) still applies to every manifest when a teeth photo
   is present.

@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.avatar import AvatarKind, AvatarStatus
+from app.schemas.job import JobOut
 
 
 FaceType = Literal["human", "animal", "cartoon"]
@@ -145,7 +146,12 @@ class AvatarOut(BaseModel):
     face_type: str = "human"
     # The DRAFT voice; what visitors hear is the published snapshot's copy.
     voice: dict | None = None
-    # The DRAFT mouth: {renderer, profile, has_oral_photo}. Null = classic.
+    # The DRAFT mouth, null for the classic one: {renderer, profile,
+    # has_oral_photo, teeth: {source: "ai" | "upload" | null, note: {code,
+    # detail} | null}, motion_url: the presigned draft motion manifest (the
+    # avatar's own mouth shapes) or null (the bundled Reference motion),
+    # kit: services.mouth_kit.public_kit, or null}. Every route of the owner
+    # API that returns an avatar signs its motion_url.
     mouth: dict | None = None
     # True when the draft has moved ahead of the published snapshot — the
     # dashboard shows a Publish bar on this.
@@ -178,6 +184,20 @@ class MouthProfile(BaseModel):
 class MouthUpdate(BaseModel):
     renderer: Literal["classic", "continuous"]
     profile: MouthProfile = Field(default_factory=MouthProfile)
+
+
+class MouthKitRequest(BaseModel):
+    # A third_party_ai consent naming google, by this user (POST /consents).
+    consent_id: str = Field(min_length=1, max_length=64)
+
+
+class MouthKitOut(BaseModel):
+    """The avatar's mouth-kit job (step "mouth_kit"): live while it runs,
+    then how it ended; null when this server ran none for it since it
+    started (a restart forgets jobs: one the client started and cannot find
+    was interrupted)."""
+
+    job: JobOut | None = None
 
 
 class AvatarUpdate(BaseModel):

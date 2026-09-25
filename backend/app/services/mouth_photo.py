@@ -11,13 +11,20 @@ second photo from the owner; AI makes it for them.
 **One path in.** Whatever the source, a mouth photo is admitted by
 `prepare_mouth_photo`: the portrait checks every mouth photo has always had
 (portrait_photo.prepare_photo: a real detected face, big enough, the mouth
-actually open), an encoding for visitors (`encode_for_visitors`, below),
-then the browser's own teeth test on exactly those bytes
-(services.dental_photo: the upper row wide, dense and tall enough, or
-`DentalPhotoError` on every visitor's page), and `store` writes it as the
-draft's oral photo. The owner
-upload and the AI path differ only in where the bytes come from and in the
-`teeth` record they leave (below).
+actually open), then `admit_photo`: an encoding for visitors
+(`encode_for_visitors`, below) and the browser's own teeth test on exactly
+those bytes (services.dental_photo: the upper row wide, dense and tall
+enough, or `DentalPhotoError` on every visitor's page); `store` writes it
+as the draft's oral photo. The owner upload and the AI paths differ only
+in where the bytes come from and in the `teeth` record they leave (below).
+
+**AI teeth come with the mouth shapes.** Finishing a person, and the Mouth
+panel's one AI action, make the performance kit (services.mouth_kit): six
+photos of the person's mouth, whose "ee" is the teeth photo when the embed
+would draw it; it enters at `admit_photo`, found and checked as a shape
+already. The single "ee" photo below (`make_teeth`) is what is left when
+the kit cannot be made on this server (no face detector for its
+registration): a person can still get their teeth.
 
 **The AI "ee" photo** (`make_teeth`). The model is sent the face crop a
 touch-up sends (photo_adjust: 1.6 face boxes, square, 1024 px) of the
@@ -41,16 +48,19 @@ was finished with generic teeth, saying why, for the avatar page.
 
 AI-made teeth are disclosed like any AI edit: `ai_edited` gains
 `"teeth": {"model"}` (`with_ai_teeth`), and becomes `{"mode": "teeth"}` when
-nothing else about the picture was AI-made.
+nothing else about the picture was AI-made (`mouth_disclosure` keeps that
+mode right as teeth and mouth shapes come and go).
 
-Not fitted from the photo: the teeth height (`profile.teethY`). Measured on
-the lab's two AI "ee" photos of one fictional person (oral-detail-v2, v3),
-the upper incisal edge mapped into the portrait through the skull (stable
-landmarks, as a touch-up aligns) gives -0.034 and -0.010 mouth widths
-where the hand fit is 0.016, and the incisal edge below the upper lip
-measures 0.080 against 0.143: the value moves with how much crown the
-model chose to show, not with the person. A default of 0 sits inside that
-spread; the Mouth panel's slider is the fit.
+Not fitted from a single photo: the teeth height (`profile.teethY`).
+Measured on the lab's two AI "ee" photos of one fictional person
+(oral-detail-v2, v3), the upper incisal edge mapped into the portrait
+through the skull (stable landmarks, as a touch-up aligns) gives -0.034
+and -0.010 mouth widths where the hand fit is 0.016, and the incisal edge
+below the upper lip measures 0.080 against 0.143: the value moves with how
+much crown the model chose to show, not with the person. A default of 0
+sits inside that spread; the Mouth panel's slider is the fit. The kit's
+teeth are fitted (performance_kit.fit_profile: where the embed seats the
+arch it extracts, calibrated on oral-detail-v3).
 """
 
 from __future__ import annotations
@@ -110,7 +120,7 @@ TEETH_UNCLEAR = (
 
 class TeethFailure(Exception):
     """No AI teeth, and why: a code the dashboard translates, a detail in
-    English, and the HTTP status the generate endpoint answers with."""
+    English, and the HTTP status the refusal would answer with."""
 
     def __init__(self, code: str, detail: str, status: int = 422):
         self.code = code
@@ -148,22 +158,46 @@ def generic_teeth_record(note: dict | None) -> dict:
     return {"source": None, "note": note}
 
 
+# The disclosure's modes that say only the MOUTH was AI-made, the picture
+# itself not: its teeth photo (`teeth`), its mouth shapes (`mouth_shapes`,
+# services.mouth_kit). Every other mode is the picture's own (touchup,
+# stylise, regenerate, generate) and outranks them.
+MOUTH_MODES = ("teeth", "mouth_shapes")
+
+
+def mouth_disclosure(ai_edited: dict | None) -> dict | None:
+    """`ai_edited` with its mode re-derived when only the mouth was AI-made:
+    "teeth" while there is a teeth entry, else "mouth_shapes" while there is
+    a shapes entry, else nothing to disclose (None). The model is that
+    entry's. A picture's own mode is left as it is."""
+    if not ai_edited:
+        return None
+    if ai_edited.get("mode") not in MOUTH_MODES:
+        return ai_edited
+    teeth, shapes = ai_edited.get("teeth"), ai_edited.get("mouth_shapes")
+    if teeth:
+        derived = {"mode": "teeth", "model": teeth.get("model"), "teeth": teeth}
+        return {**derived, "mouth_shapes": shapes} if shapes else derived
+    if shapes:
+        return {"mode": "mouth_shapes", "model": shapes.get("model"), "mouth_shapes": shapes}
+    return None
+
+
 def with_ai_teeth(ai_edited: dict | None, model: str | None) -> dict:
     """The disclosure once AI made the teeth (a new dict: JSON columns are
     replaced, never mutated)."""
     if not ai_edited:
         return {"mode": "teeth", "model": model, "teeth": {"model": model}}
-    return {**ai_edited, "teeth": {"model": model}}
+    return mouth_disclosure({**ai_edited, "teeth": {"model": model}})
 
 
 def without_ai_teeth(ai_edited: dict | None) -> dict | None:
     """The disclosure once AI-made teeth are gone (replaced or removed):
-    whatever else AI did to the picture stays disclosed."""
+    whatever else AI did, to the picture or to the mouth's shapes, stays
+    disclosed."""
     if not ai_edited:
         return None
-    if ai_edited.get("mode") == "teeth":
-        return None
-    return {k: v for k, v in ai_edited.items() if k != "teeth"}
+    return mouth_disclosure({k: v for k, v in ai_edited.items() if k != "teeth"})
 
 
 # --- Admission --------------------------------------------------------------------
@@ -204,13 +238,24 @@ def encode_for_visitors(photo: bytes) -> bytes:
 def prepare_mouth_photo(data: bytes) -> tuple[bytes, dict]:
     """(photo, rig) of a mouth photo fit to store, or Validation422 saying
     what is wrong with it. The one admission of every mouth photo, uploaded
-    or AI-made. The photo is the WebP visitors get, and the teeth test runs
-    on it, not on the lossless original: what passed is what is shown.
-    CPU work."""
+    or AI-made: the portrait checks, then `admit_photo`. CPU work."""
     from app.services import portrait_photo
 
     photo, rig, _note = portrait_photo.prepare_photo(data, "mouth")
-    photo = encode_for_visitors(photo)
+    return admit_photo(photo, rig)
+
+
+def admit_photo(png: bytes, rig: dict) -> tuple[bytes, dict]:
+    """The end of every mouth photo's admission, for a clean PNG whose face
+    is already found and landmarked (`rig`: rig.build_rig of its own
+    points): the WebP visitors get, and the teeth test run on it, not on
+    the lossless original, so what passed is what is shown. Validation422
+    mouth_teeth_unclear otherwise.
+
+    The performance kit's "ee" photo enters here (services.mouth_kit): it
+    was detected and checked as a mouth shape already, with the same
+    detector, and is admitted exactly as the rest from this point. CPU work."""
+    photo = encode_for_visitors(png)
     verdict = teeth_verdict(photo, rig)
     if not verdict.accepted:
         raise Validation422(
@@ -229,20 +274,29 @@ async def store(avatar, storage, photo: bytes, rig: dict, teeth: dict) -> list[s
     """Make `photo` the draft's mouth photo (the caller commits and marks the
     draft dirty). Returns the keys of the photo it replaced, to delete
     after the commit: the published snapshot has its own copies."""
-    from uuid import uuid4
-
-    from app.services.mouth import load, oral_keys
+    from app.services.mouth import load
 
     config = load(avatar.mouth_config) or {"renderer": "continuous", "profile": {}}
     previous = [k for k in (config.get("oral_image_key"), config.get("oral_rig_key")) if k]
-    # Fresh keys per photo: the published snapshot may still point at copies
-    # of the old ones, and browsers cache presigned URLs by path.
-    image_key, rig_key = oral_keys(avatar.org_id, avatar.id, uuid4().hex[:8])
-    await storage.put_bytes(image_key, photo, MOUTH_PHOTO_TYPE)
-    await storage.put_bytes(rig_key, json.dumps(rig).encode(), "application/json")
+    image_key, rig_key = await put_photo(avatar, storage, photo, rig)
     config.update(oral_image_key=image_key, oral_rig_key=rig_key, teeth=teeth)
     avatar.mouth_config = json.dumps(config)
     return previous
+
+
+async def put_photo(avatar, storage, photo: bytes, rig: dict) -> tuple[str, str]:
+    """Write an admitted mouth photo and its rig under fresh keys, and
+    return them (image, rig); the config is the caller's to change. Fresh
+    keys per photo: the published snapshot may still point at copies of
+    the old ones, and browsers cache presigned URLs by path."""
+    from uuid import uuid4
+
+    from app.services.mouth import oral_keys
+
+    image_key, rig_key = oral_keys(avatar.org_id, avatar.id, uuid4().hex[:8])
+    await storage.put_bytes(image_key, photo, MOUTH_PHOTO_TYPE)
+    await storage.put_bytes(rig_key, json.dumps(rig).encode(), "application/json")
+    return image_key, rig_key
 
 
 # --- The AI "ee" photo ---------------------------------------------------------------

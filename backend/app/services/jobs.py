@@ -122,20 +122,33 @@ class Job:
     state: str = QUEUED
     fraction: float = 0.0
     label: str | None = None
+    # How far a counted stage is, as (done, total): "3 of 6" mouth shapes.
+    # Belongs to the label it was reported with.
+    count: tuple[int, int] | None = None
     task: asyncio.Task | None = field(default=None, repr=False)
     # Whether it holds one of the runner's running slots right now (not
     # while queued, nor while `outside_slot` has lent it back).
     holds_slot: bool = field(default=False, repr=False)
 
-    def report(self, fraction: float, label: str | None = None) -> None:
+    def report(
+        self, fraction: float, label: str | None = None, count: tuple[int, int] | None = None
+    ) -> None:
         """Record progress. Monotonic: a later, smaller report is ignored,
-        so a bar driven by it never runs backwards."""
+        so a bar driven by it never runs backwards. A new label drops the
+        previous one's `count` unless it brings its own: "fitting the mouth"
+        is not "6 of 6"."""
         self.fraction = max(self.fraction, min(max(float(fraction), 0.0), 1.0))
         if label is not None:
             self.label = label
+            self.count = count
+        elif count is not None:
+            self.count = count
 
     def progress(self) -> dict:
-        return {"fraction": round(self.fraction, 3), "label": self.label}
+        count = None
+        if self.count is not None:
+            count = {"done": self.count[0], "total": self.count[1]}
+        return {"fraction": round(self.fraction, 3), "label": self.label, "count": count}
 
 
 class JobRunner:

@@ -43,7 +43,8 @@ both a good upload flow and a small catalogue of ready characters.
 
 ## The creation flow
 
-The owner's order (2026-09-25): **upload → background → AI adjust → points**.
+The owner's order (2026-09-25, Step 5 added 2026-09-26): **upload → background
+→ AI adjust → points → preparing your avatar**.
 
 ```
 1 Upload + frame   file checks, EXIF rotation, metadata stripped; crop and
@@ -64,8 +65,20 @@ The owner's order (2026-09-25): **upload → background → AI adjust → points
 4 Place points     pre-filled; "Looks right" when the validator passes;
                    the uploader statement for a person's photo (whatever
                    line it ends on), or for a face generated from words
+5 Preparing your   the finish job gives a person's photo the Reference
+  avatar           avatar's quality before the first publish: their own
+                   teeth, their own six mouth shapes and a mouth profile
+                   fitted to them (the performance kit, made from the
+                   chosen picture and the confirmed points; AI, on the same
+                   remembered consent, never without it). Progress counts
+                   the shapes ("making the mouth shapes", n of 6), then
+                   "fitting the mouth", then "publishing"
 → Avatar page      built from the confirmed points
 ```
+
+"If required" AI runs by itself when a check finds a need (the lip touch-up
+of step 3, the mouth of step 5), and only on the member's own consent: never
+silently without it, and never asked for on their behalf.
 
 AI after background removal: the model is sent the person on a flat neutral
 backdrop (never the removed background), and so is an avatar used as the
@@ -117,7 +130,7 @@ again (a chained background job, `cutout:N`).
 | `POST /{id}/detect` {use_ai?, consent_id?} | job | the line's detector → anchors (Gemini only with consent) |
 | `POST /creations/generate` {face_type, style, prompt, source_avatar_id?, consent_id?} | job | the image model makes the original; the wizard continues as for an upload |
 | `POST /{id}/preview-rig` {anchors} | – | the rig finish would build, nothing saved |
-| `POST /{id}/finish` {name, anchors, image} | job | atomic draft→finishing; idempotent; builds, validates, publishes |
+| `POST /{id}/finish` {name, anchors, image} | job | atomic draft→finishing; idempotent; builds, validates, prepares a person's mouth (step 5), publishes |
 | `DELETE /{id}` | – | removes row and files now |
 | `GET /consents/mine?scope=third_party_ai` | – | the caller's latest AI consent under the current wording, or null (asked once per person and wording) |
 | `POST /consents` {scope, text_version, providers?, creation_id?} | – | records a statement; one about a face names its creation and counts for it only |
@@ -301,7 +314,8 @@ except for the clock, a bug fix every avatar gets):
   every other line keeps the classic mouth (null). The Mouth panel still
   switches.
 - **Their own teeth, made by AI, before the first publish**
-  (`services.mouth_photo`, `services.creations._own_teeth`). When the
+  (`services.mouth_photo`; since Step 5, below, the performance kit's "ee"
+  photo, and this single photo only where the kit cannot be made). When the
   organization allows third-party AI and the finishing member has a current
   `third_party_ai` consent, the finish job sends the chosen picture's face
   crop (the touch-up's: 1.6 face boxes, 1024 px, a cut-out on grey) with
@@ -345,12 +359,11 @@ except for the clock, a bug fix every avatar gets):
   when the restored photo is AI-made: a discarded upload, removal or AI
   generation never leaves AI teeth unlabelled or a label on teeth that are
   gone.
-- `POST /orgs/{org}/avatars/{id}/mouth-photo/generate {consent_id}` makes
-  the same photo for an existing avatar (or one whose teeth failed): a draft
-  edit, synchronous, 409 `teeth_in_progress` while one is out. An owner's
-  own photo (`POST …/mouth-photo`, now also refused by the teeth test with
-  422 `mouth_teeth_unclear`) replaces AI teeth and their disclosure;
-  removing the photo removes both.
+- (Step 5 replaced the single "ee" photo at Finish and its synchronous
+  generate endpoint with the performance kit, below; the "ee" photo remains
+  what is made where the kit cannot be.) An owner's own photo (`POST
+  …/mouth-photo`, refused by the teeth test with 422 `mouth_teeth_unclear`)
+  replaces AI teeth and their disclosure; removing the photo removes both.
 - **Teeth height is not fitted from the photo.** On the lab's two AI "ee"
   photos of one person, the upper incisal edge mapped into the portrait
   through the skull (stable landmarks) gives teethY −0.034 and −0.010 where
@@ -362,8 +375,11 @@ except for the clock, a bug fix every avatar gets):
   the wizard starts it (`POST /adjust {mode: "touchup", auto: true}`) on
   the member's own remembered consent, never asking on their behalf: 409
   `auto_adjust_not_applicable` unless the offer stands, once per photo
-  (`ai_usage.auto_adjusted`), never on an AI picture or one already
-  adjusted. The owner still chooses the result.
+  however it is re-cropped (`ai_usage.auto_adjusted`, by source photo),
+  never on an AI picture or one already adjusted, and only when the parted
+  lips are the only reason: with the eyes flagged too the touch-up would
+  redraw eyes the owner never asked about, so it stays the pre-selected
+  recommendation they start. The owner still chooses the result.
 - **Finish warns** (`warnings: [{code, detail}]`, `mouth_open` or
   `teeth_showing`) when the picture still shows them; it is not a refusal.
 - **Dashboard.** The finish progress names its stages from the job's
@@ -379,6 +395,53 @@ except for the clock, a bug fix every avatar gets):
   route, and prompts Publish beside the change. The disclosure badge reads
   "AI touch-up · AI teeth" when both apply. AI adjust starts the offered
   touch-up by itself (`autoAdjustToStart`) and says why while it runs.
+
+### Step 5: preparing your avatar (2026-09-26)
+
+What makes the Reference avatar look as it does is its kit: its own mouth
+shapes, its own teeth, a fitted mouth profile (docs/performance-kit.md).
+Finishing a person now makes theirs, from the chosen picture and the points
+they just confirmed, before the first publish (`services.creations._own_mouth`,
+`services.mouth_kit`):
+
+- **When.** A person (the photographic mouth), the organization's switch
+  on, the image model configured, the monthly limit not reached, and the
+  finishing member's current `third_party_ai` consent. Anything short of
+  that: the photographic mouth with generic teeth and the bundled motion,
+  the reason in `mouth.teeth.note`. Where the kit cannot be made on the
+  server (no face detector), the single "ee" photo, so a person still gets
+  their teeth.
+- **What.** Six image edits of the face crop (AA, EE, OO, OH, F/V, TH),
+  three at a time, the switch and the limit read again before each one (a
+  switch turned off or the limit reached mid-kit stops it: the shapes not
+  yet made are the Reference's, retargeted). Each answer is registered and
+  checked; a refused or failed shape is the Reference's. The EE is the
+  teeth photo when the embed would draw it (stored as WebP, the teeth test
+  on those bytes); otherwise standard teeth, with the reason. The profile
+  (teethY, teethScale, jawRange) is fitted from the person's own shapes.
+- **Cost and consent.** One image generation per billed call (source
+  `mouth_shapes`; a timeout counts), metered as each call ends; the consent
+  is recorded on the avatar and the creation as the first picture leaves.
+  The finish waits for Google outside the job runner's slot.
+- **Stored and published.** `mouth_config.motion_key` (the avatar's own
+  motion manifest, beside the teeth photo), `profile`, `teeth` and `kit`
+  (the owner-facing record); published as a copy, served to the widget and
+  the share page as `mouth.motion_url` (fetched cross-origin, cached like
+  the other published files). Disclosed as `ai_edited.mouth_shapes
+  {model, generated}` while visitors see the shapes.
+- **Never fails the finish.** Any error of the kit: standard teeth, the
+  bundled motion, the finish goes on.
+- **Existing avatars.** The Mouth panel's one AI action, "make mouth shapes
+  and teeth from this photo": `POST /orgs/{org}/avatars/{id}/mouth-kit
+  {consent_id}` → 202 `{job}`, polled with `GET` on the same path; a draft
+  edit the owner publishes; the owner's uploaded teeth are kept.
+- **Later edits.** Re-marked points (Mark the face, Re-detect) move the
+  kit onto them without AI; a new picture (a crop, an undone crop) drops it
+  (the bundled motion again, the shapes' label gone, the teeth kept).
+- **The consent's wording** (`third_party_ai` 2026-09-26, not yet released,
+  edited in place) covers the mouth shapes as well as the teeth: what is
+  sent (crops of the face, one per speech sound), why, and that they are
+  kept and published with the avatar, labelled as AI-made.
 
 ## Embed engine
 
@@ -404,7 +467,8 @@ except for the clock, a bug fix every avatar gets):
   between its updates, never backwards within a run), and closing the mouth
   while the element is paused. Before, the clock started at `play()`, so
   the whole utterance ran ahead of the voice by its start-up delay. Golden
-  renders are unchanged (no frame depends on the clock).
+  renders are unchanged (no frame depends on the clock). Every avatar means
+  the 3D (GLB) engine too: Step 5 gives it the same audio-locked clock.
 - Native timing in production (2026-09-26): the Kokoro provider speaks with
   the timestamped model when it is installed and serves its own phoneme
   spans as cues (`lab_timing.native_cues`), falling back to the stretched

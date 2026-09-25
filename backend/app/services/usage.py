@@ -39,7 +39,12 @@ VISION_KIND = "vision_points"
 # What each image call was for, in UsageEvent.source (16 characters): the
 # same provider and kind cover an edit of someone's photo and a portrait
 # made from text, and the bill is easier to read split by purpose.
-IMAGE_CALLS = ("generate", "adjust_touchup", "adjust_stylise", "adjust_regen", "teeth")
+# "mouth_shapes": one of the six photos of a person's mouth the performance
+# kit makes (services.mouth_kit), its "ee" (the teeth photo) included;
+# "teeth": the single "ee" photo made when the kit cannot be.
+IMAGE_CALLS = (
+    "generate", "adjust_touchup", "adjust_stylise", "adjust_regen", "teeth", "mouth_shapes",
+)
 
 
 async def _count_this_month(db: AsyncSession, org_id: str, kind: str) -> int:

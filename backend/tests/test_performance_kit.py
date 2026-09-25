@@ -18,8 +18,10 @@ import io
 import json
 import math
 import os
+import re
 from pathlib import Path
 
+import httpx
 import numpy as np
 import pytest
 from PIL import Image, ImageDraw
@@ -92,15 +94,16 @@ class Scene:
         self.known[image_key(image)] = np.asarray(points, dtype=np.float64)
 
     def box_for(self, payload: bytes) -> tuple[float, float, float, float]:
-        """Which rectangle of the base a payload shows: the face crop is a
-        CROP_SIZE square, the head crop is not."""
+        """Which square of the base a payload shows: the face crop is
+        CROP_SIZE across, the head crop (at the photo's own resolution)
+        smaller in every scene here."""
         with Image.open(io.BytesIO(payload)) as sent:
             size = sent.size
         if size == (photo_adjust.CROP_SIZE, photo_adjust.CROP_SIZE):
             x0, y0, side = photo_adjust.face_crop_box(self.base_points)
-            return x0, y0, x0 + side, y0 + side
-        return tuple(float(int(round(v))) for v in
-                     photo_adjust.head_crop_box(BASE_SIZE, self.base_points))
+        else:
+            x0, y0, side = pk.head_square(self.base_image.size, self.base_points)
+        return x0, y0, x0 + side, y0 + side
 
     def answer_points(self, shape_points: np.ndarray, box, answer_size) -> np.ndarray:
         x0, y0, x1, y1 = box
@@ -297,6 +300,19 @@ def test_the_ee_prompt_asks_for_the_upper_teeth():
     assert "tongue" in pk.pose_prompt("th") and "lower lip" in pk.pose_prompt("fv")
 
 
+def test_the_prompts_say_what_real_gemini_got_wrong():
+    """The first run on real Gemini (fictional faces): AA yawn-wide, TH's
+    tongue far out, F/V ambiguous. The wording that answers each, under a
+    new recipe version, so a stored kit says which words made it."""
+    assert pk.PROMPTS_VERSION == "pose-prompts@2"
+    assert "moderately open, as in normal conversation, not a yawn or a shout" in (
+        pk.pose_prompt("aa"))
+    assert "only the very tip of the tongue, barely visible between the front teeth" in (
+        pk.pose_prompt("th"))
+    assert ("the upper front teeth pressing gently on the lower lip; the lips otherwise "
+            "relaxed") in pk.pose_prompt("fv")
+
+
 # --- 2. Request preparation -----------------------------------------------------------------
 
 
@@ -315,15 +331,26 @@ def test_the_face_crop_is_ai_adjusts_crop_with_its_way_back(scene):
     assert np.allclose(back, scene.base_points)
 
 
-def test_the_head_crop_is_photo_adjusts_fallback_crop(scene):
+def test_the_head_crop_is_photo_adjusts_fallback_crop_made_square(scene):
+    """The head box is 6:7 (here clipped by the photo's bottom edge), a
+    shape the model does not answer in: it is padded to a square about its
+    centre, like the face crop, and sent at the photo's own resolution."""
     request = pk.prepare_pose_request(scene.base_png, scene.base_points, "oo", kind=pk.HEAD_CROP)
     assert request.kind == pk.HEAD_CROP
-    expected = photo_adjust.head_crop_box(BASE_SIZE, scene.base_points)
-    assert request.box == tuple(float(int(round(v))) for v in expected)
+    x0, y0, x1, y1 = (float(int(round(v)))
+                      for v in photo_adjust.head_crop_box(BASE_SIZE, scene.base_points))
+    assert (x1 - x0) / (y1 - y0) != pytest.approx(1.0, abs=0.02), "the box itself is not square"
+    side = max(x1 - x0, y1 - y0)
+    assert request.box == pytest.approx(
+        ((x0 + x1 - side) / 2, (y0 + y1 - side) / 2, (x0 + x1 + side) / 2, (y0 + y1 + side) / 2))
+    assert request.aspect == pytest.approx(1.0)
     with Image.open(io.BytesIO(request.payload)) as sent:
-        width, height = sent.size
-    assert width / height == pytest.approx((request.box[2] - request.box[0])
-                                           / (request.box[3] - request.box[1]), rel=0.01)
+        assert sent.size == (round(side), round(side))
+    # Where the square reaches past the photo it shows the photo's own edge,
+    # as the face crop does, not a black band.
+    with Image.open(io.BytesIO(request.payload)) as sent:
+        corner = np.asarray(sent.convert("RGB"))[-4:, :4].mean(axis=(0, 1))
+    assert np.abs(corner - np.array(SKIN)).max() < 20
 
 
 def test_no_head_crop_when_it_would_be_the_whole_photo(reference):
@@ -756,6 +783,17 @@ def test_a_bad_kit_id_or_a_missing_shape_is_refused(scene):
 EMBED_FIXTURE = REPO / "embed/src/mouth/__tests__/fixtures/avatar-motion.json"
 
 
+def fixture_as_built_today(path: Path) -> str:
+    """An embed fixture, byte for byte, but for the pose prompts' version
+    it records (`kit.prompts`): provenance the embed never reads. A new
+    wording of the prompts changes nothing the embed loads, so it does not
+    oblige the embed's fixtures to be rewritten; everything else must be
+    what the builder writes. (LIVEFACE_WRITE_FIXTURES=1 rewrites them.)"""
+    text = path.read_text()
+    recorded = json.loads(text)["kit"]["prompts"]
+    return text.replace(f'"prompts":"{recorded}"', f'"prompts":"{pk.PROMPTS_VERSION}"', 1)
+
+
 def test_the_embed_contract_fixture_is_what_the_builder_writes(scene):
     """embed/src/mouth/__tests__ loads this file through the embed's
     validator and renders it; this keeps it equal to what the backend
@@ -763,7 +801,7 @@ def test_the_embed_contract_fixture_is_what_the_builder_writes(scene):
     written = json.dumps(manifest_for(scene), separators=(",", ":"))
     if os.environ.get("LIVEFACE_WRITE_FIXTURES") == "1":
         EMBED_FIXTURE.write_text(written)
-    assert EMBED_FIXTURE.read_text() == written
+    assert fixture_as_built_today(EMBED_FIXTURE) == written
 
 
 # --- Retargeted poses at the fitted jaw range ----------------------------------------------------------
@@ -849,16 +887,16 @@ def test_the_embed_fitted_fixture_is_what_the_kit_writes(scene):
     written = json.dumps(manifest, separators=(",", ":"))
     if os.environ.get("LIVEFACE_WRITE_FIXTURES") == "1":
         EMBED_FITTED_FIXTURE.write_text(written)
-    assert EMBED_FITTED_FIXTURE.read_text() == written
+    assert fixture_as_built_today(EMBED_FITTED_FIXTURE) == written
 
 
 # --- 7. build_kit --------------------------------------------------------------------------------------
 
 
 async def test_a_kit_from_faithful_answers(scene):
-    progress: list[tuple[float, str]] = []
+    progress: list[tuple[float, str, int]] = []
     provider = FakeProvider(scene, delay=0.01)
-    result = await kit(scene, provider, on_progress=lambda f, m: progress.append((f, m)))
+    result = await kit(scene, provider, on_progress=lambda f, m, n: progress.append((f, m, n)))
 
     assert result.calls == 6 and result.billed_calls == 6
     assert sorted(shape for shape, _ in provider.requests) == sorted(pk.SHAPES)
@@ -881,9 +919,10 @@ async def test_a_kit_from_faithful_answers(scene):
     with Image.open(io.BytesIO(teeth.png)) as photo:
         assert list(photo.size) == teeth.rig["image_size"] == [1024, 1024]
     assert len(teeth.rig["points"]) == 478 and teeth.rig["inner_lip_ring"] == pk.INNER_LIP_RING
-    # Progress only moves forward and ends at 1.
-    fractions = [f for f, _ in progress]
+    # Progress only moves forward and ends at 1, counting the shapes settled.
+    fractions = [f for f, _, _ in progress]
     assert fractions == sorted(fractions) and fractions[-1] == 1.0
+    assert [n for _, _, n in progress] == [0, 1, 2, 3, 4, 5, 6, 6]
 
 
 def corrected(reference, correct) -> tuple[Scene, np.ndarray]:
@@ -1120,7 +1159,7 @@ async def test_an_ee_too_closed_for_a_teeth_photo_fits_the_geometric_teeth(scene
 async def test_an_async_progress_callback_is_awaited(scene):
     seen = []
 
-    async def progress(fraction, message):
+    async def progress(fraction, message, done):
         await asyncio.sleep(0)
         seen.append(fraction)
 
@@ -1151,3 +1190,283 @@ async def test_a_generated_kit_uses_a_fresh_id_when_none_is_given(scene):
                                FakeProvider(scene), detect=scene.detect, reference=scene.reference)
     assert first.manifest["character"].startswith("avatar-v1:")
     assert len(first.manifest["character"]) == len("avatar-v1:") + 32
+
+
+# --- 8. What review found: the head crop's shape, the yaw's sign, checks, teardown, time, ids ---
+
+
+async def test_an_answer_of_another_shape_is_refused_as_reframed(scene):
+    """A model that keeps the head's proportions and reframes to an aspect
+    of its own maps back with a scale per axis and could pass every guard
+    with the mouth elsewhere: refused, and the shape retargeted."""
+
+    def reframed(image, points):
+        size = (896, 1024)
+        scale = np.array([size[0] / image.width, size[1] / image.height])
+        return image.resize(size), points * scale
+
+    result = await kit(scene, FakeProvider(scene, {"oo": reframed}))
+    assert result.report["oo"]["status"] == "retargeted"
+    assert result.report["oo"]["reason"]["code"] == "aspect_changed"
+    assert result.report["oo"]["checks"]["aspect"] == pytest.approx(0.875)
+    assert result.billed_calls == 6, "answered, so billed"
+
+
+def test_a_pixel_or_two_of_rounding_is_not_a_reframe(scene):
+    request = pk.prepare_pose_request(scene.base_png, scene.base_points, "ee")
+    with Image.open(io.BytesIO(request.payload)) as sent:
+        answer = sent.convert("RGB").resize((1024, 1030))
+    points = scene.answer_points(scene.truth["ee"], request.box, answer.size)
+    scene.remember(answer, points)
+    frame = pk.ManifestFrame.from_base(scene.base_points, BASE_SIZE, scene.reference)
+    result = pk.register_answer(png(answer), request, pk._base_image(scene.base_png),
+                                scene.base_points, frame, scene.detect)
+    assert result.ok, result.reason
+    assert np.allclose(result.targets, scene.truth["ee"], atol=1e-6)
+
+
+async def test_a_refused_face_crop_is_asked_again_on_a_square(scene):
+    """The retry's picture is square too, and its answer registers."""
+    refused = imagegen.ImageGenRefused("SAFETY")
+    provider = FakeProvider(scene, {"aa": [refused]})
+    result = await kit(scene, provider)
+    assert result.report["aa"]["attempts"] == [pk.FACE_CROP, pk.HEAD_CROP]
+    assert result.report["aa"]["status"] == "ok"
+    assert result.report["aa"]["checks"]["aspect"] == pytest.approx(1.0)
+
+
+def test_the_yaw_guard_knows_which_way_the_head_turned(scene):
+    """The photo's nose sits 0.06 half-widths right of the cheeks' middle;
+    the answer turned the head until it sits 0.06 to the left. Unsigned,
+    both read 0.06 (photo_adjust.yaw_offset): "unchanged". Signed, they are
+    0.12 apart. Only the cheek outline moved, so no other guard sees it."""
+    half = abs(scene.base_points[454, 0] - scene.base_points[234, 0]) / 2
+    base = scene.base_points.copy()
+    base[[234, 454], 0] -= (0.06 - pk.signed_yaw(base)) * half
+    scene.base_points = base
+    assert pk.signed_yaw(base) == pytest.approx(0.06)
+
+    def other_way(points):
+        points = points.copy()
+        answer_half = abs(points[454, 0] - points[234, 0]) / 2
+        points[[234, 454], 0] += (pk.signed_yaw(points) + 0.06) * answer_half
+        assert pk.signed_yaw(points) == pytest.approx(-0.06)
+        assert photo_adjust.yaw_offset(points) == pytest.approx(photo_adjust.yaw_offset(base))
+        return points
+
+    result = registered(scene, "th", alter=other_way)
+    assert result.reason["code"] == "head_turned"
+    assert result.checks["yaw"] == pytest.approx(0.12, abs=1e-3)
+
+
+async def test_a_check_that_breaks_is_a_rejected_answer_and_the_others_carry_on(
+    scene, monkeypatch
+):
+    real = pk.register_answer
+
+    def breaks(answer, request, *args):
+        if request.shape == "oo":
+            raise RuntimeError("the detector crashed on this answer")
+        return real(answer, request, *args)
+
+    monkeypatch.setattr(pk, "register_answer", breaks)
+    result = await kit(scene, FakeProvider(scene))
+    assert result.report["oo"]["status"] == "retargeted"
+    assert result.report["oo"]["outcome"] == "rejected"
+    assert result.report["oo"]["reason"]["code"] == "check_failed"
+    assert sum(r["status"] == "ok" for r in result.report.values()) == 5
+    assert result.calls == result.billed_calls == 6
+
+
+async def test_an_unexpected_failure_cancels_the_calls_in_flight_and_accounts_for_them(scene):
+    """Anything but a provider call failing (here the progress callback,
+    once the first shape is in) tears the kit down: the calls still out are
+    cancelled and awaited, nothing more is sent, and every call that went
+    out is in the failure's log; a cancelled one may have been billed."""
+    provider = FakeProvider(scene, {"ee": "slow", "oo": "slow"})
+
+    def progress(fraction, message, done):
+        if done == 1:
+            raise RuntimeError("the job's progress store is gone")
+
+    with pytest.raises(pk.KitFailed) as failed:
+        await kit(scene, provider, on_progress=progress, concurrency=3)
+    sent = len(provider.requests)
+    await asyncio.sleep(0.05)
+    assert len(provider.requests) == sent < 6, "nothing more was sent"
+    assert provider.in_flight == 0, "the calls out were cancelled and awaited"
+    assert isinstance(failed.value.__cause__, RuntimeError)
+    log = failed.value.call_log
+    assert failed.value.calls == len(log) == sent
+    cancelled = sorted(c["shape"] for c in log if c["outcome"] == "cancelled")
+    assert cancelled == ["ee", "oo"]
+    assert all(c["billed"] is None for c in log if c["outcome"] == "cancelled")
+    # Every other call was answered before the teardown: billed.
+    assert failed.value.billed_calls == sent - len(cancelled)
+    assert all(c["billed"] is True for c in log if c["outcome"] != "cancelled")
+
+
+@pytest.mark.parametrize("error, outcome, billed", [
+    (httpx.ReadTimeout("no answer within imagegen's 90 s"), "timeout", None),
+    (httpx.WriteTimeout("the upload stalled"), "timeout", None),
+    (httpx.ConnectTimeout("never connected"), "provider_error", False),
+])
+async def test_the_providers_own_timeouts_are_classified_by_what_was_sent(
+    scene, error, outcome, billed
+):
+    provider = FakeProvider(scene, {"fv": [error]})
+    result = await kit(scene, provider)
+    assert result.report["fv"]["outcome"] == outcome
+    assert result.report["fv"]["status"] == "retargeted"
+    assert next(c for c in result.call_log if c["shape"] == "fv")["billed"] is billed
+    assert result.billed_calls == 5
+    assert [s for s, _ in provider.requests].count("fv") == 1, "never asked again"
+
+
+async def test_the_kits_bound_is_imagegens_own_timeout(scene, monkeypatch):
+    monkeypatch.setattr(imagegen, "TIMEOUT_SECONDS", 0.2)
+    result = await kit(scene, FakeProvider(scene, {"th": "slow"}))
+    assert result.report["th"]["outcome"] == "timeout"
+
+
+def test_what_was_billed_is_decided_in_one_place():
+    assert pk.call_billing(None) is True
+    assert pk.call_billing(imagegen.ImageGenRefused("SAFETY")) is True
+    assert pk.call_billing(imagegen.ImageGenNoImage("NO_IMAGE")) is True
+    assert pk.call_billing(TimeoutError()) is None
+    assert pk.call_billing(httpx.ReadTimeout("slow")) is None
+    assert pk.call_billing(asyncio.CancelledError()) is None
+    assert pk.call_billing(httpx.ConnectTimeout("down")) is False
+    assert pk.call_billing(imagegen.ImageGenUnavailable("no key")) is False
+    assert pk.call_billing(RuntimeError("image generation failed (500)")) is False
+
+
+async def test_a_stop_says_why_and_nothing_more_is_asked(scene):
+    """The caller's edit function stops the kit (its limit, its switch):
+    the shape and every one not yet asked are retargeted with its reason."""
+
+    class LimitReached(imagegen.ImageGenUnavailable):
+        code = "image_limit_reached"
+        detail = "Monthly image generation limit reached (3/3)"
+
+    provider = FakeProvider(scene, {"oh": LimitReached()})
+    result = await kit(scene, provider, concurrency=1)
+    assert [s for s, _ in provider.requests] == ["aa", "ee", "oo", "oh"]
+    assert result.calls == result.billed_calls == 3, "the stopped call was never sent"
+    for shape in ("oh", "fv", "th"):
+        assert result.report[shape]["reason"] == {
+            "code": "image_limit_reached", "detail": LimitReached.detail}
+    # Without a code of its own, it is imagegen's: no provider.
+    assert pk.stop_reason(imagegen.ImageGenUnavailable("no key"))["code"] == "imagegen_unavailable"
+
+
+@pytest.mark.parametrize("kit_id", ["Ärger", "キット", "١٢٣"])
+def test_a_kit_id_is_ascii_as_the_embed_requires(scene, kit_id):
+    """Letters and digits of other scripts pass str.isalnum; the embed's
+    AVATAR_CHARACTER takes [A-Za-z0-9_-] only."""
+    assert kit_id.isalnum()
+    entry = pk.PoseEntry(scene.base_points, pk.RETARGETED)
+    poses = {shape: entry for shape in pk.SHAPES}
+    with pytest.raises(ValueError):
+        pk.build_manifest(scene.base_points, BASE_SIZE, poses, scene.reference,
+                          kit_id=kit_id, jaw_range=0.85)
+    made = pk.build_manifest(scene.base_points, BASE_SIZE, poses, scene.reference,
+                             kit_id="Kit_09-ok", jaw_range=0.85)
+    assert made["character"] == "avatar-v1:Kit_09-ok"
+
+
+def test_a_fit_for_a_teeth_photo_can_be_refitted_for_drawn_teeth(scene):
+    fitted = {"teethY": 0.03, "teethScale": 1.12, "jawRange": 0.7, "warmth": 0.4,
+              "lipProjection": 0.6}
+    refit = pk.for_drawn_teeth(fitted, scene.base_points, scene.reference)
+    geometric = pk.fit_profile(scene.base_points, {}, scene.reference, None).profile
+    assert refit == {**fitted, "teethY": 0.0, "teethScale": geometric["teethScale"]}
+
+
+# --- 9. Re-confirmed points: the kit follows without AI ------------------------------------
+
+
+def targets_of(manifest: dict) -> dict[str, np.ndarray]:
+    to_base = pk.manifest_to_base(manifest)
+    return {pose["id"]: to_base(pose["points"]) for pose in manifest["poses"]}
+
+
+def assert_valid_avatar_motion(m: dict) -> None:
+    """The embed's validateMotionManifest (version 2), in Python."""
+    def finite(p) -> bool:
+        return (isinstance(p, list) and len(p) == 2
+                and all(isinstance(n, (int, float)) and math.isfinite(n) and abs(n) < 3 for n in p))
+
+    assert m["version"] == 2
+    assert re.fullmatch(r"avatar-v1:[A-Za-z0-9_-]{1,64}", m["character"])
+    assert [p["id"] for p in m["poses"]] == list(pk.POSES)
+    assert finite(m["center"]) and 0.03 <= m["mouth_width"] <= 0.6
+    assert 0.6 <= m["jaw_range"] <= 1.1 and 0 < len(m["triangles"]) <= 2000
+    for i, pose in enumerate(m["poses"]):
+        assert (i == 0) == (pose["provenance"] == "base")
+        if pose["provenance"] == "retargeted":
+            assert pose["registration_rms"] is None
+        else:
+            assert 0 <= pose["registration_rms"] <= 0.007
+        assert pose["image"] is None
+        assert pose["source"] is None or (
+            len(pose["source"]) == 478 and all(finite(q) for q in pose["source"]))
+        assert len(pose["points"]) == 478 and all(finite(q) for q in pose["points"])
+    for triangle in m["triangles"]:
+        assert len(set(triangle)) == 3 and all(0 <= n < 478 for n in triangle)
+    for ring in (m["inner_ring"], m["outer_ring"]):
+        assert 8 <= len(ring) <= 40 and len(set(ring)) == len(ring)
+
+
+def test_rebasing_onto_the_same_points_is_the_identity(scene):
+    manifest = manifest_for(scene)
+    assert pk.rebase_manifest(manifest, scene.base_points, scene.reference) == manifest
+
+
+@pytest.mark.parametrize("move", ["mouth", "eye", "whole"])
+def test_a_moved_mark_keeps_every_poses_displacement(scene, move):
+    """New rest = the re-confirmed points; each pose moves from it exactly
+    as it moved from the old rest, in the picture's pixels."""
+    manifest = manifest_for(scene)
+    moved = scene.base_points.copy()
+    if move == "mouth":
+        moved[pk.MOUTH_LEFT] += [-3.0, 1.0]
+        moved[pk.MOUTH_RIGHT] += [4.0, -2.0]
+    elif move == "eye":
+        moved[LEFT_EYE] += [2.5, 1.5]
+    else:
+        moved += [7.0, -5.0]
+    rebased = pk.rebase_manifest(manifest, moved, scene.reference)
+    old, new = targets_of(manifest), targets_of(rebased)
+    assert np.allclose(new["rest"], moved, atol=1e-4)
+    for shape in pk.SHAPES:
+        assert np.allclose(new[shape] - new["rest"], old[shape] - old["rest"], atol=1e-4), shape
+    # The same kit: its id, recipe, jaw range, provenance, sources, registration.
+    for key in ("character", "kit", "jaw_range", "inner_ring", "outer_ring"):
+        assert rebased[key] == manifest[key]
+    for before, after in zip(manifest["poses"][1:], rebased["poses"][1:]):
+        for key in ("provenance", "registration_rms", "source", "image"):
+            assert after[key] == before[key]
+    assert rebased["poses"][0]["source"] == pk._rounded(moved / np.asarray(BASE_SIZE))
+    assert rebased["frame"]["image_size"] == manifest["frame"]["image_size"]
+    assert_valid_avatar_motion(rebased)
+
+
+def test_a_rebase_keeps_the_recipe_that_made_the_poses(scene):
+    manifest = manifest_for(scene)
+    manifest["kit"] = {**manifest["kit"], "prompts": "pose-prompts@1"}
+    moved = scene.base_points + [1.0, 0.0]
+    assert pk.rebase_manifest(manifest, moved, scene.reference)["kit"]["prompts"] == (
+        "pose-prompts@1")
+
+
+def test_only_a_kits_manifest_is_rebased(scene, reference_manifest):
+    with pytest.raises(ValueError):
+        pk.rebase_manifest(reference_manifest, scene.base_points, scene.reference)
+    with pytest.raises(ValueError):
+        pk.rebase_manifest(manifest_for(scene), scene.base_points[:10], scene.reference)
+
+
+async def test_a_built_kit_is_a_valid_avatar_motion(scene):
+    result = await kit(scene, FakeProvider(scene))
+    assert_valid_avatar_motion(result.manifest)

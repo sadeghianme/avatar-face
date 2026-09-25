@@ -38,7 +38,9 @@ between an image and its cut-out.
 becomes an avatar, it is atomic (draft → finishing happens once), repeatable
 (a second press answers with the same avatar), and it publishes: the owner
 has just looked at the points and said they are right, which is exactly the
-confirmation a first build otherwise waits for.
+confirmation a first build otherwise waits for. Before it publishes a
+person, it prepares their mouth from the picture and those points (the
+wizard's step 5, "Preparing your avatar": `_own_mouth`).
 """
 
 from __future__ import annotations
@@ -1048,17 +1050,30 @@ ADJUST_CALLS = {
 AUTO_ADJUST_REASON = "teeth_showing"
 
 
+def source_photo_key(steps: dict | None, step_id: str | None) -> str | None:
+    """The key of the photo `step_id` comes from, through every framing
+    and cut-out of it: the root of its lineage (the upload, or the
+    generated original). The same for a photo re-cropped any number of
+    times, where each crop is a new pixel frame (frame_key)."""
+    chain = lineage(steps, step_id)
+    return chain[-1]["key"] if chain else None
+
+
 def auto_adjust_of(creation: Creation) -> dict | None:
     """{mode, image, reasons}: the touch-up the wizard may start by itself
     on the current image, or None.
 
-    Only on a person's photo whose check recommends a touch-up because the
-    teeth show, while a round is left, and at most once per photo: never on
-    a picture an AI already made (the result is the owner's to judge, even
-    if its lips are still parted), nor on one the owner has already
+    Only on a person's photo whose check recommends a touch-up for the
+    parted lips alone: with the eyes flagged too (closed, half closed,
+    looking away) a touch-up would redraw eyes the owner never asked about,
+    so it stays the pre-selected recommendation the owner starts. Only
+    while a round is left, and at most once per source photo: never on a
+    picture an AI already made (the result is the owner's to judge, even if
+    its lips are still parted), nor on a photo the owner has already
     adjusted, nor again on one it was started for (`auto_adjusted`, the
-    pixel frames it ran on). The organization's switch, the server's image
-    model and the member's consent are the caller's to check.
+    source photos it ran on), however it is re-cropped since. The
+    organization's switch, the server's image model and the member's
+    consent are the caller's to check.
     """
     from app.services.photo_adjust import ROUNDS_PER_CREATION, TOUCHUP
 
@@ -1069,7 +1084,7 @@ def auto_adjust_of(creation: Creation) -> dict | None:
     if (
         not recommendation
         or recommendation["mode"] != TOUCHUP
-        or AUTO_ADJUST_REASON not in recommendation["reasons"]
+        or set(recommendation["reasons"]) != {AUTO_ADJUST_REASON}
     ):
         return None
     current = current_step(steps)
@@ -1078,11 +1093,13 @@ def auto_adjust_of(creation: Creation) -> dict | None:
     usage = ai_usage_of(creation)
     if usage["adjust_rounds"] >= ROUNDS_PER_CREATION:
         return None
-    frame = frame_key(steps, current)
-    if frame in (usage.get("auto_adjusted") or []):
+    source = source_photo_key(steps, current)
+    started = usage.get("auto_adjusted") or []
+    # Frame keys are what was recorded before sources were: still honoured.
+    if source in started or frame_key(steps, current) in started:
         return None
     last = usage.get("last_round")
-    if last and frame_key(steps, round_source(steps, last)) == frame:
+    if last and source_photo_key(steps, round_source(steps, last)) == source:
         return None
     return {"mode": TOUCHUP, "image": current, "reasons": list(recommendation["reasons"])}
 
@@ -1544,7 +1561,7 @@ async def _build_avatar(
         # working single-photo avatar.
         avatar.has_layers = await store_layers(avatar, storage, image, rig["face_box"])
 
-    await _own_teeth(job, creation, avatar, image, storage)
+    await _own_mouth(job, creation, avatar, image, rig, storage)
 
     warnings = (anchors.get("validation") or {}).get("warnings") or []
     avatar.rig_key = rig_key
@@ -1553,7 +1570,7 @@ async def _build_avatar(
     avatar.status = AvatarStatus.ready
     avatar.error = None
     avatar.quality_note = warnings[0]["detail"] if warnings else None
-    job.report(0.8, "publishing")
+    job.report(0.92, "publishing")
     await publish(avatar, storage)
 
 
@@ -1562,40 +1579,94 @@ TEETH_FAILED = error_record(
 )
 
 
-async def _own_teeth(job: Job, creation: Creation, avatar: Avatar, image: bytes, storage) -> None:
-    """The mouth a new avatar speaks with, set before its first publish.
+async def _own_mouth(
+    job: Job, creation: Creation, avatar: Avatar, image: bytes, rig: dict, storage
+) -> None:
+    """The mouth a new avatar speaks with, set before its first publish:
+    the wizard's last step, "Preparing your avatar".
 
     A person gets the photographic mouth (services.mouth_photo.default_config;
-    every other line keeps the classic one, mouth_config null), and, when the
-    organization allows third-party AI and the member finishing it has agreed
-    to send photos to Google, their own teeth: an "ee" photo the image model
-    makes from `image`, the picture just chosen, admitted exactly like an
-    uploaded mouth photo. Anything short of that (no consent, AI off, the
-    limit, a refusal, a photo the teeth test rejects, a crash) publishes
-    with the renderer's generic teeth and records why in the teeth note.
-    Never fails the finish: the avatar is worth having without its teeth.
+    every other line keeps the classic one, mouth_config null) and, when AI
+    may make it (_ai_allowed: the organization's switch, the image model,
+    the monthly limit, the finishing member's current consent), the quality
+    the Reference avatar has: their own performance kit (services.mouth_kit)
+    from `image`, the picture just chosen, and the rig's 478 points the
+    owner just confirmed. That is their own six mouth shapes, the "ee" as
+    their teeth when the embed would draw it, and the mouth profile fitted
+    to them. Where the kit cannot be made on this server at all (no face
+    detector for its registration; nothing was sent), the single "ee" photo
+    is made instead (_single_teeth), so a person can still get their teeth.
+    Anything short of that (no consent, AI off, the limit, a crash)
+    publishes with generic teeth and the bundled motion, and records why in
+    the teeth note. Never fails the finish: the avatar is worth having
+    without them.
 
     The consent that lets the picture go is recorded on the avatar and the
-    creation as it is sent, not with the result: a refusal, an answer the
-    teeth test rejects or a provider error still sent a photo, and an audit
-    must find what allowed it. The calls wait outside the
-    runner's slot (JobRunner.outside_slot): up to two image-model calls of
-    up to 90 s each, which would otherwise hold every other job back.
+    creation as the first picture is sent, not with the result: a refusal,
+    a rejected answer or a provider error still sent a photo, and an audit
+    must find what allowed it. The calls wait outside the runner's slot
+    (JobRunner.outside_slot), so a finish waiting on Google never holds
+    another person's upload queued.
     """
-    from app.services import consent, mouth_photo
+    from app.services import consent, mouth_kit, mouth_photo, performance_kit
 
     config = mouth_photo.default_config(avatar.face_type)
     if config is None:
         return
     avatar.mouth_config = json.dumps(config)
+
+    def standard(note: dict) -> None:
+        # Generic teeth and the bundled motion, and why.
+        avatar.mouth_config = json.dumps(
+            {**config, "teeth": mouth_photo.generic_teeth_record(note)}
+        )
+
+    try:
+        consent_id = await _ai_allowed(avatar)
+    except mouth_photo.TeethFailure as exc:
+        logger.info("finish %s: no AI mouth (%s)", job.id, exc.code)
+        standard(exc.note())
+        return
+
+    async def sending() -> None:
+        avatar.consent_ids = consent.with_consent(avatar.consent_ids, consent_id)
+        creation.consent_ids = consent.with_consent(creation.consent_ids, consent_id)
+
+    job.report(0.6, mouth_kit.SHAPES_LABEL, count=(0, mouth_kit.SHAPE_COUNT))
+    try:
+        result = await mouth_kit.make(
+            avatar.org_id, image, rig["points"], job=job, on_first_send=sending,
+            on_progress=mouth_kit.progress_to(job, 0.6, 0.85),
+        )
+    except (performance_kit.KitUnavailable, ValueError) as exc:
+        logger.info("finish %s: no mouth kit on this server (%s); the teeth alone", job.id, exc)
+        await _single_teeth(job, avatar, image, storage, sending)
+        return
+    except Exception:
+        # Every call it sent was metered as it ended (mouth_kit.CallGuard).
+        logger.exception("finish %s: making the mouth kit failed", job.id)
+        standard(TEETH_FAILED)
+        return
+    job.report(0.87, mouth_kit.FIT_LABEL)
+    ai_edited = avatar.ai_edited
+    try:
+        await mouth_kit.store(avatar, storage, result, source="finish")
+    except Exception:
+        logger.exception("finish %s: storing the mouth kit failed", job.id)
+        avatar.ai_edited = ai_edited
+        standard(TEETH_FAILED)
+
+
+async def _single_teeth(job: Job, avatar: Avatar, image: bytes, storage, sending) -> None:
+    """A person's teeth alone: an "ee" photo the image model makes from
+    `image`, admitted exactly like an uploaded mouth photo, when the kit
+    cannot be made. Anything short of it publishes the generic teeth with
+    the reason in the teeth note."""
+    from app.services import mouth_photo
+
+    config = mouth_photo.default_config(avatar.face_type) or {}
     job.report(0.65, "making the teeth")
     try:
-        consent_id = await _teeth_consent(avatar)
-
-        async def sending() -> None:
-            avatar.consent_ids = consent.with_consent(avatar.consent_ids, consent_id)
-            creation.consent_ids = consent.with_consent(creation.consent_ids, consent_id)
-
         async with runner.outside_slot(job):
             made = await mouth_photo.make_teeth(avatar.org_id, image, on_send=sending)
         await mouth_photo.store(
@@ -1613,6 +1684,29 @@ async def _own_teeth(job: Job, creation: Creation, avatar: Avatar, image: bytes,
         return
     config["teeth"] = mouth_photo.generic_teeth_record(note)
     avatar.mouth_config = json.dumps(config)
+
+
+async def _ai_allowed(avatar: Avatar) -> str:
+    """The finishing member's current third_party_ai consent, when AI may
+    make this mouth at all: the organization allows third-party AI, the
+    member agreed, the server has its image model, and the monthly image
+    limit is not reached (the switch and the limit are read again before
+    every call). Else TeethFailure, whose code the teeth note shows."""
+    from app.services import imagegen
+    from app.services.mouth_photo import TeethFailure
+    from app.services.usage import check_image_limit
+
+    consent_id = await _teeth_consent(avatar)
+    if not imagegen.configured():
+        raise TeethFailure(
+            "imagegen_unavailable", "AI editing is not configured on this server", 409
+        )
+    try:
+        async with get_session_factory()() as db:
+            await check_image_limit(db, avatar.org_id)
+    except AppError as exc:
+        raise TeethFailure(exc.code, exc.detail, 429) from exc
+    return consent_id
 
 
 async def _teeth_consent(avatar: Avatar) -> str:
