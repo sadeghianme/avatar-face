@@ -7,7 +7,12 @@ Photoface HD, or embed widget. It reuses `AvatarEngine` and saved face assets.
 The shared renderer takes an optional `cueClock` callback. Without one,
 `playAudio` (the share page, the widget) now times cues by the audio
 element's position too (`embed/src/media-clock.ts`, since 2026-09-26),
-which is what this lab showed to matter.
+which is what this lab showed to matter. The 3D engine (`Avatar3DEngine`)
+plays speech by the same clock: held until the audio reports `playing`,
+re-synced on `seeked`, and with the mouth closed while paused. Until the
+voice has started, the silence the photo engine reads at time 0 is not a
+pause in the speech: no catch-breath, blink or glance away before the
+first word, however long a phone takes to start the audio.
 
 ## What the comparison means
 
@@ -95,7 +100,10 @@ The model tests require the configuration above and perform actual synthesis
 for US English, UK English, and French. Normal tests never download weights.
 Unit tests cover timing preservation, affricates, stress/length modifiers,
 invalid metadata, membership checks, explicit failure/fallback, and playback
-start/pause/buffering/resume/cancel/error behavior.
+start/pause/buffering/resume/cancel/error behavior. The product engines'
+clock is pinned with a fake audio element whose `playing` arrives late
+(`embed/src/__tests__/media-clock.test.ts` for the photo engine, including
+the pause behaviour, and `engine3d-clock.test.ts` for the 3D engine).
 
 For visual acceptance, generate the test sentence, replay, pause/resume, and
 change avatars while generating. Test a short paragraph in each supported

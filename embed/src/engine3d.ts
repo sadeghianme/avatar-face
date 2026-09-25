@@ -15,6 +15,7 @@ import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
 const BASIS_TRANSCODER_PATH = "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/basis/";
 
 import { prepareCues } from "./engine";
+import { MediaClock } from "./media-clock";
 import { Cue, DEFAULT_TUNING, EngineTuning } from "./types";
 
 // Oculus viseme -> Ready Player Me morph-target name. Note ih/oh/ou are
@@ -95,6 +96,8 @@ export class Avatar3DEngine {
   private gazeTarget = { x: 0, y: 0 };
   private nextSaccadeAt = 0;
   private currentAudio: HTMLAudioElement | null = null;
+  /** Cue time of the audio playing now: the element's own position. */
+  private audioClock: MediaClock | null = null;
   private onAudioEnd: (() => void) | null = null;
 
   static async load(canvas: HTMLCanvasElement, modelUrl: string): Promise<Avatar3DEngine> {
@@ -192,10 +195,26 @@ export class Avatar3DEngine {
 
   // --- Speech API (same shape as the 2D engine) ---
 
+  /**
+   * Play base64 audio with a viseme cue track, timed as the 2D engine times
+   * it (media-clock.ts): cue time is the audio element's own position, held
+   * at 0 until the voice is actually playing, re-anchored on `playing` and
+   * `seeked`, followed every frame, and standing still with the mouth
+   * closed while the element is paused. A clock started at play() ran ahead
+   * of the voice by however long the audio took to start, for the whole
+   * utterance.
+   */
   playAudio(audioB64: string, mime: string, cues: Cue[], onEnd?: () => void): void {
     this.stopAudio();
     const audio = new Audio(`data:${mime};base64,${audioB64}`);
     this.currentAudio = audio;
+    const clock = new MediaClock(audio);
+    this.audioClock = clock;
+    const sync = () => {
+      if (audio === this.currentAudio) clock.sync(performance.now());
+    };
+    audio.addEventListener("playing", sync);
+    audio.addEventListener("seeked", sync);
     this.onAudioEnd = onEnd ?? null;
     this.cues = prepareCues(cues);
     this.speaking = true;
@@ -235,10 +254,13 @@ export class Avatar3DEngine {
     const callback = this.onAudioEnd;
     this.onAudioEnd = null;
     this.currentAudio = null;
+    this.audioClock = null;
     if (callback && !this.destroyed) callback();
   }
 
   private stopAudio(): void {
+    // Cue time goes back to the frame clock (playCues, the next playAudio).
+    this.audioClock = null;
     if (this.currentAudio) {
       const audio = this.currentAudio;
       this.currentAudio = null;
@@ -250,12 +272,18 @@ export class Avatar3DEngine {
 
   // --- Animation ---
 
-  /** Co-articulated target weights per morph name (same scheme as 2D). */
+  private cueTime(now: number): number {
+    if (this.audioClock) return this.audioClock.read(now);
+    return now - this.cueStart;
+  }
+
+  /** Co-articulated target weights per morph name (same scheme as 2D). A
+   *  paused voice closes the mouth rather than freezing it mid-vowel. */
   private cueTargets(now: number): Record<string, number> {
     const targets: Record<string, number> = {};
     for (const name of MORPH_NAMES) targets[name] = 0;
-    if (!this.speaking || !this.cues.length) return targets;
-    const t = now - this.cueStart;
+    if (!this.speaking || !this.cues.length || this.audioClock?.paused) return targets;
+    const t = this.cueTime(now);
     let index = -1;
     for (let i = 0; i < this.cues.length; i++) {
       if (this.cues[i].t <= t) index = i;

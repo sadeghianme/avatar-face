@@ -9,7 +9,8 @@
  * of it for the rest of the utterance: every mouth shape early. The lab
  * compares renderers on the audio position read every frame
  * (lab/audio-clock.ts); this is the same clock for the share page and the
- * widget, which the stable engine may import (the engine never imports lab/).
+ * widget, which the stable engines may import (they never import lab/): the
+ * photo engine and the 3D one play speech by it alike.
  *
  * The rules:
  * - before the first `playing`, time holds at 0: the mouth waits for the
@@ -24,7 +25,10 @@
  *   refreshes late must not shake the mouth between two shapes;
  * - paused (the page, the OS, a headset button), the clock stands at the
  *   element's position and `paused` says so, so the engine can close the
- *   mouth instead of freezing it mid-vowel.
+ *   mouth instead of freezing it mid-vowel;
+ * - until the first `playing`, `started` is false: the engine is waiting
+ *   for the voice, and the silence it reads at time 0 is not a pause in the
+ *   speech (no catch-breath, no blink, no glance away before a word).
  */
 
 /** The slice of an HTMLMediaElement the clock reads; a test passes a stub. */
@@ -39,7 +43,7 @@ export interface MediaTime {
 export const MAX_EXTRAPOLATION_MS = 250;
 
 export class MediaClock {
-  private started = false;
+  private heard = false;
   private anchorMedia = 0;
   private anchorNow = 0;
   private lastMedia = Number.NaN;
@@ -47,14 +51,20 @@ export class MediaClock {
 
   constructor(private readonly media: MediaTime) {}
 
-  /** Has the element started playing (a `playing` event has been seen)? */
+  /** The voice has started (a `playing` event has been seen), whether or
+   *  not it has paused since. */
+  get started(): boolean {
+    return this.heard;
+  }
+
+  /** Has the element started playing, and is it playing now? */
   get playing(): boolean {
-    return this.started && !this.media.paused;
+    return this.heard && !this.media.paused;
   }
 
   /** Stopped after it started: the voice is silent, whatever the cues say. */
   get paused(): boolean {
-    return this.started && this.media.paused;
+    return this.heard && this.media.paused;
   }
 
   /**
@@ -62,7 +72,7 @@ export class MediaClock {
    * it, in ms, for the caller to re-place anything walked on cue time.
    */
   sync(now: number): number {
-    this.started = true;
+    this.heard = true;
     const media = this.position();
     this.anchor(media, now);
     this.lastRead = media;
@@ -71,7 +81,7 @@ export class MediaClock {
 
   /** Cue time in ms at frame time `now`. */
   read(now: number): number {
-    if (!this.started) return 0;
+    if (!this.heard) return 0;
     const media = this.position();
     if (this.media.paused) {
       this.anchor(media, now);

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AvatarEngine } from "../engine";
 import { MAX_EXTRAPOLATION_MS, MediaClock } from "../media-clock";
 import type { Cue, Rig } from "../types";
+import { FakeAudio, fakeCanvas, NoopPath } from "./browser-fakes";
 
 /**
  * Speech on the share page and in the widget is timed by the audio element
@@ -11,36 +12,8 @@ import type { Cue, Rig } from "../types";
  * starts late, stalls or is paused must not leave the mouth ahead of the
  * voice. The first block pins the clock; the second pins the engine using
  * it, with a fake audio element whose position the test moves.
+ * (engine3d-clock.test.ts pins the 3D engine on the same clock.)
  */
-
-/** A stand-in for HTMLAudioElement: the test sets its position and fires
- *  its events. */
-class FakeAudio {
-  static last: FakeAudio | null = null;
-  currentTime = 0;
-  paused = true;
-  src: string;
-  private listeners = new Map<string, (() => void)[]>();
-  constructor(src = "") {
-    this.src = src;
-    FakeAudio.last = this;
-  }
-  addEventListener(type: string, fn: () => void) {
-    this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]);
-  }
-  removeEventListener() {}
-  play() {
-    return Promise.resolve();
-  }
-  pause() {
-    this.paused = true;
-  }
-  fire(type: string) {
-    if (type === "playing") this.paused = false;
-    if (type === "pause") this.paused = true;
-    for (const fn of this.listeners.get(type) ?? []) fn();
-  }
-}
 
 describe("the media clock", () => {
   it("holds at zero until the voice is playing", () => {
@@ -53,6 +26,18 @@ describe("the media clock", () => {
     media.paused = false;
     expect(clock.sync(1500)).toBe(0);
     expect(clock.read(1516)).toBe(16);
+  });
+
+  it("says when the voice has started, and a pause does not unsay it", () => {
+    const media = new FakeAudio();
+    const clock = new MediaClock(media);
+    // Asked to play, not heard yet: waiting, which is neither playing nor paused.
+    media.paused = false;
+    expect([clock.started, clock.playing, clock.paused]).toEqual([false, false, false]);
+    clock.sync(0);
+    expect([clock.started, clock.playing, clock.paused]).toEqual([true, true, false]);
+    media.paused = true;
+    expect([clock.started, clock.playing, clock.paused]).toEqual([true, false, true]);
   });
 
   it("follows the element's position when it moves every frame", () => {
@@ -113,33 +98,14 @@ const rig = JSON.parse(
   readFileSync(new URL("./fixtures/human-rig.json", import.meta.url), "utf8")
 ) as Rig;
 
-function quietCanvas() {
-  const ctx = new Proxy({
-    createLinearGradient: () => ({ addColorStop() {} }),
-    createRadialGradient: () => ({ addColorStop() {} }),
-    getImageData: (_x: number, _y: number, w: number, h: number) =>
-      ({ data: new Uint8ClampedArray(Math.max(1, w * h) * 4).fill(180), width: w, height: h }),
-    measureText: () => ({ width: 0 }),
-  } as Record<string, unknown>, {
-    get: (obj, key: string) => (key in obj ? obj[key] : () => undefined),
-    set: (obj, key: string, value) => ((obj[key] = value), true),
-  });
-  return { width: 256, height: 256, getContext: () => ctx } as unknown as HTMLCanvasElement;
-}
-
-class NoopPath {
-  moveTo() {}
-  lineTo() {}
-  quadraticCurveTo() {}
-  bezierCurveTo() {}
-  arc() {}
-  ellipse() {}
-  rect() {}
-  closePath() {}
-  addPath() {}
-}
-
-type Internals = { cueTime(now: number): number; currentViseme(now: number): string };
+type Internals = {
+  cueTime(now: number): number;
+  currentViseme(now: number): string;
+  tick(now: number): void;
+  body: { catchBreath(now: number): void };
+  blinks: { onPause(now: number): void };
+  gazeTarget: { x: number; y: number };
+};
 
 const CUES: Cue[] = [
   { t: 0, viseme: "sil", a: 1 },
@@ -157,7 +123,7 @@ describe("speech played by the engine", () => {
     vi.stubGlobal("requestAnimationFrame", () => 1);
     vi.stubGlobal("cancelAnimationFrame", () => undefined);
     vi.stubGlobal("Path2D", NoopPath);
-    vi.stubGlobal("document", { createElement: () => quietCanvas() });
+    vi.stubGlobal("document", { createElement: () => fakeCanvas() });
     vi.stubGlobal("Audio", FakeAudio);
   });
   afterEach(() => {
@@ -167,7 +133,7 @@ describe("speech played by the engine", () => {
 
   const engineWith = (options = {}) => {
     const image = { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement;
-    const engine = new AvatarEngine(quietCanvas(), rig, image, { fullPhoto: true, ...options });
+    const engine = new AvatarEngine(fakeCanvas(), rig, image, { fullPhoto: true, ...options });
     return { engine, e: engine as unknown as Internals };
   };
 
@@ -260,5 +226,90 @@ describe("speech played by the engine", () => {
     external = 250;
     expect(e.currentViseme(now)).toBe("aa");
     engine.destroy();
+  });
+
+  describe("a pause in the speech (a catch-breath, a blink, sometimes a glance away)", () => {
+    /** "Hello, ...": the /h/ is silence at 0, and the comma is a real pause
+     *  (420-900 ms), longer than the gap between two words. */
+    const HELLO: Cue[] = [
+      { t: 0, viseme: "sil", a: 1 },
+      { t: 90, viseme: "E", a: 1 },
+      { t: 170, viseme: "nn", a: 1 },
+      { t: 240, viseme: "oh", a: 1 },
+      { t: 420, viseme: "sil", a: 1 },
+      { t: 900, viseme: "aa", a: 1 },
+      { t: 1100, viseme: "PP", a: 1 },
+      { t: 1180, viseme: "aa", a: 1 },
+      { t: 1400, viseme: "sil", a: 1 },
+    ];
+
+    /** Frame by frame for `ms`, the audio's position moving while it plays. */
+    const run = (e: Internals, audio: FakeAudio, ms: number) => {
+      for (let elapsed = 0; elapsed < ms; elapsed += 1000 / 60) {
+        now += 1000 / 60;
+        if (!audio.paused) audio.currentTime += 1 / 60;
+        e.tick(now);
+      }
+    };
+
+    const speak = () => {
+      // Every draw 0.3: a pause glances away (45% of pauses do), and each
+      // fixation the saccade timer picks is the listener, so nothing but the
+      // pause behaviour moves the gaze. (A constant the body's Box-Muller
+      // sampler accepts: 0.1 and 0.5 would be redrawn forever.)
+      vi.mocked(Math.random).mockReturnValue(0.3);
+      const { engine, e } = engineWith();
+      const breath = vi.spyOn(e.body, "catchBreath");
+      const blink = vi.spyOn(e.blinks, "onPause");
+      engine.playAudio("", "audio/wav", HELLO);
+      return { engine, e, audio: FakeAudio.last!, breath, blink };
+    };
+
+    it("is not taken while the voice has yet to start", () => {
+      const { engine, e, audio, breath, blink } = speak();
+      // 600 ms of decoding and device start-up, as on a phone. The /h/ at
+      // time 0 is all the cue track says meanwhile.
+      run(e, audio, 600);
+      expect(e.currentViseme(now)).toBe("sil");
+      expect(breath).not.toHaveBeenCalled();
+      expect(blink).not.toHaveBeenCalled();
+      expect(e.gazeTarget).toEqual({ x: 0, y: 0 });
+      // The voice starts: its /h/ runs into the vowel, with no pause between.
+      audio.fire("playing");
+      run(e, audio, 300);
+      expect(e.currentViseme(now)).toBe("oh");
+      expect(breath).not.toHaveBeenCalled();
+      expect(blink).not.toHaveBeenCalled();
+      expect(e.gazeTarget).toEqual({ x: 0, y: 0 });
+      engine.destroy();
+    });
+
+    it("is still taken at a real pause once the voice plays, once", () => {
+      const { engine, e, audio, breath, blink } = speak();
+      run(e, audio, 600);
+      audio.fire("playing");
+      // Into the comma, past the length of a pause but not out of it.
+      run(e, audio, 800);
+      expect(e.currentViseme(now)).toBe("sil");
+      expect(breath).toHaveBeenCalledTimes(1);
+      expect(blink).toHaveBeenCalledTimes(1);
+      expect(e.gazeTarget).not.toEqual({ x: 0, y: 0 });
+      // Speech resumes: back to the listener.
+      run(e, audio, 200);
+      expect(e.currentViseme(now)).not.toBe("sil");
+      expect(e.gazeTarget).toEqual({ x: 0, y: 0 });
+      engine.destroy();
+    });
+
+    it("is taken when a voice that has started is paused", () => {
+      const { engine, e, audio, breath, blink } = speak();
+      audio.fire("playing");
+      run(e, audio, 300);
+      audio.fire("pause");
+      run(e, audio, 400);
+      expect(breath).toHaveBeenCalledTimes(1);
+      expect(blink).toHaveBeenCalledTimes(1);
+      engine.destroy();
+    });
   });
 });

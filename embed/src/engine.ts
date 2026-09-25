@@ -1272,6 +1272,12 @@ export class AvatarEngine {
     return this.audioClock?.paused ?? false;
   }
 
+  /** The audio has been asked to play and is not heard yet (decoding, the
+   *  output device waking): cue time holds at 0 meanwhile. */
+  private awaitingVoice(): boolean {
+    return this.audioClock !== null && !this.audioClock.started;
+  }
+
   private currentViseme(now: number): string {
     if (!this.speaking || !this.cues.length || this.voicePaused()) return "sil";
     const t = this.cueTime(now);
@@ -1372,6 +1378,12 @@ export class AvatarEngine {
     if (silent) {
       const amp = this.amplitude();
       if (amp > 0.06) visemeWeights.jawOpen = Math.min(0.5, amp * 1.2);
+    }
+    // Waiting for the voice to start is not a pause in it. Cue time holds at
+    // 0 until the audio plays, which takes hundreds of ms on a phone, and a
+    // greeting that opens on /h/ is silence at 0: counted as a pause, it
+    // began with a breath, a blink and a glance away before the first word.
+    if (silent && !this.awaitingVoice()) {
       // A pause that has lasted long enough to be a pause (not the gap
       // between two words) gets a catch-breath. Once per run of silence.
       if (this.silenceSince === null) this.silenceSince = now;
