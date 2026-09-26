@@ -445,8 +445,10 @@ they just confirmed, before the first publish (`services.creations._own_mouth`,
   the model acted them; a refused or failed shape is the Reference's. The
   teeth photo is kept when the embed would draw it (cut to the lips, stored
   as WebP, the teeth test on those bytes); otherwise standard teeth, with
-  the reason. teethY and teethScale are fitted from the teeth photo; the jaw
-  range stays the owner's.
+  the reason. The teeth photo is drawn at the Reference's seat and size
+  (teethY 0.016, teethScale 1.00): where the model drew its teeth is its
+  choice, not the person's (docs/performance-kit.md); the jaw range stays
+  the owner's.
 - **Cost and consent.** One image generation per billed call (source
   `mouth_shapes`; a timeout counts), metered as each call ends. The consent
   is recorded before the first picture leaves, for good (a finish that fails
