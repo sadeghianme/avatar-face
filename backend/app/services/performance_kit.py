@@ -534,12 +534,23 @@ MAX_ASPECT_CHANGE = 0.01
 REFERENCE_OPENINGS: dict[str, float] = {
     "aa": 0.290, "ee": 0.165, "oo": 0.122, "oh": 0.308, "fv": 0.096, "th": 0.203,
 }
-# How much further than the Reference's a shape may open. The first run on
-# real Gemini came back 1.6 to 2.0 times the Reference's for TH, F/V and EE
-# (and AA at 2.2 to 2.5); played, an over-open TH opens every t, d, n and k
-# as wide as "ah" (the continuous mouth plays TH for them), and an
-# over-open EE every "ih", "e" and "s".
-MAX_OVER_REFERENCE = 1.3
+# How much further than the Reference's a shape may open AT THE KIT'S SIZE,
+# once normalize_amplitude has put this face's AA where the Reference's is.
+# The first run on real Gemini (@1 prompts) came back 1.6 to 2.0 times the
+# Reference's for TH, F/V and EE (and AA at 2.2 to 2.5); played, an
+# over-open TH opens every t, d, n and k as wide as "ah" (the continuous
+# mouth plays TH for them), and an over-open EE every "ih", "e" and "s".
+# The second (@3 prompts, 2026-09-26) came back 0.7 to 1.45 times raw and
+# 0.6 to 1.31 at the kit's size: its F/V at 1.31 shows a millimetre more
+# tooth than the Reference's, not an "ah", and was refused at 1.3.
+MAX_OVER_REFERENCE = 1.4
+# Before that size is known an answer is held only to what no speech sound
+# reaches, twice the Reference's own opening of the shape: the model acts
+# every shape alike (that run's AA, OH and F/V all came back about a tenth
+# too open), so a shape is judged against the Reference's at the kit's
+# size, not as the model drew it. The AA, which sets the size, is held to
+# MAX_OVER_REFERENCE as drawn.
+RAW_MAX_OVER_REFERENCE = 2.0
 # The AA sets the kit's scale (normalize_amplitude): one opening less than
 # this much of the Reference's would be scaled up with every other shape
 # more than 1.7 times; one that little is not an "ah" anyway.
@@ -548,14 +559,23 @@ MIN_AA_OF_REFERENCE = 0.6
 # mouth, never enough to force the Reference's exact look on another face.
 _FLOORS: dict[str, dict[str, float]] = {
     "aa": {"min_opening": round(MIN_AA_OF_REFERENCE * REFERENCE_OPENINGS["aa"], 3)},
-    "ee": {"min_opening": 0.05, "min_width": 0.98},
+    # An "ee" spreads the lips from a neutral mouth (the Reference's to 1.05
+    # of its rest); a portrait that already smiles has little spread left:
+    # the second real run's relaxed "ee" came back 0.96 of a smiling rest.
+    # 0.94 still refuses a rounded mouth (an OH is at most 0.92, an OO 0.85).
+    "ee": {"min_opening": 0.05, "min_width": 0.94},
     "oo": {"max_width": 0.85},
     "oh": {"min_opening": 0.12, "max_width": 0.92},
     "fv": {},
     "th": {"min_opening": 0.05},
 }
+def _raw_limit(shape: str) -> float:
+    """How many times the Reference's opening an answer may open as drawn."""
+    return MAX_OVER_REFERENCE if shape == "aa" else RAW_MAX_OVER_REFERENCE
+
+
 POSE_LIMITS: dict[str, dict[str, float]] = {
-    shape: {**floors, "max_opening": round(MAX_OVER_REFERENCE * REFERENCE_OPENINGS[shape], 3)}
+    shape: {**floors, "max_opening": round(_raw_limit(shape) * REFERENCE_OPENINGS[shape], 3)}
     for shape, floors in _FLOORS.items()
 }
 # The least lip gap, in its own mouth widths, of an answer to the teeth
@@ -630,7 +650,7 @@ def _shape_reached(shape: str, opened: float, width: float) -> str | None:
         return f"the lips parted {opened:.2f} mouth widths, less than {limits['min_opening']}"
     if opened > limits["max_opening"]:
         return (f"the lips parted {opened:.2f} mouth widths, more than {limits['max_opening']} "
-                f"({MAX_OVER_REFERENCE} times the Reference's)")
+                f"({_raw_limit(shape)} times the Reference's)")
     if width < limits.get("min_width", -math.inf):
         return f"the mouth is {width:.2f} of its rest width, narrower than {limits['min_width']}"
     if width > limits.get("max_width", math.inf):
@@ -1042,7 +1062,7 @@ def normalize_amplitude(
     from rest the Reference's AA opening over this AA's times as far as it
     was made, which puts this AA exactly where the Reference's is and keeps
     every other shape's size relative to it. (register_answer held this AA
-    to 0.6..1.3 times the Reference's, so the scale is 0.77..1.67.) Openings
+    to 0.6..1.4 times the Reference's, so the scale is 0.71..1.67.) Openings
     are measured from the rest's own (`opening`): lips parted in the
     portrait are not movement.
 

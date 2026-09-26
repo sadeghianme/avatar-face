@@ -535,7 +535,8 @@ def test_the_references_openings_are_the_bundled_motions(reference):
     measured = pk.reference_openings(reference)
     for shape, opening in pk.REFERENCE_OPENINGS.items():
         assert measured[shape] == pytest.approx(opening, abs=1e-3), shape
-    assert pk.POSE_LIMITS["th"]["max_opening"] == round(1.3 * pk.REFERENCE_OPENINGS["th"], 3)
+    assert pk.POSE_LIMITS["th"]["max_opening"] == round(2.0 * pk.REFERENCE_OPENINGS["th"], 3)
+    assert pk.POSE_LIMITS["aa"]["max_opening"] == round(1.4 * pk.REFERENCE_OPENINGS["aa"], 3)
     assert pk.POSE_LIMITS["aa"]["min_opening"] == round(0.6 * pk.REFERENCE_OPENINGS["aa"], 3)
 
 
@@ -547,13 +548,56 @@ SPIKE_OPENINGS = [("th", 0.362), ("th", 0.348), ("fv", 0.150), ("fv", 0.162),
                   ("ee", 0.320), ("ee", 0.267), ("aa", 0.73), ("aa", 0.65)]
 
 
-@pytest.mark.parametrize("shape, opened", SPIKE_OPENINGS)
-def test_the_first_real_answers_that_opened_too_far_are_refused(scene, shape, opened):
+# The second (@3 prompts, 2026-09-26, the demo portrait), as drawn: the
+# model acted every shape about alike. EE also came back 0.96 of the
+# smiling rest's width; OO and TH within their limits.
+SECOND_RUN_OPENINGS = {"aa": 0.321, "ee": 0.113, "oo": 0.041, "oh": 0.413, "fv": 0.139,
+                       "th": 0.176}
+
+
+@pytest.mark.parametrize("shape, opened", [s for s in SPIKE_OPENINGS if s[0] == "aa"])
+def test_an_ah_the_model_overacted_is_refused_as_drawn(scene, shape, opened):
+    """The AA sets the kit's size, so it is judged as drawn."""
     scene.truth[shape] = acting(scene, shape, opened / pk.REFERENCE_OPENINGS[shape])
     result = registered(scene, shape)
     assert result.checks["opening"] == pytest.approx(opened, abs=0.005)
     assert result.reason["code"] == "pose_not_reached"
-    assert "1.3 times the Reference's" in result.reason["detail"]
+    assert "1.4 times the Reference's" in result.reason["detail"]
+
+
+@pytest.mark.parametrize("shape, opened", [s for s in SPIKE_OPENINGS if s[0] != "aa"])
+def test_other_shapes_are_judged_at_the_kits_size_not_as_drawn(scene, shape, opened):
+    """As drawn they are held only to what no speech sound reaches (twice
+    the Reference's); normalize_amplitude judges them at the kit's size
+    (test_the_first_real_answers_play_no_wider_than_speech)."""
+    scene.truth[shape] = acting(scene, shape, opened / pk.REFERENCE_OPENINGS[shape])
+    result = registered(scene, shape)
+    assert result.checks["opening"] == pytest.approx(opened, abs=0.005)
+    assert result.ok
+    scene.truth[shape] = acting(scene, shape, 2.1)
+    refused = registered(scene, shape)
+    assert refused.reason["code"] == "pose_not_reached"
+    assert "2.0 times the Reference's" in refused.reason["detail"]
+
+
+def test_a_relaxed_ee_from_a_smiling_portrait_passes(scene):
+    """A portrait that already smiles has little spread left for an "ee"."""
+    def narrowed(width):
+        def alter(points):
+            points = points.copy()
+            centre = (points[pk.MOUTH_LEFT] + points[pk.MOUTH_RIGHT]) / 2
+            for corner in (pk.MOUTH_LEFT, pk.MOUTH_RIGHT):
+                points[corner] = centre + (points[corner] - centre) * width
+            return points
+        return alter
+
+    truth_width = registered(scene, "ee").checks["width"]
+    relaxed = registered(scene, "ee", alter=narrowed(0.96 / truth_width))
+    assert relaxed.checks["width"] == pytest.approx(0.96, abs=0.005)
+    assert relaxed.ok
+    rounded = registered(scene, "ee", alter=narrowed(0.92 / truth_width))
+    assert rounded.reason["code"] == "pose_not_reached"
+    assert "narrower than 0.94" in rounded.reason["detail"]
 
 
 @pytest.mark.parametrize("factor", [1.25, 0.65])
@@ -1044,7 +1088,7 @@ async def test_the_first_real_answers_play_no_wider_than_speech(scene):
     """The first run on real Gemini, replayed: TH, F/V, EE and AA opened
     1.6 to 2.5 times the Reference's (SPIKE_OPENINGS, one face's), OO and
     OH were faithful. Every over-open answer is refused and retargeted, so
-    no shape plays wider than 1.3 times the Reference's own, and t, d, n
+    no shape plays wider than 1.4 times the Reference's own, and t, d, n
     and k (the TH shape) open as the Reference's do, not as "ah"."""
     for shape, opened in SPIKE_OPENINGS[::2]:
         scene.truth[shape] = acting(scene, shape, opened / pk.REFERENCE_OPENINGS[shape])
@@ -1054,8 +1098,25 @@ async def test_the_first_real_answers_play_no_wider_than_speech(scene):
     targets = manifest_targets(result)
     for shape in pk.SHAPES:
         played = pk.opening(targets[shape], targets["rest"])
-        assert played <= 1.3 * reference[shape] + 1e-3, shape
+        assert played <= pk.MAX_OVER_REFERENCE * reference[shape] + 1e-3, shape
     assert pk.opening(targets["th"], targets["rest"]) == pytest.approx(reference["th"], abs=2e-3)
+
+
+async def test_the_second_real_run_is_the_persons_own_whole(scene):
+    """The second run (@3 prompts), replayed: the model acted every shape
+    about a tenth too far. Judged at the kit's size, all six are the
+    person's own; the AA plays exactly at the Reference's opening and
+    nothing wider than MAX_OVER_REFERENCE times the Reference's."""
+    for shape, opened in SECOND_RUN_OPENINGS.items():
+        scene.truth[shape] = acting(scene, shape, opened / pk.REFERENCE_OPENINGS[shape])
+    result = await kit(scene, FakeProvider(scene))
+    assert {s for s, r in result.report.items() if r["status"] == "ok"} == set(pk.SHAPES)
+    reference = pk.reference_openings(scene.reference)
+    targets = manifest_targets(result)
+    assert pk.opening(targets["aa"], targets["rest"]) == pytest.approx(reference["aa"], abs=2e-3)
+    for shape in pk.SHAPES:
+        played = pk.opening(targets[shape], targets["rest"])
+        assert played <= pk.MAX_OVER_REFERENCE * reference[shape] + 1e-3, shape
 
 
 EMBED_FITTED_FIXTURE = REPO / "embed/src/mouth/__tests__/fixtures/avatar-motion-fitted.json"

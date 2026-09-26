@@ -42,23 +42,30 @@ it is linear in the movement. The Reference's own: AA 0.290, EE 0.165, OO
 0.122, OH 0.308, F/V 0.096, TH 0.203 (`REFERENCE_OPENINGS`, tested equal to
 the bundled motion's).
 
-- **Each answer** must open at most 1.3 times the Reference's opening of
-  the same shape (`MAX_OVER_REFERENCE`), and at least enough to be the shape
-  (AA 0.6 times the Reference's, EE and TH 0.05, OH 0.12; EE at least 0.98
-  of the rest width, OO at most 0.85, OH at most 0.92). The first run on real
-  Gemini came back 1.6-2.0 × for TH, F/V and EE and 2.2-2.5 × for AA: played,
-  an over-open TH opens every t, d, n and k as wide as "ah" (the continuous
-  mouth plays TH for them, and EE for "ih", "e" and "s"). Those answers are
-  refused and retargeted (tested on the spike's measured openings).
+- **Each answer**, as drawn, must open at least enough to be the shape (AA
+  0.6 times the Reference's, EE and TH 0.05, OH 0.12; EE at least 0.94 of
+  the rest width, OO at most 0.85, OH at most 0.92) and at most what no
+  speech sound reaches: twice the Reference's opening of the same shape
+  (`RAW_MAX_OVER_REFERENCE`), and for the AA, which sets the kit's size,
+  1.4 times (`MAX_OVER_REFERENCE`). The EE's width floor allows a portrait
+  that already smiles: the second real run's relaxed "ee" came back 0.96 of
+  a smiling rest.
 - **The kit's size.** An image model acts: how far it opens an "ah" is its
   choice, not the person's jaw. So the person's AA sets the scale: every
   shape the model made is moved from rest the Reference's AA opening over
   this AA's times as far as it was made, which puts this AA exactly where
   the Reference's is and keeps the others' sizes relative to it (the AA
-  limits keep the scale within 0.77-1.67). Then each is held again to 1.3
-  times the Reference's opening of its shape: a TH within its own limit may
-  still open, at the kit's size, as far as an "ah". Without an AA of the
-  person's, nothing is scaled.
+  limits keep the scale within 0.71-1.67). Then each is held to 1.4 times
+  the Reference's opening of its shape at that size (`MAX_OVER_REFERENCE`).
+  The first run on real Gemini (@1 prompts) came back 1.6-2.0 × for TH, F/V
+  and EE and 2.2-2.5 × for AA: played, an over-open TH opens every t, d, n
+  and k as wide as "ah" (the continuous mouth plays TH for them, and EE for
+  "ih", "e" and "s"); those answers are refused and retargeted (tested on
+  the spike's measured openings). The second (@3 prompts) came back
+  0.7-1.45 × as drawn and 0.6-1.31 × at the kit's size: the model acts
+  every shape alike, which is why a shape is judged at the kit's size and
+  not as drawn (tested on that run's openings: all six pass). Without an
+  AA of the person's, nothing is scaled.
 - **The manifest is true at the Reference's jaw range** (0.85), as the
   bundled motion is: the retargeted shapes are the Reference's at that
   size, and the owner's jaw slider means the same with or without a kit.
