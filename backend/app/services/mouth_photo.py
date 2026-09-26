@@ -3,10 +3,12 @@ uploaded by the owner or made by AI from the avatar's own picture.
 
 Why a photo of teeth at all: the photographic mouth (embed/src/mouth,
 "continuous") opens the lips of the one photo it has, and what shows behind
-them is either the enamel lifted from a second photo of the same person
-saying "ee", or generic drawn teeth. The Reference avatar in the lab looks
-as good as it does largely because it has the first. An upload takes that
-second photo from the owner; AI makes it for them.
+them is the enamel lifted from a second photo of the same person saying
+"ee", or, without one, the standard teeth: the Reference avatar's own teeth
+photo (scripts/build_standard_teeth.py), the same for every avatar without
+its own. The Reference avatar in the lab looks as good as it does largely
+because it has the first. An upload takes that second photo from the
+owner; AI makes it for them.
 
 **One path in.** Whatever the source, a mouth photo is admitted by
 `prepare_mouth_photo`: the portrait checks every mouth photo has always had
@@ -46,7 +48,7 @@ published snapshot keeps it beside the files so Discard can restore it,
 and never hands it to a visitor):
 `{"source": "ai", "model"}` for AI teeth, `{"source": "upload"}` for the
 owner's photo, or `{"source": null, "note": {code, detail}}` when an avatar
-was finished with generic teeth, saying why, for the avatar page.
+was finished with the standard teeth, saying why, for the avatar page.
 
 AI-made teeth are disclosed like any AI edit: `ai_edited` gains
 `"teeth": {"model"}` (`with_ai_teeth`), and becomes `{"mode": "teeth"}` when
@@ -59,10 +61,12 @@ Measured on the lab's two AI "ee" photos of one fictional person
 through the skull (stable landmarks, as a touch-up aligns) gives -0.034
 and -0.010 mouth widths where the hand fit is 0.016, and the incisal edge
 below the upper lip measures 0.080 against 0.143: the value moves with how
-much crown the model chose to show, not with the person. A default of 0
-sits inside that spread; the Mouth panel's slider is the fit. The kit's
-teeth are fitted (performance_kit.fit_profile: where the embed seats the
-arch it extracts, calibrated on oral-detail-v3).
+much crown the model chose to show, not with the person. A new person
+starts with the standard teeth's seat and size, the Reference's (teethY
+0.016, `default_config`), and an AI "ee" photo made at Finish is drawn
+there, as the kit's teeth photo is (performance_kit.fit_profile, which
+measures where the photo would put them without applying it); the Mouth
+panel's slider is the fit.
 """
 
 from __future__ import annotations
@@ -141,11 +145,15 @@ class TeethFailure(Exception):
 def default_config(face_type: str) -> dict | None:
     """The mouth a NEW avatar of this line starts with: the photographic one
     where it is allowed (a person), else None, the classic drawn mouth.
-    Existing avatars keep whatever they have."""
+    Existing avatars keep whatever they have. It has no teeth photo of its
+    own yet, so it has the standard teeth, and its profile seats and sizes
+    them as the Reference draws them (performance_kit.for_standard_teeth);
+    a kit made at Finish sets the teeth values it fits."""
     from app.services.mouth import renderer_allowed
+    from app.services.performance_kit import for_standard_teeth
 
     if renderer_allowed("continuous", face_type):
-        return {"renderer": "continuous", "profile": {}}
+        return {"renderer": "continuous", "profile": for_standard_teeth({})}
     return None
 
 
@@ -158,6 +166,7 @@ def upload_teeth_record() -> dict:
 
 
 def generic_teeth_record(note: dict | None) -> dict:
+    """The record of the standard teeth (no teeth photo of its own), and why."""
     return {"source": None, "note": note}
 
 

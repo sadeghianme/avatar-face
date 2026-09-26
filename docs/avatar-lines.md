@@ -316,7 +316,8 @@ NEW human avatars (existing avatars and published snapshots are unchanged,
 except for the clock, a bug fix every avatar gets):
 
 - **Photographic mouth by default.** Finish writes `mouth_config
-  {renderer: "continuous", profile: {}}` for a line allowed it (human);
+  {renderer: "continuous", profile: {teethY: 0.016, teethScale: 1.0}}` for
+  a line allowed it (human): the standard teeth's seat and size (below);
   every other line keeps the classic mouth (null). The Mouth panel still
   switches.
 - **Their own teeth, made by AI, before the first publish**
@@ -343,8 +344,9 @@ except for the clock, a bug fix every avatar gets):
   (`JobRunner.outside_slot`), so a finish waiting on Google never holds
   another person's upload queued. Anything short of that (no consent,
   AI off, the limit, a refusal, a photo the teeth test rejects, a crash)
-  publishes with generic teeth and records why in `mouth_config.teeth.note`,
-  which the Mouth panel shows. Never fails the finish.
+  publishes with the standard teeth (below) and records why in
+  `mouth_config.teeth.note`, which the Mouth panel shows. Never fails the
+  finish.
 - **Stored as WebP, cut to the lips** (`mouth_photo.crop_to_mouth`, then
   `encode_for_visitors`, quality 90): every visitor downloads the mouth
   photo before the photographic mouth attaches, and a 1024 px crop is about
@@ -378,7 +380,9 @@ except for the clock, a bug fix every avatar gets):
   through the skull (stable landmarks) gives teethY −0.034 and −0.010 where
   the hand fit is 0.016, and the edge below the upper lip measures 0.080
   and 0.143 mouth widths: the value follows how much crown the model drew,
-  not the person. The default (0) stays; the slider is the fit.
+  not the person. A new person starts at the Reference's seat (0.016), where
+  the standard teeth and the kit's teeth photo are drawn, and an AI "ee"
+  photo stays there; the slider is the fit.
 - **Parted lips are fixed without a press.** When the current image of a
   person shows `teeth_showing` (a touch-up), `ai.auto_adjust` offers it and
   the wizard starts it (`POST /adjust {mode: "touchup", auto: true}`) on
@@ -418,6 +422,52 @@ except for the clock, a bug fix every avatar gets):
   the offered touch-up by itself (`autoAdjustToStart`) and says why while it
   runs.
 
+### The standard teeth (2026-09-26)
+
+Step 5 gives every new person the photographic mouth, and many of them
+have no teeth photo of their own: the member did not agree to send photos,
+the organization's AI switch is off, the AI's teeth were refused or
+failed, or the owner removed them. Such a mouth used to draw geometric
+teeth, and rendered with the real engine on a fictional bearded man next
+to the lab Reference they read as a denture: flat grey-beige slabs with a
+dark seam down the middle, no gum line, a tongue blob in "oo" and "th".
+The Reference's own photographed teeth (`oral-detail-v3`) borrowed onto
+the same face were clean, complete and symmetric, a little whiter and
+wider than his own, and far better. So they are now the **standard teeth**:
+
+- **The file.** `backend/scripts/build_standard_teeth.py` admits the lab's
+  delivery photo and its rig exactly as every mouth photo is admitted
+  (`mouth_photo.admit_photo`: cut to the lips, WebP, the embed's own teeth
+  test), into `embed/assets/mouth-teeth.webp` (376 × 281 px, 23 KB) and
+  `mouth-teeth.rig.json` (8 KB), which the embed's build copies to `dist`
+  and the API serves as `/mouth-teeth.webp` and `/mouth-teeth.rig.json`,
+  as `/mouth-motion.json` is (revalidated, readable from any origin).
+- **Loaded beside the motion.** The embed's one loader (`loadAvatarMouth`,
+  for the widget, the share page and the dashboard alike) loads them from
+  beside the bundled motion it is given when an avatar's config names no
+  teeth photo: `${apiBase}/mouth-teeth.webp` for the widget,
+  `/api/mouth-teeth.webp` for the dashboard and the share page (the dev
+  proxy maps `/api` to the backend as well). Whatever keeps them from
+  being drawn (the network, a decode, the teeth test) leaves the drawn
+  teeth, never a failed mouth, and they are not asked for again. An avatar
+  whose own teeth photo fails keeps failing to the classic mouth, as
+  before: the standard teeth never stand in for the owner's. The landing
+  demo passes its own teeth (the Reference's, as it always showed) and so
+  never looks for them.
+- **Seated as the Reference's.** A mouth without its own teeth has the
+  profile values the Reference draws the same photo with: teethY 0.016,
+  teethScale 1.00 (`performance_kit.for_standard_teeth`), set at Finish
+  (`mouth_photo.default_config`), by a kit whose teeth are not drawn, and
+  after the owner removes a kit's teeth photo (values the owner moved are
+  kept). The geometric fit (teethScale by the Reference's mouth-to-face
+  proportion over the face's) went with the drawn teeth. An existing
+  photographic mouth without a teeth photo draws them too, at the profile
+  it was saved with: the loader goes by the config it is served.
+- **What they are.** The fictional lab sample's AI-made teeth
+  (reference-avatar-lab.md), the same for every avatar and not made from
+  its picture; the disclosure (`ai_edited`) does not list them. The Mouth
+  panel calls them standard teeth, as before.
+
 ### Step 5: preparing your avatar (2026-09-26)
 
 What makes the Reference avatar look as it does is its kit: its own mouth
@@ -430,10 +480,10 @@ they just confirmed, before the first publish (`services.creations._own_mouth`,
   on, the image model configured, the monthly limit not reached, and the
   finishing member's current `third_party_ai` consent (asked at step 4's
   press when the member has not agreed to the words in force). Anything
-  short of that: the photographic mouth with generic teeth and the bundled
-  motion, the reason in `mouth.teeth.note`. Where the kit cannot be made on
-  the server (no face detector), the single "ee" photo, so a person still
-  gets their teeth.
+  short of that: the photographic mouth with the standard teeth and the
+  bundled motion, the reason in `mouth.teeth.note`. Where the kit cannot
+  be made on the server (no face detector), the single "ee" photo, so a
+  person still gets their teeth.
 - **What.** Seven image edits of the face crop: the six shapes (AA, EE, OO,
   OH, F/V, TH) and the teeth photo (the recipe of the photo the Reference
   renders its teeth from), three at a time, the switch and the limit read

@@ -5,16 +5,18 @@ import type { Avatar, TeethRecord } from "@/lib/types";
  *
  * A new person's avatar gets its own teeth made by AI when it is finished
  * (the teeth photo step 5 makes from their picture with the mouth shapes,
- * or alone where the server cannot make the shapes), or generic teeth with
- * a note saying why not; an owner can also add their own photo. The server
- * says which in `mouth.teeth` (services.mouth_photo, mouth_kit).
+ * or alone where the server cannot make the shapes), or the standard teeth
+ * with a note saying why not; an owner can also add their own photo. The
+ * standard teeth are a photo too: the Reference avatar's own, the same for
+ * every avatar without teeth of its own (kind "generic"). The server says
+ * which in `mouth.teeth` (services.mouth_photo, mouth_kit).
  */
 export type TeethView =
   | { kind: "ai" }
   | { kind: "upload" }
   | { kind: "generic"; note: TeethRecord["note"] };
 
-/** Why a new avatar has generic teeth, by the note's code. Each has its
+/** Why a new avatar has the standard teeth, by the note's code. Each has its
  * words (`mouthTeethNote_<code>`); a code not here shows the server's own
  * sentence. The kit's teeth photo not usable is its request's own reason,
  * `mouth_teeth_unclear`, or `teeth_photo_rejected` naming the check it

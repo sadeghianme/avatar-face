@@ -17,10 +17,24 @@ export const PROTRUSION = 0.05;
 /** Where a teeth photo is: the photo, and its rig (the landmarks on it). */
 export interface OralPhotoSource { image_url: string; rig_url: string }
 
+/** A teeth photo served beside a motion file, resolved as the browser
+ *  resolved the motion itself (a page-relative URL on the dashboard). */
+function besideMotion(motionUrl: string, image: string, rig: string): OralPhotoSource {
+  const base = new URL(motionUrl, location.href);
+  return { image_url: new URL(image, base).href, rig_url: new URL(rig, base).href };
+}
+
 /** The Reference's own teeth photo, served beside its motion (the lab). */
 function referenceTeeth(templateUrl: string): OralPhotoSource {
-  const base = new URL(templateUrl, location.href);
-  return { image_url: new URL("oral-detail-v3.webp", base).href, rig_url: new URL("oral-detail-v3.rig.json", base).href };
+  return besideMotion(templateUrl, "oral-detail-v3.webp", "oral-detail-v3.rig.json");
+}
+
+/** The standard teeth, served beside the bundled motion (the API's
+ *  mouth-motion.json): the Reference's own teeth photo, cut to its lips
+ *  (backend/scripts/build_standard_teeth.py), for an avatar without a
+ *  teeth photo of its own. */
+export function standardTeeth(motionUrl: string): OralPhotoSource {
+  return besideMotion(motionUrl, "mouth-teeth.webp", "mouth-teeth.rig.json");
 }
 
 /** A single skin/lip texture plus one stable oral interior. The shared engine

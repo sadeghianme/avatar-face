@@ -86,7 +86,7 @@ export interface Avatar {
     has_oral_photo: boolean;
     /** Where the teeth photo came from ("ai": made from the avatar's
      *  picture; "upload": the owner's), or null with the reason a new avatar
-     *  has generic teeth. Absent from a server before it said so. */
+     *  has the standard teeth. Absent from a server before it said so. */
     teeth?: TeethRecord;
     /** Presigned: the draft's own performance manifest (its six mouth
      *  shapes, docs/performance-kit.md). The path changes with every new

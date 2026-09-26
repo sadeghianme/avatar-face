@@ -97,9 +97,10 @@ GENERATED = performance_kit.GENERATED
 RETARGETED = performance_kit.RETARGETED
 
 # The profile values a kit fits: the teeth's, for its own teeth photo, or
-# for the drawn teeth when a new avatar has none. Teeth it does not bring
-# (the owner's upload, earlier AI teeth) keep their own fit, and the jaw
-# range is always the owner's (see the module docstring).
+# for the standard teeth when a new avatar has none (either seated and
+# sized as the Reference's, performance_kit.fit_profile). Teeth it does not
+# bring (the owner's upload, earlier AI teeth) keep their own fit, and the
+# jaw range is always the owner's (see the module docstring).
 FITTED_WITH_TEETH = ("teethY", "teethScale")
 FITTED_WITHOUT_TEETH: tuple[str, ...] = ()
 
@@ -324,7 +325,7 @@ def teeth_reason(result: performance_kit.KitResult) -> dict | None:
 
 
 def _standard_teeth(reason: dict) -> dict:
-    """The teeth note for a mouth left with the generic teeth."""
+    """The teeth note for a mouth left with the standard teeth."""
     return {**reason, "detail": f"{reason['detail']}; this avatar uses standard teeth"}
 
 
@@ -467,10 +468,11 @@ async def store(avatar, storage, result: performance_kit.KitResult, *, source: s
         except Validation422 as exc:
             # Accepted as PNG, refused as the WebP visitors would get: on
             # the edge of the embed's limits. The profile was fitted for it,
-            # so it is refitted for the teeth that will be drawn.
+            # so it is refitted for the teeth that will be drawn: the
+            # standard ones.
             logger.info("mouth kit: the teeth photo was refused as WebP (%s)", exc.code)
             reason = _note("mouth_teeth_unclear", exc.detail)
-            fitted = await run_cpu(_for_drawn_teeth, fitted, result.manifest)
+            fitted = performance_kit.for_standard_teeth(fitted)
         else:
             new_photo = await mouth_photo.put_photo(avatar, storage, photo, rig)
 
@@ -516,35 +518,21 @@ async def store(avatar, storage, result: performance_kit.KitResult, *, source: s
     return previous
 
 
-def _for_drawn_teeth(profile: dict, manifest: dict) -> dict:
-    """performance_kit.for_drawn_teeth on the kit's own rest points (the
-    manifest's, back in the picture's pixels). CPU work: it reads the
-    bundled Reference motion."""
-    poses = {pose["id"]: pose for pose in manifest["poses"]}
-    rest = performance_kit.manifest_to_base(manifest)(poses["rest"]["points"])
-    return performance_kit.for_drawn_teeth(profile, rest, performance_kit.load_reference())
-
-
-def _drawn_teeth_on(profile: dict, points) -> dict:
-    """performance_kit.for_drawn_teeth on a rig's points. CPU work."""
-    return performance_kit.for_drawn_teeth(profile, points, performance_kit.load_reference())
-
-
 # --- Following the avatar's edits ------------------------------------------------------
 
 
-async def teeth_changed(avatar, storage, reason: dict) -> None:
+def teeth_changed(avatar, reason: dict) -> None:
     """The teeth drawn are no longer the ones the kit fitted the profile
     for: the owner uploaded their own photo (OWNER_PHOTO) or removed the
-    photo (TEETH_REMOVED: the drawn teeth now). The teeth values the kit set
-    are refitted for the teeth drawn now, unless the owner has moved them
-    since: an upload's own defaults (its teeth at their photographed size,
-    seated like any photo's), or the drawn teeth's fit
-    (performance_kit.for_drawn_teeth on the rig's points). A fit for teeth
-    that are not drawn seats and sizes the ones that are wrongly: the kit's
-    photo put a person's teeth 0.05 mouth widths lower and 5% larger than
-    drawn teeth need. The record says its teeth photo is no longer the
-    avatar's, and why. The shapes and the jaw range are untouched."""
+    photo (TEETH_REMOVED: the standard teeth now). The teeth values the kit
+    set are refitted for the teeth drawn now, unless the owner has moved
+    them since: an upload's own defaults (its teeth at their photographed
+    size, seated like any photo's), or the standard teeth's
+    (performance_kit.for_standard_teeth: the Reference's own photo, seated
+    and sized as the Reference's). A fit for teeth that are not drawn seats
+    and sizes the ones that are wrongly. The record says its teeth photo is
+    no longer the avatar's, and why. The shapes and the jaw range are
+    untouched."""
     from app.schemas.avatar import MouthProfile
 
     config = mouth.load(avatar.mouth_config)
@@ -552,16 +540,9 @@ async def teeth_changed(avatar, storage, reason: dict) -> None:
     if not kit:
         return
     profile = dict(config.get("profile") or {})
+    target = MouthProfile().model_dump()
     if reason["code"] == TEETH_REMOVED["code"]:
-        target = MouthProfile().model_dump()
-        try:
-            rig = json.loads(await storage.get_bytes(avatar.rig_key))
-            target = await run_cpu(_drawn_teeth_on, target, rig["points"])
-        except Exception:
-            # The defaults are the drawn teeth's fit on an average face.
-            logger.exception("could not refit the drawn teeth of avatar %s", avatar.id)
-    else:
-        target = MouthProfile().model_dump()
+        target = performance_kit.for_standard_teeth(target)
     # A record from before `fitted` was kept: the values are the kit's.
     fitted = kit.get("fitted")
     for key in FITTED_WITH_TEETH:

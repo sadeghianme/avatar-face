@@ -1432,33 +1432,53 @@ async def test_the_avatar_list_does_not_sign_every_motion(client, faces, world, 
     assert (await client.get(url, headers=headers)).json()["mouth"]["motion_url"]
 
 
-async def _drawn_fit(avatar_id: str) -> dict:
-    avatar = await _avatar(avatar_id)
-    rig = json.loads(await get_storage().get_bytes(avatar.rig_key))
-    return pk.for_drawn_teeth({}, rig["points"], pk.load_reference())
+STANDARD_SEAT = (pk.REFERENCE_TEETH_Y, pk.REFERENCE_TEETH_SCALE)
 
 
-async def test_removing_the_kits_teeth_refits_the_profile_for_the_drawn_ones(
+def _teeth_values(config: dict) -> tuple[float, float]:
+    return config["profile"]["teethY"], config["profile"]["teethScale"]
+
+
+async def test_removing_the_kits_teeth_leaves_the_standard_ones_where_the_reference_has_them(
     client, faces, world
 ):
     """The kit seats and sizes its own teeth photo as the Reference's
-    (teethY 0.016, teethScale 1.0). Removed, the drawn teeth take their
-    place, fitted as the kit fits them (teethY 0.0, the geometric scale).
-    The jaw range is the owner's either way."""
+    (teethY 0.016, teethScale 1.0). Removed, the standard teeth take its
+    place: the Reference's own photo, seated and sized the same way. The
+    jaw range is the owner's either way."""
     headers, org_id = await _org(client, "refit")
     await ai_consent(client, headers, org_id)
     avatar_id, url, _ = await _finished(client, headers, org_id)
     fitted = (await _config(avatar_id))["profile"]
-    assert fitted["teethY"] == pk.REFERENCE_TEETH_Y
+    assert (fitted["teethY"], fitted["teethScale"]) == STANDARD_SEAT
     removed = await client.delete(f"{url}/mouth-photo", headers=headers)
     assert removed.status_code == 200, removed.text
     config = await _config(avatar_id)
-    drawn = await _drawn_fit(avatar_id)
-    assert config["profile"]["teethY"] == drawn["teethY"] == 0.0
-    assert config["profile"]["teethScale"] == drawn["teethScale"]
+    assert _teeth_values(config) == STANDARD_SEAT
     assert config["profile"]["jawRange"] == fitted["jawRange"]
     assert config["kit"]["teeth"] == {"used": False, "reason": mouth_kit.TEETH_REMOVED}
-    assert removed.json()["mouth"]["profile"]["teethY"] == 0.0
+    assert config["kit"]["fitted"] == dict(zip(("teethY", "teethScale"), STANDARD_SEAT))
+    assert removed.json()["mouth"]["profile"]["teethY"] == pk.REFERENCE_TEETH_Y
+
+
+async def test_an_upload_removed_after_the_kit_gives_the_standard_teeth_their_seat(
+    client, faces, world, mouth_detector
+):
+    """An upload is seated as any photo is (teethY 0.0); removed, the
+    standard teeth are drawn, and they are seated as the Reference's: a
+    seat fitted for other teeth would draw them 0.016 mouth widths high."""
+    headers, org_id = await _org(client, "uploadremoved")
+    await ai_consent(client, headers, org_id)
+    avatar_id, url, _ = await _finished(client, headers, org_id)
+    uploaded = await client.post(f"{url}/mouth-photo", files={
+        "file": ("ee.png", FULL_CROWNS, "image/png")}, headers=headers)
+    assert uploaded.status_code == 200, uploaded.text
+    assert _teeth_values(await _config(avatar_id)) == (0.0, 1.0)
+    removed = await client.delete(f"{url}/mouth-photo", headers=headers)
+    assert removed.status_code == 200, removed.text
+    config = await _config(avatar_id)
+    assert _teeth_values(config) == STANDARD_SEAT
+    assert (await client.get(url, headers=headers)).json()["mouth"]["teeth"]["source"] is None
 
 
 async def test_an_upload_after_the_kit_is_seated_as_any_photo_is(
@@ -1485,7 +1505,7 @@ async def test_teeth_values_the_owner_moved_are_theirs(client, faces, world):
     await client.delete(f"{url}/mouth-photo", headers=headers)
     config = await _config(avatar_id)
     assert config["profile"]["teethY"] == 0.04, "moved by the owner: kept"
-    assert config["profile"]["teethScale"] == (await _drawn_fit(avatar_id))["teethScale"]
+    assert config["profile"]["teethScale"] == pk.REFERENCE_TEETH_SCALE
 
 
 async def test_every_unused_published_revision_is_pruned(client, faces, world):

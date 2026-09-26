@@ -9,13 +9,19 @@ import { fakeCanvas, NoopPath, stubNetwork, type FakeNetwork, type Resource } fr
  * continuous mouth and hands it the config whole; the avatar's own
  * performance manifest (`mouth.motion_url`, version 2) must reach the
  * continuous mouth, and one that does not load must leave the bundled
- * Reference motion playing, not the classic mouth. Everything but the
- * network and the canvas is the real widget, engine and mouth code.
+ * Reference motion playing, not the classic mouth. An avatar without a
+ * teeth photo of its own gets the standard teeth, from the API beside the
+ * bundled motion. Everything but the network and the canvas is the real
+ * widget, engine and mouth code.
  */
 
 const API = "https://api.example";
 const AVATAR = "av_1";
 const BUNDLED = `${API}/mouth-motion.json`;
+/** The standard teeth, which the API serves beside BUNDLED. */
+const STANDARD = [`${API}/mouth-teeth.webp`, `${API}/mouth-teeth.rig.json`];
+/** The customer's page the widget is on: another site than the API's. */
+const PAGE = "https://shop.example/products/42";
 const KIT = "https://storage.example/avatars/av_1/motion-v2.json?X-Amz-Signature=4";
 
 const read = (path: string) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8"));
@@ -104,11 +110,17 @@ function mouthOf(engine: unknown): string | null {
   return extension ? extension.template.character : null;
 }
 
+/** Whether the engine's mouth draws its teeth from a photo. */
+function teethPhotoOf(engine: unknown): boolean {
+  return Boolean((engine as { mouthExtension?: { oral?: object } }).mouthExtension?.oral);
+}
+
 describe("the widget's continuous mouth", () => {
   beforeEach(() => {
     vi.stubGlobal("requestAnimationFrame", () => 1);
     vi.stubGlobal("cancelAnimationFrame", () => undefined);
     vi.stubGlobal("Path2D", NoopPath);
+    vi.stubGlobal("location", { href: PAGE });
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -151,6 +163,32 @@ describe("the widget's continuous mouth", () => {
     expect(network.requested).toContain(BUNDLED);
   });
 
+  it("draws the standard teeth, from the API, for an avatar without a teeth photo of its own", async () => {
+    const mouth = { renderer: "continuous", profile: { jawRange: 0.7 }, oral: null, motion_url: KIT };
+    const { network, attached } = await embed(published(mouth), {
+      [KIT]: { json: avatarMotion },
+      [STANDARD[0]]: { image: [236, 228, 214, 255] },
+      [STANDARD[1]]: { json: teethRig },
+    });
+    await attached.done;
+    expect(mouthOf(attached.engine)).toBe("avatar-v1:contract-fixture");
+    expect(teethPhotoOf(attached.engine)).toBe(true);
+    // Beside the bundled motion the widget names (`${apiBase}/…`), not
+    // beside the customer's page; each once, and the motion not at all.
+    expect(network.requested.filter((url) => [KIT, BUNDLED, ...STANDARD].includes(url)))
+      .toEqual([KIT, ...STANDARD]);
+    expect(network.requested.some((url) => url.startsWith("https://shop.example"))).toBe(false);
+  });
+
+  it("keeps the continuous mouth, with drawn teeth, where the standard teeth do not load", async () => {
+    const mouth = { renderer: "continuous", profile: {}, oral: null };
+    const { network, attached } = await embed(published(mouth), { [STANDARD[0]]: { status: 404 } });
+    await attached.done;
+    expect(mouthOf(attached.engine)).toBe("lab-reference-v1");
+    expect(teethPhotoOf(attached.engine)).toBe(false);
+    expect(network.requested.filter((url) => STANDARD.includes(url))).toEqual([STANDARD[0]]);
+  });
+
   it("keeps the classic mouth for a teeth photo it cannot draw, downloading nothing twice", async () => {
     const oral = {
       image_url: "https://storage.example/avatars/av_1/oral.webp?X-Amz-Signature=5",
@@ -166,7 +204,10 @@ describe("the widget's continuous mouth", () => {
     });
     await expect(attached.done).rejects.toMatchObject({ name: "DentalPhotoError" });
     expect(mouthOf(attached.engine)).toBeNull();
-    const mouthFiles = network.requested.filter((url) => [KIT, BUNDLED, oral.image_url, oral.rig_url].includes(url));
+    const mouthFiles = network.requested.filter((url) =>
+      [KIT, BUNDLED, oral.image_url, oral.rig_url, ...STANDARD].includes(url));
+    // Its own photo refused is not replaced by the standard teeth: the
+    // owner's choice of teeth is not overruled on visitors' pages.
     expect(mouthFiles).toEqual([KIT, oral.image_url, oral.rig_url]);
   });
 });

@@ -185,11 +185,14 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
 
 
     // Mouth upgrade, progressive as well. Any failure — bundle, template,
-    // the teeth photo — leaves the classic mouth, which always works.
+    // the avatar's own teeth photo — leaves the classic mouth, which always
+    // works.
     if (info.mouth?.renderer === "continuous") {
       // The config goes through whole: an avatar with its own performance
       // kit names its manifest in `motion_url`, and the bundled Reference
       // motion below is what every other avatar plays (and the fallback).
+      // An avatar without a teeth photo of its own gets the standard teeth,
+      // which the API serves beside that motion.
       const mouthConfig = info.mouth;
       void loadScript(`${apiBase}/liveface-mouth.js`)
         .then(() =>

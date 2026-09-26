@@ -1167,8 +1167,8 @@ async def get_avatar_detail(avatar_id: str, ctx: OrgMember, db: DB) -> AvatarDet
 async def upload_mouth_photo(avatar_id: str, file: UploadFile, ctx: OrgMember, db: DB) -> Avatar:
     """A second photo of the same person with teeth showing.
 
-    It supplies THEIR enamel to the continuous mouth instead of fitted
-    geometry. Validated exactly as in the lab it graduated from (a real
+    It supplies THEIR enamel to the continuous mouth instead of the
+    standard teeth. Validated exactly as in the lab it graduated from (a real
     detected face, large enough, mouth actually open) and by the browser's
     own teeth test (422 mouth_teeth_unclear: the upper row too small, or
     only its tips), through services.mouth_photo, the path AI-made teeth
@@ -1196,7 +1196,7 @@ async def upload_mouth_photo(avatar_id: str, file: UploadFile, ctx: OrgMember, d
     # The owner's own teeth replace any the AI made: the mouth is no longer
     # AI-made, and the disclosure stops saying so (from the next Publish).
     avatar.ai_edited = mouth_photo.without_ai_teeth(avatar.ai_edited)
-    await mouth_kit.teeth_changed(avatar, storage, mouth_kit.OWNER_PHOTO)
+    mouth_kit.teeth_changed(avatar, mouth_kit.OWNER_PHOTO)
     mark_dirty(avatar)
     await db.commit()
     for key in previous:
@@ -1276,7 +1276,9 @@ async def mouth_kit_job(avatar_id: str, ctx: OrgMember, db: DB) -> MouthKitOut:
 @router.delete("/{avatar_id}/mouth-photo", response_model=AvatarOut)
 @_one_edit_at_a_time
 async def remove_mouth_photo(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
-    """Back to fitted teeth. The published snapshot keeps its own copy."""
+    """Back to the standard teeth (the Reference's own teeth photo, which
+    every mouth without a photo of its own draws). The published snapshot
+    keeps its own copy."""
     import json as _json
 
     from app.services.mouth import load as load_mouth
@@ -1295,7 +1297,7 @@ async def remove_mouth_photo(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
     avatar.mouth_config = _json.dumps(config)
     # Teeth the AI made are gone, and so is their disclosure (next Publish).
     avatar.ai_edited = without_ai_teeth(avatar.ai_edited)
-    await mouth_kit.teeth_changed(avatar, storage, mouth_kit.TEETH_REMOVED)
+    mouth_kit.teeth_changed(avatar, mouth_kit.TEETH_REMOVED)
     mark_dirty(avatar)
     await db.commit()
     return avatar

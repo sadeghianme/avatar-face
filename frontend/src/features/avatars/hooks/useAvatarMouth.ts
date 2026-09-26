@@ -2,7 +2,9 @@ import { attachAvatarMouth, type AttachedMouth, type AvatarMouthConfig } from "@
 import { useEffect, useRef, useState } from "react";
 import { mouthConfigToLoad, mouthLoadIdentity } from "@/features/avatars/mouth-config";
 
-/** The motion template, served by the API next to the widget bundles. */
+/** The motion template, served by the API next to the widget bundles. The
+ *  loader finds the standard teeth beside it (/api/mouth-teeth.webp), for
+ *  an avatar without a teeth photo of its own, as visitors' widgets do. */
 export const MOUTH_MOTION_URL = "/api/mouth-motion.json";
 
 type MouthHost = Parameters<typeof attachAvatarMouth>[0];

@@ -5,7 +5,8 @@
  *
  * The avatar's mouth config is handed on whole, so its own performance
  * manifest (`motion_url`) reaches the loader; `motionUrl` is the bundled
- * Reference motion, played when there is none.
+ * Reference motion, played when there is none, and the standard teeth are
+ * found beside it.
  */
 import { attachAvatarMouth } from "./mouth";
 

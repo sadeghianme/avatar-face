@@ -82,6 +82,28 @@ async def test_a_changed_bundle_is_not_reported_unchanged(client):
     assert again.content
 
 
+async def test_the_standard_teeth_are_served_as_the_motion_is(client):
+    """The continuous mouth finds the standard teeth beside the motion it is
+    given (embed loadAvatarMouth), and on a customer's page that is the API:
+    the rig is fetch()ed and the photo loaded as an anonymous-CORS image
+    whose pixels the mouth reads, both from the customer's origin. Served
+    as /mouth-motion.json is, and exactly the committed files."""
+    from pathlib import Path
+
+    assets = Path(__file__).resolve().parents[2] / "embed" / "assets"
+    for path, media_type in (("/mouth-teeth.webp", "image/webp"),
+                             ("/mouth-teeth.rig.json", "application/json")):
+        response = await client.get(path, headers={"Origin": "https://shop.example"})
+        assert response.status_code == 200, f"{path}: {response.text}"
+        assert response.headers["content-type"].startswith(media_type), path
+        assert response.headers["access-control-allow-origin"] == "*", path
+        assert "no-cache" in response.headers["cache-control"], path
+        assert response.content == (assets / path.lstrip("/")).read_bytes(), (
+            f"{path} is not the committed file: rebuild the embed (make embed)")
+        again = await client.get(path, headers={"If-None-Match": response.headers["etag"]})
+        assert again.status_code == 304, path
+
+
 def test_etag_normalisation_rules():
     from app.main import _etag_matches
 

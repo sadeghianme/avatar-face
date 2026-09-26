@@ -785,10 +785,10 @@ def reference_fit(reference, reference_manifest, *, with_teeth=True):
     if with_teeth:
         image, points = reference_ee(reference_manifest)
         teeth = pk.TeethPhoto(image, points, reference.poses["ee"] * REFERENCE_SIZE)
-    return pk.fit_profile(reference.rest * REFERENCE_SIZE, reference, teeth)
+    return pk.fit_profile(reference.rest * REFERENCE_SIZE, teeth)
 
 
-def test_the_fit_measures_the_references_teeth_photo_where_the_reference_draws_it(reference):
+def test_the_fit_measures_the_references_teeth_photo_where_the_reference_draws_it():
     """The Reference renders oral-detail-v3 with teethY tuned by hand to
     0.016 (frontend/src/features/lab/reference-avatar.ts). Registered onto
     the portrait, that photo's arch ends 0.0467 rest mouth widths below the
@@ -800,7 +800,7 @@ def test_the_fit_measures_the_references_teeth_photo_where_the_reference_draws_i
     image, points, portrait = reference_teeth_photo()
     registered = pk.register(points, portrait)
     assert pk.registration_rms(registered, portrait) / REFERENCE_SIZE < 0.001
-    fit = pk.fit_profile(portrait, reference, pk.TeethPhoto(image, points, registered))
+    fit = pk.fit_profile(portrait, pk.TeethPhoto(image, points, registered))
     assert fit.teeth_photo
     assert fit.measurements["teeth_photo"]["accepted"]
     assert fit.measurements["teeth_edge_below_seam"] == pytest.approx(0.0467, abs=0.001)
@@ -820,12 +820,13 @@ def test_the_references_own_ee_shows_too_little_crown_to_be_a_teeth_photo(
 ):
     """Its EE shows the upper teeth 0.07 mouth widths deep: tips, which the
     embed's DentalOralSurface refuses (it needs 0.10 of central crown). So
-    the fit is for the geometric teeth, with the reason."""
+    the standard teeth are drawn, seated as the Reference's, with the
+    reason."""
     fit = reference_fit(reference, reference_manifest)
     assert not fit.teeth_photo
     assert fit.measurements["teeth_photo"]["crown_coverage"] == pytest.approx(0.070, abs=0.003)
-    assert fit.profile["teethY"] == 0.0
-    assert fit.profile["teethScale"] == pytest.approx(1.0, abs=1e-4)
+    assert fit.profile["teethY"] == pk.REFERENCE_TEETH_Y
+    assert fit.profile["teethScale"] == pk.REFERENCE_TEETH_SCALE
     assert [(r["field"], r["code"]) for r in fit.reasons] == [("teethY", "teeth_photo_refused")]
 
 
@@ -847,26 +848,38 @@ def test_a_teeth_answer_like_the_references_ee_is_not_handed_on(reference, refer
     assert finished.manifest["poses"][2]["provenance"] == "generated"
 
 
-def test_without_a_teeth_photo_the_geometric_teeth_keep_the_references_proportion(
+def test_without_a_teeth_photo_the_standard_teeth_are_seated_as_the_references(
     reference, reference_manifest
 ):
+    """The standard teeth are the Reference's own teeth photo
+    (scripts/build_standard_teeth.py): drawn where, and as large as, the
+    Reference draws it, and the reason says why they are drawn."""
     fit = reference_fit(reference, reference_manifest, with_teeth=False)
-    assert fit.profile["teethScale"] == pytest.approx(1.0, abs=1e-4)
-    assert fit.profile["teethY"] == 0.0
+    assert fit.profile["teethScale"] == pk.REFERENCE_TEETH_SCALE == 1.0
+    assert fit.profile["teethY"] == pk.REFERENCE_TEETH_Y == 0.016
+    assert fit.profile == pk.for_standard_teeth(pk._profile_defaults()[0])
     assert [r["code"] for r in fit.reasons] == ["no_teeth_photo"]
     why = {"code": "safety_refused", "detail": "declined"}
-    told = pk.fit_profile(reference.rest * REFERENCE_SIZE, reference, None, why)
+    told = pk.fit_profile(reference.rest * REFERENCE_SIZE, None, why)
     assert told.reasons == [{"field": "teethY", **why}]
 
 
-def test_a_mouth_wide_for_its_face_gets_smaller_geometric_teeth(reference):
+@pytest.mark.parametrize("wider", [1.1, 1.5])
+def test_the_standard_teeth_are_the_references_size_on_any_mouth(reference, wider):
+    """The drawn teeth were sized by the Reference's mouth-to-face
+    proportion over this face's (a mouth half again as wide for its face
+    got them smaller than the profile allows, clamped). The standard teeth
+    are a photo, which the embed draws in mouth widths as the Reference's
+    is: the same size, and nothing to clamp."""
     base = reference.rest * REFERENCE_SIZE
     wide = base.copy()
     centre = (base[61] + base[291]) / 2
     lips = pk.OUTER_LIP_RING + pk.INNER_LIP_RING
-    wide[lips, 0] = centre[0] + (base[lips, 0] - centre[0]) * 1.1
-    fit = pk.fit_profile(wide, reference, None)
-    assert fit.profile["teethScale"] == pytest.approx(1 / 1.1, abs=1e-3)
+    wide[lips, 0] = centre[0] + (base[lips, 0] - centre[0]) * wider
+    fit = pk.fit_profile(wide, None)
+    assert fit.profile["teethScale"] == pk.REFERENCE_TEETH_SCALE
+    assert fit.profile["teethY"] == pk.REFERENCE_TEETH_Y
+    assert [r["field"] for r in fit.reasons] == ["teethY"]
 
 
 def test_the_fit_measures_the_teeth_in_the_photo(scene):
@@ -876,7 +889,7 @@ def test_the_fit_measures_the_teeth_in_the_photo(scene):
     times wider mouth below its lip, which the EE lifts 0.048 above the
     neutral seam."""
     photo = paint_teeth(Image.new("RGB", (800, 800), SKIN), scene.truth["ee"], 0.12)
-    fit = pk.fit_profile(scene.base_points, scene.reference,
+    fit = pk.fit_profile(scene.base_points,
                          pk.TeethPhoto(photo, scene.truth["ee"], scene.truth["ee"]))
     assert fit.measurements["teeth_photo"]["upper_edge"] == pytest.approx(0.12, abs=0.004)
     assert fit.measurements["teeth_edge_below_seam"] == pytest.approx(0.12 * 1.0502 - 0.0476, abs=0.004)
@@ -885,13 +898,13 @@ def test_the_fit_measures_the_teeth_in_the_photo(scene):
     assert fit.profile["teethY"] == pk.REFERENCE_TEETH_Y
 
 
-def test_an_ee_photo_without_teeth_keeps_the_defaults_with_the_reason(scene):
+def test_an_ee_photo_without_teeth_leaves_the_standard_teeth_with_the_reason(scene):
     closed = Image.new("RGB", (800, 800), SKIN)
     ImageDraw.Draw(closed).polygon([tuple(p) for p in scene.truth["ee"][pk.INNER_LIP_RING]],
                                    fill=(46, 22, 24))
-    fit = pk.fit_profile(scene.base_points, scene.reference,
+    fit = pk.fit_profile(scene.base_points,
                          pk.TeethPhoto(closed, scene.truth["ee"], scene.truth["ee"]))
-    assert fit.profile["teethY"] == 0.0
+    assert fit.profile["teethY"] == pk.REFERENCE_TEETH_Y
     codes = {r["field"]: r["code"] for r in fit.reasons}
     assert codes == {"teethY": "no_teeth_visible"}
 
@@ -906,27 +919,12 @@ def test_an_ai_teeth_photo_is_drawn_at_the_references_seat_however_it_was_drawn(
     centre = (ee[pk.MOUTH_LEFT] + ee[pk.MOUTH_RIGHT]) / 2
     wide = ee.copy()
     wide[:, 0] = centre[0] + (ee[:, 0] - centre[0]) * 1.4
-    fit = pk.fit_profile(scene.base_points, scene.reference, pk.TeethPhoto(photo, ee, wide))
+    fit = pk.fit_profile(scene.base_points, pk.TeethPhoto(photo, ee, wide))
     assert fit.teeth_photo
     assert fit.profile["teethScale"] == pk.REFERENCE_TEETH_SCALE
     assert fit.profile["teethY"] == pk.REFERENCE_TEETH_Y
     assert fit.measurements["teeth_scale_as_drawn"] == pytest.approx(1.4 * 1.05, abs=0.02)
     assert not [r for r in fit.reasons if r["field"] in ("teethY", "teethScale")]
-
-
-def test_geometric_teeth_past_the_limits_are_clamped_with_a_reason(reference):
-    """A mouth half again as wide for its face as the Reference's would draw
-    its geometric teeth smaller than the profile allows."""
-    base = reference.rest * REFERENCE_SIZE
-    wide = base.copy()
-    centre = (base[61] + base[291]) / 2
-    lips = pk.OUTER_LIP_RING + pk.INNER_LIP_RING
-    wide[lips, 0] = centre[0] + (base[lips, 0] - centre[0]) * 1.5
-    fit = pk.fit_profile(wide, reference, None)
-    low = pk._profile_defaults()[1]["teethScale"][0]
-    assert fit.profile["teethScale"] == low
-    assert {"field": "teethScale", "code": "clamped"}.items() <= next(
-        r for r in fit.reasons if r["field"] == "teethScale").items()
 
 
 # --- 4. Manifest -----------------------------------------------------------------------------------------
@@ -1380,7 +1378,7 @@ async def test_no_provider_gives_the_reference_retargeted_for_this_face(scene):
     assert all(r["reason"]["code"] == "imagegen_unavailable" for r in result.report.values())
     assert [p["provenance"] for p in result.manifest["poses"][1:]] == ["retargeted"] * 6
     assert result.teeth_source is None
-    assert result.profile["teethY"] == 0.0 and result.profile["jawRange"] == 0.85
+    assert result.profile["teethY"] == pk.REFERENCE_TEETH_Y and result.profile["jawRange"] == 0.85
     # This face is the Reference: retargeted, the poses are the Reference's.
     frame = np.asarray(result.manifest["frame"]["to_manifest"])
     expected = scene.truth["aa"] @ frame[:, :2].T + frame[:, 2]
@@ -1408,7 +1406,7 @@ async def test_a_rejected_teeth_answer_leaves_no_teeth_photo(scene):
     assert result.teeth_report["status"] == "failed"
     assert result.teeth_report["reason"]["code"] == "head_moved"
     assert result.teeth_source is None
-    assert result.profile["teethY"] == 0.0
+    assert result.profile["teethY"] == pk.REFERENCE_TEETH_Y
     assert all(r["status"] == "ok" for r in result.report.values()), "the shapes are apart"
 
 
@@ -1419,22 +1417,22 @@ async def test_a_teeth_answer_without_visible_teeth_is_not_handed_on(scene):
     assert result.teeth_report["reason"]["code"] == "no_teeth_visible"
     reasons = {r["field"]: r["code"] for r in result.profile_fit["reasons"]}
     assert reasons["teethY"] == "no_teeth_visible"
-    # The geometric teeth, sized for this face: the Reference's proportion.
-    assert result.profile["teethScale"] == pytest.approx(1.0, abs=1e-3)
+    # The standard teeth, at the Reference's seat and size.
+    assert result.profile["teethScale"] == pk.REFERENCE_TEETH_SCALE
 
 
 async def test_a_teeth_answer_showing_only_tips_is_not_handed_on(scene):
     """The Reference's own EE shows its teeth 0.07 deep. The embed would
     refuse such a photo and drop the avatar to the classic mouth, so it is
-    not handed on, and the fit is for the geometric teeth."""
+    not handed on, and the standard teeth are drawn instead."""
     result = await kit(scene, FakeProvider(scene, teeth_edge=0.07))
     assert result.teeth_source is None
     assert result.teeth_report == {**result.teeth_report, "status": "failed",
                                    "outcome": "rejected"}
     assert result.teeth_report["reason"]["code"] == "teeth_photo_refused"
     assert result.profile_fit["measurements"]["teeth_photo"]["crown_coverage"] < 0.10
-    assert result.profile["teethY"] == 0.0
-    assert result.profile["teethScale"] == pytest.approx(1.0, abs=1e-3)
+    assert result.profile["teethY"] == pk.REFERENCE_TEETH_Y
+    assert result.profile["teethScale"] == pk.REFERENCE_TEETH_SCALE
 
 
 async def test_a_teeth_answer_too_closed_to_show_them_is_rejected(scene):
@@ -1449,7 +1447,7 @@ async def test_a_teeth_answer_too_closed_to_show_them_is_rejected(scene):
     assert result.teeth_report["reason"]["code"] == "pose_not_reached"
     reasons = {r["field"]: r["code"] for r in result.profile_fit["reasons"]}
     assert reasons["teethY"] == "pose_not_reached"
-    assert result.profile["teethScale"] == pytest.approx(1.0, abs=1e-3)
+    assert result.profile["teethScale"] == pk.REFERENCE_TEETH_SCALE
 
 
 async def test_an_async_progress_callback_is_awaited(scene):
@@ -1672,12 +1670,15 @@ def test_a_kit_id_is_ascii_as_the_embed_requires(scene, kit_id):
     assert made["character"] == "avatar-v1:Kit_09-ok"
 
 
-def test_a_fit_for_a_teeth_photo_can_be_refitted_for_drawn_teeth(scene):
+def test_a_fit_for_a_teeth_photo_can_be_refitted_for_the_standard_teeth(scene):
+    """Only the teeth values change, to what the fit gives a mouth without a
+    teeth photo; the owner's jaw range and warmth stay."""
     fitted = {"teethY": 0.03, "teethScale": 1.12, "jawRange": 0.7, "warmth": 0.4,
               "lipProjection": 0.6}
-    refit = pk.for_drawn_teeth(fitted, scene.base_points, scene.reference)
-    geometric = pk.fit_profile(scene.base_points, scene.reference, None).profile
-    assert refit == {**fitted, "teethY": 0.0, "teethScale": geometric["teethScale"]}
+    refit = pk.for_standard_teeth(fitted)
+    standard = pk.fit_profile(scene.base_points, None).profile
+    assert refit == {**fitted, "teethY": standard["teethY"], "teethScale": standard["teethScale"]}
+    assert (refit["teethY"], refit["teethScale"]) == (pk.REFERENCE_TEETH_Y, pk.REFERENCE_TEETH_SCALE)
 
 
 # --- 9. Re-confirmed points: the kit follows without AI ------------------------------------

@@ -41,11 +41,11 @@ describe("teeth", () => {
     assert.deepEqual(teethView(mouth({ has_oral_photo: true })), { kind: "upload" });
   });
 
-  it("keeps the reason generic teeth are used", () => {
+  it("keeps the reason the standard teeth are used", () => {
     const note = { code: "no_ai_consent", detail: "You have not agreed" };
     assert.deepEqual(teethView(mouth({ teeth: { source: null, note } })), { kind: "generic", note });
     assert.deepEqual(teethView(mouth()), { kind: "generic", note: null });
-    // The record says AI, but the photo is gone (removed): generic.
+    // The record says AI, but the photo is gone (removed): the standard teeth.
     const gone = mouth({ has_oral_photo: false, teeth: { source: "ai", note: null } });
     assert.deepEqual(teethView(gone), { kind: "generic", note: null });
   });

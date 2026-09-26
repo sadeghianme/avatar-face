@@ -1626,9 +1626,11 @@ async def _own_mouth(
     the kit cannot be made on this server at all (no face detector for its
     registration; nothing was sent), the single "ee" photo is made instead
     (_single_teeth), so a person can still get their teeth. Anything short
-    of that (no consent, AI off, the limit, a crash) publishes with generic
-    teeth and the bundled motion, and records why in the teeth note. Never
-    fails the finish: the avatar is worth having without them.
+    of that (no consent, AI off, the limit, a crash) publishes with the
+    standard teeth (the Reference's own teeth photo, seated as the
+    Reference's: mouth_photo.default_config) and the bundled motion, and
+    records why in the teeth note. Never fails the finish: the avatar is
+    worth having without them.
 
     The consent that lets the picture go is recorded on the creation, for
     good, before the first picture is sent (and on the avatar, which this
@@ -1647,7 +1649,7 @@ async def _own_mouth(
     avatar.mouth_config = json.dumps(config)
 
     def standard(note: dict) -> bool:
-        # Generic teeth and the bundled motion, and why.
+        # The standard teeth and the bundled motion, and why.
         avatar.mouth_config = json.dumps(
             {**config, "teeth": mouth_photo.generic_teeth_record(note)}
         )
@@ -1724,7 +1726,7 @@ async def _record_finish_consent(creation: Creation, consent_id: str) -> None:
 async def _single_teeth(job: Job, avatar: Avatar, image: bytes, storage, sending) -> bool:
     """A person's teeth alone: an "ee" photo the image model makes from
     `image`, admitted exactly like an uploaded mouth photo, when the kit
-    cannot be made. Anything short of it publishes the generic teeth with
+    cannot be made. Anything short of it publishes the standard teeth with
     the reason in the teeth note. True when the teeth were made."""
     from app.services import mouth_photo
 

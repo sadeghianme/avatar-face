@@ -13,6 +13,8 @@ import { normalizeProfile } from "../reference-mouth-model";
  * equal to "what visitors get". These run the real loader (the motion, the
  * teeth photo, the teeth surface built from it) over a network that records
  * every download, so what is fetched, and how often, is part of the contract.
+ * An avatar without a teeth photo of its own gets the standard teeth, served
+ * beside the bundled motion (`STANDARD`).
  */
 
 const read = (path: string) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8"));
@@ -25,6 +27,11 @@ const KIT = "https://storage.example/kits/k1/motion.json?X-Amz-Signature=1";
 const TEETH = {
   image_url: "https://storage.example/oral.webp?X-Amz-Signature=2",
   rig_url: "https://storage.example/oral.rig.json?X-Amz-Signature=3",
+};
+/** The standard teeth, where the API serves them: beside MOTION. */
+const STANDARD = {
+  image_url: "https://api.example/mouth-teeth.webp",
+  rig_url: "https://api.example/mouth-teeth.rig.json",
 };
 
 /** Enamel, as the teeth test sees it; and lips, where it finds no teeth. */
@@ -44,6 +51,8 @@ const network = (answers: Record<string, Resource> = {}) => stubNetwork({
   [KIT]: { json: avatarMotion },
   [TEETH.image_url]: { image: ENAMEL },
   [TEETH.rig_url]: { json: teethRig },
+  [STANDARD.image_url]: { image: ENAMEL },
+  [STANDARD.rig_url]: { json: teethRig },
   ...answers,
 });
 
@@ -55,6 +64,8 @@ const hasTeethPhoto = (mouth: ContinuousMouth) => Boolean((mouth as unknown as {
 
 beforeEach(() => {
   vi.stubGlobal("document", { createElement: () => fakeCanvas() });
+  // The dashboard's page, which a page-relative motion URL resolves against.
+  vi.stubGlobal("location", { href: "https://app.example/avatars/av_1" });
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -117,7 +128,7 @@ describe("the motion an avatar plays", () => {
     const { requested } = network();
     const mouth = await loadAvatarMouth({ renderer: "continuous", motion_url: KIT }, MOTION);
     expect(playing(mouth)).toBe("avatar-v1:contract-fixture");
-    expect(requested).toEqual([KIT]);
+    expect(requested).toEqual([KIT, STANDARD.image_url, STANDARD.rig_url]);
   });
 
   it.each<[string, Resource]>([
@@ -129,7 +140,7 @@ describe("the motion an avatar plays", () => {
     const { requested } = network({ [KIT]: answer });
     const mouth = await loadAvatarMouth({ renderer: "continuous", motion_url: KIT }, MOTION);
     expect(playing(mouth)).toBe("lab-reference-v1");
-    expect(requested).toEqual([KIT, MOTION]);
+    expect(requested).toEqual([KIT, MOTION, STANDARD.image_url, STANDARD.rig_url]);
   });
 
   it("does not fall back once the caller has cancelled", async () => {
@@ -202,5 +213,92 @@ describe("the avatar's teeth photo", () => {
     expect(engine.setMouthExtension).not.toHaveBeenCalled();
     expect(engine.tuning.mouthOpen).toBe(1.4);
     expect(requested).toEqual(downloads);
+  });
+});
+
+describe("the standard teeth", () => {
+  it("are an avatar's teeth when it has no photo of its own, downloaded once, beside the bundled motion", async () => {
+    const { requested } = network();
+    const mouth = await loadAvatarMouth({ renderer: "continuous", oral: null, motion_url: null }, MOTION);
+    expect(playing(mouth)).toBe("lab-reference-v1");
+    expect(hasTeethPhoto(mouth)).toBe(true);
+    expect(requested).toEqual([MOTION, STANDARD.image_url, STANDARD.rig_url]);
+  });
+
+  it("come from beside the bundled motion when the avatar plays its own", async () => {
+    const { requested } = network();
+    const mouth = await loadAvatarMouth({ renderer: "continuous", motion_url: KIT }, MOTION);
+    expect(playing(mouth)).toBe("avatar-v1:contract-fixture");
+    expect(hasTeethPhoto(mouth)).toBe(true);
+    expect(requested).toEqual([KIT, STANDARD.image_url, STANDARD.rig_url]);
+  });
+
+  it("are found beside a page-relative motion as the browser found the motion (the dashboard's /api)", async () => {
+    const relative = "/api/mouth-motion.json";
+    const beside = {
+      image_url: "https://app.example/api/mouth-teeth.webp",
+      rig_url: "https://app.example/api/mouth-teeth.rig.json",
+    };
+    const { requested } = network({
+      [relative]: { json: bundled },
+      [beside.image_url]: { image: ENAMEL },
+      [beside.rig_url]: { json: teethRig },
+    });
+    const mouth = await loadAvatarMouth({ renderer: "continuous" }, relative);
+    expect(hasTeethPhoto(mouth)).toBe(true);
+    expect(requested).toEqual([relative, beside.image_url, beside.rig_url]);
+  });
+
+  it("are never fetched for an avatar with a teeth photo of its own", async () => {
+    const { requested } = network();
+    const mouth = await loadAvatarMouth({ renderer: "continuous", oral: TEETH }, MOTION);
+    expect(hasTeethPhoto(mouth)).toBe(true);
+    expect(requested).toEqual([MOTION, TEETH.image_url, TEETH.rig_url]);
+  });
+
+  // Whatever keeps them from being drawn, the mouth still loads, with the
+  // drawn teeth, as before the standard ones existed; nothing is asked for
+  // twice.
+  it.each<[string, Record<string, Resource>, string[]]>([
+    ["are not served (a server without them)", { [STANDARD.image_url]: { status: 404 }, [STANDARD.rig_url]: { status: 404 } },
+      [MOTION, STANDARD.image_url]],
+    ["do not decode", { [STANDARD.image_url]: { broken: true } }, [MOTION, STANDARD.image_url]],
+    ["have lost their rig", { [STANDARD.rig_url]: { status: 404 } }, [MOTION, STANDARD.image_url, STANDARD.rig_url]],
+    ["cannot be reached for their rig", { [STANDARD.rig_url]: { offline: true } }, [MOTION, STANDARD.image_url, STANDARD.rig_url]],
+    ["have a rig that is not one", { [STANDARD.rig_url]: { json: { points: [] } } }, [MOTION, STANDARD.image_url, STANDARD.rig_url]],
+    ["do not show the upper teeth (DentalPhotoError)", { [STANDARD.image_url]: { image: LIPS } },
+      [MOTION, STANDARD.image_url, STANDARD.rig_url]],
+  ])("that %s leave the drawn teeth, and the mouth loads", async (_, answers, downloads) => {
+    const { requested } = network(answers);
+    const engine = host();
+    await attachAvatarMouth(engine, { renderer: "continuous", profile: { jawRange: 0.7 } }, MOTION);
+    const mouth = engine.setMouthExtension.mock.calls[0][0] as ContinuousMouth;
+    expect(playing(mouth)).toBe("lab-reference-v1");
+    expect(hasTeethPhoto(mouth)).toBe(false);
+    expect(engine.tuning.mouthOpen).toBe(0.7);
+    expect(requested).toEqual(downloads);
+  });
+
+  it("are not asked for when no motion loads at all", async () => {
+    const { requested } = network({ [MOTION]: { offline: true } });
+    await expect(loadAvatarMouth({ renderer: "continuous" }, MOTION)).rejects.toThrow();
+    expect(requested).toEqual([MOTION]);
+  });
+
+  it("do not stand in for a load the caller cancelled while they downloaded", async () => {
+    const controller = new AbortController();
+    const { requested } = network();
+    const fetch = globalThis.fetch;
+    // Cancelled as the standard teeth's rig is asked for: the load rejects,
+    // as any cancelled load does, rather than settle for the drawn teeth.
+    vi.stubGlobal("fetch", async (url: string, init?: { signal?: AbortSignal }) => {
+      if (url === STANDARD.rig_url) controller.abort();
+      return fetch(url, init);
+    });
+    const engine = host();
+    await expect(attachAvatarMouth(engine, { renderer: "continuous" }, MOTION, controller.signal))
+      .rejects.toMatchObject({ name: "AbortError" });
+    expect(engine.setMouthExtension).not.toHaveBeenCalled();
+    expect(requested).toEqual([MOTION, STANDARD.image_url, STANDARD.rig_url]);
   });
 });

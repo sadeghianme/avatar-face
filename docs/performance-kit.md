@@ -27,7 +27,7 @@ photo once its owner has confirmed the points.
 | Checks | `register_answer(...)` → `PoseRegistration` | refuses an answer whose aspect differs from what was sent by more than 1% (`aspect_changed`); detect, map back, register on eye corners + nose bridge onto the detector's own view of the base photo (`base_detected`), RMS ≤ 0.007 in manifest units; refuses head zoom/tilt, moved nose or eyes, a head turned (the nose tip's SIGNED offset between the cheeks, `signed_yaw`), skin ΔE > 8, or a mouth not in the asked shape (`POSE_LIMITS`, below). The teeth answer passes the same drift checks, and must show its teeth (its own lip gap ≥ 0.08 of its mouth width); how far it opens is not played, so not bounded. Targets = confirmed points + (registered − detected base), so the owner's corrections to the marks are kept and never read as motion. A check that raises is a rejected answer (`check_failed`) |
 | Size | `normalize_amplitude(base_points, generated, reference)` → `Amplitude` | the person's own shapes at the Reference's conversational size (below) |
 | Fallback | `retarget_reference_pose(shape, base_points, reference)` | the Reference's displacement in its levelled mouth frame × this face's mouth width over the Reference's, turned to this face's mouth angle: exactly what the engine does with the bundled motion, so a retargeted pose plays as the bundled one does on the same face, whatever the lips' thickness (tested on a face whose lips are 1.24 × the Reference's height). Baked by the backend: the embed has no retarget code |
-| Fit | `fit_profile(base_points, reference, teeth, why_no_teeth)` → `ProfileFit` | teethY, teethScale: the Reference's for a teeth photo the embed would draw (where the photo would put them is measured), else fitted for the drawn teeth; clamped to `MouthProfile`'s ranges; defaults with a reason when unmeasurable. The jaw range is not fitted (below) |
+| Fit | `fit_profile(base_points, teeth, why_no_teeth)` → `ProfileFit` | teethY, teethScale: the Reference's (0.016, 1.00) for a teeth photo the embed would draw (where the photo would put them is measured) and, with the reason, for the standard teeth drawn when there is none (`for_standard_teeth`: they are the Reference's own photo, below). The jaw range is not fitted (below) |
 | Teeth photo test | `dental_photo.accept_teeth_photo(image, points, inner_ring)` → `Acceptance` | the embed's DentalOralSurface test, ported pass for pass (extraction canvas, `extractDentalLayers`, `dentalCrownCoverage`): arch ≥ 110/512 wide, ≥ 180 px of enamel, central crown ≥ 0.10 mouth widths. Pixel-exact against the embed's code (`dental-extraction.json` fixture) |
 | Manifest | `build_manifest(...)` | version 2, see below; the kit id is ASCII `[A-Za-z0-9_-]{1,64}` exactly as the embed accepts it |
 | Rebase | `rebase_manifest(manifest, base_points, reference, image_size)` | the same kit on the face's points as they are now: re-confirmed, re-detected, or the picture cropped around the face; no AI call (see "Wired") |
@@ -118,7 +118,7 @@ the bundled motion plays the same shape on the same face.
   motion has a fallback, the bundled one), so a refused photo is not handed
   on (`teeth_source` null; `teeth_report` says why: `teeth_photo_refused`,
   `no_teeth_visible`, a failed check, or the request's own reason) and the
-  profile is fitted for the geometric teeth. The Reference's own EE shows
+  standard teeth are drawn instead (below). The Reference's own EE shows
   tips only (central crown 0.070) and would be refused; `oral-detail-v3` is
   accepted (0.115). That is why the teeth are their own request: a spoken EE
   with the crowns the embed needs would lift the upper lip far above speech.
@@ -143,9 +143,29 @@ the bundled motion plays the same shape on the same face.
   0.0467 below the seam, it gives the hand-tuned **0.016** back.
   `teeth_scale_as_drawn` = its mouth width / rest mouth width (1.13 for v3,
   which the Reference draws at 1.00).
-- **teethScale without a teeth photo** (the drawn, geometric teeth) = the
-  Reference's mouth-to-face width ratio over this face's (1.00 on the
-  Reference), clamped to the profile's range with a reason.
+- **Without a teeth photo the embed draws, the standard teeth**: the
+  Reference's own teeth photo, `oral-detail-v3`, cut to its lips and
+  admitted like every mouth photo (`scripts/build_standard_teeth.py` writes
+  `embed/assets/mouth-teeth.webp`, 376 × 281 px and 23 KB, and its rig),
+  served by the API beside `/mouth-motion.json` (`/mouth-teeth.webp`,
+  `/mouth-teeth.rig.json`, cached and cross-origin as the motion is), and
+  found by the embed's one loader (`loadAvatarMouth`) beside the bundled
+  motion it is given, for an avatar whose config names no teeth photo:
+  the widget, the share page and the dashboard alike. They are seated and
+  sized as the Reference draws them, 0.016 and 1.00
+  (`for_standard_teeth`), which is where a new person starts
+  (`mouth_photo.default_config`). Why: rendered with the real engine on a
+  fictional bearded man who had no teeth photo, the drawn teeth read as a
+  denture (flat grey-beige slabs with a dark seam down the middle, no gum
+  line, a tongue blob in "oo" and "th"), while the Reference's photographed
+  teeth borrowed onto the same face were clean, complete and symmetric, a
+  little whiter and wider than his own (2026-09-26). The drawn teeth are
+  only the fallback now, for standard teeth that do not load (never a
+  failed mouth); their fit by mouth-to-face proportion went with them. The
+  standard teeth are the fictional sample's AI-made teeth (provenance in
+  [dental-rendering-repair-2026-09-07.md](dental-rendering-repair-2026-09-07.md)),
+  the same for every avatar and not made from its picture: `ai_edited`
+  does not list them.
 
 ## Wired (services/mouth_kit.py)
 
@@ -156,8 +176,8 @@ model configured, the monthly image limit, the member's current
 `third_party_ai` consent. A member who has not agreed to the words in force
 is asked when they press "Looks right" / "Save the points" (step 4), before
 anything is sent; "Not now" finishes with the standard mouth. Not allowed:
-the photographic mouth with generic teeth, the reason in
-`mouth_config.teeth.note`, the bundled motion. The kit is made from the
+the photographic mouth with the standard teeth (seated as the Reference's),
+the reason in `mouth_config.teeth.note`, the bundled motion. The kit is made from the
 avatar's picture as rigged and the rig's 478 points. A failure to tell
 whether AI is allowed (the database) never fails the finish either.
 
@@ -194,8 +214,8 @@ nothing (it is kept, and not asked for). The teeth photo is stored through
 `mouth_photo.admit_photo`: cut to the lips (`crop_to_mouth`: the renderer and
 the teeth test read the photo inside its lips only, so a 1024 px face is
 mostly download for nothing), the WebP visitors get, the teeth test on those
-bytes; were the WebP refused where the PNG passed, the profile is refitted
-for the drawn teeth (`for_drawn_teeth`). Record `{source: "ai", model}`; the
+bytes; were the WebP refused where the PNG passed, the standard teeth are
+drawn instead, and the profile is theirs (`for_standard_teeth`). Record `{source: "ai", model}`; the
 owner's upload is never replaced. `mouth_config.kit` is the owner-facing
 record: id, recipe, model, per-shape provenance with the reason a shape was
 retargeted, `teeth: {used, reason}` (a photo that failed a check names the
@@ -206,9 +226,9 @@ profile values it set (`fitted`), calls, `state` ("made" or "dropped", with
 **Teeth changed later.** An owner's upload replaces the kit's teeth photo and
 its disclosure; removing the photo removes both. Either way the teeth values
 the kit fitted (and the owner has not moved since) are refitted for the teeth
-drawn now (`mouth_kit.teeth_changed`): an upload's defaults, or the drawn
-teeth's fit. Left as they were, the drawn teeth sat 0.05 mouth widths low and
-5% large.
+drawn now (`mouth_kit.teeth_changed`): an upload's defaults (teethY 0), or
+the standard teeth's (the Reference's seat, `for_standard_teeth`). Left at an
+upload's, the standard teeth would sit 0.016 mouth widths high.
 
 **Publish.** The motion is copied to `published/r<rev>/mouth-motion.json`
 like the teeth photo (deleted with the avatar, restored into a fresh draft
@@ -273,4 +293,5 @@ all, or it failed), so the checklist never ticks a mouth that was not made.
 
 - The continuous mouth's F/V lip-contact correction (tuned for the
   Reference's F/V photo) still applies to every manifest when a teeth photo
-  is present.
+  is drawn, which, with the standard teeth, is every continuous mouth whose
+  teeth load.

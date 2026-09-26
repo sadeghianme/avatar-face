@@ -334,6 +334,22 @@ def create_app() -> FastAPI:
         Served like the bundles: fixed URL, revalidated, cross-origin."""
         return _serve_widget_bundle("mouth-motion.json", request, "application/json")
 
+    # The standard teeth (backend/scripts/build_standard_teeth.py): the
+    # Reference's own teeth photo, which the continuous mouth draws for an
+    # avatar without a teeth photo of its own. The loader finds them beside
+    # the motion it was given, so they are served the way it is: every
+    # customer's page loads them cross-origin (the rig by fetch(), the
+    # photo as an anonymous-CORS image the mouth reads pixels from).
+    @app.get("/mouth-teeth.webp", include_in_schema=False)
+    async def mouth_teeth(request: Request):
+        """The standard teeth photo, cut to the lips."""
+        return _serve_widget_bundle("mouth-teeth.webp", request, "image/webp")
+
+    @app.get("/mouth-teeth.rig.json", include_in_schema=False)
+    async def mouth_teeth_rig(request: Request):
+        """The standard teeth photo's landmarks."""
+        return _serve_widget_bundle("mouth-teeth.rig.json", request, "application/json")
+
     app.include_router(auth.router)
     app.include_router(orgs.router)
     app.include_router(avatars.router)

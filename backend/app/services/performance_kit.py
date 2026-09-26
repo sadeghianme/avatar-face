@@ -855,15 +855,19 @@ UPPER_SEAT = 0.055
 REFERENCE_TEETH_DROP = 0.0243
 # How the Reference draws its teeth photo: the one seat and size tuned by
 # eye (frontend/src/features/lab/reference-avatar.ts, teethY 0.016 on the
-# default teethScale). An AI teeth photo is drawn the same way, not where
-# and how large the model drew its teeth. The model imagines teeth for a
-# closed-mouth portrait: on the second real run (2026-09-26) it drew them
-# 0.125 mouth widths below the seam (v3: 0.047) in a smile 1.22 widths
-# wide, and fitted to that (teethY 0.094 and teethScale 1.22, both past the
-# renderer's limits) the engine drew them 12% wider and 28% taller than the
-# Reference's, down on the lower lip: talking through clenched teeth. At
-# the Reference's seat they sat where the Reference's do. Where the photo
-# would put them is still measured (teeth_y_as_drawn, teeth_scale_as_drawn).
+# default teethScale). The standard teeth, which a mouth without a teeth
+# photo of its own is drawn with, are that very photo
+# (scripts/build_standard_teeth.py), so they are seated and sized the same
+# way (for_standard_teeth). An AI teeth photo is drawn the same way too,
+# not where and how large the model drew its teeth. The model imagines
+# teeth for a closed-mouth portrait: on the second real run (2026-09-26)
+# it drew them 0.125 mouth widths below the seam (v3: 0.047) in a smile
+# 1.22 widths wide, and fitted to that (teethY 0.094 and teethScale 1.22,
+# both past the renderer's limits) the engine drew them 12% wider and 28%
+# taller than the Reference's, down on the lower lip: talking through
+# clenched teeth. At the Reference's seat they sat where the Reference's
+# do. Where the photo would put them is still measured (teeth_y_as_drawn,
+# teeth_scale_as_drawn).
 REFERENCE_TEETH_Y = 0.016
 REFERENCE_TEETH_SCALE = 1.0
 
@@ -915,7 +919,9 @@ def neutral_seam(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
 class ProfileFit:
     profile: dict
     measurements: dict = field(default_factory=dict)
-    # One entry per value left at its default or clamped, with why.
+    # What was not fitted from this face, one entry per value (`field`), with
+    # why. A teeth photo that is not drawn is teethY's entry: the standard
+    # teeth are drawn instead, and this is why (_finish reports it).
     reasons: list[dict] = field(default_factory=list)
     # True when the profile is fitted for the teeth photo, which the embed
     # accepts: the caller hands the photo on only then.
@@ -936,32 +942,22 @@ class TeethPhoto:
     targets: np.ndarray
 
 
-def geometric_teeth_scale(base_points: np.ndarray, reference: ReferenceMotion) -> float:
-    """teethScale for the drawn (geometric) teeth: they are sized in mouth
-    widths for the Reference's mouth-to-face proportion, so the Reference's
-    ratio over this face's (exactly 1 on the Reference). Unclamped."""
-    face = float(np.linalg.norm(base_points[FACE_RIGHT] - base_points[FACE_LEFT]))
-    return (_mouth_width(reference.rest) / reference.face_width) / (_mouth_width(base_points) / face)
-
-
-def for_drawn_teeth(profile: dict, base_points, reference: ReferenceMotion) -> dict:
-    """A fitted `profile` as fit_profile makes it without a teeth photo:
-    teethY at its default and teethScale for the drawn teeth (clamped);
-    everything else unchanged. For a mouth whose teeth photo is not drawn
-    after all (services.mouth_kit: the WebP visitors get is tested again,
-    and a photo on the very edge of the embed's limits can fail there; or
-    the owner removed it): a profile fitted for teeth that are not drawn
-    would seat and size the drawn ones wrongly."""
-    defaults, limits = _profile_defaults()
-    low, high = limits["teethScale"]
-    scale = geometric_teeth_scale(_checked_points(base_points), reference)
-    return {**profile, "teethY": defaults["teethY"],
-            "teethScale": round(min(high, max(low, scale)), 4)}
+def for_standard_teeth(profile: dict) -> dict:
+    """`profile` with the teeth values of a mouth that has no teeth photo of
+    its own; everything else unchanged. Such a mouth is drawn with the
+    standard teeth, which are the Reference's own teeth photo
+    (scripts/build_standard_teeth.py), so they are seated and sized as the
+    Reference draws it (REFERENCE_TEETH_Y, REFERENCE_TEETH_SCALE): what
+    fit_profile fits without a teeth photo, what a new person starts with
+    (mouth_photo.default_config), and what a mouth gets whose teeth photo is
+    not drawn after all (services.mouth_kit: the WebP visitors get is tested
+    again, and a photo on the very edge of the embed's limits can fail
+    there; or the owner removed it)."""
+    return {**profile, "teethY": REFERENCE_TEETH_Y, "teethScale": REFERENCE_TEETH_SCALE}
 
 
 def fit_profile(
     base_points: np.ndarray,
-    reference: ReferenceMotion,
     teeth: TeethPhoto | None = None,
     why_no_teeth: dict | None = None,
 ) -> ProfileFit:
@@ -969,26 +965,23 @@ def fit_profile(
 
     `teeth` is the teeth answer (TEETH), registered. It counts only if the
     embed would draw it (dental_photo.accept_teeth_photo: DentalOralSurface's
-    own test); one it would refuse leaves the geometric teeth, and the fit
-    is for those. `why_no_teeth` says why there is no answer to measure
-    (its request failed or was refused). Each value is clamped to the API's
-    range, and one that cannot be measured stays at its default, with the
-    reason.
+    own test); one it would refuse leaves the standard teeth, and says why
+    (so does `why_no_teeth`: why there is no answer to measure, its request
+    failed or was refused).
 
-    With a teeth photo the embed draws, teethY and teethScale are the
-    Reference's (REFERENCE_TEETH_Y, REFERENCE_TEETH_SCALE: why, there), and
-    where the photo itself would put them is measured, not applied:
-    teeth_y_as_drawn is where its upper arch ends (the bottom of the arch
-    the embed extracts, which is what dentalPlacement seats), carried by the
-    photo's registration onto the base and measured below the neutral seam
-    in rest mouth widths (skull-fixed, so the photo's lifted upper lip is
-    not taken for lower teeth), plus REFERENCE_TEETH_DROP, less UPPER_SEAT
-    (on oral-detail-v3 registered onto the Reference portrait this gives
-    the hand-tuned 0.016); teeth_scale_as_drawn is its mouth width over the
-    rest's (1.13 on v3, which the Reference draws at 1.00).
-    teethScale without a teeth photo: the drawn teeth are geometric and
-    sized in mouth widths, so the scale is the Reference's mouth-to-face
-    width ratio over this face's (exactly 1 on the Reference).
+    The teeth drawn are seated and sized as the Reference's either way
+    (REFERENCE_TEETH_Y, REFERENCE_TEETH_SCALE: why, there): the standard
+    teeth are the Reference's own photo (for_standard_teeth), and a teeth
+    photo the embed draws is drawn the same way. Where such a photo would
+    put its teeth is measured, not applied: teeth_y_as_drawn is where its
+    upper arch ends (the bottom of the arch the embed extracts, which is
+    what dentalPlacement seats), carried by the photo's registration onto
+    the base and measured below the neutral seam in rest mouth widths
+    (skull-fixed, so the photo's lifted upper lip is not taken for lower
+    teeth), plus REFERENCE_TEETH_DROP, less UPPER_SEAT (on oral-detail-v3
+    registered onto the Reference portrait this gives the hand-tuned
+    0.016); teeth_scale_as_drawn is its mouth width over the rest's (1.13
+    on v3, which the Reference draws at 1.00).
 
     The jaw range is not fitted: the kit's own shapes are brought to the
     Reference's size instead (normalize_amplitude), so the manifest is true
@@ -997,26 +990,14 @@ def fit_profile(
     """
     from app.services import dental_photo
 
-    defaults, limits = _profile_defaults()
-    fit = ProfileFit(profile=dict(defaults))
-    width = _mouth_width(base_points)
-
-    def settle(name: str, value: float | None, why: dict | None = None) -> None:
-        if value is None or not math.isfinite(value):
-            fit.reasons.append({"field": name, **(why or _reason("unmeasured", "not measured"))})
-            return
-        low, high = limits[name]
-        clamped = min(high, max(low, value))
-        if clamped != value:
-            fit.reasons.append({"field": name, "code": "clamped",
-                                "detail": f"{value:.4f} is outside {low}..{high}"})
-        fit.profile[name] = round(clamped, 4)
-
+    defaults, _ = _profile_defaults()
+    fit = ProfileFit(profile=for_standard_teeth(defaults))
     acceptance = None
     if teeth is not None:
         acceptance = dental_photo.accept_teeth_photo(teeth.image, teeth.points, INNER_LIP_RING)
         fit.measurements["teeth_photo"] = acceptance.as_dict()
     if acceptance is not None and acceptance.accepted:
+        width = _mouth_width(base_points)
         down_photo, photo_px = _down(teeth.targets)
         # The arch's end in the photo's mouth frame (origin 13, corner line
         # level, in its mouth widths); the registration is a similarity, so
@@ -1032,26 +1013,21 @@ def fit_profile(
             teeth_y_as_drawn=round(below + REFERENCE_TEETH_DROP - UPPER_SEAT, 4),
             teeth_scale_as_drawn=round(photo_width, 4),
         )
-        settle("teethY", REFERENCE_TEETH_Y)
-        settle("teethScale", REFERENCE_TEETH_SCALE)
+        return fit
+    if teeth is None:
+        why = why_no_teeth or _reason("no_teeth_photo", "No teeth photo of this face")
+    elif acceptance.arch_pixels == 0:
+        why = _reason("no_teeth_visible", "The teeth photo shows no upper teeth")
     else:
-        if teeth is None:
-            why = why_no_teeth or _reason("no_teeth_photo", "No teeth photo of this face")
-        elif acceptance.arch_pixels == 0:
-            why = _reason("no_teeth_visible", "The teeth photo shows no upper teeth")
-        else:
-            why = _reason(
-                "teeth_photo_refused",
-                "The teeth photo shows too little of the upper teeth for the photographic mouth "
-                f"(central crown {acceptance.crown_coverage:.3f} of the mouth width, arch "
-                f"{acceptance.arch_width} px, {acceptance.arch_pixels} px of enamel; the embed "
-                f"needs {dental_photo.MIN_CROWN_COVERAGE}, {dental_photo.MIN_ARCH_WIDTH} and "
-                f"{dental_photo.MIN_ARCH_PIXELS})",
-            )
-        settle("teethY", None, why)
-        ratio = geometric_teeth_scale(base_points, reference)
-        fit.measurements["mouth_to_face_vs_reference"] = round(1 / ratio, 4)
-        settle("teethScale", ratio)
+        why = _reason(
+            "teeth_photo_refused",
+            "The teeth photo shows too little of the upper teeth for the photographic mouth "
+            f"(central crown {acceptance.crown_coverage:.3f} of the mouth width, arch "
+            f"{acceptance.arch_width} px, {acceptance.arch_pixels} px of enamel; the embed "
+            f"needs {dental_photo.MIN_CROWN_COVERAGE}, {dental_photo.MIN_ARCH_WIDTH} and "
+            f"{dental_photo.MIN_ARCH_PIXELS})",
+        )
+    fit.reasons.append({"field": "teethY", **why})
     return fit
 
 
@@ -1458,13 +1434,14 @@ def _finish(
     generated = {shape: registrations[shape].targets for shape in SHAPES
                  if shape in registrations and registrations[shape].ok}
     amplitude = normalize_amplitude(base_points, generated, reference)
-    # The profile is fitted for the teeth that will be drawn: the teeth
-    # photo's when the embed would draw it, the geometric ones otherwise.
+    # The teeth that will be drawn: the teeth photo when the embed would
+    # draw it, the standard teeth otherwise (and why), either seated and
+    # sized as the Reference's.
     answer = registrations.get(TEETH)
     photo = None
     if answer is not None and answer.ok:
         photo = TeethPhoto(answer.answer_image, answer.answer_points, answer.targets)
-    fit = fit_profile(base_points, reference, photo, why_no_teeth)
+    fit = fit_profile(base_points, photo, why_no_teeth)
     fit.measurements.update(amplitude.measurements)
     fit.reasons.extend(amplitude.reasons)
     teeth = _teeth_source(answer) if fit.teeth_photo else None

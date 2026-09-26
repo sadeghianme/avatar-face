@@ -5,7 +5,7 @@
  * embed widget, so an avatar cannot look one way where its owner fits it and
  * another where visitors see it.
  */
-import { ContinuousMouth, type OralPhotoSource } from "./continuous-mouth";
+import { ContinuousMouth, standardTeeth, type OralPhotoSource } from "./continuous-mouth";
 import type { MotionManifest } from "./photographic-performance-model";
 import { normalizeProfile, type ReferenceProfile } from "./reference-mouth-model";
 
@@ -18,7 +18,11 @@ export type { ReferenceProfile } from "./reference-mouth-model";
 export interface AvatarMouthConfig {
   renderer: "continuous";
   profile?: Partial<ReferenceProfile> | null;
-  /** The person's own teeth, when they supplied a second photo. */
+  /**
+   * The avatar's own teeth photo: the owner's second photo, or made by AI
+   * from its picture. Absent or null: the standard teeth, served beside the
+   * bundled motion (`standardTeeth`).
+   */
   oral?: OralPhotoSource | null;
   /**
    * The avatar's own performance manifest (version 2: its six mouth shapes,
@@ -31,9 +35,10 @@ export interface AvatarMouthConfig {
 /**
  * Build the mouth an avatar's config asks for. `motionUrl` is the authored
  * motion template (`<api>/mouth-motion.json`), played when the config names
- * no manifest of its own or when that manifest does not load. Rejects on any
- * other failure, the teeth photo's included; the caller keeps the classic
- * mouth, which is always a working fallback.
+ * no manifest of its own or when that manifest does not load; the standard
+ * teeth are served beside it. Rejects on any other failure, the avatar's
+ * own teeth photo's included; the caller keeps the classic mouth, which is
+ * always a working fallback.
  *
  * The motion is settled first, then the teeth photo is loaded, once. Only
  * the motion has a fallback: the photo is the same whichever motion plays,
@@ -49,12 +54,51 @@ export async function loadAvatarMouth(
 ): Promise<ContinuousMouth> {
   const template = await avatarMotion(config.motion_url, motionUrl, signal);
   throwIfCancelled(signal);
-  const oral = config.oral ? await ContinuousMouth.loadOralPhoto(config.oral, signal) : undefined;
-  throwIfCancelled(signal);
-  // Throws DentalPhotoError for a photo it cannot draw the teeth from.
-  const mouth = new ContinuousMouth(template, oral);
+  const mouth = config.oral
+    ? await withOwnTeeth(template, config.oral, signal)
+    : await withStandardTeeth(template, motionUrl, signal);
   mouth.setProfile(normalizeProfile(config.profile));
   return mouth;
+}
+
+/** The mouth with the avatar's own teeth photo; rejects when it does not
+ *  load, and with DentalPhotoError when it does not show the upper teeth
+ *  clearly enough to draw them from. */
+async function withOwnTeeth(
+  template: MotionManifest,
+  source: OralPhotoSource,
+  signal?: AbortSignal
+): Promise<ContinuousMouth> {
+  const oral = await ContinuousMouth.loadOralPhoto(source, signal);
+  throwIfCancelled(signal);
+  return new ContinuousMouth(template, oral);
+}
+
+/**
+ * The mouth of an avatar without a teeth photo of its own: the standard
+ * teeth, the Reference's own photographed teeth, served beside the bundled
+ * motion. Drawn teeth in their place looked like a denture on a real face
+ * (flat slabs with a seam down the middle, no gum line); the Reference's
+ * photo, on the same face, looked like teeth.
+ *
+ * Nothing about them can fail the mouth: whatever keeps them from being
+ * drawn (the network, a decode, a DentalPhotoError, a server that has none)
+ * leaves the drawn teeth, as before they existed, and they are not asked
+ * for again. A cancelled load still rejects.
+ */
+async function withStandardTeeth(
+  template: MotionManifest,
+  motionUrl: string,
+  signal?: AbortSignal
+): Promise<ContinuousMouth> {
+  try {
+    const oral = await ContinuousMouth.loadOralPhoto(standardTeeth(motionUrl), signal);
+    throwIfCancelled(signal);
+    return new ContinuousMouth(template, oral);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return new ContinuousMouth(template);
+  }
 }
 
 /**

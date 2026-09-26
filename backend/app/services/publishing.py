@@ -484,8 +484,9 @@ async def published_view(avatar, storage) -> dict | None:
 
 
 async def _mouth_view(mouth: dict | None, storage) -> dict | None:
-    """What a visitor's engine needs: renderer, fit, presigned teeth, and
-    the presigned motion (`motion_url`: the avatar's own performance
+    """What a visitor's engine needs: renderer, fit, presigned teeth (null:
+    the standard teeth, which the engine loads beside the bundled motion),
+    and the presigned motion (`motion_url`: the avatar's own performance
     manifest; null, the bundled Reference motion). The engine fetch()es the
     motion cross-origin from the customer's page, which the storage route
     allows (/storage/ is on main.PublicCorsMiddleware's public surface)."""

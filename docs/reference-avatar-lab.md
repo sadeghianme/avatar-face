@@ -27,8 +27,11 @@ The seven authored shapes still supply landmark movement, retargeted in each
 portrait's mouth coordinate system. The nose and eyes stay outside this local
 deformation. The fictional sample now uses its dedicated `oral-detail-v3` photo
 for separate, fixed-scale enamel arches, with independent mouth shading and
-lower-arch movement. A personal portrait defaults to adjustable
-oral geometry; the sample's teeth are never put into a customer's face.
+lower-arch movement. In this lab a personal portrait defaults to adjustable
+oral geometry. Customers' avatars without a teeth photo of their own now get
+the sample's teeth, cut to its lips, as their standard teeth (since
+2026-09-26: avatar-lines.md, "The standard teeth"): on a real face they
+looked like teeth, and the geometry like a denture.
 
 How to test a photo:
 

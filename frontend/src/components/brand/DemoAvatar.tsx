@@ -123,6 +123,9 @@ export function DemoAvatar({
       director.attach(created, linesModule.default as unknown as DemoLine[], VOICES);
 
       // The photographic mouth, progressively; the classic one works meanwhile.
+      // It brings its own teeth photo (the Reference's, as the demo always
+      // showed), so the loader never looks for the standard teeth: those are
+      // served beside the API's motion, not beside this bundled copy of it.
       const mouth = import("@liveface/embed/mouth")
         .then(({ attachAvatarMouth }) =>
           attachAvatarMouth(

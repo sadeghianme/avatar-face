@@ -4,7 +4,7 @@ Finishing a person's creation gives the avatar the photographic mouth and,
 when the organization allows third-party AI and the member has agreed to
 send photos to Google, an "ee" photo the image model makes of them, admitted
 like an uploaded mouth photo. Everything short of that publishes with the
-renderer's generic teeth and a note saying why. The Mouth panel's action
+standard teeth (the Reference's own teeth photo) and a note saying why. The Mouth panel's action
 (POST /avatars/{id}/mouth-kit, a job) does the same for an existing avatar,
 as a draft edit.
 
@@ -33,6 +33,7 @@ from sqlalchemy import select
 from app.db import get_session_factory
 from app.models import Avatar, Creation
 from app.services import face_template, imagegen, mouth_photo, portrait_photo
+from app.services import performance_kit as pk
 from app.services import photo_adjust as pa
 from app.services.usage import IMAGE_KIND
 from tests.test_creation_ai import (
@@ -211,8 +212,17 @@ def test_the_teeth_disclosure_is_added_and_removed_without_touching_the_rest():
     assert mouth_photo.without_ai_teeth(None) is None
 
 
+# How a mouth without a teeth photo of its own seats and sizes its teeth:
+# the standard teeth are the Reference's own photo, drawn as the Reference
+# draws it (performance_kit.for_standard_teeth).
+STANDARD_SEAT = {"teethY": pk.REFERENCE_TEETH_Y, "teethScale": pk.REFERENCE_TEETH_SCALE}
+
+
 def test_only_a_person_starts_with_the_photographic_mouth():
-    assert mouth_photo.default_config("human") == {"renderer": "continuous", "profile": {}}
+    """With no teeth photo of its own yet: the standard teeth, seated and
+    sized as the Reference draws them."""
+    assert mouth_photo.default_config("human") == {"renderer": "continuous",
+                                                   "profile": STANDARD_SEAT}
     assert mouth_photo.default_config("animal") is None
     assert mouth_photo.default_config("cartoon") is None
 
@@ -240,6 +250,8 @@ async def test_a_person_is_finished_with_their_own_ai_teeth(
     config = json.loads(avatar.mouth_config)
     assert config["renderer"] == "continuous"
     assert config["teeth"] == {"source": "ai", "model": imagegen.MODEL}
+    # Drawn where the kit's teeth photo is: at the Reference's seat.
+    assert config["profile"] == STANDARD_SEAT
     assert published["mouth"]["renderer"] == "continuous"
     assert published["mouth"]["oral_image_key"].startswith(f"orgs/{org_id}/avatars/{avatar_id}/published/")
     # Disclosed to visitors, with the consent that let the photo out.
@@ -261,12 +273,14 @@ async def test_without_the_members_consent_nothing_is_sent(client, faces, images
     assert images.calls == []
     assert await _usage(org_id, IMAGE_KIND) == []
     config = json.loads(avatar.mouth_config)
-    assert config["renderer"] == "continuous", "the photographic mouth, generic teeth"
+    assert config["renderer"] == "continuous", "the photographic mouth, the standard teeth"
+    assert config["profile"] == STANDARD_SEAT
     assert "oral_image_key" not in config
     assert config["teeth"]["source"] is None
     assert config["teeth"]["note"]["code"] == "no_ai_consent"
     assert "oral_image_key" not in published["mouth"]
     assert published["mouth"]["renderer"] == "continuous"
+    assert published["mouth"]["profile"] == STANDARD_SEAT
     # The note is kept with the snapshot (for Discard), never served.
     assert published["mouth"]["teeth"]["note"]["code"] == "no_ai_consent"
     assert avatar.ai_edited is None
@@ -308,7 +322,7 @@ async def test_a_refusal_is_asked_once_more_on_the_head_crop(
     assert json.loads(avatar.mouth_config)["teeth"]["source"] == "ai"
 
 
-async def test_a_second_refusal_publishes_generic_teeth(client, faces, images):
+async def test_a_second_refusal_publishes_the_standard_teeth(client, faces, images):
     headers, org_id = await _org(client, "refused")
     await ai_consent(client, headers, org_id)
     images.script = ["refuse"]
@@ -318,6 +332,7 @@ async def test_a_second_refusal_publishes_generic_teeth(client, faces, images):
     teeth = json.loads(avatar.mouth_config)["teeth"]
     assert teeth["note"]["code"] == "safety_refused"
     assert "oral_image_key" not in published["mouth"]
+    assert published["mouth"]["profile"] == STANDARD_SEAT
     assert avatar.ai_edited is None
 
 
