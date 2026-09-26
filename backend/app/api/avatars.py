@@ -1226,15 +1226,16 @@ async def make_mouth_kit(
     performance kit, services.mouth_kit), for avatars made before it, or
     whose kit could not be made then, or whose picture changed since.
 
-    A job (202, `job`), followed with GET below: six image-model calls take
-    tens of seconds, longer than a request may wait behind the proxy. 409
+    A job (202, `job`), followed with GET below: seven image-model calls
+    (a shape per speech sound and the teeth photo) take tens of seconds,
+    longer than a request may wait behind the proxy. 409
     mouth_kit_in_progress while one runs for this avatar (and the runner's
     429 too_many_jobs, 503 job_queue_full). Needs the caller's
     third_party_ai consent (403 consent_required) and the organization's
     switch on (403 third_party_ai_disabled); metered against the monthly
     image limit (429 image_limit_reached, and read again before each call).
-    Teeth the owner uploaded are kept: the kit then brings its shapes and
-    its jaw range only. A DRAFT edit: visitors get the new mouth, and the
+    Teeth the owner uploaded are kept: the kit then asks for and brings
+    its six shapes only. A DRAFT edit: visitors get the new mouth, and the
     disclosure that AI made it, when the owner publishes.
     """
     from app.services import consent, imagegen
@@ -1262,7 +1263,8 @@ async def make_mouth_kit(
 @router.get("/{avatar_id}/mouth-kit", response_model=MouthKitOut)
 async def mouth_kit_job(avatar_id: str, ctx: OrgMember, db: DB) -> MouthKitOut:
     """The avatar's mouth-kit job: its progress while it runs ("making the
-    mouth shapes", with how many of the six are settled, "fitting the
+    mouth shapes", with how many of its requests are settled (seven, or
+    six when the owner's own teeth are kept), "fitting the
     mouth", "saving"; "making the teeth" where only the teeth can be made),
     then done or failed with the reason. Null when this server ran none for
     it (a restart forgets jobs). Once done, the avatar's draft has it."""
