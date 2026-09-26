@@ -564,7 +564,11 @@ _FLOORS: dict[str, dict[str, float]] = {
     # the second real run's relaxed "ee" came back 0.96 of a smiling rest.
     # 0.94 still refuses a rounded mouth (an OH is at most 0.92, an OO 0.85).
     "ee": {"min_opening": 0.05, "min_width": 0.94},
-    "oo": {"max_width": 0.85},
+    # An "oo" rounds the lips around a small opening. The second real run's
+    # came back with a third of the Reference's (0.041): rendered on the
+    # engine, a pressed pout that reads as "mm". Half the Reference's is the
+    # least that still reads as a rounded vowel.
+    "oo": {"min_opening": 0.06, "max_width": 0.85},
     "oh": {"min_opening": 0.12, "max_width": 0.92},
     "fv": {},
     "th": {"min_opening": 0.05},
@@ -841,6 +845,19 @@ UPPER_SEAT = 0.055
 # itself puts it 0.0467 below. Every fitted face gets the same allowance,
 # so a photo like v3 fits the Reference's value (tests/test_performance_kit.py).
 REFERENCE_TEETH_DROP = 0.0243
+# How the Reference draws its teeth photo: the one seat and size tuned by
+# eye (frontend/src/features/lab/reference-avatar.ts, teethY 0.016 on the
+# default teethScale). An AI teeth photo is drawn the same way, not where
+# and how large the model drew its teeth. The model imagines teeth for a
+# closed-mouth portrait: on the second real run (2026-09-26) it drew them
+# 0.125 mouth widths below the seam (v3: 0.047) in a smile 1.22 widths
+# wide, and fitted to that (teethY 0.094 and teethScale 1.22, both past the
+# renderer's limits) the engine drew them 12% wider and 28% taller than the
+# Reference's, down on the lower lip: talking through clenched teeth. At
+# the Reference's seat they sat where the Reference's do. Where the photo
+# would put them is still measured (teeth_y_as_drawn, teeth_scale_as_drawn).
+REFERENCE_TEETH_Y = 0.016
+REFERENCE_TEETH_SCALE = 1.0
 
 
 def _profile_defaults() -> tuple[dict, dict[str, tuple[float, float]]]:
@@ -950,20 +967,20 @@ def fit_profile(
     range, and one that cannot be measured stays at its default, with the
     reason.
 
-    teethY: where the teeth photo's upper arch ends (the bottom of the arch
-      the embed extracts, which is what dentalPlacement seats), carried by
-      the photo's registration onto the base, measured below the neutral
-      seam in rest mouth widths: skull-fixed, so the photo's lifted upper
-      lip is not taken for lower teeth. Plus REFERENCE_TEETH_DROP, less
-      UPPER_SEAT: on oral-detail-v3 registered onto the Reference portrait
-      this gives the hand-tuned 0.016 the Reference renders that photo with.
-    teethScale: with a teeth photo, its mouth width over the rest mouth
-      width (both registered): the photo's teeth are sized in its own mouth
-      widths and drawn in rest widths, so this draws them at their true
-      size. (The Reference renders v3 at the default 1.00, never tuned; v3
-      would fit 1.13.) Without one the drawn teeth are geometric and sized
-      in mouth widths, so the scale is the Reference's mouth-to-face width
-      ratio over this face's (exactly 1 on the Reference).
+    With a teeth photo the embed draws, teethY and teethScale are the
+    Reference's (REFERENCE_TEETH_Y, REFERENCE_TEETH_SCALE: why, there), and
+    where the photo itself would put them is measured, not applied:
+    teeth_y_as_drawn is where its upper arch ends (the bottom of the arch
+    the embed extracts, which is what dentalPlacement seats), carried by the
+    photo's registration onto the base and measured below the neutral seam
+    in rest mouth widths (skull-fixed, so the photo's lifted upper lip is
+    not taken for lower teeth), plus REFERENCE_TEETH_DROP, less UPPER_SEAT
+    (on oral-detail-v3 registered onto the Reference portrait this gives
+    the hand-tuned 0.016); teeth_scale_as_drawn is its mouth width over the
+    rest's (1.13 on v3, which the Reference draws at 1.00).
+    teethScale without a teeth photo: the drawn teeth are geometric and
+    sized in mouth widths, so the scale is the Reference's mouth-to-face
+    width ratio over this face's (exactly 1 on the Reference).
 
     The jaw range is not fitted: the kit's own shapes are brought to the
     Reference's size instead (normalize_amplitude), so the manifest is true
@@ -1001,10 +1018,14 @@ def fit_profile(
         below = float((edge - seam) @ down) / width
         photo_width = photo_px / width
         fit.teeth_photo = True
-        fit.measurements.update(teeth_edge_below_seam=round(below, 4),
-                                teeth_photo_width=round(photo_width, 4))
-        settle("teethY", below + REFERENCE_TEETH_DROP - UPPER_SEAT)
-        settle("teethScale", photo_width)
+        fit.measurements.update(
+            teeth_edge_below_seam=round(below, 4),
+            teeth_photo_width=round(photo_width, 4),
+            teeth_y_as_drawn=round(below + REFERENCE_TEETH_DROP - UPPER_SEAT, 4),
+            teeth_scale_as_drawn=round(photo_width, 4),
+        )
+        settle("teethY", REFERENCE_TEETH_Y)
+        settle("teethScale", REFERENCE_TEETH_SCALE)
     else:
         if teeth is None:
             why = why_no_teeth or _reason("no_teeth_photo", "No teeth photo of this face")

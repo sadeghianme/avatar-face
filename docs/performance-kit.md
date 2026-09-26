@@ -27,7 +27,7 @@ photo once its owner has confirmed the points.
 | Checks | `register_answer(...)` → `PoseRegistration` | refuses an answer whose aspect differs from what was sent by more than 1% (`aspect_changed`); detect, map back, register on eye corners + nose bridge onto the detector's own view of the base photo (`base_detected`), RMS ≤ 0.007 in manifest units; refuses head zoom/tilt, moved nose or eyes, a head turned (the nose tip's SIGNED offset between the cheeks, `signed_yaw`), skin ΔE > 8, or a mouth not in the asked shape (`POSE_LIMITS`, below). The teeth answer passes the same drift checks, and must show its teeth (its own lip gap ≥ 0.08 of its mouth width); how far it opens is not played, so not bounded. Targets = confirmed points + (registered − detected base), so the owner's corrections to the marks are kept and never read as motion. A check that raises is a rejected answer (`check_failed`) |
 | Size | `normalize_amplitude(base_points, generated, reference)` → `Amplitude` | the person's own shapes at the Reference's conversational size (below) |
 | Fallback | `retarget_reference_pose(shape, base_points, reference)` | the Reference's displacement in its levelled mouth frame × this face's mouth width over the Reference's, turned to this face's mouth angle: exactly what the engine does with the bundled motion, so a retargeted pose plays as the bundled one does on the same face, whatever the lips' thickness (tested on a face whose lips are 1.24 × the Reference's height). Baked by the backend: the embed has no retarget code |
-| Fit | `fit_profile(base_points, reference, teeth, why_no_teeth)` → `ProfileFit` | teethY, teethScale, from the teeth photo when the embed would draw it, else for the drawn teeth; clamped to `MouthProfile`'s ranges; defaults with a reason when unmeasurable. The jaw range is not fitted (below) |
+| Fit | `fit_profile(base_points, reference, teeth, why_no_teeth)` → `ProfileFit` | teethY, teethScale: the Reference's for a teeth photo the embed would draw (where the photo would put them is measured), else fitted for the drawn teeth; clamped to `MouthProfile`'s ranges; defaults with a reason when unmeasurable. The jaw range is not fitted (below) |
 | Teeth photo test | `dental_photo.accept_teeth_photo(image, points, inner_ring)` → `Acceptance` | the embed's DentalOralSurface test, ported pass for pass (extraction canvas, `extractDentalLayers`, `dentalCrownCoverage`): arch ≥ 110/512 wide, ≥ 180 px of enamel, central crown ≥ 0.10 mouth widths. Pixel-exact against the embed's code (`dental-extraction.json` fixture) |
 | Manifest | `build_manifest(...)` | version 2, see below; the kit id is ASCII `[A-Za-z0-9_-]{1,64}` exactly as the embed accepts it |
 | Rebase | `rebase_manifest(manifest, base_points, reference, image_size)` | the same kit on the face's points as they are now: re-confirmed, re-detected, or the picture cropped around the face; no AI call (see "Wired") |
@@ -43,13 +43,14 @@ it is linear in the movement. The Reference's own: AA 0.290, EE 0.165, OO
 the bundled motion's).
 
 - **Each answer**, as drawn, must open at least enough to be the shape (AA
-  0.6 times the Reference's, EE and TH 0.05, OH 0.12; EE at least 0.94 of
-  the rest width, OO at most 0.85, OH at most 0.92) and at most what no
+  0.6 times the Reference's, EE and TH 0.05, OO 0.06, OH 0.12; EE at least
+  0.94 of the rest width, OO at most 0.85, OH at most 0.92) and at most what no
   speech sound reaches: twice the Reference's opening of the same shape
   (`RAW_MAX_OVER_REFERENCE`), and for the AA, which sets the kit's size,
   1.4 times (`MAX_OVER_REFERENCE`). The EE's width floor allows a portrait
   that already smiles: the second real run's relaxed "ee" came back 0.96 of
-  a smiling rest.
+  a smiling rest. The OO's floor refuses a pout: that run's OO opened a
+  third of the Reference's (0.041), and rendered it read as "mm".
 - **The kit's size.** An image model acts: how far it opens an "ah" is its
   choice, not the person's jaw. So the person's AA sets the scale: every
   shape the model made is moved from rest the Reference's AA opening over
@@ -121,19 +122,30 @@ the bundled motion plays the same shape on the same face.
   tips only (central crown 0.070) and would be refused; `oral-detail-v3` is
   accepted (0.115). That is why the teeth are their own request: a spoken EE
   with the crowns the embed needs would lift the upper lip far above speech.
-- **teethY** = where the teeth photo's upper arch ends (the bottom of the
-  arch the embed extracts, which `dentalPlacement` seats), carried by the
-  photo's registration onto the base, measured below the neutral seam
-  (`centralMouthAnchors`) in rest mouth widths: skull-fixed, so its lifted
-  upper lip is not taken for lower teeth. Plus 0.0243
-  (`REFERENCE_TEETH_DROP`), less 0.055 (the renderer's seat). The allowance
-  is calibrated on `oral-detail-v3` registered onto the Reference portrait:
-  its arch ends 0.0467 below the seam, and the hand-tuned **0.016** draws it
-  at 0.071, so v3 fits **0.016**.
-- **teethScale** with a teeth photo = its mouth width / rest mouth width
-  (teeth at their photographed size; 1.13 for v3, which the Reference
-  renders at the untuned default 1.00). Without one = the Reference's
-  mouth-to-face width ratio over this face's (1.00 on the Reference).
+- **teethY and teethScale with a teeth photo are the Reference's**: 0.016
+  and 1.00 (`REFERENCE_TEETH_Y`, `REFERENCE_TEETH_SCALE`), the one seat and
+  size tuned by eye. The model imagines teeth for a closed-mouth portrait,
+  so where and how large it drew them is its choice, not the person's. On
+  the second real run it drew them 0.125 mouth widths below the seam in a
+  smile 1.22 widths wide; fitted to that (teethY 0.094, teethScale 1.22,
+  both past the renderer's limits) the real engine drew them 12% wider and
+  28% taller than the Reference's and down on the lower lip, like talking
+  through clenched teeth, and at the Reference's seat they sat where the
+  Reference's do (rendered side by side, 2026-09-26).
+- **Where the photo would put them is measured**, not applied:
+  `teeth_y_as_drawn` = where its upper arch ends (the bottom of the arch the
+  embed extracts, which `dentalPlacement` seats), carried by the photo's
+  registration onto the base, measured below the neutral seam
+  (`centralMouthAnchors`) in rest mouth widths, skull-fixed so its lifted
+  upper lip is not taken for lower teeth, plus 0.0243
+  (`REFERENCE_TEETH_DROP`), less 0.055 (the renderer's seat): calibrated on
+  `oral-detail-v3` registered onto the Reference portrait, whose arch ends
+  0.0467 below the seam, it gives the hand-tuned **0.016** back.
+  `teeth_scale_as_drawn` = its mouth width / rest mouth width (1.13 for v3,
+  which the Reference draws at 1.00).
+- **teethScale without a teeth photo** (the drawn, geometric teeth) = the
+  Reference's mouth-to-face width ratio over this face's (1.00 on the
+  Reference), clamped to the profile's range with a reason.
 
 ## Wired (services/mouth_kit.py)
 

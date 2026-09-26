@@ -1441,15 +1441,15 @@ async def _drawn_fit(avatar_id: str) -> dict:
 async def test_removing_the_kits_teeth_refits_the_profile_for_the_drawn_ones(
     client, faces, world
 ):
-    """The kit seats and sizes its own teeth photo (teethY, teethScale).
-    Removed, the drawn teeth take their place, fitted as the kit fits them;
-    left as they were, visitors saw generic teeth 0.05 mouth widths low and
-    5% large. The jaw range is the owner's either way."""
+    """The kit seats and sizes its own teeth photo as the Reference's
+    (teethY 0.016, teethScale 1.0). Removed, the drawn teeth take their
+    place, fitted as the kit fits them (teethY 0.0, the geometric scale).
+    The jaw range is the owner's either way."""
     headers, org_id = await _org(client, "refit")
     await ai_consent(client, headers, org_id)
     avatar_id, url, _ = await _finished(client, headers, org_id)
     fitted = (await _config(avatar_id))["profile"]
-    assert fitted["teethY"] > 0.02, "the kit's own photo seats its teeth lower"
+    assert fitted["teethY"] == pk.REFERENCE_TEETH_Y
     removed = await client.delete(f"{url}/mouth-photo", headers=headers)
     assert removed.status_code == 200, removed.text
     config = await _config(avatar_id)
