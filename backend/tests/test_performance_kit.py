@@ -315,15 +315,17 @@ def test_the_ee_is_speech_and_the_teeth_are_asked_for_on_their_own():
 
 def test_the_prompts_say_what_real_gemini_got_wrong():
     """The first run on real Gemini (fictional faces): AA yawn-wide, TH's
-    tongue far out, F/V ambiguous. The wording that answers each, under a
-    new recipe version, so a stored kit says which words made it."""
-    assert pk.PROMPTS_VERSION == "pose-prompts@3"
+    tongue far out, F/V ambiguous; the second: OO a pout, F/V open over the
+    teeth. The wording that answers each, under a new recipe version, so a
+    stored kit says which words made it."""
+    assert pk.PROMPTS_VERSION == "pose-prompts@4"
     assert "moderately open, as in normal conversation, not a yawn or a shout" in (
         pk.pose_prompt("aa"))
     assert "only the very tip of the tongue, barely visible between the front teeth" in (
         pk.pose_prompt("th"))
-    assert ("the upper front teeth pressing gently on the lower lip; the lips otherwise "
-            "relaxed") in pk.pose_prompt("fv")
+    assert "the lower lip drawn up and tucked lightly under the upper front teeth" in (
+        pk.pose_prompt("fv"))
+    assert "a clearly open, round hole, not a kiss, a whistle or a pout" in pk.pose_prompt("oo")
 
 
 # --- 2. Request preparation -----------------------------------------------------------------

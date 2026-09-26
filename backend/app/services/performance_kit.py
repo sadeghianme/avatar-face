@@ -92,7 +92,14 @@ KIT_VERSION = 2
 # the teeth photo, and the full crowns the embed needs from one (0.10 mouth
 # widths of central crown) came with an upper lip lifted well above any
 # spoken "ee", which the mouth then played on every "ih", "e" and "s".
-PROMPTS_VERSION = "pose-prompts@3"
+# @4 (2026-09-26): OO and F/V reworded after the second real run (two
+# fictional faces, gated by register_answer): with @3 both OOs came back a
+# pressed pout (0.04 mouth widths open, a third of the Reference's; it
+# reads as "mm") and both F/Vs with the lips parted over the teeth (1.3
+# and 1.8 times the Reference's at the kit's size). Reworded, both F/Vs
+# passed and one OO of two opened as the Reference's does (the other went
+# too far and is refused, as a pout is: the Reference's then plays).
+PROMPTS_VERSION = "pose-prompts@4"
 # The manifest format ContinuousMouth accepts for a per-avatar kit. Version 1
 # is the Reference's own (character "lab-reference-v1"), bundled with the
 # embed as mouth-motion.json; version 2 adds provenance, the frame and the
@@ -164,17 +171,18 @@ POSE_PROMPTS: dict[str, str] = {
         "only slightly open, at most the biting edges of the upper front teeth showing"
     ),
     "oo": (
-        'saying "oo" as in "food": the lips rounded and pushed forward into a small, '
-        "round opening, the corners of the mouth drawn in, a small dark opening in the "
-        "centre and no teeth showing"
+        'saying "oo" as in "you", in normal conversation: the lips rounded and pushed a '
+        "little forward around a clearly open, round hole, not a kiss, a whistle or a pout, "
+        "the corners of the mouth drawn in and no teeth showing"
     ),
     "oh": (
         'saying "oh" as in "go": the lips rounded into an open oval, taller than it is '
         'wide, the jaw lowered, less pushed forward than for "oo"'
     ),
     "fv": (
-        'saying "f" as in "five": the upper front teeth pressing gently on the lower '
-        "lip; the lips otherwise relaxed"
+        'saying "f" as in "five": the lower lip drawn up and tucked lightly under the upper '
+        "front teeth, which rest on it; the mouth otherwise closed, only the biting edges of "
+        "the upper front teeth showing"
     ),
     "th": (
         'saying "th" as in "think": only the very tip of the tongue, barely visible '
