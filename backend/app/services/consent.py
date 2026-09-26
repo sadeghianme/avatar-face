@@ -25,8 +25,8 @@ Three scopes:
   the wizard's own lip touch-up, and a person's mouth made from their
   picture, at Finish ("Preparing your avatar") or by the Mouth panel's one
   AI action: their teeth and their mouth shapes (a crop of the face sent
-  for each of six speech sounds, and once more for a sound the AI
-  declined; services.mouth_kit). It says those teeth and mouth shapes are
+  for the teeth and for each of six speech sounds, and once more for any
+  the AI declined; services.mouth_kit). It says those teeth and mouth shapes are
   kept with the avatar and published with it, labelled as made by AI.
   Agreements to the earlier text, which promised none of this, no longer
   count.

@@ -74,7 +74,9 @@ def image_key(image: Image.Image) -> str:
 
 class Scene:
     """The test's world: the base photo, the truth of every shape in base
-    pixels, and a detector that knows every answer the fake provider made."""
+    pixels (and of the teeth photo: the Reference's EE, its lips drawn back
+    and parted), and a detector that knows every answer the fake provider
+    made."""
 
     def __init__(self, reference: pk.ReferenceMotion):
         self.reference = reference
@@ -82,6 +84,7 @@ class Scene:
         self.base_png = png(self.base_image)
         self.base_points = to_base(reference.rest)
         self.truth = {shape: to_base(reference.poses[shape]) for shape in pk.SHAPES}
+        self.truth[pk.TEETH] = self.truth["ee"]
         self.known: dict[str, np.ndarray] = {}
         self.detect_calls = 0
 
@@ -112,6 +115,8 @@ class Scene:
 
 
 def shape_of(prompt: str) -> str:
+    if prompt == pk.teeth_prompt():
+        return pk.TEETH
     return next(shape for shape in pk.SHAPES if pk.POSE_PROMPTS[shape] in prompt)
 
 
@@ -136,16 +141,16 @@ def paint_teeth(image: Image.Image, points: np.ndarray, edge: float) -> Image.Im
 
 class FakeProvider:
     """imagegen.edit_image's contract without a network: returns the crop
-    it was sent, marked per shape, and tells the Scene where the shape's
-    landmarks are in it. `behaviour[shape]` may be an exception to raise
-    (every time, or a list consumed call by call), "slow" (sleeps past any
-    timeout), or a function (points) -> points altering the landmarks, or
-    (image, points) -> (image, points) altering both.
+    it was sent, marked per request, and tells the Scene where the shape's
+    landmarks are in it. `behaviour[shape]` (a shape, or pk.TEETH) may be an
+    exception to raise (every time, or a list consumed call by call), "slow"
+    (sleeps past any timeout), or a function (points) -> points altering the
+    landmarks, or (image, points) -> (image, points) altering both.
 
-    The EE answer shows upper teeth down to `teeth_edge` mouth widths below
-    its inner upper lip: by default 0.12, full crowns like the Reference's
-    teeth photo (oral-detail-v3 shows 0.14), which the embed accepts; the
-    Reference's own EE shows only 0.07, tips it refuses."""
+    The teeth photo shows upper teeth down to `teeth_edge` mouth widths
+    below its inner upper lip: by default 0.12, full crowns like the
+    Reference's teeth photo (oral-detail-v3 shows 0.14), which the embed
+    accepts; the Reference's own EE shows only 0.07, tips it refuses."""
 
     def __init__(self, scene: Scene, behaviour: dict | None = None, *, teeth_edge=0.12, delay=0.0):
         self.scene = scene
@@ -174,10 +179,10 @@ class FakeProvider:
             box = self.scene.box_for(payload)
             with Image.open(io.BytesIO(payload)) as sent:
                 answer = sent.convert("RGB")
-            # One pixel per shape, so every answer is a different image.
-            answer.putpixel((0, 0), (pk.SHAPES.index(shape) * 20, 0, 0))
+            # One pixel per request, so every answer is a different image.
+            answer.putpixel((0, 0), ((pk.SHAPES + (pk.TEETH,)).index(shape) * 20, 0, 0))
             points = self.scene.answer_points(self.scene.truth[shape], box, answer.size)
-            if shape == "ee" and self.teeth_edge is not None:
+            if shape == pk.TEETH and self.teeth_edge is not None:
                 answer = paint_teeth(answer, points, self.teeth_edge)
             if callable(action):
                 altered = action(answer, points) if action.__code__.co_argcount == 2 else action(points)
@@ -294,9 +299,17 @@ def test_there_is_one_versioned_prompt_per_shape():
             assert kept in prompt
 
 
-def test_the_ee_prompt_asks_for_the_upper_teeth():
-    """EE doubles as the teeth photo, so it must show them."""
-    assert "UPPER FRONT TEETH CLEARLY VISIBLE" in pk.pose_prompt("ee")
+def test_the_ee_is_speech_and_the_teeth_are_asked_for_on_their_own():
+    """EE is the "ee" of speech: the full crowns a teeth photo needs lift
+    the upper lip far above it. The teeth photo is its own request, with
+    the recipe of the photo the Reference renders its teeth from."""
+    from app.services import mouth_photo
+
+    assert "at most the biting edges of the upper front teeth" in pk.pose_prompt("ee")
+    assert "CLEARLY VISIBLE" not in pk.pose_prompt("ee")
+    assert pk.request_prompt(pk.TEETH) == pk.teeth_prompt() == mouth_photo.TEETH_PROMPT
+    assert "ENTIRE upper front teeth" in pk.teeth_prompt()
+    assert pk.request_prompt("aa") == pk.pose_prompt("aa")
     assert "tongue" in pk.pose_prompt("th") and "lower lip" in pk.pose_prompt("fv")
 
 
@@ -304,7 +317,7 @@ def test_the_prompts_say_what_real_gemini_got_wrong():
     """The first run on real Gemini (fictional faces): AA yawn-wide, TH's
     tongue far out, F/V ambiguous. The wording that answers each, under a
     new recipe version, so a stored kit says which words made it."""
-    assert pk.PROMPTS_VERSION == "pose-prompts@2"
+    assert pk.PROMPTS_VERSION == "pose-prompts@3"
     assert "moderately open, as in normal conversation, not a yawn or a shout" in (
         pk.pose_prompt("aa"))
     assert "only the very tip of the tongue, barely visible between the front teeth" in (
@@ -351,6 +364,13 @@ def test_the_head_crop_is_photo_adjusts_fallback_crop_made_square(scene):
     with Image.open(io.BytesIO(request.payload)) as sent:
         corner = np.asarray(sent.convert("RGB"))[-4:, :4].mean(axis=(0, 1))
     assert np.abs(corner - np.array(SKIN)).max() < 20
+
+
+def test_the_teeth_are_asked_for_on_the_same_face_crop(scene):
+    request = pk.prepare_pose_request(scene.base_png, scene.base_points, pk.TEETH)
+    aa = pk.prepare_pose_request(scene.base_png, scene.base_points, "aa")
+    assert request.prompt == pk.teeth_prompt() and request.shape == pk.TEETH
+    assert request.box == aa.box and request.payload == aa.payload
 
 
 def test_no_head_crop_when_it_would_be_the_whole_photo(reference):
@@ -496,6 +516,103 @@ def test_an_answer_that_did_not_make_the_shape_is_refused(scene):
     assert "AA" in result.reason["detail"]
 
 
+# What an over-acting model still keeps where it was: the eyes and the nose
+# (the Reference's own shapes move them a hair, which the guards allow once,
+# not two and a half times over).
+_STILL = sorted(set(pk.NOSE_GUARD) | set(pk.EYE_GUARD) | set(pk.ANCHORS))
+
+
+def acting(scene: Scene, shape: str, factor: float) -> np.ndarray:
+    """The truth of `shape`, its mouth and jaw moved from rest `factor`
+    times as far: a model that over- or under-acts it."""
+    moved = scene.truth[shape] - scene.base_points
+    scaled = scene.base_points + factor * moved
+    scaled[_STILL] = scene.truth[shape][_STILL]
+    return scaled
+
+
+def test_the_references_openings_are_the_bundled_motions(reference):
+    measured = pk.reference_openings(reference)
+    for shape, opening in pk.REFERENCE_OPENINGS.items():
+        assert measured[shape] == pytest.approx(opening, abs=1e-3), shape
+    assert pk.POSE_LIMITS["th"]["max_opening"] == round(1.3 * pk.REFERENCE_OPENINGS["th"], 3)
+    assert pk.POSE_LIMITS["aa"]["min_opening"] == round(0.6 * pk.REFERENCE_OPENINGS["aa"], 3)
+
+
+# The first run on real Gemini (@1 prompts, two fictional faces), measured
+# as the kit measures: each answer's lips parted this far beyond the
+# portrait's, in its rest mouth widths. TH, F/V and EE came back 1.6 to 2.0
+# times the Reference's, AA 2.2 to 2.5 times; all but AA passed before.
+SPIKE_OPENINGS = [("th", 0.362), ("th", 0.348), ("fv", 0.150), ("fv", 0.162),
+                  ("ee", 0.320), ("ee", 0.267), ("aa", 0.73), ("aa", 0.65)]
+
+
+@pytest.mark.parametrize("shape, opened", SPIKE_OPENINGS)
+def test_the_first_real_answers_that_opened_too_far_are_refused(scene, shape, opened):
+    scene.truth[shape] = acting(scene, shape, opened / pk.REFERENCE_OPENINGS[shape])
+    result = registered(scene, shape)
+    assert result.checks["opening"] == pytest.approx(opened, abs=0.005)
+    assert result.reason["code"] == "pose_not_reached"
+    assert "1.3 times the Reference's" in result.reason["detail"]
+
+
+@pytest.mark.parametrize("factor", [1.25, 0.65])
+def test_an_answer_within_its_sounds_range_passes(scene, factor):
+    scene.truth["aa"] = acting(scene, "aa", factor)
+    assert registered(scene, "aa").ok
+
+
+def test_an_ah_too_small_to_scale_the_kit_by_is_refused(scene):
+    """An AA opening 0.13 mouth widths (the Reference's is 0.29) would scale
+    every other shape up 2.2 times (normalize_amplitude)."""
+    scene.truth["aa"] = acting(scene, "aa", 0.13 / pk.REFERENCE_OPENINGS["aa"])
+    result = registered(scene, "aa")
+    assert result.reason["code"] == "pose_not_reached"
+    assert result.checks["opening"] == pytest.approx(0.13, abs=0.005)
+
+
+def test_lips_parted_at_rest_are_not_read_as_the_shapes_opening(reference):
+    """A portrait kept with its lips parted: the answer's lips are the
+    rest's gap further apart already. Only what the shape adds counts."""
+    scene = Scene(reference)
+    parted = parted_rest(scene.base_points, 0.08)
+    scene.truth = {shape: parted + (points - scene.base_points)
+                   for shape, points in scene.truth.items()}
+    scene.base_points = parted
+    result = registered(scene, "ee")
+    assert result.ok, result.reason
+    assert result.checks["opening"] == pytest.approx(pk.REFERENCE_OPENINGS["ee"], abs=0.005)
+    assert result.checks["gap"] == pytest.approx(pk.REFERENCE_OPENINGS["ee"] + 0.08, abs=0.01)
+
+
+def parted_rest(points: np.ndarray, gap: float) -> np.ndarray:
+    """`points` with the lower lip (its corners excepted) and everything
+    below it dropped `gap` mouth widths: the lips parted at rest. (At the
+    Reference's rest its inner lips cross: 13 sits a hair below 14.)"""
+    parted = points.copy()
+    width = float(np.linalg.norm(points[291] - points[61]))
+    lower = set(pk.INNER_LIP_RING[1:10]) | set(pk.OUTER_LIP_RING[1:10])
+    lower |= {i for i in range(478) if points[i][1] > points[17][1]}
+    parted[sorted(lower), 1] += gap * width
+    return parted
+
+
+def test_a_teeth_answer_is_held_only_to_showing_the_teeth(scene):
+    """The teeth photo is not a shape of speech: however far it opens, it
+    is not played. Its lips must show the teeth, which a closed mouth does
+    not."""
+    wide = registered(scene, pk.TEETH, alter=None)
+    assert wide.ok, wide.reason
+    request = pk.prepare_pose_request(scene.base_png, scene.base_points, pk.TEETH)
+
+    def closed(points):
+        return scene.answer_points(scene.base_points, request.box, (1024, 1024))
+
+    shut = registered(scene, pk.TEETH, alter=closed)
+    assert shut.reason["code"] == "pose_not_reached"
+    assert "show the teeth" in shut.reason["detail"]
+
+
 def test_no_face_a_broken_image_and_a_mirror_are_refused(scene):
     request = pk.prepare_pose_request(scene.base_png, scene.base_points, "aa")
     frame = pk.ManifestFrame.from_base(scene.base_points, BASE_SIZE, scene.reference)
@@ -538,22 +655,19 @@ def test_retargeting_follows_the_face_through_any_similarity(reference):
     assert np.allclose(moved, place(reference.poses["oh"]), atol=1e-6)
 
 
-def test_a_thicker_lower_lip_moves_further_and_the_upper_lip_does_not(reference):
+def test_thicker_lips_move_as_far_as_the_references(reference):
+    """How far a jaw drops is not set by how full the lips are: the lower
+    lip 30% taller than the Reference's, every point still moves as the
+    Reference's does (the mouth is as wide). Scaled by the lip heights, the
+    chin used to drop 1.3 times as far as the bundled motion drops it."""
     base = reference.rest * REFERENCE_SIZE
     thick = base.copy()
-    # The lower lip's outer edge and everything below it drop: the lower lip
-    # is 30% taller than the Reference's, the upper lip unchanged.
     lower_height = float(np.linalg.norm(base[14] - base[17]))
     below = base[:, 1] > base[17, 1] - 1e-9
     thick[below, 1] += 0.3 * lower_height
     reference_move = reference.poses["aa"] * REFERENCE_SIZE - base
     move = pk.retarget_reference_pose("aa", thick, reference) - thick
-    # The chin is well below the seam: vertical movement scaled by 1.3.
-    assert move[152, 1] == pytest.approx(reference_move[152, 1] * 1.3, rel=0.02)
-    # The upper lip's centre is above it: unchanged.
-    assert move[0, 1] == pytest.approx(reference_move[0, 1], rel=0.02)
-    # Horizontal movement follows the (unchanged) mouth width.
-    assert move[61, 0] == pytest.approx(reference_move[61, 0], rel=1e-6)
+    assert np.allclose(move, reference_move, atol=1e-6)
 
 
 def test_a_wider_mouth_moves_its_corners_further(reference):
@@ -568,15 +682,35 @@ def test_a_wider_mouth_moves_its_corners_further(reference):
     assert move[291, 0] == pytest.approx(reference_move[291, 0] * 1.2, rel=5e-3)
 
 
-def test_an_implausible_lip_height_is_bounded(reference):
-    base = reference.rest * REFERENCE_SIZE
-    flat = base.copy()
-    flat[0] = flat[13] + [0, -1e-3]  # an upper lip of no height at all
-    reference_move = reference.poses["aa"] * REFERENCE_SIZE - base
-    move = pk.retarget_reference_pose("aa", flat, reference) - flat
-    # The upper lip's outer edge, well above the seam: all upper-lip scale.
-    ratio = move[0, 1] / reference_move[0, 1]
-    assert ratio == pytest.approx(pk.LIP_SCALE_RANGE[0], rel=0.05)
+@pytest.mark.parametrize("shape", ["oh", "th", "aa"])
+def test_on_another_face_a_retargeted_pose_plays_as_the_bundled_motion(reference, shape):
+    """The engine plays the bundled motion on any face by its mouth width
+    alone (ContinuousMouth: movement x neutral width / the template's). A
+    kit's retargeted pose, on a face whose lips are 1.24 times the
+    Reference's height for their width (the finish tests' face), opens as
+    far: its displacement over its manifest's mouth width is the
+    Reference's over the bundled one's. By the lips' heights, OH and TH
+    opened 23% further than the bundled motion on the same face."""
+    angle = math.radians(4)
+    turn = 0.8 * np.array([[math.cos(angle), -math.sin(angle)],
+                           [math.sin(angle), math.cos(angle)]])
+    face = reference.rest * REFERENCE_SIZE @ turn.T + [60, 30]
+    centre = (face[pk.MOUTH_LEFT] + face[pk.MOUTH_RIGHT]) / 2
+    lips = pk.OUTER_LIP_RING + pk.INNER_LIP_RING
+    face[lips] = centre + (face[lips] - centre) * [1.0, 1.24]
+    poses = {s: pk.PoseEntry(pk.retarget_reference_pose(s, face, reference), pk.RETARGETED)
+             for s in pk.SHAPES}
+    manifest = pk.build_manifest(face, (1300, 1300), poses, reference, kit_id="other",
+                                 jaw_range=0.85)
+    bundled = json.loads((REPO / "embed/assets/mouth-motion.json").read_text())
+
+    def gap(m: dict) -> float:
+        points = {p["id"]: np.asarray(p["points"]) for p in m["poses"]}
+        moved = points[shape][13] - points[shape][14]
+        rest = points["rest"][13] - points["rest"][14]
+        return (float(np.linalg.norm(moved)) - float(np.linalg.norm(rest))) / m["mouth_width"]
+
+    assert gap(manifest) == pytest.approx(gap(bundled), rel=0.01)
 
 
 # --- 6. Profile fit ------------------------------------------------------------------------------------
@@ -599,12 +733,13 @@ def reference_teeth_photo() -> tuple[Image.Image, np.ndarray, np.ndarray]:
             np.asarray(portrait["points"], dtype=np.float64))
 
 
-def reference_fit(reference, reference_manifest, *, with_teeth=True, shapes=("ee", "aa")):
+def reference_fit(reference, reference_manifest, *, with_teeth=True):
+    """The fit with the Reference's own EE photo as the teeth photo."""
     teeth = None
     if with_teeth:
-        teeth = pk.TeethPhoto(*reference_ee(reference_manifest))
-    generated = {s: reference.poses[s] * REFERENCE_SIZE for s in shapes}
-    return pk.fit_profile(reference.rest * REFERENCE_SIZE, generated, reference, teeth)
+        image, points = reference_ee(reference_manifest)
+        teeth = pk.TeethPhoto(image, points, reference.poses["ee"] * REFERENCE_SIZE)
+    return pk.fit_profile(reference.rest * REFERENCE_SIZE, reference, teeth)
 
 
 def test_the_fit_reproduces_the_references_teeth_position_from_its_teeth_photo(reference):
@@ -616,10 +751,9 @@ def test_the_fit_reproduces_the_references_teeth_position_from_its_teeth_photo(r
     fit gives the hand value back, and not the 0.06 limit a lip-relative
     measure (0.1388 x 1.13 - 0.055 = 0.102) would clamp to."""
     image, points, portrait = reference_teeth_photo()
-    ee = pk.register(points, portrait)
-    assert pk.registration_rms(ee, portrait) / REFERENCE_SIZE < 0.001
-    aa = reference.poses["aa"] * REFERENCE_SIZE
-    fit = pk.fit_profile(portrait, {"ee": ee, "aa": aa}, reference, pk.TeethPhoto(image, points))
+    registered = pk.register(points, portrait)
+    assert pk.registration_rms(registered, portrait) / REFERENCE_SIZE < 0.001
+    fit = pk.fit_profile(portrait, reference, pk.TeethPhoto(image, points, registered))
     assert fit.teeth_photo
     assert fit.measurements["teeth_photo"]["accepted"]
     assert fit.measurements["teeth_edge_below_seam"] == pytest.approx(0.0467, abs=0.001)
@@ -627,8 +761,8 @@ def test_the_fit_reproduces_the_references_teeth_position_from_its_teeth_photo(r
     # Its smile is 13% wider than the neutral mouth, so its teeth are drawn
     # 13% larger than the neutral width would make them: their true size.
     assert fit.profile["teethScale"] == pytest.approx(1.13, abs=0.01)
-    # Its AA is the Reference's AA: the default jaw range, exactly.
-    assert fit.profile["jawRange"] == pytest.approx(0.85, abs=1e-4)
+    # The jaw range is not the teeth's to fit: the default, the owner's.
+    assert fit.profile["jawRange"] == 0.85
     assert fit.reasons == []
 
 
@@ -646,26 +780,34 @@ def test_the_references_own_ee_shows_too_little_crown_to_be_a_teeth_photo(
     assert [(r["field"], r["code"]) for r in fit.reasons] == [("teethY", "teeth_photo_refused")]
 
 
-def test_the_references_own_ee_is_not_handed_on_as_the_teeth_photo(reference, reference_manifest):
+def test_a_teeth_answer_like_the_references_ee_is_not_handed_on(reference, reference_manifest):
+    """The teeth request answered with a photo like the Reference's own EE
+    (tips only): the embed would refuse it, so it is not handed on, and why
+    is said; the EE shape itself is another request, and stays."""
     image, points = reference_ee(reference_manifest)
-    registration = pk.PoseRegistration(
-        "ee", targets=reference.poses["ee"] * REFERENCE_SIZE, rms=0.0008,
-        answer_points=points, answer_size=image.size, answer_image=image)
-    manifest, fit, teeth = pk._finish(reference.rest * REFERENCE_SIZE, image.size,
-                                      {"ee": registration}, reference, "reference-ee")
-    assert teeth is None
-    reasons = {r["field"]: r["code"] for r in fit.reasons}
-    assert reasons["teeth_source"] == "teeth_photo_refused"
-    assert manifest["poses"][2]["provenance"] == "generated"
+    ee = reference.poses["ee"] * REFERENCE_SIZE
+    teeth = pk.PoseRegistration(pk.TEETH, targets=ee, rms=0.0008, answer_points=points,
+                                answer_size=image.size, answer_image=image)
+    speech = pk.PoseRegistration("ee", targets=ee, rms=0.0008, answer_points=points,
+                                 answer_size=image.size, answer_image=image)
+    finished = pk._finish(reference.rest * REFERENCE_SIZE, image.size,
+                          {"ee": speech, pk.TEETH: teeth}, reference, "reference-ee")
+    assert finished.teeth is None
+    assert finished.teeth_refused["code"] == "teeth_photo_refused"
+    assert {r["field"]: r["code"] for r in finished.fit.reasons}["teethY"] == "teeth_photo_refused"
+    assert finished.manifest["poses"][2]["provenance"] == "generated"
 
 
 def test_without_a_teeth_photo_the_geometric_teeth_keep_the_references_proportion(
     reference, reference_manifest
 ):
-    fit = reference_fit(reference, reference_manifest, with_teeth=False, shapes=("aa",))
+    fit = reference_fit(reference, reference_manifest, with_teeth=False)
     assert fit.profile["teethScale"] == pytest.approx(1.0, abs=1e-4)
     assert fit.profile["teethY"] == 0.0
-    assert [r["code"] for r in fit.reasons] == ["ee_not_generated"]
+    assert [r["code"] for r in fit.reasons] == ["no_teeth_photo"]
+    why = {"code": "safety_refused", "detail": "declined"}
+    told = pk.fit_profile(reference.rest * REFERENCE_SIZE, reference, None, why)
+    assert told.reasons == [{"field": "teethY", **why}]
 
 
 def test_a_mouth_wide_for_its_face_gets_smaller_geometric_teeth(reference):
@@ -674,7 +816,7 @@ def test_a_mouth_wide_for_its_face_gets_smaller_geometric_teeth(reference):
     centre = (base[61] + base[291]) / 2
     lips = pk.OUTER_LIP_RING + pk.INNER_LIP_RING
     wide[lips, 0] = centre[0] + (base[lips, 0] - centre[0]) * 1.1
-    fit = pk.fit_profile(wide, {}, reference, None)
+    fit = pk.fit_profile(wide, reference, None)
     assert fit.profile["teethScale"] == pytest.approx(1 / 1.1, abs=1e-3)
 
 
@@ -685,8 +827,8 @@ def test_the_fit_measures_the_teeth_in_the_photo(scene):
     times wider mouth below its lip, which the EE lifts 0.048 above the
     neutral seam."""
     photo = paint_teeth(Image.new("RGB", (800, 800), SKIN), scene.truth["ee"], 0.12)
-    fit = pk.fit_profile(scene.base_points, {"ee": scene.truth["ee"]}, scene.reference,
-                         pk.TeethPhoto(photo, scene.truth["ee"]))
+    fit = pk.fit_profile(scene.base_points, scene.reference,
+                         pk.TeethPhoto(photo, scene.truth["ee"], scene.truth["ee"]))
     assert fit.measurements["teeth_photo"]["upper_edge"] == pytest.approx(0.12, abs=0.004)
     assert fit.measurements["teeth_edge_below_seam"] == pytest.approx(0.12 * 1.0502 - 0.0476, abs=0.004)
     assert fit.profile["teethY"] == pytest.approx(
@@ -697,21 +839,25 @@ def test_an_ee_photo_without_teeth_keeps_the_defaults_with_the_reason(scene):
     closed = Image.new("RGB", (800, 800), SKIN)
     ImageDraw.Draw(closed).polygon([tuple(p) for p in scene.truth["ee"][pk.INNER_LIP_RING]],
                                    fill=(46, 22, 24))
-    fit = pk.fit_profile(scene.base_points, {"ee": scene.truth["ee"]}, scene.reference,
-                         pk.TeethPhoto(closed, scene.truth["ee"]))
+    fit = pk.fit_profile(scene.base_points, scene.reference,
+                         pk.TeethPhoto(closed, scene.truth["ee"], scene.truth["ee"]))
     assert fit.profile["teethY"] == 0.0
     codes = {r["field"]: r["code"] for r in fit.reasons}
-    assert codes["teethY"] == "no_teeth_visible"
-    assert codes["jawRange"] == "aa_not_generated"
+    assert codes == {"teethY": "no_teeth_visible"}
 
 
 def test_fitted_values_are_clamped_with_a_reason(scene):
-    wide_open = scene.truth["aa"].copy()
-    wide_open[14] += [0, 200]
-    fit = pk.fit_profile(scene.base_points, {"aa": wide_open}, scene.reference, None)
-    assert fit.profile["jawRange"] == 1.1
-    assert {"field": "jawRange", "code": "clamped"}.items() <= next(
-        r for r in fit.reasons if r["field"] == "jawRange").items()
+    """A teeth photo whose mouth, registered, is 1.4 times as wide as the
+    rest's would draw its teeth larger than the profile allows."""
+    ee = scene.truth["ee"]
+    photo = paint_teeth(Image.new("RGB", (800, 800), SKIN), ee, 0.12)
+    centre = (ee[pk.MOUTH_LEFT] + ee[pk.MOUTH_RIGHT]) / 2
+    wide = ee.copy()
+    wide[:, 0] = centre[0] + (ee[:, 0] - centre[0]) * 1.4
+    fit = pk.fit_profile(scene.base_points, scene.reference, pk.TeethPhoto(photo, ee, wide))
+    assert fit.profile["teethScale"] == 1.2
+    assert {"field": "teethScale", "code": "clamped"}.items() <= next(
+        r for r in fit.reasons if r["field"] == "teethScale").items()
 
 
 # --- 4. Manifest -----------------------------------------------------------------------------------------
@@ -721,8 +867,7 @@ def manifest_for(scene: Scene, generated=("aa", "ee", "oo")) -> dict:
     poses = {}
     for shape in pk.SHAPES:
         if shape in generated:
-            poses[shape] = pk.PoseEntry(scene.truth[shape], pk.GENERATED, 0.0015,
-                                        scene.truth[shape] / np.asarray(BASE_SIZE))
+            poses[shape] = pk.PoseEntry(scene.truth[shape], pk.GENERATED, 0.0015)
         else:
             poses[shape] = pk.PoseEntry(
                 pk.retarget_reference_pose(shape, scene.base_points, scene.reference),
@@ -739,9 +884,10 @@ def test_the_manifest_is_the_reference_format_with_its_version_2_fields(scene, r
     assert [p["provenance"] for p in manifest["poses"]] == [
         "base", "generated", "generated", "generated", "retargeted", "retargeted", "retargeted"]
     assert manifest["poses"][4]["registration_rms"] is None
-    assert manifest["poses"][4]["source"] is None
     assert manifest["poses"][1]["registration_rms"] == 0.0015
-    assert all(p["image"] is None for p in manifest["poses"])
+    # Nothing the engine does not read: no pose photos, and no answer
+    # landmarks (half of every visitor's download, when they were kept).
+    assert all(p["image"] is None and p["source"] is None for p in manifest["poses"])
     for pose in manifest["poses"]:
         assert len(pose["points"]) == 478
     assert manifest["inner_ring"] == reference_manifest["inner_ring"]
@@ -754,9 +900,22 @@ def test_the_manifest_is_the_reference_format_with_its_version_2_fields(scene, r
     assert manifest["mouth_width"] == pytest.approx(reference_manifest["mouth_width"], rel=1e-3)
     assert manifest["center"] == pytest.approx(reference_manifest["center"], abs=1e-3)
     rest = np.asarray(manifest["poses"][0]["points"])
-    assert rest[291, 1] == pytest.approx(rest[61, 1], abs=1e-7)
+    assert rest[291, 1] == pytest.approx(rest[61, 1], abs=1e-5)
     triangles = np.asarray(manifest["triangles"])
     assert triangles.min() >= 0 and triangles.max() < 478 and 100 < len(triangles) < 2000
+
+
+def test_the_manifest_is_small_for_what_every_visitor_downloads(scene):
+    """Points to five decimals (1/15000 of a mouth width) and nothing the
+    engine does not read: about half of what it was, raw and gzipped."""
+    import gzip
+
+    manifest = manifest_for(scene)
+    for pose in manifest["poses"]:
+        for x, y in pose["points"]:
+            assert round(x, 5) == x and round(y, 5) == y
+    raw = json.dumps(manifest, separators=(",", ":")).encode()
+    assert len(raw) < 90_000 and len(gzip.compress(raw)) < 35_000
 
 
 def test_the_frame_maps_base_pixels_to_manifest_units(scene):
@@ -764,7 +923,7 @@ def test_the_frame_maps_base_pixels_to_manifest_units(scene):
     frame = np.asarray(manifest["frame"]["to_manifest"])
     assert manifest["frame"]["image_size"] == list(BASE_SIZE)
     mapped = scene.truth["aa"] @ frame[:, :2].T + frame[:, 2]
-    assert np.allclose(mapped, manifest["poses"][1]["points"], atol=1e-6)
+    assert np.allclose(mapped, manifest["poses"][1]["points"], atol=1e-5)
 
 
 def test_a_bad_kit_id_or_a_missing_shape_is_refused(scene):
@@ -804,25 +963,7 @@ def test_the_embed_contract_fixture_is_what_the_builder_writes(scene):
     assert fixture_as_built_today(EMBED_FIXTURE) == written
 
 
-# --- Retargeted poses at the fitted jaw range ----------------------------------------------------------
-
-
-def movement(jaw_range: float, measured: float) -> float:
-    """ContinuousMouth.setProfile: how far every pose plays, for a profile
-    jawRange and the jaw range the manifest's geometry is true at."""
-    return max(0.65, min(1.3, jaw_range / measured))
-
-
-def fitted_kit(scene: Scene, aa_amplitude: float = 0.75):
-    """_finish for a face that speaks like the Reference, only moving
-    `aa_amplitude` as far in every shape the model made (AA, OO, F/V),
-    and whose EE, OH and TH were not made (retargeted)."""
-    registrations = {}
-    for shape in ("aa", "oo", "fv"):
-        targets = scene.base_points + aa_amplitude * (scene.truth[shape] - scene.base_points)
-        registrations[shape] = pk.PoseRegistration(
-            shape, targets=targets, rms=0.0015, answer_points=targets, answer_size=BASE_SIZE)
-    return pk._finish(scene.base_points, BASE_SIZE, registrations, scene.reference, "fitted-fixture")
+# --- The kit's own size ------------------------------------------------------------------------------
 
 
 def displacement(manifest: dict, shape: str) -> np.ndarray:
@@ -830,60 +971,102 @@ def displacement(manifest: dict, shape: str) -> np.ndarray:
     return (poses[shape] - poses["rest"]) / manifest["mouth_width"]
 
 
-@pytest.mark.parametrize("aa_amplitude", [0.75, 0.6, 1.2])
-def test_a_retargeted_pose_plays_as_the_bundled_reference_at_any_profile(scene, aa_amplitude):
-    """The engine plays a version 2 manifest at jawRange / jaw_range, the
-    bundled motion at jawRange / 0.85. A retargeted pose is baked at
-    jaw_range / 0.85 so that, at every profile, it plays exactly as the same
-    Reference pose does on this face through the bundled motion. (This face
-    is the Reference: retargeted onto it, its poses are the Reference's.)"""
-    manifest, fit, _ = fitted_kit(scene, aa_amplitude)
-    jaw = manifest["jaw_range"]
-    assert jaw == fit.profile["jawRange"] == pytest.approx(
-        min(1.1, max(0.6, 0.85 * aa_amplitude)), abs=1e-3)
+def fitted_kit(scene: Scene, amplitude: float = 1.25) -> pk._Finished:
+    """_finish for a face that speaks like the Reference, but whose model
+    moved every shape it made (AA, OO, F/V) `amplitude` times as far, and
+    whose EE, OH and TH were not made (retargeted)."""
+    registrations = {}
+    for shape in ("aa", "oo", "fv"):
+        targets = scene.base_points + amplitude * (scene.truth[shape] - scene.base_points)
+        registrations[shape] = pk.PoseRegistration(
+            shape, targets=targets, rms=0.0015, answer_points=targets, answer_size=BASE_SIZE)
+    return pk._finish(scene.base_points, BASE_SIZE, registrations, scene.reference,
+                      "fitted-fixture")
+
+
+@pytest.mark.parametrize("amplitude", [0.75, 1.0, 1.25])
+def test_the_persons_shapes_are_played_at_the_references_size(scene, amplitude):
+    """How far an image model opens an "ah" is the model's choice (the
+    first real answers went 1.35 to 2.5 times the Reference's): the AA sets
+    the scale, and every shape the model made is moved from rest by it. So
+    this face, whose model under- or over-acted every shape alike, plays
+    each exactly as the Reference does, the retargeted ones included, and
+    the manifest is true at the Reference's jaw range."""
+    finished = fitted_kit(scene, amplitude)
+    manifest = finished.manifest
+    assert manifest["jaw_range"] == 0.85 == finished.fit.profile["jawRange"]
+    assert finished.fit.measurements["amplitude"] == pytest.approx(1 / amplitude, abs=1e-3)
     bundled = pk.build_manifest(
         scene.base_points, BASE_SIZE,
         {s: pk.PoseEntry(scene.truth[s], pk.RETARGETED) for s in pk.SHAPES},
         scene.reference, kit_id="bundled", jaw_range=0.85)
-    for profile in (jaw, 0.7, 0.85, 1.0):
-        for shape in ("ee", "oh", "th"):
-            played = displacement(manifest, shape) * movement(profile, jaw)
-            reference = displacement(bundled, shape) * movement(profile, 0.85)
-            if movement(profile, jaw) not in (0.65, 1.3) and movement(profile, 0.85) not in (0.65, 1.3):
-                assert np.allclose(played, reference, atol=1e-6), (profile, shape)
-    # The person's own shapes keep their sizes relative to the retargeted
-    # ones: OH opens as much more than AA as the Reference's does, only
-    # when AA was not clamped to the profile's range.
-    if 0.6 < 0.85 * aa_amplitude < 1.1:
-        gap = lambda d: float(np.linalg.norm(d[13] - d[14]))  # noqa: E731
-        ratio = gap(displacement(manifest, "oh")) / gap(displacement(manifest, "aa"))
-        ref = gap(displacement(bundled, "oh")) / gap(displacement(bundled, "aa"))
-        assert ratio == pytest.approx(ref, rel=1e-3)
+    for shape in pk.SHAPES:
+        assert np.allclose(displacement(manifest, shape), displacement(bundled, shape),
+                           atol=2e-4), shape
+    assert finished.refused == {}
 
 
-async def test_a_kit_with_a_small_aa_and_refused_shapes_bakes_them_at_its_jaw_range(scene):
-    """The whole path: the person's AA opens 75% as far as the Reference's,
-    and the model refuses OH and TH."""
-    scene.truth["aa"] = scene.base_points + 0.75 * (scene.truth["aa"] - scene.base_points)
-    refused = imagegen.ImageGenRefused("SAFETY")
-    result = await kit(scene, FakeProvider(scene, {"oh": [refused, refused], "th": [refused, refused]}))
-    jaw = result.profile["jawRange"]
-    assert jaw == result.manifest["jaw_range"] == pytest.approx(0.6375, abs=1e-3)
+def test_a_shape_too_open_for_the_kits_own_ah_is_refused(scene):
+    """TH opened 1.25 times the Reference's, within its own limit; but the
+    AA opened only 0.8 times, so at the kit's size (x 1.25) the TH opens
+    0.31 mouth widths, more than an "ah" does: every t, d, n and k would
+    open like one. Refused, and retargeted."""
+    registrations = {}
+    for shape, factor in (("aa", 0.8), ("th", 1.25), ("oo", 0.8)):
+        targets = acting(scene, shape, factor)
+        registrations[shape] = pk.PoseRegistration(
+            shape, targets=targets, rms=0.0015, answer_points=targets, answer_size=BASE_SIZE)
+    finished = pk._finish(scene.base_points, BASE_SIZE, registrations, scene.reference, "t")
+    assert finished.refused["th"]["code"] == "pose_not_reached"
+    assert "at the kit's size" in finished.refused["th"]["detail"]
+    provenance = {p["id"]: p["provenance"] for p in finished.manifest["poses"]}
+    assert provenance["th"] == "retargeted" and provenance["oo"] == "generated"
+
+
+def test_lips_parted_at_rest_do_not_inflate_the_kits_size(reference):
+    """A portrait with its lips parted 0.04 or 0.08 mouth widths, and an AA
+    that moves exactly as the Reference's does: the AA's opening counts
+    from the rest's, so nothing is scaled (measured from closed lips, the
+    jaw range came out 0.969 and 1.086, and every retargeted shape was
+    baked 1.14 and 1.28 times too large)."""
+    for gap in (0.04, 0.08):
+        scene = Scene(reference)
+        rest = parted_rest(scene.base_points, gap)
+        aa = rest + (scene.truth["aa"] - scene.base_points)
+        registration = pk.PoseRegistration("aa", targets=aa, rms=0.001, answer_points=aa,
+                                           answer_size=BASE_SIZE)
+        finished = pk._finish(rest, BASE_SIZE, {"aa": registration}, reference, "parted")
+        assert finished.fit.measurements["amplitude"] == pytest.approx(1.0, abs=2e-3), gap
+        assert finished.manifest["jaw_range"] == 0.85
+
+
+async def test_the_first_real_answers_play_no_wider_than_speech(scene):
+    """The first run on real Gemini, replayed: TH, F/V, EE and AA opened
+    1.6 to 2.5 times the Reference's (SPIKE_OPENINGS, one face's), OO and
+    OH were faithful. Every over-open answer is refused and retargeted, so
+    no shape plays wider than 1.3 times the Reference's own, and t, d, n
+    and k (the TH shape) open as the Reference's do, not as "ah"."""
+    for shape, opened in SPIKE_OPENINGS[::2]:
+        scene.truth[shape] = acting(scene, shape, opened / pk.REFERENCE_OPENINGS[shape])
+    result = await kit(scene, FakeProvider(scene))
+    assert {s for s, r in result.report.items() if r["status"] == "ok"} == {"oo", "oh"}
+    reference = pk.reference_openings(scene.reference)
     targets = manifest_targets(result)
-    for shape in ("oh", "th"):
-        assert result.report[shape]["status"] == "retargeted"
-        expected = scene.base_points + (scene.truth[shape] - scene.base_points) * jaw / 0.85
-        assert np.allclose(targets[shape], expected, atol=1e-4), shape
+    for shape in pk.SHAPES:
+        played = pk.opening(targets[shape], targets["rest"])
+        assert played <= 1.3 * reference[shape] + 1e-3, shape
+    assert pk.opening(targets["th"], targets["rest"]) == pytest.approx(reference["th"], abs=2e-3)
 
 
 EMBED_FITTED_FIXTURE = REPO / "embed/src/mouth/__tests__/fixtures/avatar-motion-fitted.json"
 
 
 def test_the_embed_fitted_fixture_is_what_the_kit_writes(scene):
-    """embed/src/mouth/__tests__/avatar-motion.test.ts plays this manifest's
-    retargeted poses through the real ContinuousMouth next to the bundled
+    """embed/src/mouth/__tests__/avatar-motion.test.ts plays this manifest
+    (a model that over-acted AA, OO and F/V by a quarter, and EE, OH and TH
+    retargeted) through the real ContinuousMouth next to the bundled
     motion. Regenerate with LIVEFACE_WRITE_FIXTURES=1."""
-    manifest, _, _ = fitted_kit(scene)
+    manifest = fitted_kit(scene).manifest
     written = json.dumps(manifest, separators=(",", ":"))
     if os.environ.get("LIVEFACE_WRITE_FIXTURES") == "1":
         EMBED_FITTED_FIXTURE.write_text(written)
@@ -894,35 +1077,49 @@ def test_the_embed_fitted_fixture_is_what_the_kit_writes(scene):
 
 
 async def test_a_kit_from_faithful_answers(scene):
-    progress: list[tuple[float, str, int]] = []
+    progress: list[tuple[float, str, int, int]] = []
     provider = FakeProvider(scene, delay=0.01)
-    result = await kit(scene, provider, on_progress=lambda f, m, n: progress.append((f, m, n)))
+    result = await kit(scene, provider,
+                       on_progress=lambda f, m, n, total: progress.append((f, m, n, total)))
 
-    assert result.calls == 6 and result.billed_calls == 6
-    assert sorted(shape for shape, _ in provider.requests) == sorted(pk.SHAPES)
+    # Six shapes and the teeth photo, each asked for once.
+    assert result.calls == 7 and result.billed_calls == 7
+    assert sorted(shape for shape, _ in provider.requests) == sorted(pk.SHAPES + (pk.TEETH,))
     assert all(r["status"] == "ok" and r["outcome"] == "generated" for r in result.report.values())
     assert [p["provenance"] for p in result.manifest["poses"][1:]] == ["generated"] * 6
     assert result.manifest["character"] == "avatar-v1:test-kit"
     assert all(entry["model"] == "fake-image-model" for entry in result.call_log)
-    # The fit: the painted edge 0.12 EE widths below the EE's lip, the EE
-    # 1.05 rest widths wide, its lip lifted 0.048 above the neutral seam;
-    # plus the Reference's allowance, less the 0.055 seat.
+    # The teeth fit: the painted edge 0.12 photo widths below the photo's
+    # lip, its mouth 1.05 rest widths wide, its lip lifted 0.048 above the
+    # neutral seam; plus the Reference's allowance, less the 0.055 seat.
     assert result.profile_fit["teeth_photo"] is True
+    assert result.teeth_report["status"] == "ok"
     assert result.profile["teethY"] == pytest.approx(
         0.12 * 1.0502 - 0.0476 + pk.REFERENCE_TEETH_DROP - pk.UPPER_SEAT, abs=0.004)
     assert result.base_detected is False  # the Scene's detector knows only answers
-    assert result.profile["jawRange"] == pytest.approx(0.85, abs=1e-3)
-    assert result.manifest["jaw_range"] == result.profile["jawRange"]
-    # The EE answer is handed on as the teeth photo, with its own rig.
+    # Played at the Reference's size: its own AA is the Reference's.
+    assert result.profile["jawRange"] == result.manifest["jaw_range"] == 0.85
+    assert result.profile_fit["measurements"]["amplitude"] == pytest.approx(1.0, abs=1e-3)
+    # The teeth answer is handed on as the teeth photo, with its own rig.
     teeth = result.teeth_source
     assert teeth is not None
     with Image.open(io.BytesIO(teeth.png)) as photo:
         assert list(photo.size) == teeth.rig["image_size"] == [1024, 1024]
     assert len(teeth.rig["points"]) == 478 and teeth.rig["inner_lip_ring"] == pk.INNER_LIP_RING
-    # Progress only moves forward and ends at 1, counting the shapes settled.
-    fractions = [f for f, _, _ in progress]
+    # Progress only moves forward and ends at 1, counting the requests
+    # settled out of the seven.
+    fractions = [f for f, _, _, _ in progress]
     assert fractions == sorted(fractions) and fractions[-1] == 1.0
-    assert [n for _, _, n in progress] == [0, 1, 2, 3, 4, 5, 6, 6]
+    assert [n for _, _, n, _ in progress] == [0, 1, 2, 3, 4, 5, 6, 7, 7]
+    assert {total for _, _, _, total in progress} == {7}
+
+
+async def test_a_kit_for_teeth_it_keeps_asks_for_the_shapes_only(scene):
+    """The owner's own teeth photo is kept: the teeth are not asked for."""
+    provider = FakeProvider(scene)
+    result = await kit(scene, provider, teeth=False)
+    assert pk.TEETH not in [shape for shape, _ in provider.requests]
+    assert result.calls == 6 and result.teeth_report is None and result.teeth_source is None
 
 
 def corrected(reference, correct) -> tuple[Scene, np.ndarray]:
@@ -966,14 +1163,14 @@ async def test_the_owners_corrected_eye_marks_are_not_read_as_a_tilted_head(refe
     assert all(r["status"] == "ok" for r in result.report.values())
     assert all(abs(r["checks"]["rotation"]) < 0.01 for r in result.report.values())
     targets = manifest_targets(result)
-    assert np.allclose(targets["rest"], scene.base_points, atol=1e-4)
+    assert np.allclose(targets["rest"], scene.base_points, atol=0.02)
     for shape in pk.SHAPES:
         # The confirmed points, moved exactly as the answer moved the face.
         expected = scene.base_points + (scene.truth[shape] - detected)
-        assert np.allclose(targets[shape], expected, atol=1e-4), shape
+        assert np.allclose(targets[shape], expected, atol=0.02), shape
     # The lips move as photographed: no sideways slide.
     mouth = pk.OUTER_LIP_RING + pk.INNER_LIP_RING
-    assert np.allclose(targets["aa"][mouth], scene.truth["aa"][mouth], atol=1e-4)
+    assert np.allclose(targets["aa"][mouth], scene.truth["aa"][mouth], atol=0.02)
 
 
 async def test_the_owners_widened_mouth_marks_keep_every_shape(reference):
@@ -992,9 +1189,13 @@ async def test_the_owners_widened_mouth_marks_keep_every_shape(reference):
     assert result.report["ee"]["status"] == "ok"
     assert result.report["ee"]["checks"]["width"] == pytest.approx(1.05, abs=0.01)
     targets = manifest_targets(result)
+    # The wider marks make the same opening a smaller part of the mouth:
+    # the kit's size follows, as the bundled motion's does (by the width).
+    scale = result.profile_fit["measurements"]["amplitude"]
+    assert scale == pytest.approx(1.08, abs=0.01)
     for shape in pk.SHAPES:
-        expected = scene.base_points + (scene.truth[shape] - detected)
-        assert np.allclose(targets[shape], expected, atol=1e-4), shape
+        expected = scene.base_points + scale * (scene.truth[shape] - detected)
+        assert np.allclose(targets[shape], expected, atol=0.05), shape
 
 
 async def test_a_base_detection_equal_to_the_confirmed_points_changes_nothing(reference):
@@ -1004,7 +1205,7 @@ async def test_a_base_detection_equal_to_the_confirmed_points_changes_nothing(re
     with_detection = await kit(scene, FakeProvider(scene))
     assert with_detection.base_detected and not without.base_detected
     for a, b in zip(without.manifest["poses"], with_detection.manifest["poses"]):
-        assert np.allclose(a["points"], b["points"], atol=1e-6)
+        assert np.allclose(a["points"], b["points"], atol=1e-5)
     assert without.profile == with_detection.profile
 
 
@@ -1040,7 +1241,7 @@ async def test_a_refusal_is_asked_once_more_on_the_head_crop_and_never_again(sce
     assert result.manifest["poses"][3]["provenance"] == "retargeted"
     # Every request was different; every one was answered, so billed.
     assert len({digest for _, digest in provider.requests}) == len(provider.requests)
-    assert result.calls == result.billed_calls == 8
+    assert result.calls == result.billed_calls == 9
 
 
 async def test_a_refusal_is_not_retried_when_the_head_crop_is_the_whole_photo(reference):
@@ -1050,22 +1251,24 @@ async def test_a_refusal_is_not_retried_when_the_head_crop_is_the_whole_photo(re
     scene.truth = {s: reference.poses[s] * 300 - np.array([20.0, 70.0]) for s in pk.SHAPES}
     scene.base_image = Image.new("RGB", (220, 260), SKIN)
     scene.base_png = png(scene.base_image)
-    provider = FakeProvider(scene, {s: imagegen.ImageGenRefused("SAFETY") for s in pk.SHAPES})
+    provider = FakeProvider(
+        scene, {s: imagegen.ImageGenRefused("SAFETY") for s in pk.SHAPES + (pk.TEETH,)})
     result = await kit(scene, provider)
-    assert result.calls == 6
+    assert result.calls == 7
     assert all(r["attempts"] == [pk.FACE_CROP] for r in result.report.values())
+    assert result.teeth_report["attempts"] == [pk.FACE_CROP]
 
 
 @pytest.mark.parametrize("error, outcome, billed", [
-    (imagegen.ImageGenNoImage("NO_IMAGE"), "no_image", 5 + 1),
-    (RuntimeError("image generation failed (500)"), "provider_error", 5),
+    (imagegen.ImageGenNoImage("NO_IMAGE"), "no_image", 6 + 1),
+    (RuntimeError("image generation failed (500)"), "provider_error", 6),
 ])
 async def test_a_failed_shape_is_retargeted_and_not_asked_again(scene, error, outcome, billed):
     provider = FakeProvider(scene, {"th": [error, error]})
     result = await kit(scene, provider)
     assert result.report["th"] == {**result.report["th"], "status": "retargeted", "outcome": outcome}
     assert [s for s, _ in provider.requests].count("th") == 1
-    assert result.calls == 6 and result.billed_calls == billed
+    assert result.calls == 7 and result.billed_calls == billed
     assert result.manifest["poses"][6]["provenance"] == "retargeted"
 
 
@@ -1091,7 +1294,7 @@ async def test_no_provider_gives_the_reference_retargeted_for_this_face(scene):
     # This face is the Reference: retargeted, the poses are the Reference's.
     frame = np.asarray(result.manifest["frame"]["to_manifest"])
     expected = scene.truth["aa"] @ frame[:, :2].T + frame[:, 2]
-    assert np.allclose(result.manifest["poses"][1]["points"], expected, atol=1e-6)
+    assert np.allclose(result.manifest["poses"][1]["points"], expected, atol=1e-5)
 
 
 async def test_a_rejected_answer_is_retargeted_with_its_reason(scene):
@@ -1102,69 +1305,72 @@ async def test_a_rejected_answer_is_retargeted_with_its_reason(scene):
     assert result.report["aa"]["status"] == "retargeted"
     assert result.report["aa"]["outcome"] == "rejected"
     assert result.report["aa"]["reason"]["code"] == "pose_not_reached"
-    assert result.billed_calls == 6  # it was answered, so it was billed
+    assert result.billed_calls == 7  # it was answered, so it was billed
+    # No AA of the person's to scale by: the other shapes stay as made.
     reasons = {r["field"]: r["code"] for r in result.profile_fit["reasons"]}
-    assert reasons["jawRange"] == "aa_not_generated"
+    assert reasons["amplitude"] == "aa_not_generated"
+    assert result.profile_fit["measurements"]["amplitude"] == 1.0
 
 
-async def test_a_rejected_ee_leaves_no_teeth_photo(scene):
-    provider = FakeProvider(scene, {"ee": lambda points: rotate(points, 8)})
+async def test_a_rejected_teeth_answer_leaves_no_teeth_photo(scene):
+    provider = FakeProvider(scene, {pk.TEETH: lambda points: rotate(points, 8)})
     result = await kit(scene, provider)
-    assert result.report["ee"]["reason"]["code"] == "head_moved"
+    assert result.teeth_report["status"] == "failed"
+    assert result.teeth_report["reason"]["code"] == "head_moved"
     assert result.teeth_source is None
     assert result.profile["teethY"] == 0.0
+    assert all(r["status"] == "ok" for r in result.report.values()), "the shapes are apart"
 
 
-async def test_an_ee_without_visible_teeth_is_kept_but_is_not_the_teeth_photo(scene):
+async def test_a_teeth_answer_without_visible_teeth_is_not_handed_on(scene):
     result = await kit(scene, FakeProvider(scene, teeth_edge=None))
     assert result.report["ee"]["status"] == "ok"
     assert result.teeth_source is None
+    assert result.teeth_report["reason"]["code"] == "no_teeth_visible"
     reasons = {r["field"]: r["code"] for r in result.profile_fit["reasons"]}
     assert reasons["teethY"] == "no_teeth_visible"
     # The geometric teeth, sized for this face: the Reference's proportion.
     assert result.profile["teethScale"] == pytest.approx(1.0, abs=1e-3)
 
 
-async def test_an_ee_showing_only_tips_is_kept_but_is_not_the_teeth_photo(scene):
+async def test_a_teeth_answer_showing_only_tips_is_not_handed_on(scene):
     """The Reference's own EE shows its teeth 0.07 deep. The embed would
-    refuse that photo and drop the avatar to the classic mouth, so it is
+    refuse such a photo and drop the avatar to the classic mouth, so it is
     not handed on, and the fit is for the geometric teeth."""
     result = await kit(scene, FakeProvider(scene, teeth_edge=0.07))
-    assert result.report["ee"]["status"] == "ok"
-    assert result.manifest["poses"][2]["provenance"] == "generated"
     assert result.teeth_source is None
-    reasons = {r["field"]: r["code"] for r in result.profile_fit["reasons"]}
-    assert reasons["teeth_source"] == reasons["teethY"] == "teeth_photo_refused"
+    assert result.teeth_report == {**result.teeth_report, "status": "failed",
+                                   "outcome": "rejected"}
+    assert result.teeth_report["reason"]["code"] == "teeth_photo_refused"
     assert result.profile_fit["measurements"]["teeth_photo"]["crown_coverage"] < 0.10
     assert result.profile["teethY"] == 0.0
     assert result.profile["teethScale"] == pytest.approx(1.0, abs=1e-3)
 
 
-async def test_an_ee_too_closed_for_a_teeth_photo_fits_the_geometric_teeth(scene):
+async def test_a_teeth_answer_too_closed_to_show_them_is_rejected(scene):
     def nearly_closed(points):
         points = points.copy()
         width = float(np.linalg.norm(points[291] - points[61]))
         points[14] = points[13] + [0, 0.06 * width]
         return points
 
-    result = await kit(scene, FakeProvider(scene, {"ee": nearly_closed}))
-    assert result.report["ee"]["status"] == "ok"
+    result = await kit(scene, FakeProvider(scene, {pk.TEETH: nearly_closed}))
     assert result.teeth_source is None
+    assert result.teeth_report["reason"]["code"] == "pose_not_reached"
     reasons = {r["field"]: r["code"] for r in result.profile_fit["reasons"]}
-    assert reasons["teeth_source"] == "teeth_gap_small"
-    assert reasons["teethY"] == "no_teeth_photo"
+    assert reasons["teethY"] == "pose_not_reached"
     assert result.profile["teethScale"] == pytest.approx(1.0, abs=1e-3)
 
 
 async def test_an_async_progress_callback_is_awaited(scene):
     seen = []
 
-    async def progress(fraction, message, done):
+    async def progress(fraction, message, done, total):
         await asyncio.sleep(0)
         seen.append(fraction)
 
     await kit(scene, FakeProvider(scene), on_progress=progress)
-    assert seen[-1] == 1.0 and len(seen) == 8
+    assert seen[-1] == 1.0 and len(seen) == 9
 
 
 async def test_without_a_detector_nothing_is_sent(scene, monkeypatch):
@@ -1209,7 +1415,7 @@ async def test_an_answer_of_another_shape_is_refused_as_reframed(scene):
     assert result.report["oo"]["status"] == "retargeted"
     assert result.report["oo"]["reason"]["code"] == "aspect_changed"
     assert result.report["oo"]["checks"]["aspect"] == pytest.approx(0.875)
-    assert result.billed_calls == 6, "answered, so billed"
+    assert result.billed_calls == 7, "answered, so billed"
 
 
 def test_a_pixel_or_two_of_rounding_is_not_a_reframe(scene):
@@ -1275,7 +1481,7 @@ async def test_a_check_that_breaks_is_a_rejected_answer_and_the_others_carry_on(
     assert result.report["oo"]["outcome"] == "rejected"
     assert result.report["oo"]["reason"]["code"] == "check_failed"
     assert sum(r["status"] == "ok" for r in result.report.values()) == 5
-    assert result.calls == result.billed_calls == 6
+    assert result.calls == result.billed_calls == 7
 
 
 async def test_an_unexpected_failure_cancels_the_calls_in_flight_and_accounts_for_them(scene):
@@ -1285,7 +1491,7 @@ async def test_an_unexpected_failure_cancels_the_calls_in_flight_and_accounts_fo
     out is in the failure's log; a cancelled one may have been billed."""
     provider = FakeProvider(scene, {"ee": "slow", "oo": "slow"})
 
-    def progress(fraction, message, done):
+    def progress(fraction, message, done, total):
         if done == 1:
             raise RuntimeError("the job's progress store is gone")
 
@@ -1319,7 +1525,7 @@ async def test_the_providers_own_timeouts_are_classified_by_what_was_sent(
     assert result.report["fv"]["outcome"] == outcome
     assert result.report["fv"]["status"] == "retargeted"
     assert next(c for c in result.call_log if c["shape"] == "fv")["billed"] is billed
-    assert result.billed_calls == 5
+    assert result.billed_calls == 6
     assert [s for s, _ in provider.requests].count("fv") == 1, "never asked again"
 
 
@@ -1356,6 +1562,7 @@ async def test_a_stop_says_why_and_nothing_more_is_asked(scene):
     for shape in ("oh", "fv", "th"):
         assert result.report[shape]["reason"] == {
             "code": "image_limit_reached", "detail": LimitReached.detail}
+    assert result.teeth_report["reason"]["code"] == "image_limit_reached"
     # Without a code of its own, it is imagegen's: no provider.
     assert pk.stop_reason(imagegen.ImageGenUnavailable("no key"))["code"] == "imagegen_unavailable"
 
@@ -1379,7 +1586,7 @@ def test_a_fit_for_a_teeth_photo_can_be_refitted_for_drawn_teeth(scene):
     fitted = {"teethY": 0.03, "teethScale": 1.12, "jawRange": 0.7, "warmth": 0.4,
               "lipProjection": 0.6}
     refit = pk.for_drawn_teeth(fitted, scene.base_points, scene.reference)
-    geometric = pk.fit_profile(scene.base_points, {}, scene.reference, None).profile
+    geometric = pk.fit_profile(scene.base_points, scene.reference, None).profile
     assert refit == {**fitted, "teethY": 0.0, "teethScale": geometric["teethScale"]}
 
 
@@ -1438,18 +1645,36 @@ def test_a_moved_mark_keeps_every_poses_displacement(scene, move):
         moved += [7.0, -5.0]
     rebased = pk.rebase_manifest(manifest, moved, scene.reference)
     old, new = targets_of(manifest), targets_of(rebased)
-    assert np.allclose(new["rest"], moved, atol=1e-4)
+    assert np.allclose(new["rest"], moved, atol=0.01)
     for shape in pk.SHAPES:
-        assert np.allclose(new[shape] - new["rest"], old[shape] - old["rest"], atol=1e-4), shape
-    # The same kit: its id, recipe, jaw range, provenance, sources, registration.
+        assert np.allclose(new[shape] - new["rest"], old[shape] - old["rest"], atol=0.01), shape
+    # The same kit: its id, recipe, jaw range, provenance, registration.
     for key in ("character", "kit", "jaw_range", "inner_ring", "outer_ring"):
         assert rebased[key] == manifest[key]
-    for before, after in zip(manifest["poses"][1:], rebased["poses"][1:]):
+    for before, after in zip(manifest["poses"], rebased["poses"]):
         for key in ("provenance", "registration_rms", "source", "image"):
             assert after[key] == before[key]
-    assert rebased["poses"][0]["source"] == pk._rounded(moved / np.asarray(BASE_SIZE))
     assert rebased["frame"]["image_size"] == manifest["frame"]["image_size"]
     assert_valid_avatar_motion(rebased)
+
+
+def test_a_crop_moves_the_kit_with_the_face(scene):
+    """A crop cuts the same pixels at whole pixels: the face is the same,
+    only elsewhere in a smaller picture. In manifest units nothing moves."""
+    manifest = manifest_for(scene)
+    left, top = 20, 25
+    moved = scene.base_points - [left, top]
+    size = (BASE_SIZE[0] - 60, BASE_SIZE[1] - 70)
+    rebased = pk.rebase_manifest(manifest, moved, scene.reference, size)
+    assert rebased["frame"]["image_size"] == list(size)
+    for before, after in zip(manifest["poses"], rebased["poses"]):
+        assert np.allclose(before["points"], after["points"], atol=2e-5)
+    assert rebased["mouth_width"] == pytest.approx(manifest["mouth_width"], abs=1e-6)
+    assert rebased["center"] == pytest.approx(manifest["center"], abs=1e-6)
+    assert rebased["triangles"] == manifest["triangles"]
+    # A crop at the corner moves no point, but the picture is another size.
+    corner = pk.rebase_manifest(manifest, scene.base_points, scene.reference, size)
+    assert corner["frame"]["image_size"] == list(size)
 
 
 def test_a_rebase_keeps_the_recipe_that_made_the_poses(scene):

@@ -151,7 +151,8 @@ class AvatarOut(BaseModel):
     # detail} | null}, motion_url: the presigned draft motion manifest (the
     # avatar's own mouth shapes) or null (the bundled Reference motion),
     # kit: services.mouth_kit.public_kit, or null}. Every route of the owner
-    # API that returns an avatar signs its motion_url.
+    # API that returns one avatar signs its motion_url; the list (GET
+    # /avatars) leaves it null.
     mouth: dict | None = None
     # True when the draft has moved ahead of the published snapshot — the
     # dashboard shows a Publish bar on this.
@@ -226,3 +227,6 @@ class AvatarDetail(AvatarOut):
     # Background/body/head decomposition, when built — the layered render
     # path. "background" may be absent (cut-outs have nothing behind them).
     layer_urls: dict[str, str] | None = None
+    # The creation whose finish is still building this avatar (the wizard's
+    # step 5, "Preparing your avatar"): its page follows the build there.
+    preparing_creation_id: str | None = None

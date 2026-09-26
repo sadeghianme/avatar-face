@@ -91,8 +91,10 @@ const HEADINGS: Record<WizardStep, string> = {
  *
  * Every step that sends the picture to Google needs the member's
  * third-party AI statement (useConsent): step 3 asks for it inline, the
- * points step through the dialog rendered here, once, for all of them.
- * It is asked once per member and wording; the server remembers it.
+ * points step through the dialog rendered here, once, for all of them (the
+ * AI points of an animal, and the finish of a person, whose teeth and
+ * mouth shapes step 5 makes). It is asked once per member and wording;
+ * the server remembers it.
  */
 export function CreationWizard({ orgId, creationId }: { orgId: string; creationId?: string }) {
   const { t } = useTranslation();
@@ -115,9 +117,16 @@ export function CreationWizard({ orgId, creationId }: { orgId: string; creationI
   useEffect(() => setError(null), [step, setError]);
   useEffect(() => {
     // A step change moves focus to its heading; so does arriving from an
-    // upload, since the drop zone that had focus is gone.
+    // upload, since the drop zone that had focus is gone. A finish that
+    // failed goes back to the points with its reason at the top (PointsStep):
+    // focus goes to that, or nothing in view would say the build failed.
     const arrived = shown.current === null && (location.state as { uploaded?: boolean } | null)?.uploaded;
-    if ((shown.current !== null && shown.current !== step) || arrived) heading.current?.focus();
+    if ((shown.current !== null && shown.current !== step) || arrived) {
+      const failed = step === "points" && creation?.job?.step === "finish" && jobFailure(creation.job);
+      const reason = failed ? document.getElementById("finish-failure") : null;
+      if (reason) reason.focus();
+      else heading.current?.focus();
+    }
     shown.current = step;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
@@ -299,6 +308,7 @@ export function CreationWizard({ orgId, creationId }: { orgId: string; creationI
         refetch={refetch}
         withAi={consent.withAi}
         recordConsent={consent.record}
+        aiConsentId={consent.aiConsentId}
         defaultName={recalledName(creation.id) || t("createDefaultName")}
         onBack={() => goTo("adjust")}
         onFocusLost={focusHeading}

@@ -15,43 +15,49 @@ the switch and the limit are read again, so a switch turned off or a limit
 reached mid-kit stops it (every shape not yet answered is retargeted,
 nothing more is sent), and calls still in flight count against the limit,
 so three concurrent calls never pass its last unit together. The consent
-is recorded on the avatar (and the creation) once, as the first picture
-leaves, whatever the answers turn out to be; a kit that sent nothing
-records nothing.
+is recorded (on the avatar, and for a finish on the creation) before the
+first picture leaves, whatever the answers turn out to be; a kit that sent
+nothing records nothing, and one whose consent could not be recorded sends
+nothing.
 
 **What it costs.** One image-generation usage row per billed call (source
 SHAPES_CALL), written as each call ends and classified as the kit
 classifies it (performance_kit.call_billing): an answer is billed, a
 timeout may have been and counts, a call that never reached Google does
-not.
+not. Seven calls: the six shapes and the teeth photo (six when the avatar
+keeps the owner's own teeth), and one more for each the AI declines.
 
 **Where it lives.** The manifest is stored beside the teeth photo
 (`mouth-motion-<stamp>.json`, a fresh key each time) and named by
-`mouth_config.motion_key`; the fitted profile becomes the draft's; the
-kit's "ee" photo becomes the teeth photo when the embed would draw it
-(mouth_photo.admit_photo: the WebP visitors get, the teeth test run on
-those bytes); `mouth_config.kit` records what the kit is made of (owner
-facing: publishing keeps it beside the files for Discard, never serves it).
+`mouth_config.motion_key`, when the kit made shapes of the person's own
+(one with none plays exactly what the bundled motion plays, so the bundled
+motion plays); the teeth fit becomes the draft's; the kit's teeth photo
+becomes the avatar's when the embed would draw it (mouth_photo.admit_photo:
+the WebP visitors get, the teeth test run on those bytes);
+`mouth_config.kit` records what the kit is made of (owner facing:
+publishing keeps it beside the files for Discard, never serves it).
 Publishing copies the manifest like the teeth photo, and the widget and
 share page get it as `mouth.motion_url`.
 
 **What it keeps of the owner's.** Teeth the owner uploaded are never
-replaced: the kit brings its shapes and its jaw range, and the teeth fit
-stays theirs. AI teeth from an earlier run stay when a new kit cannot make
-teeth the embed would draw.
+replaced, and not asked for: the kit brings its shapes only, and the teeth
+fit stays theirs. AI teeth from an earlier run stay when a new kit cannot
+make teeth the embed would draw. The jaw range is the owner's: the kit's
+shapes are made at the Reference's size (performance_kit
+.normalize_amplitude), so the slider means the same with or without them.
 
 **Who is told.** AI-made shapes are disclosed as `ai_edited.mouth_shapes`
 {model, generated}, with mode "mouth_shapes" when nothing else was
 AI-made (mouth_photo.mouth_disclosure). Retargeted shapes are the
 Reference's movement, not pixels an AI drew, and are not counted.
 
-**Later edits.** Points re-confirmed on the same picture move the manifest
-with them, with no AI call (`follow_points`, performance_kit
-.rebase_manifest). A new picture (a crop, a crop undone) is not the one
-the kit was made from: `drop` takes the motion away (the bundled one plays
-again) with its disclosure and says so in the record. The teeth photo
-stays: the renderer registers it by its own landmarks, whatever the
-portrait, exactly as teeth made from an earlier picture always have.
+**Later edits.** The kit follows its face with no AI call (`follow_points`,
+performance_kit.rebase_manifest): points re-confirmed on the same picture
+(Mark the face, a re-detection), and the picture moved under the same
+face (a crop, a crop reset, either undone: the same pixels, translated).
+A kit that cannot follow is dropped (`drop`), and says why. The teeth
+photo stays whatever the portrait: the renderer registers it by its own
+landmarks.
 """
 
 from __future__ import annotations
@@ -90,21 +96,18 @@ SAVE_LABEL = "saving"
 GENERATED = performance_kit.GENERATED
 RETARGETED = performance_kit.RETARGETED
 
-# The profile values a kit fits: with its own teeth photo all three, with
-# teeth it does not bring (the owner's upload, earlier AI teeth) only the
-# jaw range, the one value the shapes themselves decide.
-FITTED_WITH_TEETH = ("teethY", "teethScale", "jawRange")
-FITTED_WITHOUT_TEETH = ("jawRange",)
+# The profile values a kit fits: the teeth's, for its own teeth photo, or
+# for the drawn teeth when a new avatar has none. Teeth it does not bring
+# (the owner's upload, earlier AI teeth) keep their own fit, and the jaw
+# range is always the owner's (see the module docstring).
+FITTED_WITH_TEETH = ("teethY", "teethScale")
+FITTED_WITHOUT_TEETH: tuple[str, ...] = ()
 
-PICTURE_CHANGED = {
-    "code": "picture_changed",
-    "detail": "The picture changed, and the mouth shapes were made from the previous one",
-}
 REBASE_FAILED = {
     "code": "rebase_failed",
     "detail": "The mouth shapes could not follow the new points",
 }
-# Why the kit's "ee" photo is not the teeth (kit.teeth.reason), besides
+# Why the kit's teeth photo is not the avatar's (kit.teeth.reason), besides
 # what the kit itself says (teeth_reason).
 OWNER_PHOTO = {"code": "owner_photo", "detail": "Your own teeth photo is used"}
 TEETH_REMOVED = {"code": "teeth_removed", "detail": "The teeth photo was removed"}
@@ -124,7 +127,8 @@ def _note(code: str, detail: str) -> dict:
 class _Stopped(imagegen.ImageGenUnavailable):
     """No more calls may go: an ImageGenUnavailable, which the kit reads as
     "nothing sent, send nothing more", saying why (the organization's
-    switch, the monthly limit; performance_kit.stop_reason reads it)."""
+    switch, the monthly limit, a consent that could not be recorded;
+    performance_kit.stop_reason reads it)."""
 
     def __init__(self, code: str, detail: str):
         super().__init__(detail)
@@ -132,14 +136,25 @@ class _Stopped(imagegen.ImageGenUnavailable):
         self.detail = detail
 
 
+CONSENT_NOT_RECORDED = (
+    "consent_not_recorded",
+    "Your agreement to send photos could not be recorded, so nothing was sent",
+)
+
+
 class CallGuard:
     """imagegen.edit_image as the kit may call it for one organization.
 
     Before each call, under one lock: the switch and the monthly limit are
     read again, the limit counting every call of this kit still in flight
-    as spent; the consent is recorded (`on_first_send`, once, before the
-    first picture leaves). After each call, under the same lock, it is
-    metered if it was billed, as the kit classifies it."""
+    as spent; the consent is recorded (`on_first_send`, before the first
+    picture leaves). Recording it is tried again before every call until it
+    succeeds: until then nothing is sent (`_Stopped`
+    "consent_not_recorded", which the kit reads as "send nothing more").
+    Then the provider call itself, bounded by imagegen's timeout (the kit's
+    own bound is off: waiting for this lock, the database or the consent's
+    record is not the provider's time). After each call, under the same
+    lock, it is metered if it was billed, as the kit classifies it."""
 
     def __init__(self, org_id: str, on_first_send: Callable[[], Awaitable[None]] | None = None):
         self.org_id = org_id
@@ -153,19 +168,27 @@ class CallGuard:
         async with self._lock:
             await self._admit()
             if self._on_first_send is not None:
-                send, self._on_first_send = self._on_first_send, None
-                await send()
+                try:
+                    await self._on_first_send()
+                except Exception as exc:
+                    # Kept for the next call to try again; this one does
+                    # not go, since nothing would say what allowed it.
+                    logger.exception("could not record the consent for org %s", self.org_id)
+                    raise _Stopped(*CONSENT_NOT_RECORDED) from exc
+                self._on_first_send = None
             self._in_flight += 1
             self.sent += 1
         error: BaseException | None = None
         try:
-            return await imagegen.edit_image(prompt, payload, mime)
+            return await asyncio.wait_for(
+                imagegen.edit_image(prompt, payload, mime), timeout=imagegen.TIMEOUT_SECONDS
+            )
         except BaseException as exc:
             error = exc
             raise
         finally:
-            # Shielded: a call the kit's own timeout cancels was sent and
-            # may be billed, and its row is written all the same.
+            # Shielded: a call cancelled in flight was sent and may be
+            # billed, and its row is written all the same.
             await asyncio.shield(self._settle(error))
 
     async def _admit(self) -> None:
@@ -203,17 +226,18 @@ class CallGuard:
                 self._in_flight -= 1
 
 
-def progress_to(job: Job | None, start: float, end: float) -> Callable[[float, str, int], None]:
+def progress_to(job: Job | None, start: float, end: float) -> Callable[[float, str, int, int], None]:
     """The kit's progress as `job`'s, between `start` and `end` of its bar:
-    SHAPES_LABEL with how many of the six shapes are settled, then
-    FIT_LABEL once they all are (the fit, the manifest)."""
+    SHAPES_LABEL with how many of its requests (the six shapes and the
+    teeth photo) are settled, then FIT_LABEL once they all are (the fit,
+    the manifest)."""
 
-    def report(fraction: float, message: str, done: int) -> None:
+    def report(fraction: float, message: str, done: int, total: int) -> None:
         if job is None:
             return
         at = start + (end - start) * fraction
-        if done < SHAPE_COUNT:
-            job.report(at, SHAPES_LABEL, count=(done, SHAPE_COUNT))
+        if done < total:
+            job.report(at, SHAPES_LABEL, count=(done, total))
         else:
             job.report(at, FIT_LABEL)
 
@@ -225,15 +249,17 @@ async def make(
     picture: bytes,
     points,
     *,
+    teeth: bool = True,
     job: Job | None = None,
     on_first_send: Callable[[], Awaitable[None]] | None = None,
-    on_progress: Callable[[float, str, int], object] | None = None,
+    on_progress: Callable[[float, str, int, int], object] | None = None,
 ) -> performance_kit.KitResult:
     """The kit for `picture` (the avatar's picture, as rigged) and `points`
-    (its rig's 478 points), through a CallGuard for `org_id`.
+    (its rig's 478 points), through a CallGuard for `org_id`; with its teeth
+    photo unless `teeth` is False (the avatar keeps the owner's own).
 
     The whole of it waits outside the job runner's slot
-    (JobRunner.outside_slot): six image-model calls take tens of seconds,
+    (JobRunner.outside_slot): seven image-model calls take tens of seconds,
     and every CPU part of the kit runs on the one CPU thread anyway, which
     is the bound that protects speech. Raises what build_kit raises:
     KitUnavailable or ValueError before any call, KitFailed after some
@@ -241,7 +267,8 @@ async def make(
     guard = CallGuard(org_id, on_first_send)
     async with runner.outside_slot(job):
         return await performance_kit.build_kit(
-            picture, points, guard, concurrency=CONCURRENCY, on_progress=on_progress,
+            picture, points, guard, teeth=teeth, concurrency=CONCURRENCY, bound_calls=False,
+            on_progress=on_progress,
         )
 
 
@@ -256,52 +283,61 @@ def generated_count(result: performance_kit.KitResult) -> int:
 
 # --- Records ------------------------------------------------------------------------
 
-# The EE shape's reasons the Mouth panel already words for teeth that were
-# not made (the single "ee" photo's notes), passed on as they are.
+# Why the kit's teeth request brought nothing, passed on as its own note
+# (the Mouth panel words each, as for the single "ee" photo's): what
+# stopped the calls, or what the AI answered.
 _TEETH_NOTE_CODES = frozenset({
     "safety_refused", "no_image", "provider_error", "timeout", "imagegen_unavailable",
-    "image_limit_reached", "third_party_ai_disabled",
+    "image_limit_reached", "third_party_ai_disabled", CONSENT_NOT_RECORDED[0],
 })
+# The embed's own refusal of a teeth photo that passed every other check.
+_UNCLEAR_CODES = frozenset({"teeth_photo_refused", "no_teeth_visible"})
 
 
 def teeth_reason(result: performance_kit.KitResult) -> dict | None:
     """Why the kit brings no teeth photo, as a note the Mouth panel words
-    (mouth.teeth.note, kit.teeth.reason), or None when it brings one. The
-    EE shape was not made (its own reason; a check it failed is
-    `teeth_photo_rejected`), or it was but shows too little of the upper
-    teeth for the embed (`mouth_teeth_unclear`, as for any mouth photo)."""
-    if result.teeth_source is not None:
+    (mouth.teeth.note, kit.teeth.reason), or None when it brings one (or
+    was not asked for any). The request stopped or the AI did not answer
+    with a picture (its own reason); the picture showed too little of the
+    upper teeth for the embed (`mouth_teeth_unclear`, as for any mouth
+    photo); or it failed a check, which the note names (`reason`) for the
+    dashboard to word: `teeth_photo_rejected` alone would not say whether
+    the lips were too close or the head moved."""
+    if result.teeth_source is not None or result.teeth_report is None:
         return None
-    ee = result.report["ee"]
-    reason = ee.get("reason") or {}
-    if ee["status"] != "ok":
-        if reason.get("code") in _TEETH_NOTE_CODES:
-            return _note(reason["code"], reason["detail"])
+    reason = result.teeth_report.get("reason") or {}
+    code = reason.get("code")
+    if code in _TEETH_NOTE_CODES:
+        return _note(code, reason["detail"])
+    if code in _UNCLEAR_CODES:
         return _note(
-            "teeth_photo_rejected",
-            "The AI's \"ee\" photo changed more than the mouth "
-            f"({reason.get('detail') or 'it failed its checks'}), so it was not used",
+            "mouth_teeth_unclear",
+            "The AI's teeth photo shows too little of the upper teeth for the photographic "
+            "mouth, so it was not used",
         )
-    return _note(
-        "mouth_teeth_unclear",
-        "The AI's \"ee\" photo shows too little of the upper teeth for the photographic "
-        "mouth, so it was not used",
-    )
+    return {
+        **_note("teeth_photo_rejected",
+                "The AI's teeth photo did not pass its checks "
+                f"({reason.get('detail') or 'no reason given'}), so it was not used"),
+        "reason": reason or None,
+    }
 
 
 def _standard_teeth(reason: dict) -> dict:
     """The teeth note for a mouth left with the generic teeth."""
-    return _note(reason["code"], f"{reason['detail']}; this avatar uses standard teeth")
+    return {**reason, "detail": f"{reason['detail']}; this avatar uses standard teeth"}
 
 
 def kit_record(
-    result: performance_kit.KitResult, *, source: str, teeth: dict
+    result: performance_kit.KitResult, *, source: str, teeth: dict, fitted: dict
 ) -> dict:
     """What `mouth_config.kit` keeps of a kit, for the owner: its id and
     recipe, the model, each shape's provenance with why a shape was
-    retargeted, whether its "ee" is the teeth photo (`teeth`: {used,
-    reason}), what the fit could not measure, and what it took. `source`
-    says where it was made: "finish" or "mouth_panel"."""
+    retargeted, whether its teeth photo is the avatar's (`teeth`: {used,
+    reason}), the profile values it set (`fitted`, so they can be refitted
+    when the teeth change and the owner has not moved them), what the fit
+    could not measure, and what it took. `source` says where it was made:
+    "finish" or "mouth_panel"."""
     shapes = {}
     for shape in performance_kit.SHAPES:
         entry = result.report[shape]
@@ -324,6 +360,7 @@ def kit_record(
         "generated": generated,
         "retargeted": SHAPE_COUNT - generated,
         "teeth": teeth,
+        "fitted": fitted,
         "fit_reasons": result.profile_fit.get("reasons") or [],
         "calls": result.calls,
         "billed_calls": result.billed_calls,
@@ -395,12 +432,15 @@ def _manifest_bytes(manifest: dict) -> bytes:
 
 async def store(avatar, storage, result: performance_kit.KitResult, *, source: str) -> list[str]:
     """Make `result` the draft's mouth kit: its manifest the avatar's own
-    motion, its fitted profile the draft's, its "ee" photo the teeth when
-    the embed would draw it and the owner has none of their own, and the
-    disclosure to match. Every file is written before the row changes, so a
-    failure leaves the draft as it was. The caller commits (and marks an
-    edited draft dirty). Returns the keys replaced, to delete after the
-    commit: the published snapshot has its own copies."""
+    motion when it has shapes of the person's own (none, and the bundled
+    motion plays: this manifest would only be the Reference's shapes fitted
+    by mouth width, which is what the bundled motion plays), its teeth fit
+    the draft's, its teeth photo the avatar's when the embed would draw it
+    and the owner has none of their own, and the disclosure to match. Every
+    file is written before the row changes, so a failure leaves the draft
+    as it was. The caller commits (and marks an edited draft dirty).
+    Returns the keys replaced, to delete after the commit: the published
+    snapshot has its own copies."""
     from app.core.errors import Validation422
     from app.schemas.avatar import MouthProfile
     from app.services import mouth_photo
@@ -444,30 +484,33 @@ async def store(avatar, storage, result: performance_kit.KitResult, *, source: s
         # Teeth the kit does not replace keep their own fit.
         keys = FITTED_WITHOUT_TEETH
     else:
-        config["teeth"] = mouth_photo.generic_teeth_record(_standard_teeth(reason))
+        config["teeth"] = mouth_photo.generic_teeth_record(
+            _standard_teeth(reason or _note("teeth_failed", "The teeth could not be made")))
         keys = FITTED_WITH_TEETH
     # The fitted values the kit decides; everything else the owner set (or
-    # the kit's defaults, on a new avatar) stays. Held to the API's ranges
-    # like any profile an owner saves: it is served to strangers.
-    draft_profile = config.get("profile") or {}
+    # the defaults, on a new avatar) stays. Held to the API's ranges like
+    # any profile an owner saves: it is served to strangers.
     config["profile"] = MouthProfile.model_validate({
-        **fitted,
-        **{k: v for k, v in draft_profile.items() if k not in keys},
+        **(config.get("profile") or {}),
+        **{k: fitted[k] for k in keys},
     }).model_dump()
 
-    key = mouth.motion_key(avatar.org_id, avatar.id, uuid4().hex[:8])
-    await storage.put_bytes(key, _manifest_bytes(result.manifest), MOTION_TYPE)
-    if config.get("motion_key"):
-        previous.append(config["motion_key"])
-    config["motion_key"] = key
-    config["kit"] = kit_record(
-        result, source=source, teeth={"used": new_photo is not None, "reason": reason},
-    )
     generated = generated_count(result)
     if generated:
+        key = mouth.motion_key(avatar.org_id, avatar.id, uuid4().hex[:8])
+        await storage.put_bytes(key, _manifest_bytes(result.manifest), MOTION_TYPE)
+        if config.get("motion_key"):
+            previous.append(config["motion_key"])
+        config["motion_key"] = key
         ai_edited = with_ai_shapes(ai_edited, model, generated)
     else:
+        if config.get("motion_key"):
+            previous.append(config.pop("motion_key"))
         ai_edited = without_ai_shapes(ai_edited)
+    config["kit"] = kit_record(
+        result, source=source, teeth={"used": new_photo is not None, "reason": reason},
+        fitted={k: config["profile"][k] for k in keys},
+    )
     avatar.mouth_config = json.dumps(config)
     avatar.ai_edited = ai_edited
     return previous
@@ -482,28 +525,64 @@ def _for_drawn_teeth(profile: dict, manifest: dict) -> dict:
     return performance_kit.for_drawn_teeth(profile, rest, performance_kit.load_reference())
 
 
+def _drawn_teeth_on(profile: dict, points) -> dict:
+    """performance_kit.for_drawn_teeth on a rig's points. CPU work."""
+    return performance_kit.for_drawn_teeth(profile, points, performance_kit.load_reference())
+
+
 # --- Following the avatar's edits ------------------------------------------------------
 
 
-def teeth_replaced(avatar, reason: dict) -> None:
-    """The kit's "ee" photo is no longer the avatar's teeth (the owner
-    uploaded their own, or removed the photo): its record says so, and
-    why. The shapes and the rest of the kit are untouched."""
+async def teeth_changed(avatar, storage, reason: dict) -> None:
+    """The teeth drawn are no longer the ones the kit fitted the profile
+    for: the owner uploaded their own photo (OWNER_PHOTO) or removed the
+    photo (TEETH_REMOVED: the drawn teeth now). The teeth values the kit set
+    are refitted for the teeth drawn now, unless the owner has moved them
+    since: an upload's own defaults (its teeth at their photographed size,
+    seated like any photo's), or the drawn teeth's fit
+    (performance_kit.for_drawn_teeth on the rig's points). A fit for teeth
+    that are not drawn seats and sizes the ones that are wrongly: the kit's
+    photo put a person's teeth 0.05 mouth widths lower and 5% larger than
+    drawn teeth need. The record says its teeth photo is no longer the
+    avatar's, and why. The shapes and the jaw range are untouched."""
+    from app.schemas.avatar import MouthProfile
+
     config = mouth.load(avatar.mouth_config)
     kit = (config or {}).get("kit")
-    if not kit or not (kit.get("teeth") or {}).get("used"):
+    if not kit:
         return
-    config["kit"] = {**kit, "teeth": {"used": False, "reason": reason}}
+    profile = dict(config.get("profile") or {})
+    if reason["code"] == TEETH_REMOVED["code"]:
+        target = MouthProfile().model_dump()
+        try:
+            rig = json.loads(await storage.get_bytes(avatar.rig_key))
+            target = await run_cpu(_drawn_teeth_on, target, rig["points"])
+        except Exception:
+            # The defaults are the drawn teeth's fit on an average face.
+            logger.exception("could not refit the drawn teeth of avatar %s", avatar.id)
+    else:
+        target = MouthProfile().model_dump()
+    # A record from before `fitted` was kept: the values are the kit's.
+    fitted = kit.get("fitted")
+    for key in FITTED_WITH_TEETH:
+        if fitted is None or key not in fitted or profile.get(key) == fitted[key]:
+            profile[key] = target[key]
+    config["profile"] = MouthProfile.model_validate(profile).model_dump()
+    kit = {**kit, "fitted": {
+        **(fitted or {}), **{k: config["profile"][k] for k in FITTED_WITH_TEETH}}}
+    if (kit.get("teeth") or {}).get("used"):
+        kit["teeth"] = {"used": False, "reason": reason}
+    config["kit"] = kit
     avatar.mouth_config = json.dumps(config)
 
 
-def drop(avatar, reason: dict = PICTURE_CHANGED) -> list[str]:
-    """The draft's kit no longer belongs to its picture (a crop, a crop
-    undone): the motion goes (the engine plays the bundled Reference motion
-    again), with the disclosure of its AI-made shapes, and the record says
-    why (state "dropped"). The teeth photo and the profile stay. Returns
-    the motion's key, to delete after the commit; nothing to do without a
-    kit."""
+def drop(avatar, reason: dict) -> list[str]:
+    """The draft's kit can no longer play on its face (its manifest could
+    not follow the points): the motion goes (the engine plays the bundled
+    Reference motion again), with the disclosure of its AI-made shapes, and
+    the record says why (state "dropped"). The teeth photo and the profile
+    stay. Returns the motion's key, to delete after the commit; nothing to
+    do without one."""
     config = mouth.load(avatar.mouth_config)
     key = (config or {}).get("motion_key")
     if not key:
@@ -516,20 +595,23 @@ def drop(avatar, reason: dict = PICTURE_CHANGED) -> list[str]:
     return [key]
 
 
-async def follow_points(avatar, storage, points) -> list[str]:
-    """Move the draft's kit onto points re-confirmed on the SAME picture
-    (Mark the face's saved marks, a re-detection): no AI call, every shape
-    keeps its movement (performance_kit.rebase_manifest), the manifest gets
-    a fresh key. A kit that cannot follow is dropped rather than left on
-    the old points. Returns the keys replaced, to delete after the
-    commit."""
+async def follow_points(avatar, storage, points, image_size=None) -> list[str]:
+    """Move the draft's kit onto the face's points as they are now, with no
+    AI call: points re-confirmed on the same picture (Mark the face's saved
+    marks, a re-detection), or the picture moved under the same face (a
+    crop, a crop reset, an undo of either: the same pixels, translated;
+    `image_size` is then the new picture's). Every shape keeps its movement
+    (performance_kit.rebase_manifest), and the manifest gets a fresh key.
+    A kit that cannot follow is dropped rather than left on the old
+    points. Returns the keys replaced, to delete after the commit."""
     config = mouth.load(avatar.mouth_config)
     key = (config or {}).get("motion_key")
     if not key:
         return []
+    size = tuple(int(v) for v in image_size) if image_size is not None else None
     try:
         manifest = json.loads(await storage.get_bytes(key))
-        rebased = await run_cpu(performance_kit.rebase_manifest, manifest, points)
+        rebased = await run_cpu(performance_kit.rebase_manifest, manifest, points, None, size)
     except Exception:
         logger.exception("the mouth kit of avatar %s could not follow its points", avatar.id)
         return drop(avatar, REBASE_FAILED)
@@ -546,17 +628,50 @@ async def follow_points(avatar, storage, points) -> list[str]:
 
 async def follow_rig(avatar, storage, before: dict | None, after: dict | None) -> list[str]:
     """After an edit put another rig in place under the same key (undo):
-    a rig for a picture of another size belongs to another picture (a crop
-    undone or redone), so the kit goes; the same picture's rig with other
-    points moves it; the same rig changes nothing. Returns keys to delete
-    after the commit."""
+    the kit follows it. A rig of another size is the same face on a picture
+    cropped or uncropped (every edit that snapshots a rig moves the face's
+    pixels by a translation at most: a crop, its reset, a background);
+    the same picture's rig with other points moves the kit likewise; the
+    same rig changes nothing. Returns keys to delete after the commit."""
     if not before or not after:
         return []
     if list(before.get("image_size") or []) != list(after.get("image_size") or []):
-        return drop(avatar)
+        return await follow_points(avatar, storage, after["points"], after["image_size"])
     if before.get("points") != after.get("points"):
         return await follow_points(avatar, storage, after["points"])
     return []
+
+
+async def follow_redetection(org_id: str, avatar_id: str, points) -> None:
+    """follow_points for a job that rebuilt a rig of the same picture
+    without the avatar's edit lock (Re-detect, a retry: rig.process_avatar,
+    a request's background task).
+
+    Under the lock, on the row as it is NOW, in a short transaction of its
+    own: that job loaded its row when it started and commits it much later,
+    and a mouth edit in between (the Mouth panel's kit storing its shapes
+    and teeth, under the lock) would otherwise be overwritten with the kit
+    it had read, its files deleted from under it. Whatever kit the row
+    holds now follows the new points. The draft moved ahead of what is
+    published (its rig changed), so it is marked so."""
+    from app.db import get_session_factory
+    from app.services.edit_locks import avatar_edits
+    from app.services.publishing import mark_dirty
+    from app.services.storage import get_storage
+
+    storage = get_storage()
+    stale: list[str] = []
+    async with avatar_edits.hold(avatar_id):
+        async with get_session_factory()() as db:
+            avatar = await _load_avatar(db, org_id, avatar_id)
+            if avatar is None:
+                return
+            stale = await follow_points(avatar, storage, points)
+            if avatar.published_config:
+                mark_dirty(avatar)
+            await db.commit()
+    for key in stale:
+        await storage.delete(key)
 
 
 # --- The Mouth panel's job -------------------------------------------------------------
@@ -667,9 +782,11 @@ def _require_person(avatar) -> None:
 async def _make_for_avatar(job: Job, params: dict) -> None:
     """The Mouth panel's action on an existing avatar: its kit, made from
     its picture and its rig as they are now, and stored as a draft edit
-    (the owner publishes). Teeth the owner uploaded are kept. Where the kit
-    cannot be made on this server, the single "ee" photo instead (unless
-    the owner has their own teeth: then there is nothing it could bring)."""
+    (the owner publishes). Teeth the owner uploaded are kept, and not asked
+    for. Where the kit cannot be made on this server, the single "ee" photo
+    instead (unless the owner has their own teeth: then there is nothing it
+    could bring). A kit with no shape of the person's own fails: the owner
+    asked for their mouth shapes, and the draft keeps the ones it has."""
     from app.db import get_session_factory
     from app.services import consent
     from app.services.consent import ai_switched_off
@@ -715,10 +832,10 @@ async def _make_for_avatar(job: Job, params: dict) -> None:
                     row.consent_ids = consent.with_consent(row.consent_ids, consent_id)
                     await db.commit()
 
-    job.report(0.05, SHAPES_LABEL, count=(0, SHAPE_COUNT))
+    job.report(0.05, SHAPES_LABEL, count=(0, SHAPE_COUNT + (0 if own_teeth else 1)))
     try:
         result = await make(
-            org_id, picture, points, job=job, on_first_send=sending,
+            org_id, picture, points, teeth=not own_teeth, job=job, on_first_send=sending,
             on_progress=progress_to(job, 0.05, 0.85),
         )
     except (performance_kit.KitUnavailable, ValueError) as exc:
@@ -728,12 +845,12 @@ async def _make_for_avatar(job: Job, params: dict) -> None:
                 getattr(exc, "detail", None) or str(exc), code=code
             ) from exc
         logger.info("mouth kit %s: no kit on this server (%s); the teeth alone", job.id, code)
-        await _teeth_alone(job, org_id, avatar_id, picture, picture_key, sending)
+        await _teeth_alone(job, org_id, avatar_id, picture, sending)
         return
-    if generated_count(result) == 0 and result.teeth_source is None:
-        # Nothing of this person was made: the owner's request failed, and
-        # the draft keeps what it has (a kit of the Reference's shapes
-        # would replace their own with nothing better).
+    if generated_count(result) == 0:
+        # None of the person's own shapes: the owner's request failed, and
+        # the draft keeps what it has (shapes of an earlier kit on this
+        # face are better than none; its teeth, whatever came back).
         raise _nothing_made(result)
 
     job.report(0.88, FIT_LABEL)
@@ -742,16 +859,14 @@ async def _make_for_avatar(job: Job, params: dict) -> None:
             avatar = await _load_avatar(db, org_id, avatar_id)
             if avatar is None:
                 return
-            if avatar.image_key != picture_key:
-                raise Conflict409(
-                    "The picture changed while its mouth was being made; make it again",
-                    code="superseded",
-                )
+            _require_mouth(avatar)
             rig = json.loads(await storage.get_bytes(avatar.rig_key))
-            if rig.get("points") != points:
-                # Re-marked meanwhile, on the same picture: the kit follows.
+            if rig.get("points") != points or rig.get("image_size") != manifest_size(result):
+                # Re-marked, re-detected or cropped meanwhile: the same face,
+                # and the kit follows it (follow_points).
                 result.manifest = await run_cpu(
-                    performance_kit.rebase_manifest, result.manifest, rig["points"]
+                    performance_kit.rebase_manifest, result.manifest, rig["points"], None,
+                    tuple(rig["image_size"]),
                 )
             stale = await store(avatar, storage, result, source="mouth_panel")
             mark_dirty(avatar)
@@ -759,6 +874,27 @@ async def _make_for_avatar(job: Job, params: dict) -> None:
     job.report(1.0, SAVE_LABEL)
     for key in stale:
         await storage.delete(key)
+
+
+def manifest_size(result: performance_kit.KitResult) -> list[int]:
+    """The picture size a kit's manifest was made on."""
+    return list(result.manifest["frame"]["image_size"])
+
+
+def _require_mouth(avatar) -> None:
+    """What storing a kit needs of the avatar, however long its calls took:
+    a face the photographic mouth is for, with its picture and rig. Its
+    picture may have been cropped meanwhile, or its points re-marked or
+    re-detected: the kit follows the face, which is the same."""
+    from app.core.errors import Validation422
+
+    if not mouth.renderer_allowed("continuous", avatar.face_type):
+        raise Validation422(
+            "The photographic mouth draws human teeth, so it is only for human faces",
+            code="mouth_not_for_face_type",
+        )
+    if not avatar.image_key or not avatar.rig_key:
+        raise Conflict409("The avatar's picture is gone", code="source_gone")
 
 
 def _nothing_made(result: performance_kit.KitResult) -> AppError:
@@ -774,10 +910,11 @@ def _nothing_made(result: performance_kit.KitResult) -> AppError:
     )
 
 
-async def _teeth_alone(job: Job, org_id: str, avatar_id: str, picture: bytes,
-                       picture_key: str, sending) -> None:
+async def _teeth_alone(job: Job, org_id: str, avatar_id: str, picture: bytes, sending) -> None:
     """The single "ee" photo (mouth_photo.make_teeth), as a draft edit: what
-    the panel can still make where the kit cannot be made."""
+    the panel can still make where the kit cannot be made. The photo is
+    registered by its own landmarks, so whatever happened to the portrait
+    meanwhile, it is the person's teeth."""
     from app.db import get_session_factory
     from app.services import mouth_photo
     from app.services.edit_locks import avatar_edits
@@ -797,11 +934,7 @@ async def _teeth_alone(job: Job, org_id: str, avatar_id: str, picture: bytes,
             avatar = await _load_avatar(db, org_id, avatar_id)
             if avatar is None:
                 return
-            if avatar.image_key != picture_key:
-                raise Conflict409(
-                    "The picture changed while its teeth were being made; make them again",
-                    code="superseded",
-                )
+            _require_mouth(avatar)
             previous = await mouth_photo.store(
                 avatar, storage, made.photo, made.rig, mouth_photo.ai_teeth_record(made.model)
             )

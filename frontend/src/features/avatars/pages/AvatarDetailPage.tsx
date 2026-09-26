@@ -17,6 +17,7 @@ import { PublishBar } from "@/features/avatars/components/PublishBar";
 import { SharePanel } from "@/features/avatars/components/SharePanel";
 import { SpeakPanel } from "@/features/voices";
 import { defaultVoiceSelection, type VoiceSelection } from "@/features/voices";
+import { Spinner } from "@/components/ui/Spinner";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MouthPanel } from "@/features/avatars/components/MouthPanel";
 import { TuningPanel } from "@/features/avatars/components/TuningPanel";
@@ -29,7 +30,8 @@ import {
   type MotionChoice,
 } from "@/features/avatars/mouth-config";
 import { aiEditedLabels, aiEditedModels } from "@/features/avatars/teeth";
-import { api } from "@/lib/api";
+import { errorText } from "@/features/avatars/creation";
+import { api, ApiError } from "@/lib/api";
 import { useOrg } from "@/providers/org";
 import type { Avatar } from "@/lib/types";
 
@@ -56,6 +58,8 @@ export function AvatarDetailPage() {
   // Which mouth shapes the preview plays: the avatar's own, or the standard
   // ones to compare them with. The preview only; nothing is saved.
   const [motion, setMotion] = useState<MotionChoice>("own");
+  // Why the rig job could not be run again, in words.
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   // Native fullscreen on the preview card. The `fullscreen` state exists so
   // the toggle icon flips even when the user leaves with Esc, which never
@@ -153,9 +157,17 @@ export function AvatarDetailPage() {
   };
 
   const retry = async () => {
-    await api.post(`/orgs/${current.id}/avatars/${avatar.id}/retry`);
+    setRetryError(null);
+    try {
+      await api.post(`/orgs/${current.id}/avatars/${avatar.id}/retry`);
+    } catch (err) {
+      setRetryError(err instanceof ApiError ? errorText(t, err.code, err.detail, err.retryAfter) : t("error"));
+    }
     await queryClient.invalidateQueries({ queryKey: ["avatar", current.id, avatarId] });
   };
+  // The wizard's step 5 is building it: followed there, where its stages
+  // are, not here, where there is nothing of it yet to retry.
+  const preparing = avatar.preparing_creation_id ?? null;
 
   /** Step back one edit — crop, background, whatever it was. */
   const undo = async () => {
@@ -313,6 +325,11 @@ export function AvatarDetailPage() {
           <button className="btn-secondary mt-3" onClick={() => void retry()}>
             {t("retry")}
           </button>
+          {retryError && (
+            <p className="field-error mt-2 text-sm" role="alert">
+              {retryError}
+            </p>
+          )}
         </div>
       )}
 
@@ -324,9 +341,22 @@ export function AvatarDetailPage() {
         <FinishNotice key={avatar.id} avatar={avatar} aiEnabled={current.third_party_ai_enabled ?? true} />
       )}
 
-      {(avatar.status === "pending" || avatar.status === "processing") && (
+      {preparing && (
+        <section className="card mb-6" aria-labelledby="preparing-title">
+          <h2 id="preparing-title" className="flex items-center gap-2 font-semibold">
+            <Spinner className="h-4 w-4 shrink-0 text-brand-600" />
+            {t("avatarPreparingTitle")}
+          </h2>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{t("avatarPreparingHint")}</p>
+          <Link className="btn-secondary mt-3 min-h-11" to={`/avatars/new/${preparing}`}>
+            {t("avatarPreparingFollow")}
+          </Link>
+        </section>
+      )}
+
+      {!preparing && (avatar.status === "pending" || avatar.status === "processing") && (
         <div className="mb-6">
-          <PrepProgress avatar={avatar} onRetry={() => void retry()} />
+          <PrepProgress avatar={avatar} onRetry={() => void retry()} error={retryError} />
         </div>
       )}
 

@@ -115,11 +115,79 @@ async def _finished_person(client, headers, org_id) -> tuple[str, Avatar, dict]:
 def test_a_full_crown_photo_is_admitted(mouth_detector):
     photo, rig = mouth_photo.prepare_mouth_photo(FULL_CROWNS)
     stored = Image.open(io.BytesIO(photo))
-    assert stored.size == (1254, 1254), "the rig's pixel coordinates still hold"
+    assert list(stored.size) == rig["image_size"], "the rig's pixel coordinates still hold"
     assert len(rig["points"]) == 478
-    # What every visitor downloads: WebP, a fraction of the lossless PNG.
+    # What every visitor downloads: WebP of the lips, a sliver of the
+    # lossless 1254 px face.
     assert stored.format == "WEBP"
-    assert len(photo) < len(FULL_CROWNS) / 4
+    assert max(stored.size) < 1254 / 2
+    assert len(photo) < len(FULL_CROWNS) / 20
+
+
+def test_a_mouth_photo_is_cut_to_what_the_renderer_reads(mouth_detector):
+    """The renderer (and the teeth test) read a mouth photo inside its lips
+    only. Cut to them at whole pixels, the rig moved with it, the photo
+    reads exactly as the whole one does."""
+    whole, whole_rig, _ = portrait_photo.prepare_photo(FULL_CROWNS, "mouth")
+    cut, rig = mouth_photo.crop_to_mouth(whole, whole_rig)
+    with Image.open(io.BytesIO(cut)) as image:
+        assert list(image.size) == rig["image_size"] and image.width < 700
+    assert mouth_photo.teeth_verdict(cut, rig) == mouth_photo.teeth_verdict(whole, whole_rig)
+    offset = np.asarray(whole_rig["points"]) - np.asarray(rig["points"])
+    assert np.allclose(offset, offset[0], atol=0.011) and (offset[0] == offset[0].round()).all()
+    # What the renderer reads of the rig, and nothing else.
+    assert set(rig) == {"version", "image_size", "points", "inner_lip_ring", "outer_lip_ring"}
+    # A photo that is all mouth already is left as it is.
+    assert mouth_photo.crop_to_mouth(cut, rig) == (cut, rig)
+
+
+async def test_a_teeth_call_that_timed_out_is_metered_as_the_kit_meters_it(client, monkeypatch):
+    """Sent, and maybe billed: performance_kit.call_billing, the one
+    classification, counts httpx's read timeout (imagegen's 90 s) as a
+    call; the single "ee" photo meters it too, and says it timed out."""
+    import httpx
+
+    headers, org_id = await _org(client, "tmo")
+
+    async def slow(prompt, payload, mime):
+        raise httpx.ReadTimeout("read timed out")
+
+    monkeypatch.setattr(imagegen, "configured", lambda: True)
+    monkeypatch.setattr(imagegen, "edit_image", slow)
+    monkeypatch.setattr(mouth_photo, "face_request",
+                        lambda source: mouth_photo.Request(b"x", "image/jpeg"))
+    with pytest.raises(mouth_photo.TeethFailure) as failed:
+        await mouth_photo.make_teeth(org_id, FULL_CROWNS)
+    assert failed.value.code == "timeout"
+    assert await _usage(org_id, IMAGE_KIND) == [mouth_photo.TEETH_CALL]
+
+    async def unreachable(prompt, payload, mime):
+        raise httpx.ConnectTimeout("never connected")
+
+    monkeypatch.setattr(imagegen, "edit_image", unreachable)
+    with pytest.raises(mouth_photo.TeethFailure) as failed:
+        await mouth_photo.make_teeth(org_id, FULL_CROWNS)
+    assert failed.value.code == "provider_error"
+    assert await _usage(org_id, IMAGE_KIND) == [mouth_photo.TEETH_CALL], "never reached Google"
+
+
+async def test_a_consent_that_cannot_be_recorded_sends_nothing(client, monkeypatch):
+    headers, org_id = await _org(client, "unrecorded")
+    sent = []
+
+    async def provider(prompt, payload, mime):
+        sent.append(prompt)
+
+    async def on_send():
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(imagegen, "configured", lambda: True)
+    monkeypatch.setattr(imagegen, "edit_image", provider)
+    monkeypatch.setattr(mouth_photo, "face_request",
+                        lambda source: mouth_photo.Request(b"x", "image/jpeg"))
+    with pytest.raises(mouth_photo.TeethFailure) as failed:
+        await mouth_photo.make_teeth(org_id, FULL_CROWNS, on_send=on_send)
+    assert failed.value.code == "consent_not_recorded" and sent == []
 
 
 def test_a_tips_only_photo_is_refused_as_the_browser_would(mouth_detector):

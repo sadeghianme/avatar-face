@@ -93,7 +93,9 @@ export interface AvatarPerformanceKeyframe {
   id: PerformancePose;
   /** Pose photos are not delivered: the continuous mouth warps one portrait. */
   image: string | null;
-  /** The pose's landmarks in its own photo (fractions of it); null when retargeted. */
+  /** The pose's landmarks in its own photo (fractions of it). The backend
+   *  sends null: the continuous mouth never reads it, and every visitor
+   *  downloads the manifest. */
   source: XY[] | null;
   points: XY[];
   /** Null for a retargeted pose, which was never registered. */

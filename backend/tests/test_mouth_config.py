@@ -28,8 +28,9 @@ def _png() -> bytes:
 
 @pytest.fixture
 def open_mouth_photo(monkeypatch):
-    """Skip real face detection and the teeth test: accept any image as a
-    valid mouth photo (both are tested on real pixels in test_mouth_photo)."""
+    """Skip real face detection, the cut to the lips and the teeth test:
+    accept any image as a valid mouth photo (all three are tested on real
+    pixels in test_mouth_photo)."""
     from app.services import mouth_photo, portrait_photo
     from app.services.dental_photo import Acceptance
 
@@ -42,6 +43,7 @@ def open_mouth_photo(monkeypatch):
         mouth_photo, "teeth_verdict",
         lambda photo, rig: Acceptance(True, 400, 20000, 0.12, 0.14),
     )
+    monkeypatch.setattr(mouth_photo, "crop_to_mouth", lambda png, rig: (png, rig))
 
 
 async def test_existing_avatars_keep_the_classic_mouth(client, setup):

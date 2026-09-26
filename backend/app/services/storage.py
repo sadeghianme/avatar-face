@@ -38,6 +38,12 @@ class Storage:
     async def exists(self, key: str) -> bool:
         raise NotImplementedError
 
+    async def list_names(self, prefix: str) -> list[str]:
+        """The names directly under the folder `prefix` (which ends in "/"):
+        its files and its sub-folders, one level down, unordered. Empty for
+        a folder that does not exist."""
+        raise NotImplementedError
+
     async def delete(self, key: str) -> None:
         raise NotImplementedError
 
@@ -65,11 +71,27 @@ class Storage:
         raise NotImplementedError
 
 
+def is_published(key: str) -> bool:
+    """A published snapshot's file (services.publishing): written once, at
+    its revision's own key, and never again."""
+    return "/published/" in key
+
+
 class LocalStorage(Storage):
     """Filesystem-backed storage with presigned-URL semantics.
 
     Signatures: HMAC-SHA256 over "<method>:<key>:<expiry>" with the JWT
     secret, so URLs are tamper-proof and expire like real presigned URLs.
+
+    A published file's GET URL is the same for everyone who asks within a
+    window (`expiry_seconds` long): its expiry is the end of the NEXT
+    window, so it is valid for one to two windows. Every page view fetches
+    the embed config and gets its files' URLs from it; were each URL new,
+    every view would download the picture, its rig, the teeth photo and
+    the mouth's motion again. The same URL lets the browser keep them
+    (storage_routes.cache_control), and nothing is lost: the file behind a
+    published key never changes. A draft's URL stays new each time (its
+    rig is rewritten in place).
     """
 
     def __init__(self, root: str | Path, base_url: str, secret: str, expiry_seconds: int):
@@ -94,7 +116,12 @@ class LocalStorage(Storage):
         return hmac.compare_digest(self.sign(method, key, expires), signature)
 
     def _url(self, method: str, key: str) -> str:
-        expires = int(time.time()) + self.expiry_seconds
+        now = int(time.time())
+        if method == "GET" and is_published(key) and self.expiry_seconds > 0:
+            window = self.expiry_seconds
+            expires = (now // window + 2) * window
+        else:
+            expires = now + self.expiry_seconds
         query = urlencode({"expires": expires, "signature": self.sign(method, key, expires)})
         return f"{self.base_url}/storage/{quote(key)}?{query}"
 
@@ -135,6 +162,14 @@ class LocalStorage(Storage):
 
     async def exists(self, key: str) -> bool:
         return self._path(key).is_file()
+
+    async def list_names(self, prefix: str) -> list[str]:
+        _check_prefix(prefix)
+        folder = self._path(prefix)
+        if not folder.is_dir():
+            return []
+        # A write in progress is a hidden temporary file (put_bytes).
+        return [entry.name for entry in folder.iterdir() if not entry.name.startswith(".")]
 
     async def sweep(self, prefix: str, older_than_seconds: int, must_contain: str) -> int:
         import time
@@ -223,6 +258,16 @@ class S3Storage(Storage):
                 return True
             except s3.exceptions.ClientError:
                 return False
+
+    async def list_names(self, prefix: str) -> list[str]:
+        _check_prefix(prefix)
+        names: list[str] = []
+        async with self._client() as s3:
+            paginator = s3.get_paginator("list_objects_v2")
+            async for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix, Delimiter="/"):
+                names += [p["Prefix"][len(prefix):].rstrip("/") for p in page.get("CommonPrefixes", [])]
+                names += [o["Key"][len(prefix):] for o in page.get("Contents", [])]
+        return names
 
     async def delete(self, key: str) -> None:
         async with self._client() as s3:

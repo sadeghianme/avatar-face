@@ -400,9 +400,6 @@ async def process_avatar(avatar_id: str) -> None:
             return
         avatar.status = AvatarStatus.processing
         await db.commit()
-        # The avatar's own motion files a re-detection replaced, deleted
-        # once the row naming their successors is committed.
-        stale: list[str] = []
 
         try:
             from app.models import AvatarKind
@@ -482,6 +479,17 @@ async def process_avatar(avatar_id: str) -> None:
             rig_key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/rig.json"
             thumb_key = write_thumbnail_key(avatar.org_id, avatar.id, thumb_type)
             await storage.put_bytes(rig_key, json.dumps(rig).encode(), "application/json")
+            if avatar.kind != AvatarKind.model3d:
+                # Re-detecting the same picture (Re-detect, a retry) moves
+                # the rig's points: the mouth kit's rest pose follows them,
+                # with no AI call. Under the avatar's edit lock, on the row
+                # as it is now, and committed on its own: this row was read
+                # before the detection and is written back after the layers,
+                # and a mouth edit in between must not be undone by it
+                # (services.mouth_kit.follow_redetection).
+                from app.services import mouth_kit
+
+                await mouth_kit.follow_redetection(avatar.org_id, avatar.id, rig["points"])
             await storage.put_bytes(thumb_key, thumb, thumb_type)
 
             avatar.rig_key = rig_key
@@ -489,13 +497,6 @@ async def process_avatar(avatar_id: str) -> None:
             avatar.status = AvatarStatus.ready
             avatar.error = None
             avatar.quality_note = quality_note
-            if avatar.kind != AvatarKind.model3d:
-                # Re-detecting the same picture (Re-detect, a retry) moves
-                # the rig's points: the mouth kit's rest pose follows them,
-                # with no AI call (services.mouth_kit).
-                from app.services import mouth_kit
-
-                stale = await mouth_kit.follow_points(avatar, storage, rig["points"])
 
             # Layer decomposition, photo avatars only. Optional by contract:
             # a failure (no segmenter, odd geometry) leaves a working
@@ -534,8 +535,6 @@ async def process_avatar(avatar_id: str) -> None:
             avatar.status = AvatarStatus.failed
             avatar.error = str(exc)[:1000]
         await db.commit()
-        for key in stale:
-            await storage.delete(key)
 
 
 async def _carry_crop_origin(avatar, storage, rig: dict) -> None:

@@ -92,6 +92,78 @@ async def test_s3_delete_prefix_lists_and_deletes_in_batches(monkeypatch):
         await storage.delete_prefix("orgs/o/avatars/1")
 
 
+async def test_list_names_is_one_level_of_a_folder(local):
+    for key in ("orgs/o/avatars/1/published/r3/rig.json", "orgs/o/avatars/1/published/r7/a.png",
+                "orgs/o/avatars/1/mouth-1.webp", "orgs/o/avatars/10/source.png"):
+        await local.put_bytes(key, b"x", "application/octet-stream")
+    assert sorted(await local.list_names("orgs/o/avatars/1/")) == ["mouth-1.webp", "published"]
+    assert sorted(await local.list_names("orgs/o/avatars/1/published/")) == ["r3", "r7"]
+    assert await local.list_names("orgs/o/avatars/2/") == []
+    with pytest.raises(ValueError):
+        await local.list_names("orgs/o/avatars/1")
+
+
+async def test_s3_list_names_asks_for_one_level(monkeypatch):
+    asked = []
+
+    class Paginator:
+        def paginate(self, **kwargs):
+            asked.append(kwargs)
+
+            async def gen():
+                yield {"CommonPrefixes": [{"Prefix": "orgs/o/avatars/1/published/r3/"}],
+                       "Contents": [{"Key": "orgs/o/avatars/1/published/stray.json"}]}
+                yield {"CommonPrefixes": [{"Prefix": "orgs/o/avatars/1/published/r7/"}]}
+
+            return gen()
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        def get_paginator(self, name):
+            return Paginator()
+
+    storage = S3Storage("https://s3", "k", "s", "bucket", "auto", 60)
+    monkeypatch.setattr(storage, "_client", lambda: Client())
+    names = await storage.list_names("orgs/o/avatars/1/published/")
+    assert sorted(names) == ["r3", "r7", "stray.json"]
+    assert asked == [{"Bucket": "bucket", "Prefix": "orgs/o/avatars/1/published/",
+                      "Delimiter": "/"}]
+
+
+async def test_a_published_files_url_is_the_same_for_every_page_view_of_the_hour(
+    local, monkeypatch
+):
+    """Every page view fetches the embed config and gets its files' URLs
+    from it; a published file's is the same within the window, so the
+    browser keeps the file, and valid for one to two windows. A draft's
+    stays new each time (its rig is rewritten in place)."""
+    import time as clock
+
+    from app.api.storage_routes import cache_control
+
+    local = LocalStorage(local.root, "http://testserver", "secret", 3600)
+    published = "orgs/o/avatars/1/published/r3/mouth-motion.json"
+    draft = "orgs/o/avatars/1/mouth-motion-ab.json"
+    now = 1_790_000_100
+    monkeypatch.setattr(clock, "time", lambda: now)
+    first = await local.presign_get(published)
+    first_draft = await local.presign_get(draft)
+    now += 1700
+    assert await local.presign_get(published) == first
+    assert await local.presign_get(draft) != first_draft
+    expires = int(first.split("expires=")[1].split("&")[0])
+    assert 3600 <= expires - 1_790_000_100 <= 7200 and expires % 3600 == 0
+    assert local.verify("GET", published, expires, first.split("signature=")[1])
+    assert cache_control(published, expires) == f"private, max-age={expires - now}"
+    assert cache_control(draft, expires) == "no-cache"
+    assert cache_control("orgs/o/avatars/1/source.png", expires) == "private, max-age=300"
+
+
 async def test_deleting_an_avatar_removes_every_file_it_ever_had(client, monkeypatch):
     """Crops, the pre-crop photo, undo history, thumbnails and every
     published revision — none of which a key column still points at."""

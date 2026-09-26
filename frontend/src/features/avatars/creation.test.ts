@@ -53,6 +53,9 @@ import {
   MAX_UPLOAD_BYTES,
   movedParts,
   mouthExpected,
+  finishNeedsAiConsent,
+  finishMouthStandard,
+  PUBLISH_STANDARD_LABEL,
   nameFromFile,
   normalizeCrop,
   pickMarks,
@@ -544,10 +547,14 @@ describe("strings", () => {
         ...FINISH_STAGES.map((stage) => `createFinishStage_${stage}`),
         ...FINISH_PHASES.map((phase) => `createFinishPhase_${phase}`),
         ...["shapes", "teeth"].map((phase) => `createFinishPhaseHint_${phase}`),
-        ...["done", "current", "pending"].map((state) => `createFinishPhaseState_${state}`),
+        ...["done", "current", "pending", "skipped"].map((state) => `createFinishPhaseState_${state}`),
         "mouthShapesCount",
         "adjustAutoStarted",
         "adjustAutoReady",
+        "adjustAutoStartedEyes",
+        "adjustAutoReadyEyes",
+        ...["Fix", "Place", "Statement", "Name"].map((what) => `createRetryAfter${what}`),
+        ...["createFixFirst", "createPlaceFirst", "createDepictionFirst", "createLooksRightHint", "createSaveHint"],
       ];
       assert.deepEqual(needed.filter((key) => !keys.has(key)), []);
     });
@@ -827,10 +834,29 @@ describe("step 5, listed", () => {
     assert.deepEqual(rows(finishRows(at("publishing"), true, seen("teeth"))), ["build:done", "teeth:done", "publish:current"]);
   });
   it("never ticks a mouth nobody saw being made", () => {
-    // Expected, but the server had no AI to make it with (its image model,
-    // the monthly limit): straight from the layers to publishing.
-    assert.deepEqual(rows(finishRows(at("publishing"), true, seen("copy", "rig", "layers"))), [
+    // Nothing of the mouth seen, and none expected: no mouth rows.
+    assert.deepEqual(rows(finishRows(at("publishing"), false, seen("copy", "rig", "layers"))), [
       "build:done", "publish:current",
+    ]);
+  });
+  it("never ticks a mouth that was not made: the server says so as it publishes", () => {
+    // The kit broke after two of its seven calls: straight to publishing,
+    // with the standard mouth. Neither the shapes nor their fitting is done.
+    assert.equal(finishMouthStandard(at(PUBLISH_STANDARD_LABEL)), true);
+    assert.equal(finishMouthStandard(at("publishing")), false);
+    assert.deepEqual(rows(finishRows(at(PUBLISH_STANDARD_LABEL), true, seen("layers", "shapes"))), [
+      "build:done", "shapes:skipped", "fit:skipped", "publish:current",
+    ]);
+    // Expected, but no AI was allowed after all (the monthly limit): the
+    // rows listed ahead are not left pending, nor ticked.
+    assert.deepEqual(rows(finishRows(at(PUBLISH_STANDARD_LABEL), true, seen("layers"))), [
+      "build:done", "shapes:skipped", "fit:skipped", "publish:current",
+    ]);
+    assert.deepEqual(rows(finishRows(at(PUBLISH_STANDARD_LABEL), false, seen("layers"))), [
+      "build:done", "publish:current",
+    ]);
+    assert.deepEqual(rows(finishRows(at(PUBLISH_STANDARD_LABEL), true, seen("teeth"))), [
+      "build:done", "teeth:skipped", "publish:current",
     ]);
   });
   it("leaves every row pending while queued, or at a stage it does not know", () => {
@@ -847,6 +873,21 @@ describe("step 5, listed", () => {
   });
   it("names every row it can list", () => {
     assert.deepEqual([...FINISH_PHASES], ["build", "shapes", "fit", "teeth", "publish"]);
+  });
+});
+
+describe("the AI statement, asked at the finish", () => {
+  it("for a person when AI is on and the member has not agreed to these words", () => {
+    assert.equal(finishNeedsAiConsent(creation(), null), true);
+  });
+  it("not when they have, nor while it is not known yet", () => {
+    assert.equal(finishNeedsAiConsent(creation(), "consent-1"), false);
+    assert.equal(finishNeedsAiConsent(creation(), undefined), false);
+  });
+  it("not when the organization turned AI off, nor for a line whose mouth is drawn", () => {
+    assert.equal(finishNeedsAiConsent(creation({ ai: ai({ enabled: false }) }), null), false);
+    assert.equal(finishNeedsAiConsent(creation({ face_type: "animal" }), null), false);
+    assert.equal(finishNeedsAiConsent(creation({ face_type: "cartoon" }), null), false);
   });
 });
 

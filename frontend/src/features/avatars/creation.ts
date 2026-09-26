@@ -197,7 +197,9 @@ export interface CreationAi {
 
 /** The server's offer of a touch-up nobody has to press for: a person whose
  * parted lips show their teeth (they would stay painted on the lips as the
- * avatar talks). Once per photo; the owner still chooses the result. */
+ * avatar talks), and whose eyes the same touch-up fixes when the check
+ * found them wanting too (`reasons`). Once per photo; the owner still
+ * chooses the result. */
 export interface AutoAdjust {
   mode: "touchup";
   image: StepId;
@@ -329,11 +331,17 @@ export function autoAdjustToStart(
 /** What building an avatar goes through, in order: its own words for each
  * (`createFinishStage_<stage>`), so the owner sees where the seconds go. A
  * person's mouth takes the longest of them: "shapes" is their teeth and
- * six mouth shapes, made by AI from the picture (counted, "3 of 6"), "fit"
- * the mouth fitted to them from those shapes, and "teeth" the teeth alone,
- * where the server cannot make the shapes (services.creations._own_mouth). */
+ * six mouth shapes, made by AI from the picture (counted, "3 of 7": the
+ * teeth photo and the six shapes), "fit" the mouth fitted to them, and
+ * "teeth" the teeth alone, where the server cannot make the shapes
+ * (services.creations._own_mouth). */
 export const FINISH_STAGES = ["copy", "rig", "layers", "shapes", "fit", "teeth", "publish"] as const;
 export type FinishStage = (typeof FINISH_STAGES)[number];
+
+/** The finish's last stage when a person's own mouth was not made after
+ * all (no AI allowed, or it failed): the stages seen before it do not say
+ * so (a kit that broke after its fourth shape goes straight to publishing). */
+export const PUBLISH_STANDARD_LABEL = "publishing with the standard mouth";
 
 // The labels services.creations._build_avatar reports its progress with
 // (job.report). They are the server's log words, not a contract of their
@@ -346,7 +354,14 @@ const FINISH_STAGE_LABELS: Readonly<Record<string, FinishStage>> = {
   "fitting the mouth": "fit",
   "making the teeth": "teeth",
   publishing: "publish",
+  [PUBLISH_STANDARD_LABEL]: "publish",
 };
+
+/** Is the finish publishing with the standard mouth instead of the
+ * person's own? */
+export function finishMouthStandard(job: CreationJob | null | undefined): boolean {
+  return finishStage(job) === "publish" && job?.progress?.label === PUBLISH_STANDARD_LABEL;
+}
 
 /** The stage a running finish is at, or null (another job, queued, done,
  * or a label from a newer server). */
@@ -380,6 +395,19 @@ export function mouthExpected(creation: Creation, consentId: string | null | und
   return creation.face_type === "human" && Boolean(creation.ai?.enabled) && typeof consentId === "string";
 }
 
+/**
+ * Must finishing this creation ask the member for the AI statement first?
+ * A person, whose own teeth and mouth shapes step 5 makes by AI when it may
+ * (the organization's switch on), and a member known not to have agreed
+ * under the words this page shows (null: never asked, or the words
+ * changed; unknown while it loads, when nothing is asked). Asked at the
+ * press that starts step 5, so nothing is sent without it and a member who
+ * says "Not now" gets the avatar with the standard mouth.
+ */
+export function finishNeedsAiConsent(creation: Creation, consentId: string | null | undefined): boolean {
+  return creation.face_type === "human" && Boolean(creation.ai?.enabled) && consentId === null;
+}
+
 /** The rows step 5 lists, in order (`createFinishPhase_<phase>`): copying,
  * rigging and layering are one ("build"); a person's mouth is "shapes"
  * (their teeth and mouth shapes, counted) then "fit", or "teeth" alone
@@ -400,8 +428,10 @@ const MOUTH_PHASES: readonly FinishPhase[] = ["shapes", "fit", "teeth"];
 
 export interface FinishRow {
   phase: FinishPhase;
-  state: "done" | "current" | "pending";
-  /** The current "shapes" row's count ("3 of 6"); null on every other. */
+  /** "skipped": a person's mouth that was not made after all (the finish
+   * publishes with the standard one): not done, and nothing to wait for. */
+  state: "done" | "current" | "pending" | "skipped";
+  /** The current "shapes" row's count ("3 of 7"); null on every other. */
   count: JobCount | null;
 }
 
@@ -414,11 +444,14 @@ export interface FinishRow {
  * What the server reports wins: a mouth stage it is at, or was seen at
  * (`seen`, the stages this page has watched go by), is listed whether
  * expected or not, and a teeth-only mouth replaces the shapes and their
- * fitting. Nothing is ticked that nobody saw happen: once the finish is
- * publishing, the mouth rows stay (done) only if a mouth stage was seen,
- * and are dropped otherwise, since the server may have had no AI to make
- * them with (the avatar's page then says why). A stage this page does not
- * know, or a queue, leaves every row pending: no stage, never a wrong one.
+ * fitting. Nothing is ticked that nobody saw happen, or that did not
+ * happen: once the finish is publishing, the server says whether the
+ * person's own mouth was made (finishMouthStandard). Made, the mouth rows
+ * seen go on as done (the fitting, however quick, came before publishing);
+ * not made (no AI allowed, or it failed), every mouth row listed is
+ * "skipped", never ticked. A mouth never seen nor expected is not listed.
+ * A stage this page does not know, or a queue, leaves every row pending:
+ * no stage, never a wrong one.
  */
 export function finishRows(
   job: CreationJob | null | undefined,
@@ -432,15 +465,23 @@ export function finishRows(
   if (current) phases.add(current);
   const mouthSeen = MOUTH_PHASES.some((phase) => phases.has(phase));
   const beforeMouth = current === null || current === "build";
+  const standard = finishMouthStandard(job);
   const order: FinishPhase[] = ["build"];
-  if (mouthSeen || (expected && beforeMouth)) {
+  if (mouthSeen || (expected && (beforeMouth || standard))) {
     order.push(...(phases.has("teeth") ? (["teeth"] as const) : (["shapes", "fit"] as const)));
   }
   order.push("publish");
   const at = current ? order.indexOf(current) : -1;
   return order.map((phase, i) => ({
     phase,
-    state: at === -1 || i > at ? "pending" : i < at ? "done" : "current",
+    state:
+      standard && MOUTH_PHASES.includes(phase)
+        ? "skipped"
+        : at === -1 || i > at
+          ? "pending"
+          : i < at
+            ? "done"
+            : "current",
     count: phase === "shapes" && i === at ? stageCount(job) : null,
   }));
 }
@@ -1174,6 +1215,9 @@ export const KNOWN_ERRORS: ReadonlySet<string> = new Set([
   "source_gone",
   "avatar_not_found",
   "not_a_photo",
+  // The avatar page's Retry, for an avatar step 5 is still preparing.
+  "avatar_preparing",
+  "image_missing",
 ]);
 
 export type Translate = (key: string, options?: Record<string, unknown>) => string;

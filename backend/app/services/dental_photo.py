@@ -5,8 +5,8 @@ The continuous mouth draws a person's own teeth from a photo of them
 dental-oral-surface.ts) cuts the upper and lower arches out of it with
 extractDentalLayers (dental-texture-model.ts) and throws DentalPhotoError
 unless the upper arch is wide, solid and shows enough of the central
-crowns. That error drops the whole avatar to the classic mouth, and the
-bundled-motion fallback reuses the same photo, so it fails again.
+crowns. That error drops the whole avatar to the classic mouth: only the
+motion has a fallback (the bundled one), the teeth photo has none.
 
 The backend therefore asks the embed's own question before it hands a photo
 on as the teeth photo: this module reproduces the extraction canvas (the

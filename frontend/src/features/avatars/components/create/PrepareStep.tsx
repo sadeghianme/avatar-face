@@ -26,7 +26,9 @@ function tabStore(): DraftStore | null {
  * make it (the member's consent, the organization's switch), their own
  * teeth and six mouth shapes are made from the chosen picture first and
  * the mouth is fitted to them: what gives the photo the Reference avatar's
- * quality. Nothing is asked here: the owner chose in steps 3 and 4.
+ * quality. Nothing is asked here: the AI statement, when the member had
+ * not agreed to the words in force, was asked at the press that opened
+ * this step (PointsStep), before anything was sent.
  *
  * The job's stages are listed in plain words (creation.finishRows), the
  * shapes counted as they are made, and what is said around the list
@@ -42,7 +44,12 @@ export function PrepareStep({ creation, mouthExpected }: { creation: Creation; m
   const job = creation.job;
   const seen = useSeenStages(job);
   const rows = finishRows(job, mouthExpected, seen);
-  const mouth = rows.find((row) => row.phase === "shapes" || row.phase === "teeth")?.phase ?? null;
+  // The person's own mouth was not made after all: said once, and no word
+  // around the list claims the AI is still making it.
+  const standard = rows.some((row) => row.state === "skipped");
+  const mouth = standard
+    ? null
+    : rows.find((row) => row.phase === "shapes" || row.phase === "teeth")?.phase ?? null;
   // The finish answer's warnings, kept for this tab (PointsStep); a tab that
   // never saw the answer shows what the photo check says it was.
   const kept = creation.avatar_id ? finishNoticeFor(tabStore(), creation.avatar_id) : null;
@@ -55,6 +62,7 @@ export function PrepareStep({ creation, mouthExpected }: { creation: Creation; m
           {t(mouth === "teeth" ? "createPrepareTeeth" : "createPrepareMouth")}
         </p>
       )}
+      {standard && <p className="text-sm text-gray-600 dark:text-gray-300">{t("createPrepareStandard")}</p>}
       {job && isJobActive(job) ? (
         <JobProgress job={job} rows={rows} />
       ) : (

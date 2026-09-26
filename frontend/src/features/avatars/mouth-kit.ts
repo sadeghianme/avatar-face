@@ -7,7 +7,7 @@
  * POST …/mouth-kit, then GET the same path until it ends. What a kit is
  * made of comes with the avatar (`mouth.kit`): how many of its six shapes
  * the AI made from the photo, why the others are the standard ones fitted
- * to the face, and whether its "ee" became the teeth.
+ * to the face, and whether its teeth photo became the avatar's.
  *
  * Framework-free with type-only imports, like creation.ts, so the rules are
  * tested with `node --test`.
@@ -199,11 +199,11 @@ export function canCompareShapes(mouth: Avatar["mouth"]): boolean {
 }
 
 /**
- * Why the kit's "ee" is not the teeth, when the teeth on show do not say
- * so already, or null: the owner's own photo was kept (the kit brought
- * shapes only), the photo was removed since, or teeth an AI made before
- * were kept because the new "ee" could not be used. Standard teeth with a
- * note say it in the note.
+ * Why the kit's teeth photo is not the avatar's, when the teeth on show do
+ * not say so already, or null: the owner's own photo was kept (the kit
+ * brought shapes only), the photo was removed since, or teeth an AI made
+ * before were kept because the new photo could not be used. Standard teeth
+ * with a note say it in the note.
  */
 export function kitTeethReason(mouth: Avatar["mouth"], teeth: TeethView | null): Reason | null {
   const kit = mouth?.kit;
@@ -213,13 +213,34 @@ export function kitTeethReason(mouth: Avatar["mouth"], teeth: TeethView | null):
 }
 
 /** The kit's teeth reasons with a sentence of their own
- * (`mouthKitTeeth_<code>`); any other is "not used as the teeth", with its
- * reason (reasonText). */
+ * (`mouthKitTeeth_<code>`); any other is "not used", with its reason
+ * (reasonText; for a photo that failed a check, that check's). */
 export const KIT_TEETH_CODES = ["owner_photo", "teeth_removed"] as const;
 
 export function kitTeethText(t: Translate, reason: Reason): string {
   if ((KIT_TEETH_CODES as readonly string[]).includes(reason.code)) return t(`mouthKitTeeth_${reason.code}`);
-  return t("mouthKitTeethNotUsed", { reason: reasonText(t, reason) });
+  return t("mouthKitTeethNotUsed", { reason: reasonText(t, checkOf(reason)) });
+}
+
+/** The check a reason is about: a teeth photo that did not pass one names
+ * it (`reason.reason`), when it has words here; else the reason itself. */
+function checkOf(reason: Reason): Reason {
+  const check = reason.code === "teeth_photo_rejected" ? reason.reason : null;
+  return check && REASONS.has(check.code) ? check : reason;
+}
+
+/**
+ * A teeth note in the owner's words: its own sentence
+ * (`mouthTeethNote_<code>`, `noteKey`), and for a teeth photo that failed
+ * a check, which check (`mouthTeethNote_teeth_photo_rejected_because`): the
+ * lips too close is not the head moved. The server's sentence for a note
+ * nothing here words.
+ */
+export function teethNoteText(t: Translate, note: Reason, noteKey: (code: string) => string | null): string {
+  const check = checkOf(note);
+  if (check !== note) return t("mouthTeethNote_teeth_photo_rejected_because", { reason: reasonText(t, check) });
+  const key = noteKey(note.code);
+  return key ? t(key) : `${t("mouthTeethGeneric")} ${note.detail}`;
 }
 
 // --- Reasons and failures -------------------------------------------------------------
@@ -238,6 +259,7 @@ export const SHAPE_REASON_CODES = [
   "imagegen_unavailable",
   "image_limit_reached",
   "third_party_ai_disabled",
+  "consent_not_recorded",
   "aspect_changed",
   "check_failed",
   "unreadable_result",
@@ -252,9 +274,9 @@ export const SHAPE_REASON_CODES = [
   "pose_not_reached",
 ] as const;
 
-/** Every reason with a clause: a shape's, and why the kit's "ee" is not
- * the teeth (it shows too little of the upper teeth, or failed a check
- * that would have been passed by a picture that changed only the mouth). */
+/** Every reason with a clause: a shape's, and why the kit's teeth photo is
+ * not the avatar's (it shows too little of the upper teeth, or it did not
+ * pass its checks). */
 export const MOUTH_REASON_CODES = [...SHAPE_REASON_CODES, "mouth_teeth_unclear", "teeth_photo_rejected"] as const;
 
 const SHAPE_REASONS: ReadonlySet<string> = new Set(SHAPE_REASON_CODES);
@@ -269,9 +291,10 @@ export function reasonText(t: Translate, reason: Reason | null): string {
 // What the teeth alone can be refused for: worded as the teeth, since no
 // shape was asked for (mouthErr_generate_<code>, mouthErr_<code>).
 const TEETH_ALONE: ReadonlySet<string> = new Set([
-  "safety_refused", "no_image", "provider_error", "mouth_teeth_unclear", "reference_no_face",
-  "reference_mouth_closed", "reference_face_small", "no_face_for_teeth", "face_turned",
-  "landmarks_unavailable", "imagegen_unavailable", "image_limit_reached", "third_party_ai_disabled",
+  "safety_refused", "no_image", "provider_error", "timeout", "mouth_teeth_unclear",
+  "reference_no_face", "reference_mouth_closed", "reference_face_small", "no_face_for_teeth",
+  "face_turned", "landmarks_unavailable", "imagegen_unavailable", "image_limit_reached",
+  "third_party_ai_disabled", "consent_not_recorded",
 ]);
 
 /** A failed kit job's codes with a sentence of their own
@@ -380,6 +403,5 @@ export function factText(t: Translate, fact: PreparedFact, noteKey: (code: strin
   if (view.kind === "ai") return t("finishNoticeTeeth_ai");
   if (view.kind === "upload") return t("finishNoticeTeeth_upload");
   if (!view.note) return t("mouthTeethGeneric");
-  const key = noteKey(view.note.code);
-  return key ? t(key) : `${t("mouthTeethGeneric")} ${view.note.detail}`;
+  return teethNoteText(t, view.note, noteKey);
 }

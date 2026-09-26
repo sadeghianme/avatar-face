@@ -1045,8 +1045,9 @@ ADJUST_CALLS = {
 # What the wizard may fix without being asked: a person whose lips are
 # parted over their teeth. Those teeth are pixels of the photo, painted on
 # the lips, so the photographic mouth shows them on closed lips as it talks;
-# a touch-up closes the lips and nothing else. Everything else the check
-# finds (eyes, pose, light) stays a recommendation the owner acts on.
+# a touch-up closes the lips (and fixes the eyes when the check found them
+# wanting too, as it recommends). Nothing else the check finds (eyes alone,
+# pose, light) starts by itself: it stays a recommendation the owner acts on.
 AUTO_ADJUST_REASON = "teeth_showing"
 
 
@@ -1063,17 +1064,19 @@ def auto_adjust_of(creation: Creation) -> dict | None:
     """{mode, image, reasons}: the touch-up the wizard may start by itself
     on the current image, or None.
 
-    Only on a person's photo whose check recommends a touch-up for the
-    parted lips alone: with the eyes flagged too (closed, half closed,
-    looking away) a touch-up would redraw eyes the owner never asked about,
-    so it stays the pre-selected recommendation the owner starts. Only
-    while a round is left, and at most once per source photo: never on a
-    picture an AI already made (the result is the owner's to judge, even if
-    its lips are still parted), nor on a photo the owner has already
-    adjusted, nor again on one it was started for (`auto_adjusted`, the
-    source photos it ran on), however it is re-cropped since. The
-    organization's switch, the server's image model and the member's
-    consent are the caller's to check.
+    Only on a person's photo whose check recommends a touch-up because the
+    teeth show between parted lips: the check found a need the photographic
+    mouth cannot live with, and the owner's flow runs such a fix by itself
+    on the member's remembered consent. With the eyes flagged too (closed,
+    half closed, looking away) the same touch-up closes the lips and fixes
+    the eyes, which the check recommends as well; the reasons say so, and
+    the owner still chooses the result or keeps the photo. Only while a
+    round is left, and at most once per source photo: never on a picture an
+    AI already made (the result is the owner's to judge, even if its lips
+    are still parted), nor on a photo the owner has already adjusted, nor
+    again on one it was started for (`auto_adjusted`, the source photos it
+    ran on), however it is re-cropped since. The organization's switch, the
+    server's image model and the member's consent are the caller's to check.
     """
     from app.services.photo_adjust import ROUNDS_PER_CREATION, TOUCHUP
 
@@ -1084,7 +1087,7 @@ def auto_adjust_of(creation: Creation) -> dict | None:
     if (
         not recommendation
         or recommendation["mode"] != TOUCHUP
-        or set(recommendation["reasons"]) != {AUTO_ADJUST_REASON}
+        or AUTO_ADJUST_REASON not in recommendation["reasons"]
     ):
         return None
     current = current_step(steps)
@@ -1434,7 +1437,15 @@ async def _generate(job: Job, params: dict) -> None:
 async def _finish(job: Job, params: dict) -> None:
     """Build the avatar from the confirmed marks, publish it, and let the
     creation go. Any failure puts the creation back to draft and removes
-    the half-built avatar, so pressing Finish again starts clean."""
+    the half-built avatar, so pressing Finish again starts clean.
+
+    No database connection is held while the avatar is built: a person's
+    mouth waits on the image model for up to minutes (services.mouth_kit),
+    and the connection pool is shared with every customer's widget. The two
+    rows are read, the build works on them detached, and what it changed
+    is written in one short transaction at the end, which also finishes the
+    creation. An avatar row deleted meanwhile fails that write (the UPDATE
+    matches nothing) rather than being written again."""
     storage = get_storage()
     async with get_session_factory()() as db:
         creation = (
@@ -1448,29 +1459,38 @@ async def _finish(job: Job, params: dict) -> None:
         ).scalar_one_or_none()
         if creation is None:
             return
-        # Read now: a rollback expires the instance, and an async session
-        # cannot lazily reload it inside the handler below.
-        org_id, creation_id, avatar_id = creation.org_id, creation.id, creation.avatar_id
-        generated = (step_items(creation.steps).get("original") or {}).get("generated")
         avatar = (
-            await db.execute(select(Avatar).where(Avatar.id == avatar_id, Avatar.org_id == org_id))
+            await db.execute(
+                select(Avatar).where(
+                    Avatar.id == creation.avatar_id, Avatar.org_id == creation.org_id
+                )
+            )
         ).scalar_one_or_none()
-        try:
-            if avatar is None:
-                raise RuntimeError("the avatar being finished is gone")
-            await _build_avatar(job, creation, avatar, params, storage)
+    org_id, creation_id, avatar_id = creation.org_id, creation.id, creation.avatar_id
+    generated = (step_items(creation.steps).get("original") or {}).get("generated")
+    try:
+        if avatar is None:
+            raise RuntimeError("the avatar being finished is gone")
+        await _build_avatar(job, creation, avatar, params, storage)
+        async with get_session_factory()() as db:
+            # The build's changes, flushed onto the avatar's row as an
+            # UPDATE of what was read (autoflush, before the statement below).
+            db.add(avatar)
             result = await db.execute(
                 update(Creation)
                 .where(Creation.id == creation_id, Creation.status == CreationStatus.finishing)
-                .values(status=CreationStatus.finished, job=job_record(job, DONE))
+                .values(
+                    status=CreationStatus.finished,
+                    job=job_record(job, DONE),
+                    consent_ids=creation.consent_ids,
+                )
             )
             if result.rowcount != 1:
                 raise RuntimeError("the creation left finishing while it was built")
             await db.commit()
-        except Exception:
-            await db.rollback()
-            await _undo_finish_retrying(org_id, creation_id, avatar_id)
-            raise
+    except Exception:
+        await _undo_finish_retrying(org_id, creation_id, avatar_id)
+        raise
     # The avatar has its own copies now. Deleted after the commit, so a crash
     # in between leaves files the retention sweep removes, never an avatar
     # pointing at nothing.
@@ -1561,7 +1581,7 @@ async def _build_avatar(
         # working single-photo avatar.
         avatar.has_layers = await store_layers(avatar, storage, image, rig["face_box"])
 
-    await _own_mouth(job, creation, avatar, image, rig, storage)
+    mouth_made = await _own_mouth(job, creation, avatar, image, rig, storage)
 
     warnings = (anchors.get("validation") or {}).get("warnings") or []
     avatar.rig_key = rig_key
@@ -1570,20 +1590,30 @@ async def _build_avatar(
     avatar.status = AvatarStatus.ready
     avatar.error = None
     avatar.quality_note = warnings[0]["detail"] if warnings else None
-    job.report(0.92, "publishing")
+    # Step 5 lists the person's mouth before publishing: whether it was made
+    # is said here, since the stages it saw do not tell (a kit that broke
+    # after its fourth shape went straight to publishing).
+    job.report(0.92, PUBLISH_LABEL if mouth_made is not False else PUBLISH_STANDARD_LABEL)
     await publish(avatar, storage)
 
 
 TEETH_FAILED = error_record(
     "teeth_failed", "The teeth could not be made, so this avatar uses standard teeth"
 )
+# The finish's last stage, and the same when a person's mouth was not made
+# after all (no AI allowed, or it failed): the standard teeth and shapes.
+PUBLISH_LABEL = "publishing"
+PUBLISH_STANDARD_LABEL = "publishing with the standard mouth"
 
 
 async def _own_mouth(
     job: Job, creation: Creation, avatar: Avatar, image: bytes, rig: dict, storage
-) -> None:
+) -> bool | None:
     """The mouth a new avatar speaks with, set before its first publish:
-    the wizard's last step, "Preparing your avatar".
+    the wizard's last step, "Preparing your avatar". True when the person's
+    own mouth was made (some of their shapes, or their teeth), False when a
+    person got the standard one, None for a line that has no photographic
+    mouth.
 
     A person gets the photographic mouth (services.mouth_photo.default_config;
     every other line keeps the classic one, mouth_config null) and, when AI
@@ -1591,48 +1621,55 @@ async def _own_mouth(
     the monthly limit, the finishing member's current consent), the quality
     the Reference avatar has: their own performance kit (services.mouth_kit)
     from `image`, the picture just chosen, and the rig's 478 points the
-    owner just confirmed. That is their own six mouth shapes, the "ee" as
-    their teeth when the embed would draw it, and the mouth profile fitted
-    to them. Where the kit cannot be made on this server at all (no face
-    detector for its registration; nothing was sent), the single "ee" photo
-    is made instead (_single_teeth), so a person can still get their teeth.
-    Anything short of that (no consent, AI off, the limit, a crash)
-    publishes with generic teeth and the bundled motion, and records why in
-    the teeth note. Never fails the finish: the avatar is worth having
-    without them.
+    owner just confirmed. That is their own six mouth shapes, their teeth
+    photo when the embed would draw it, and the teeth fitted to it. Where
+    the kit cannot be made on this server at all (no face detector for its
+    registration; nothing was sent), the single "ee" photo is made instead
+    (_single_teeth), so a person can still get their teeth. Anything short
+    of that (no consent, AI off, the limit, a crash) publishes with generic
+    teeth and the bundled motion, and records why in the teeth note. Never
+    fails the finish: the avatar is worth having without them.
 
-    The consent that lets the picture go is recorded on the avatar and the
-    creation as the first picture is sent, not with the result: a refusal,
-    a rejected answer or a provider error still sent a photo, and an audit
-    must find what allowed it. The calls wait outside the runner's slot
-    (JobRunner.outside_slot), so a finish waiting on Google never holds
-    another person's upload queued.
+    The consent that lets the picture go is recorded on the creation, for
+    good, before the first picture is sent (and on the avatar, which this
+    finish writes): a refusal, a rejected answer or a provider error still
+    sent a photo, and a finish that fails afterwards, or a restart that
+    interrupts it, deletes the half-built avatar and rolls nothing back of
+    what was sent, so an audit must still find what allowed it. The calls
+    wait outside the runner's slot (JobRunner.outside_slot), so a finish
+    waiting on Google never holds another person's upload queued.
     """
     from app.services import consent, mouth_kit, mouth_photo, performance_kit
 
     config = mouth_photo.default_config(avatar.face_type)
     if config is None:
-        return
+        return None
     avatar.mouth_config = json.dumps(config)
 
-    def standard(note: dict) -> None:
+    def standard(note: dict) -> bool:
         # Generic teeth and the bundled motion, and why.
         avatar.mouth_config = json.dumps(
             {**config, "teeth": mouth_photo.generic_teeth_record(note)}
         )
+        return False
 
     try:
         consent_id = await _ai_allowed(avatar)
     except mouth_photo.TeethFailure as exc:
         logger.info("finish %s: no AI mouth (%s)", job.id, exc.code)
-        standard(exc.note())
-        return
+        return standard(exc.note())
+    except Exception:
+        # Not knowing whether AI may make the mouth (the database, say) is
+        # not a reason to lose the avatar.
+        logger.exception("finish %s: could not tell whether AI may make the mouth", job.id)
+        return standard(TEETH_FAILED)
 
     async def sending() -> None:
+        await _record_finish_consent(creation, consent_id)
         avatar.consent_ids = consent.with_consent(avatar.consent_ids, consent_id)
         creation.consent_ids = consent.with_consent(creation.consent_ids, consent_id)
 
-    job.report(0.6, mouth_kit.SHAPES_LABEL, count=(0, mouth_kit.SHAPE_COUNT))
+    job.report(0.6, mouth_kit.SHAPES_LABEL, count=(0, mouth_kit.SHAPE_COUNT + 1))
     try:
         result = await mouth_kit.make(
             avatar.org_id, image, rig["points"], job=job, on_first_send=sending,
@@ -1640,13 +1677,11 @@ async def _own_mouth(
         )
     except (performance_kit.KitUnavailable, ValueError) as exc:
         logger.info("finish %s: no mouth kit on this server (%s); the teeth alone", job.id, exc)
-        await _single_teeth(job, avatar, image, storage, sending)
-        return
+        return await _single_teeth(job, avatar, image, storage, sending)
     except Exception:
         # Every call it sent was metered as it ended (mouth_kit.CallGuard).
         logger.exception("finish %s: making the mouth kit failed", job.id)
-        standard(TEETH_FAILED)
-        return
+        return standard(TEETH_FAILED)
     job.report(0.87, mouth_kit.FIT_LABEL)
     ai_edited = avatar.ai_edited
     try:
@@ -1654,14 +1689,43 @@ async def _own_mouth(
     except Exception:
         logger.exception("finish %s: storing the mouth kit failed", job.id)
         avatar.ai_edited = ai_edited
-        standard(TEETH_FAILED)
+        return standard(TEETH_FAILED)
+    kit = json.loads(avatar.mouth_config)["kit"]
+    return kit["generated"] > 0 or bool(kit["teeth"]["used"])
 
 
-async def _single_teeth(job: Job, avatar: Avatar, image: bytes, storage, sending) -> None:
+async def _record_finish_consent(creation: Creation, consent_id: str) -> None:
+    """The consent that lets a finish's pictures go, on the creation's row
+    and committed, before the first of them leaves: the finish's own write
+    comes minutes later, or never (a failure deletes the half-built avatar
+    and puts the creation back to draft; a restart interrupts it). Raises
+    when it cannot be recorded, and then nothing is sent
+    (mouth_kit.CallGuard)."""
+    from app.services import consent
+
+    async with get_session_factory()() as db:
+        stored = (
+            await db.execute(
+                select(Creation.consent_ids).where(
+                    Creation.id == creation.id, Creation.org_id == creation.org_id
+                )
+            )
+        ).scalar_one_or_none()
+        result = await db.execute(
+            update(Creation)
+            .where(Creation.id == creation.id, Creation.org_id == creation.org_id)
+            .values(consent_ids=consent.with_consent(stored, consent_id))
+        )
+        if result.rowcount != 1:
+            raise RuntimeError("the creation being finished is gone")
+        await db.commit()
+
+
+async def _single_teeth(job: Job, avatar: Avatar, image: bytes, storage, sending) -> bool:
     """A person's teeth alone: an "ee" photo the image model makes from
     `image`, admitted exactly like an uploaded mouth photo, when the kit
     cannot be made. Anything short of it publishes the generic teeth with
-    the reason in the teeth note."""
+    the reason in the teeth note. True when the teeth were made."""
     from app.services import mouth_photo
 
     config = mouth_photo.default_config(avatar.face_type) or {}
@@ -1681,9 +1745,10 @@ async def _single_teeth(job: Job, avatar: Avatar, image: bytes, storage, sending
     else:
         # AI made part of what visitors see: the disclosure says so.
         avatar.ai_edited = mouth_photo.with_ai_teeth(avatar.ai_edited, made.model)
-        return
+        return True
     config["teeth"] = mouth_photo.generic_teeth_record(note)
     avatar.mouth_config = json.dumps(config)
+    return False
 
 
 async def _ai_allowed(avatar: Avatar) -> str:
@@ -1730,7 +1795,8 @@ async def _teeth_consent(avatar: Avatar) -> str:
     if agreed is None or PROVIDER not in (agreed.providers or []):
         raise TeethFailure(
             "no_ai_consent",
-            "You have not agreed to send photos to Google, so standard teeth are used",
+            "AI was not used: you have not agreed to the current statement on sending photos "
+            "to Google, so standard teeth are used",
             403,
         )
     return agreed.id

@@ -62,19 +62,20 @@ logger = logging.getLogger("liveface.avatars")
 
 
 async def _sign_motion(result: Any) -> None:
-    """Sign the draft motion of every avatar in `result` (one, or a list)
-    onto the instance, for its `mouth.motion_url` (Avatar.mouth)."""
+    """Sign the draft motion of `result`, when it is one avatar, onto the
+    instance, for its `mouth.motion_url` (Avatar.mouth). A list is left
+    unsigned (motion_url null): the avatar list shows no mouth, and signing
+    each would cost a storage round trip per avatar (a HEAD and a presign
+    each, on S3) for a page that never plays one."""
     from app.services.mouth import load as load_mouth, motion_url
 
-    storage = get_storage()
-    for avatar in result if isinstance(result, list) else [result]:
-        if isinstance(avatar, Avatar) and getattr(avatar, "signed_motion_url", None) is None:
-            avatar.signed_motion_url = await motion_url(load_mouth(avatar.mouth_config), storage)
+    if isinstance(result, Avatar) and getattr(result, "signed_motion_url", None) is None:
+        result.signed_motion_url = await motion_url(load_mouth(result.mouth_config), get_storage())
 
 
 class _SignedMouthRoute(APIRoute):
-    """A route whose avatars carry their draft motion's presigned URL
-    (AvatarOut.mouth.motion_url), whichever route answers.
+    """A route whose avatar carries its draft motion's presigned URL
+    (AvatarOut.mouth.motion_url), whichever route answers with one.
 
     Presigning is async; AvatarOut reads the ORM object's `mouth` property,
     which is not. So the URL is signed onto the instance after the route
@@ -82,7 +83,7 @@ class _SignedMouthRoute(APIRoute):
     changed something else (a slider, a rename) would answer with a mouth
     without its motion, and a dashboard merging that answer into what it
     shows would preview the bundled motion while visitors get the avatar's
-    own."""
+    own. The list (GET /avatars) is not signed (_sign_motion)."""
 
     def __init__(self, path: str, endpoint: Callable[..., Awaitable[Any]], **kwargs: Any):
         @functools.wraps(endpoint)
@@ -253,10 +254,17 @@ async def confirm_uploaded(
 async def retry_rig(
     avatar_id: str, ctx: OrgMember, db: DB, background: BackgroundTasks
 ) -> Avatar:
-    """Re-enqueue the rig job (used by the stall-detection UI)."""
+    """Re-enqueue the rig job (used by the stall-detection UI). Not for an
+    avatar the creation wizard is still preparing (409 avatar_preparing):
+    its finish job builds it, and there is nothing of it to retry yet."""
     avatar = await _get_avatar(db, ctx.org.id, avatar_id)
     if avatar.status == AvatarStatus.ready:
         raise Conflict409("Avatar is already ready", code="already_processed")
+    if await _preparing_creation(db, avatar) is not None:
+        raise Conflict409(
+            "This avatar is still being prepared from its photo; it opens when it is ready",
+            code="avatar_preparing",
+        )
     if not avatar.image_key or not await get_storage().exists(avatar.image_key):
         raise Validation422("Image has not been uploaded yet", code="image_missing")
     avatar.status = AvatarStatus.pending
@@ -557,8 +565,9 @@ async def undo_edit(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
                 after = _json.loads(restored)
             except ValueError:
                 after = None
-            # Undoing a crop puts another picture back (the mouth kit goes);
-            # undoing a background change the same one (it stays).
+            # Undoing a crop puts the whole picture back, the same face
+            # elsewhere in it (the mouth kit follows); undoing a background
+            # change the same rig (it stays).
             stale = await mouth_kit.follow_rig(avatar, storage, before, after)
 
     avatar.edit_history = _json.dumps(history)
@@ -616,8 +625,8 @@ async def crop_avatar(
         await _rebuild_thumbnail(avatar, storage)
         await _uncrop_rig(avatar, storage, cropped_keys)
         await _rebuild_layers(avatar, storage)
-        # Another picture than the one the mouth kit was made from.
-        stale = mouth_kit.drop(avatar)
+        # The same face, back in the whole picture: the mouth kit follows it.
+        stale = await _kit_follows_rig(avatar, storage)
         mark_dirty(avatar)
         await db.commit()
         for key in stale:
@@ -681,14 +690,31 @@ async def crop_avatar(
             await write_fit_base(storage, base_key, move_fit_base(base, left, top, rig))
     await _rebuild_thumbnail(avatar, storage)
     await _rebuild_layers(avatar, storage)
-    # A new picture: the mouth kit belonged to the one before. Its teeth
-    # photo stays (registered by its own landmarks, whatever the portrait).
-    stale = mouth_kit.drop(avatar)
+    # The same face's pixels, translated: the mouth kit follows the moved
+    # rig (its teeth photo is registered by its own landmarks anyway).
+    stale = await _kit_follows_rig(avatar, storage)
     mark_dirty(avatar)
     await db.commit()
     for key in stale:
         await storage.delete(key)
     return avatar
+
+
+async def _kit_follows_rig(avatar: Avatar, storage) -> list[str]:
+    """The mouth kit moved onto the rig now in place after a crop or its
+    reset (mouth_kit.follow_points): a crop cuts the same pixels at whole
+    pixels, so the kit is the face's still, only elsewhere in the picture.
+    Returns the keys to delete after the commit."""
+    import json as _json
+
+    if not avatar.rig_key:
+        return []
+    try:
+        rig = _json.loads(await storage.get_bytes(avatar.rig_key))
+    except Exception:
+        logger.exception("rig read failed for avatar %s", avatar.id)
+        return []
+    return await mouth_kit.follow_points(avatar, storage, rig["points"], rig["image_size"])
 
 
 def _move_rig(rig: dict, left: float, top: float, size: tuple[int, int]) -> dict:
@@ -1031,12 +1057,17 @@ async def publish_avatar(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
 async def discard_avatar_draft(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
     """Throw the draft away and go back to what is published."""
     avatar = await _get_avatar(db, ctx.org.id, avatar_id)
-    if not await discard_draft(avatar, get_storage()):
+    storage = get_storage()
+    discarded = await discard_draft(avatar, storage)
+    if discarded is None:
         raise Conflict409(
             "This avatar has never been published, so there is nothing to go back to",
             code="never_published",
         )
     await db.commit()
+    # The discarded draft's mouth files, which nothing names any more.
+    for key in discarded:
+        await storage.delete(key)
     return avatar
 
 
@@ -1085,6 +1116,26 @@ async def rig_reset(
     return avatar
 
 
+async def _preparing_creation(db: DB, avatar: Avatar) -> str | None:
+    """The creation whose finish is building `avatar` (the wizard's step 5,
+    "Preparing your avatar"), while it does; else None. Its row exists from
+    the moment Finish is pressed, listed as processing, with no picture
+    until the finish commits."""
+    from app.models import Creation, CreationStatus
+
+    if avatar.status == AvatarStatus.ready:
+        return None
+    return (
+        await db.execute(
+            select(Creation.id).where(
+                Creation.org_id == avatar.org_id,
+                Creation.avatar_id == avatar.id,
+                Creation.status == CreationStatus.finishing,
+            )
+        )
+    ).scalar_one_or_none()
+
+
 @router.get("/{avatar_id}", response_model=AvatarDetail)
 async def get_avatar_detail(avatar_id: str, ctx: OrgMember, db: DB) -> AvatarDetail:
     avatar = await _get_avatar(db, ctx.org.id, avatar_id)
@@ -1093,6 +1144,7 @@ async def get_avatar_detail(avatar_id: str, ctx: OrgMember, db: DB) -> AvatarDet
     # route class.
     await _sign_motion(avatar)
     detail = AvatarDetail.model_validate(avatar)
+    detail.preparing_creation_id = await _preparing_creation(db, avatar)
     if avatar.image_key and await storage.exists(avatar.image_key):
         detail.image_url = await storage.presign_get(avatar.image_key)
         if avatar.kind == AvatarKind.model3d:
@@ -1144,7 +1196,7 @@ async def upload_mouth_photo(avatar_id: str, file: UploadFile, ctx: OrgMember, d
     # The owner's own teeth replace any the AI made: the mouth is no longer
     # AI-made, and the disclosure stops saying so (from the next Publish).
     avatar.ai_edited = mouth_photo.without_ai_teeth(avatar.ai_edited)
-    mouth_kit.teeth_replaced(avatar, mouth_kit.OWNER_PHOTO)
+    await mouth_kit.teeth_changed(avatar, storage, mouth_kit.OWNER_PHOTO)
     mark_dirty(avatar)
     await db.commit()
     for key in previous:
@@ -1241,7 +1293,7 @@ async def remove_mouth_photo(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
     avatar.mouth_config = _json.dumps(config)
     # Teeth the AI made are gone, and so is their disclosure (next Publish).
     avatar.ai_edited = without_ai_teeth(avatar.ai_edited)
-    mouth_kit.teeth_replaced(avatar, mouth_kit.TEETH_REMOVED)
+    await mouth_kit.teeth_changed(avatar, storage, mouth_kit.TEETH_REMOVED)
     mark_dirty(avatar)
     await db.commit()
     return avatar

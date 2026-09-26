@@ -174,12 +174,14 @@ async def test_a_closed_mouth_finishes_without_warnings(client, faces):
 # --- once per photo, and only for the lips -----------------------------------------------
 
 
-async def test_parted_lips_with_eyes_to_fix_too_stay_the_owners_choice(
+async def test_parted_lips_with_eyes_to_fix_too_are_touched_up_by_themselves(
     client, faces, images, monkeypatch
 ):
-    """A touch-up redraws the eyes as well as the lips. With the eyes
-    flagged too (here looking away), it would invent eyes the owner never
-    asked about: it stays the pre-selected recommendation they start."""
+    """The check found the teeth showing between parted lips, which the
+    photographic mouth cannot live with, and the eyes looking away. The
+    touch-up it recommends does both, and starts by itself on the member's
+    remembered consent like any required fix; the reasons say what it
+    fixes, and the owner still chooses the result."""
     from tests.test_photo_analysis import looking
 
     monkeypatch.setitem(CHANGES, "lips_and_gaze", lambda p: with_mouth(looking(p, 0.6), 0.07))
@@ -188,12 +190,16 @@ async def test_parted_lips_with_eyes_to_fix_too_stay_the_owners_choice(
     recommendation = body["analysis"]["recommendation"]
     assert recommendation["mode"] == "touchup"
     assert recommendation["reasons"] == ["gaze_off_camera", "teeth_showing"]
-    assert body["ai"]["suggested"] == ["touchup"], "pre-selected for the owner"
+    assert body["ai"]["auto_adjust"] == {
+        "mode": "touchup", "image": "original", "reasons": ["gaze_off_camera", "teeth_showing"],
+    }
+    started = await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
+                            auto=True, count=1)
+    assert started.status_code == 202, started.text
+    body = await _get(client, headers, base)
+    assert body["job"]["state"] == "done" and len(images.calls) == 1
+    assert body["current"] == "original", "offered, never chosen"
     assert body["ai"]["auto_adjust"] is None
-    response = await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                             auto=True)
-    assert response.status_code == 409 and response.json()["code"] == "auto_adjust_not_applicable"
-    assert images.calls == []
 
 
 async def test_the_offer_is_once_per_photo_however_it_is_cropped(client, teeth, images):

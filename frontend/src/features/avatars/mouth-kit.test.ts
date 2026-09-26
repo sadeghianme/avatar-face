@@ -35,6 +35,7 @@ import {
   shapesLabel,
   shapesView,
   standardShapeText,
+  teethNoteText,
   WHOLE_MOUTH_CODES,
 } from "./mouth-kit.ts";
 import { mouthErrorKey, teethNoteKey, teethView } from "./teeth.ts";
@@ -275,6 +276,32 @@ describe("the kit's teeth", () => {
     assert.equal(kitTeethText(t, reason("teeth_removed")), "mouthKitTeeth_teeth_removed");
   });
 
+  it("names the check a teeth photo failed, in the note and in the kit's own words", () => {
+    // "Rejected" alone would not say whether the lips were too close or
+    // the head moved: the server names the check it failed.
+    const failed = { ...reason("teeth_photo_rejected"), reason: reason("head_moved") };
+    assert.equal(
+      teethNoteText(t, failed, teethNoteKey),
+      'mouthTeethNote_teeth_photo_rejected_because{"reason":"mouthReason_head_moved"}'
+    );
+    assert.equal(
+      kitTeethText(t, failed),
+      'mouthKitTeethNotUsed{"reason":"mouthReason_head_moved"}'
+    );
+    // Without a check it knows, the note's own words.
+    assert.equal(teethNoteText(t, reason("teeth_photo_rejected"), teethNoteKey),
+                 "mouthTeethNote_teeth_photo_rejected");
+    assert.equal(
+      teethNoteText(t, { ...reason("teeth_photo_rejected"), reason: reason("brand_new") }, teethNoteKey),
+      "mouthTeethNote_teeth_photo_rejected"
+    );
+    assert.equal(teethNoteText(t, reason("no_ai_consent"), teethNoteKey), "mouthTeethNote_no_ai_consent");
+    assert.equal(teethNoteText(t, reason("brand_new", "As sent"), teethNoteKey), "mouthTeethGeneric As sent");
+    // A consent that could not be recorded sent nothing, and says so.
+    assert.equal(teethNoteText(t, reason("consent_not_recorded"), teethNoteKey),
+                 "mouthTeethNote_consent_not_recorded");
+  });
+
   it("leaves it to the teeth note, and says nothing when the ee is the teeth", () => {
     const noted = mouth({
       has_oral_photo: false,
@@ -446,8 +473,11 @@ describe("the words exist", () => {
         "mouthKitHint",
         "mouthKitHintShapes",
         "mouthKitWorking",
+        "mouthKitStage_shapesTeeth",
         "mouthShapesAiHint",
+        "mouthShapesAiHintMixed",
         "mouthShapesStandardHint",
+        "mouthTeethNote_teeth_photo_rejected_because",
         "finishNoticeTitle",
         "finishNoticePreparedTitle",
         "createFinishingHint",

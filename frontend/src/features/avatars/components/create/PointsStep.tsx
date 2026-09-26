@@ -14,6 +14,7 @@ import {
   currentStep,
   errorText,
   expectedMouthWarnings,
+  finishNeedsAiConsent,
   isJobActive,
   jobFailure,
   loadDraftMarks,
@@ -99,6 +100,15 @@ type Run = <T>(
  * from words the statement that it is no real person; the server says
  * which (`creation.statement`). It is recorded for this creation at the
  * moment of finishing and sent with it.
+ *
+ * Finishing a person makes their own teeth and mouth shapes by AI (step 5)
+ * when the member has agreed to send photos to Google under the words in
+ * force: one who has not is asked at that press (the dialog), before
+ * anything is sent; "Not now" finishes with the standard mouth.
+ *
+ * A finish that fails comes back here with its reason at the top, where
+ * focus goes (the wizard), not under the preview; Retry there is held by
+ * whatever holds the main button (the statement, above all, is ticked again).
  */
 export function PointsStep({
   orgId,
@@ -108,6 +118,7 @@ export function PointsStep({
   refetch,
   withAi,
   recordConsent,
+  aiConsentId,
   defaultName,
   onBack,
   onFocusLost,
@@ -119,6 +130,8 @@ export function PointsStep({
   refetch: () => unknown;
   withAi: WithAi;
   recordConsent: (scope: ConsentScope, creationId?: string) => Promise<ConsentRecord>;
+  /** The member's remembered AI consent (useConsent.aiConsentId). */
+  aiConsentId: string | null | undefined;
   defaultName: string;
   onBack: () => void;
   /** Put focus somewhere sensible (the step heading): the control that had
@@ -209,6 +222,7 @@ export function PointsStep({
       refetch={refetch}
       withAi={withAi}
       recordConsent={recordConsent}
+      aiConsentId={aiConsentId}
       name={name}
       onName={setName}
       onBack={onBack}
@@ -227,6 +241,7 @@ function PointsEditor({
   refetch,
   withAi,
   recordConsent,
+  aiConsentId,
   name,
   onName,
   onBack,
@@ -241,6 +256,7 @@ function PointsEditor({
   refetch: () => unknown;
   withAi: WithAi;
   recordConsent: (scope: ConsentScope, creationId?: string) => Promise<ConsentRecord>;
+  aiConsentId: string | null | undefined;
   name: string;
   onName: (name: string) => void;
   onBack: () => void;
@@ -329,11 +345,18 @@ function PointsEditor({
   const tick = (part: MarkPart, on: boolean) =>
     setTicked((now) => (on ? [...now.filter((p) => p !== part), part] : now.filter((p) => p !== part)));
 
+  // A person's mouth is made by AI at step 5: asked for first when the
+  // member has not agreed under these words (finishNeedsAiConsent).
+  const asksAi = finishNeedsAiConsent(creation, aiConsentId);
   const finish = async () => {
     setMissing([]);
     const outcome = await run(
       "finish",
       async () => {
+        // The AI statement, before anything is sent: "I agree" records it
+        // (and step 5 makes the person's teeth and mouth shapes), "Not now"
+        // records nothing and the avatar gets the standard mouth.
+        if (asksAi) await withAi(t("createPrepareAiPurpose"), async (agreed) => agreed);
         // Recorded now, under the words on screen, and only for this
         // finish: a retry after a failure records it again.
         const consentId = statementScope ? (await recordConsent(statementScope, creation.id)).id : undefined;
@@ -380,14 +403,30 @@ function PointsEditor({
     part in GROUP_LABELS ? t(GROUP_LABELS[part as keyof typeof GROUP_LABELS]) : part;
 
   const failure = creation.job?.step === "finish" ? jobFailure(creation.job) : null;
-  // A failed finish is retried from what is on screen, not from what the
-  // failed attempt was sent: the owner may have renamed it or moved a point
-  // since. Every other job retries as it was.
-  const retryFailed = failure ? () => void finish() : onRetry;
   // "Detect again" runs while these marks stay on screen; nothing may be
   // finished on marks that are about to be replaced.
   const working = isJobActive(creation.job);
   const blocked = reasons.length > 0;
+  // What holds the finish, the main button and a failed finish's Retry alike.
+  const statementMissing = needsStatement && !statement;
+  const readyToFinish = !blocked && unplaced.length === 0 && Boolean(name.trim()) && !statementMissing;
+  const finishHint = blocked
+    ? "createFixFirst"
+    : unplaced.length > 0
+      ? "createPlaceFirst"
+      : statementMissing
+        ? "createDepictionFirst"
+        : oneClick
+          ? "createLooksRightHint"
+          : "createSaveHint";
+  // The same, said from the failure at the top: what holds it is below.
+  const retryHint = blocked
+    ? "createRetryAfterFix"
+    : unplaced.length > 0
+      ? "createRetryAfterPlace"
+      : statementMissing
+        ? "createRetryAfterStatement"
+        : "createRetryAfterName";
   const texture = image?.url ?? "";
   // Step 3 can still close parted lips or regenerate an open mouth: worth
   // pointing back to while a round is left and AI is on.
@@ -395,6 +434,21 @@ function PointsEditor({
 
   return (
     <div className="space-y-5">
+      {failure && creation.job && (
+        // A failed finish, said where the owner lands (and focus goes:
+        // CreationWizard), not below the preview. Its Retry is the finish
+        // again, from what is on screen now, and waits for what the main
+        // button waits for: the statement is ticked again after a failure.
+        <div id="finish-failure" tabIndex={-1} className="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+          <JobProgress
+            job={creation.job}
+            onRetry={readyToFinish ? () => void finish() : undefined}
+            retrying={busy !== null || working}
+          >
+            {!readyToFinish && creation.job.retryable && <p className="text-xs">{t(retryHint)}</p>}
+          </JobProgress>
+        </div>
+      )}
       <p className="text-sm text-gray-600 dark:text-gray-300">{t(line.guide)}</p>
       <p className="text-xs text-gray-500 dark:text-gray-400">{t("markFaceKeys")}</p>
 
@@ -559,13 +613,7 @@ function PointsEditor({
           {t("createMarksMissing", { parts: missing.map(partName).join(", ") })}
         </p>
       )}
-      {creation.job && (failure || working) && (
-        <JobProgress
-          job={creation.job}
-          onRetry={retryFailed}
-          retrying={busy === "retry" || busy === "finish"}
-        />
-      )}
+      {creation.job && working && <JobProgress job={creation.job} onRetry={onRetry} retrying={busy === "retry"} />}
 
       <MouthWarnings
         warnings={expectedMouthWarnings(creation).map((code) => ({ code, detail: "" }))}
@@ -606,6 +654,8 @@ function PointsEditor({
         </label>
       )}
 
+      {asksAi && <p className="max-w-2xl text-xs text-gray-500 dark:text-gray-400">{t("createFinishAsksAi")}</p>}
+
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" className="btn-secondary min-h-11" onClick={onBack} disabled={busy !== null}>
           {t("createBack")}
@@ -614,22 +664,14 @@ function PointsEditor({
           type="button"
           className="btn-primary min-h-11 px-5"
           onClick={() => void finish()}
-          disabled={busy !== null || working || blocked || unplaced.length > 0 || !name.trim() || (needsStatement && !statement)}
+          disabled={busy !== null || working || !readyToFinish}
           aria-describedby="finish-hint"
         >
           {busy === "finish" ? <Spinner className="h-4 w-4" /> : <Icon name="check" className="h-4 w-4" strokeWidth={2} />}
           {oneClick ? t("createLooksRight") : t("createSavePoints")}
         </button>
         <span id="finish-hint" className="text-xs text-gray-500 dark:text-gray-400">
-          {blocked
-            ? t("createFixFirst")
-            : unplaced.length > 0
-              ? t("createPlaceFirst")
-              : needsStatement && !statement
-                ? t("createDepictionFirst")
-                : oneClick
-                ? t("createLooksRightHint")
-                : t("createSaveHint")}
+          {t(finishHint)}
         </span>
       </div>
     </div>

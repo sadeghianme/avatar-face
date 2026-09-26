@@ -23,13 +23,16 @@ class JobProgress(BaseModel):
     fraction: float
     # The stage, in the server's words: a finish reports "copying images",
     # "building the rig", "building layers", "making the mouth shapes",
-    # "fitting the mouth", "making the teeth", "publishing"; the Mouth
-    # panel's kit (step "mouth_kit") "making the mouth shapes", "fitting the
-    # mouth", "making the teeth", "saving". A label a client does not know
-    # is shown as nothing, never as a wrong stage.
+    # "fitting the mouth", "making the teeth", then "publishing", or
+    # "publishing with the standard mouth" when a person's own mouth was
+    # not made after all (no AI allowed, or it failed); the Mouth panel's
+    # kit (step "mouth_kit") "making the mouth shapes", "fitting the mouth",
+    # "making the teeth", "saving". A label a client does not know is shown
+    # as nothing, never as a wrong stage.
     label: str | None = None
-    # How far a counted stage is ("making the mouth shapes": 3 of 6 settled,
-    # made or given up on); null for a stage that is not counted.
+    # How far a counted stage is ("making the mouth shapes": 3 of 7 settled,
+    # the six shapes and the teeth photo, made or given up on); null for a
+    # stage that is not counted.
     count: JobCount | None = None
 
 

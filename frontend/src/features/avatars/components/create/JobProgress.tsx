@@ -100,10 +100,11 @@ export function useSeenStages(job: CreationJob | null | undefined): ReadonlySet<
 
 /**
  * Building an avatar, as a checklist: "Building your avatar", then a
- * person's teeth and mouth shapes (counted: "3 of 6"), the mouth fitted to
+ * person's teeth and mouth shapes (counted: "3 of 7"), the mouth fitted to
  * them, and publishing (`rows`, creation.finishRows). The mouth is an
  * image-model call per shape and can take a minute: a bar that sits still
- * without a word looks stuck, and a list says what is left.
+ * without a word looks stuck, and a list says what is left. A mouth that
+ * was not made after all is shown as such ("skipped"), never ticked.
  */
 function FinishProgress({ job, rows }: { job: CreationJob; rows: FinishRow[] }) {
   const { t } = useTranslation();
@@ -146,6 +147,10 @@ function FinishRowItem({ row, stage }: { row: FinishRow; stage: FinishStage | nu
           <span className="grid h-5 w-5 place-items-center rounded-full bg-emerald-500 text-white">
             <Icon name="check" className="h-3 w-3" strokeWidth={3} />
           </span>
+        ) : row.state === "skipped" ? (
+          <span className="grid h-5 w-5 place-items-center">
+            <span className="h-0.5 w-3 rounded-full bg-gray-400 dark:bg-white/30" />
+          </span>
         ) : row.state === "current" ? (
           <Spinner className="h-5 w-5 text-brand-600 dark:text-brand-400" />
         ) : (
@@ -159,7 +164,9 @@ function FinishRowItem({ row, stage }: { row: FinishRow; stage: FinishStage | nu
               ? "font-medium text-gray-900 dark:text-gray-100"
               : row.state === "done"
                 ? "text-gray-700 dark:text-gray-300"
-                : "text-gray-500 dark:text-gray-400"
+                : row.state === "skipped"
+                  ? "text-gray-500 line-through decoration-gray-400/70 dark:text-gray-400"
+                  : "text-gray-500 dark:text-gray-400"
           }`}
         >
           <span>

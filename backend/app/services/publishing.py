@@ -30,14 +30,10 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 
 logger = logging.getLogger("liveface.publishing")
-
-# How many published revisions to keep. The current one is what clients are
-# served; the previous one covers presigned URLs already handed out and
-# in-flight page loads. Older ones are dead weight.
-KEEP_REVISIONS = 2
 
 LAYER_NAMES = ("background", "body", "head")
 
@@ -207,6 +203,7 @@ async def publish(avatar, storage) -> dict:
     # Only after the new snapshot is recorded: deleting first would leave a
     # window where the config points at files that no longer exist.
     await _prune(avatar, storage, keep_from=[config, previous])
+    await _sweep_mouth_files(avatar, storage, mouth)
     logger.info("published avatar %s at revision %d", avatar.id, revision)
     return config
 
@@ -221,33 +218,83 @@ def _plays_own_motion(mouth: dict | None) -> bool:
     return bool(mouth and mouth.get("renderer") == "continuous" and mouth.get("motion_key"))
 
 
-# The files a published revision may hold (`publish`'s copies), by name.
-PUBLISHED_NAMES = (
-    "image", "rig", "thumb", "mouth", "mouth-rig", "mouth-motion",
-    *[f"layer-{n}" for n in LAYER_NAMES],
-)
+def avatar_root(org_id: str, avatar_id: str) -> str:
+    return f"orgs/{org_id}/avatars/{avatar_id}/"
 
 
 async def _prune(avatar, storage, keep_from: list[dict | None]) -> None:
-    """Delete published revisions older than the ones still in use."""
+    """Delete every published revision but the ones still in use: the
+    current one, which clients are served, and the previous one, which
+    covers URLs already handed out and page loads in flight (`keep_from`).
+    Older ones are dead weight.
+
+    By listing what is there: revisions are the draft revisions published,
+    with gaps between them (three edits, then a publish), so the numbers
+    below the oldest kept say nothing about which exist, and one skipped
+    once would stay for good."""
     keep = {c["revision"] for c in keep_from if c and "revision" in c}
     if not keep:
         return
-    oldest = min(keep)
-    for revision in range(max(0, oldest - KEEP_REVISIONS), oldest):
-        prefix = published_prefix(avatar.org_id, avatar.id, revision)
-        for name in PUBLISHED_NAMES:
-            for ext in ("png", "jpg", "webp", "json", "glb"):
-                key = f"{prefix}/{name}.{ext}"
-                try:
-                    if await storage.exists(key):
-                        await storage.delete(key)
-                except Exception:  # pruning is housekeeping, never fatal
-                    logger.exception("could not prune %s", key)
+    root = f"{avatar_root(avatar.org_id, avatar.id)}published/"
+    try:
+        names = await storage.list_names(root)
+    except Exception:  # pruning is housekeeping, never fatal
+        logger.exception("could not list %s", root)
+        return
+    for name in names:
+        match = re.fullmatch(r"r(\d+)", name)
+        if match is None or int(match.group(1)) in keep:
+            continue
+        try:
+            await storage.delete_prefix(f"{root}{name}/")
+        except Exception:
+            logger.exception("could not prune %s%s", root, name)
 
 
-async def discard_draft(avatar, storage) -> bool:
-    """Put the draft back to what is published. True if anything changed.
+# The draft's own mouth files (services.mouth: mouth-<stamp>.webp/.json and
+# mouth-motion-<stamp>.json; older photos .png), beside the avatar's other
+# files. The published copies are under published/, never these names.
+_MOUTH_FILE = re.compile(r"mouth-[A-Za-z0-9-]+\.(?:webp|png|json)")
+
+
+def _mouth_keys(mouth: dict | None) -> set[str]:
+    return {key for key in (
+        (mouth or {}).get("oral_image_key"),
+        (mouth or {}).get("oral_rig_key"),
+        (mouth or {}).get("motion_key"),
+    ) if key}
+
+
+async def _sweep_mouth_files(avatar, storage, mouth: dict | None) -> None:
+    """Delete the draft's mouth files the draft no longer names.
+
+    Every edit that replaces one deletes the old one after its commit; a
+    process that died in between (a restart mid-save) leaves it behind for
+    good, since nothing names it any more. Publishing holds the avatar's edit
+    lock, and every other writer of these files writes and commits under it
+    too (or, finishing an avatar, is this very publish), so a file the
+    draft does not name here is no one's."""
+    root = avatar_root(avatar.org_id, avatar.id)
+    named = _mouth_keys(mouth)
+    try:
+        names = await storage.list_names(root)
+    except Exception:
+        logger.exception("could not list %s", root)
+        return
+    for name in names:
+        if _MOUTH_FILE.fullmatch(name) and f"{root}{name}" not in named:
+            try:
+                await storage.delete(f"{root}{name}")
+            except Exception:
+                logger.exception("could not delete %s%s", root, name)
+
+
+async def discard_draft(avatar, storage) -> list[str] | None:
+    """Put the draft back to what is published. None when the avatar was
+    never published (nothing to go back to); otherwise the discarded
+    draft's mouth files the restored draft does not name, to delete after
+    the commit (nothing else names them: the undo history keeps pictures
+    and rigs, never the mouth).
 
     The published copies are restored into fresh live keys rather than the
     originals being 'un-edited': the live keys may point at a crop or a
@@ -256,7 +303,10 @@ async def discard_draft(avatar, storage) -> bool:
     """
     config = config_of(avatar)
     if config is None:
-        return False
+        return None
+    from app.services.mouth import load as load_mouth
+
+    discarded = _mouth_keys(load_mouth(getattr(avatar, "mouth_config", None)))
 
     from uuid import uuid4
 
@@ -328,7 +378,8 @@ async def discard_draft(avatar, storage) -> bool:
     # Back in step with what is published.
     avatar.draft_revision = config.get("revision", 0)
     logger.info("discarded draft for avatar %s", avatar.id)
-    return True
+    restored_keys = _mouth_keys(load_mouth(avatar.mouth_config))
+    return sorted(discarded - restored_keys)
 
 
 def _restored_teeth(published: dict | None, config: dict, has_photo: bool) -> dict | None:
@@ -349,12 +400,12 @@ def _restored_teeth(published: dict | None, config: dict, has_photo: bool) -> di
 
 def _restored_kit(published: dict | None, has_motion: bool) -> dict | None:
     """The draft's kit record after a Discard: the one published with the
-    motion. A record of a kit whose motion did not come back says so
-    (dropped), as for a kit the picture left behind; a dropped one stays
-    as it was."""
+    motion (or without one, for a kit that made no shape of its own: the
+    bundled motion played for it). A record of a kit whose motion did not
+    come back says so (dropped); a dropped one stays as it was."""
     if published is None:
         return None
-    if has_motion or published.get("state") == "dropped":
+    if has_motion or published.get("state") == "dropped" or not published.get("generated"):
         return published
     return {**published, "state": "dropped",
             "dropped": {"code": "motion_missing", "detail": "The mouth shapes' file is gone"}}

@@ -195,12 +195,14 @@ export function AdjustStep({
   };
 
   // Parted lips over the teeth: the server offers a touch-up that closes
-  // them (ai.auto_adjust), and it starts here without a press when the
-  // member has already agreed to send photos to Google. Never asked for on
-  // their behalf, once per image; the result waits beside the photo for the
-  // owner to choose, like any round.
+  // them (ai.auto_adjust; it fixes the eyes too when the check found them
+  // wanting), and it starts here without a press when the member has
+  // already agreed to send photos to Google. Never asked for on their
+  // behalf, once per image; the result waits beside the photo for the
+  // owner to choose, like any round. What it was started for is kept, to
+  // say it.
   const autoStarted = useRef(new Set<string>());
-  const [autoRan, setAutoRan] = useState(false);
+  const [autoRan, setAutoRan] = useState<readonly string[] | null>(null);
   useEffect(() => {
     const offer = autoAdjustToStart(creation, consent.aiConsentId, autoStarted.current);
     const consentId = consent.aiConsentId;
@@ -211,7 +213,7 @@ export function AdjustStep({
     // The options would offer to start what is already running: the round's
     // progress, then its versions beside the photo, take their place.
     setOpen(false);
-    setAutoRan(true);
+    setAutoRan(offer.reasons);
     void run("adjust", async () => {
       try {
         return await api.post<Creation>(`${base}/adjust`, {
@@ -224,7 +226,7 @@ export function AdjustStep({
         // The offer went (another tab took it, the image changed): nothing
         // to report, the step is as it was.
         if (err instanceof ApiError && err.code === "auto_adjust_not_applicable") {
-          setAutoRan(false);
+          setAutoRan(null);
           return undefined;
         }
         if (err instanceof ApiError && consentProblem(err.code, err.body)?.kind === "required") {
@@ -236,7 +238,7 @@ export function AdjustStep({
       // Refused (the monthly limit, AI switched off meanwhile): the wizard
       // shows why, and the step goes back to offering the fix by hand.
       if (!outcome.ok) {
-        setAutoRan(false);
+        setAutoRan(null);
         setOpen(true);
       }
     });
@@ -248,12 +250,13 @@ export function AdjustStep({
   // Why a round is on screen that nobody pressed for: while it runs, and
   // once its versions wait beside the photo. A failed round speaks for
   // itself (JobProgress).
+  const autoEyes = Boolean(autoRan?.some((reason) => reason !== "teeth_showing"));
   const autoNote = !autoRan
     ? null
     : adjustJob && isJobActive(adjustJob)
-      ? "adjustAutoStarted"
+      ? autoEyes ? "adjustAutoStartedEyes" : "adjustAutoStarted"
       : hasRound && !failure
-        ? "adjustAutoReady"
+        ? autoEyes ? "adjustAutoReadyEyes" : "adjustAutoReady"
         : null;
 
   // "Use this": taken, and on to the points, unless it is being cut out

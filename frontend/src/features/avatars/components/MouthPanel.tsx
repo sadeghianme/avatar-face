@@ -20,6 +20,7 @@ import {
   shapesLabel,
   shapesView,
   standardShapeText,
+  teethNoteText,
 } from "@/features/avatars/mouth-kit";
 import { mouthErrorKey, teethNoteKey, teethView, type MouthAction } from "@/features/avatars/teeth";
 import { api, ApiError } from "@/lib/api";
@@ -208,7 +209,6 @@ export function MouthPanel({
   const aiTeeth = teeth?.kind === "ai";
   const ownTeeth = teeth?.kind === "upload";
   const note = teeth?.kind === "generic" ? teeth.note : null;
-  const noteKey = note ? teethNoteKey(note.code) : null;
   const shapes = shapesView(saved);
   const standardShapes = shapes && shapes.kind !== "own" ? shapes.standard : [];
   const shapesDropped = shapes ? droppedText(t, shapes) : null;
@@ -258,12 +258,14 @@ export function MouthPanel({
   // counted), or nothing known beyond that it runs.
   const stage = kit.stage;
   const count = stage === "shapes" ? stageCount(running) : null;
+  // The shapes come with the teeth photo, unless the owner's own is kept.
+  const stageKey = stage === "shapes" && !ownTeeth ? "mouthKitStage_shapesTeeth" : `mouthKitStage_${stage}`;
   const progressText = !running
     ? ""
     : running.state === "queued"
       ? t("createJobQueued")
       : stage
-        ? t(`mouthKitStage_${stage}`)
+        ? t(stageKey)
         : t("mouthKitWorking");
   const progressSpoken = count
     ? `${progressText} ${t("mouthShapesCount", { done: count.done, total: count.total })}`
@@ -328,7 +330,14 @@ export function MouthPanel({
                   <SourceChip made={shapes.kind !== "standard"}>{shapesLabel(t, shapes)}</SourceChip>
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-gray-500">
-                  {shapesDropped ?? t(shapes.kind === "standard" ? "mouthShapesStandardHint" : "mouthShapesAiHint")}
+                  {shapesDropped ??
+                    t(
+                      shapes.kind === "standard"
+                        ? "mouthShapesStandardHint"
+                        : shapes.kind === "mixed"
+                          ? "mouthShapesAiHintMixed"
+                          : "mouthShapesAiHint"
+                    )}
                 </p>
                 {standardShapes.length > 0 && (
                   <div className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
@@ -392,7 +401,7 @@ export function MouthPanel({
               </p>
               {note && (
                 <p className="mt-1.5 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
-                  {noteKey ? t(noteKey) : `${t("mouthTeethGeneric")} ${note.detail}`}
+                  {teethNoteText(t, note, teethNoteKey)}
                 </p>
               )}
               {teethReason && (
@@ -405,11 +414,18 @@ export function MouthPanel({
             <div className="p-3">
               {canMakeKit && (
                 <>
+                  {/* Held with aria-disabled, not disabled, while the job is
+                      asked for and runs (up to a minute): a disabled button
+                      drops the keyboard's focus to the page, and the next
+                      Tab would start from the top. */}
                   <button
                     type="button"
-                    className="btn-secondary min-h-11 max-w-full text-start"
-                    disabled={busy || starting || working}
-                    onClick={() => void makeKit()}
+                    className="btn-secondary min-h-11 max-w-full text-start aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+                    disabled={busy}
+                    aria-disabled={starting || working}
+                    onClick={() => {
+                      if (!starting && !working) void makeKit();
+                    }}
                     aria-describedby="mouth-kit-hint"
                   >
                     {starting || working ? (

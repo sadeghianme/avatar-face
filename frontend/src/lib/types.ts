@@ -106,6 +106,10 @@ export interface Avatar {
   model_url?: string | null;
   /** An AI made or changed the picture: disclosed with the avatar. */
   ai_edited?: AiEdited | null;
+  /** Detail only: the creation whose finish is still building this avatar
+   *  (the wizard's step 5, "Preparing your avatar"); its page follows the
+   *  build there. Absent from a server before it said so. */
+  preparing_creation_id?: string | null;
 }
 
 /** How an AI was involved in an avatar, as it is disclosed. `mode` is what
@@ -120,10 +124,12 @@ export interface AiEdited {
   mouth_shapes?: { model: string | null; generated: number };
 }
 
-/** A reason, as the server gives one: a code to word, and its sentence. */
+/** A reason, as the server gives one: a code to word, and its sentence;
+ *  `reason`, the check behind it (a teeth photo that did not pass one). */
 export interface Reason {
   code: string;
   detail: string;
+  reason?: Reason | null;
 }
 
 /** The avatar's teeth photo: who made it, or why there is none. */
@@ -139,9 +145,9 @@ export type MouthShape = "aa" | "ee" | "oo" | "oh" | "fv" | "th";
  * A mouth kit, as the owner is told about it (services.mouth_kit
  * .public_kit): the person's own mouth shapes, made by AI from the avatar's
  * picture ("generated"), or the standard one fitted to the face where a
- * shape could not be made ("retargeted", with why). "dropped": it was made
- * for another picture (or could not follow new points), so the standard
- * motion plays again; the teeth stay.
+ * shape could not be made ("retargeted", with why). "dropped": it could not
+ * follow the face's points, so the standard motion plays again; the teeth
+ * stay.
  */
 export interface MouthKit {
   state: "made" | "dropped";
@@ -151,7 +157,7 @@ export interface MouthKit {
   retargeted: number;
   /** Always the six, in aa, ee, oo, oh, fv, th order. */
   shapes: { shape: MouthShape; provenance: "generated" | "retargeted"; reason: Reason | null }[];
-  /** Whether its "ee" is the teeth photo, and why not when it is not. */
+  /** Whether its teeth photo is the avatar's, and why not when it is not. */
   teeth: { used: boolean; reason: Reason | null };
   dropped: Reason | null;
 }

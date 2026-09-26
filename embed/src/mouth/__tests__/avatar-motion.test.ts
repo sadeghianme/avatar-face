@@ -168,13 +168,14 @@ describe("a per-avatar manifest in the continuous mouth", () => {
   });
 });
 
-/** Written by the backend from a kit whose own AA opens 75% as far as the
- *  Reference's (so its jaw range is fitted at 0.6375) and whose EE, OH and
- *  TH were retargeted: backend/tests/test_performance_kit.py. */
+/** Written by the backend from a kit whose model moved AA, OO and F/V a
+ *  quarter further than the Reference does (an image model acts), brought
+ *  back to the Reference's size by its own AA, and whose EE, OH and TH were
+ *  retargeted: backend/tests/test_performance_kit.py. */
 const fittedManifest = (): AvatarPerformanceManifest =>
   JSON.parse(readFileSync(new URL("./fixtures/avatar-motion-fitted.json", import.meta.url), "utf8"));
 
-describe("a retargeted pose in an avatar's kit", () => {
+describe("a kit at the Reference's size", () => {
   const LIPS = [13, 14, 0, 17, 61, 291, 78, 308, 81, 311, 178, 402];
   /** Where the lips settle for `id`, as displacements in the neutral
    *  mouth's own frame, in its widths: comparable across manifests. */
@@ -198,22 +199,24 @@ describe("a retargeted pose in an avatar's kit", () => {
     });
   };
 
-  it("is fitted at a jaw range other than the Reference's", () => {
+  it("is true at the Reference's jaw range, its own shapes and the retargeted ones alike", () => {
     const manifest = validateMotionManifest(fittedManifest()) as AvatarPerformanceManifest;
-    expect(manifest.jaw_range).toBeCloseTo(.6375, 3);
+    expect(manifest.jaw_range).toBe(.85);
     expect(manifest.poses.map(p => p.provenance)).toEqual(
       ["base", "generated", "retargeted", "generated", "retargeted", "generated", "retargeted"]);
   });
 
   // The fixture's face is the Reference, so the bundled motion on it is the
-  // truth: at the kit's own fit, and at any other profile, a retargeted
-  // pose must open as far as the Reference's does. Baked at the Reference's
-  // size instead, OH would open a third too far here. (Within 1%: the
-  // bundled motion keeps the Reference's 0.3 degree lean, which a kit's
-  // levelled frame does not, so its sideways parts differ by up to 0.3
-  // degrees of the vertical ones, and its falloff is sampled 0.3 degrees
-  // round.)
-  it.each([["oh", .6375], ["th", .6375], ["ee", .6375], ["oh", .75], ["th", .7]])(
+  // truth: the person's own over-acted AA, OO and F/V, and the retargeted
+  // EE, OH and TH, all open as far as the Reference's do, at the kit's own
+  // fit and at any other profile. Played as the model made them, AA would
+  // open a quarter too far here, and every other shape with it. (Within
+  // 1%: the bundled motion keeps the Reference's 0.3 degree lean, which a
+  // kit's levelled frame does not, so its sideways parts differ by up to
+  // 0.3 degrees of the vertical ones, and its falloff is sampled 0.3
+  // degrees round.)
+  it.each([["aa", .85], ["oo", .85], ["fv", .85], ["oh", .85], ["th", .85], ["ee", .85],
+    ["aa", .7], ["oh", .75], ["th", .7]])(
     "plays %s as the bundled Reference does on the same face, at jawRange %s", (id, jawRange) => {
       const mine = played(fittedManifest(), jawRange, id);
       const reference = played(bundled(), jawRange, id);
@@ -225,7 +228,7 @@ describe("a retargeted pose in an avatar's kit", () => {
         near(y, ry);
         expect(x).toBeCloseTo(rx, 2);
       });
-      expect(Math.abs(reference[1][1])).toBeGreaterThan(.02);
+      expect(Math.abs(reference[1][1])).toBeGreaterThan(.01);
     });
 });
 

@@ -11,20 +11,22 @@ second photo from the owner; AI makes it for them.
 **One path in.** Whatever the source, a mouth photo is admitted by
 `prepare_mouth_photo`: the portrait checks every mouth photo has always had
 (portrait_photo.prepare_photo: a real detected face, big enough, the mouth
-actually open), then `admit_photo`: an encoding for visitors
-(`encode_for_visitors`, below) and the browser's own teeth test on exactly
-those bytes (services.dental_photo: the upper row wide, dense and tall
-enough, or `DentalPhotoError` on every visitor's page); `store` writes it
-as the draft's oral photo. The owner upload and the AI paths differ only
+actually open), then `admit_photo`: the photo cut to its lips
+(`crop_to_mouth`), an encoding for visitors (`encode_for_visitors`, below)
+and the browser's own teeth test on exactly those bytes
+(services.dental_photo: the upper row wide, dense and tall enough, or
+`DentalPhotoError` on every visitor's page); `store` writes it as the
+draft's oral photo. The owner upload and the AI paths differ only
 in where the bytes come from and in the `teeth` record they leave (below).
 
 **AI teeth come with the mouth shapes.** Finishing a person, and the Mouth
 panel's one AI action, make the performance kit (services.mouth_kit): six
-photos of the person's mouth, whose "ee" is the teeth photo when the embed
-would draw it; it enters at `admit_photo`, found and checked as a shape
-already. The single "ee" photo below (`make_teeth`) is what is left when
-the kit cannot be made on this server (no face detector for its
-registration): a person can still get their teeth.
+photos of the person's mouth and one of their teeth (TEETH_PROMPT, below),
+which is the teeth photo when the embed would draw it; it enters at
+`admit_photo`, found and checked as an answer of the kit already. The
+single "ee" photo below (`make_teeth`) is what is left when the kit cannot
+be made on this server (no face detector for its registration): a person
+can still get their teeth.
 
 **The AI "ee" photo** (`make_teeth`). The model is sent the face crop a
 touch-up sends (photo_adjust: 1.6 face boxes, square, 1024 px) of the
@@ -104,11 +106,12 @@ TEETH_PROMPT = (
 )
 
 # Every visitor of the avatar downloads the mouth photo before the
-# photographic mouth attaches, and presigned URLs change with each config
-# fetch, so neither the browser nor a CDN keeps it between visits. As the
-# PNG ingest_photo makes, a 1024 px "ee" face crop is about 1.3 MB; as
-# WebP at this quality, about 160 KB, with the enamel's edges intact for
-# the teeth test and the renderer (which samples only inside the lips).
+# photographic mouth attaches (once per hour and browser: a published file's
+# URL is the same for that long, services.storage). As the PNG ingest_photo
+# makes, a 1024 px "ee" face crop is about 1.3 MB; as WebP at this quality,
+# about 160 KB, with the enamel's edges intact for the teeth test and the
+# renderer (which samples only inside the lips); cut to the lips first
+# (crop_to_mouth), a fraction of that.
 MOUTH_PHOTO_TYPE = "image/webp"
 MOUTH_PHOTO_QUALITY = 90
 
@@ -245,16 +248,56 @@ def prepare_mouth_photo(data: bytes) -> tuple[bytes, dict]:
     return admit_photo(photo, rig)
 
 
+# Around the lips, what a mouth photo keeps (in its mouth widths): far more
+# than the pixel the renderer's smoothing reads past its clip.
+MOUTH_PHOTO_MARGIN = 0.35
+# What the renderer reads of a mouth photo's rig (embed validateOralRig).
+_ORAL_RIG_FIELDS = ("version", "image_size", "points", "inner_lip_ring", "outer_lip_ring")
+
+
+def crop_to_mouth(png: bytes, rig: dict) -> tuple[bytes, dict]:
+    """The part of a mouth photo the renderer reads, and its rig moved with
+    it: every visitor downloads the photo, and a 1024 px face crop is
+    mostly face. DentalOralSurface draws the photo clipped to its inner lip
+    ring, and the teeth test (services.dental_photo) reads the same, so the
+    lips with a margin are all either sees. Cut at whole pixels, so every
+    pixel they sample is the same pixel at the same place in the mouth's
+    frame; the rig keeps what the renderer reads of it (the triangulation,
+    visemes and the rest are the portrait's business). CPU work."""
+    from PIL import Image
+
+    from app.services.photo_io import png_bytes
+
+    points = np.asarray(rig["points"], dtype=np.float64)
+    lips = points[list(rig["outer_lip_ring"]) + list(rig["inner_lip_ring"])]
+    width = float(np.linalg.norm(points[291] - points[61]))
+    margin = MOUTH_PHOTO_MARGIN * width
+    with Image.open(io.BytesIO(png)) as image:
+        image.load()
+        x0 = max(0, int(np.floor(lips[:, 0].min() - margin)))
+        y0 = max(0, int(np.floor(lips[:, 1].min() - margin)))
+        x1 = min(image.width, int(np.ceil(lips[:, 0].max() + margin)))
+        y1 = min(image.height, int(np.ceil(lips[:, 1].max() + margin)))
+        if (x0, y0, x1, y1) == (0, 0, image.width, image.height):
+            return png, rig
+        cropped = png_bytes(image.crop((x0, y0, x1, y1)))
+    moved = {key: rig[key] for key in _ORAL_RIG_FIELDS if key in rig}
+    moved["image_size"] = [x1 - x0, y1 - y0]
+    moved["points"] = [[round(float(x) - x0, 2), round(float(y) - y0, 2)] for x, y in points]
+    return cropped, moved
+
+
 def admit_photo(png: bytes, rig: dict) -> tuple[bytes, dict]:
     """The end of every mouth photo's admission, for a clean PNG whose face
     is already found and landmarked (`rig`: rig.build_rig of its own
-    points): the WebP visitors get, and the teeth test run on it, not on
-    the lossless original, so what passed is what is shown. Validation422
-    mouth_teeth_unclear otherwise.
+    points): cut to the lips (`crop_to_mouth`), the WebP visitors get, and
+    the teeth test run on it, not on the lossless original, so what passed
+    is what is shown. Validation422 mouth_teeth_unclear otherwise.
 
-    The performance kit's "ee" photo enters here (services.mouth_kit): it
-    was detected and checked as a mouth shape already, with the same
+    The performance kit's teeth photo enters here (services.mouth_kit): it
+    was detected and checked as an answer of the kit already, with the same
     detector, and is admitted exactly as the rest from this point. CPU work."""
+    png, rig = crop_to_mouth(png, rig)
     photo = encode_for_visitors(png)
     verdict = teeth_verdict(photo, rig)
     if not verdict.accepted:
@@ -408,7 +451,16 @@ async def make_teeth(
     while True:
         await _may_call(org_id)
         if on_send is not None:
-            await on_send()
+            try:
+                await on_send()
+            except Exception as exc:
+                # Nothing leaves that nothing would say was allowed.
+                logger.exception("teeth: the consent could not be recorded")
+                raise TeethFailure(
+                    "consent_not_recorded",
+                    "Your agreement to send photos could not be recorded, so nothing was sent",
+                    503,
+                ) from exc
             on_send = None
         try:
             generated = await imagegen.edit_image(TEETH_PROMPT, request.payload, request.mime)
@@ -435,6 +487,17 @@ async def make_teeth(
                 "imagegen_unavailable", "AI editing is not configured on this server", 409
             ) from exc
         except Exception as exc:
+            # Classified as the mouth kit classifies its calls
+            # (performance_kit.call_billing, the one classification): a
+            # timeout was sent and may have been billed, so it is metered;
+            # a call that never reached the provider, or failed without an
+            # answer, is not.
+            from app.services.performance_kit import call_billing
+
+            if call_billing(exc) is None:
+                logger.warning("teeth: the provider did not answer in time (%r)", exc)
+                await _meter(org_id)
+                raise TeethFailure("timeout", "The AI did not answer in time", 504) from exc
             logger.exception("teeth: the provider call failed")
             raise TeethFailure(
                 "provider_error", "The AI service did not return an image", 502

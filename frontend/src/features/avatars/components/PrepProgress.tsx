@@ -7,14 +7,19 @@ const STALL_SECONDS = 60;
 
 /**
  * Avatar-prep UX: step indicator (detect -> mesh+visemes -> preview),
- * elapsed seconds, stall detection at 60s with a Retry button.
+ * elapsed seconds, stall detection at 60s with a Retry button, and why a
+ * retry was refused (`error`). For an avatar the rig job builds (an
+ * upload, a re-detection); one the creation wizard's step 5 is preparing
+ * is followed there instead (AvatarDetailPage).
  */
 export function PrepProgress({
   avatar,
   onRetry,
+  error = null,
 }: {
   avatar: Avatar;
   onRetry: () => void;
+  error?: string | null;
 }) {
   const { t } = useTranslation();
   const [elapsed, setElapsed] = useState(0);
@@ -56,6 +61,11 @@ export function PrepProgress({
           <button className="btn-secondary" onClick={onRetry}>
             {t("retry")}
           </button>
+          {error && (
+            <p className="field-error mt-2" role="alert">
+              {error}
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -6,11 +6,12 @@ signature + expiry produced by LocalStorage.presign_*.
 from __future__ import annotations
 
 import mimetypes
+import time
 
 from fastapi import APIRouter, Query, Request, Response
 
 from app.core.errors import Auth401, NotFound404, Validation422
-from app.services.storage import LocalStorage, get_storage
+from app.services.storage import LocalStorage, get_storage, is_published
 
 router = APIRouter(prefix="/storage", tags=["storage"])
 
@@ -45,11 +46,14 @@ async def storage_get(
         # the mouth photo's rig, the avatar's own motion) cross-origin.
         # PublicCorsMiddleware (app.main) reflects the page's origin over
         # this for every /storage/ response.
-        headers={"Access-Control-Allow-Origin": "*", "Cache-Control": cache_control(key)},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": cache_control(key, expires),
+        },
     )
 
 
-def cache_control(key: str) -> str:
+def cache_control(key: str, expires: int | None = None) -> str:
     """How long a browser may keep a stored file.
 
     A draft's rig JSON is mutable (manual fit adjustments rewrite rig.json
@@ -57,12 +61,14 @@ def cache_control(key: str) -> str:
     expiry, so draft JSON is revalidated. A published snapshot's files are
     copies no edit writes again (every revision publishes to keys of its
     own, services.publishing), JSON included (its rig, the mouth photo's
-    rig, the avatar's own motion), so they are cached like its images: the
-    widget fetches the motion and the rigs cross-origin on every attach.
-    (A presigned URL changes with every config fetch anyway, so a cached
-    copy only ever serves the page that fetched it.)"""
-    if key.endswith(".json") and "/published/" not in key:
+    rig, the avatar's own motion), and their URL is the same for every page
+    view within a window (LocalStorage signs them so): a browser keeps
+    them for as long as their URL is valid (`expires`), so a visitor coming
+    back downloads none of them again."""
+    if key.endswith(".json") and not is_published(key):
         return "no-cache"
+    if is_published(key) and expires is not None:
+        return f"private, max-age={max(0, expires - int(time.time()))}"
     return "private, max-age=300"
 
 

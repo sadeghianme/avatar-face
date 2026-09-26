@@ -4,10 +4,10 @@ import type { Avatar, TeethRecord } from "@/lib/types";
  * Whose teeth the photographic mouth shows, for the Mouth panel.
  *
  * A new person's avatar gets its own teeth made by AI when it is finished
- * (the "ee" of the mouth shapes step 5 makes from their picture, or an "ee"
- * photo alone where the server cannot make the shapes), or generic teeth
- * with a note saying why not; an owner can also add their own photo. The
- * server says which in `mouth.teeth` (services.mouth_photo, mouth_kit).
+ * (the teeth photo step 5 makes from their picture with the mouth shapes,
+ * or alone where the server cannot make the shapes), or generic teeth with
+ * a note saying why not; an owner can also add their own photo. The server
+ * says which in `mouth.teeth` (services.mouth_photo, mouth_kit).
  */
 export type TeethView =
   | { kind: "ai" }
@@ -16,8 +16,9 @@ export type TeethView =
 
 /** Why a new avatar has generic teeth, by the note's code. Each has its
  * words (`mouthTeethNote_<code>`); a code not here shows the server's own
- * sentence. The kit's "ee" not usable as teeth is its own reason, or
- * `teeth_photo_rejected` (it failed its checks) or `mouth_teeth_unclear`. */
+ * sentence. The kit's teeth photo not usable is its request's own reason,
+ * `mouth_teeth_unclear`, or `teeth_photo_rejected` naming the check it
+ * failed (mouth-kit.teethNoteText). */
 export const TEETH_NOTE_CODES = [
   "no_ai_consent",
   "third_party_ai_disabled",
@@ -27,6 +28,7 @@ export const TEETH_NOTE_CODES = [
   "no_image",
   "provider_error",
   "timeout",
+  "consent_not_recorded",
   "mouth_teeth_unclear",
   "teeth_photo_rejected",
   "reference_no_face",
@@ -84,6 +86,8 @@ export const MOUTH_ERROR_CODES = [
   "safety_refused",
   "no_image",
   "provider_error",
+  "timeout",
+  "consent_not_recorded",
   "no_face_for_teeth",
   "face_turned",
   "landmarks_unavailable",
