@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { Avaturn3DPanel } from "@/features/avatars/components/Avaturn3DPanel";
-import { GenerateCreation } from "@/features/avatars/components/create/GenerateCreation";
 import { Icon } from "@/components/ui/Icon";
 import { api, ApiError, uploadWithProgress } from "@/lib/api";
 import type { Avatar, StockAvatar } from "@/lib/types";
@@ -15,14 +14,10 @@ interface Created {
 }
 
 /**
- * Every way to make an avatar that does not start from a photo of one's
- * own: AI generation, the stock gallery, a 3D model (a .glb file or a URL),
- * and Avaturn's 3D editor.
- *
- * Generation is a creation: it starts one and continues in the wizard, so
- * a generated face passes the same points, the same confirmation and the
- * same statement as an upload. The others are unchanged from before the
- * wizard.
+ * The ways to add an avatar that are not the wizard's: the stock gallery,
+ * a 3D model (a .glb file or a URL), and Avaturn's 3D editor. Folded under
+ * the wizard's first step, so the two big choices stay the one thing on
+ * screen. (Generating from words is the wizard's own "Generate with AI".)
  */
 export function OtherWays({ orgId }: { orgId: string }) {
   const { t } = useTranslation();
@@ -92,10 +87,11 @@ export function OtherWays({ orgId }: { orgId: string }) {
   };
 
   return (
-    <section aria-labelledby="other-ways-heading" className="mt-12 border-t border-gray-200 pt-8 dark:border-line">
-      <h2 id="other-ways-heading" className="text-xl font-semibold tracking-[-0.02em]">
-        {t("createOtherWays")}
-      </h2>
+    <details className="group mx-auto mt-8 max-w-4xl rounded-2xl border border-gray-200 bg-white/60 px-5 py-4 dark:border-line dark:bg-panel/60">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-gray-700 dark:text-gray-200">
+        <span>{t("wzOtherWays")}</span>
+        <Icon name="chevron" className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90 rtl:-scale-x-100" />
+      </summary>
       <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("createOtherWaysHint")}</p>
 
       <div className="mt-5 max-w-sm">
@@ -117,11 +113,7 @@ export function OtherWays({ orgId }: { orgId: string }) {
         </p>
       )}
 
-      <h3 className="mb-1 mt-8 text-lg font-medium">{t("genTitle")}</h3>
-      <p className="mb-3 text-[13px] text-gray-500 dark:text-gray-400">{t("genScratchTitle")}</p>
-      <GenerateCreation orgId={orgId} name={name} />
-
-      <h3 className="mb-3 mt-10 text-lg font-medium">{t("stockGallery")}</h3>
+      <h3 className="mb-3 mt-8 text-lg font-medium">{t("stockGallery")}</h3>
       <div className="grid grid-cols-3 gap-3 sm:grid-cols-6 sm:gap-4">
         {stock?.map((item) => (
           <button
@@ -195,6 +187,6 @@ export function OtherWays({ orgId }: { orgId: string }) {
       <h3 className="mb-1 mt-10 text-lg font-medium">{t("avaturnTitle")}</h3>
       <p className="mb-3 text-[13px] text-gray-500 dark:text-gray-400">{t("avaturnSubtitle")}</p>
       <Avaturn3DPanel orgId={orgId} />
-    </section>
+    </details>
   );
 }

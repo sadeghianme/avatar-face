@@ -45,6 +45,8 @@ export default {
         playhead: { "0%": { left: "0%" }, "100%": { left: "100%" } },
         type: { "0%": { width: "0ch" }, "55%,100%": { width: "var(--type-width)" } },
         fill: { "0%": { transform: "scaleX(0.12)" }, "70%,100%": { transform: "scaleX(var(--fill, 0.62))" } },
+        // The creation wizard's loading pictures (features/avatars/components/wizard).
+        shimmer: { "0%": { backgroundPosition: "150% 0" }, "100%": { backgroundPosition: "-50% 0" } },
       },
       animation: {
         eq: "eq 0.9s ease-in-out infinite",
@@ -61,6 +63,7 @@ export default {
         playhead: "playhead 3.2s linear infinite",
         type: "type 5s steps(40, end) infinite",
         fill: "fill 6s cubic-bezier(0.22,1,0.36,1) infinite",
+        shimmer: "shimmer 2.2s ease-in-out infinite",
       },
     },
   },

@@ -133,7 +133,16 @@ export interface CreationAnchors {
 
 /** A job's step: a creation's, or "mouth_kit", an avatar's mouth made from
  * its photo in the Mouth panel (the same JobOut shape, schemas/job.py). */
-export type JobStep = "ingest" | "generate" | "adjust" | "background" | "detect" | "finish" | "mouth_kit";
+export type JobStep =
+  | "ingest"
+  | "generate"
+  | "adjust"
+  | "background"
+  | "detect"
+  | "finish"
+  | "mouth_kit"
+  // The four-step wizard's step 3 (wizard.ts).
+  | "prepare";
 export type JobState = "queued" | "running" | "done" | "failed" | "interrupted";
 
 /** How far a counted stage is: "3 of 6" mouth shapes settled (made, or
@@ -1218,6 +1227,12 @@ export const KNOWN_ERRORS: ReadonlySet<string> = new Set([
   // The avatar page's Retry, for an avatar step 5 is still preparing.
   "avatar_preparing",
   "image_missing",
+  // The four-step wizard's step 3 (wizard.ts, POST /prepare).
+  "original_not_for_look",
+  "instruction_required",
+  "generate_not_for_upload",
+  "plan_incomplete",
+  "plan_with_source",
 ]);
 
 export type Translate = (key: string, options?: Record<string, unknown>) => string;

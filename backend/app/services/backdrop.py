@@ -76,6 +76,40 @@ def _edge_band(height: int, width: int) -> np.ndarray:
     return mask
 
 
+def _connected(candidate: np.ndarray, edge: np.ndarray) -> np.ndarray:
+    """The candidate pixels connected to the frame's edge band."""
+    from scipy import ndimage
+
+    labels, _ = ndimage.label(candidate)
+    touching = np.unique(labels[edge & candidate])
+    touching = touching[touching != 0]
+    return np.isin(labels, touching)
+
+
+# At most this many backdrop pixels fit the smooth backdrop model.
+MODEL_SAMPLES = 20000
+
+
+def _smooth_backdrop(lab: np.ndarray, backdrop: np.ndarray) -> np.ndarray:
+    """HxWx3: a quadratic surface (in x and y, per LAB channel) fitted to
+    the backdrop pixels, evaluated everywhere."""
+    height, width = backdrop.shape
+    ys, xs = np.nonzero(backdrop)
+    if len(ys) > MODEL_SAMPLES:
+        pick = np.random.default_rng(0).choice(len(ys), MODEL_SAMPLES, replace=False)
+        ys, xs = ys[pick], xs[pick]
+    u = xs / max(1, width - 1) * 2 - 1
+    v = ys / max(1, height - 1) * 2 - 1
+    design = np.stack([np.ones_like(u), u, v, u * u, v * v, u * v], axis=1)
+    coef, *_ = np.linalg.lstsq(design, lab[ys, xs], rcond=None)
+    gu = (np.arange(width) / max(1, width - 1) * 2 - 1)[None, :]
+    gv = (np.arange(height) / max(1, height - 1) * 2 - 1)[:, None]
+    terms = (np.ones((height, width)), gu + 0 * gv, gv + 0 * gu, gu * gu + 0 * gv, gv * gv + 0 * gu, gu * gv)
+    return np.stack(
+        [sum(coef[k, c] * terms[k] for k in range(6)) for c in range(3)], axis=2
+    )
+
+
 def backdrop_mask(rgb: np.ndarray) -> np.ndarray | None:
     """HxW bool, True on the backdrop; None when there is no plain backdrop
     to cut, or cutting it would not leave a subject."""
@@ -100,10 +134,18 @@ def backdrop_mask(rgb: np.ndarray) -> np.ndarray | None:
     if float(candidate[edge].mean()) < MIN_EDGE_BACKDROP:
         logger.info("backdrop does not run round the frame (%.2f)", float(candidate[edge].mean()))
         return None
-    labels, _ = ndimage.label(candidate)
-    touching = np.unique(labels[edge & candidate])
-    touching = touching[touching != 0]
-    backdrop = np.isin(labels, touching)
+    backdrop = _connected(candidate, edge)
+    # Second pass: a studio backdrop is rarely one colour (a sweep brightens
+    # behind the subject, a render vignettes). Its colour is modelled as a
+    # smooth surface over the backdrop found so far, and each pixel is
+    # judged against the backdrop as it is THERE, not at the frame's edge,
+    # so the lighter grey around the hair comes off too, without a halo.
+    model = _smooth_backdrop(lab, backdrop)
+    distance = np.linalg.norm(lab - model, axis=2)
+    residual = distance[backdrop]
+    sigma = 1.4826 * float(np.median(np.abs(residual - np.median(residual)))) + float(np.median(residual))
+    limit = float(np.clip(SIGMAS * max(sigma, 1.0), MIN_DISTANCE, MAX_DISTANCE))
+    backdrop = _connected(distance < limit, edge)
     # Specks of the subject that happen to be backdrop-coloured next to the
     # edge are taken back: the subject is closed over small gaps.
     # (Padded with the edge's own values: a closing treats the outside as

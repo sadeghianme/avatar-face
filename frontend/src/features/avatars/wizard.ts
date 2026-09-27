@@ -1,0 +1,369 @@
+/**
+ * The four-step creation wizard: 1 Model · 2 Photo · 3 Prepare · 4 Publish
+ * (the owner's flow, docs/avatar-lines.md "The creation flow"), as rules.
+ *
+ * 1 Model    a human avatar or an animal avatar;
+ * 2 Photo    "Generate with AI" (one description) or "Upload a photo", in a
+ *            look: Realistic, Animation (3D, animated-film) or Cartoon (flat
+ *            2D); the consent and, for a person, the statement, here;
+ * 3 Prepare  automatic: the background comes off and the AI makes the
+ *            picture in the look, ready to speak (services.wizard); Retry,
+ *            "describe a change", and for a realistic upload "use my
+ *            original photo";
+ * 4 Publish  the face found by itself, a talking preview, Publish (the
+ *            points editor only when the face was not found, or on "Fix
+ *            points"); a person's own mouth is made while it publishes.
+ *
+ * Steps 1 and 2 are this page's state (the URL's `?model=`); from step 3 on
+ * there is a creation, whose `plan` says what was chosen. Framework-free
+ * with type-only imports, tested with `node --test`.
+ */
+import type { FaceStatement } from "@/features/avatars/consent";
+import type {
+  Creation,
+  CreationAnchors,
+  CreationJob,
+  CreationStep,
+  DraftStore,
+} from "@/features/avatars/creation";
+import type { FaceType } from "@/lib/types";
+
+export type AvatarModel = "human" | "animal";
+export type Look = "realistic" | "animation" | "cartoon";
+export type PhotoSource = "generate" | "upload";
+export type Screen = "model" | "photo" | "prepare" | "publish";
+
+export const SCREENS: readonly Screen[] = ["model", "photo", "prepare", "publish"];
+export const MODELS: readonly AvatarModel[] = ["human", "animal"];
+export const LOOKS: readonly Look[] = ["realistic", "animation", "cartoon"];
+export const SOURCES: readonly PhotoSource[] = ["generate", "upload"];
+/** The server's limit on a description or a change (services.wizard). */
+export const MAX_WORDS = 300;
+
+export interface Plan {
+  model: AvatarModel;
+  look: Look;
+  source: PhotoSource;
+  description: string | null;
+}
+
+/** What the prepare job last did (`ai.last_prepare`). */
+export interface LastPrepare {
+  mode: "ai" | "change" | "generate" | "original";
+  look: Look;
+  instruction: string | null;
+  step: string;
+  /** False when the background could not be taken off cleanly. */
+  cut: boolean;
+}
+
+/** The creation fields this module reads beyond creation.ts's. */
+export type WizardCreation = Creation & {
+  plan?: Plan | null;
+  ai: Creation["ai"] & { prepare_rounds_left?: number; last_prepare?: LastPrepare | null };
+};
+
+/** Model × look → the line the avatar is rigged and rendered on
+ * (services.wizard.line_for): a realistic person is the human line (the
+ * photographic mouth, and their own mouth kit at publish), a realistic
+ * animal the animal line (the muzzle), anything animated or drawn the
+ * cartoon line. */
+export function lineFor(model: AvatarModel, look: Look): FaceType {
+  if (look === "realistic") return model === "animal" ? "animal" : "human";
+  return "cartoon";
+}
+
+export function parseModel(value: string | null | undefined): AvatarModel | null {
+  return MODELS.find((m) => m === value) ?? null;
+}
+
+export function parseLook(value: string | null | undefined): Look | null {
+  return LOOKS.find((l) => l === value) ?? null;
+}
+
+/** The creation's plan: the server's, or for a creation the old wizard
+ * started, the one its line implies (as the server infers it). */
+export function planOf(creation: WizardCreation): Plan {
+  if (creation.plan) return creation.plan;
+  const generated = Boolean(creation.steps.find((s) => s.id === "original")?.generated);
+  return {
+    model: creation.face_type === "animal" ? "animal" : "human",
+    look: creation.face_type === "cartoon" ? "cartoon" : "realistic",
+    source: generated ? "generate" : "upload",
+    description: null,
+  };
+}
+
+// --- Step 2: what is asked ------------------------------------------------------------
+
+/** Must the owner agree to the AI to go on? Always, but for a realistic
+ * upload, which can use the photo as it is (cut out, no AI). */
+export function aiRequired(source: PhotoSource, look: Look): boolean {
+  return source === "generate" || look !== "realistic";
+}
+
+/** The statement about a face asked with the photo or the description: a
+ * person's photo is someone ("I am this person or have their permission"),
+ * a person made from words is no one real. An animal needs neither. */
+export function statementFor(model: AvatarModel, source: PhotoSource): FaceStatement | null {
+  if (model !== "human") return null;
+  return source === "upload" ? "depiction" : "generated_face";
+}
+
+export interface PhotoForm {
+  model: AvatarModel;
+  source: PhotoSource;
+  look: Look;
+  description: string;
+  hasFile: boolean;
+  aiAgreed: boolean;
+  statementAgreed: boolean;
+  /** The organization allows third-party AI. */
+  aiEnabled: boolean;
+}
+
+/** Why "Create my avatar" is held, as an i18n key, or null when it may go. */
+export function photoBlocker(form: PhotoForm): string | null {
+  if (!form.aiEnabled && aiRequired(form.source, form.look)) return "wzHoldAiOff";
+  if (form.source === "upload" && !form.hasFile) return "wzHoldFile";
+  if (form.source === "generate" && !form.description.trim()) return "wzHoldDescription";
+  if (aiRequired(form.source, form.look) && !form.aiAgreed) return "wzHoldAi";
+  if (statementFor(form.model, form.source) && !form.statementAgreed) return "wzHoldStatement";
+  return null;
+}
+
+/** How step 3 starts a new upload: the AI in the look, or (a realistic
+ * upload whose owner did not agree to the AI) the photo itself. */
+export type PrepareIntent = "ai" | "original";
+
+export function intentFor(form: Pick<PhotoForm, "source" | "look" | "aiAgreed" | "aiEnabled">): PrepareIntent {
+  return form.aiAgreed && form.aiEnabled ? "ai" : "original";
+}
+
+// --- Step 3 ---------------------------------------------------------------------------
+
+const PREPARE_STEPS: ReadonlySet<string> = new Set(["ingest", "generate", "prepare", "background", "detect"]);
+
+/** Is `job` part of making the picture (step 3's work)? */
+export function isPrepareJob(job: CreationJob | null | undefined): boolean {
+  return Boolean(job && PREPARE_STEPS.has(job.step));
+}
+
+/** Where step 3's work is, for the words under the progress bar. */
+export type PrepareStage = "queued" | "upload" | "create" | "check" | "background" | "face" | "save";
+
+// The labels services.creations and services.wizard report (job.report).
+// A label this does not know shows the step's general words, never a wrong
+// stage.
+const STAGE_OF_LABEL: Readonly<Record<string, PrepareStage>> = {
+  reading: "upload",
+  analysing: "check",
+  generating: "create",
+  "preparing the photo": "upload",
+  "creating your avatar": "create",
+  "checking the picture": "check",
+  "removing the background": "background",
+  "finding the face": "face",
+  "asking the AI for the points": "face",
+  "checking the points": "face",
+  saving: "save",
+};
+
+export function prepareStage(job: CreationJob | null | undefined): PrepareStage | null {
+  if (!job || !isPrepareJob(job)) return null;
+  if (job.state === "queued") return "queued";
+  if (job.state !== "running") return null;
+  const label = job.progress?.label;
+  if (!label) return job.step === "generate" || job.step === "prepare" ? "create" : "upload";
+  return STAGE_OF_LABEL[label] ?? null;
+}
+
+/** The ordered stages step 3 shows as a checklist, for the work at hand. */
+export function prepareChecklist(source: PhotoSource, withAi: boolean): PrepareStage[] {
+  if (source === "generate") return ["create", "background", "face"];
+  return withAi ? ["upload", "create", "background", "face"] : ["upload", "background", "face"];
+}
+
+/** The picture the avatar will be made of: the current image, once step 3
+ * has made it (the anchors found on it are what says so). */
+export function preparedStep(creation: Creation): CreationStep | null {
+  const anchors = creation.anchors;
+  if (!anchors || anchors.image === null) return null;
+  const current = creation.steps.find((s) => s.id === creation.current) ?? null;
+  if (!current) return null;
+  // The anchors belong to the current image or to the one it was cut from.
+  const behind = current.from ? creation.steps.find((s) => s.id === current.from) : null;
+  const ownFrame = anchors.image === current.id || (Boolean(current.cutout) && anchors.image === behind?.id);
+  return ownFrame ? current : null;
+}
+
+/** The "before" of the before/after: the upload, for an uploaded photo. A
+ * character made from words has none. */
+export function beforeStep(creation: WizardCreation): CreationStep | null {
+  if (planOf(creation).source !== "upload") return null;
+  return creation.steps.find((s) => s.id === "original") ?? null;
+}
+
+/** Should step 3 start preparing by itself? The photo is in, nothing runs
+ * or failed, and nothing is prepared yet. */
+export function needsPrepare(creation: WizardCreation): boolean {
+  if (creation.status !== "draft") return false;
+  if (!creation.steps.some((s) => s.id === "original") || !creation.face_type) return false;
+  const job = creation.job;
+  if (job && (job.state === "queued" || job.state === "running")) return false;
+  if (job && (job.state === "failed" || job.state === "interrupted") && job.error?.code !== "superseded") {
+    return false;
+  }
+  return preparedStep(creation) === null;
+}
+
+/** Where step 3 is: working on the picture, done (a picture is ready,
+ * even when a later try failed: it is still there), failed with nothing
+ * to show, or waiting to start (about to, or for the owner's agreement). */
+export type PreparePhase = "working" | "done" | "failed" | "waiting";
+
+export function preparePhase(creation: Creation): PreparePhase {
+  const job = creation.job;
+  if (isBusyPreparing(creation)) return "working";
+  if (preparedStep(creation)) return "done";
+  if (job && isPrepareJob(job) && (job.state === "failed" || job.state === "interrupted") && job.error?.code !== "superseded") {
+    return "failed";
+  }
+  return "waiting";
+}
+
+/** "Use my original photo": a realistic upload only. */
+export function canUseOriginal(plan: Plan): boolean {
+  return plan.source === "upload" && plan.look === "realistic";
+}
+
+/** AI tries left on step 3 (six per creation). */
+export function triesLeft(creation: WizardCreation): number {
+  return creation.ai?.prepare_rounds_left ?? 0;
+}
+
+// --- Step 4 ---------------------------------------------------------------------------
+
+/** The screen a creation is on: a creation being built or built is on
+ * Publish; Publish is asked for (`?step=publish`) and the picture is ready;
+ * otherwise Prepare. Asking for Publish never skips making the picture. */
+export function screenFor(creation: WizardCreation, requested: string | null): "prepare" | "publish" {
+  if (creation.status === "finishing" || creation.status === "finished") return "publish";
+  if (requested === "publish" && preparedStep(creation) && !isBusyPreparing(creation)) return "publish";
+  return "prepare";
+}
+
+function isBusyPreparing(creation: Creation): boolean {
+  const job = creation.job;
+  return Boolean(job && isPrepareJob(job) && (job.state === "queued" || job.state === "running"));
+}
+
+/** Were the eyes, lips and head found, well enough to publish without
+ * placing a point? A detection the validator passes, or the vision
+ * model's points (an animal, a drawing) that fit. A template's guess is
+ * not: then the points editor opens. */
+export function faceFound(anchors: Pick<CreationAnchors, "detected" | "source" | "validation"> | null): boolean {
+  if (!anchors) return false;
+  return anchors.validation.ok && (anchors.detected || anchors.source === "ai");
+}
+
+// --- Names ----------------------------------------------------------------------------
+
+// Camera and app file names say nothing about who is in the picture.
+const MEANINGLESS_FILE =
+  /^(img|image|dsc|dscn|dscf|pxl|photo|picture|pic|screenshot|screen shot|capture|whatsapp|signal|telegram|mvimg|received|download|untitled|p)(?=$|[\W_\d])|^[\d\W_]+$|\d{6,}/i;
+const ARTICLES = /^(a|an|the|un|une|le|la|les|des|l')\s+/i;
+const NAME_MAX = 40;
+
+function capitalised(text: string): string {
+  return text.charAt(0).toLocaleUpperCase() + text.slice(1);
+}
+
+function cut(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const head = text.slice(0, max + 1);
+  const space = head.lastIndexOf(" ");
+  return (space > max / 2 ? head.slice(0, space) : text.slice(0, max)).trim();
+}
+
+/**
+ * A sensible first name for a new avatar (renamed on its page in one
+ * click): the description's own words ("a cheerful baker with flour on her
+ * apron" → "Cheerful baker with flour on her"), a file name that means
+ * something ("maria_headshot.jpg" → "Maria headshot"), else `fallback` (the
+ * model and look in words, "Realistic human").
+ */
+export function defaultName(input: { description?: string | null; fileName?: string | null; fallback: string }): string {
+  const words = (input.description ?? "").replace(/\s+/g, " ").trim().replace(ARTICLES, "");
+  if (words) return capitalised(cut(words.replace(/[.,;:!?]+$/, ""), NAME_MAX));
+  const stem = (input.fileName ?? "").replace(/\.[^.]+$/, "").trim();
+  if (stem && !MEANINGLESS_FILE.test(stem)) {
+    const clean = stem.replace(/[_\-.]+/g, " ").replace(/\s+/g, " ").trim();
+    if (clean) return capitalised(cut(clean, NAME_MAX));
+  }
+  return input.fallback;
+}
+
+// --- This tab's memory ----------------------------------------------------------------
+
+/** What step 2 was given, kept for this tab: going Back from step 3 opens
+ * step 2 as it was, and step 3 knows how to start and what to call it. */
+export interface Choices {
+  model: AvatarModel;
+  source: PhotoSource;
+  look: Look;
+  description: string;
+  fileName: string | null;
+  intent: PrepareIntent;
+}
+
+const CHOICES_PREFIX = "liveface.wizard.";
+const LAST_KEY = `${CHOICES_PREFIX}last`;
+
+export function rememberChoices(store: DraftStore | null, creationId: string | null, choices: Choices): void {
+  try {
+    const text = JSON.stringify(choices);
+    store?.setItem(LAST_KEY, text);
+    if (creationId) store?.setItem(`${CHOICES_PREFIX}${creationId}`, text);
+  } catch {
+    // best effort: without it step 3 goes by the plan
+  }
+}
+
+function parseChoices(raw: string | null | undefined): Choices | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<Choices> | null;
+    const model = parseModel(value?.model);
+    const look = parseLook(value?.look);
+    const source = SOURCES.find((s) => s === value?.source) ?? null;
+    if (!model || !look || !source) return null;
+    return {
+      model,
+      look,
+      source,
+      description: typeof value?.description === "string" ? value.description.slice(0, MAX_WORDS) : "",
+      fileName: typeof value?.fileName === "string" ? value.fileName : null,
+      intent: value?.intent === "original" ? "original" : "ai",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** The choices kept for a creation, or (no id) the last ones made. */
+export function recallChoices(store: DraftStore | null, creationId: string | null): Choices | null {
+  try {
+    return parseChoices(store?.getItem(creationId ? `${CHOICES_PREFIX}${creationId}` : LAST_KEY));
+  } catch {
+    return null;
+  }
+}
+
+export function forgetChoices(store: DraftStore | null, creationId: string): void {
+  try {
+    store?.removeItem(`${CHOICES_PREFIX}${creationId}`);
+  } catch {
+    // best effort
+  }
+}

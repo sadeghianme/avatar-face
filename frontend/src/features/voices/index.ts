@@ -4,3 +4,4 @@ export { SpeakPanel } from "./components/SpeakPanel";
 export { VoicePicker } from "./components/VoicePicker";
 export { defaultVoiceSelection } from "./components/VoicePicker";
 export type { VoiceSelection } from "./components/VoicePicker";
+export { SampleSpeech, sampleVoice } from "./components/SampleSpeech";

@@ -43,6 +43,54 @@ both a good upload flow and a small catalogue of ready characters.
 
 ## The creation flow
 
+### The four-step wizard (2026-09-28, replaces the five steps below)
+
+The owner's flow: **1 Model · 2 Photo · 3 Prepare · 4 Publish**.
+
+```
+1 Model     Human avatar | Animal avatar
+2 Photo     "Generate with AI" (one description, example chips) or "Upload a
+            photo", and a look: Realistic | Animation (3D, animated film) |
+            Cartoon (flat 2D). The AI agreement (third_party_ai) and, for a
+            person, the statement (depiction for a photo, generated_face for
+            a description) are ticked HERE; the statement is recorded for the
+            creation as soon as it exists, and finish finds it
+            (consent.statement_about). A realistic upload may go without AI.
+3 Prepare   automatic, one job (POST /prepare, services.wizard): the AI makes
+            the picture in the look on a plain backdrop, it is cut out (the
+            person segmenter for a person, else services.backdrop, the
+            colour keyer) and the face is found (MediaPipe; the vision
+            model's points for an animal or a drawing, on the consent).
+            A described character gets all of this inside its generate job.
+            Result big, before/after slider; Retry, "Describe a change"
+            (mode change, edits the AI picture), "Use my original photo"
+            (realistic uploads: framed, cut out, no AI). Six AI tries.
+4 Publish   talking preview (preview-rig) with a play button; Publish =
+            finish (a realistic person's mouth kit runs inside it, listed as
+            stages). The points editor only when the face was not found
+            (a template's guess: the owner places and confirms) or on
+            "Fix points". Name: a default (the description's words, a
+            meaningful file name, else "Human avatar"...), renamed in place
+            on the avatar page; the voice is chosen there too.
+```
+
+Model × look → line (services.wizard.line_for, wizard.ts lineFor):
+
+| model \ look | Realistic | Animation | Cartoon |
+|---|---|---|---|
+| Human | `human` (photographic mouth, own teeth and shapes at publish, layers) | `cartoon` | `cartoon` |
+| Animal | `animal` (muzzle) | `cartoon` | `cartoon` |
+
+The plan `{model, look, source, description}` is kept in `steps.plan`; a
+creation without one (the old wizard) is carried on with the plan its line
+implies. Prompts (services.wizard): frontal head and shoulders (animals:
+frontal head, muzzle to the camera), eyes open on the camera, mouth closed
+and relaxed, soft even frontal light, sharp eyes and lips, a flat mid-grey
+backdrop (soft blue for a grey or white subject) that the keyer takes off;
+the owner's words are quoted and cannot move any of it.
+
+### The five-step flow (2026-09-25, superseded)
+
 The owner's order (2026-09-25, Step 5 added 2026-09-26): **upload → background
 → AI adjust → points → preparing your avatar**.
 
@@ -141,6 +189,9 @@ again (a chained background job, `cutout:N`).
 | `GET /consents/mine?scope=third_party_ai` | – | the caller's latest AI consent under the current wording, or null (asked once per person and wording) |
 | `POST /consents` {scope, text_version, providers?, creation_id?} | – | records a statement; one about a face names its creation and counts for it only |
 | `POST /{id}/retry` {consent_id?} | job | runs a failed job again; one that sends pixels out needs the retrying member's own consent |
+| `POST /creations` +{model, look} | job | the four-step wizard's upload: the line from the plan, kept as `plan` |
+| `POST /creations/generate` +{model, look} | job | the wizard's character prompt; cut-out and anchors in the same job |
+| `POST /{id}/prepare` {mode: ai\|change\|generate\|original, instruction?, consent_id?} | job | step 3: the picture in the look (adjusted:N), its cut-out (cutout:N) and anchors, in one write; six AI tries |
 
 Races: a job records the `revision` it started from and stores its result only
 if the row is unchanged (`UPDATE … WHERE revision = :rev`). One active job per

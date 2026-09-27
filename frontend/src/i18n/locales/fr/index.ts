@@ -9,6 +9,7 @@ import { settings } from "./settings";
 import { share } from "./share";
 import { simulator } from "./simulator";
 import { voices } from "./voices";
+import { wizard } from "./wizard";
 
 export const messages = {
   ...api_keys,
@@ -22,4 +23,5 @@ export const messages = {
   ...share,
   ...simulator,
   ...voices,
+  ...wizard,
 };

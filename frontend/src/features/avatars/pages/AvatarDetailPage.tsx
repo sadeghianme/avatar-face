@@ -12,6 +12,7 @@ import { Avatar3DPreview } from "@/features/avatars/components/Avatar3DPreview";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { EmbedSnippet } from "@/features/avatars/components/EmbedSnippet";
 import { FinishNotice } from "@/features/avatars/components/FinishNotice";
+import { InlineName } from "@/features/avatars/components/InlineName";
 import { PrepProgress } from "@/features/avatars/components/PrepProgress";
 import { PublishBar } from "@/features/avatars/components/PublishBar";
 import { SharePanel } from "@/features/avatars/components/SharePanel";
@@ -141,6 +142,13 @@ export function AvatarDetailPage() {
     await queryClient.invalidateQueries({ queryKey: ["avatar", current!.id, avatar!.id] });
   };
 
+  /** The name, edited in place in the title (InlineName). */
+  const rename = async (name: string) => {
+    await api.patch(`/orgs/${current!.id}/avatars/${avatar!.id}`, { name });
+    await queryClient.invalidateQueries({ queryKey: ["avatar", current!.id, avatar!.id] });
+    await queryClient.invalidateQueries({ queryKey: ["avatars", current!.id] });
+  };
+
   /** Cut the subject out, or put the original photo back. */
   const toggleBackground = async () => {
     setBusyBg(true);
@@ -200,7 +208,7 @@ export function AvatarDetailPage() {
           >
             <Icon name="back" className="h-5 w-5" />
           </Link>
-          <h1 className="text-2xl font-semibold">{avatar.name}</h1>
+          <InlineName name={avatar.name} onSave={rename} />
           <StatusBadge status={avatar.status} />
           {/* The same disclosure visitors get with the published avatar:
               what the AI did to the picture, "AI teeth" when it made the
