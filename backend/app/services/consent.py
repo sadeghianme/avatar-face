@@ -271,6 +271,36 @@ async def latest(
     return None
 
 
+async def statement_about(
+    db: AsyncSession, org: Organization, user_id: str, scope: str, subject_id: str
+) -> Consent | None:
+    """This user's latest statement `scope` about the face in creation
+    `subject_id`, under the wording in force, or None.
+
+    The four-step wizard asks for the statement where the photo or the
+    description is given (its step 2) and records it for the creation as
+    soon as the creation exists; finishing then finds it here instead of
+    asking again. Still this user's own, about this face, under the current
+    words: exactly what `require` accepts.
+    """
+    if scope not in SUBJECT_SCOPES:
+        return None
+    return (
+        await db.execute(
+            select(Consent)
+            .where(
+                Consent.org_id == org.id,
+                Consent.user_id == user_id,
+                Consent.scope == scope,
+                Consent.subject_id == subject_id,
+                Consent.text_version == TEXT_VERSIONS[scope],
+            )
+            .order_by(Consent.created_at.desc(), Consent.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
 def with_consent(consent_ids: list | None, consent_id: str) -> list:
     """`consent_ids` with `consent_id` appended once (a new list: JSON
     columns are replaced, never mutated)."""

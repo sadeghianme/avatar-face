@@ -40,7 +40,10 @@ class JobOut(BaseModel):
     id: str
     # "mouth_kit": an avatar's mouth shapes and teeth made from its photo
     # (POST /avatars/{id}/mouth-kit); every other step is a creation's.
-    step: Literal["ingest", "generate", "adjust", "background", "detect", "finish", "mouth_kit"]
+    # "prepare": the four-step wizard's step 3 (services.wizard).
+    step: Literal[
+        "ingest", "generate", "adjust", "background", "detect", "finish", "mouth_kit", "prepare"
+    ]
     state: Literal["queued", "running", "done", "failed", "interrupted"]
     error: JobError | None = None
     started_at: str

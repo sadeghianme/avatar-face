@@ -44,6 +44,8 @@ VISION_KIND = "vision_points"
 # "teeth": the single "ee" photo made when the kit cannot be.
 IMAGE_CALLS = (
     "generate", "adjust_touchup", "adjust_stylise", "adjust_regen", "teeth", "mouth_shapes",
+    # The wizard's step 3 (services.wizard): the upload in its look, or a change.
+    "prepare",
 )
 
 

@@ -57,14 +57,18 @@ from app.schemas.creation import (
     FinishOut,
     FinishRequest,
     FinishWarning,
+    AvatarLook,
+    AvatarModel,
     GenerateCreationRequest,
     JobOut,
+    PrepareRequest,
     PreviewRigOut,
     PreviewRigRequest,
     RetryRequest,
     StepOut,
 )
 from app.services import creations as svc
+from app.services import wizard
 from app.services.jobs import ACTIVE_STATES, FAILED, INTERRUPTED, QUEUED, run_cpu, runner
 from app.services.storage import get_storage
 
@@ -249,6 +253,8 @@ def _ai_out(creation: Creation, org: Organization | None, recommendation: dict |
         ai_detections_left=max(0, svc.AI_DETECTIONS_PER_CREATION - usage["detections"]),
         last_round=AdjustRoundOut(**last) if last and last["source"] else None,
         auto_adjust=_auto_adjust(creation) if enabled else None,
+        prepare_rounds_left=max(0, wizard.PREPARE_ROUNDS_PER_CREATION - usage["prepare_rounds"]),
+        last_prepare=usage.get("last_prepare"),
     )
 
 
@@ -316,6 +322,7 @@ async def _out(db: DB, creation: Creation) -> CreationOut:
         # session: this is an identity-map read, not a query.
         ai=_ai_out(creation, await db.get(Organization, creation.org_id), recommendation),
         statement=svc.statement_for(creation),
+        plan=wizard.plan_of(creation.steps),
         created_at=creation.created_at,
         updated_at=creation.updated_at,
     )
@@ -349,14 +356,26 @@ async def create_creation(
     ctx: OrgMember,
     db: DB,
     face_type: Annotated[FaceType | None, Form()] = None,
+    model: Annotated[AvatarModel | None, Form()] = None,
+    look: Annotated[AvatarLook | None, Form()] = None,
 ) -> CreationOut:
     """Upload a photo and start a creation.
 
     Refusals that need no decoding happen here (type, size, the draft limit,
     the job admission, the header's pixel count); the decode, clean-up and
     analysis run as the creation's first job.
+
+    The four-step wizard sends `model` and `look` (both, or neither): the
+    line follows from them (services.wizard.line_for) and the creation keeps
+    them as its `plan`; step 3 then prepares the photo (POST /prepare).
     """
     settings = get_settings()
+    plan = None
+    if (model is None) != (look is None):
+        raise Validation422("Send both the model and the look", code="plan_incomplete")
+    if model is not None and look is not None:
+        plan = wizard.make_plan(model, look, "upload")
+        face_type = wizard.line_for(model, look)
     if file.content_type not in settings.allowed_image_types:
         raise Validation422("Choose a JPEG, PNG or WebP photo", code="unsupported_image_type")
     data = await file.read(svc.MAX_UPLOAD_BYTES + 1)
@@ -382,6 +401,7 @@ async def create_creation(
             face_type=face_type,
             status=CreationStatus.draft,
             revision=0,
+            steps={"current": None, "items": {}, wizard.PLAN: plan} if plan else None,
             job=svc.job_record(job, QUEUED, {}),
         )
         db.add(creation)
@@ -430,6 +450,20 @@ async def generate_creation(
     from app.services.usage import check_image_limit
 
     consent.require_ai_enabled(ctx.org)
+    plan = None
+    face_type = body.face_type
+    if (body.model is None) != (body.look is None):
+        raise Validation422("Send both the model and the look", code="plan_incomplete")
+    if body.model is not None and body.look is not None:
+        if body.source_avatar_id:
+            raise Validation422(
+                "A character described in words is made from the words only",
+                code="plan_with_source",
+            )
+        plan = wizard.make_plan(body.model, body.look, "generate", body.prompt)
+        face_type = wizard.line_for(body.model, body.look)
+    if face_type is None:
+        raise Validation422("Say what kind of face to make", code="face_type_required")
     consent_ids: list[str] = []
     if body.source_avatar_id or body.consent_id:
         agreed = await consent.require(
@@ -459,11 +493,13 @@ async def generate_creation(
     creation_id = new_id()
     job = runner.reserve(ctx.org.id, creation_id, "generate", 0)
     params = {
-        "style": body.style,
+        "style": wizard.STYLE_OF_LOOK[plan["look"]] if plan else body.style,
         "prompt": body.prompt,
         "source_avatar_id": body.source_avatar_id,
         # What a retry checks again: sending the source photo out needs the
-        # retrying member's own consent under the current wording.
+        # retrying member's own consent under the current wording. With a
+        # plan, it also lets the job ask the vision model for the points of
+        # a face the detector cannot see.
         "consent_id": consent_ids[0] if consent_ids else None,
     }
     try:
@@ -471,9 +507,10 @@ async def generate_creation(
             id=creation_id,
             org_id=ctx.org.id,
             created_by_id=ctx.membership.user_id,
-            face_type=body.face_type,
+            face_type=face_type,
             status=CreationStatus.draft,
             revision=0,
+            steps={"current": None, "items": {}, wizard.PLAN: plan} if plan else None,
             consent_ids=consent_ids or None,
             job=svc.job_record(job, QUEUED, params),
         )
@@ -935,6 +972,100 @@ async def adjust_photo(
     return await _start_adjust(db, creation, body, ctx.org, ctx.membership.user_id)
 
 
+async def _start_prepare(
+    db: DB, creation: Creation, body: PrepareRequest, org: Organization, user_id: str
+) -> CreationOut:
+    from app.services import consent, imagegen
+    from app.services.ai_models import PROVIDER
+    from app.services.usage import check_image_limit
+
+    _require_draft(creation)
+    _require_image(creation)
+    face_type = _require_face_type(creation)
+    items = svc.step_items(creation.steps)
+    plan = wizard.plan_of(creation.steps)
+    values: dict = {}
+    if plan is None:
+        # A creation the old wizard started: carried on with the plan its
+        # line implies (a person's photo is realistic, a drawing a cartoon).
+        plan = wizard.inferred_plan(face_type, bool(items["original"].get("generated")))
+        steps = svc.copied(creation.steps)
+        steps[wizard.PLAN] = plan
+        values["steps"] = steps
+    instruction = (body.instruction or "").strip() or None
+    params: dict = {"mode": body.mode, "instruction": instruction}
+    if body.mode == wizard.ORIGINAL:
+        if plan["look"] != "realistic":
+            raise Validation422(
+                "Your own photo is used as it is only for a realistic avatar",
+                code="original_not_for_look",
+            )
+        if plan["source"] != "upload":
+            raise Validation422("There is no photo of yours to use", code="original_not_for_look")
+        # No AI makes the picture; the consent, when the member gave one, lets
+        # the vision model find the points of a face the detector misses.
+        if body.consent_id:
+            agreed = await consent.require(
+                db, body.consent_id, org, user_id, consent.THIRD_PARTY_AI, PROVIDER
+            )
+            params["consent_id"] = agreed.id
+            values["consent_ids"] = consent.with_consent(creation.consent_ids, agreed.id)
+    else:
+        if body.mode == wizard.CHANGE and not instruction:
+            raise Validation422("Describe the change first", code="instruction_required")
+        if body.mode == wizard.GENERATE and plan["source"] != "generate":
+            raise Validation422(
+                "Only a character described in words is made again from its words",
+                code="generate_not_for_upload",
+            )
+        agreed = await consent.require(
+            db, body.consent_id, org, user_id, consent.THIRD_PARTY_AI, PROVIDER
+        )
+        if not imagegen.configured():
+            raise Conflict409(
+                "AI image making is not configured on this server", code="imagegen_unavailable"
+            )
+        usage = svc.ai_usage_of(creation)
+        if usage["prepare_rounds"] >= wizard.PREPARE_ROUNDS_PER_CREATION:
+            raise Conflict409(
+                "This avatar has used all its AI tries; continue with the picture you have",
+                code="budget_spent",
+            )
+        # Refused now rather than failing in the job: nothing is spent.
+        await check_image_limit(db, creation.org_id)
+        # Taken with the job, atomically: two presses cannot both pass.
+        usage["prepare_rounds"] += 1
+        params["consent_id"] = agreed.id
+        values["ai_usage"] = usage
+        values["consent_ids"] = consent.with_consent(creation.consent_ids, agreed.id)
+    await svc.start_job(db, creation, "prepare", params, values=values, bump="steps" in values)
+    return await _reloaded(db, creation)
+
+
+@router.post("/{creation_id}/prepare", response_model=CreationOut, status_code=202)
+async def prepare_photo(
+    creation_id: str, body: PrepareRequest, ctx: OrgMember, db: DB
+) -> CreationOut:
+    """Step 3 of the four-step wizard (a job): make the picture the avatar is
+    built from, in the plan's look, take its background off and find its
+    face (services.wizard). `mode`:
+
+    - `ai`: the upload, made by the AI in the look, frontal and lit, eyes
+      open on the camera, mouth closed; `instruction` is added to it;
+    - `change`: `instruction` applied to the current AI picture;
+    - `generate`: a new picture from a generated creation's description;
+    - `original`: the photo itself, framed and cut out, no AI (realistic
+      uploads only; 422 original_not_for_look).
+
+    The AI modes need a third_party_ai consent (403 consent_required /
+    third_party_ai_disabled), a try left (six per creation, 409
+    budget_spent) and the monthly image limit (429). The picture before is
+    kept: every result is a step, and the upload stays.
+    """
+    creation = await _get(db, ctx.org.id, creation_id)
+    return await _start_prepare(db, creation, body, ctx.org, ctx.membership.user_id)
+
+
 @router.post("/{creation_id}/preview-rig", response_model=PreviewRigOut)
 async def preview_rig(
     creation_id: str, body: PreviewRigRequest, ctx: OrgMember, db: DB
@@ -994,11 +1125,18 @@ async def _start_finish(
         # no real person). Decided by where the pixels came from, not by
         # the line (a stylised photo is still that person), and made for
         # this creation. Checked first, before any other refusal, so the
-        # dashboard asks for it once.
+        # dashboard asks for it once. Without an id, the statement this
+        # member already made for this creation (the four-step wizard asks
+        # for it with the photo or the description).
+        given = body.consent_id
+        if not given:
+            made = await consent.statement_about(db, org, user_id, statement, creation.id)
+            given = made.id if made is not None else None
         agreed = await consent.require(
-            db, body.consent_id, org, user_id, statement, subject_id=creation.id
+            db, given, org, user_id, statement, subject_id=creation.id
         )
         consent_ids = consent.with_consent(consent_ids, agreed.id)
+        body = body.model_copy(update={"consent_id": agreed.id})
     anchors = _anchors_for(creation, body.anchors_id)
     marks = _check_marks(body.marks, face_type, anchors["image_size"])
     required = svc.required_marks(face_type, bool(anchors.get("detected")))
@@ -1146,6 +1284,13 @@ async def retry_job(
         return await _reloaded(db, creation)
     if job.step == "background":
         return (await _start_background(db, creation, "remove"))[0]
+    if job.step == "prepare":
+        prepare = PrepareRequest(
+            mode=params.get("mode") or wizard.AI,
+            instruction=params.get("instruction"),
+            consent_id=given or params.get("consent_id"),
+        )
+        return await _start_prepare(db, creation, prepare, ctx.org, ctx.membership.user_id)
     if job.step == "detect":
         detect = DetectRequest(
             use_ai=bool(params.get("use_ai")), consent_id=given or params.get("consent_id")

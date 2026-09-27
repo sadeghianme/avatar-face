@@ -545,6 +545,8 @@ def ai_usage_of(creation: Creation) -> dict:
     usage.setdefault("detections", 0)
     usage.setdefault("next_adjusted", 0)
     usage.setdefault("vision_cache", [])
+    # The four-step wizard's AI runs on step 3 (services.wizard).
+    usage.setdefault("prepare_rounds", 0)
     return usage
 
 
@@ -713,6 +715,11 @@ async def _ingest(job: Job, params: dict) -> None:
             }
         },
     }
+    # The four-step wizard's plan (services.wizard), given at upload.
+    creation = await _load(job)
+    plan = (creation.steps or {}).get("plan") if creation is not None else None
+    if plan:
+        steps["plan"] = plan
     stored = await _store_result(
         job,
         params,
@@ -1367,9 +1374,17 @@ async def _generate(job: Job, params: dict) -> None:
     async with get_session_factory()() as db:
         await check_image_limit(db, job.org_id)
     job.report(0.1, "generating")
-    prompt = photo_adjust.generation_prompt(
-        params["style"], creation.face_type, params.get("prompt") or "", source is not None
-    )
+    plan = (creation.steps or {}).get("plan")
+    if plan and source is None:
+        # The four-step wizard: its own prompt for the model and look, a
+        # plain backdrop, and the cut-out and the face found in this job.
+        from app.services import wizard
+
+        prompt = wizard.character_prompt(plan["model"], plan["look"], plan.get("description"))
+    else:
+        prompt = photo_adjust.generation_prompt(
+            params["style"], creation.face_type, params.get("prompt") or "", source is not None
+        )
     try:
         if source is not None:
             payload, mime = await run_cpu(source_on_backdrop, source)
@@ -1426,9 +1441,24 @@ async def _generate(job: Job, params: dict) -> None:
             }
         },
     }
-    await _store_result(
-        job, params, {"steps": steps, "analysis": _stored_analysis(analysis)}, [key]
-    )
+    values: dict = {"steps": steps, "analysis": _stored_analysis(analysis)}
+    new_keys = [key]
+    if plan and source is None:
+        from app.services import wizard
+
+        steps["plan"] = plan
+        values["anchors"], cut = await wizard.settle(
+            job, creation, steps, "original", clean, params.get("consent_id"), new_keys
+        )
+
+        def remember(usage: dict) -> None:
+            usage["last_prepare"] = {
+                "mode": wizard.GENERATE, "look": plan["look"], "instruction": None,
+                "step": "original", "cut": cut,
+            }
+
+        await _update_ai_usage(job, remember)
+    await _store_result(job, params, values, new_keys)
 
 
 # --- Finish -----------------------------------------------------------------------
@@ -1868,6 +1898,13 @@ async def _undo_finish_retrying(org_id: str, creation_id: str, avatar_id: str | 
             await asyncio.sleep(delay)
 
 
+async def _prepare(job: Job, params: dict) -> None:
+    """The four-step wizard's step 3 (services.wizard.prepare_job)."""
+    from app.services.wizard import prepare_job
+
+    await prepare_job(job, params)
+
+
 WORKS = {
     "ingest": _ingest,
     "generate": _generate,
@@ -1875,6 +1912,7 @@ WORKS = {
     "adjust": _adjust,
     "detect": _detect,
     "finish": _finish,
+    "prepare": _prepare,
 }
 
 

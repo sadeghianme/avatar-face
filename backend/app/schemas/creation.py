@@ -95,10 +95,21 @@ class DetectRequest(BaseModel):
     consent_id: str | None = Field(default=None, max_length=64)
 
 
-class GenerateCreationRequest(BaseModel):
-    """A creation whose original is made by the image model."""
+AvatarModel = Literal["human", "animal"]
+AvatarLook = Literal["realistic", "animation", "cartoon"]
 
-    face_type: FaceType
+
+class GenerateCreationRequest(BaseModel):
+    """A creation whose original is made by the image model.
+
+    The four-step wizard sends `model` and `look` (services.wizard): the line
+    follows from them, the prompt is the wizard's own, and the job also cuts
+    the picture out and finds its face. Older clients send `face_type` and
+    `style`, as before."""
+
+    face_type: FaceType | None = None
+    model: AvatarModel | None = None
+    look: AvatarLook | None = None
     style: GenerationStyle = "photoreal"
     # What to make, in the owner's words (appended to the style prompt).
     prompt: str = Field(default="", max_length=300)
@@ -106,6 +117,29 @@ class GenerateCreationRequest(BaseModel):
     # photo to Google, so it needs a third_party_ai consent.
     source_avatar_id: str | None = Field(default=None, max_length=32)
     consent_id: str | None = Field(default=None, max_length=64)
+
+
+class PrepareRequest(BaseModel):
+    """Step 3 of the four-step wizard (services.wizard): a job.
+
+    `ai` makes the upload in the plan's look; `change` edits the current AI
+    picture with `instruction` (from the upload when there is none yet);
+    `generate` makes a new picture from a generated creation's description
+    (its Retry); `original` uses the photo itself, cut out, with no AI (a
+    realistic upload only). The AI modes need a third_party_ai consent."""
+
+    mode: Literal["ai", "change", "generate", "original"] = "ai"
+    instruction: str | None = Field(default=None, max_length=300)
+    consent_id: str | None = Field(default=None, max_length=64)
+
+
+class PlanOut(BaseModel):
+    """What the owner chose on the four-step wizard's first two screens."""
+
+    model: AvatarModel
+    look: AvatarLook
+    source: Literal["upload", "generate"]
+    description: str | None = None
 
 
 class ChooseRequest(BaseModel):
@@ -241,6 +275,11 @@ class AiOut(BaseModel):
     # Set when the wizard should start a touch-up on its own (see
     # AutoAdjustOut); null otherwise, and once one was started for this image.
     auto_adjust: AutoAdjustOut | None = None
+    # The four-step wizard's step 3: AI runs left, and what the last one
+    # was ({mode, look, instruction, step, cut}: `cut` false when the
+    # backdrop could not be taken off and the picture is kept whole).
+    prepare_rounds_left: int = 0
+    last_prepare: dict | None = None
 
 
 class CreationOut(BaseModel):
@@ -270,6 +309,8 @@ class CreationOut(BaseModel):
     # (whatever line it is on now, a stylised one included), and
     # "generated_face" for a face the image model made from words.
     statement: Literal["depiction", "generated_face"] | None = None
+    # The four-step wizard's plan; null for a creation the old wizard made.
+    plan: PlanOut | None = None
     created_at: datetime
     updated_at: datetime
 
