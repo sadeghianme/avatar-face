@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw
 
 from app.services import backdrop, imagegen, wizard
 from app.services import vision_points as vp
-from app.services.usage import IMAGE_KIND, VISION_KIND
+from app.services.usage import IMAGE_KIND, VISION_KIND  # noqa: F401
 from tests.test_creation_ai import (  # noqa: F401  (fixtures)
     FakeImages,
     _org,
@@ -381,3 +381,85 @@ async def test_ai_off_refuses_the_ai_and_leaves_the_photo(client, faces, images,
     assert imagegen.MODEL  # the fake stood in for the model all along
     assert vp.PROVIDER
     _ = FakeImages
+
+
+# --- a refused edit is asked once more on the head crop ---------------------------------
+
+
+async def test_a_declined_upload_is_asked_once_more_on_the_head_crop(client, faces, images):
+    """Real Gemini declined a whole-frame portrait at the prompt and edited the
+    same face cropped to head and shoulders. The prepare job asks once more on
+    that crop, meters both calls, and the answer is an ordinary result."""
+    from app.services import face_template
+
+    images.script = ["refuse", studio()]
+    # A face a quarter of the frame wide, so its head crop is a real crop.
+    faces.by_size[(600, 750)] = face_template.place((250, 250, 350, 400))
+    headers, org_id = await _org(client, "crop-prepare")
+    base, _ = await _upload(client, headers, org_id, look="cartoon")
+    await _prepare(client, headers, base, consent_id=await ai_consent(client, headers, org_id))
+    body = await _get(client, headers, base)
+    assert body["job"]["state"] == "done", body["job"]
+    assert len(images.calls) == 2
+    full, crop = (Image.open(io.BytesIO(c["source"])) for c in images.calls)
+    assert crop.width * crop.height < full.width * full.height, "the second ask is the crop"
+    assert images.calls[0]["prompt"] == images.calls[1]["prompt"]
+    assert body["current"] == "cutout:0"
+    assert await _usage(org_id, IMAGE_KIND) == ["prepare", "prepare"], "both asks metered"
+    assert body["ai"]["prepare_rounds_left"] == wizard.PREPARE_ROUNDS_PER_CREATION - 1
+
+
+async def test_a_head_crop_that_is_declined_too_is_safety_refused(client, faces, images):
+    from app.services import face_template
+
+    images.script = ["refuse"]
+    faces.by_size[(600, 750)] = face_template.place((250, 250, 350, 400))
+    headers, org_id = await _org(client, "crop-twice")
+    base, _ = await _upload(client, headers, org_id, look="animation")
+    await _prepare(client, headers, base, consent_id=await ai_consent(client, headers, org_id))
+    body = await _get(client, headers, base)
+    assert len(images.calls) == 2, "the photo, then its head crop; never a third time"
+    assert body["job"]["error"]["code"] == "safety_refused"
+    assert body["job"]["retryable"] is False
+    assert await _usage(org_id, IMAGE_KIND) == ["prepare", "prepare"]
+
+
+async def test_a_picture_that_is_already_a_head_crop_or_has_no_face_is_asked_once(
+    client, faces, images
+):
+    from app.services import face_template
+
+    images.script = ["refuse"]
+    # The face fills the frame: its head crop is the same picture.
+    faces.by_size[(600, 750)] = face_template.place((30, 30, 570, 720))
+    headers, org_id = await _org(client, "crop-same-prepare")
+    base, _ = await _upload(client, headers, org_id, look="cartoon")
+    consent_id = await ai_consent(client, headers, org_id)
+    await _prepare(client, headers, base, consent_id=consent_id)
+    assert len(images.calls) == 1
+    # An animal: nothing detects a face to crop around.
+    faces.none_for.add((600, 750))
+    animal, _ = await _upload(client, headers, org_id, model="animal", look="cartoon")
+    await _prepare(client, headers, animal, consent_id=consent_id)
+    assert len(images.calls) == 2, "one more ask for the animal, no crop retry"
+    body = await _get(client, headers, animal)
+    assert body["job"]["error"]["code"] == "safety_refused"
+
+
+async def test_a_declined_change_is_asked_once_more_on_the_crop_too(client, faces, images):
+    from app.services import face_template
+
+    images.script = [studio(), "refuse", studio(shirt=(150, 40, 40))]
+    headers, org_id = await _org(client, "crop-change")
+    base, _ = await _upload(client, headers, org_id, look="cartoon")
+    consent_id = await ai_consent(client, headers, org_id)
+    await _prepare(client, headers, base, consent_id=consent_id)
+    # The AI picture is 600x750 too (the fake answers studio()): a small face.
+    faces.by_size[(600, 750)] = face_template.place((250, 250, 350, 400))
+    await _prepare(
+        client, headers, base, mode="change", instruction="a red shirt", consent_id=consent_id
+    )
+    body = await _get(client, headers, base)
+    assert body["job"]["state"] == "done", body["job"]
+    assert len(images.calls) == 3
+    assert body["current"] == "cutout:1"

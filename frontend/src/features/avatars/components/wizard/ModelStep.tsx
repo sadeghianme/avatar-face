@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import { Face } from "@/features/avatars/components/wizard/Art";
+import { LookPicture } from "@/features/avatars/components/wizard/Art";
 import { MODELS, type AvatarModel } from "@/features/avatars/wizard";
 import { Icon } from "@/components/ui/Icon";
 
@@ -34,16 +34,16 @@ export function ModelStep({
                 chosen === model ? "border-brand-500 ring-1 ring-brand-500" : "border-gray-200 dark:border-line"
               }`}
           >
-            <span className="relative block aspect-square w-full sm:aspect-[4/3] overflow-hidden bg-gradient-to-b from-brand-50 via-orange-50 to-white dark:from-[#2a1d12] dark:via-[#1f1711] dark:to-raised">
+            <span className="relative block aspect-square w-full overflow-hidden bg-gradient-to-b from-brand-50 via-orange-50 to-white dark:from-[#2a1d12] dark:via-[#1f1711] dark:to-raised">
               {/* A soft halo behind the face. */}
               <span
                 aria-hidden="true"
                 className="absolute left-1/2 top-[58%] h-[78%] w-[62%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-200/60 blur-2xl dark:bg-brand-500/15"
               />
-              <Face
+              <LookPicture
                 model={model}
                 look="animation"
-                className="absolute inset-x-0 bottom-0 mx-auto h-[92%] w-auto transition-transform duration-300 group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+                className="absolute inset-0 h-full w-full transition-transform duration-300 group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
               />
             </span>
             <span className="flex flex-1 items-start justify-between gap-2 p-3 sm:p-5">

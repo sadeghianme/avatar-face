@@ -334,7 +334,7 @@ export function PhotoStep({
                       : "border-gray-200 hover:border-brand-300 dark:border-line dark:hover:border-brand-500/40"
                   }`}
               >
-                <span className={`relative block aspect-square w-full overflow-hidden sm:aspect-[4/3] ${PICTURE_BACKDROP}`}>
+                <span className={`relative block aspect-square w-full overflow-hidden ${PICTURE_BACKDROP}`}>
                   <LookPicture model={model} look={l} className="absolute inset-0 h-full w-full" />
                   {on && (
                     <span className="absolute end-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-brand-600 text-white shadow motion-safe:animate-tick-in">

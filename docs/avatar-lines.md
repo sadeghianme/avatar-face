@@ -74,6 +74,24 @@ The owner's flow: **1 Model · 2 Photo · 3 Prepare · 4 Publish**.
             on the avatar page; the voice is chosen there too.
 ```
 
+Refused edits (2026-10-03): the real image model declines some whole-frame
+portraits at the prompt and edits the same face cropped to head and
+shoulders. An upload or a change the model declines is therefore asked ONCE
+more on that crop (`wizard.head_crop_source`, 2.2 face widths), when a face
+is found and the crop differs from the whole picture; every answered call,
+the refusal included, is metered, and a second refusal is `safety_refused`.
+
+Consent wording `third_party_ai` 2026-10-03 describes this flow (the photo
+or description sent to make the picture in the chosen style, again at each
+retry or change; the picture again for an animal's or a drawing's points; a
+realistic person's face crops for their teeth and mouth shapes; results kept
+and published with an AI label; never used to train AI) and says nothing of
+what the provider does with data. Agreements to 2026-09-26 no longer count:
+the Photo screen's box comes up unticked and is agreed once more.
+
+The style thumbnails are real outputs of these prompts, cut out and cropped
+(`backend/scripts/build_style_thumbs.py`, `frontend/src/assets/wizard/`).
+
 Model × look → line (services.wizard.line_for, wizard.ts lineFor):
 
 | model \ look | Realistic | Animation | Cartoon |

@@ -49,7 +49,7 @@ describe("recording a consent", () => {
   it("matches the server's wording versions (services.consent.TEXT_VERSIONS)", () => {
     assert.deepEqual(
       { ...CONSENT_TEXT_VERSIONS },
-      { third_party_ai: "2026-09-26", depiction: "2026-09-25", generated_face: "2026-09-25" }
+      { third_party_ai: "2026-10-03", depiction: "2026-09-25", generated_face: "2026-09-25" }
     );
   });
   it("notices when the words in force are not the ones on screen", () => {
@@ -76,6 +76,12 @@ describe("a remembered consent", () => {
     assert.equal(rememberedConsent(mine({ consent_id: null }), "third_party_ai"), null);
     assert.equal(rememberedConsent(mine({ scope: "depiction" }), "third_party_ai"), null);
     assert.equal(rememberedConsent(mine({ text_version: "2027-01-01" }), "third_party_ai"), null);
+    // The wording of the four-step wizard (2026-10-03): an agreement to the
+    // one before it is not remembered, so the Photo screen's box is unticked
+    // and every member is asked once more.
+    assert.equal(rememberedConsent(mine({ text_version: "2026-09-26" }), "third_party_ai"), null);
+    assert.equal(rememberedConsent(mine({ text_version: "2026-10-03" }), "third_party_ai"), "c1");
+    assert.equal(consentBody("third_party_ai").text_version, "2026-10-03");
     assert.equal(rememberedConsent(undefined, "third_party_ai"), null);
   });
   it("is what a fresh record answers, so the next step does not ask again", () => {

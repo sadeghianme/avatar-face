@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { CHECKER_STYLE, Face, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
+import { CHECKER_STYLE, LookPicture, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
 import type { CreationStep } from "@/features/avatars/creation";
 import type { AvatarModel, Look, PrepareStage } from "@/features/avatars/wizard";
 import { Icon } from "@/components/ui/Icon";
@@ -48,7 +48,7 @@ export function Working({
             className="absolute inset-0 h-full w-full scale-105 object-contain opacity-70 blur-[2px] saturate-50"
           />
         ) : (
-          <Face model={model} look={look} className="absolute inset-x-0 bottom-0 mx-auto h-[88%] w-auto opacity-30 blur-[1.5px] motion-safe:animate-float-slow" />
+          <LookPicture model={model} look={look} className="absolute inset-0 h-full w-full opacity-30 blur-[2px] motion-safe:animate-float-slow" />
         )}
         {/* Shimmer and scan line: motion only for those who want it. */}
         <div

@@ -17,19 +17,22 @@ that was never shown.
 
 Three scopes:
 
-- `third_party_ai`: "this photo will be sent to Google (Gemini) to edit it
-  or to find its points". Refused outright (403 third_party_ai_disabled)
-  when the organization has turned third-party AI off. About sending photos,
-  not about one photo, so it is remembered per person and wording. Its
-  wording of 2026-09-26 also covers what is sent without a further press:
-  the wizard's own lip touch-up, and a person's mouth made from their
-  picture, at Finish ("Preparing your avatar") or by the Mouth panel's one
-  AI action: their teeth and their mouth shapes (a crop of the face sent
-  for the teeth and for each of six speech sounds, and once more for any
-  the AI declined; services.mouth_kit). It says those teeth and mouth shapes are
-  kept with the avatar and published with it, labelled as made by AI.
-  Agreements to the earlier text, which promised none of this, no longer
-  count.
+- `third_party_ai`: "the photo I upload, or the description I type, and
+  crops of my avatar's face are sent to Google (Gemini) to create and adjust
+  my avatar". Refused outright (403 third_party_ai_disabled) when the
+  organization has turned third-party AI off. About sending photos, not
+  about one photo, so it is remembered per person and wording. Its wording
+  of 2026-10-03 describes the four-step wizard: the upload or the
+  description sent to make the avatar's picture in the chosen style, again
+  at every retry or change, the picture again for an animal's or a
+  drawing's points, and a realistic person's teeth and mouth shapes at
+  publish or from the Mouth panel (a crop of the face sent for the teeth
+  and for each of six speech sounds, and once more for any the AI declined;
+  services.mouth_kit). It says the results are kept with the avatar and
+  published with it, labelled as made by AI, and that pictures are never
+  used to train AI. Agreements to an earlier text no longer count: every
+  member is asked once more (frontend useConsent / the wizard's Photo
+  screen).
 - `depiction`: "I am this person or have their permission, and they are 18
   or older". Required to finish a creation made from a person's photo, AI
   or not, on whatever line it ends up (services.creations.statement_for):
@@ -67,7 +70,7 @@ SUBJECT_SCOPES = frozenset({DEPICTION, GENERATED_FACE})
 # whenever its text changes in meaning (en and fr together): every consent
 # given under the old text stops being accepted, and people are asked again.
 TEXT_VERSIONS: dict[str, str] = {
-    THIRD_PARTY_AI: "2026-09-26",
+    THIRD_PARTY_AI: "2026-10-03",
     DEPICTION: "2026-09-25",
     GENERATED_FACE: "2026-09-25",
 }

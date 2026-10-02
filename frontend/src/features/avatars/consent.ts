@@ -32,7 +32,7 @@ export type FaceStatement = "depiction" | "generated_face";
  * every language together.
  */
 export const CONSENT_TEXT_VERSIONS: Readonly<Record<ConsentScope, string>> = {
-  third_party_ai: "2026-09-26",
+  third_party_ai: "2026-10-03",
   depiction: "2026-09-25",
   generated_face: "2026-09-25",
 };

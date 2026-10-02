@@ -53,6 +53,8 @@ import io
 import logging
 from uuid import uuid4
 
+from PIL import Image
+
 from app.core.errors import AppError, Conflict409, Validation422
 from app.services.jobs import Job, run_cpu
 
@@ -397,58 +399,111 @@ def _refund(usage: dict) -> None:
     usage["prepare_rounds"] = max(0, int(usage.get("prepare_rounds") or 0) - 1)
 
 
+def head_crop_source(data: bytes) -> tuple[bytes, str] | None:
+    """The head-and-shoulders crop of the picture about its face, as it may
+    be sent to the model (opaque, shrunk, JPEG), or None when there is no
+    face to crop around or the crop is the whole picture. CPU work.
+
+    Measured against the real model (2026-09-25 and again 2026-10-03): a
+    whole-frame portrait is declined at the prompt (promptFeedback OTHER)
+    and the same face cropped to 2.2 face widths is edited under the same
+    prompt. So a declined edit is asked once more on this: a different
+    input, never the same request repeated (photo_adjust.head_crop)."""
+    from app.services import imagegen, landmarks, photo_adjust
+    from app.services.photo_io import on_backdrop
+
+    image = on_backdrop(Image.open(io.BytesIO(data)))
+    try:
+        points = photo_adjust._detect(image)
+    except landmarks.LandmarkerUnavailable:
+        return None
+    if points is None:
+        return None
+    crop = photo_adjust.head_crop(image, points)
+    if crop is None:
+        return None
+    return photo_adjust._jpeg(crop, imagegen.SOURCE_QUALITY), "image/jpeg"
+
+
 async def _ask_ai(
     job: Job, prompt: str, source: bytes | None, mode: str
 ) -> tuple[bytes, str]:
-    """One call to the image model, metered as it is answered. Raises the
-    wizard's own errors: safety_refused (never retried), no_image,
+    """The call to the image model, metered as it is answered. Raises the
+    wizard's own errors: safety_refused (never asked a third time), no_image,
     imagegen_unavailable, provider_error, third_party_ai_disabled, and the
-    monthly limit."""
-    from app.services import creations as svc
+    monthly limit.
+
+    An edit the model declines (an upload, a change) is asked ONCE more on
+    the picture's head-and-shoulders crop when it has one that differs from
+    the whole picture (head_crop_source); every answered call, the refusal
+    included, is metered, and the switch and the monthly limit are read
+    again before the second. A character made from words has no picture to
+    crop and is asked once."""
     from app.db import get_session_factory
+    from app.services import creations as svc
     from app.services import imagegen
     from app.services.usage import check_image_limit, record_generation
 
     session = get_session_factory()
-
-    if await svc._ai_switched_off(job.org_id):
-        raise svc._ai_disabled_error()
-    async with session() as db:
-        await check_image_limit(db, job.org_id)
-    try:
-        if source is not None:
-            payload, mime = await run_cpu(svc.source_on_backdrop, source)
-            answer = await imagegen.edit_image(prompt, payload, mime)
-        else:
-            answer = await imagegen.create_image(prompt)
-    except imagegen.ImageGenRefused as exc:
+    sends: list[tuple[bytes, str] | None]
+    if source is None:
+        sends = [None]
+    else:
+        sends = [await run_cpu(svc.source_on_backdrop, source)]
+    tried_crop = source is None
+    refusal: imagegen.ImageGenRefused | None = None
+    index = 0
+    while index < len(sends):
+        if await svc._ai_switched_off(job.org_id):
+            raise svc._ai_disabled_error()
+        async with session() as db:
+            await check_image_limit(db, job.org_id)
+        send = sends[index]
+        index += 1
+        try:
+            if send is not None:
+                answer = await imagegen.edit_image(prompt, send[0], send[1])
+            else:
+                answer = await imagegen.create_image(prompt)
+        except imagegen.ImageGenRefused as exc:
+            async with session() as db:
+                await record_generation(db, job.org_id, "gemini", mode)
+            refusal = exc
+            if not tried_crop:
+                tried_crop = True
+                crop = await run_cpu(head_crop_source, source)
+                if crop is not None:
+                    logger.info(
+                        "prepare %s refused (%s); asking once more on the head crop",
+                        job.id, exc.reason,
+                    )
+                    sends.append(crop)
+            continue
+        except imagegen.ImageGenNoImage as exc:
+            async with session() as db:
+                await record_generation(db, job.org_id, "gemini", mode)
+            raise AppError(
+                "The AI answered without a picture; try again", code="no_image"
+            ) from exc
+        except imagegen.ImageGenUnavailable as exc:
+            raise Conflict409(
+                "AI image making is not configured on this server", code="imagegen_unavailable"
+            ) from exc
+        except AppError:
+            raise
+        except Exception as exc:
+            logger.exception("prepare %s: the provider call failed", job.id)
+            raise AppError(
+                "The AI service did not return a picture; try again", code="provider_error"
+            ) from exc
         async with session() as db:
             await record_generation(db, job.org_id, "gemini", mode)
-        if source is None:
-            detail = "The AI declined to make this character; change the description"
-        else:
-            detail = "The AI declined to edit this photo; try another photo or change"
-        raise Validation422(detail, code="safety_refused") from exc
-    except imagegen.ImageGenNoImage as exc:
-        async with session() as db:
-            await record_generation(db, job.org_id, "gemini", mode)
-        raise AppError(
-            "The AI answered without a picture; try again", code="no_image"
-        ) from exc
-    except imagegen.ImageGenUnavailable as exc:
-        raise Conflict409(
-            "AI image making is not configured on this server", code="imagegen_unavailable"
-        ) from exc
-    except AppError:
-        raise
-    except Exception as exc:
-        logger.exception("prepare %s: the provider call failed", job.id)
-        raise AppError(
-            "The AI service did not return a picture; try again", code="provider_error"
-        ) from exc
-    async with session() as db:
-        await record_generation(db, job.org_id, "gemini", mode)
-    return answer.image, answer.model
+        return answer.image, answer.model
+    if source is None:
+        detail = "The AI declined to make this character; change the description"
+    else:
+        detail = "The AI declined to edit this photo; try another photo or change"
+    raise Validation422(detail, code="safety_refused") from refusal
 
 
 async def prepare_job(job: Job, params: dict) -> None:
