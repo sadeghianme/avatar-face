@@ -31,6 +31,7 @@ import {
   faceFound,
   planOf,
   recallChoices,
+  statementToAsk,
   type WizardCreation,
 } from "@/features/avatars/wizard";
 import { SampleSpeech } from "@/features/voices";
@@ -75,6 +76,7 @@ export function PublishScreen({
   run,
   consent,
   refetch,
+  clearError,
   onBack,
   onFixing,
 }: {
@@ -84,6 +86,8 @@ export function PublishScreen({
   run: Run;
   consent: ConsentApi;
   refetch: () => unknown;
+  /** Drops the last request's error banner (a refusal this screen answers itself). */
+  clearError: () => void;
   onBack: () => void;
   /** The editor opened or closed (the heading says which). */
   onFixing: (fixing: boolean) => void;
@@ -135,6 +139,7 @@ export function PublishScreen({
       run={run}
       consent={consent}
       refetch={refetch}
+      clearError={clearError}
       onBack={onBack}
       onFixing={onFixing}
     />
@@ -160,6 +165,7 @@ function Editor({
   run,
   consent,
   refetch,
+  clearError,
   onBack,
   onFixing,
 }: {
@@ -170,6 +176,7 @@ function Editor({
   run: Run;
   consent: ConsentApi;
   refetch: () => unknown;
+  clearError: () => void;
   onBack: () => void;
   onFixing: (fixing: boolean) => void;
 }) {
@@ -187,8 +194,14 @@ function Editor({
   const [rigUrl, setRigUrl] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [engine, setEngine] = useState<AvatarEngine | null>(null);
-  const [statementScope, setStatementScope] = useState<FaceStatement | null>(null);
+  // The statement about this face: what the server says finishing needs
+  // (unless made with the photo), or what a refusal at Publish asked for.
+  // Shown as a box here either way: Publish never fails on a statement it
+  // does not let the member make.
+  const [refused, setRefused] = useState<FaceStatement | null>(null);
+  const statementScope = refused ?? statementToAsk(creation, recallChoices(tabStore(), creation.id)?.statement ?? null);
   const [statement, setStatement] = useState(false);
+  const statementBox = useRef<HTMLInputElement>(null);
   const latest = useRef(0);
   const edited = JSON.stringify(marks) !== JSON.stringify(anchors.marks);
 
@@ -274,7 +287,13 @@ function Editor({
       return;
     }
     const problem = consentProblem(outcome.error.code, outcome.error.body);
-    if (problem?.kind === "required" && problem.scope !== "third_party_ai") setStatementScope(problem.scope);
+    if (problem?.kind === "required" && problem.scope !== "third_party_ai") {
+      // The box is the next action: no banner beside it, and the focus on it.
+      clearError();
+      setRefused(problem.scope);
+      setStatement(false);
+      window.setTimeout(() => statementBox.current?.focus(), 0);
+    }
     if (outcome.error.code === "fit_invalid" && Array.isArray(outcome.error.body.reasons)) {
       setReasons(outcome.error.body.reasons as FitReason[]);
       setFixing(true);
@@ -402,6 +421,7 @@ function Editor({
           {statementScope && (
             <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 p-3 text-sm text-gray-800 dark:border-line dark:text-gray-200">
               <input
+                ref={statementBox}
                 type="checkbox"
                 className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"
                 checked={statement}

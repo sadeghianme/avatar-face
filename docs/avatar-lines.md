@@ -356,7 +356,10 @@ unchanged changes nothing. A head sent without diagonals keeps the saved ones.
   came from, not by the line: a human line, or a human face the photo check
   found on the upload, its framing or its cut-out (so a stylised or
   line-switched photo still needs it). A face generated from words takes
-  `generated_face` instead ("made by AI, not a real, identifiable person").
+  `generated_face` instead ("made by AI, not a real, identifiable person"),
+  except an animal the wizard drew in an animated or cartoon look, whose
+  detected "face" (MediaPipe on a cartoon dog) is a false positive: nothing
+  is asked of it. A realistic animal read as a face still gets it.
   Both are recorded for one creation (`subject_id`, migration 025) and
   accepted for it only; neither is remembered across creations.
 - Choosing a stylised version remembers the line and background answer it

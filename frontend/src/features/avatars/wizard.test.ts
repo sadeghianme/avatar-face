@@ -24,6 +24,7 @@ import {
   rememberChoices,
   screenFor,
   statementFor,
+  statementToAsk,
 } from "./wizard.ts";
 
 function memoryStore() {
@@ -118,6 +119,23 @@ describe("step 2", () => {
     assert.equal(statementFor("human", "upload"), "depiction");
     assert.equal(statementFor("human", "generate"), "generated_face");
     assert.equal(statementFor("animal", "upload"), null);
+  });
+
+  it("asks Publish for the statement the server says it needs, not the one the model forecasts", () => {
+    // The exact scenario: an animal whose cartoon "face" the detector found.
+    // The Photo screen forecasts nothing for an animal...
+    assert.equal(statementFor("animal", "generate"), null);
+    // ...and the server's word, once there is a creation, is what Publish shows.
+    const dog = { face_type: "cartoon", statement: "generated_face" };
+    assert.equal(statementToAsk(dog, null), "generated_face");
+    assert.equal(statementToAsk({ face_type: "animal", statement: "depiction" }, null), "depiction");
+    assert.equal(statementToAsk({ face_type: "animal", statement: null }, null), null);
+    // Made with the photo on step 2: not asked twice. Another statement: asked.
+    assert.equal(statementToAsk({ face_type: "human", statement: "depiction" }, "depiction"), null);
+    assert.equal(statementToAsk({ face_type: "human", statement: "depiction" }, "generated_face"), "depiction");
+    // A server that does not say yet asks it of a person only.
+    assert.equal(statementToAsk({ face_type: "human" }, null), "depiction");
+    assert.equal(statementToAsk({ face_type: "animal" }, null), null);
   });
 
   it("says what holds the button", () => {
@@ -223,10 +241,12 @@ describe("names", () => {
 describe("this tab's memory", () => {
   it("keeps the choices for a creation and as the last ones, and survives junk", () => {
     const store = memoryStore();
-    const choices = { model: "animal", source: "generate", look: "cartoon", description: "a fox", fileName: null, intent: "ai" };
+    const choices = { model: "animal", source: "generate", look: "cartoon", description: "a fox", fileName: null, intent: "ai", statement: null };
     rememberChoices(store, "c9", choices);
     assert.deepEqual(recallChoices(store, "c9"), choices);
     assert.deepEqual(recallChoices(store, null), choices);
+    rememberChoices(store, "c8", { ...choices, statement: "generated_face" });
+    assert.equal(recallChoices(store, "c8").statement, "generated_face");
     forgetChoices(store, "c9");
     assert.equal(recallChoices(store, "c9"), null);
     store.setItem("liveface.wizard.last", "{not json");

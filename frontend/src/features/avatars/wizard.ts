@@ -102,12 +102,36 @@ export function aiRequired(source: PhotoSource, look: Look): boolean {
   return source === "generate" || look !== "realistic";
 }
 
-/** The statement about a face asked with the photo or the description: a
- * person's photo is someone ("I am this person or have their permission"),
- * a person made from words is no one real. An animal needs neither. */
+/** The statement about a face expected with the photo or the description,
+ * before the server has looked at anything: a person's photo is someone
+ * ("I am this person or have their permission"), a person made from words
+ * is no one real. An animal is not expected to need either. This is only a
+ * forecast: what finishing really needs is the server's word
+ * (`Creation.statement`, from where the pixels came from and what the photo
+ * check found), which only exists once there is a creation. An uploaded
+ * animal's photo may turn out to show a person, a generated character's
+ * face is only known after Prepare. `statementToAsk` is the truth. */
 export function statementFor(model: AvatarModel, source: PhotoSource): FaceStatement | null {
   if (model !== "human") return null;
   return source === "upload" ? "depiction" : "generated_face";
+}
+
+/**
+ * The statement Publish must show the member now: the one the server says
+ * finishing needs for this creation, unless the member already made it with
+ * the photo (`made`, remembered by this tab). The server's word, never the
+ * model's: a cartoon dog the face detector took for a face, an animal photo
+ * that is really a person, a character whose face was found only on
+ * Prepare, all need (or do not need) a statement the Photo screen could not
+ * know. A server that does not say yet is taken to ask it of a person.
+ */
+export function statementToAsk(
+  creation: Pick<Creation, "statement" | "face_type">,
+  made: FaceStatement | null
+): FaceStatement | null {
+  const needed =
+    creation.statement !== undefined ? creation.statement : (creation.face_type ?? "human") === "human" ? "depiction" : null;
+  return needed && needed !== made ? needed : null;
 }
 
 export interface PhotoForm {
@@ -315,6 +339,8 @@ export interface Choices {
   description: string;
   fileName: string | null;
   intent: PrepareIntent;
+  /** The statement about the face the member made on step 2, if any. */
+  statement: FaceStatement | null;
 }
 
 const CHOICES_PREFIX = "liveface.wizard.";
@@ -345,6 +371,7 @@ function parseChoices(raw: string | null | undefined): Choices | null {
       description: typeof value?.description === "string" ? value.description.slice(0, MAX_WORDS) : "",
       fileName: typeof value?.fileName === "string" ? value.fileName : null,
       intent: value?.intent === "original" ? "original" : "ai",
+      statement: value?.statement === "depiction" || value?.statement === "generated_face" ? value.statement : null,
     };
   } catch {
     return null;

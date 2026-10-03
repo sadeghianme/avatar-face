@@ -317,6 +317,65 @@ async def test_a_described_character_is_made_cut_out_and_found_in_one_job(
     assert body["status"] == "finished", body["job"]
 
 
+async def _generate_animal(client, headers, org_id, look):
+    consent_id = await ai_consent(client, headers, org_id)
+    response = await _run(
+        client, headers, "POST", f"/orgs/{org_id}/creations/generate",
+        json={"model": "animal", "look": look, "prompt": "a golden spaniel", "consent_id": consent_id},
+    )
+    assert response.status_code == 202, response.text
+    return f"/orgs/{org_id}/creations/{response.json()['id']}"
+
+
+@pytest.mark.parametrize("look", ["cartoon", "animation"])
+async def test_a_drawn_animal_the_detector_calls_a_face_publishes_without_a_statement(
+    client, faces, images, look
+):
+    # MediaPipe (the fixture's Faces) finds a "face" on every image, as it did
+    # on a cartoon dog: a false positive, not a person's likeness.
+    images.script = [studio()]
+    headers, org_id = await _org(client, f"dog{look}")
+    base = await _generate_animal(client, headers, org_id, look)
+    body = await _get(client, headers, base)
+    assert body["job"]["state"] == "done", body["job"]
+    assert body["analysis"]["detected"] is True
+    assert body["face_type"] == "cartoon"
+    assert body["statement"] is None
+    finish = await _run(
+        client, headers, "POST", f"{base}/finish",
+        json={"name": "Rex", "anchors_id": body["anchors"]["id"]},
+    )
+    assert finish.status_code == 202, finish.text
+
+
+async def test_a_realistic_generated_animal_that_reads_as_a_face_still_needs_the_statement(
+    client, faces, images
+):
+    images.script = [studio()]
+    headers, org_id = await _org(client, "dogreal")
+    base = await _generate_animal(client, headers, org_id, "realistic")
+    body = await _get(client, headers, base)
+    assert body["face_type"] == "animal"
+    assert body["statement"] == "generated_face"
+    finish = await _run(
+        client, headers, "POST", f"{base}/finish",
+        json={"name": "Rex", "anchors_id": body["anchors"]["id"]},
+    )
+    assert finish.status_code == 403 and finish.json()["scope"] == "generated_face"
+
+
+async def test_a_drawn_person_still_needs_the_statement(client, faces, images):
+    images.script = [studio()]
+    headers, org_id = await _org(client, "drawnperson")
+    consent_id = await ai_consent(client, headers, org_id)
+    response = await _run(
+        client, headers, "POST", f"/orgs/{org_id}/creations/generate",
+        json={"model": "human", "look": "cartoon", "prompt": "a baker", "consent_id": consent_id},
+    )
+    base = f"/orgs/{org_id}/creations/{response.json()['id']}"
+    assert (await _get(client, headers, base))["statement"] == "generated_face"
+
+
 async def test_a_statement_about_another_creation_does_not_publish_this_one(client, faces, images):
     images.script = [studio()]
     headers, org_id = await _org(client, "strict")

@@ -339,7 +339,12 @@ def statement_for(creation: Creation) -> str | None:
       face of a person (on the human line, or one the check found), since
       "I am this person" cannot be true of it and a prompt can still ask
       for someone real; a picture redrawn from one of the org's avatars
-      needs "depiction", like the photo it came from;
+      needs "depiction", like the photo it came from. An animal the
+      wizard drew from words in an animated or cartoon look (the prompt
+      asks for an animal, not a person) is not a person's likeness: the
+      detector's "face" on a cartoon dog is a false positive, so nothing
+      is asked unless it is a realistic picture or a person was found
+      on the human line;
     - an upload: "depiction" when it is on the human line, or when the
       photo check found a human face on an image in its lineage that no AI
       made (the upload, its framing, its cut-out);
@@ -356,7 +361,10 @@ def statement_for(creation: Creation) -> str | None:
     root = chain[-1]
     generated = root.get("generated")
     if generated:
-        if not (human_line or _detected_a_person(root)):
+        plan = (steps or {}).get("plan") or {}
+        drawn_animal = plan.get("model") == "animal" and plan.get("look") in ("animation", "cartoon")
+        found_person = _detected_a_person(root) and not drawn_animal
+        if not (human_line or found_person):
             return None
         return consent.DEPICTION if generated.get("source_avatar_id") else consent.GENERATED_FACE
     photographed = [item for item in chain if not item.get("adjust")]

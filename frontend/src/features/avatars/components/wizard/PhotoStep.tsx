@@ -10,7 +10,7 @@ import {
   type Creation,
   type DraftStore,
 } from "@/features/avatars/creation";
-import { CONSENT_TEXT_VERSIONS, consentProblem, providerLabel } from "@/features/avatars/consent";
+import { CONSENT_TEXT_VERSIONS, consentProblem, providerLabel, type FaceStatement } from "@/features/avatars/consent";
 import type { ConsentApi } from "@/features/avatars/hooks/useConsent";
 import {
   aiRequired,
@@ -169,9 +169,11 @@ export function PhotoStep({
         consentId = (await consent.record("third_party_ai")).id;
         created = await send(consentId);
       }
+      let made: FaceStatement | null = null;
       if (statement) {
         try {
           await consent.record(statement, created.id);
+          made = statement;
         } catch {
           // Publish asks again when it finds none; nothing is lost here.
         }
@@ -183,6 +185,7 @@ export function PhotoStep({
         description,
         fileName: file?.name ?? null,
         intent: intentFor({ source, look, aiAgreed, aiEnabled }),
+        statement: made,
       });
       onCreated(created);
     } catch (err) {

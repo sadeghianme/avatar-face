@@ -222,6 +222,7 @@ export function NewWizard({ orgId, creationId }: { orgId: string; creationId?: s
         run={run}
         consent={consent}
         refetch={refetch}
+        clearError={() => setError(null)}
         onBack={toPrepare}
         onFixing={setFixing}
       />
