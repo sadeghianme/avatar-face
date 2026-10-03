@@ -179,9 +179,12 @@ def build_request(face_type: str, payload: bytes, mime: str) -> dict:
             "responseMimeType": "application/json",
             "responseJsonSchema": response_schema(face_type),
             # Pointing is perception, not reasoning: Google's guidance for
-            # spatial tasks is to keep thinking minimal, which is also
-            # cheaper and steadier.
-            "thinkingConfig": {"thinkingLevel": "minimal"},
+            # spatial tasks is to keep thinking low, which is also cheaper
+            # and steadier. Not "minimal": gemini-3.8-flash answers that with
+            # a 400 ("Thinking level MINIMAL is not supported"), which made
+            # every AI points request fail in production (checked against
+            # the real model: low, medium and no setting all answer).
+            "thinkingConfig": {"thinkingLevel": "low"},
             "temperature": 0,
         },
     }
@@ -245,7 +248,7 @@ async def request_points(payload: bytes, mime: str, face_type: str) -> dict[str,
         logger.error(
             "vision model rejected the request (%s): %s", response.status_code, response.text[:400]
         )
-        raise VisionError(f"The AI service refused the request ({response.status_code})")
+        raise VisionError("The AI could not find the points this time, so they start from a guess")
     try:
         return parse_answer(response.json(), face_type)
     except VisionError as exc:

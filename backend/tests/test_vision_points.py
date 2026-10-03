@@ -265,3 +265,11 @@ def test_a_fit_the_validator_refuses_is_not_used():
     crossed["mouth_right"] = (face["head_right"][0] + 40, face["mouth_right"][1])
     result = vp.anchors_from_points(answer_for(crossed, "animal"), SIZE, "animal")
     assert result.anchors is None and result.problems
+
+
+def test_the_request_never_asks_for_the_thinking_level_the_model_rejects():
+    """gemini-3.8-flash answers thinkingLevel "minimal" with a 400, which made
+    every AI points request fail in production; "low" is accepted (checked
+    against the real model, 2026-10-03)."""
+    request = vp.build_request("animal", b"x", "image/jpeg")
+    assert request["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "low"}
