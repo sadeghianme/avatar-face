@@ -108,17 +108,12 @@ async def test_an_avatar_fitted_before_keeps_its_look_until_it_chooses(client):
     headers, _, _, base = await _setup(client, "pet5", "animal")
     await _fit(client, headers, base, await _anchors(client, headers, base), True)
     detail = (await client.get(base, headers=headers)).json()
+    from urllib.parse import unquote, urlparse
+
     from app.services.storage import get_storage
 
     storage = get_storage()
-    from sqlalchemy import select
-
-    from app.db import get_session_factory
-    from app.models import Avatar
-
-    async with get_session_factory()() as session:
-        avatar = (await session.execute(select(Avatar).where(Avatar.id == detail["id"]))).scalar_one()
-        key = avatar.rig_key
+    key = unquote(urlparse(detail["rig_url"]).path.split("/storage/", 1)[1])
     rig = json.loads(await storage.get_bytes(key))
     rig["render_profile"] = "animal@1"
     await storage.put_bytes(key, json.dumps(rig).encode(), "application/json")
