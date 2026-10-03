@@ -15,7 +15,21 @@
  *   StrictMode.
  */
 import { BlinkScheduler, blinkEase } from "./blink";
+import { lidAmount, lidSamplePoints, medianColour, paintLid } from "./blink-lid";
 import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
+import {
+  CharacterField,
+  DEFAULT_LOOK,
+  INNER_UPPER,
+  characterOpening,
+  mergeTraits,
+  openingPath,
+  sampleLook,
+  type CharacterLook,
+  type CharacterTraits,
+  type Rgb,
+} from "./character-mouth";
+import { TONGUE_RAISE, paintCharacter } from "./character-paint";
 import { HeadMotion } from "./headmotion";
 import { kindProfile, type KindProfile } from "./kind-profile";
 import { MediaClock } from "./media-clock";
@@ -465,6 +479,13 @@ export class AvatarEngine {
   /** What the rig's line changes in the mouth; today's human renderer
    *  unless the rig names a profile. */
   private readonly profile: KindProfile;
+  /** The character mouth (character-mouth.ts), only for a profile that asks
+   *  for it: the jaw field, what the picture looks like, the owner's traits
+   *  and how high the tongue is now. Null for every classic rig. */
+  private field: CharacterField | null = null;
+  private look: CharacterLook = DEFAULT_LOOK;
+  private traits: CharacterTraits;
+  private tongue = 0;
   private texture: HTMLImageElement;
   /** StrictMode guard: render loop and async callbacks bail once destroyed. */
   private destroyed = false;
@@ -538,6 +559,10 @@ export class AvatarEngine {
    * stylized one can have brown, auburn or near-white, and drawing black on
    * those puts a stranger's eyelash on the face. */
   private lashColour: string[] = ["rgba(60, 42, 38, 0.75)", "rgba(60, 42, 38, 0.75)"];
+  /** The same, as numbers, and each eye's lid colour: for the painted lid
+   *  of a profile that blinks that way (blink-lid.ts). */
+  private lashRgb: Rgb[] = [[60, 42, 38], [60, 42, 38]];
+  private lidSkin: Rgb[] = [[200, 150, 130], [200, 150, 130]];
   private raf = 0;
   private startTime = 0;
   private lastTickAt = 0;
@@ -573,6 +598,7 @@ export class AvatarEngine {
     this.ctx = ctx;
     this.rig = rig;
     this.profile = kindProfile(rig);
+    this.traits = this.profile.traits;
     this.texture = texture;
     this.cueClock = opts.cueClock;
     this.mouthExtension = opts.mouthExtension;
@@ -585,6 +611,8 @@ export class AvatarEngine {
     this.computeFraming();
     this.sampleLipColour();
     this.sampleLashColour();
+    this.sampleCharacterLook();
+    this.sampleLidColours();
     this.subdivideMouthRegion();
     this.startTime = performance.now();
     this.blinks.reset(this.startTime);
@@ -633,7 +661,17 @@ export class AvatarEngine {
     this.computeFraming();
     this.sampleLipColour();
     this.sampleLashColour();
+    this.sampleCharacterLook();
+    this.sampleLidColours();
     this.subdivideMouthRegion();
+  }
+
+  /**
+   * The owner's mouth settings for a character mouth (jaw, teeth, tongue),
+   * over the profile's own. Ignored by a classic mouth.
+   */
+  setCharacterTraits(own: Partial<CharacterTraits> | null | undefined): void {
+    this.traits = mergeTraits(this.profile.traits, own);
   }
 
   /**
@@ -712,6 +750,7 @@ export class AvatarEngine {
     this.detectCutOut();
     this.measureBody();
     this.buildHeadLayer();
+    this.field = this.profile.mouth === "character" ? new CharacterField(this.basePoints) : null;
   }
 
   /**
@@ -945,6 +984,90 @@ export class AvatarEngine {
     }
   }
 
+  /** Each eye's lid colour, from the skin beside it, for the painted lid. */
+  private sampleLidColours(): void {
+    if (this.profile.blink !== "lid") return;
+    try {
+      const off = document.createElement("canvas");
+      off.width = this.texture.naturalWidth;
+      off.height = this.texture.naturalHeight;
+      const ctx = off.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.drawImage(this.texture, 0, 0);
+      for (let e = 0; e < 2; e++) {
+        const shape = this.eyeShape(this.texPoints, e);
+        const samples = lidSamplePoints(shape.upper, shape.lower).map((p): Rgb | null => {
+          const x = Math.round(p.x), y = Math.round(p.y);
+          if (x < 0 || y < 0 || x >= off.width || y >= off.height) return null;
+          const d = ctx.getImageData(x, y, 1, 1).data;
+          return d[3] < 128 ? null : [d[0], d[1], d[2]];
+        });
+        const c = medianColour(samples, 0.7);
+        if (c) this.lidSkin[e] = c;
+      }
+    } catch {
+      // Tainted texture: the default skin tone.
+    }
+  }
+
+  /** An eye's two lids as ordered point lists, corner to corner. */
+  private eyeShape(pts: readonly Point[], e: number): { upper: Point[]; lower: Point[] } {
+    const [c0, c1] = EYE_CORNERS[e];
+    const byX = (a: Point, b: Point) => a.x - b.x;
+    const upper = [pts[c0], ...UPPER_LIDS[e].map((i) => pts[i]), pts[c1]].sort(byX);
+    const lower = [pts[c0], ...LOWER_LIDS[e].map((i) => pts[i]), pts[c1]].sort(byX);
+    return { upper, lower };
+  }
+
+  /** The painted lid of a profile that blinks that way. */
+  private drawLids(pts: Point[]): void {
+    if (this.profile.blink !== "lid" || this.blink <= 0 || this.tuning.blink <= 0) return;
+    const amount = lidAmount(blinkEase(this.blink));
+    const flat = this.look.flat;
+    for (let e = 0; e < 2; e++) {
+      const shape = this.eyeShape(pts, e);
+      paintLid(this.ctx, shape, amount, this.lidSkin[e], this.lashRgb[e], flat);
+    }
+  }
+
+  /**
+   * Cel art or a render, and the picture's own line, for the character mouth
+   * to paint in. Only a rig whose profile asks for that mouth pays for it.
+   */
+  private sampleCharacterLook(): void {
+    if (this.profile.mouth !== "character") return;
+    const skin: Rgb = this.skinColour ?? DEFAULT_LOOK.skin;
+    this.look = { ...DEFAULT_LOOK, lip: this.lipColour, skin };
+    try {
+      const l = this.texPoints[61], r = this.texPoints[291];
+      if (!l || !r) return;
+      const w = Math.max(Math.hypot(r.x - l.x, r.y - l.y), 4);
+      const cx = (l.x + r.x) / 2, cy = (l.y + r.y) / 2;
+      const x0 = Math.max(0, Math.floor(cx - w * 2)), y0 = Math.max(0, Math.floor(cy - w * 1.2));
+      const x1 = Math.min(this.texture.naturalWidth, Math.ceil(cx + w * 2));
+      const y1 = Math.min(this.texture.naturalHeight, Math.ceil(cy + w * 1.7));
+      if (x1 <= x0 || y1 <= y0) return;
+      const off = document.createElement("canvas");
+      off.width = this.texture.naturalWidth;
+      off.height = this.texture.naturalHeight;
+      const ctx = off.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.drawImage(this.texture, 0, 0);
+      const data = ctx.getImageData(x0, y0, x1 - x0, y1 - y0);
+      const pixel = (x: number, y: number): Rgb | null => {
+        const px = Math.round(x) - x0, py = Math.round(y) - y0;
+        if (px < 0 || py < 0 || px >= data.width || py >= data.height) return null;
+        const i = (py * data.width + px) * 4;
+        if (data.data[i + 3] < 128) return null;
+        return [data.data[i], data.data[i + 1], data.data[i + 2]];
+      };
+      const seam = INNER_UPPER.map((i) => this.texPoints[i]).filter(Boolean);
+      this.look = sampleLook(pixel, seam, { cx, cy, w }, this.lipColour, skin);
+    } catch {
+      // Tainted texture: the default look, shaded.
+    }
+  }
+
   /** The darkest run along each upper lid — the lashes as this face has them. */
   private sampleLashColour(): void {
     try {
@@ -973,6 +1096,7 @@ export class AvatarEngine {
         picks.sort((a, b) => a.lum - b.lum);
         const [r, g, b] = picks[Math.floor(picks.length * 0.15)].rgb;
         this.lashColour[e] = `rgba(${r}, ${g}, ${b}, 0.8)`;
+        this.lashRgb[e] = [r, g, b];
       }
     } catch {
       // Tainted texture: keep the neutral dark default.
@@ -1432,6 +1556,14 @@ export class AvatarEngine {
       this.weights[key] += (target - this.weights[key]) * rate;
     }
 
+    // The tongue follows the sound being made, eased: the sounds are
+    // discrete and the tongue is not.
+    if (this.field) {
+      const sound = this.pose?.()?.viseme ?? this.currentViseme(now);
+      const target = TONGUE_RAISE[sound] ?? 0;
+      this.tongue += (target - this.tongue) * (1 - Math.exp(-dt / 55));
+    }
+
     // Speech energy (drives head pose amplitude).
     const instant = this.speaking
       ? Math.min(1, this.weights.jawOpen + this.weights.mouthStretch * 0.5 + this.amplitude())
@@ -1541,7 +1673,9 @@ export class AvatarEngine {
     // ~75% of the way to the corners. Narrower (0.65 was tried) turns a
     // wide flat lip — every cartoon — into a pointed teardrop on "oh".
     const lensWidth = 1.05 - 0.3 * Math.min(1, w.mouthPucker + w.mouthFunnel * 0.6);
-    for (let i = 0; i < pts.length; i++) {
+    // A character profile moves the mouth with its own field instead.
+    const classic = !this.field;
+    for (let i = 0; classic && i < pts.length; i++) {
       const px = pts[i].x - mcx;
       const py = pts[i].y - mcy;
       const dist = Math.hypot(px, py * 1.35); // squashed: motion spreads wider than tall
@@ -1592,11 +1726,13 @@ export class AvatarEngine {
       pts[i].y += dy * this.tuning.mouthOpen;
     }
 
+    if (this.field) this.field.apply(pts, w, this.tuning.mouthOpen, this.traits);
+
     // Cheek response: points lateral to the mouth corners push outward as
     // the jaw opens. (Jaw drop itself is handled by the continuous field
     // above — doing it again here, skipping mouth points, was what created
     // the torn seam along the lower lip.)
-    if (w.jawOpen > 0.01) {
+    if (classic && w.jawOpen > 0.01) {
       for (let i = 0; i < pts.length; i++) {
         const dx = pts[i].x - mcx;
         const dyFromMouth = pts[i].y - mcy;
@@ -1618,7 +1754,7 @@ export class AvatarEngine {
     // Lids also follow a downward gaze a little (LID_FOLLOW), so the
     // deformation runs whenever either is non-zero.
     const lidFollow = Math.max(0, Math.min(0.5, this.gaze.y)) * LID_FOLLOW;
-    if (this.blink > 0 || lidFollow > 0) {
+    if ((this.blink > 0 || lidFollow > 0) && this.profile.blink === "mesh") {
       // Asymmetric ease: lids snap shut faster than they reopen — blink.ts.
       const amount = Math.min(1, blinkEase(this.blink) + lidFollow);
       for (let e = 0; e < 2; e++) {
@@ -1764,6 +1900,7 @@ export class AvatarEngine {
     }
 
     this.drawEyes(pts);
+    this.drawLids(pts);
     this.drawLashes(pts);
     this.drawMouthSurface(pts);
 
@@ -1823,6 +1960,7 @@ export class AvatarEngine {
       this.drawWarpedTriangle(pts, a, b, c);
     }
     this.drawEyes(pts);
+    this.drawLids(pts);
     this.drawLashes(pts);
     this.drawMouthSurface(pts);
     if (this.debugMesh) this.drawDebugMesh(pts);
@@ -1844,9 +1982,28 @@ export class AvatarEngine {
       } finally { this.ctx.restore(); }
     }
     if (!painted) {
+      if (this.field && !this.mouthExtension) {
+        this.drawCharacterMouth(pts);
+        return;
+      }
       if (this.profile.contactLine) this.drawLipContactLine(pts);
       this.drawMouthInterior(pts);
     }
+  }
+
+  /** The character mouth's opening, read off the moved lips, and painted. */
+  private drawCharacterMouth(pts: Point[]): void {
+    const opening = characterOpening(pts, this.basePoints);
+    if (!opening) return;
+    paintCharacter(this.ctx, {
+      opening,
+      clip: openingPath(opening, () => new Path2D()),
+      weights: this.weights,
+      look: this.look,
+      traits: this.traits,
+      tongueRaise: this.tongue,
+      cavityShade: this.profile.cavityShade,
+    });
   }
 
   /**
@@ -1928,7 +2085,7 @@ export class AvatarEngine {
    * those looks pasted on.
    */
   private drawLashes(pts: Point[]): void {
-    if (this.blink <= 0) return;
+    if (this.blink <= 0 || this.profile.blink === "lid") return;
     const phase = this.blink;
     const amount =
       phase < 0.4
