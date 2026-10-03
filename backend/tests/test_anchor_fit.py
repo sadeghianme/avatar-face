@@ -402,13 +402,26 @@ def test_the_fitted_rig_is_retriangulated_and_keeps_its_lip_rings():
     assert out["face_box"][0] == min(xs) and out["face_box"][2] == max(xs)
 
 
-def test_only_an_animal_fit_carries_a_render_profile():
+def test_a_fit_carries_its_lines_current_render_profile():
     rig, base = template_rig()
     animal, _ = fit_rig(rig, base, line_marks("cat small mouth"), "animal")
-    assert animal["render_profile"] == "animal@1"
-    # A line that no longer is an animal loses the muzzle mouth.
+    assert animal["render_profile"] == "animal@2"
+    # The Animation and Cartoon looks get the character mouth too.
     cartoon, _ = fit_rig(animal, base, line_marks("cat small mouth"), "cartoon")
-    assert "render_profile" not in cartoon
+    assert cartoon["render_profile"] == "toon@1"
+    # A human keeps the classic renderer, and a face that becomes one loses it.
+    human, _ = fit_rig(cartoon, base, marks_from_mesh(base, "human"), "human")
+    assert "render_profile" not in human
+
+
+def test_the_classic_mouth_style_is_the_profile_the_line_had_before():
+    from app.services.anchor_fit import render_profile_for
+
+    assert render_profile_for("animal") == "animal@2"
+    assert render_profile_for("animal", "classic") == "animal@1"
+    assert render_profile_for("cartoon", "classic") is None
+    assert render_profile_for("human", "classic") is None
+    assert render_profile_for("human") is None
 
 
 def test_stored_marks_are_the_owners():
@@ -451,6 +464,10 @@ def test_the_embed_fixture_is_what_the_fit_makes():
     out, problems = fit_rig(rig, base, line_marks("toon big grin"), "animal")
     assert problems == []
     fixture = json.loads((FIXTURES / "fitted-animal-rig.json").read_text())
+    # The fixture stands for a rig fitted before animal@2 (it keeps animal@1,
+    # which embed's tests pin); everything else is this fit's output.
+    assert out["render_profile"] == "animal@2"
+    out["render_profile"] = "animal@1"
     assert fixture == json.loads(json.dumps(out))
 
 

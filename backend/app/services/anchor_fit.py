@@ -175,8 +175,18 @@ EYE_SLACK = 0.1
 LINE_FACE_TYPES = frozenset({"animal", "cartoon"})
 NO_PUPIL_FACE_TYPES = frozenset({"animal"})
 # Versioned renderer settings a fitted rig carries (see embed KindProfile).
-# Absent means today's renderer, which is what every other line keeps.
-RENDER_PROFILES = {"animal": "animal@1"}
+# Absent means the classic human renderer, which humans keep.
+#
+# A new fit names the line's current profile: "toon@1" for the Animation and
+# Cartoon looks (face type cartoon) and "animal@2" for animals, both of which
+# move and paint the mouth as a character's (embed/src/character-mouth.ts).
+# A rig fitted before them keeps the profile it was saved with ("animal@1", or
+# none) until its owner fits it again or switches its mouth style
+# (LEGACY_PROFILES is what "classic" means), so nothing live changes by itself.
+RENDER_PROFILES = {"animal": "animal@2", "cartoon": "toon@1"}
+LEGACY_PROFILES = {"animal": "animal@1"}
+# The mouth styles an owner may choose between on those lines.
+MOUTH_STYLES = ("character", "classic")
 
 
 def marks_mouth_as_line(face_type: str) -> bool:
@@ -187,7 +197,12 @@ def marks_pupils(face_type: str) -> bool:
     return face_type not in NO_PUPIL_FACE_TYPES
 
 
-def render_profile_for(face_type: str) -> str | None:
+def render_profile_for(face_type: str, style: str = "character") -> str | None:
+    """The profile a rig of `face_type` is saved with, in the owner's mouth
+    `style`: the line's current one, or (classic) the one the line had before
+    the character mouth, which is none for animation and humans."""
+    if style == "classic":
+        return LEGACY_PROFILES.get(face_type)
     return RENDER_PROFILES.get(face_type)
 
 

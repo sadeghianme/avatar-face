@@ -3,8 +3,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import type { CharacterSettings } from "@liveface/embed/mouth";
+
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
+import { CharacterMouthSection } from "@/features/avatars/components/CharacterMouthSection";
 import { ProgressBar, ShapeTicks } from "@/features/avatars/components/create/JobProgress";
 import { publishDraft } from "@/features/avatars/components/PublishBar";
 import { stageCount } from "@/features/avatars/creation";
@@ -69,12 +72,15 @@ export function MouthPanel({
   avatar,
   orgId,
   onPreview,
+  onPreviewCharacter,
   motion,
   onMotion,
 }: {
   avatar: Avatar;
   orgId: string;
   onPreview: (renderer: MouthRenderer, profile: ReferenceProfile) => void;
+  /** An animation's or an animal's character settings being edited. */
+  onPreviewCharacter: (settings: CharacterSettings | null) => void;
   /** The mouth shapes the dashboard preview plays (the compare switch). */
   motion: MotionChoice;
   onMotion: (choice: MotionChoice) => void;
@@ -289,8 +295,14 @@ export function MouthPanel({
         <p className="mt-1 text-xs leading-relaxed text-gray-500">{t("mouthHint")}</p>
       </div>
 
+      {!human && avatar.kind === "photo" && (
+        <CharacterMouthSection avatar={avatar} orgId={orgId} onPreview={onPreviewCharacter} />
+      )}
+
       <div
-        className={`grid gap-2 ${choices.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}
+        className={`grid gap-2 ${choices.length === 1 ? "grid-cols-1" : "grid-cols-2"} ${
+          !human && avatar.kind === "photo" ? "hidden" : ""
+        }`}
         role="radiogroup"
         aria-label={t("mouthTitle")}
       >

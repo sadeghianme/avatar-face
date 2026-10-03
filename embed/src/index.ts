@@ -13,3 +13,4 @@ export type { BlendWeights, Cue, EngineTuning, Rig, SynthesisPayload } from "./t
 export { DEFAULT_TUNING, ZERO_WEIGHTS, weightsFromLegacy } from "./types";
 export { streamSpeech, StreamingSpeechPlayer } from "./speech-stream";
 export type { StreamHandle, StreamOptions } from "./speech-stream";
+export type { CharacterSettings, ClassicMouthConfig } from "./character-mouth";

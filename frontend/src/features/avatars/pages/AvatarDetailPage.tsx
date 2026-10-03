@@ -1,5 +1,5 @@
 import type { SpeechPlayer } from "@liveface/embed";
-import type { AvatarMouthConfig } from "@liveface/embed/mouth";
+import type { AvatarMouthConfig, ClassicMouthConfig } from "@liveface/embed/mouth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -55,7 +55,7 @@ export function AvatarDetailPage() {
   const [busyBg, setBusyBg] = useState(false);
   // The mouth being previewed: the panel's live state while the owner is
   // choosing or dragging, otherwise whatever the draft has saved.
-  const [mouthPreview, setMouthPreview] = useState<AvatarMouthConfig | null | undefined>(undefined);
+  const [mouthPreview, setMouthPreview] = useState<AvatarMouthConfig | ClassicMouthConfig | null | undefined>(undefined);
   // Which mouth shapes the preview plays: the avatar's own, or the standard
   // ones to compare them with. The preview only; nothing is saved.
   const [motion, setMotion] = useState<MotionChoice>("own");
@@ -433,6 +433,9 @@ export function AvatarDetailPage() {
                 avatar={avatar}
                 orgId={current.id}
                 onPreview={(renderer, profile) => setMouthPreview(draftMouthConfig(avatar, renderer, profile))}
+                onPreviewCharacter={(settings) =>
+                  setMouthPreview(settings ? draftMouthConfig(avatar, undefined, undefined, settings) : undefined)
+                }
                 motion={motion}
                 onMotion={setMotion}
               />

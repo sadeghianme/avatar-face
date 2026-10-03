@@ -96,7 +96,14 @@ export interface Avatar {
      *  (never served to visitors); null when none was made. Absent from a
      *  server before it said so. */
     kit?: MouthKit | null;
+    /** How an animation's or an animal's character mouth is set (teeth,
+     *  tongue, jaw); absent until the owner has set it. */
+    character?: { style?: "character" | "classic"; teeth?: "upper" | "none"; tongue?: boolean; jaw?: number } | null;
   } | null;
+  /** Detail only: the draft rig's render profile ("toon@1", "animal@2", the older
+   *  "animal@1", or none: the classic renderer). Which look an animation or an
+   *  animal has. Absent from a server before it said so. */
+  render_profile?: string | null;
   /** Set means a public page exists at /s/<token>. */
   share_token?: string | null;
   /** Background/body/head decomposition for the layered render path. */

@@ -1,5 +1,5 @@
 import { AvatarEngine, BrowserTTS, type Rig } from "@liveface/embed";
-import type { AvatarMouthConfig } from "@liveface/embed/mouth";
+import type { AvatarMouthConfig, ClassicMouthConfig } from "@liveface/embed/mouth";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
@@ -19,7 +19,7 @@ interface PublicAvatar {
   layer_urls?: Record<string, string> | null;
   voice?: { provider: string; voice: string; locale: string } | null;
   /** The PUBLISHED mouth; null means the classic one. */
-  mouth?: AvatarMouthConfig | null;
+  mouth?: AvatarMouthConfig | ClassicMouthConfig | null;
   /** Absent on snapshots published before disclosures were recorded. */
   disclosure?: {
     ai_edited: { mode: string; model: string | null } | null;

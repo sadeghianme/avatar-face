@@ -1,4 +1,10 @@
-import { attachAvatarMouth, type AttachedMouth, type AvatarMouthConfig } from "@liveface/embed/mouth";
+import {
+  attachAvatarMouth,
+  type AttachedMouth,
+  type AvatarMouthConfig,
+  type CharacterSettings,
+  type ClassicMouthConfig,
+} from "@liveface/embed/mouth";
 import { useEffect, useRef, useState } from "react";
 import { mouthConfigToLoad, mouthLoadIdentity } from "@/features/avatars/mouth-config";
 
@@ -7,7 +13,10 @@ import { mouthConfigToLoad, mouthLoadIdentity } from "@/features/avatars/mouth-c
  *  an avatar without a teeth photo of its own, as visitors' widgets do. */
 export const MOUTH_MOTION_URL = "/api/mouth-motion.json";
 
-type MouthHost = Parameters<typeof attachAvatarMouth>[0];
+type MouthHost = Parameters<typeof attachAvatarMouth>[0] & {
+  /** AvatarEngine's; absent on a host that has none. */
+  setCharacterTraits?: (own: CharacterSettings | null | undefined) => void;
+};
 
 /**
  * Put an avatar's configured mouth on a running preview engine.
@@ -21,18 +30,19 @@ type MouthHost = Parameters<typeof attachAvatarMouth>[0];
  */
 export function useAvatarMouth(
   engine: MouthHost | null,
-  config: AvatarMouthConfig | null
+  config: AvatarMouthConfig | ClassicMouthConfig | null
 ): { failed: boolean } {
   const attached = useRef<AttachedMouth | null>(null);
   const [failed, setFailed] = useState(false);
-  const active = config?.renderer === "continuous";
+  const continuous = config?.renderer === "continuous" ? config : null;
+  const active = continuous !== null;
   // Presigned URLs are re-signed on every refetch. Identity is the path of
   // the teeth photo and of the motion; the freshest signatures are kept in a
   // ref for when a reload IS needed.
   const identity = mouthLoadIdentity(config);
-  const latest = useRef(config);
-  latest.current = config;
-  const profile = config?.profile;
+  const latest = useRef(continuous);
+  latest.current = continuous;
+  const profile = continuous?.profile;
 
   useEffect(() => {
     setFailed(false);
@@ -59,6 +69,16 @@ export function useAvatarMouth(
     attached.current?.setProfile(profile);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileKey]);
+
+  // How the owner set an animation's or an animal's character mouth. Applied
+  // live and cheaply (the engine reads it on its next frame); a classic or a
+  // photographic mouth ignores it.
+  const character = config?.renderer === "classic" ? (config.character ?? null) : null;
+  const characterKey = JSON.stringify(character);
+  useEffect(() => {
+    engine?.setCharacterTraits?.(character);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, characterKey]);
 
   return { failed };
 }

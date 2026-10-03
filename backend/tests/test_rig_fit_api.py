@@ -270,12 +270,12 @@ async def test_an_animal_fit_reaches_visitors_with_the_muzzle_profile(client):
     it with no wiring of their own — and only once the owner publishes."""
     headers, _, _, base = await _setup(client, "dog", "animal")
     await _fit(client, headers, base, await _anchors(client, headers, base), True)
-    assert (await _rig(client, headers, base))["render_profile"] == "animal@1"
+    assert (await _rig(client, headers, base))["render_profile"] == "animal@2"
 
     await client.post(f"{base}/publish", headers=headers)
     token = (await client.post(f"{base}/share", headers=headers)).json()["share_token"]
     public = (await client.get(f"/public/v1/avatars/{token}")).json()
-    assert (await client.get(public["rig_url"])).json()["render_profile"] == "animal@1"
+    assert (await client.get(public["rig_url"])).json()["render_profile"] == "animal@2"
 
 
 async def test_a_human_fit_has_no_render_profile(client):
@@ -290,7 +290,7 @@ async def test_switching_line_switches_the_profile(client):
     await client.patch(base, json={"face_type": "human"}, headers=headers)
     assert "render_profile" not in await _rig(client, headers, base)
     await client.patch(base, json={"face_type": "animal"}, headers=headers)
-    assert (await _rig(client, headers, base))["render_profile"] == "animal@1"
+    assert (await _rig(client, headers, base))["render_profile"] == "animal@2"
 
 
 async def test_the_fit_base_is_kept_beside_the_rig(client):
