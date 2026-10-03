@@ -42,21 +42,24 @@ async def create_org(
     first login. It is idempotent: a user has at most one, and asking again
     (a retry, a second tab, an effect that fired twice) answers 200 with the
     one that exists instead of making another."""
+    # Read once: after the rollback below, the session has expired `user`, and
+    # touching it then would be IO outside the greenlet (a 500 for the loser).
+    user_id = user.id
     if body.personal:
-        existing = await _personal_org(db, user.id)
+        existing = await _personal_org(db, user_id)
         if existing is not None:
             response.status_code = 200
             return existing
-    org = Organization(name=body.name, personal_owner_id=user.id if body.personal else None)
+    org = Organization(name=body.name, personal_owner_id=user_id if body.personal else None)
     db.add(org)
     try:
         await db.flush()
-        db.add(Membership(user_id=user.id, org_id=org.id, role=Role.owner))
+        db.add(Membership(user_id=user_id, org_id=org.id, role=Role.owner))
         await db.commit()
     except IntegrityError:
         # Lost the race to another request for the same user's personal org.
         await db.rollback()
-        existing = await _personal_org(db, user.id) if body.personal else None
+        existing = await _personal_org(db, user_id) if body.personal else None
         if existing is None:
             raise
         response.status_code = 200
