@@ -422,6 +422,42 @@ async def test_a_drawn_animal_the_detector_calls_a_face_publishes_without_a_stat
         json={"name": "Rex", "anchors_id": body["anchors"]["id"]},
     )
     assert finish.status_code == 202, finish.text
+    # An animal-like character starts without the human-style teeth the
+    # character mouth would otherwise draw (the line is plain "cartoon").
+    avatar_id = (await _get(client, headers, base))["avatar_id"]
+    avatar = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
+    assert avatar["mouth"]["character"]["teeth"] == "none", avatar["mouth"]
+    assert avatar["mouth"]["character"]["style"] == "character"
+
+
+def test_only_an_animals_plan_turns_the_character_teeth_off():
+    """The line cannot tell a dog from a woman (both are "cartoon"); the plan
+    can. A person's character mouth keeps its default teeth, and settings
+    the owner already made are never overwritten."""
+    import json
+    from types import SimpleNamespace
+
+    from app.services.creations import _animal_character_mouth
+
+    def avatar(config=None):
+        return SimpleNamespace(
+            face_type="cartoon", mouth_config=json.dumps(config) if config else None)
+
+    def creation(model):
+        return SimpleNamespace(steps={"plan": {"model": model, "look": "cartoon"}})
+
+    person = avatar()
+    _animal_character_mouth(creation("human"), person)
+    assert person.mouth_config is None
+    dog = avatar()
+    _animal_character_mouth(creation("animal"), dog)
+    assert json.loads(dog.mouth_config)["character"]["teeth"] == "none"
+    set_already = avatar({"renderer": "classic", "profile": {}, "character": {"teeth": "upper"}})
+    _animal_character_mouth(creation("animal"), set_already)
+    assert json.loads(set_already.mouth_config)["character"] == {"teeth": "upper"}
+    human_line = SimpleNamespace(face_type="human", mouth_config=None)
+    _animal_character_mouth(creation("animal"), human_line)
+    assert human_line.mouth_config is None
 
 
 async def test_a_realistic_generated_animal_that_reads_as_a_face_still_needs_the_statement(

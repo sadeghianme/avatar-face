@@ -1620,6 +1620,7 @@ async def _build_avatar(
         avatar.has_layers = await store_layers(avatar, storage, image, rig["face_box"])
 
     mouth_made = await _own_mouth(job, creation, avatar, image, rig, storage)
+    _animal_character_mouth(creation, avatar)
 
     warnings = (anchors.get("validation") or {}).get("warnings") or []
     avatar.rig_key = rig_key
@@ -1642,6 +1643,27 @@ TEETH_FAILED = error_record(
 # after all (no AI allowed, or it failed): the standard teeth and shapes.
 PUBLISH_LABEL = "publishing"
 PUBLISH_STANDARD_LABEL = "publishing with the standard mouth"
+
+
+def _animal_character_mouth(creation: Creation, avatar: Avatar) -> None:
+    """A new animal-like character starts with no teeth in its character
+    mouth. An animation or a cartoon is stored as the plain `cartoon` line
+    whatever it shows, so the line cannot tell a dog from a woman; the
+    wizard's plan (the owner's first choice, "Animal") can. Human-style upper
+    teeth on a dog look wrong, and the owner can turn them on in the Mouth
+    panel. Only where the character mouth applies and nothing is set yet."""
+    from app.services import mouth, wizard
+
+    plan = wizard.plan_of(creation.steps)
+    if not plan or plan.get("model") != "animal" or not mouth.character_allowed(avatar.face_type):
+        return
+    config = json.loads(avatar.mouth_config) if avatar.mouth_config else {}
+    if config.get("character"):
+        return
+    config.setdefault("renderer", "classic")
+    config.setdefault("profile", {})
+    config["character"] = mouth.clean_character({**mouth.DEFAULT_CHARACTER, "teeth": "none"})
+    avatar.mouth_config = json.dumps(config)
 
 
 async def _own_mouth(

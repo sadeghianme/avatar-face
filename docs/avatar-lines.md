@@ -706,3 +706,9 @@ Later: our own keypoint model (only with a separate opt-in data programme), a
 licensed face parser for lip contours, the general segmenter after measurement
 on the production box, WebGL renderer and 2.5D head turns, and the liveness
 work (audio clock, cursor gaze, brows).
+
+A new animal-like character (the wizard's plan says "Animal") starts with the
+character mouth's teeth off (services.creations._animal_character_mouth): the
+line is plain `cartoon` for an animation or cartoon of any subject, so only
+the plan can tell a dog from a woman. The owner can turn teeth on in the
+Mouth panel; settings already made are never overwritten.
