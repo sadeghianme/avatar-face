@@ -131,3 +131,32 @@ def test_025_binds_statements_to_a_creation_and_back(tmp_path):
     assert "subject_id" not in _columns(database, "consents")
     with closing(sqlite3.connect(database)) as db:
         assert db.execute("select scope from consents where id = 'c1'").fetchone() == ("depiction",)
+
+
+def test_026_personal_org_is_unique_per_user(tmp_path):
+    database = tmp_path / "migrate.sqlite3"
+    _alembic(database, "upgrade", "025_consent_subject")
+    assert "personal_owner_id" not in _columns(database, "organizations")
+    with closing(sqlite3.connect(database)) as db:
+        db.execute(
+            "insert into organizations (id, name, created_at, updated_at) "
+            "values ('o1', 'Old', '2026-01-01', '2026-01-01')"
+        )
+        db.commit()
+    _alembic(database, "upgrade", "head")
+    assert "personal_owner_id" in _columns(database, "organizations")
+    with closing(sqlite3.connect(database)) as db:
+        assert db.execute("select personal_owner_id from organizations").fetchone() == (None,)
+        for org_id in ("o2", "o3"):  # several without one are fine
+            db.execute(
+                "insert into organizations (id, name, created_at, updated_at) "
+                f"values ('{org_id}', 'N', '2026-01-01', '2026-01-01')"
+            )
+        db.execute("update organizations set personal_owner_id = 'u1' where id = 'o2'")
+        try:
+            db.execute("update organizations set personal_owner_id = 'u1' where id = 'o3'")
+            raise AssertionError("a second personal organization for one user was accepted")
+        except sqlite3.IntegrityError:
+            pass
+    _alembic(database, "downgrade", "025_consent_subject")
+    assert "personal_owner_id" not in _columns(database, "organizations")

@@ -70,6 +70,8 @@ export const common = {
   createOrg: "Créer une organisation",
   newOrgName: "Nom de la nouvelle organisation",
   loading: "Chargement…",
+  workspaceSetup: "Préparation de votre espace…",
+  workspaceFailed: "Impossible de préparer votre espace. Réessayez.",
   errorPageBody: "Impossible de charger cette page. Un rechargement suffit en général.",
   reloadPage: "Recharger la page",
   error: "Une erreur est survenue",

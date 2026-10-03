@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import DB, CurrentUser, OrgAdmin, OrgMember, OrgOwner
 from app.core.errors import Conflict409, NotFound404, Validation422
@@ -32,13 +33,46 @@ def _with_role(org: Organization, role: Role) -> OrgWithRole:
 
 
 @router.post("/orgs", response_model=OrgWithRole, status_code=201)
-async def create_org(body: OrgCreate, user: CurrentUser, db: DB) -> OrgWithRole:
-    org = Organization(name=body.name)
+async def create_org(
+    body: OrgCreate, user: CurrentUser, db: DB, response: Response
+) -> OrgWithRole:
+    """Create an organization, the caller its owner.
+
+    `personal: true` is the account's own organization, made automatically on
+    first login. It is idempotent: a user has at most one, and asking again
+    (a retry, a second tab, an effect that fired twice) answers 200 with the
+    one that exists instead of making another."""
+    if body.personal:
+        existing = await _personal_org(db, user.id)
+        if existing is not None:
+            response.status_code = 200
+            return existing
+    org = Organization(name=body.name, personal_owner_id=user.id if body.personal else None)
     db.add(org)
-    await db.flush()
-    db.add(Membership(user_id=user.id, org_id=org.id, role=Role.owner))
-    await db.commit()
+    try:
+        await db.flush()
+        db.add(Membership(user_id=user.id, org_id=org.id, role=Role.owner))
+        await db.commit()
+    except IntegrityError:
+        # Lost the race to another request for the same user's personal org.
+        await db.rollback()
+        existing = await _personal_org(db, user.id) if body.personal else None
+        if existing is None:
+            raise
+        response.status_code = 200
+        return existing
     return _with_role(org, Role.owner)
+
+
+async def _personal_org(db, user_id: str) -> OrgWithRole | None:
+    row = (
+        await db.execute(
+            select(Organization, Membership.role)
+            .join(Membership, Membership.org_id == Organization.id)
+            .where(Organization.personal_owner_id == user_id, Membership.user_id == user_id)
+        )
+    ).first()
+    return _with_role(row[0], row[1]) if row else None
 
 
 @router.get("/orgs", response_model=list[OrgWithRole])

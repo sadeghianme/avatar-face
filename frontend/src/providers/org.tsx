@@ -5,10 +5,12 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
 import { api } from "@/lib/api";
+import { needsPersonalOrg, settingUpWorkspace } from "@/lib/orgSetup";
 import { useAuth } from "@/providers/auth";
 import type { Org } from "@/lib/types";
 
@@ -17,7 +19,12 @@ interface OrgState {
   current: Org | null;
   setCurrent: (org: Org) => void;
   createOrg: (name: string) => Promise<Org>;
+  /** True until the organizations are known, and while a new account's
+   * personal one is being made (nothing to show before it exists). */
   loading: boolean;
+  /** Making the personal organization failed; `retrySetup` tries again. */
+  setupFailed: boolean;
+  retrySetup: () => void;
 }
 
 const OrgContext = createContext<OrgState | null>(null);
@@ -36,14 +43,41 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     enabled: Boolean(user),
   });
 
-  // Auto-create a personal org on first login so the app is usable instantly.
+  // A new account gets its personal organization, once. The request is
+  // idempotent on the server (one personal organization per user), and the
+  // guard here keeps this tab from sending it twice anyway: the effect runs
+  // again whenever `user` or the list changes while the request is still in
+  // flight. The list reads as loading until it lands, so there is no blank
+  // page and no "+ Create organization" to press meanwhile.
+  const settingUp = useRef<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [setupFailed, setSetupFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
-    if (user && !isLoading && orgs.length === 0) {
-      void api
-        .post<Org>("/orgs", { name: `${user.display_name || user.username}'s space` })
-        .then(() => queryClient.invalidateQueries({ queryKey: ["orgs"] }));
-    }
-  }, [user, isLoading, orgs.length, queryClient]);
+    const state = { userId: user?.id ?? null, loaded: !isLoading, orgCount: orgs.length, requestedFor: settingUp.current };
+    if (!user || !needsPersonalOrg(state)) return;
+    settingUp.current = user.id;
+    setPending(true);
+    setSetupFailed(false);
+    api
+      .post<Org>("/orgs", { name: `${user.display_name || user.username}'s space`, personal: true })
+      .then(async () => {
+        await queryClient.invalidateQueries({ queryKey: ["orgs"] });
+        // Made but not listed (a failed refetch): say so, rather than wait forever.
+        if (!queryClient.getQueryData<Org[]>(["orgs"])?.length) throw new Error("not listed");
+      })
+      .catch(() => {
+        settingUp.current = null;
+        setSetupFailed(true);
+      })
+      .finally(() => setPending(false));
+  }, [user, isLoading, orgs.length, attempt, queryClient]);
+
+  const retrySetup = useCallback(() => {
+    setSetupFailed(false);
+    setAttempt((n) => n + 1);
+  }, []);
 
   const current = orgs.find((o) => o.id === currentId) ?? orgs[0] ?? null;
 
@@ -64,7 +98,15 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
   return (
     <OrgContext.Provider
-      value={{ orgs, current, setCurrent, createOrg, loading: isLoading }}
+      value={{
+        orgs,
+        current,
+        setCurrent,
+        createOrg,
+        loading: settingUpWorkspace({ userId: user?.id ?? null, loaded: !isLoading, orgCount: orgs.length, failed: setupFailed }) || pending,
+        setupFailed,
+        retrySetup,
+      }}
     >
       {children}
     </OrgContext.Provider>

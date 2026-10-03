@@ -32,6 +32,14 @@ class Organization(TimestampedBase):
         Boolean, default=True, server_default=true(), nullable=False
     )
 
+    # The user this is the PERSONAL organization of (the one a new account
+    # gets automatically), else null. Unique, so a user has at most one:
+    # two requests racing to make it (a double-fired effect, two tabs, a
+    # retry) cannot both succeed, and the loser is answered with the winner.
+    personal_owner_id: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, unique=True
+    )
+
     memberships: Mapped[list["Membership"]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
     )

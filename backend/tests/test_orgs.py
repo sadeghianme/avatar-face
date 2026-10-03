@@ -12,6 +12,36 @@ async def test_create_and_list_orgs(client):
     assert orgs[0]["role"] == "owner"
 
 
+async def test_the_personal_org_is_made_once_however_many_times_it_is_asked(client):
+    import asyncio
+
+    headers = await register_and_login(client, "solo")
+    body = {"name": "solo's space", "personal": True}
+    first = await client.post("/orgs", json=body, headers=headers)
+    assert first.status_code == 201, first.text
+    again = await client.post("/orgs", json=body, headers=headers)
+    assert again.status_code == 200 and again.json()["id"] == first.json()["id"]
+    assert again.json()["role"] == "owner"
+
+    # Racing requests (a double-fired effect, two tabs): one organization.
+    other = await register_and_login(client, "racer")
+    results = await asyncio.gather(
+        *[client.post("/orgs", json={"name": "r", "personal": True}, headers=other) for _ in range(5)]
+    )
+    assert all(r.status_code in (200, 201) for r in results), [r.text for r in results]
+    assert len({r.json()["id"] for r in results}) == 1
+    assert len((await client.get("/orgs", headers=other)).json()) == 1
+
+    # A hand-made organization is its own thing and does not count as personal.
+    made = await client.post("/orgs", json={"name": "Acme"}, headers=headers)
+    assert made.status_code == 201 and made.json()["id"] != first.json()["id"]
+    assert len((await client.get("/orgs", headers=headers)).json()) == 2
+    # Nobody else's personal organization is returned to another user.
+    third = await register_and_login(client, "third")
+    mine = await client.post("/orgs", json=body, headers=third)
+    assert mine.status_code == 201 and mine.json()["id"] not in {first.json()["id"], made.json()["id"]}
+
+
 async def test_non_member_gets_404(client):
     alice = await register_and_login(client, "alice")
     bob = await register_and_login(client, "bob")

@@ -5,7 +5,7 @@ import { useOrg } from "@/providers/org";
 
 export function OrgSwitcher() {
   const { t } = useTranslation();
-  const { orgs, current, setCurrent, createOrg } = useOrg();
+  const { orgs, current, setCurrent, createOrg, loading } = useOrg();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
 
@@ -49,6 +49,7 @@ export function OrgSwitcher() {
       <select
         aria-label="organization"
         className="input"
+        disabled={loading && orgs.length === 0}
         value={current?.id ?? ""}
         onChange={(e) => {
           if (e.target.value === "__new__") setCreating(true);
@@ -58,6 +59,7 @@ export function OrgSwitcher() {
           }
         }}
       >
+        {orgs.length === 0 && <option value="">{t("loading")}</option>}
         {orgs.map((org) => (
           <option key={org.id} value={org.id}>
             {org.name}

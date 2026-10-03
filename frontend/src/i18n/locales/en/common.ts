@@ -72,6 +72,8 @@ export const common = {
   createOrg: "Create organization",
   newOrgName: "New organization name",
   loading: "Loading…",
+  workspaceSetup: "Setting up your workspace…",
+  workspaceFailed: "We could not set up your workspace. Try again.",
   errorPageBody: "We couldn't load this page. Reloading usually fixes it.",
   reloadPage: "Reload the page",
   error: "Something went wrong",

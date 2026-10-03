@@ -9,6 +9,9 @@ from app.models.org import Role
 
 class OrgCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
+    # The account's own organization, made once on first login: asking again
+    # answers with the one that exists (201 or 200, the same organization).
+    personal: bool = False
 
 
 class OrgUpdate(BaseModel):

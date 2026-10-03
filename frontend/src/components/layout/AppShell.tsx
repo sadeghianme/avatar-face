@@ -4,7 +4,9 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { LanguageMenu } from "@/components/layout/LanguageMenu";
+import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/providers/auth";
+import { useOrg } from "@/providers/org";
 import { useTheme } from "@/providers/theme";
 import { OrgSwitcher } from "@/components/layout/OrgSwitcher";
 
@@ -49,6 +51,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { theme, toggle } = useTheme();
   const [open, setOpen] = useState(false);
   const crumb = useCrumb();
+  const { current, loading, setupFailed, retrySetup } = useOrg();
   const initial = (user?.display_name || user?.username || "?").charAt(0).toUpperCase();
 
   const sidebar = (
@@ -150,7 +153,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="mx-auto max-w-[1360px] px-5 py-8 sm:px-8 sm:py-10">{children}</main>
+        <main className="mx-auto max-w-[1360px] px-5 py-8 sm:px-8 sm:py-10">
+          {current ? (
+            children
+          ) : setupFailed ? (
+            <div role="alert" className="space-y-3">
+              <p className="text-sm text-gray-600 dark:text-gray-300">{t("workspaceFailed")}</p>
+              <button type="button" className="btn-primary min-h-11" onClick={retrySetup}>
+                {t("retry")}
+              </button>
+            </div>
+          ) : (
+            <p role="status" className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+              <Spinner className="h-4 w-4" /> {loading ? t("workspaceSetup") : t("loading")}
+            </p>
+          )}
+        </main>
       </div>
     </div>
   );
