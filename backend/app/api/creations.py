@@ -1013,6 +1013,10 @@ async def _start_prepare(
     else:
         if body.mode == wizard.CHANGE and not instruction:
             raise Validation422("Describe the change first", code="instruction_required")
+        if body.again:
+            if body.mode != wizard.CHANGE:
+                raise Validation422("Only a change is tried again", code="again_not_a_change")
+            params["again"] = True
         if body.mode == wizard.GENERATE and plan["source"] != "generate":
             raise Validation422(
                 "Only a character described in words is made again from its words",

@@ -107,6 +107,8 @@ export const wizard = {
   wzOriginalNote: "This is your own photo with its background removed. No AI was used.",
   wzAiMadeNote: "Made by AI. Your avatar will be labelled as AI-made.",
   wzChangeApplied: "Change applied: “{{change}}”",
+  wzChangeClear: "Remove this change",
+  wzChangeClearHint: "Redo the picture without this change (uses one try)",
   wzContinue: "Looks good, continue",
   wzTryAgain: "Try again",
   wzOtherPhoto: "Choose another photo",

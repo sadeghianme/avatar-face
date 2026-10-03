@@ -107,6 +107,8 @@ export const wizard = {
   wzOriginalNote: "C’est votre propre photo, sans son arrière-plan. Aucune IA n’a été utilisée.",
   wzAiMadeNote: "Créé par l’IA. Votre avatar sera signalé comme créé par l’IA.",
   wzChangeApplied: "Modification appliquée : « {{change}} »",
+  wzChangeClear: "Retirer cette modification",
+  wzChangeClearHint: "Refaire l’image sans cette modification (compte pour un essai)",
   wzContinue: "C’est parfait, continuer",
   wzTryAgain: "Réessayer",
   wzOtherPhoto: "Choisir une autre photo",

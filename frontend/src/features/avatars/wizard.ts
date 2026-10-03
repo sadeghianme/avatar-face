@@ -256,6 +256,35 @@ export function preparePhase(creation: Creation): PreparePhase {
   return "waiting";
 }
 
+/** The body of POST /prepare. */
+export interface PrepareBody {
+  mode: "ai" | "change" | "generate" | "original";
+  instruction?: string;
+  /** With `change`: Retry of the last change (from the same base). */
+  again?: boolean;
+}
+
+/** The change in effect: the owner's last instruction, when the last try
+ * was a change. */
+export function activeChange(last: LastPrepare | null | undefined): string | null {
+  return last?.mode === "change" && last.instruction ? last.instruction : null;
+}
+
+/** The plain try: the upload redone in its look, or a described character
+ * made anew, with no change in effect. */
+export function plainBody(plan: Plan): PrepareBody {
+  return { mode: plan.source === "generate" ? "generate" : "ai" };
+}
+
+/** What Retry asks: "try again" means the same request. When the last try
+ * was a change, that change again on the same base (the instruction stays
+ * in effect until the owner clears it); otherwise the plain try. Each is
+ * one of the six tries. */
+export function retryBody(plan: Plan, last: LastPrepare | null | undefined): PrepareBody {
+  const change = activeChange(last);
+  return change ? { mode: "change", instruction: change, again: true } : plainBody(plan);
+}
+
 /** "Use my original photo": a realistic upload only. */
 export function canUseOriginal(plan: Plan): boolean {
   return plan.source === "upload" && plan.look === "realistic";

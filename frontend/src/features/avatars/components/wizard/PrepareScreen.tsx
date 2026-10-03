@@ -13,19 +13,23 @@ import { consentProblem } from "@/features/avatars/consent";
 import type { ConsentApi } from "@/features/avatars/hooks/useConsent";
 import type { Run } from "@/features/avatars/hooks/useCreation";
 import {
+  activeChange,
   beforeStep,
   canUseOriginal,
   isPrepareJob,
   MAX_WORDS,
   needsPrepare,
   planOf,
+  plainBody,
   prepareChecklist,
   preparedStep,
   preparePhase,
   prepareStage,
   recallChoices,
+  retryBody,
   triesLeft,
   type LastPrepare,
+  type PrepareBody,
   type WizardCreation,
 } from "@/features/avatars/wizard";
 import { Icon } from "@/components/ui/Icon";
@@ -39,8 +43,6 @@ function tabStore(): DraftStore | null {
     return null;
   }
 }
-
-type PrepareBody = { mode: "ai" | "change" | "generate" | "original"; instruction?: string };
 
 /**
  * Step 3: the picture the avatar is made of, made by itself.
@@ -274,6 +276,7 @@ export function PrepareScreen({
   }
 
   // --- The result ----------------------------------------------------------------
+  const applied = activeChange(last);
   const redoing = working || busy === "prepare" || busy === "change" || busy === "retry";
   const note = !last?.cut && last
     ? t("wzKeptBackground")
@@ -306,9 +309,23 @@ export function PrepareScreen({
                 {t("wzDescribedAs", { description: plan.description })}
               </span>
             )}
-            {last?.instruction && (
+            {applied && (
               <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
-                {t("wzChangeApplied", { change: last.instruction })}
+                {t("wzChangeApplied", { change: applied })}
+                {canAi && !askAi && (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      className="inline min-h-6 rounded font-medium text-brand-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:opacity-50 dark:text-brand-300"
+                      onClick={() => void prepare(plainBody(plan))}
+                      disabled={redoing || busy !== null}
+                      title={t("wzChangeClearHint")}
+                    >
+                      {t("wzChangeClear")}
+                    </button>
+                  </>
+                )}
               </span>
             )}
           </span>
@@ -357,7 +374,7 @@ export function PrepareScreen({
             <button
               type="button"
               className="btn-secondary min-h-11"
-              onClick={() => void prepare({ mode: plan.source === "generate" ? "generate" : "ai" })}
+              onClick={() => void prepare(retryBody(plan, last))}
               disabled={redoing || busy !== null}
             >
               <Icon name="refresh" className="h-4 w-4" />

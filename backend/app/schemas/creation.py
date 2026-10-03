@@ -131,6 +131,10 @@ class PrepareRequest(BaseModel):
     mode: Literal["ai", "change", "generate", "original"] = "ai"
     instruction: str | None = Field(default=None, max_length=300)
     consent_id: str | None = Field(default=None, max_length=64)
+    # With `change`: the owner's Retry of their last change. It is made
+    # again from the picture the last try was made from, not stacked on the
+    # last result.
+    again: bool = False
 
 
 class PlanOut(BaseModel):

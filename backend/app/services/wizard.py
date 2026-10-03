@@ -567,6 +567,11 @@ async def prepare_job(job: Job, params: dict) -> None:
             call = "generate"
         elif mode == CHANGE:
             base_id = svc._through_cutouts(creation.steps, svc.current_step(creation.steps))
+            if params.get("again"):
+                # Retry of the last change: from what that try started from,
+                # so the change is not applied on top of its own result.
+                last = (svc.ai_usage_of(creation).get("last_prepare") or {}).get("step")
+                base_id = (items.get(last) or {}).get("from") or base_id
             if base_id is None or base_id not in items:
                 base_id = "original"
             source = await storage.get_bytes(items[base_id]["key"])

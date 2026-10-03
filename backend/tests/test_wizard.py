@@ -215,6 +215,53 @@ async def test_a_change_edits_the_ai_picture_with_the_owners_words(client, faces
     assert _step(body, "cutout:0") is not None
 
 
+async def test_retrying_a_change_tries_the_same_change_again_on_the_same_base(
+    client, faces, images
+):
+    images.script = [studio(), studio(shirt=(150, 40, 40)), studio(shirt=(160, 50, 50))]
+    headers, org_id = await _org(client, "retrier")
+    base, _ = await _upload(client, headers, org_id, look="cartoon")
+    consent_id = await ai_consent(client, headers, org_id)
+    await _prepare(client, headers, base, consent_id=consent_id)
+    await _prepare(
+        client, headers, base, mode="change", instruction="a red shirt", consent_id=consent_id
+    )
+    # The owner's Retry carries their change, from adjusted:0 (what the change
+    # started from), not stacked on adjusted:1.
+    again = await _prepare(
+        client, headers, base, mode="change", instruction="a red shirt", again=True,
+        consent_id=consent_id,
+    )
+    assert again.status_code == 202, again.text
+    body = await _get(client, headers, base)
+    assert body["job"]["state"] == "done", body["job"]
+    assert _step(body, "adjusted:2")["from"] == "adjusted:0"
+    assert _step(body, "adjusted:2")["adjust"]["instruction"] == "a red shirt"
+    assert images.calls[2]["prompt"].startswith("Edit this avatar portrait")
+    assert body["ai"]["last_prepare"]["mode"] == "change"
+    assert body["ai"]["last_prepare"]["instruction"] == "a red shirt"
+    # Another Retry keeps going from the same base.
+    images.script = [studio()]
+    await _prepare(
+        client, headers, base, mode="change", instruction="a red shirt", again=True,
+        consent_id=consent_id,
+    )
+    body = await _get(client, headers, base)
+    assert _step(body, "adjusted:3")["from"] == "adjusted:0"
+
+    # Clearing it: a plain prepare from the upload again, no instruction.
+    images.script = [studio()]
+    await _prepare(client, headers, base, consent_id=consent_id)
+    body = await _get(client, headers, base)
+    assert _step(body, "adjusted:4")["from"] == "original"
+    assert body["ai"]["last_prepare"]["instruction"] is None
+
+    # "again" is for a change only; the six-try budget still counts every one.
+    bad = await _prepare(client, headers, base, mode="ai", again=True, consent_id=consent_id)
+    assert bad.status_code == 422 and bad.json()["code"] == "again_not_a_change"
+    assert body["ai"]["prepare_rounds_left"] == wizard.PREPARE_ROUNDS_PER_CREATION - 5
+
+
 async def test_the_original_photo_is_cut_out_without_ai(client, faces, images, segmenter):
     headers, org_id = await _org(client, "purist")
     base, _ = await _upload(client, headers, org_id)

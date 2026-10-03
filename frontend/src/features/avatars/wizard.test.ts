@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  activeChange,
   aiRequired,
   beforeStep,
   canUseOriginal,
@@ -17,11 +18,13 @@ import {
   lineFor,
   needsPrepare,
   photoBlocker,
+  plainBody,
   planOf,
   preparedStep,
   prepareStage,
   recallChoices,
   rememberChoices,
+  retryBody,
   screenFor,
   statementFor,
   statementToAsk,
@@ -217,6 +220,32 @@ describe("step 4", () => {
     assert.equal(faceFound(anchors("x", { detected: false, source: "template" })), false);
     assert.equal(faceFound(anchors("x", { validation: { ok: false, reasons: [], warnings: [], detected: true, one_click: false } })), false);
     assert.equal(faceFound(null), false);
+  });
+});
+
+describe("retry", () => {
+  const upload = { model: "human", look: "cartoon", source: "upload", description: null };
+  const generated = { model: "animal", look: "cartoon", source: "generate", description: "a fox" };
+  const tried = (mode, instruction = null) => ({ mode, look: "cartoon", instruction, step: "adjusted:1", cut: true });
+
+  it("tries the owner's last change again, on the same base, until it is cleared", () => {
+    const last = tried("change", "a red shirt");
+    assert.equal(activeChange(last), "a red shirt");
+    assert.deepEqual(retryBody(upload, last), { mode: "change", instruction: "a red shirt", again: true });
+    assert.deepEqual(retryBody(generated, last), { mode: "change", instruction: "a red shirt", again: true });
+  });
+
+  it("redoes the plain try when the last try was not a change", () => {
+    assert.deepEqual(retryBody(upload, tried("ai")), { mode: "ai" });
+    assert.deepEqual(retryBody(generated, tried("generate")), { mode: "generate" });
+    assert.deepEqual(retryBody(upload, null), { mode: "ai" });
+    assert.equal(activeChange(tried("change", null)), null);
+    assert.equal(activeChange(tried("ai", "x")), null);
+  });
+
+  it("clears the change with a plain try", () => {
+    assert.deepEqual(plainBody(upload), { mode: "ai" });
+    assert.deepEqual(plainBody(generated), { mode: "generate" });
   });
 });
 
