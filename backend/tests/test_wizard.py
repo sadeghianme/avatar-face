@@ -262,6 +262,35 @@ async def test_retrying_a_change_tries_the_same_change_again_on_the_same_base(
     assert body["ai"]["prepare_rounds_left"] == wizard.PREPARE_ROUNDS_PER_CREATION - 5
 
 
+async def test_a_prepare_waiting_on_the_provider_does_not_hold_a_running_slot(
+    client, faces, images, monkeypatch
+):
+    from app.services.jobs import runner
+
+    seen = {}
+    real_edit = images.edit
+
+    async def watching(prompt, source, mime):
+        # Inside the provider call: the job's slot is lent back, so someone
+        # else's upload is not held at "waiting for a free spot" behind it.
+        job = next(iter(runner._jobs.values()))
+        seen["holds"] = job.holds_slot
+        seen["free"] = runner._slots._value
+        return await real_edit(prompt, source, mime)
+
+    monkeypatch.setattr(imagegen, "edit_image", watching)
+    images.script = [studio()]
+    headers, org_id = await _org(client, "slotlender")
+    base, _ = await _upload(client, headers, org_id, look="cartoon")
+    consent_id = await ai_consent(client, headers, org_id)
+    await _prepare(client, headers, base, consent_id=consent_id)
+    body = await _get(client, headers, base)
+    assert body["job"]["state"] == "done", body["job"]
+    assert seen["holds"] is False and seen["free"] == runner.max_running
+    # ... and the job holds one again for the rest of its work.
+    assert runner._slots._value == runner.max_running
+
+
 async def test_the_original_photo_is_cut_out_without_ai(client, faces, images, segmenter):
     headers, org_id = await _org(client, "purist")
     base, _ = await _upload(client, headers, org_id)

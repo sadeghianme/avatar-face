@@ -56,7 +56,7 @@ from uuid import uuid4
 from PIL import Image
 
 from app.core.errors import AppError, Conflict409, Validation422
-from app.services.jobs import Job, run_cpu
+from app.services.jobs import Job, run_cpu, runner
 
 logger = logging.getLogger("liveface.wizard")
 
@@ -461,10 +461,14 @@ async def _ask_ai(
         send = sends[index]
         index += 1
         try:
-            if send is not None:
-                answer = await imagegen.edit_image(prompt, send[0], send[1])
-            else:
-                answer = await imagegen.create_image(prompt)
+            # The wait on Google (tens of seconds) is not work on this box:
+            # the running slot goes back for it, so other people's uploads
+            # are not held at "waiting for a free worker" behind it.
+            async with runner.outside_slot(job):
+                if send is not None:
+                    answer = await imagegen.edit_image(prompt, send[0], send[1])
+                else:
+                    answer = await imagegen.create_image(prompt)
         except imagegen.ImageGenRefused as exc:
             async with session() as db:
                 await record_generation(db, job.org_id, "gemini", mode)

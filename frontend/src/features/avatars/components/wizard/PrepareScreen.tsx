@@ -14,6 +14,7 @@ import type { ConsentApi } from "@/features/avatars/hooks/useConsent";
 import type { Run } from "@/features/avatars/hooks/useCreation";
 import {
   activeChange,
+  heldStage,
   beforeStep,
   canUseOriginal,
   isPrepareJob,
@@ -30,6 +31,7 @@ import {
   triesLeft,
   type LastPrepare,
   type PrepareBody,
+  type PrepareStage,
   type WizardCreation,
 } from "@/features/avatars/wizard";
 import { Icon } from "@/components/ui/Icon";
@@ -156,7 +158,12 @@ export function PrepareScreen({
 
   const working = phase === "working" || (phase === "waiting" && busy === "prepare");
   const stages = prepareChecklist(plan.source, !(last?.mode === "original") && choices?.intent !== "original");
-  const stage = prepareStage(job) ?? (busy ? "upload" : null);
+  // Monotonic within a run: see heldStage.
+  const shownStage = useRef<PrepareStage | null>(null);
+  // A run is over once a picture is shown (or it failed) and nothing is working.
+  const idle = (phase === "done" || phase === "failed") && busy === null && !(job && isJobActive(job));
+  const stage = idle ? null : heldStage(shownStage.current, prepareStage(job) ?? (busy ? "upload" : null));
+  shownStage.current = stage;
   const fraction = job && isJobActive(job) ? job.progress?.fraction ?? null : null;
   const failure = job && isPrepareJob(job) ? jobFailure(job) : null;
   const failureText = failure ? errorText(t, failure.code, failure.detail) : null;

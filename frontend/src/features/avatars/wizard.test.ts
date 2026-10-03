@@ -13,7 +13,9 @@ import {
   canUseOriginal,
   defaultName,
   faceFound,
+  checklistRow,
   forgetChoices,
+  heldStage,
   intentFor,
   lineFor,
   needsPrepare,
@@ -220,6 +222,31 @@ describe("step 4", () => {
     assert.equal(faceFound(anchors("x", { detected: false, source: "template" })), false);
     assert.equal(faceFound(anchors("x", { validation: { ok: false, reasons: [], warnings: [], detected: true, one_click: false } })), false);
     assert.equal(faceFound(null), false);
+  });
+});
+
+describe("the stage shown", () => {
+  it("never goes back within a run", () => {
+    // Reading (the upload), then the picture's job waiting for a slot, then
+    // a poll of the older state: the words stay on the furthest stage.
+    let shown = null;
+    const seen = [];
+    for (const next of ["queued", "upload", "queued", "upload", "create", "upload", "queued", "check", "create", "background", "face", "save", null, "background"]) {
+      shown = heldStage(shown, next);
+      seen.push(shown);
+    }
+    assert.deepEqual(seen, ["queued", "upload", "upload", "upload", "create", "create", "create", "check", "check", "background", "face", "save", "save", "save"]);
+    assert.equal(heldStage(null, null), null);
+  });
+
+  it("lights a checklist row for every stage, so the list never blanks", () => {
+    const rows = ["upload", "create", "background", "face"];
+    assert.equal(checklistRow("upload", rows), 0);
+    assert.equal(checklistRow("check", rows), 1);
+    assert.equal(checklistRow("save", rows), 3);
+    assert.equal(checklistRow("queued", rows), -1);
+    assert.equal(checklistRow(null, rows), -1);
+    assert.equal(checklistRow("check", ["create", "background", "face"]), 0);
   });
 });
 

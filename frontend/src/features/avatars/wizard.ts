@@ -202,6 +202,41 @@ export function prepareStage(job: CreationJob | null | undefined): PrepareStage 
   return STAGE_OF_LABEL[label] ?? null;
 }
 
+const STAGE_RANK: Readonly<Record<PrepareStage, number>> = {
+  queued: 0,
+  upload: 1,
+  create: 2,
+  check: 3,
+  background: 4,
+  face: 5,
+  save: 6,
+};
+
+/**
+ * The stage to show: never one earlier than a stage already shown in this
+ * run. A try is several requests and jobs in a row (the upload's reading,
+ * then the picture's job, which waits for a slot first), and polls land in
+ * any order against them: left alone, the words went "Reading your photo"
+ * → "Waiting for a free spot" → "Reading…" within one try. `held` is the
+ * stage shown so far in this run (null when none; a run ends when nothing
+ * is working, and the next one starts afresh).
+ */
+export function heldStage(held: PrepareStage | null, next: PrepareStage | null): PrepareStage | null {
+  if (next === null) return held;
+  if (held === null) return next;
+  return STAGE_RANK[next] >= STAGE_RANK[held] ? next : held;
+}
+
+/** The checklist row a stage lights: the checking of the picture is still
+ * making it, and saving is the end of finding the face. */
+export function checklistRow(stage: PrepareStage | null, rows: readonly PrepareStage[]): number {
+  if (stage === null || stage === "queued") return -1;
+  const own = rows.indexOf(stage);
+  if (own >= 0) return own;
+  const row = stage === "check" ? "create" : stage === "save" ? "face" : null;
+  return row ? rows.indexOf(row) : -1;
+}
+
 /** The ordered stages step 3 shows as a checklist, for the work at hand. */
 export function prepareChecklist(source: PhotoSource, withAi: boolean): PrepareStage[] {
   if (source === "generate") return ["create", "background", "face"];

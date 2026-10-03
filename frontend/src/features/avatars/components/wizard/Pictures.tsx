@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { CHECKER_STYLE, LookPicture, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
 import type { CreationStep } from "@/features/avatars/creation";
-import type { AvatarModel, Look, PrepareStage } from "@/features/avatars/wizard";
+import { checklistRow, type AvatarModel, type Look, type PrepareStage } from "@/features/avatars/wizard";
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 
@@ -36,7 +36,7 @@ export function Working({
   hint: string;
 }) {
   const { t } = useTranslation();
-  const at = stage ? stages.indexOf(stage) : -1;
+  const at = checklistRow(stage, stages);
   const shown = stage === "queued" ? t("wzStage_queued") : stage ? t(`wzStage_${stage}`) : t("wzStage_create");
   return (
     <div className="grid gap-5 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] md:items-center">
