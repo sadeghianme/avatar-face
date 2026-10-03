@@ -25,6 +25,7 @@ import { AvatarEngine } from "./engine";
 import type { Avatar3DEngine } from "./engine3d";
 import { SpeechPlayer, SpeechQueue } from "./speech";
 import { listen, sttSupported, ListenOptions } from "./stt";
+import type { ClassicMouthConfig } from "./character-mouth";
 import type { AvatarMouthConfig } from "./mouth";
 import { EngineTuning, Rig, SynthesisPayload } from "./types";
 
@@ -132,7 +133,7 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     model_url?: string | null;
     layer_urls?: { background?: string; body: string; head: string } | null;
     voice?: { provider: string; voice: string; locale: string } | null;
-    mouth?: AvatarMouthConfig | null;
+    mouth?: AvatarMouthConfig | ClassicMouthConfig | null;
     /** Absent for snapshots published before disclosures were recorded. */
     disclosure?: Disclosure;
   } = await meta.json();
@@ -177,6 +178,9 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
       fullPhoto: (script.dataset.framing ?? info.framing) === "full",
     });
     engine = photoEngine;
+    // How the owner set a character mouth (jaw, teeth, tongue); a classic
+    // mouth ignores it.
+    if (info.mouth?.renderer === "classic") photoEngine.setCharacterTraits(info.mouth.character);
     void fullPromise
       ?.then((img) => {
         if (img !== first) photoEngine.setTexture(img);

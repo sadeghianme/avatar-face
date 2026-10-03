@@ -927,7 +927,7 @@ async def test_an_animal_is_never_finished_on_the_template_guess(client):
     assert avatar["face_type"] == "animal" and avatar["published"] is True
     assert avatar["layer_urls"] is None  # no layers for animals yet
     rig = (await client.get(avatar["rig_url"])).json()
-    assert rig["render_profile"] == "animal@1"
+    assert rig["render_profile"] == "animal@2"
 
 
 @pytest.mark.parametrize(

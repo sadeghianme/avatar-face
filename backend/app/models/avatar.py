@@ -118,6 +118,12 @@ class Avatar(TimestampedBase):
         return public_view(self.mouth_config, getattr(self, "signed_motion_url", None))
 
     @property
+    def render_profile(self) -> str | None:
+        """The draft rig's render profile, as the owner API read it off the
+        rig for this instance (api.avatars._sign_motion), or null."""
+        return getattr(self, "signed_render_profile", None)
+
+    @property
     def voice(self) -> dict | None:
         import json
 

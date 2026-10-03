@@ -146,6 +146,10 @@ async def publish(avatar, storage) -> dict:
     # teeth, and a visitor must never see them in a muzzle.
     if mouth and renderer_allowed(mouth["renderer"], face_type):
         mouth_published = {"renderer": mouth["renderer"], "profile": mouth.get("profile") or {}}
+        if mouth.get("character") is not None:
+            # How the owner set the character mouth (services.mouth): carried
+            # by value, like the fit, so a later edit reaches nobody unpublished.
+            mouth_published["character"] = mouth["character"]
         oral_image = await copy(mouth.get("oral_image_key"), "mouth", "png")
         oral_rig = await copy(mouth.get("oral_rig_key"), "mouth-rig", "json")
         if oral_image and oral_rig:
@@ -490,13 +494,21 @@ async def _mouth_view(mouth: dict | None, storage) -> dict | None:
     manifest; null, the bundled Reference motion). The engine fetch()es the
     motion cross-origin from the customer's page, which the storage route
     allows (/storage/ is on main.PublicCorsMiddleware's public surface)."""
-    if not mouth or mouth.get("renderer") != "continuous":
+    if not mouth:
         return None
-    from app.services.mouth import motion_url, photo_urls
+    from app.services.mouth import clean_character, motion_url, photo_urls
+
+    if mouth.get("renderer") != "continuous":
+        # The classic renderer, with the owner's character settings if they
+        # set any: the engine applies them when the rig's profile has a
+        # character mouth, and ignores them otherwise.
+        character = clean_character(mouth.get("character"))
+        return {"renderer": "classic", "character": character} if character else None
 
     return {
         "renderer": "continuous",
         "profile": mouth.get("profile") or {},
+        "character": None,
         "oral": await photo_urls(mouth, storage),
         "motion_url": await motion_url(mouth, storage),
     }

@@ -610,11 +610,40 @@ they just confirmed, before the first publish (`services.creations._own_mouth`,
   blink style (mesh / lid), jaw parameters, contact line on/off, allowed mouth
   extensions. Profile scalars multiply inside the engine; host `tune()` stays
   on top. Unused brow code is deleted rather than made configurable.
-- **Muzzle** (`animal@1`): dark cavity and tongue, no incisors, optional canines,
-  no gaze patch, no brow lift.
-- **Toon** (`toon@1`, flat art only): flat cavity, one tooth band, flat tongue;
-  full blinks as a lid painted from a sampled lid band, falling back to the
-  mesh blink when the band is not flat.
+- **Muzzle** (`animal@1`, the first muzzle, kept for rigs fitted with it): dark
+  cavity and tongue, no incisors, on the classic mouth's geometry.
+- **Character mouth** (`toon@1`: Animation and Cartoon looks; `animal@2`:
+  animals; embed/src/character-mouth.ts, character-paint.ts, blink-lid.ts).
+  Chosen only by the rig's `render_profile`, written by a fit, so widget,
+  share page and dashboard preview get it with no wiring. It replaces the
+  classic mouth's field and painter for those rigs:
+  - *Mesh*: the jaw is a hinge down to the chin and the muzzle (the lower lip
+    drops by the jaw, the chin keeps 72% of it, the lower face tapers wider
+    with distance), the lips move as one band (one falloff for all rows, so a
+    drawn lip line cannot crumple), retraction opens the lips a little for
+    /s/ /ee/ /f/.
+  - *Opening*: read off the moved inner lip rings, not synthesised.
+  - *Paint*: flat colours with the picture's own line for cel art, soft shading
+    and a halo rim for a render or a photograph, told by the picture's palette
+    (a few colours cover the area round the mouth) and the darkest tone on its
+    own mouth seam; an upper-teeth band (toons; none on a muzzle; never on a
+    rounded mouth), a bottom-anchored tongue that rises for /th/ and /d/
+    (eased, the sounds are discrete).
+  - *Blink*: `blink: "lid"` paints a lid over the eye from the skin beside it,
+    lash line on its edge, clipped to the eye, and leaves the mesh still (the
+    mesh blink pinches a drawn or rendered iris). Honours `tune({blink: 0})`.
+  - *Owner settings* (`mouth_config.character`, PATCH `character`): `style`
+    ("character", or "classic": the profile the line had before), `teeth`
+    ("upper" | "none"), `tongue`, `jaw` (0.5 to 1.6). Served to visitors in the
+    published mouth as `{renderer: "classic", character}` and applied with
+    `engine.setCharacterTraits`.
+  - *Migration*: a fit and a face-type change write the line's current profile
+    (cartoon `toon@1`, animal `animal@2`, human none), so new avatars get the
+    character mouth by default. A rig fitted before keeps what it names
+    (`animal@1`, or none) through every unrelated edit and publish; it changes
+    when its owner fits the face again or chooses "Character mouth" in the
+    Mouth panel (which says so for such avatars). The classic style survives a
+    re-fit.
 - Performance: cap mouth subdivision by face size; share one downscaled
   sampling canvas.
 - Speech clock (2026-09-26, every avatar): `playAudio` without a

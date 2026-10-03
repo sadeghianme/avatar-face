@@ -29,6 +29,47 @@ def renderer_allowed(renderer: str, face_type: str) -> bool:
     return renderer != "continuous" or face_type in CONTINUOUS_FACE_TYPES
 
 
+# The character mouth (embed/src/character-mouth.ts) is how an animation or an
+# animal talks: a drawn or rendered opening with a tongue and, for a toon,
+# teeth. It is chosen by the rig's render profile, not by `renderer`, so the
+# photographic mouth and the character mouth never meet on one face; what is
+# stored here is only how the owner set it: `style` ("character", or "classic"
+# for the look the line had before it), `teeth`, `tongue` and `jaw`.
+CHARACTER_FACE_TYPES = ("cartoon", "animal")
+CHARACTER_STYLES = ("character", "classic")
+CHARACTER_TEETH = ("upper", "none")
+JAW_RANGE = (0.5, 1.6)
+DEFAULT_CHARACTER = {"style": "character", "teeth": "upper", "tongue": True, "jaw": 1.0}
+
+
+def character_allowed(face_type: str) -> bool:
+    return face_type in CHARACTER_FACE_TYPES
+
+
+def clean_character(raw: dict | None) -> dict | None:
+    """The owner's character settings as stored: only known keys, each in its
+    range; a value that is not usable is the default. None for none."""
+    if not isinstance(raw, dict):
+        return None
+    jaw = raw.get("jaw")
+    jaw = float(jaw) if isinstance(jaw, (int, float)) and not isinstance(jaw, bool) else 1.0
+    if jaw != jaw:  # NaN
+        jaw = 1.0
+    return {
+        "style": raw.get("style") if raw.get("style") in CHARACTER_STYLES else "character",
+        "teeth": raw.get("teeth") if raw.get("teeth") in CHARACTER_TEETH else "upper",
+        "tongue": raw["tongue"] if isinstance(raw.get("tongue"), bool) else True,
+        "jaw": round(max(JAW_RANGE[0], min(JAW_RANGE[1], jaw)), 3),
+    }
+
+
+def character_style(raw: str | None) -> str:
+    """The owner's chosen mouth style for an avatar's stored config; the
+    character mouth unless they chose the classic one."""
+    config = load(raw)
+    return ((config or {}).get("character") or {}).get("style") or "character"
+
+
 def load(raw: str | None) -> dict | None:
     try:
         value = json.loads(raw) if raw else None
@@ -54,6 +95,7 @@ def public_view(raw: str | None, motion_url: str | None = None) -> dict | None:
     return {
         "renderer": config["renderer"],
         "profile": config.get("profile") or {},
+        "character": clean_character(config.get("character")),
         "has_oral_photo": has_photo,
         "teeth": {
             # An upload from before the record existed is still an upload.

@@ -154,8 +154,7 @@ export function paintCharacter(ctx: CanvasRenderingContext2D, f: CharacterFrameI
     const tc = flat ? tongueColour(look) : mix(tongueColour(look), mix(look.line, look.lip, 0.2), 0.28);
     ctx.beginPath();
     smoothThrough(ctx, tops, true);
-    ctx.lineTo(base[base.length - 1].x, base[base.length - 1].y);
-    ctx.lineTo(base[0].x, base[0].y);
+    for (let s = base.length - 1; s >= 0; s--) ctx.lineTo(base[s].x, base[s].y);
     ctx.closePath();
     if (flat) {
       ctx.fillStyle = rgb(tc);

@@ -61,6 +61,33 @@ from app.services.storage import get_storage
 logger = logging.getLogger("liveface.avatars")
 
 
+def _honour_mouth_style(rig: dict, avatar: Avatar, face_type: str) -> None:
+    """A fit names the line's current render profile; an avatar whose owner
+    chose the classic mouth keeps the classic one through a re-fit."""
+    from app.services.mouth import character_style
+
+    profile = render_profile_for(face_type, character_style(avatar.mouth_config))
+    if profile:
+        rig["render_profile"] = profile
+    else:
+        rig.pop("render_profile", None)
+
+
+async def _rig_profile(avatar: Avatar) -> str | None:
+    """The render profile of the avatar's draft rig; null when it names none
+    or the rig cannot be read (a photo avatar still processing)."""
+    import json as _json
+
+    if not avatar.rig_key or avatar.kind != AvatarKind.photo:
+        return None
+    try:
+        rig = _json.loads(await get_storage().get_bytes(avatar.rig_key))
+    except Exception:
+        return None
+    profile = rig.get("render_profile")
+    return profile if isinstance(profile, str) else None
+
+
 async def _sign_motion(result: Any) -> None:
     """Sign the draft motion of `result`, when it is one avatar, onto the
     instance, for its `mouth.motion_url` (Avatar.mouth). A list is left
@@ -71,6 +98,10 @@ async def _sign_motion(result: Any) -> None:
 
     if isinstance(result, Avatar) and getattr(result, "signed_motion_url", None) is None:
         result.signed_motion_url = await motion_url(load_mouth(result.mouth_config), get_storage())
+    if isinstance(result, Avatar) and result.face_type in ("cartoon", "animal"):
+        # Which look the draft has (character mouth or the classic one) is on
+        # the rig, not the avatar: one read, for the lines that have a choice.
+        result.signed_render_profile = await _rig_profile(result)
 
 
 class _SignedMouthRoute(APIRoute):
@@ -291,7 +322,12 @@ async def update_avatar(
     reaches sites that already have the snippet pasted in — they re-read the
     avatar on every page load, so the change lands without anyone editing HTML.
     """
-    from app.services.mouth import load as load_mouth, renderer_allowed
+    from app.services.mouth import (
+        character_allowed,
+        clean_character,
+        load as load_mouth,
+        renderer_allowed,
+    )
 
     avatar = await _get_avatar(db, ctx.org.id, avatar_id)
     face_type = body.face_type or avatar.face_type
@@ -299,6 +335,11 @@ async def update_avatar(
         raise Validation422(
             "The photographic mouth draws human teeth, so it is only for human faces",
             code="mouth_not_for_face_type",
+        )
+    if body.character is not None and not character_allowed(face_type):
+        raise Validation422(
+            "The character mouth is for animations and animals",
+            code="character_not_for_face_type",
         )
     if body.name is not None:
         avatar.name = body.name
@@ -316,13 +357,28 @@ async def update_avatar(
         current = load_mouth(avatar.mouth_config) or {}
         current.update(renderer=body.mouth.renderer, profile=body.mouth.profile.model_dump())
         avatar.mouth_config = _json.dumps(current)
+    if body.character is not None:
+        import json as _json
+
+        # How the character mouth is set. The look itself (the new mouth or
+        # the line's classic one) is the draft rig's render profile, moved
+        # below; a rig fitted before the character mouth keeps its look until
+        # its owner chooses it here or fits the face again.
+        current = load_mouth(avatar.mouth_config) or {"renderer": "classic", "profile": {}}
+        current["character"] = clean_character(body.character.model_dump())
+        avatar.mouth_config = _json.dumps(current)
     if (
         body.framing is not None
         or body.face_type is not None
         or body.voice is not None
         or body.mouth is not None
+        or body.character is not None
     ):
         mark_dirty(avatar)
+    if body.character is not None and not (
+        body.face_type is not None and body.face_type != avatar.face_type
+    ):
+        await _reprofile_visemes(avatar, visemes=False)
     if body.face_type is not None and body.face_type != avatar.face_type:
         avatar.face_type = body.face_type
         # Only the viseme table changes. Re-running detection would throw
@@ -342,11 +398,13 @@ async def update_avatar(
     return avatar
 
 
-async def _reprofile_visemes(avatar: Avatar) -> None:
-    """Swap the stored rig's viseme table and render profile to match the
-    avatar's face type. The draft only: visitors see it once published."""
+async def _reprofile_visemes(avatar: Avatar, visemes: bool = True) -> None:
+    """Swap the stored rig's viseme table (unless `visemes` is False) and
+    render profile to match the avatar's face type and the owner's mouth
+    style. The draft only: visitors see it once published."""
     import json as _json
 
+    from app.services.mouth import character_style
     from app.services.rig import VISEME_BLENDSHAPES, VISEME_PROFILES
 
     if not avatar.rig_key or avatar.kind != AvatarKind.photo:
@@ -354,10 +412,11 @@ async def _reprofile_visemes(avatar: Avatar) -> None:
     storage = get_storage()
     try:
         rig = _json.loads(await storage.get_bytes(avatar.rig_key))
-        rig["visemes"] = VISEME_PROFILES.get(avatar.face_type, VISEME_BLENDSHAPES)
+        if visemes:
+            rig["visemes"] = VISEME_PROFILES.get(avatar.face_type, VISEME_BLENDSHAPES)
         # A face that stops being an animal must get its incisors back, and
         # one that becomes an animal loses them, as a fit would have done.
-        profile = render_profile_for(avatar.face_type)
+        profile = render_profile_for(avatar.face_type, character_style(avatar.mouth_config))
         if profile:
             rig["render_profile"] = profile
         else:
@@ -1004,6 +1063,7 @@ async def rig_fit(avatar_id: str, body: RigFit, ctx: OrgMember, db: DB) -> RigFi
         marks_from_dict(body.model_dump(exclude={"persist"}, exclude_none=True), face_type),
     )
     adjusted, problems = fit_rig(rig, base, marks, face_type)
+    _honour_mouth_style(adjusted, avatar, face_type)
     reasons = [FitReason(code=p.code, detail=p.detail, count=p.count) for p in problems]
 
     if body.persist:

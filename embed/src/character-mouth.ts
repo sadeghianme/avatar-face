@@ -59,6 +59,22 @@ export interface CharacterTraits {
   jaw: number;
 }
 
+/** The owner's mouth settings as the API serves them (the style is the
+ *  backend's to apply to the rig; the engine reads the rest). */
+export interface CharacterSettings {
+  style?: "character" | "classic";
+  teeth?: "none" | "upper";
+  tongue?: boolean;
+  jaw?: number;
+}
+
+/** What the API serves for an avatar whose mouth is the classic renderer but
+ *  has character settings (the published snapshot's `mouth`). */
+export interface ClassicMouthConfig {
+  renderer: "classic";
+  character?: CharacterSettings | null;
+}
+
 export const DEFAULT_TRAITS: CharacterTraits = { teeth: "upper", tongue: true, jaw: 1 };
 export const TRAIT_LIMITS = { jaw: [0.5, 1.6] } as const;
 

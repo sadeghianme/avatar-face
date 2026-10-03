@@ -154,6 +154,11 @@ class AvatarOut(BaseModel):
     # API that returns one avatar signs its motion_url; the list (GET
     # /avatars) leaves it null.
     mouth: dict | None = None
+    # The render profile the DRAFT rig names ("toon@1", "animal@2", "animal@1",
+    # or null: the classic renderer). Set by the routes that return one avatar
+    # (they read the rig); null on the list. The Mouth panel's character
+    # section reads it to say which look the avatar has now.
+    render_profile: str | None = None
     # True when the draft has moved ahead of the published snapshot — the
     # dashboard shows a Publish bar on this.
     unpublished: bool = False
@@ -187,6 +192,17 @@ class MouthUpdate(BaseModel):
     profile: MouthProfile = Field(default_factory=MouthProfile)
 
 
+class CharacterUpdate(BaseModel):
+    """How an animation or an animal's character mouth is set. Ranges mirror
+    TRAIT_LIMITS in embed/src/character-mouth.ts; a published config is served
+    to strangers and must not trust the client's clamp."""
+
+    style: Literal["character", "classic"] = "character"
+    teeth: Literal["upper", "none"] = "upper"
+    tongue: bool = True
+    jaw: float = Field(default=1.0, ge=0.5, le=1.6)
+
+
 class MouthKitRequest(BaseModel):
     # A third_party_ai consent naming google, by this user (POST /consents).
     consent_id: str = Field(min_length=1, max_length=64)
@@ -209,6 +225,7 @@ class AvatarUpdate(BaseModel):
     face_type: FaceType | None = None
     voice: VoiceConfig | None = None
     mouth: MouthUpdate | None = None
+    character: CharacterUpdate | None = None
 
 
 class AvatarCreated(BaseModel):
