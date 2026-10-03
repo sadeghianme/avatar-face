@@ -416,6 +416,7 @@ export function AvatarDetailPage() {
                 layerUrls={avatar.layer_urls}
                 debugMesh={debugMesh}
                 fullPhoto={fullPhoto}
+                soft
                 onEngine={setEngine}
               />
             )}

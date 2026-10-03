@@ -2,7 +2,6 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Icon } from "@/components/ui/Icon";
-import { Spinner } from "@/components/ui/Spinner";
 
 /**
  * The avatar's name as its page's title, edited where it stands: click it
@@ -73,10 +72,15 @@ export function InlineName({ name, onSave }: { name: string; onSave: (next: stri
           <input
             id={`${ids}-name`}
             ref={input}
-            className="input h-11 min-w-0 max-w-[min(28rem,70vw)] text-xl font-semibold"
+            className={`input h-11 min-w-0 max-w-[min(28rem,70vw)] text-xl font-semibold transition-opacity duration-300 ${
+              saving ? "opacity-60" : ""
+            }`}
             value={value}
             maxLength={128}
-            disabled={saving}
+            // Saving is a quiet dimming of the same field: no spinner, nothing
+            // appears or moves, and the words cannot change under the request.
+            readOnly={saving}
+            aria-busy={saving || undefined}
             aria-describedby={`${ids}-hint`}
             aria-invalid={failed || undefined}
             onChange={(e) => setValue(e.target.value)}
@@ -94,7 +98,6 @@ export function InlineName({ name, onSave }: { name: string; onSave: (next: stri
               if (!saving) void commit();
             }}
           />
-          {saving && <Spinner className="h-4 w-4 text-brand-600" />}
         </div>
         <p id={`${ids}-hint`} className={`mt-1 text-xs ${failed ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-400"}`} role={failed ? "alert" : undefined}>
           {failed ? t("wzRenameFailed") : t("wzRenameHint")}

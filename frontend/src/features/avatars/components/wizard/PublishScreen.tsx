@@ -309,7 +309,7 @@ function Editor({
   const preview = (
     <div className={`relative overflow-hidden rounded-3xl border border-gray-200 dark:border-line ${PICTURE_BACKDROP}`}>
       {rigUrl && texture ? (
-        <AvatarPreview rigUrl={rigUrl} textureUrl={texture} size={fixing ? 320 : 520} onEngine={setEngine} />
+        <AvatarPreview rigUrl={rigUrl} textureUrl={texture} size={fixing ? 320 : 520} soft onEngine={setEngine} />
       ) : (
         <div className="grid aspect-square place-items-center p-6 text-center text-sm text-gray-500 dark:text-gray-400">
           {previewError ?? (
@@ -320,7 +320,7 @@ function Editor({
         </div>
       )}
       {rigUrl && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-black/35 to-transparent p-4 pt-12">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4 pt-12">
           <SampleSpeech
             engine={engine}
             orgId={orgId}
