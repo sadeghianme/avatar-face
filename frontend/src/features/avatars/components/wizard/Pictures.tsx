@@ -150,18 +150,23 @@ export function Result({
   const [split, setSplit] = useState(50);
   const ids = useId();
   const transparent = Boolean(after.cutout);
+  // Both pictures fill the same square the same way (cover, centred), so
+  // they line up. The After sits on its own OPAQUE backdrop (white or ink
+  // under the tinted gradient, which is translucent): a cut-out's clear
+  // parts must not show the Before through them.
   const afterLayer = (
-    <div className="absolute inset-0" style={transparent ? CHECKER_STYLE : undefined}>
-      <img src={after.url} alt={t("wzAfter")} className="absolute inset-0 h-full w-full object-contain" draggable={false} />
+    <div className="absolute inset-0 overflow-hidden bg-white dark:bg-ink">
+      <div className={`absolute inset-0 ${PICTURE_BACKDROP}`} />
+      {transparent && <div className="absolute inset-0" style={CHECKER_STYLE} />}
+      <img src={after.url} alt={t("wzAfter")} className="absolute inset-0 h-full w-full object-cover" draggable={false} />
     </div>
   );
   return (
     <div className={`${STAGE} ${PICTURE_BACKDROP} select-none`}>
       {before ? (
         <>
-          <img src={before.url} alt={t("wzBefore")} className="absolute inset-0 h-full w-full object-contain" draggable={false} />
+          <img src={before.url} alt={t("wzBefore")} className="absolute inset-0 h-full w-full object-cover" draggable={false} />
           <div className="absolute inset-0" style={{ clipPath: `inset(0 0 0 ${split}%)` }}>
-            <div className={`absolute inset-0 ${PICTURE_BACKDROP}`} />
             {afterLayer}
           </div>
           <div
