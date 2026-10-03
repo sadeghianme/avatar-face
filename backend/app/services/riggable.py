@@ -25,8 +25,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Face width as a fraction of image width. Below this, per-tooth detail is a
-# couple of pixels and the mouth reads as a smudge.
+# Face width as a fraction of the image's SHORTER side (the frame the avatar
+# shows is square-ish: a wide cut-out or a landscape picture must not be
+# judged against its width, which says nothing about the face's pixels).
+# Below this, per-tooth detail is a couple of pixels and the mouth reads as
+# a smudge.
 MIN_FACE_FRACTION = 0.22
 
 # How close the face may come to the frame edge, as a fraction of face width.
@@ -99,11 +102,13 @@ def check_landmarks(points, image_size: tuple[int, int], detected: bool) -> RigC
     if face_w <= 0 or face_h <= 0:
         return RigCheck(False, "degenerate face", detected=detected, code="degenerate_face")
 
-    fraction = face_w / width
+    fraction = face_w / min(width, height)
     if fraction < MIN_FACE_FRACTION:
+        # One decimal: "22% of frame; needs 22%" (a face at 21.6%) is
+        # honest to the threshold and contradicts itself to the reader.
         return RigCheck(
             False,
-            f"face too small ({fraction:.0%} of frame; needs {MIN_FACE_FRACTION:.0%})",
+            f"face too small ({fraction:.1%} of frame; needs {MIN_FACE_FRACTION:.0%})",
             fraction,
             detected=detected,
             code="face_small",

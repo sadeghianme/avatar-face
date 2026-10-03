@@ -49,6 +49,26 @@ def test_a_face_too_small_is_rejected():
     assert "too small" in result.reason
 
 
+def test_the_message_never_says_the_face_is_as_big_as_the_threshold_it_misses():
+    # 21.6% of the frame shows as "22%": "22% of frame; needs 22%".
+    half = MIN_FACE_FRACTION * 1024 * 0.98 / 2
+    result = check_landmarks(face(half_w=half), SIZE, detected=True)
+    assert not result.ok
+    assert "21.6% of frame; needs 22%" in result.reason, result.reason
+    # At the threshold it passes.
+    assert check_landmarks(face(half_w=MIN_FACE_FRACTION * 1024 / 2 + 0.5), SIZE, detected=True).ok
+
+
+def test_a_wide_picture_is_judged_on_its_shorter_side():
+    # A 16:9 cut-out (1376x768): a face 22.6% of the height is 12.6% of the
+    # width. The avatar shows the face in a square, so it is not too small.
+    wide = (1376, 768)
+    half = 0.226 * 768 / 2
+    assert check_landmarks(face(cx=688, cy=384, half_w=half, half_h=half * 1.2), wide, detected=True).ok
+    small = 0.15 * 768 / 2
+    assert not check_landmarks(face(cx=688, cy=384, half_w=small, half_h=small * 1.2), wide, detected=True).ok
+
+
 def test_a_face_running_off_the_edge_is_rejected():
     """The warp reaches past the landmarks; a face flush to the frame tears."""
     result = check_landmarks(face(cx=180, half_w=280), SIZE, detected=True)
