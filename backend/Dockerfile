@@ -25,27 +25,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 libglib2.0-0 libegl1 libgles2 curl espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/pyproject.toml ./
-COPY backend/app ./app
-COPY backend/alembic ./alembic
-COPY backend/alembic.ini ./
-# One-off maintenance scripts, run with `python -m scripts.<name>`.
-COPY backend/scripts ./scripts
-# Pinned: this was unpinned, and a rebuild silently upgraded to a mediapipe
-# major version with a different runtime dependency, breaking detection on a
-# deploy that changed nothing in this repo.
-RUN pip install --no-cache-dir . "mediapipe==1.0.1"
-# Widget bundles served at /liveface.js and /liveface-3d.js
-COPY --from=embed-build /build/embed/dist /app/embed/dist
+# Models first, before any source is copied: they depend on nothing in this
+# repository, so a code change must not re-download ~700MB of them (it did,
+# on every deploy, until the host's address was rate limited by GitHub and a
+# deploy failed on a 503). Every download retries with a delay for the same
+# reason.
 
 # MediaPipe FaceLandmarker model for real photo rigging. Versioned URL and a
 # checksum, not /latest/: every stored rig was measured by this exact model,
 # and a silently replaced one would move the points of every re-detection.
 RUN mkdir -p models \
- && curl -fsSL -o models/face_landmarker.task \
+ && curl -fsSL --retry 8 --retry-delay 15 --retry-all-errors -o models/face_landmarker.task \
     https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task \
  && echo "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff  models/face_landmarker.task" | sha256sum -c - \
- && curl -fsSL -o models/selfie_segmenter.tflite \
+ && curl -fsSL --retry 8 --retry-delay 15 --retry-all-errors -o models/selfie_segmenter.tflite \
     https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite
 ENV RIG_MODEL_PATH=/app/backend/models/face_landmarker.task
 ENV SEGMENT_MODEL_PATH=/app/backend/models/selfie_segmenter.tflite
@@ -53,7 +46,7 @@ ENV SEGMENT_MODEL_PATH=/app/backend/models/selfie_segmenter.tflite
 # Kokoro-82M local TTS (Apache-2.0): one consistent server voice with no key,
 # no per-character bill, and no text leaving the instance. ~350MB, fetched at
 # build time like the MediaPipe models above.
-RUN curl -fsSL -o models/kokoro-v1.0.onnx     https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx  && curl -fsSL -o models/voices-v1.0.bin     https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+RUN curl -fsSL --retry 8 --retry-delay 15 --retry-all-errors -o models/kokoro-v1.0.onnx     https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx  && curl -fsSL --retry 8 --retry-delay 15 --retry-all-errors -o models/voices-v1.0.bin     https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
 ENV KOKORO_MODEL_PATH=/app/backend/models/kokoro-v1.0.onnx
 ENV KOKORO_VOICES_PATH=/app/backend/models/voices-v1.0.bin
 
@@ -65,7 +58,7 @@ ENV KOKORO_VOICES_PATH=/app/backend/models/voices-v1.0.bin
 # audio's length, and the lab labels its clock-only mode.
 ARG INCLUDE_LIPSYNC_MODEL=1
 RUN if [ "$INCLUDE_LIPSYNC_MODEL" = "1" ]; then \
-      curl -fsSL -o models/kokoro-timed.onnx \
+      curl -fsSL --retry 8 --retry-delay 15 --retry-all-errors -o models/kokoro-timed.onnx \
         https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX-timestamped/resolve/dd4401a9add81ac692d20e240d22ec9dda82cc29/onnx/model.onnx \
       && echo "651ea8291843a92276a4a003581a215cb07d15e47dde6fcfb1b768f9a1682054  models/kokoro-timed.onnx" | sha256sum -c -; \
     fi
@@ -84,12 +77,26 @@ RUN mkdir -p models/piper \
              nl/nl_NL/mls/medium/nl_NL-mls-medium \
              pl/pl_PL/darkman/medium/pl_PL-darkman-medium ; do \
       name=$(basename $v) ; \
-      curl -fsSL -o models/piper/$name.onnx \
+      curl -fsSL --retry 8 --retry-delay 15 --retry-all-errors -o models/piper/$name.onnx \
         https://huggingface.co/rhasspy/piper-voices/resolve/main/$v.onnx \
-   && curl -fsSL -o models/piper/$name.onnx.json \
+   && curl -fsSL --retry 8 --retry-delay 15 --retry-all-errors -o models/piper/$name.onnx.json \
         https://huggingface.co/rhasspy/piper-voices/resolve/main/$v.onnx.json ; \
     done
 ENV PIPER_VOICES_DIR=/app/backend/models/piper
+
+COPY backend/pyproject.toml ./
+COPY backend/app ./app
+COPY backend/alembic ./alembic
+COPY backend/alembic.ini ./
+# One-off maintenance scripts, run with `python -m scripts.<name>`.
+COPY backend/scripts ./scripts
+# Pinned: this was unpinned, and a rebuild silently upgraded to a mediapipe
+# major version with a different runtime dependency, breaking detection on a
+# deploy that changed nothing in this repo.
+RUN pip install --no-cache-dir . "mediapipe==1.0.1"
+# Widget bundles served at /liveface.js and /liveface-3d.js
+COPY --from=embed-build /build/embed/dist /app/embed/dist
+
 
 EXPOSE 7002
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7002"]
