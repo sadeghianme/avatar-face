@@ -1,13 +1,15 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { lidEdge, lidAmount, lidSamplePoints, medianColour } from "../blink-lid";
+import { lidEdge, lidAmount, lidSamplePoints, medianColour, regularEye } from "../blink-lid";
 import {
   CharacterField,
   DEFAULT_TRAITS,
   INNER_LOWER,
   INNER_UPPER,
   characterOpening,
+  edgeWidth,
+  tuckAmount,
   mergeTraits,
   mouthFrame,
   sampleLook,
@@ -156,7 +158,7 @@ describe("teeth and tongue", () => {
 
 describe("what the mouth takes from the picture", () => {
   const palette = (colours: Rgb[]) => (x: number, y: number): Rgb =>
-    colours[(Math.floor(x / 9) + Math.floor(y / 9)) % colours.length];
+    colours[(Math.floor(x / 30) + Math.floor(y / 30)) % colours.length];
   const noisy = (x: number, y: number): Rgb => [
     (x * 37 + y * 11) % 256, (x * 7 + y * 53) % 256, (x * 13 + y * 29) % 256,
   ];
@@ -166,6 +168,33 @@ describe("what the mouth takes from the picture", () => {
   it("calls a few flat colours cel art, and a spread of colours a render", () => {
     expect(sampleLook(palette([[240, 190, 160], [200, 140, 120], [60, 30, 25]]), seam, box, [150, 90, 80], [240, 190, 160]).flat).toBe(true);
     expect(sampleLook(noisy, seam, box, [150, 90, 80], [200, 160, 140]).flat).toBe(false);
+  });
+
+  it("does not take fur in a narrow range of browns for cel art, nor a smooth gradient", () => {
+    // Few palette bins, but the pixels are never the same as their neighbours.
+    const fur = (x: number, y: number): Rgb => {
+      const n = ((x * 73 + y * 151) % 17) - 8;
+      return [150 + n, 112 + n, 80 + n];
+    };
+    expect(sampleLook(fur, seam, box, [150, 90, 80], [150, 112, 80]).flat).toBe(false);
+    const shaded = (x: number): Rgb => [200 + x * 0.6, 150 + x * 0.6, 130 + x * 0.6];
+    expect(sampleLook(shaded, seam, box, [150, 90, 80], [200, 150, 130]).flat).toBe(false);
+  });
+
+  it("reads how soft the picture's edges are, and feathers by that", () => {
+    const edge = (blur: number) => (_x: number, y: number): Rgb => {
+      const t = blur < 0.1 ? (y > 100 ? 1 : 0) : Math.max(0, Math.min(1, (y - 100) / blur + 0.5));
+      const v = 240 - 200 * t;
+      return [v, v, v];
+    };
+    const crisp = edgeWidth(edge(0.01), seam)!;
+    const soft = edgeWidth(edge(4), seam)!;
+    expect(crisp).toBeLessThan(1.2);
+    expect(soft).toBeGreaterThan(crisp * 2);
+    expect(sampleLook(edge(4), seam, box, [150, 90, 80], [200, 160, 140]).soft).toBeGreaterThan(
+      sampleLook(edge(0.01), seam, box, [150, 90, 80], [200, 160, 140]).soft
+    );
+    expect(edgeWidth(() => [200, 200, 200], seam)).toBeNull();
   });
 
   it("takes the line from the darkest tone on the mouth's own seam", () => {
@@ -239,5 +268,50 @@ describe("the painted lid", () => {
     const c = medianColour(samples, 0.7)!;
     expect(c[0]).toBeGreaterThan(190);
     expect(medianColour([null, null])).toBeNull();
+  });
+
+  it("builds the lid on a smooth eye, however loose the marks are", () => {
+    // Marks jittered by several px, one of them far off the eye.
+    const loose = {
+      upper: [{ x: 0, y: 10 }, { x: 10, y: 7 }, { x: 20, y: -9 }, { x: 30, y: 1 }, { x: 40, y: 10 }],
+      lower: [{ x: 0, y: 10 }, { x: 10, y: 21 }, { x: 20, y: 13 }, { x: 30, y: 20 }, { x: 40, y: 10 }],
+    };
+    for (const e of [eye, loose]) {
+      const r = regularEye(e);
+      expect(r.upper[0]).toEqual({ x: 0, y: 10 });
+      expect(r.upper[r.upper.length - 1].x).toBeCloseTo(40);
+      // Each lid is one arch (up, then down), and the eye is a plausible size.
+      const ups = r.upper.map((p) => p.y);
+      const peak = ups.indexOf(Math.min(...ups));
+      for (let i = 1; i <= peak; i++) expect(ups[i]).toBeLessThanOrEqual(ups[i - 1] + 1e-6);
+      for (let i = peak + 1; i < ups.length; i++) expect(ups[i]).toBeGreaterThanOrEqual(ups[i - 1] - 1e-6);
+      const height = Math.max(...r.lower.map((p) => p.y)) - Math.min(...ups);
+      expect(height).toBeGreaterThan(40 * 0.14);
+      expect(height).toBeLessThan(40 * 0.95);
+    }
+    // The wild mark does not drag the lid out of the eye's own size.
+    expect(Math.min(...regularEye(loose).upper.map((p) => p.y))).toBeGreaterThan(-6);
+  });
+});
+
+describe("/f/ and /v/", () => {
+  it("are told from /p/, /th/ and the vowels", () => {
+    const w = (o: Partial<BlendWeights>) => ({ ...ZERO_WEIGHTS, ...o });
+    expect(tuckAmount(w({ jawOpen: 0.1, mouthClose: 0.55, mouthStretch: 0.25, mouthFunnel: 0.1 }))).toBeGreaterThan(0.7);
+    expect(tuckAmount(w({ jawOpen: 0.12, mouthClose: 0.5, mouthStretch: 0.15 }))).toBeGreaterThan(0.5);
+    expect(tuckAmount(w({ jawOpen: 0.05, mouthClose: 0.9, mouthPucker: 0.25 }))).toBe(0); // /p/
+    expect(tuckAmount(w({ jawOpen: 0.25, mouthClose: 0.2, mouthStretch: 0.2 }))).toBe(0); // /th/
+    expect(tuckAmount(w({ jawOpen: 0.85, mouthStretch: 0.2 }))).toBe(0); // /aa/
+    expect(tuckAmount(ZERO_WEIGHTS)).toBe(0);
+  });
+
+  it("close a muzzle to one seam, and leave a toon's teeth a tooth's height of opening", () => {
+    const ff = rig.visemes.FF;
+    const opening = (traits: typeof DEFAULT_TRAITS) => characterOpening(moved(ff, traits), base);
+    expect(opening({ ...DEFAULT_TRAITS, teeth: "none" })).toBeNull();
+    const toon = opening({ ...DEFAULT_TRAITS, teeth: "upper" });
+    expect(toon).not.toBeNull();
+    expect(toon!.gap / toon!.width).toBeGreaterThan(0.03);
+    expect(toon!.gap / toon!.width).toBeLessThan(0.14);
   });
 });

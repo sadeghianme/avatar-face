@@ -125,6 +125,20 @@ export function mouthFrame(points: readonly Pt[]): MouthFrame {
 
 
 /**
+ * How much of an /f/ or /v/ the weights are, 0..1: the lower lip drawn up
+ * under the upper teeth. Needs the lips together (mouthClose) and drawn back
+ * (mouthStretch), a little jaw, and not rounded; /p/ /b/ /m/ have no stretch,
+ * /th/ and the vowels not enough mouthClose.
+ */
+export function tuckAmount(w: BlendWeights): number {
+  const rounded = Math.min(1, w.mouthPucker + w.mouthFunnel * 0.6);
+  const closed = smooth((w.mouthClose - 0.3) / 0.2);
+  const back = smooth(w.mouthStretch / 0.1);
+  const jaw = smooth((w.jawOpen - 0.03) / 0.04);
+  return closed * back * jaw * (1 - Math.min(1, rounded * 2.5));
+}
+
+/**
  * The jaw and the lips as a displacement field over every vertex, built once
  * from the rest mesh. `apply` runs per frame.
  *
@@ -173,7 +187,12 @@ export class CharacterField {
     const W = f.w;
     const rounding = Math.min(1, w.mouthPucker + w.mouthFunnel * 0.6);
     const lensW = 1.05 - 0.3 * rounding;
-    const jaw = w.jawOpen * W * JAW_GAIN * traits.jaw;
+    // /f/ /v/: the lower lip rises under the upper teeth. With teeth the lips
+    // stay a tooth's height apart for them to show; a muzzle (no teeth) closes
+    // to one clean seam, the lower lip a little raised.
+    const tuckF = tuckAmount(w);
+    const toothy = traits.teeth === "upper";
+    const jaw = w.jawOpen * W * JAW_GAIN * traits.jaw * (1 - tuckF * (toothy ? 0.35 : 0.92));
     // Lip retraction opens the lips a little without the jaw: /s/ /ee/ show
     // teeth with the mouth nearly shut; /f/ /v/ tuck the lower lip. Same
     // measures the classic mouth uses.
@@ -182,7 +201,7 @@ export class CharacterField {
       (1 - rounding) ** 2 *
       Math.min(1, Math.max(0, (w.mouthStretch - 0.14) / 0.16));
     const tuck = w.mouthClose * Math.min(1, w.mouthStretch / 0.2) * (1 - rounding);
-    const part = Math.max(retract * 0.075, tuck * 0.02) * W;
+    const part = Math.max(retract * 0.075 * (toothy ? 1 : 1 - tuckF), tuck * 0.02 * (toothy ? 1 : 1 - tuckF), toothy ? tuckF * 0.085 : 0) * W;
     const drop = jaw + part * 0.6;
     const lift = jaw * (0.1 + 0.28 * rounding) + part * 0.4;
     const reach = W * 1.15;
@@ -216,7 +235,7 @@ export class CharacterField {
       }
 
       // The jaw.
-      if (role === 2) dn += drop * lens;
+      if (role === 2) dn += drop * lens - tuckF * W * (toothy ? 0.004 : 0.003) * lens;
       else if (role === 3) dn += drop * 0.5 * lens;
       else if (role === 1) dn -= lift * lens;
       else if (vi > 0) {
@@ -319,11 +338,41 @@ export interface CharacterLook {
   line: Rgb;
   lip: Rgb;
   skin: Rgb;
+  /** How soft the picture's own edges are, as a fraction of the mouth's
+   *  width: the opening's edge is feathered by the same amount. */
+  soft: number;
 }
 
 export const DEFAULT_LOOK: CharacterLook = {
-  flat: false, line: [60, 28, 26], lip: [150, 90, 84], skin: [200, 150, 130],
+  flat: false, line: [60, 28, 26], lip: [150, 90, 84], skin: [200, 150, 130], soft: 0.006,
 };
+
+/**
+ * How wide the picture's edges are, in pixels, read across its mouth seam:
+ * the contrast of the profile over its steepest step. A photograph of fur is
+ * a pixel or two; a render a little more; an upscaled drawing, several.
+ */
+export function edgeWidth(pixel: (x: number, y: number) => Rgb | null, seam: readonly Pt[]): number | null {
+  const widths: number[] = [];
+  const from = Math.floor(seam.length * 0.25), to = Math.ceil(seam.length * 0.75);
+  for (let k = from; k < to; k++) {
+    const p = seam[k];
+    const lum: number[] = [];
+    for (let dy = -5; dy <= 5; dy++) {
+      const c = pixel(p.x, p.y + dy);
+      if (c) lum.push(luma(c));
+    }
+    if (lum.length < 8) continue;
+    const contrast = Math.max(...lum) - Math.min(...lum);
+    if (contrast < 25) continue;
+    let steepest = 0;
+    for (let i = 0; i + 1 < lum.length; i++) steepest = Math.max(steepest, Math.abs(lum[i + 1] - lum[i]));
+    if (steepest > 0) widths.push(contrast / steepest);
+  }
+  if (!widths.length) return null;
+  widths.sort((a, b) => a - b);
+  return widths[Math.floor(widths.length / 2)];
+}
 
 export const luma = (c: Rgb) => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
 export const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
@@ -353,19 +402,30 @@ export function sampleLook(
   const x0 = box.cx - box.w * 1.5, x1 = box.cx + box.w * 1.5;
   const y0 = box.cy - box.w * 0.9, y1 = box.cy + box.w * 1.5;
   const N = 28;
+  // Flat art is also FLAT: two pixels a few apart are the same colour. A fur
+  // or a skin texture in a narrow range of browns fills few palette bins and
+  // would pass for cel art by its palette alone; a slow shading gradient does
+  // too, but its pixels drift apart over a few pixels.
+  let pairs = 0, same = 0;
   for (let a = 0; a < N; a++) {
     for (let b = 0; b < N; b++) {
-      const c = pixel(x0 + ((x1 - x0) * (a + 0.5)) / N, y0 + ((y1 - y0) * (b + 0.5)) / N);
+      const x = x0 + ((x1 - x0) * (a + 0.5)) / N, y = y0 + ((y1 - y0) * (b + 0.5)) / N;
+      const c = pixel(x, y);
       if (!c) continue;
       const key = ((c[0] >> 4) << 8) | ((c[1] >> 4) << 4) | (c[2] >> 4);
       bins.set(key, (bins.get(key) ?? 0) + 1);
       total++;
+      const d = pixel(x + 6, y);
+      if (d) {
+        pairs++;
+        if (Math.max(Math.abs(c[0] - d[0]), Math.abs(c[1] - d[1]), Math.abs(c[2] - d[2])) <= 2) same++;
+      }
     }
   }
   let flat = false;
   if (total > 0) {
     const top = [...bins.values()].sort((p, q) => q - p).slice(0, 8).reduce((s, v) => s + v, 0);
-    flat = top / total >= 0.7;
+    flat = top / total >= 0.7 && (pairs === 0 || same / pairs >= 0.7);
   }
   const dark: { l: number; c: Rgb }[] = [];
   for (const p of seam) {
@@ -379,6 +439,8 @@ export function sampleLook(
     dark.sort((p, q) => p.l - q.l);
     line = dark[Math.floor(dark.length * 0.12)].c;
   }
-  return { flat, line, lip, skin };
+  const edge = edgeWidth(pixel, seam);
+  const soft = edge === null ? DEFAULT_LOOK.soft : Math.max(1, Math.min(4, edge)) / Math.max(box.w, 1);
+  return { flat, line, lip, skin, soft };
 }
 

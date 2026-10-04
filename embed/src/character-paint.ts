@@ -2,6 +2,7 @@ import {
   luma,
   mix,
   rgb,
+  tuckAmount,
   type CharacterLook,
   type CharacterTraits,
   type Opening,
@@ -16,9 +17,9 @@ import type { BlendWeights } from "./types";
  * Two looks, chosen by the picture (CharacterLook.flat). Cel art gets flat
  * fills and the picture's own line, because gradients in a flat drawing read
  * as a photograph pasted into it. A render or a photograph gets soft
- * shading, a shadowed upper lip and a soft rim, because a flat patch in
- * those reads as a sticker. Everything is clipped to the opening, so nothing
- * can reach outside the lips.
+ * shading, a shadowed upper lip and an edge as soft as the picture's own,
+ * because a flat patch in those reads as a sticker. Everything is clipped to
+ * the opening, so nothing can reach outside the lips.
  */
 
 /** How high the tongue sits for each sound, 0 (resting) to 1 (against the
@@ -105,16 +106,73 @@ function strokeLine(ctx: CanvasRenderingContext2D, line: readonly Pt[], width: n
   ctx.stroke();
 }
 
+/** Begin a path for a band hanging from `line` into the mouth (down from the
+ *  upper lip, up from the lower), `height` px at its middle, tapering to the
+ *  corners; returns its far edge. */
+function bandFrom(ctx: CanvasRenderingContext2D, line: readonly Pt[], height: number, down: boolean): Pt[] {
+  const edge: Pt[] = [];
+  const far: Pt[] = [];
+  const steps = 18;
+  for (let s = 0; s <= steps; s++) {
+    const t = s / steps;
+    const u = along(line, t);
+    edge.push({ x: u.x, y: u.y + (down ? -2 : 2) });
+    far.push({ x: u.x, y: u.y + (down ? 1 : -1) * height * bump(t, 3) });
+  }
+  ctx.beginPath();
+  smoothThrough(ctx, edge, true);
+  for (let s = far.length - 1; s >= 0; s--) ctx.lineTo(far[s].x, far[s].y);
+  ctx.closePath();
+  return far;
+}
+
+/** Fill the current path with enamel: flat on cel art, shaded in a render and
+ *  receding into the mouth's corners. */
+function fillEnamel(
+  ctx: CanvasRenderingContext2D, look: CharacterLook, flat: boolean,
+  top: number, height: number, left: number, right: number
+) {
+  const enamel = toothColour(look);
+  if (flat) {
+    ctx.fillStyle = rgb(enamel);
+    ctx.fill();
+    return;
+  }
+  const g = ctx.createLinearGradient(0, top, 0, top + height);
+  g.addColorStop(0, rgb(mix(enamel, look.line, 0.16)));
+  g.addColorStop(0.3, rgb(enamel));
+  g.addColorStop(1, rgb(mix(enamel, look.line, 0.08)));
+  ctx.fillStyle = g;
+  ctx.fill();
+  // The teeth recede into the mouth towards its corners.
+  const dark = mix(look.line, look.lip, 0.15);
+  const fade = ctx.createLinearGradient(left, 0, right, 0);
+  fade.addColorStop(0, rgb(dark, 0.9));
+  fade.addColorStop(0.2, rgb(dark, 0.45));
+  fade.addColorStop(0.38, rgb(dark, 0));
+  fade.addColorStop(0.62, rgb(dark, 0));
+  fade.addColorStop(0.8, rgb(dark, 0.45));
+  fade.addColorStop(1, rgb(dark, 0.9));
+  ctx.fillStyle = fade;
+  ctx.fill();
+}
+
 export function paintCharacter(ctx: CanvasRenderingContext2D, f: CharacterFrameInput): void {
   const { opening: o, look, traits } = f;
   const W = o.width;
   const flat = look.flat;
   const open = o.gap / W;
+  // The edge's feather, in px: as soft as the picture's own edges are.
+  const feather = Math.max(1.2, look.soft * W);
+  // /f/ /v/: the upper teeth rest on the lower lip, which rises and curls in.
+  const tuck = traits.teeth === "upper" ? smooth((tuckAmount(f.weights) - 0.08) / 0.5) : 0;
 
   const top = Math.min(...o.upper.map((p) => p.y));
   const bottom = Math.max(...o.lower.map((p) => p.y));
   const left = Math.min(...o.upper.map((p) => p.x));
   const right = Math.max(...o.upper.map((p) => p.x));
+  const box = (): [number, number, number, number] =>
+    [left - W * 0.1, top - W * 0.1, right - left + W * 0.2, bottom - top + W * 0.2];
 
   ctx.save();
   ctx.clip(f.clip);
@@ -131,11 +189,31 @@ export function paintCharacter(ctx: CanvasRenderingContext2D, f: CharacterFrameI
     g.addColorStop(1, shade(f.cavityShade[2]));
     ctx.fillStyle = g;
   }
-  ctx.fillRect(left - W * 0.1, top - W * 0.1, right - left + W * 0.2, bottom - top + W * 0.2);
+  ctx.fillRect(...box());
+  if (!flat) {
+    // Warmth where the mouth runs back to the throat, and darker gum at the
+    // corners, so the opening is a space and not a cut-out shape.
+    const cx = (left + right) / 2;
+    const warm = ctx.createRadialGradient(cx, bottom - o.gap * 0.2, 1, cx, bottom - o.gap * 0.2, Math.max(W * 0.34, 4));
+    warm.addColorStop(0, rgb(mix(look.lip, [170, 60, 60], 0.6), 0.2));
+    warm.addColorStop(1, rgb(look.lip, 0));
+    ctx.fillStyle = warm;
+    ctx.fillRect(...box());
+    const gum = mix(look.line, look.lip, 0.35);
+    const ends = ctx.createLinearGradient(left, 0, right, 0);
+    ends.addColorStop(0, rgb(gum, 0.7));
+    ends.addColorStop(0.16, rgb(gum, 0.28));
+    ends.addColorStop(0.3, rgb(gum, 0));
+    ends.addColorStop(0.7, rgb(gum, 0));
+    ends.addColorStop(0.84, rgb(gum, 0.28));
+    ends.addColorStop(1, rgb(gum, 0.7));
+    ctx.fillStyle = ends;
+    ctx.fillRect(...box());
+  }
 
   // The tongue, under the teeth: low and flat for a vowel, up against the
   // teeth for /th/ and /d/.
-  if (traits.tongue && open > 0.06) {
+  if (traits.tongue && open > 0.06 && tuck < 0.5) {
     const amount = smooth((open - 0.06) / 0.1);
     const tops: Pt[] = [];
     const base: Pt[] = [];
@@ -150,6 +228,7 @@ export function paintCharacter(ctx: CanvasRenderingContext2D, f: CharacterFrameI
       tops.push({ x: lo.x, y: lo.y - h });
       base.push({ x: lo.x, y: lo.y + 3 });
     }
+    ctx.globalAlpha = o.alpha * (1 - tuck * 2);
     // In shade the tongue sits in the dark of the mouth, so it is dimmer.
     const tc = flat ? tongueColour(look) : mix(tongueColour(look), mix(look.line, look.lip, 0.2), 0.28);
     ctx.beginPath();
@@ -166,56 +245,76 @@ export function paintCharacter(ctx: CanvasRenderingContext2D, f: CharacterFrameI
       ctx.fillStyle = g;
     }
     ctx.fill();
+    // The groove down the middle and the wet shine, sized to the tongue that
+    // is there: its own height at the middle and its own width.
+    const mid = along(tops, 0.5);
+    const floor = along(o.lower, 0.5).y;
+    const rise = Math.max(0, floor - mid.y);
+    const span = Math.abs(tops[tops.length - 1].x - tops[0].x);
+    if (rise > 3) {
+      const groove = Math.max(1, W * 0.011);
+      ctx.beginPath();
+      ctx.moveTo(mid.x, mid.y + rise * 0.04);
+      ctx.quadraticCurveTo(mid.x + groove * 0.4, mid.y + rise * 0.3, mid.x, mid.y + rise * 0.62);
+      ctx.strokeStyle = rgb(mix(tc, look.line, flat ? 0.45 : 0.55), flat ? 0.85 : 0.5);
+      ctx.lineWidth = groove;
+      ctx.lineCap = "round";
+      ctx.stroke();
+      if (!flat) {
+        // Light beside the groove, soft and low on the tongue.
+        const rx = Math.max(span * 0.14, 2), ry = Math.max(rise * 0.2, 1.5);
+        const cx = mid.x - rx * 0.5, cy = mid.y + rise * 0.28;
+        const shine = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+        shine.addColorStop(0, "rgba(255, 226, 220, 0.34)");
+        shine.addColorStop(1, "rgba(255, 226, 220, 0)");
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(1, ry / rx);
+        ctx.fillStyle = shine;
+        ctx.fillRect(-rx, -rx, rx * 2, rx * 2);
+        ctx.restore();
+      }
+    }
     if (!flat) {
-      // A wet edge along the top, and the groove down the middle.
+      // A wet edge along the top.
       strokeLine(ctx, tops, Math.max(1, W * 0.008), "rgba(255, 214, 206, 0.28)");
-      const mid = along(tops, 0.5);
-      strokeLine(ctx, [{ x: mid.x, y: mid.y + 2 }, { x: mid.x, y: mid.y + Math.min(o.gap * 0.3, W * 0.07) }],
-        Math.max(1, W * 0.01), rgb(mix(tc, look.line, 0.55), 0.45));
     } else {
       strokeLine(ctx, tops, Math.max(1, W * 0.012), rgb(mix(tc, look.line, 0.4), 0.85));
     }
+    ctx.globalAlpha = o.alpha;
   }
 
   // The upper teeth: a band hanging from the lip.
   const shown = teethShown(open, f.weights, traits);
   const th = teethHeight(o.gap, W, shown);
-  if (shown > 0.04 && th > 1) {
-    const edge: Pt[] = [];
-    const tips: Pt[] = [];
-    const steps = 18;
-    for (let s = 0; s <= steps; s++) {
-      const t = s / steps;
-      const u = along(o.upper, t);
-      edge.push({ x: u.x, y: u.y - 2 });
-      tips.push({ x: u.x, y: u.y + th * bump(t, 3) });
-    }
+  if (shown > 0.04 && th > 1 && tuck < 0.9) {
     ctx.globalAlpha = o.alpha * Math.min(1, shown * 1.8);
+    bandFrom(ctx, o.upper, th, true);
+    fillEnamel(ctx, look, flat, top, th * 1.1, left, right);
+    ctx.globalAlpha = o.alpha;
+  }
+
+  // /f/ /v/: the whole opening is the upper teeth, resting on a lower lip that
+  // has risen and curled in, its own colour a little lighter where it turns
+  // over. Faded in with the sound, so there is no step as the mouth comes to it.
+  if (tuck > 0.02) {
+    ctx.globalAlpha = o.alpha * tuck;
     ctx.beginPath();
-    smoothThrough(ctx, edge, true);
-    for (let s = tips.length - 1; s >= 0; s--) ctx.lineTo(tips[s].x, tips[s].y);
-    ctx.closePath();
-    const enamel = toothColour(look);
+    ctx.rect(...box());
+    fillEnamel(ctx, look, flat, top, Math.max(o.gap, 2), left, right);
+    const roll = Math.max(1.5, o.gap * 0.5);
+    const far = bandFrom(ctx, o.lower, roll, false);
     if (flat) {
-      ctx.fillStyle = rgb(enamel);
+      ctx.fillStyle = rgb(look.lip);
       ctx.fill();
+      strokeLine(ctx, far, Math.max(1, W * 0.011), rgb(mix(look.line, look.lip, 0.15), 0.9));
     } else {
-      const g = ctx.createLinearGradient(0, top, 0, top + th * 1.1);
-      g.addColorStop(0, rgb(mix(enamel, look.line, 0.16)));
-      g.addColorStop(0.3, rgb(enamel));
-      g.addColorStop(1, rgb(mix(enamel, look.line, 0.08)));
+      const g = ctx.createLinearGradient(0, bottom - roll, 0, bottom + 1);
+      g.addColorStop(0, rgb(mix(look.lip, look.line, 0.3), 0));
+      g.addColorStop(0.3, rgb(mix(look.lip, look.line, 0.3), 0.75));
+      g.addColorStop(0.7, rgb(mix(look.lip, [255, 244, 240], 0.14), 0.95));
+      g.addColorStop(1, rgb(look.lip, 1));
       ctx.fillStyle = g;
-      ctx.fill();
-      // The teeth recede into the mouth towards its corners.
-      const dark = mix(look.line, look.lip, 0.15);
-      const fade = ctx.createLinearGradient(left, 0, right, 0);
-      fade.addColorStop(0, rgb(dark, 0.9));
-      fade.addColorStop(0.2, rgb(dark, 0.45));
-      fade.addColorStop(0.38, rgb(dark, 0));
-      fade.addColorStop(0.62, rgb(dark, 0));
-      fade.addColorStop(0.8, rgb(dark, 0.45));
-      fade.addColorStop(1, rgb(dark, 0.9));
-      ctx.fillStyle = fade;
       ctx.fill();
     }
     ctx.globalAlpha = o.alpha;
@@ -225,7 +324,16 @@ export function paintCharacter(ctx: CanvasRenderingContext2D, f: CharacterFrameI
   if (!flat) {
     strokeLine(ctx, o.upper, Math.max(1.5, o.gap * 0.32), "rgba(20, 6, 6, 0.3)");
     strokeLine(ctx, o.upper, Math.max(1, o.gap * 0.12), "rgba(14, 4, 4, 0.38)");
-    strokeLine(ctx, o.lower, Math.max(1, o.gap * 0.16), "rgba(30, 10, 10, 0.28)");
+    if (tuck < 0.6) strokeLine(ctx, o.lower, Math.max(1, o.gap * 0.16), "rgba(30, 10, 10, 0.28)");
+    // The opening's edge is as soft as the picture's own: a ring of the inner
+    // lip's tone fading inwards, so the cavity does not end in a cut.
+    const inner = mix(look.line, look.lip, 0.45);
+    ctx.lineJoin = "round";
+    for (const [k, a] of [[6, 0.14], [3.4, 0.2], [1.6, 0.28]] as const) {
+      ctx.strokeStyle = rgb(inner, a);
+      ctx.lineWidth = feather * k;
+      ctx.stroke(f.clip);
+    }
   }
   ctx.restore();
 
@@ -236,13 +344,13 @@ export function paintCharacter(ctx: CanvasRenderingContext2D, f: CharacterFrameI
   ctx.lineJoin = "round";
   if (flat) {
     ctx.strokeStyle = rgb(look.line);
-    ctx.lineWidth = Math.max(1.4, W * 0.026);
+    ctx.lineWidth = Math.max(1.4, W * 0.026 * (1 - 0.5 * tuck));
     ctx.stroke(f.clip);
   } else {
     const edge = mix(look.line, look.lip, 0.25);
-    for (const [k, a] of [[0.06, 0.1], [0.032, 0.18], [0.014, 0.4]] as const) {
+    for (const [k, a] of [[5.5, 0.07], [2.8, 0.15], [1.3 + tuck * 0.7, 0.3 + tuck * 0.25]] as const) {
       ctx.strokeStyle = rgb(edge, a);
-      ctx.lineWidth = Math.max(1, W * k);
+      ctx.lineWidth = Math.max(1, feather * k);
       ctx.stroke(f.clip);
     }
   }

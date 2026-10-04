@@ -638,6 +638,30 @@ they just confirmed, before the first publish (`services.creations._own_mouth`,
   - *Blink*: `blink: "lid"` paints a lid over the eye from the skin beside it,
     lash line on its edge, clipped to the eye, and leaves the mesh still (the
     mesh blink pinches a drawn or rendered iris). Honours `tune({blink: 0})`.
+    Polish round 2 (same profile names; their golden snapshots were
+    regenerated, human/classic and `animal@1` goldens are untouched): the lid
+    is built on a smoothed ellipse fitted to the eye's width and height (loose
+    marks cannot make it ragged or wander), clones the fur or skin just below
+    the eye on a shaded picture (flat fill and a crisp lash on cel art), is
+    tinted towards the skin above (the lighter end of what both sides give,
+    since a brow can sit where "above" is read), has a soft crease and a lash
+    that tapers to the corners, settles into a gentle curve when shut, and the
+    eye squashes a little before the lid arrives.
+  - */f/ /v/* (`tuckAmount`: lips together and drawn back, a little jaw, not
+    rounded): with teeth on, the opening is the upper teeth resting on a lower
+    lip that rolls up over them; with teeth off the lips close to one clean
+    seam (the jaw barely drops), so no slit and no white line.
+  - *Soft mouths*: a render or photograph's opening has an edge as soft as the
+    picture's own (`look.soft`, read across the mouth seam), a ring of inner-lip
+    tone inside it, darker gum at the corners, warmth towards the throat, and a
+    tongue with a centre groove and a shine sized to the tongue that is there.
+  - *Cel art or not* is told by the palette AND by flatness (two pixels six
+    apart are the same colour): fur in a narrow range of browns used to pass for
+    cel art by its palette alone.
+  - *Triangle seams*: in a character profile each warped triangle overlaps its
+    neighbours by a pixel (less on the lips, where a thin drawn line crosses
+    them), which closed the faint wire and the "v" under the chin that a moved
+    jaw showed on flat art.
   - *Owner settings* (`mouth_config.character`, PATCH `character`): `style`
     ("character", or "classic": the profile the line had before), `teeth`
     ("upper" | "none"), `tongue`, `jaw` (0.5 to 1.6). Served to visitors in the

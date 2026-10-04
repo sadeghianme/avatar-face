@@ -6,9 +6,17 @@ import { mix, rgb, type Pt, type Rgb } from "./character-mouth";
  * The mesh blink moves the photographed lid down, which on a photograph of a
  * person is a few pixels of narrowing, and on a drawn or rendered eye pinches
  * the iris into a diamond or does not read at all. Characters blink with a
- * lid that comes down over the eye; so this paints one, from the colour of
- * the skin beside the eye, with the lash line riding its edge, clipped to the
- * eye's own opening so it cannot spill. The mesh stays still meanwhile.
+ * lid that comes down over the eye; so this paints one, with the lash line
+ * riding its edge, clipped to the eye's own opening so it cannot spill. The
+ * mesh stays still meanwhile.
+ *
+ * What it is made of: on a shaded picture, a clone of the fur or skin just
+ * below the eye (so the lid has the picture's own texture, not a flat
+ * patch), tinted towards the skin above so it joins the brow without a seam;
+ * on cel art, a flat fill. It follows a smoothed ellipse fitted to the eye's
+ * width and height, not the raw points, so loose marks do not make a ragged
+ * lid or let it wander off the eye, and the eye squashes a little before the
+ * lid arrives.
  */
 
 export interface EyeShape {
@@ -17,6 +25,16 @@ export interface EyeShape {
   /** The lower lid's points, corner to corner. */
   lower: readonly Pt[];
 }
+
+/** What the lid is made of: the skin above the eye and the skin below it. */
+export interface LidTone { above: Rgb; below: Rgb }
+
+/** A rectangle in the canvas the lid is painted in. */
+export interface Box { x: number; y: number; w: number; h: number }
+
+/** Copies the picture's own pixels: `src` (canvas coordinates of the face as
+ *  drawn) onto `dst`. Supplied by the engine, which knows the texture. */
+export type Blit = (dst: Box, src: Box) => void;
 
 /** Where to read a lid's colour: a little above the upper lid and below the
  *  lower lid, in the same points the lids are given in. */
@@ -82,82 +100,193 @@ export function lidEdge(eye: EyeShape, amount: number): Pt[] {
   });
 }
 
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
+const smoothStep = (x: number) => { const t = clamp(x, 0, 1); return t * t * (3 - 2 * t); };
+const gShape = (u: number) => 1 - Math.pow(Math.abs(u), 2.1);
+const taper = (t: number) => 0.3 + 0.7 * Math.pow(Math.sin(Math.PI * t), 0.6);
+
+function median(v: number[]): number {
+  const s = v.slice().sort((a, b) => a - b);
+  return s.length ? s[Math.floor(s.length / 2)] : 0;
+}
+
 /**
- * Paint the lid. `amount` is how far it has come down; `skin` the colour it
- * is made of; `line` the lash colour, and `flat` whether the picture is cel
- * art (a crisp lid and a drawn lash) or shaded (a soft fold).
+ * The eye as a plausible eye: corner to corner, with each lid a smooth arch
+ * whose height is the median height the marks agree on, and every mark held
+ * within a third of that arch. Hand-marked points are loose by several
+ * pixels, a vision model's looser still; the lid is built on this, not on
+ * them.
+ */
+export function regularEye(eye: EyeShape, n = 11): EyeShape {
+  const { upper, lower } = eye;
+  const a = { x: (upper[0].x + lower[0].x) / 2, y: (upper[0].y + lower[0].y) / 2 };
+  const b = {
+    x: (upper[upper.length - 1].x + lower[lower.length - 1].x) / 2,
+    y: (upper[upper.length - 1].y + lower[lower.length - 1].y) / 2,
+  };
+  const w = Math.max(Math.hypot(b.x - a.x, b.y - a.y), 1);
+  const tx = (b.x - a.x) / w, ty = (b.y - a.y) / w;
+  // Down the face for an eye read left to right.
+  const nx = -ty, ny = tx;
+  const flip = ny < 0 ? -1 : 1;
+  const heights = (lid: readonly Pt[], sign: number) =>
+    lid
+      .map((p) => {
+        const dx = p.x - a.x, dy = p.y - a.y;
+        return { u: clamp(2 * ((dx * tx + dy * ty) / w) - 1, -1, 1), h: Math.max(0, (dx * nx + dy * ny) * flip * sign) };
+      })
+      .sort((p, q) => p.u - q.u);
+  const hu = heights(upper, -1), hl = heights(lower, 1);
+  const amp = (hs: { u: number; h: number }[], lo: number, hi: number) =>
+    clamp(median(hs.filter((p) => gShape(p.u) > 0.25).map((p) => p.h / gShape(p.u))), lo * w, hi * w);
+  const aU = amp(hu, 0.1, 0.55);
+  const aL = amp(hl, 0.04, 0.4);
+  const at = (hs: { u: number; h: number }[], u: number) => {
+    for (let i = 0; i < hs.length - 1; i++) {
+      if (u <= hs[i + 1].u) return lerp(hs[i].h, hs[i + 1].h, clamp((u - hs[i].u) / Math.max(hs[i + 1].u - hs[i].u, 1e-6), 0, 1));
+    }
+    return hs[hs.length - 1].h;
+  };
+  const build = (hs: { u: number; h: number }[], A: number, sign: number): Pt[] => {
+    const out: Pt[] = [];
+    for (let k = 0; k < n; k++) {
+      const u = -1 + (2 * k) / (n - 1);
+      const arch = A * gShape(u);
+      const h = k === 0 || k === n - 1 ? 0 : lerp(arch, clamp(at(hs, u), arch * 0.67, arch * 1.33), 0.35);
+      const along = ((u + 1) / 2) * w;
+      out.push({ x: a.x + tx * along + nx * flip * h * sign, y: a.y + ty * along + ny * flip * h * sign });
+    }
+    return out;
+  };
+  return { upper: build(hu, aU, -1), lower: build(hl, aL, 1) };
+}
+
+/**
+ * Paint the lid. `amount` is how far it has come down, `tone` the skin it is
+ * made of, `line` the lash colour, `flat` whether the picture is cel art (a
+ * crisp lid of one colour and a drawn lash) or shaded (a clone of the skin
+ * beside the eye, a soft crease, a tapered lash).
  */
 export function paintLid(
   ctx: CanvasRenderingContext2D,
-  eye: EyeShape,
+  rawEye: EyeShape,
   amount: number,
-  skin: Rgb,
+  tone: LidTone,
   line: Rgb,
-  flat: boolean
+  flat: boolean,
+  blit?: Blit | null
 ): void {
   if (amount < 0.04) return;
+  const w0 = Math.hypot(
+    rawEye.upper[rawEye.upper.length - 1].x - rawEye.upper[0].x,
+    rawEye.upper[rawEye.upper.length - 1].y - rawEye.upper[0].y
+  );
+  if (w0 < 3) return;
+  const eye = regularEye(rawEye);
   const { upper, lower } = eye;
   const w = Math.hypot(upper[upper.length - 1].x - upper[0].x, upper[upper.length - 1].y - upper[0].y);
-  if (w < 3) return;
-  const edge = lidEdge(eye, amount);
+  const raw = lidEdge(eye, amount);
+  // A shut eye is a gentle curve, not the lower lid's whole arch: the lash line
+  // settles part of the way back to the chord between the corners.
+  const settle = smoothStep((amount - 0.5) / 0.5) * 0.32;
+  const c0 = raw[0], c1 = raw[raw.length - 1];
+  const edge = raw.map((p) => ({
+    x: p.x,
+    y: lerp(p.y, c0.y + ((c1.y - c0.y) * (p.x - c0.x)) / Math.max(c1.x - c0.x, 1e-6), settle),
+  }));
+  // What the lid fills reaches the whole opening as it lands, so no sliver of
+  // eye is left below a lash line that stopped short of the lower lid.
+  const reach = smoothStep((amount - 0.8) / 0.2);
+  const fillEdge = edge.map((p, i) => ({ x: p.x, y: lerp(p.y, lower[Math.min(i, lower.length - 1)].y + w * 0.12, reach) }));
+  const top = Math.min(...upper.map((p) => p.y)) - w * 0.1;
+  const bottom = Math.max(...lower.map((p) => p.y)) + w * 0.1;
+  const left = Math.min(upper[0].x, lower[0].x) - w * 0.1;
+  const right = Math.max(upper[upper.length - 1].x, lower[lower.length - 1].x) + w * 0.1;
+  const above = tone.above;
+  const mid = mix(tone.above, tone.below, 0.4);
+  const span = { x: left - w * 0.3, y: top - w * 0.3, w: right - left + w * 0.6, h: bottom - top + w * 0.6 };
 
-  // In shade the lid's rim is not a cut edge: a soft halo of its own colour
-  // spills a little past the eye, so it settles into the fur or skin round it.
-  if (!flat) {
-    ctx.save();
-    ctx.beginPath();
-    through(ctx, upper.map((p) => ({ x: p.x, y: p.y - w * 0.08 })), true);
-    through(ctx, lower.slice().reverse().map((p) => ({ x: p.x, y: p.y + w * 0.1 })), false);
-    ctx.closePath();
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = rgb(skin, 0.28 * amount);
-    ctx.lineWidth = w * 0.16;
-    ctx.stroke();
-    ctx.strokeStyle = rgb(skin, 0.4 * amount);
-    ctx.lineWidth = w * 0.07;
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  ctx.save();
   // The eye's opening, slightly grown so no sliver of eyeball survives.
+  ctx.save();
   ctx.beginPath();
-  through(ctx, upper.map((p) => ({ x: p.x, y: p.y - w * 0.08 })), true);
+  through(ctx, upper.map((p) => ({ x: p.x, y: p.y - w * 0.1 })), true);
   through(ctx, lower.slice().reverse().map((p) => ({ x: p.x, y: p.y + w * 0.1 })), false);
   ctx.closePath();
   ctx.clip();
-  // Skin from above the eye down to the leading edge.
-  ctx.beginPath();
-  ctx.moveTo(upper[0].x - w * 0.2, upper[0].y - w * 0.5);
-  ctx.lineTo(upper[upper.length - 1].x + w * 0.2, upper[upper.length - 1].y - w * 0.5);
-  ctx.lineTo(edge[edge.length - 1].x + w * 0.2, edge[edge.length - 1].y);
-  through(ctx, edge.slice().reverse(), false);
-  ctx.closePath();
-  if (flat) {
-    ctx.fillStyle = rgb(skin);
-  } else {
-    const mid = Math.floor(upper.length / 2);
-    const g = ctx.createLinearGradient(0, upper[mid].y, 0, edge[mid].y + 1);
-    g.addColorStop(0, rgb(skin));
-    g.addColorStop(0.75, rgb(skin));
-    g.addColorStop(1, rgb(mix(skin, line, 0.28)));
-    ctx.fillStyle = g;
+
+  // The eye squashes a little before the lid arrives, anchored at the lower
+  // lid, so what it uncovers at the top is hidden by the lid itself.
+  if (!flat && blit && amount < 0.85) {
+    const s = 1 - 0.11 * smoothStep(amount / 0.45) * (1 - smoothStep((amount - 0.5) / 0.35));
+    const box = { x: left, y: top, w: right - left, h: bottom - top };
+    blit({ x: box.x, y: bottom - box.h * s, w: box.w, h: box.h * s }, box);
   }
-  ctx.fill();
+
+  // The lid: skin from above the eye down to the leading edge.
+  ctx.beginPath();
+  ctx.moveTo(upper[0].x - w * 0.2, top - w * 0.2);
+  ctx.lineTo(upper[upper.length - 1].x + w * 0.2, top - w * 0.2);
+  ctx.lineTo(fillEdge[fillEdge.length - 1].x + w * 0.2, fillEdge[fillEdge.length - 1].y);
+  through(ctx, fillEdge.slice().reverse(), false);
+  ctx.lineTo(fillEdge[0].x - w * 0.2, fillEdge[0].y);
+  ctx.closePath();
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = rgb(flat ? above : mid);
+  ctx.fillRect(span.x, span.y, span.w, span.h);
+  if (!flat) {
+    if (blit) {
+      // Clone the skin just below the eye: its own texture over the lid.
+      const shift = bottom - top + w * 0.05;
+      const box = { x: left - w * 0.1, y: top, w: right - left + w * 0.2, h: bottom - top };
+      blit(box, { ...box, y: box.y + shift });
+    }
+    // Join the skin above: tinted towards it at the top, so the lid has no
+    // seam where it meets the brow; shaded towards the lashes at its edge.
+    const g = ctx.createLinearGradient(0, top, 0, bottom);
+    g.addColorStop(0, rgb(above, 0.6));
+    g.addColorStop(0.55, rgb(above, 0.12));
+    g.addColorStop(1, rgb(mix(above, line, 0.3), 0.3));
+    ctx.fillStyle = g;
+    ctx.fillRect(span.x, span.y, span.w, span.h);
+  }
+  ctx.restore();
   ctx.restore();
 
-  // The lash line, along the edge, once the lid is mostly down.
-  const lash = Math.min(1, (amount - 0.25) / 0.5);
-  if (lash > 0.02) {
+  // The crease under the brow: a soft shadow along the top of the lid.
+  if (!flat) {
     ctx.save();
-    ctx.globalAlpha = lash * (flat ? 1 : 0.8);
-    ctx.beginPath();
-    through(ctx, edge, true);
-    ctx.strokeStyle = rgb(line);
-    ctx.lineWidth = Math.max(1.2, w * (flat ? 0.05 : 0.035));
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.stroke();
+    const crease = upper.map((p) => ({ x: p.x, y: p.y - w * 0.035 }));
+    for (const [k, a] of [[0.06, 0.025], [0.03, 0.045], [0.014, 0.07]] as const) {
+      ctx.beginPath();
+      through(ctx, crease, true);
+      ctx.strokeStyle = rgb(mix(above, line, 0.5), a * amount);
+      ctx.lineWidth = w * k;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // The lash line, along the edge once the lid is mostly down: a band that
+  // thins to nothing at the corners.
+  const lash = Math.min(1, (amount - 0.2) / 0.5);
+  if (lash > 0.02) {
+    const thick = Math.max(1.3, w * (flat ? 0.05 : 0.036));
+    const n = edge.length;
+    const topEdge = edge.map((p, i) => ({ x: p.x, y: p.y - (thick * taper(i / (n - 1))) / 2 }));
+    const botEdge = edge.map((p, i) => ({ x: p.x, y: p.y + (thick * taper(i / (n - 1))) / 2 }));
+    ctx.save();
+    ctx.globalAlpha = lash * (flat ? 1 : 0.85);
+    ctx.beginPath();
+    through(ctx, topEdge, true);
+    ctx.lineTo(botEdge[n - 1].x, botEdge[n - 1].y);
+    through(ctx, botEdge.slice().reverse(), false);
+    ctx.closePath();
+    ctx.fillStyle = rgb(line);
+    ctx.fill();
     ctx.restore();
   }
 }

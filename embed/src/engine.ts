@@ -15,7 +15,7 @@
  *   StrictMode.
  */
 import { BlinkScheduler, blinkEase } from "./blink";
-import { lidAmount, lidSamplePoints, medianColour, paintLid } from "./blink-lid";
+import { lidAmount, lidSamplePoints, medianColour, paintLid, type Box, type LidTone } from "./blink-lid";
 import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
 import {
   CharacterField,
@@ -562,7 +562,10 @@ export class AvatarEngine {
   /** The same, as numbers, and each eye's lid colour: for the painted lid
    *  of a profile that blinks that way (blink-lid.ts). */
   private lashRgb: Rgb[] = [[60, 42, 38], [60, 42, 38]];
-  private lidSkin: Rgb[] = [[200, 150, 130], [200, 150, 130]];
+  private lidTone: LidTone[] = [
+    { above: [200, 150, 130], below: [200, 150, 130] },
+    { above: [200, 150, 130], below: [200, 150, 130] },
+  ];
   private raf = 0;
   private startTime = 0;
   private lastTickAt = 0;
@@ -996,14 +999,23 @@ export class AvatarEngine {
       ctx.drawImage(this.texture, 0, 0);
       for (let e = 0; e < 2; e++) {
         const shape = this.eyeShape(this.texPoints, e);
-        const samples = lidSamplePoints(shape.upper, shape.lower).map((p): Rgb | null => {
+        const read = (p: Point): Rgb | null => {
           const x = Math.round(p.x), y = Math.round(p.y);
           if (x < 0 || y < 0 || x >= off.width || y >= off.height) return null;
           const d = ctx.getImageData(x, y, 1, 1).data;
           return d[3] < 128 ? null : [d[0], d[1], d[2]];
-        });
-        const c = medianColour(samples, 0.7);
-        if (c) this.lidSkin[e] = c;
+        };
+        const spots = lidSamplePoints(shape.upper, shape.lower);
+        const nUp = shape.upper.length - 2;
+        const readUp = spots.slice(0, nUp).map(read);
+        const readDown = spots.slice(nUp).map(read);
+        // A brow or a lash line can sit where "above the eye" is read, and it
+        // is dark: the lid's own skin is the lighter end of what both sides
+        // give, and the skin above is read from them together.
+        const below = medianColour(readDown, 0.65);
+        const above = medianColour([...readUp, ...readDown], 0.65);
+        const either = above ?? below;
+        if (either) this.lidTone[e] = { above: above ?? either, below: below ?? either };
       }
     } catch {
       // Tainted texture: the default skin tone.
@@ -1019,6 +1031,27 @@ export class AvatarEngine {
     return { upper, lower };
   }
 
+  /**
+   * Copies of the picture's own pixels for a painted lid: a canvas rectangle
+   * of the face as drawn, from the texture the face is drawn from. The eye
+   * stays where it was drawn (the mesh does not move it for a lid blink), so
+   * canvas and texture differ by a scale and an offset read off its corners.
+   */
+  private lidBlit(e: number, pts: Point[]): ((dst: Box, src: Box) => void) | null {
+    const [c0, c1] = EYE_CORNERS[e];
+    const a = pts[c0], b = pts[c1], ta = this.texPoints[c0], tb = this.texPoints[c1];
+    if (!a || !b || !ta || !tb) return null;
+    const k = Math.hypot(tb.x - ta.x, tb.y - ta.y) / Math.max(Math.hypot(b.x - a.x, b.y - a.y), 1e-6);
+    return (dst, src) => {
+      if (dst.w < 1 || dst.h < 1 || src.w < 1 || src.h < 1) return;
+      this.ctx.drawImage(
+        this.texture,
+        ta.x + (src.x - a.x) * k, ta.y + (src.y - a.y) * k, src.w * k, src.h * k,
+        dst.x, dst.y, dst.w, dst.h
+      );
+    };
+  }
+
   /** The painted lid of a profile that blinks that way. */
   private drawLids(pts: Point[]): void {
     if (this.profile.blink !== "lid" || this.blink <= 0 || this.tuning.blink <= 0) return;
@@ -1026,7 +1059,7 @@ export class AvatarEngine {
     const flat = this.look.flat;
     for (let e = 0; e < 2; e++) {
       const shape = this.eyeShape(pts, e);
-      paintLid(this.ctx, shape, amount, this.lidSkin[e], this.lashRgb[e], flat);
+      paintLid(this.ctx, shape, amount, this.lidTone[e], this.lashRgb[e], flat, this.lidBlit(e, pts));
     }
   }
 
@@ -1895,8 +1928,10 @@ export class AvatarEngine {
       ctx.translate(head.fdx, head.fdy);
     }
 
+    const pads = this.trianglePads();
+    let t = 0;
     for (const [a, b, c] of this.triangles) {
-      this.drawWarpedTriangle(pts, a, b, c);
+      this.drawWarpedTriangle(pts, a, b, c, pads ? pads[t++] : 0);
     }
 
     this.drawEyes(pts);
@@ -1956,8 +1991,10 @@ export class AvatarEngine {
     }
     this.drawFullFrame(L.head);
 
+    const pads = this.trianglePads();
+    let t = 0;
     for (const [a, b, c] of this.triangles) {
-      this.drawWarpedTriangle(pts, a, b, c);
+      this.drawWarpedTriangle(pts, a, b, c, pads ? pads[t++] : 0);
     }
     this.drawEyes(pts);
     this.drawLids(pts);
@@ -2025,11 +2062,41 @@ export class AvatarEngine {
     ctx.translate(-this.bodyPivot.x, -this.bodyPivot.y - rise);
   }
 
+  private padsFor: unknown = null;
+  private pads: Float32Array | null = null;
+
+  /** Each triangle's overlap with its neighbours, px, for a character profile
+   *  (null for the others, which draw exactly as they always did). Worked out
+   *  once per mesh. */
+  private trianglePads(): Float32Array | null {
+    if (!this.field) return null;
+    if (this.padsFor !== this.triangles || !this.pads) {
+      this.padsFor = this.triangles;
+      this.pads = Float32Array.from(this.triangles, ([a, b, c]) => (this.touchesMouth(a, b, c) ? 0.45 : 1));
+    }
+    return this.pads;
+  }
+
+  private mouthSet: Set<number> | null = null;
+
+  /** Does a triangle touch the lips (the rig's mouth points, or a vertex the
+   *  mouth subdivision added)? */
+  private touchesMouth(a: number, b: number, c: number): boolean {
+    if (!this.mouthSet) this.mouthSet = new Set(this.rig.mouth_indices ?? []);
+    const set = this.mouthSet;
+    const mouthy = (i: number): boolean => {
+      if (i < 478) return set.has(i);
+      const parents = this.derivedParents[i - 478];
+      return !!parents && (set.has(parents[0]) || set.has(parents[1]));
+    };
+    return mouthy(a) || mouthy(b) || mouthy(c);
+  }
+
   /**
    * Draw one texture triangle warped to its deformed destination.
    * Affine solved with Cramer's rule; degenerate triangles are skipped.
    */
-  private drawWarpedTriangle(pts: Point[], i0: number, i1: number, i2: number): void {
+  private drawWarpedTriangle(pts: Point[], i0: number, i1: number, i2: number, pad = 0): void {
     const ctx = this.ctx;
     const s0 = this.texPoints[i0], s1 = this.texPoints[i1], s2 = this.texPoints[i2];
     const d0 = pts[i0], d1 = pts[i1], d2 = pts[i2];
@@ -2062,7 +2129,19 @@ export class AvatarEngine {
     // Slightly inflate the clip triangle to hide seams between triangles.
     const cx = (d0.x + d1.x + d2.x) / 3;
     const cy = (d0.y + d1.y + d2.y) / 3;
-    const grow = (p: Point) => ({ x: p.x + (p.x - cx) * 0.015, y: p.y + (p.y - cy) * 0.015 });
+    // A character's flat art shows the seams the photograph hides: where two
+    // triangles meet, their anti-aliased edges each cover half a pixel, and
+    // what is underneath (the un-warped picture, a moved chin's old outline)
+    // shows through as a faint wire. A fixed pixel of overlap closes them; a
+    // percentage of the triangle's size does not on a small one.
+    // (Less where a thin drawn line crosses the triangles, as the lips do: a
+    // wide overlap would redraw a pixel of it from the wrong triangle.)
+        const grow = (p: Point) => {
+      const x = p.x + (p.x - cx) * 0.015, y = p.y + (p.y - cy) * 0.015;
+      if (!pad) return { x, y };
+      const d = Math.hypot(p.x - cx, p.y - cy) || 1;
+      return { x: x + ((p.x - cx) / d) * pad, y: y + ((p.y - cy) / d) * pad };
+    };
     const g0 = grow(d0), g1 = grow(d1), g2 = grow(d2);
     ctx.moveTo(g0.x, g0.y);
     ctx.lineTo(g1.x, g1.y);
