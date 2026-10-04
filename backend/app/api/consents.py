@@ -80,6 +80,10 @@ class MyConsentOut(BaseModel):
     # it is for; null means ask (never asked, or the wording changed).
     consent_id: str | None = None
     created_at: datetime | None = None
+    # True only when consent_id is null because the wording changed: the
+    # member did agree to an earlier version. Lets the dashboard say why it
+    # asks again. False for a member who never agreed, or who has agreed now.
+    stale: bool = False
 
 
 @router.get("/mine", response_model=MyConsentOut)
@@ -98,6 +102,8 @@ async def my_consent(
         text_version=svc.TEXT_VERSIONS[scope],
         consent_id=consent.id if consent else None,
         created_at=consent.created_at if consent else None,
+        stale=consent is None
+        and await svc.agreed_before(db, ctx.org, ctx.membership.user_id, scope),
     )
 
 

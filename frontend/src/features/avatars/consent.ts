@@ -125,6 +125,9 @@ export interface MyConsent {
   text_version: string;
   consent_id: string | null;
   created_at: string | null;
+  /** True when consent_id is null because the wording changed: the member
+   * agreed to an earlier version. Absent on servers that predate it. */
+  stale?: boolean;
 }
 
 /**
@@ -140,6 +143,18 @@ export function rememberedConsent(mine: MyConsent | null | undefined, scope: Con
   return mine.text_version === CONSENT_TEXT_VERSIONS[scope] ? mine.consent_id : null;
 }
 
+/**
+ * Whether to tell the member that the statement changed since they agreed:
+ * they have an earlier agreement but none for the words in force, and the
+ * words the server holds are the ones on this page (so agreeing is possible).
+ * False for a member who never agreed (nothing to renew) and for one who
+ * has agreed to the current words.
+ */
+export function needsReagree(mine: MyConsent | null | undefined, scope: ConsentScope): boolean {
+  if (!mine || mine.scope !== scope || mine.consent_id) return false;
+  return mine.stale === true && mine.text_version === CONSENT_TEXT_VERSIONS[scope];
+}
+
 /** What GET /consents/mine will answer once `record` is stored: written
  * into the cache so the next step does not ask again before a refetch. */
 export function mineFromRecord(record: ConsentRecord): MyConsent {
@@ -148,5 +163,6 @@ export function mineFromRecord(record: ConsentRecord): MyConsent {
     text_version: record.text_version,
     consent_id: record.id,
     created_at: record.created_at,
+    stale: false,
   };
 }

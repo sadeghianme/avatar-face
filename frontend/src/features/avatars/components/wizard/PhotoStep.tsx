@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { AiConsentReagreeNote } from "@/features/avatars/components/create/AiConsentDialog";
 import { LookPicture, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
 import { useRadioGroup } from "@/features/avatars/components/wizard/radio";
 import {
@@ -379,6 +380,7 @@ export function PhotoStep({
                 <span>{t(source === "upload" ? "wzConsentAi_upload" : "wzConsentAi_generate")}</span>
               </label>
               <div id={`${ids}-ai-more`} className="ms-8 mt-1 space-y-1 text-xs text-gray-500 dark:text-gray-400">
+                {consent.aiReagree && <AiConsentReagreeNote className="!text-xs font-medium" />}
                 <p>
                   {t("wzConsentAiProvider", { providers })} {!needsAi && t("wzConsentOptional")}
                 </p>

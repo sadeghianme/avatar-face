@@ -604,6 +604,7 @@ export const avatars = {
   aiConsentRights: "N’envoyez qu’une image de vous, ou de quelqu’un qui l’a accepté.",
   aiConsentOptional: "C’est facultatif pour une photo réaliste : sans IA, votre propre photo est utilisée, sans son arrière-plan. Votre réponse est mémorisée pour votre compte, et redemandée si ce texte change.",
   aiConsentRecorded: "Version du texte {{version}}. Votre accord est enregistré avec cette version.",
+  aiConsentReagree: "Nous avons mis à jour la façon dont nous décrivons ce qui est envoyé à l’IA. Veuillez accepter à nouveau pour continuer.",
   aiConsentDecline: "Pas maintenant",
   aiConsentAgree: "J’accepte",
   createAiPoints: "Trouver les points avec l’IA",

@@ -10,6 +10,7 @@ import {
   consentBody,
   consentProblem,
   mineFromRecord,
+  needsReagree,
   providerLabel,
   rememberedConsent,
   termsOutdated,
@@ -115,5 +116,35 @@ describe("a refusal about consent", () => {
   it("names Google as the owner knows it", () => {
     assert.equal(providerLabel("google"), "Google (Gemini)");
     assert.equal(providerLabel("other"), "other");
+  });
+});
+
+describe("telling a returning member the wording changed", () => {
+  const mine = (over = {}) => ({
+    scope: "third_party_ai" as const,
+    text_version: version,
+    consent_id: null,
+    created_at: null,
+    ...over,
+  });
+  it("says so only for an earlier agreement and none for the words in force", () => {
+    assert.equal(needsReagree(mine({ stale: true }), "third_party_ai"), true);
+  });
+  it("stays silent for a member who never agreed, or an older server", () => {
+    assert.equal(needsReagree(mine({ stale: false }), "third_party_ai"), false);
+    assert.equal(needsReagree(mine(), "third_party_ai"), false);
+  });
+  it("stays silent once the current words are agreed", () => {
+    assert.equal(needsReagree(mine({ stale: true, consent_id: "c1" }), "third_party_ai"), false);
+    const record = {
+      id: "c2", scope: "third_party_ai" as const, providers: ["google"], text_version: version, created_at: "now",
+    };
+    assert.equal(needsReagree(mineFromRecord(record), "third_party_ai"), false);
+  });
+  it("stays silent while loading, for another scope, or if the server's words are not this page's", () => {
+    assert.equal(needsReagree(undefined, "third_party_ai"), false);
+    assert.equal(needsReagree(null, "third_party_ai"), false);
+    assert.equal(needsReagree(mine({ stale: true }), "depiction"), false);
+    assert.equal(needsReagree(mine({ stale: true, text_version: "2099-01-01" }), "third_party_ai"), false);
   });
 });

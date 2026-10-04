@@ -278,7 +278,7 @@ async def test_my_latest_consent_is_remembered_per_scope(client):
     nothing = await _mine(client, headers, org_id)
     assert nothing == {
         "scope": "third_party_ai", "text_version": svc.TEXT_VERSIONS["third_party_ai"],
-        "consent_id": None, "created_at": None,
+        "consent_id": None, "created_at": None, "stale": False,
     }
 
     first = (await _give(client, headers, org_id)).json()["id"]
@@ -317,6 +317,32 @@ async def test_a_new_wording_forgets_the_old_consent(client, monkeypatch):
     monkeypatch.setitem(svc.TEXT_VERSIONS, "third_party_ai", "2099-01-01")
     body = await _mine(client, headers, org_id)
     assert body["consent_id"] is None and body["text_version"] == "2099-01-01"
+    # ...and says it was agreed before, so the dashboard can explain why.
+    assert body["stale"] is True
+
+
+async def test_stale_is_false_for_never_agreed_and_for_agreed_now(client, monkeypatch):
+    headers, org_id = await _org(client, "stale1")
+    assert (await _mine(client, headers, org_id))["stale"] is False
+    await _give(client, headers, org_id)
+    assert (await _mine(client, headers, org_id))["stale"] is False
+    # Agreeing again under the new wording clears it.
+    monkeypatch.setitem(svc.TEXT_VERSIONS, "third_party_ai", "2099-01-01")
+    assert (await _mine(client, headers, org_id))["stale"] is True
+    await _give(client, headers, org_id, version="2099-01-01")
+    after = await _mine(client, headers, org_id)
+    assert after["stale"] is False and after["consent_id"] is not None
+
+
+async def test_stale_is_this_members_in_this_org(client, monkeypatch):
+    headers, org_id = await _org(client, "stale2")
+    await _give(client, headers, org_id)
+    monkeypatch.setitem(svc.TEXT_VERSIONS, "third_party_ai", "2099-01-01")
+    other_headers, other_org = await _org(client, "stale3")
+    assert (await _mine(client, other_headers, other_org))["stale"] is False
+    second_org = await create_org(client, headers)
+    assert (await _mine(client, headers, second_org))["stale"] is False
+    assert (await _mine(client, headers, org_id))["stale"] is True
 
 
 async def test_a_remembered_consent_is_one_require_accepts(client):

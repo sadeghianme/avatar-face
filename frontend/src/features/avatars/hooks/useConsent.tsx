@@ -7,6 +7,7 @@ import {
   consentBody,
   consentProblem,
   mineFromRecord,
+  needsReagree,
   rememberedConsent,
   termsOutdated,
   type ConsentRecord,
@@ -32,6 +33,8 @@ const outdated = () =>
  * - `aiConsentId`: the member's remembered third-party AI consent under the
  *   words this page shows (GET /consents/mine), or null: ask first. Undefined
  *   while that is still loading, so nothing asks before it knows.
+ * - `aiReagree`: true when the member agreed under an earlier wording and has
+ *   not agreed to this one (the checkbox and the dialog then say why).
  * - `record(scope, creationId?)`: records a statement under this page's
  *   words, right before the step it is for (a statement about a face, for
  *   the creation `creationId`). A third-party AI consent is then remembered
@@ -157,7 +160,10 @@ export function useConsent(orgId: string) {
 
   const providers = terms.data?.third_party_ai.providers ?? AI_PROVIDERS;
   const dialog = (
-    <AiConsentDialog open={asking !== null} purpose={asking?.purpose ?? ""} providers={providers} onAnswer={answer} />
+    <AiConsentDialog open={asking !== null} purpose={asking?.purpose ?? ""} providers={providers}
+      reagree={needsReagree(mine.data, "third_party_ai")}
+      onAnswer={answer}
+    />
   );
 
   return {
@@ -165,6 +171,9 @@ export function useConsent(orgId: string) {
     /** Unknown (loading) counts as on: every step also checks for itself. */
     aiEnabled: terms.data?.third_party_ai_enabled ?? true,
     providers,
+    /** The member agreed to an earlier wording but not the current one:
+     * every place that asks says why (AiConsentReagreeNote). */
+    aiReagree: needsReagree(mine.data, "third_party_ai"),
     aiConsentId: mine.isPending ? undefined : rememberedConsent(mine.data, "third_party_ai"),
     record,
     forgetAi,

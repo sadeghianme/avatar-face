@@ -35,6 +35,20 @@ export function AiConsentText({ providers, id }: { providers: readonly string[];
 }
 
 /**
+ * Said beside the statement (checkbox or dialog) to a member who agreed to
+ * an earlier wording: why the box is empty. One component, so the sentence
+ * and its styling live in one place; callers decide with consent.needsReagree.
+ */
+export function AiConsentReagreeNote({ id, className = "" }: { id?: string; className?: string }) {
+  const { t } = useTranslation();
+  return (
+    <p id={id} role="note" className={`text-sm text-brand-700 dark:text-brand-300 ${className}`}>
+      {t("aiConsentReagree")}
+    </p>
+  );
+}
+
+/**
  * The statement inline, as a checkbox: asked once per person and wording
  * (the server remembers it), so the AI step shows it only until it is
  * given. Unticked by default; ticking it records nothing by itself, the
@@ -45,11 +59,14 @@ export function AiConsentCheckbox({
   checked,
   onChange,
   disabled = false,
+  reagree = false,
 }: {
   providers: readonly string[];
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
+  /** consent.needsReagree: say that the wording changed. */
+  reagree?: boolean;
 }) {
   const { t } = useTranslation();
   const named = providers.map(providerLabel).join(", ");
@@ -66,7 +83,8 @@ export function AiConsentCheckbox({
         />
         <span className="text-sm font-medium">{t("aiConsentCheck", { providers: named })}</span>
       </label>
-      <div className="mt-2 ps-8">
+      <div className="mt-2 space-y-2 ps-8">
+        {reagree && <AiConsentReagreeNote />}
         <AiConsentText providers={providers} id="ai-consent-inline-body" />
       </div>
     </div>
@@ -82,12 +100,15 @@ export function AiConsentDialog({
   open,
   purpose,
   providers,
+  reagree = false,
   onAnswer,
 }: {
   open: boolean;
   /** What the owner pressed, in words ("Find the points with AI"). */
   purpose: string;
   providers: readonly string[];
+  /** consent.needsReagree: say that the wording changed. */
+  reagree?: boolean;
   onAnswer: (agreed: boolean) => void;
 }) {
   const { t } = useTranslation();
@@ -105,7 +126,8 @@ export function AiConsentDialog({
           <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{t("aiConsentFor", { purpose })}</p>
         </div>
       </div>
-      <div className="mt-4">
+      <div className="mt-4 space-y-2">
+        {reagree && <AiConsentReagreeNote />}
         <AiConsentText providers={providers} id="ai-consent-body" />
       </div>
       <div className="mt-5 flex flex-wrap justify-end gap-3">

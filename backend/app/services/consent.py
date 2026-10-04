@@ -274,6 +274,30 @@ async def latest(
     return None
 
 
+async def agreed_before(
+    db: AsyncSession, org: Organization, user_id: str, scope: str
+) -> bool:
+    """True when this user recorded `scope` in this org under an EARLIER
+    wording (any version other than the one in force). With `latest` being
+    None it means "agreed before, the words changed", which the dashboard
+    says to the member instead of showing an unexplained empty checkbox."""
+    if scope in SUBJECT_SCOPES:
+        return False
+    found = (
+        await db.execute(
+            select(Consent.id)
+            .where(
+                Consent.org_id == org.id,
+                Consent.user_id == user_id,
+                Consent.scope == scope,
+                Consent.text_version != TEXT_VERSIONS[scope],
+            )
+            .limit(1)
+        )
+    ).first()
+    return found is not None
+
+
 async def statement_about(
     db: AsyncSession, org: Organization, user_id: str, scope: str, subject_id: str
 ) -> Consent | None:
