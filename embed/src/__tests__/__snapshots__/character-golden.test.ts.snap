@@ -43,8 +43,8 @@ exports[`animal@2 golden output > flat art, aa (open): mesh and drawing are unch
 exports[`animal@2 golden output > flat art, blink full: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 0,
-  "drawCalls": 31962,
-  "drawing": "53e70ba05811c31b",
+  "drawCalls": 31952,
+  "drawing": "f3137d58fff26c47",
   "lipGapPx": 0.83,
   "mesh": "a21d4cdd609de678",
 }
@@ -113,8 +113,8 @@ exports[`animal@2 golden output > render, aa (open): mesh and drawing are unchan
 exports[`animal@2 golden output > render, blink full: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 0,
-  "drawCalls": 32074,
-  "drawing": "407a8adada3c8908",
+  "drawCalls": 31964,
+  "drawing": "c2a4c228a7523e16",
   "lipGapPx": 0.83,
   "mesh": "a21d4cdd609de678",
 }
@@ -183,8 +183,8 @@ exports[`toon@1 golden output > flat art, aa (open): mesh and drawing are unchan
 exports[`toon@1 golden output > flat art, blink full: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 0,
-  "drawCalls": 31962,
-  "drawing": "53e70ba05811c31b",
+  "drawCalls": 31952,
+  "drawing": "f3137d58fff26c47",
   "lipGapPx": 0.83,
   "mesh": "a21d4cdd609de678",
 }
@@ -253,8 +253,8 @@ exports[`toon@1 golden output > render, aa (open): mesh and drawing are unchange
 exports[`toon@1 golden output > render, blink full: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 0,
-  "drawCalls": 32074,
-  "drawing": "407a8adada3c8908",
+  "drawCalls": 31964,
+  "drawing": "c2a4c228a7523e16",
   "lipGapPx": 0.83,
   "mesh": "a21d4cdd609de678",
 }

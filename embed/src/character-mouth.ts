@@ -402,11 +402,15 @@ export function sampleLook(
   const x0 = box.cx - box.w * 1.5, x1 = box.cx + box.w * 1.5;
   const y0 = box.cy - box.w * 0.9, y1 = box.cy + box.w * 1.5;
   const N = 28;
-  // Flat art is also FLAT: two pixels a few apart are the same colour. A fur
-  // or a skin texture in a narrow range of browns fills few palette bins and
-  // would pass for cel art by its palette alone; a slow shading gradient does
-  // too, but its pixels drift apart over a few pixels.
-  let pairs = 0, same = 0;
+  // Cel art is told by two things together. Its palette: a handful of colours
+  // cover nearly all of the area (a render's skin and a photograph's fur spread
+  // over hundreds of bins; measured on real pictures: cartoons 0.85 to 0.87
+  // in the top eight bins, renders and fur 0.33 to 0.42). And its texture:
+  // neighbouring pixels are alike, as the MEDIAN step between them shows, so a
+  // few hard edges (the drawn line) do not count against it, nor does the light
+  // noise an AI-made drawing carries. A fur of a narrow range of browns fills
+  // few bins too, but its median step is large.
+  const steps: number[] = [];
   for (let a = 0; a < N; a++) {
     for (let b = 0; b < N; b++) {
       const x = x0 + ((x1 - x0) * (a + 0.5)) / N, y = y0 + ((y1 - y0) * (b + 0.5)) / N;
@@ -415,17 +419,16 @@ export function sampleLook(
       const key = ((c[0] >> 4) << 8) | ((c[1] >> 4) << 4) | (c[2] >> 4);
       bins.set(key, (bins.get(key) ?? 0) + 1);
       total++;
-      const d = pixel(x + 6, y);
-      if (d) {
-        pairs++;
-        if (Math.max(Math.abs(c[0] - d[0]), Math.abs(c[1] - d[1]), Math.abs(c[2] - d[2])) <= 2) same++;
-      }
+      const d = pixel(x + 1, y);
+      if (d) steps.push(Math.max(Math.abs(c[0] - d[0]), Math.abs(c[1] - d[1]), Math.abs(c[2] - d[2])));
     }
   }
   let flat = false;
   if (total > 0) {
     const top = [...bins.values()].sort((p, q) => q - p).slice(0, 8).reduce((s, v) => s + v, 0);
-    flat = top / total >= 0.7 && (pairs === 0 || same / pairs >= 0.7);
+    steps.sort((p, q) => p - q);
+    const median = steps.length ? steps[Math.floor(steps.length / 2)] : 0;
+    flat = top / total >= 0.7 && median <= 4;
   }
   const dark: { l: number; c: Rgb }[] = [];
   for (const p of seam) {

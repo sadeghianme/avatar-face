@@ -655,9 +655,24 @@ they just confirmed, before the first publish (`services.creations._own_mouth`,
     picture's own (`look.soft`, read across the mouth seam), a ring of inner-lip
     tone inside it, darker gum at the corners, warmth towards the throat, and a
     tongue with a centre groove and a shine sized to the tongue that is there.
-  - *Cel art or not* is told by the palette AND by flatness (two pixels six
-    apart are the same colour): fur in a narrow range of browns used to pass for
-    cel art by its palette alone.
+  - *Cel art or not* is told by the palette (top eight 16-level colour bins
+    cover at least 70% of the mouth area) AND by the MEDIAN step between
+    neighbouring pixels being at most 4 levels. Measured on the five real
+    AI-made characters (crops are test fixtures, `fixtures/real-crops/`):
+    cartoons 0.85 to 0.87 in the top bins with median step 1 to 2; renders and
+    fur 0.33 to 0.42 with median step 2 to 8. A stricter "70% of pixel pairs
+    near-identical" test (the first version) called both real cartoons renders:
+    AI-made flat art carries light noise and soft gradients. A noise-free smooth
+    gradient still counts as flat; fur of a narrow range of browns does not.
+  - *Lid on a real eye*: `eyeExtent` reads how far the eye reaches from the
+    picture (rays from its middle until the colour has matched the surround in
+    that direction for four pixels, held between the marked ellipse and half
+    as much again), so the lid has no slivers at the corners and a drawn
+    outline is covered. On a shaded face the lid is painted apart and let in
+    through a soft mask of that reach, so its edge fades into the fur or skin;
+    cel art keeps a crisp edge. The clone of the skin below the eye is made
+    only where that patch is one surface (a plain patch of fur or skin), never
+    on cel art.
   - *Triangle seams*: in a character profile each warped triangle overlaps its
     neighbours by a pixel (less on the lips, where a thin drawn line crosses
     them), which closed the faint wire and the "v" under the chin that a moved

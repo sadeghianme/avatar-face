@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { lidEdge, lidAmount, lidSamplePoints, medianColour, regularEye } from "../blink-lid";
+import { eyeExtent, lidEdge, lidAmount, lidSamplePoints, medianColour, regularEye } from "../blink-lid";
 import {
   CharacterField,
   DEFAULT_TRAITS,
@@ -170,14 +170,18 @@ describe("what the mouth takes from the picture", () => {
     expect(sampleLook(noisy, seam, box, [150, 90, 80], [200, 160, 140]).flat).toBe(false);
   });
 
-  it("does not take fur in a narrow range of browns for cel art, nor a smooth gradient", () => {
+  it("does not take fur in a narrow range of browns, nor a grained gradient, for cel art", () => {
     // Few palette bins, but the pixels are never the same as their neighbours.
     const fur = (x: number, y: number): Rgb => {
       const n = ((x * 73 + y * 151) % 17) - 8;
       return [150 + n, 112 + n, 80 + n];
     };
     expect(sampleLook(fur, seam, box, [150, 90, 80], [150, 112, 80]).flat).toBe(false);
-    const shaded = (x: number): Rgb => [200 + x * 0.6, 150 + x * 0.6, 130 + x * 0.6];
+    // A render: a slow gradient with the grain of its texture on top.
+    const shaded = (x: number, y: number): Rgb => {
+      const g = ((x * 31 + y * 17) % 13) - 6;
+      return [200 + x * 0.3 + g, 150 + x * 0.3 + g, 130 + x * 0.3 + g];
+    };
     expect(sampleLook(shaded, seam, box, [150, 90, 80], [200, 150, 130]).flat).toBe(false);
   });
 
@@ -291,6 +295,43 @@ describe("the painted lid", () => {
     }
     // The wild mark does not drag the lid out of the eye's own size.
     expect(Math.min(...regularEye(loose).upper.map((p) => p.y))).toBeGreaterThan(-6);
+  });
+});
+
+describe("how far the eye really reaches", () => {
+  const marks = {
+    upper: [{ x: 40, y: 50 }, { x: 55, y: 42 }, { x: 70, y: 40 }, { x: 85, y: 42 }, { x: 100, y: 50 }],
+    lower: [{ x: 40, y: 50 }, { x: 55, y: 58 }, { x: 70, y: 60 }, { x: 85, y: 58 }, { x: 100, y: 50 }],
+  };
+  // A drawn eye larger than its marks: an ellipse 40 x 13 round (70, 50),
+  // on skin, with a darker patch of shadow touching its right side.
+  const drawn = (x: number, y: number): Rgb => {
+    if (Math.hypot((x - 70) / 40, (y - 50) / 13) < 1) return [30, 20, 20];
+    if (x > 112 && x < 140) return [150, 100, 80]; // a patch of a different colour
+    return [230, 180, 150];
+  };
+
+  it("follows the drawn eye where it is larger than the marks, and no further", () => {
+    const outline = eyeExtent(drawn, marks);
+    const radius = outline.map((p) => Math.hypot(p.x - 70, p.y - 50));
+    // Sideways it reaches past the marks' own 30 (the drawn eye runs to 40)...
+    expect(radius[0]).toBeGreaterThan(31);
+    const re = (angle: number) => 1 / Math.sqrt((Math.cos(angle) / 30) ** 2 + (Math.sin(angle) / 10) ** 2);
+    outline.forEach((p, k) => {
+      const a = (2 * Math.PI * k) / outline.length;
+      expect(Math.hypot(p.x - 70, p.y - 50)).toBeLessThanOrEqual(re(a) * 1.46 + 1);
+    });
+  });
+
+  it("does not take a neighbouring patch of another colour for the eye", () => {
+    const outline = eyeExtent(drawn, marks);
+    expect(Math.max(...outline.map((p) => p.x))).toBeLessThan(112);
+  });
+
+  it("falls back to the marked opening on a picture it cannot read", () => {
+    const outline = eyeExtent(() => null, marks);
+    expect(outline.length).toBe(16);
+    expect(Math.max(...outline.map((p) => p.x))).toBeGreaterThan(88);
   });
 });
 

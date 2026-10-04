@@ -15,7 +15,7 @@
  *   StrictMode.
  */
 import { BlinkScheduler, blinkEase } from "./blink";
-import { lidAmount, lidSamplePoints, medianColour, paintLid, type Box, type LidTone } from "./blink-lid";
+import { eyeExtent, lidAmount, lidSamplePoints, medianColour, paintLid, type Blit, type LidTone } from "./blink-lid";
 import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
 import {
   CharacterField,
@@ -562,6 +562,10 @@ export class AvatarEngine {
   /** The same, as numbers, and each eye's lid colour: for the painted lid
    *  of a profile that blinks that way (blink-lid.ts). */
   private lashRgb: Rgb[] = [[60, 42, 38], [60, 42, 38]];
+  /** Each eye's real reach in texture pixels (blink-lid.ts eyeExtent), and
+   *  whether the skin below it is plain enough to copy for a lid. */
+  private lidExtent: (Point[] | null)[] = [null, null];
+  private lidCloneOk: boolean[] = [false, false];
   private lidTone: LidTone[] = [
     { above: [200, 150, 130], below: [200, 150, 130] },
     { above: [200, 150, 130], below: [200, 150, 130] },
@@ -1016,6 +1020,45 @@ export class AvatarEngine {
         const above = medianColour([...readUp, ...readDown], 0.65);
         const either = above ?? below;
         if (either) this.lidTone[e] = { above: above ?? either, below: below ?? either };
+        // How far the eye really reaches, and whether the skin below is plain.
+        const w = Math.hypot(shape.upper[shape.upper.length - 1].x - shape.upper[0].x, shape.upper[shape.upper.length - 1].y - shape.upper[0].y);
+        const all = [...shape.upper, ...shape.lower];
+        const rx0 = Math.max(0, Math.floor(Math.min(...all.map((q) => q.x)) - w * 1.1));
+        const ry0 = Math.max(0, Math.floor(Math.min(...all.map((q) => q.y)) - w * 1.1));
+        const rx1 = Math.min(off.width, Math.ceil(Math.max(...all.map((q) => q.x)) + w * 1.1));
+        const ry1 = Math.min(off.height, Math.ceil(Math.max(...all.map((q) => q.y)) + w * 1.1));
+        if (rx1 > rx0 && ry1 > ry0 && either) {
+          const img = ctx.getImageData(rx0, ry0, rx1 - rx0, ry1 - ry0);
+          const at = (x: number, y: number): Rgb | null => {
+            const px = Math.round(x) - rx0, py = Math.round(y) - ry0;
+            if (px < 0 || py < 0 || px >= img.width || py >= img.height) return null;
+            const i = (py * img.width + px) * 4;
+            return img.data[i + 3] < 128 ? null : [img.data[i], img.data[i + 1], img.data[i + 2]];
+          };
+          // How much the skin's own texture varies: fur and pores are noise the
+          // eye's edge must stand out from, flat art has none.
+          const around = [...readUp, ...readDown].filter((c): c is Rgb => !!c);
+          const ref = either;
+          const spread = around.length
+            ? Math.sqrt(around.reduce((sum, c) => sum + (c[0] - ref[0]) ** 2 + (c[1] - ref[1]) ** 2 + (c[2] - ref[2]) ** 2, 0) / around.length)
+            : 0;
+          this.lidExtent[e] = eyeExtent(at, shape, Math.max(50, Math.min(95, spread * 2.5)));
+          // The patch the lid would copy: the skin below the eye. It must be one
+          // surface (fur, skin), not an outline or another shape.
+          const bottom = Math.max(...shape.lower.map((q) => q.y));
+          const left = Math.min(...all.map((q) => q.x));
+          let far = 0, n = 0;
+          for (let a = 0; a < 10; a++) {
+            for (let b = 0; b < 5; b++) {
+              const c = at(left + (w * (a + 0.5)) / 10, bottom + w * (0.08 + 0.1 * b));
+              if (!c) continue;
+              n++;
+              const ref = below ?? either;
+              if (Math.hypot(c[0] - ref[0], c[1] - ref[1], c[2] - ref[2]) > Math.max(70, spread * 3)) far++;
+            }
+          }
+          this.lidCloneOk[e] = n > 0 && far / n <= 0.18;
+        }
       }
     } catch {
       // Tainted texture: the default skin tone.
@@ -1037,14 +1080,23 @@ export class AvatarEngine {
    * stays where it was drawn (the mesh does not move it for a lid blink), so
    * canvas and texture differ by a scale and an offset read off its corners.
    */
-  private lidBlit(e: number, pts: Point[]): ((dst: Box, src: Box) => void) | null {
+  /** A texture point of an eye, in the canvas the eye is drawn in. */
+  private fromTexture(e: number, pts: Point[], t: Point): Point {
+    const [c0, c1] = EYE_CORNERS[e];
+    const a = pts[c0], b = pts[c1], ta = this.texPoints[c0], tb = this.texPoints[c1];
+    if (!a || !b || !ta || !tb) return t;
+    const k = Math.hypot(tb.x - ta.x, tb.y - ta.y) / Math.max(Math.hypot(b.x - a.x, b.y - a.y), 1e-6);
+    return { x: a.x + (t.x - ta.x) / k, y: a.y + (t.y - ta.y) / k };
+  }
+
+  private lidBlit(e: number, pts: Point[]): Blit | null {
     const [c0, c1] = EYE_CORNERS[e];
     const a = pts[c0], b = pts[c1], ta = this.texPoints[c0], tb = this.texPoints[c1];
     if (!a || !b || !ta || !tb) return null;
     const k = Math.hypot(tb.x - ta.x, tb.y - ta.y) / Math.max(Math.hypot(b.x - a.x, b.y - a.y), 1e-6);
-    return (dst, src) => {
+    return (c, dst, src) => {
       if (dst.w < 1 || dst.h < 1 || src.w < 1 || src.h < 1) return;
-      this.ctx.drawImage(
+      c.drawImage(
         this.texture,
         ta.x + (src.x - a.x) * k, ta.y + (src.y - a.y) * k, src.w * k, src.h * k,
         dst.x, dst.y, dst.w, dst.h
@@ -1059,7 +1111,11 @@ export class AvatarEngine {
     const flat = this.look.flat;
     for (let e = 0; e < 2; e++) {
       const shape = this.eyeShape(pts, e);
-      paintLid(this.ctx, shape, amount, this.lidTone[e], this.lashRgb[e], flat, this.lidBlit(e, pts));
+      const outline = this.lidExtent[e]
+        ? this.lidExtent[e]!.map((q) => this.fromTexture(e, pts, q))
+        : null;
+      const blit = flat || !this.lidCloneOk[e] ? null : this.lidBlit(e, pts);
+      paintLid(this.ctx, shape, amount, this.lidTone[e], this.lashRgb[e], flat, blit, outline);
     }
   }
 
