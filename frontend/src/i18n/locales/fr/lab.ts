@@ -127,7 +127,7 @@ export const lab = {
   photofaceHDStableLabel: "Moteur actuel",
   photofaceHDLabLabel: "Photoface HD",
   photofaceHDInside: "Ce qui change",
-  photofaceHDDepth: "Une surface faciale 3D légère ajoute du volume aux joues, au nez et à la mâchoire.",
+  photofaceHDDepth: "Relief du visage mesuré à partir des repères de votre photo ; une approximation en dôme seulement si la détection échoue.",
   photofaceHDLayers: "Le fond, le corps et la tête bougent séparément pour un mouvement plus propre.",
   photofaceHDReuse: "Les mêmes voix, phonèmes et files de lecture pilotent le nouveau moteur.",
   photofaceHDIsolation: "Module expérimental : le moteur 2D et le widget actuels restent intacts.",
