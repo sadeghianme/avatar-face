@@ -75,6 +75,21 @@ make typecheck   # tsc -b for frontend + embed
 make migrate     # alembic upgrade head (per-milestone migrations)
 ```
 
+## Pinned backend versions
+
+The production image installs backend libraries with
+`pip install -c constraints.txt . "mediapipe==1.0.1"`.
+[backend/constraints.txt](backend/constraints.txt) is the `pip freeze` of the
+production container (the versions tested end to end), so a rebuild cannot
+silently upgrade a library. It only limits versions: it adds no packages, and
+dev tools such as pytest are unaffected. The embed and frontend images use
+`npm ci` with their committed `package-lock.json`, which is pinned already.
+
+To upgrade deliberately: change the pin in `constraints.txt` (and the range in
+`pyproject.toml` if it forbids it), rebuild, run the backend tests and a real
+photo-to-avatar flow, deploy, then regenerate the file by running `pip freeze`
+in the new production container and dropping the `liveface-backend` line.
+
 ## Production-hardening backlog (known, deliberate)
 
 1. Move in-memory state (credential overlay, embed rate limiter) to Redis —

@@ -84,7 +84,7 @@ RUN mkdir -p models/piper \
     done
 ENV PIPER_VOICES_DIR=/app/backend/models/piper
 
-COPY backend/pyproject.toml ./
+COPY backend/pyproject.toml backend/constraints.txt ./
 COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./
@@ -92,8 +92,10 @@ COPY backend/alembic.ini ./
 COPY backend/scripts ./scripts
 # Pinned: this was unpinned, and a rebuild silently upgraded to a mediapipe
 # major version with a different runtime dependency, breaking detection on a
-# deploy that changed nothing in this repo.
-RUN pip install --no-cache-dir . "mediapipe==1.0.1"
+# deploy that changed nothing in this repo. constraints.txt pins every other
+# library to the versions running in production (see the README, "Pinned
+# backend versions"); it restricts versions only, it adds no packages.
+RUN pip install --no-cache-dir -c constraints.txt . "mediapipe==1.0.1"
 # Widget bundles served at /liveface.js and /liveface-3d.js
 COPY --from=embed-build /build/embed/dist /app/embed/dist
 
