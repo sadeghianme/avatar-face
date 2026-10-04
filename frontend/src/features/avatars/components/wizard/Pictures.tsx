@@ -158,14 +158,14 @@ export function Result({
     <div className="absolute inset-0 overflow-hidden bg-white dark:bg-ink">
       <div className={`absolute inset-0 ${PICTURE_BACKDROP}`} />
       {transparent && <div className="absolute inset-0" style={CHECKER_STYLE} />}
-      <img src={after.url} alt={t("wzAfter")} className="absolute inset-0 h-full w-full object-cover" draggable={false} />
+      <img src={after.url} alt={t("wzAfter")} className="absolute inset-0 h-full w-full object-cover object-top" draggable={false} />
     </div>
   );
   return (
     <div className={`${STAGE} ${PICTURE_BACKDROP} select-none`}>
       {before ? (
         <>
-          <img src={before.url} alt={t("wzBefore")} className="absolute inset-0 h-full w-full object-cover" draggable={false} />
+          <img src={before.url} alt={t("wzBefore")} className="absolute inset-0 h-full w-full object-cover object-top" draggable={false} />
           <div className="absolute inset-0" style={{ clipPath: `inset(0 0 0 ${split}%)` }}>
             {afterLayer}
           </div>
