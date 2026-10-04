@@ -53,6 +53,8 @@ export const common = {
   imageProviders: "Fournisseurs d'images",
   imageProvidersHint: "Utilisés pour générer des avatars à partir d'une photo. Les photos sont envoyées au fournisseur.",
   voiceProvidersHint: "Utilisés pour la synthèse vocale. Laissez vide pour les voix du navigateur.",
+  modelProviders: "Fournisseurs d'avatars 3D",
+  modelProvidersHint: "Utilisés pour créer un avatar 3D animé à partir d'une photo. Sans fournisseur, vous pouvez toujours importer des avatars 3D au format GLB.",
   voice: "Voix",
   provider: "Fournisseur",
   roles: {"owner": "Propriétaire", "admin": "Admin", "member": "Membre"},

@@ -124,6 +124,8 @@ export const lab = {
   photofaceHDChoose: "Avatar photo",
   photofaceHDNoAvatars: "Aucun avatar photo prêt",
   photofaceHDChooseHint: "Ce labo lit les ressources existantes sans modifier ni remplacer l'avatar original.",
+  photofaceHDStableLabel: "Moteur actuel",
+  photofaceHDLabLabel: "Photoface HD",
   photofaceHDInside: "Ce qui change",
   photofaceHDDepth: "Une surface faciale 3D légère ajoute du volume aux joues, au nez et à la mâchoire.",
   photofaceHDLayers: "Le fond, le corps et la tête bougent séparément pour un mouvement plus propre.",

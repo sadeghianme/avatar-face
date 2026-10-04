@@ -14,7 +14,8 @@
  *     not climb (`../`), so moving a file never silently rewires another.
  *
  * Plus one content check: every locale file has the same key set in every
- * language, and no key is defined twice.
+ * language (a key missing on either side is reported), and no key is defined
+ * twice.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -87,7 +88,8 @@ const [base, ...others] = langs;
 for (const lang of others) {
   for (const [key, file] of perLang[base]) {
     const where = perLang[lang].get(key);
-    if (where && where !== file) errors.push(`i18n: "${key}" is in ${base}/${file} but ${lang}/${where}`);
+    if (!where) errors.push(`i18n/${lang}: "${key}" (in ${base}/${file}) is missing from ${lang}/${file}`);
+    else if (where !== file) errors.push(`i18n: "${key}" is in ${base}/${file} but ${lang}/${where}`);
   }
   for (const key of perLang[lang].keys()) {
     if (!perLang[base].has(key)) errors.push(`i18n/${lang}: "${key}" has no ${base} counterpart`);
