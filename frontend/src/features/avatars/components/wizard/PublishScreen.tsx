@@ -6,6 +6,8 @@ import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
 import { JobProgress, useSeenStages } from "@/features/avatars/components/create/JobProgress";
 import { PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
+import { BackButton, PhoneNote, StepFooter } from "@/features/avatars/components/wizard/Footer";
+import { useRadioGroup } from "@/features/avatars/components/wizard/radio";
 import {
   anchorsCurrent,
   currentStep,
@@ -29,6 +31,7 @@ import { LINES } from "@/features/avatars/lines";
 import {
   defaultName,
   faceFound,
+  footerPlan,
   planOf,
   recallChoices,
   statementToAsk,
@@ -42,6 +45,8 @@ import { api, ApiError } from "@/lib/api";
 // The preview follows moved points this long after the last move.
 const PREVIEW_DELAY_MS = 400;
 const PARTS = ["eyes", "lips", "head"] as const;
+const PUBLISH_VIEWS = ["points", "preview"] as const;
+type PublishView = (typeof PUBLISH_VIEWS)[number];
 
 function tabStore(): DraftStore | null {
   try {
@@ -61,9 +66,13 @@ function tabStore(): DraftStore | null {
  * itself once it is built); for a realistic person their own teeth and
  * mouth shapes are made meanwhile, listed with the other stages.
  *
- * The points editor (MarkCanvas) shows only when the face was not found
- * (a template's guess: the owner places the points and says they are
- * right), or on "Fix points". Its preview follows the points.
+ * The big picture shows the points found, on by default (MarkCanvas, with
+ * its 3x zoom in the corner): drag one only if it is off; Publish sends
+ * them as "Fix points" did, and a refused fit says why beside them. The
+ * talking preview is another canvas, so a toggle above the picture picks
+ * Points or Talking preview, and playing the sample switches to it. When
+ * the face was not found, the points start from the template's guess, a
+ * hint says to place them, and the owner ticks that they are right.
  *
  * The statement about a face was made on step 2; a creation without one
  * (a draft from the old wizard) asks for it here, inline, when publishing
@@ -119,13 +128,10 @@ export function PublishScreen({
   if (!anchors) {
     // Nothing to publish from: the picture changed under this tab.
     return (
-      <div className="space-y-4">
+      <>
         <p className="text-sm text-gray-600 dark:text-gray-300">{t("createErr_anchors_stale")}</p>
-        <button type="button" className="btn-primary min-h-11" onClick={onBack}>
-          <Icon name="back" className="h-4 w-4 rtl:-scale-x-100" />
-          {t("wzBack")}
-        </button>
-      </div>
+        <StepFooter back={<BackButton onClick={onBack} />} />
+      </>
     );
   }
 
@@ -187,7 +193,10 @@ function Editor({
   const line = LINES[creation.face_type ?? "human"];
   const found = faceFound(anchors);
   const image = currentStep(creation);
-  const [fixing, setFixingState] = useState(!found);
+  // The big picture shows the points (to drag) or the talking preview: two
+  // canvases that cannot be one. Points first; playing the sample switches.
+  const [view, setView] = useState<PublishView>("points");
+  const viewRadio = useRadioGroup(PUBLISH_VIEWS, view, setView);
   const [marks, setMarks] = useState<FaceMarks>(anchors.marks);
   const [confirmed, setConfirmed] = useState(false);
   const [reasons, setReasons] = useState<FitReason[]>(anchors.validation.reasons);
@@ -204,11 +213,8 @@ function Editor({
   const statementBox = useRef<HTMLInputElement>(null);
   const latest = useRef(0);
   const edited = JSON.stringify(marks) !== JSON.stringify(anchors.marks);
+  const footer = footerPlan("publish");
 
-  const setFixing = (next: boolean) => {
-    setFixingState(next);
-    onFixing(next);
-  };
   useEffect(() => {
     onFixing(!found);
     // Once, for these anchors (the editor is keyed by them).
@@ -296,7 +302,7 @@ function Editor({
     }
     if (outcome.error.code === "fit_invalid" && Array.isArray(outcome.error.body.reasons)) {
       setReasons(outcome.error.body.reasons as FitReason[]);
-      setFixing(true);
+      setView("points");
     }
   };
 
@@ -306,10 +312,19 @@ function Editor({
   };
 
   const texture = image?.url ?? "";
+  const [imgW, imgH] = anchors.image_size;
+  // As large as the viewport allows: the picture's height fits between the
+  // bars, its width follows its shape.
+  const ratio = imgW / Math.max(1, imgH);
+  const fit = { maxWidth: `max(${Math.round(300 * ratio)}px, min(100%, calc((100dvh - 27.5rem) * ${ratio})))` };
+
   const preview = (
-    <div className={`relative overflow-hidden rounded-3xl border border-gray-200 dark:border-line ${PICTURE_BACKDROP}`}>
+    <div
+      className={`relative overflow-hidden rounded-3xl border border-gray-200 dark:border-line ${PICTURE_BACKDROP}
+        [&_canvas]:block [&_canvas]:max-h-[max(300px,calc(100dvh-27.5rem))] [&_canvas]:max-w-full [&_canvas]:!w-auto`}
+    >
       {rigUrl && texture ? (
-        <AvatarPreview rigUrl={rigUrl} textureUrl={texture} size={fixing ? 320 : 520} soft onEngine={setEngine} />
+        <AvatarPreview rigUrl={rigUrl} textureUrl={texture} size={640} soft onEngine={setEngine} />
       ) : (
         <div className="grid aspect-square place-items-center p-6 text-center text-sm text-gray-500 dark:text-gray-400">
           {previewError ?? (
@@ -317,17 +332,6 @@ function Editor({
               <Spinner className="h-5 w-5 text-brand-600" /> {t("wzPreviewLoading")}
             </span>
           )}
-        </div>
-      )}
-      {rigUrl && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4 pt-12">
-          <SampleSpeech
-            engine={engine}
-            orgId={orgId}
-            text={t("wzSample")}
-            labels={{ play: t("wzPlay"), stop: t("wzStop") }}
-            className="pointer-events-auto inline-flex min-h-12 items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-gray-900 shadow-xl ring-1 ring-black/5 transition hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:opacity-60 motion-reduce:hover:scale-100 dark:bg-raised dark:text-white dark:ring-white/10 [&_svg]:text-brand-600"
-          />
         </div>
       )}
     </div>
@@ -341,39 +345,49 @@ function Editor({
         </div>
       )}
 
-      <div className={`grid gap-6 ${fixing ? "md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : "md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]"}`}>
-        <div>
-          {fixing && texture ? (
-            <>
-              {!found && (
-                <p className="mb-3 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100">
-                  <Icon name="target" className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>{t("wzNotFound")}</span>
-                </p>
-              )}
-              <MarkCanvas imageUrl={texture} imageSize={anchors.image_size} marks={marks} onChange={setMarks} />
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="btn-secondary min-h-10 px-3 text-xs"
-                  onClick={() => setMarks(anchors.marks)}
-                  disabled={!edited || busy !== null}
-                >
-                  <Icon name="undo" className="h-3.5 w-3.5" />
-                  {t("wzResetPoints")}
-                </button>
-                <span className="hidden self-center text-xs text-gray-500 dark:text-gray-400 sm:inline">{t("markFaceKeys")}</span>
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:gap-12">
+        {/* The picture, big, with its points on. */}
+        <div className="min-w-0">
+          <div className="mx-auto" style={fit}>
+            <div className="mb-3 flex justify-center">
+              <div
+                role="radiogroup"
+                aria-label={t("wzViewLabel")}
+                className="inline-flex gap-1 rounded-xl bg-gray-100 p-1 dark:bg-white/[0.05]"
+              >
+                {PUBLISH_VIEWS.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    {...viewRadio(v)}
+                    className={`inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-4 ${
+                      view === v
+                        ? "bg-white text-gray-900 shadow-sm ring-1 ring-black/5 dark:bg-raised dark:text-white dark:ring-white/10"
+                        : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                    }`}
+                  >
+                    <Icon name={v === "points" ? "target" : "speaker"} className="h-4 w-4" />
+                    {t(`wzView_${v}`)}
+                  </button>
+                ))}
               </div>
-            </>
-          ) : (
-            preview
-          )}
+            </div>
+
+            {view === "points" && texture && (
+              <>
+                <div className="overflow-hidden rounded-3xl border border-gray-200 dark:border-line [&>div]:rounded-none">
+                  <MarkCanvas imageUrl={texture} imageSize={anchors.image_size} marks={marks} onChange={setMarks} />
+                </div>
+              </>
+            )}
+            {/* Kept running while the points show, so Play needs no wait. */}
+            <div className={view === "preview" ? "" : "hidden"}>{preview}</div>
+          </div>
         </div>
 
+        {/* What was found, the sample, the name. */}
         <div className="flex flex-col gap-5">
-          {fixing ? (
-            <div className="max-w-xs md:max-w-none">{preview}</div>
-          ) : (
+          {found ? (
             <div>
               <p className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
                 <span className="grid h-6 w-6 place-items-center rounded-full bg-emerald-500 text-white">
@@ -392,8 +406,45 @@ function Editor({
                   </li>
                 ))}
               </ul>
+              <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">{t("wzPointsHint")}</p>
             </div>
+          ) : (
+            <p className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100">
+              <Icon name="target" className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{t("wzNotFound")}</span>
+            </p>
           )}
+
+          <div>
+            <button
+              type="button"
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg text-sm font-medium text-brand-700 hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline dark:text-brand-300 dark:disabled:text-gray-600"
+              onClick={() => setMarks(anchors.marks)}
+              disabled={!edited || busy !== null}
+            >
+              <Icon name="undo" className="h-4 w-4" />
+              {t("wzResetPoints")}
+            </button>
+            <details className="group mt-1 hidden text-xs text-gray-500 dark:text-gray-400 sm:block">
+              <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1 font-medium hover:text-gray-700 dark:hover:text-gray-200">
+                <Icon name="chevron" className="h-3.5 w-3.5 transition-transform group-open:rotate-90 rtl:-scale-x-100" />
+                {t("wzKeysTitle")}
+              </summary>
+              <p className="mt-1 leading-relaxed">{t("markFaceKeys")}</p>
+            </details>
+          </div>
+
+          {/* Playing the sample shows the talking preview. */}
+          <div onClickCapture={() => setView("preview")}>
+            <SampleSpeech
+              engine={engine}
+              orgId={orgId}
+              text={t("wzSample")}
+              labels={{ play: t("wzPlay"), stop: t("wzStop") }}
+              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 text-sm font-semibold text-gray-900 shadow-sm transition hover:border-brand-300 hover:bg-brand-50/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:opacity-60 dark:border-line dark:bg-raised dark:text-white dark:hover:border-brand-500/40 [&_svg]:text-brand-600"
+            />
+            {previewError && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{previewError}</p>}
+          </div>
 
           {blocked && (
             <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100">
@@ -431,51 +482,31 @@ function Editor({
             </label>
           )}
 
-          {found && (
-            <button
-              type="button"
-              className="inline-flex min-h-10 items-center gap-2 self-start rounded-lg text-sm font-medium text-brand-700 hover:underline disabled:opacity-50 dark:text-brand-300"
-              onClick={() => setFixing(!fixing)}
-              disabled={busy !== null}
-              aria-expanded={fixing}
-            >
-              <Icon name={fixing ? "check" : "target"} className="h-4 w-4" />
-              {fixing ? t("wzDoneFixing") : t("wzFixPoints")}
-            </button>
-          )}
-
-          <div className="rounded-xl bg-gray-50 p-3 text-sm dark:bg-white/[0.04]">
+          <div className="rounded-2xl bg-gray-50 p-4 text-sm dark:bg-white/[0.04]">
             <p className="text-gray-600 dark:text-gray-300">
               {t("wzPublishAs")} <strong className="font-semibold text-gray-900 dark:text-white">{name}</strong>
             </p>
             <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{t("wzPublishHint")}</p>
           </div>
 
-          <div className="mt-auto flex flex-col-reverse gap-3 border-t border-gray-100 pt-5 dark:border-line sm:flex-row sm:items-center sm:justify-between">
-            <button type="button" className="btn-secondary min-h-11" onClick={onBack} disabled={busy !== null}>
-              <Icon name="back" className="h-4 w-4 rtl:-scale-x-100" />
-              {t("wzBack")}
-            </button>
-            <div className="flex flex-col items-stretch gap-2 sm:items-end">
-              <button
-                type="button"
-                className="btn-primary min-h-12 px-7 text-[15px] shadow-sm shadow-brand-600/20"
-                onClick={() => void publish()}
-                disabled={Boolean(hold) || busy !== null}
-                aria-describedby={hold ? `${ids}-hold` : undefined}
-              >
-                {busy === "finish" ? <Spinner className="h-4 w-4" /> : <Icon name="bolt" className="h-4 w-4" strokeWidth={1.9} />}
-                {t("wzPublish")}
-              </button>
-              {hold && (
-                <p id={`${ids}-hold`} className="text-center text-xs text-gray-500 dark:text-gray-400 sm:text-end">
-                  {t(hold)}
-                </p>
-              )}
-            </div>
-          </div>
+          {hold && <PhoneNote id={`${ids}-hold`}>{t(hold)}</PhoneNote>}
         </div>
       </div>
+
+      <StepFooter back={footer.back && <BackButton onClick={onBack} disabled={busy !== null} />} note={hold ? t(hold) : null}>
+        {footer.primary === "publish" && (
+          <button
+            type="button"
+            className="btn-primary min-h-12 px-6 text-[15px] shadow-sm shadow-brand-600/20 sm:px-7"
+            onClick={() => void publish()}
+            disabled={Boolean(hold) || busy !== null}
+            aria-describedby={hold ? `${ids}-hold` : undefined}
+          >
+            {busy === "finish" ? <Spinner className="h-4 w-4" /> : <Icon name="bolt" className="h-4 w-4" strokeWidth={1.9} />}
+            {t("wzPublish")}
+          </button>
+        )}
+      </StepFooter>
     </div>
   );
 }

@@ -19,7 +19,7 @@ export function ModelStep({
 }) {
   const { t } = useTranslation();
   return (
-    <ul className="grid grid-cols-2 gap-3 sm:gap-5">
+    <ul className="mx-auto grid max-w-[1400px] grid-cols-2 gap-3 sm:gap-6 xl:gap-8">
       {MODELS.map((model) => (
         <li key={model}>
           <button
@@ -34,28 +34,28 @@ export function ModelStep({
                 chosen === model ? "border-brand-500 ring-1 ring-brand-500" : "border-gray-200 dark:border-line"
               }`}
           >
-            <span className="relative block aspect-square w-full overflow-hidden bg-gradient-to-b from-brand-50 via-orange-50 to-white dark:from-[#2a1d12] dark:via-[#1f1711] dark:to-raised">
+            <span className="relative block aspect-square w-full overflow-hidden bg-gradient-to-b md:aspect-[4/3] md:max-h-[min(56vh,560px)] from-brand-50 via-orange-50 to-white dark:from-[#2a1d12] dark:via-[#1f1711] dark:to-raised">
               {/* A soft halo behind the face. */}
               <span
                 aria-hidden="true"
-                className="absolute left-1/2 top-[58%] h-[78%] w-[62%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-200/60 blur-2xl dark:bg-brand-500/15"
+                className="absolute left-1/2 top-[58%] h-[78%] w-[62%] -translate-x-1/2 md:w-[46%] -translate-y-1/2 rounded-full bg-brand-200/60 blur-2xl dark:bg-brand-500/15"
               />
               <LookPicture
                 model={model}
                 look="animation"
-                className="absolute inset-0 h-full w-full transition-transform duration-300 group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+                className="absolute inset-y-0 left-1/2 aspect-square h-full w-auto max-w-none -translate-x-1/2 transition-transform duration-300 group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
               />
             </span>
-            <span className="flex flex-1 items-start justify-between gap-2 p-3 sm:p-5">
+            <span className="flex flex-1 items-start justify-between gap-2 p-3 sm:p-6">
               <span className="min-w-0">
-                <span className="block text-base font-semibold tracking-[-0.01em] sm:text-lg">{t(`wzModel_${model}`)}</span>
-                <span id={`model-hint-${model}`} className="mt-1 block text-xs leading-snug text-gray-500 dark:text-gray-400 sm:text-sm">
+                <span className="block text-base font-semibold tracking-[-0.01em] sm:text-xl">{t(`wzModel_${model}`)}</span>
+                <span id={`model-hint-${model}`} className="mt-1 block text-xs leading-snug text-gray-500 dark:text-gray-400 sm:text-[15px]">
                   {t(`wzModelHint_${model}`)}
                 </span>
               </span>
               <span
                 aria-hidden="true"
-                className="mt-0.5 hidden h-8 w-8 shrink-0 place-items-center rounded-full bg-gray-100 text-gray-500 transition-colors group-hover:bg-brand-600 group-hover:text-white dark:bg-white/[0.06] dark:text-gray-300 sm:grid"
+                className="mt-0.5 hidden h-10 w-10 shrink-0 place-items-center rounded-full bg-gray-100 text-gray-500 transition-colors group-hover:bg-brand-600 group-hover:text-white dark:bg-white/[0.06] dark:text-gray-300 sm:grid"
               >
                 <Icon name="arrow" className="h-4 w-4 rtl:-scale-x-100" strokeWidth={2} />
               </span>

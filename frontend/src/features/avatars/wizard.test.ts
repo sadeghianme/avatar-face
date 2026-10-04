@@ -32,6 +32,11 @@ import {
   screenFor,
   statementFor,
   statementToAsk,
+  footerPlan,
+  selectedVersion,
+  versionLabel,
+  versionOfStep,
+  versionsOf,
 } from "./wizard.ts";
 
 function memoryStore() {
@@ -319,5 +324,97 @@ describe("this tab's memory", () => {
     store.setItem("liveface.wizard.last", JSON.stringify({ model: "robot", look: "cartoon", source: "upload" }));
     assert.equal(recallChoices(store, null), null);
     assert.equal(recallChoices(null, null), null);
+  });
+});
+
+describe("versions", () => {
+  // An upload, its own photo prepared, an AI try, a change, the change removed.
+  const made = (id, from, instruction = null) =>
+    step(id, { from, adjust: { mode: "regenerate", instruction, rejected: null } });
+  const many = creation({
+    current: "cutout:1",
+    steps: [
+      step("original"),
+      step("framed", { from: "original" }),
+      step("cutout", { from: "framed", cutout: true }),
+      made("adjusted:0", "original"),
+      step("cutout:0", { from: "adjusted:0", cutout: true }),
+      made("adjusted:1", "adjusted:0", "shorter hair"),
+      step("cutout:1", { from: "adjusted:1", cutout: true }),
+      made("adjusted:10", "original"),
+      step("cutout:10", { from: "adjusted:10", cutout: true }),
+      made("adjusted:2", "original"),
+    ],
+    anchors: anchors("adjusted:1"),
+  });
+
+  it("lists the upload first, then each AI result in the order made, newest last", () => {
+    const list = versionsOf(many);
+    assert.deepEqual(list.map((v) => v.id), ["original", "adjusted:0", "adjusted:1", "adjusted:2", "adjusted:10"]);
+    assert.deepEqual(list.map((v) => v.number), [1, 2, 3, 4, 5]);
+    assert.deepEqual(list.map((v) => v.kind), ["photo", "ai", "change", "ai", "ai"]);
+    // Each shows its cut-out when it has one; the photo as it was prepared.
+    assert.deepEqual(list.map((v) => v.shown.id), ["cutout", "cutout:0", "cutout:1", "adjusted:2", "cutout:10"]);
+    assert.equal(list[2].instruction, "shorter hair");
+  });
+
+  it("knows the version in use, through its cut-out and the photo's framing", () => {
+    assert.equal(selectedVersion(many), "adjusted:1");
+    assert.equal(versionOfStep(many, "cutout"), "original");
+    assert.equal(versionOfStep(many, "framed"), "original");
+    assert.equal(versionOfStep(many, "cutout:10"), "adjusted:10");
+    assert.equal(versionOfStep(many, "nope"), null);
+    // Nothing made yet: nothing in use.
+    assert.equal(selectedVersion(creation()), null);
+  });
+
+  it("lets the upload be used only for a realistic plan, and prepares it first if need be", () => {
+    const fresh = creation({ steps: [step("original"), made("adjusted:0", "original")] });
+    const [photo] = versionsOf(fresh);
+    assert.equal(photo.selectable, true);
+    assert.equal(photo.needsPrepare, true);
+    assert.equal(photo.shown.id, "original");
+    const styled = creation({
+      plan: { model: "human", look: "cartoon", source: "upload", description: null },
+      steps: [step("original"), made("adjusted:0", "original")],
+    });
+    assert.equal(versionsOf(styled)[0].selectable, false);
+    assert.equal(versionsOf(styled)[0].needsPrepare, false);
+  });
+
+  it("has no upload for a character made from words: its first picture is the AI's", () => {
+    const words = creation({
+      plan: { model: "animal", look: "cartoon", source: "generate", description: "a fox" },
+      steps: [step("original", { generated: { model: "m", style: "illustrated", provider: "gemini" } }), made("adjusted:0", "original")],
+    });
+    const list = versionsOf(words);
+    assert.deepEqual(list.map((v) => v.kind), ["generated", "ai"]);
+    assert.ok(list.every((v) => v.selectable && !v.needsPrepare));
+  });
+
+  it("leaves out a result that failed its checks", () => {
+    const refused = creation({
+      steps: [step("original"), step("adjusted:0", { from: "original", adjust: { mode: "regenerate", rejected: { code: "x", detail: "" } } })],
+    });
+    assert.deepEqual(versionsOf(refused).map((v) => v.id), ["original"]);
+  });
+
+  it("names each version for its alt text", () => {
+    assert.deepEqual(versionLabel({ number: 3, kind: "change", instruction: "shorter hair" }), {
+      key: "wzVersionAlt_change",
+      values: { n: 3, change: "shorter hair" },
+    });
+    assert.equal(versionLabel({ number: 1, kind: "photo", instruction: null }).key, "wzVersionAlt_photo");
+  });
+});
+
+describe("the footer", () => {
+  it("puts Back on the left and the screen's one primary action on the right", () => {
+    assert.deepEqual(footerPlan("model"), { back: "avatars", primary: null });
+    assert.deepEqual(footerPlan("photo"), { back: "model", primary: "create" });
+    assert.deepEqual(footerPlan("prepare"), { back: "photo", primary: null });
+    assert.deepEqual(footerPlan("prepare", { prepared: true }), { back: "photo", primary: "continue" });
+    assert.deepEqual(footerPlan("publish"), { back: "prepare", primary: "publish" });
+    assert.deepEqual(footerPlan("publish", { building: true }), { back: null, primary: null });
   });
 });

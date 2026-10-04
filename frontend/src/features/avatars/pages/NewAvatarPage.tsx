@@ -17,11 +17,11 @@ export function NewAvatarPage() {
   const [params] = useSearchParams();
   if (!current) return null;
   return (
-    <div>
-      {/* Keyed by the creation: a new one is a new wizard, not the old
-          one's state carried over. */}
-      <NewWizard key={creationId ?? "new"} orgId={current.id} creationId={creationId} />
+    // Keyed by the creation: a new one is a new wizard, not the old one's
+    // state carried over. The other ways sit inside the wizard's scroll
+    // area, above its fixed action bar.
+    <NewWizard key={creationId ?? "new"} orgId={current.id} creationId={creationId}>
       {!creationId && !params.get("model") && <OtherWays orgId={current.id} />}
-    </div>
+    </NewWizard>
   );
 }

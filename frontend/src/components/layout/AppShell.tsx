@@ -51,6 +51,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { theme, toggle } = useTheme();
   const [open, setOpen] = useState(false);
   const crumb = useCrumb();
+  // The creation wizard uses the whole content area beside the rail, with
+  // its own sticky progress and fixed action bar (features/avatars wizard).
+  const wide = useLocation().pathname.startsWith("/avatars/new");
   const { current, loading, setupFailed, retrySetup } = useOrg();
   const initial = (user?.display_name || user?.username || "?").charAt(0).toUpperCase();
 
@@ -128,8 +131,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
 
       <div className="lg:ms-[232px]">
-        <header className="sticky top-0 z-30 border-b border-black/[0.07] bg-white/80 backdrop-blur-xl dark:border-white/[0.07] dark:bg-ink/80">
-          <div className="mx-auto flex max-w-[1360px] items-center gap-3 px-5 py-2.5 sm:px-8">
+        <header className="sticky top-0 z-30 h-14 border-b border-black/[0.07] bg-white/80 backdrop-blur-xl dark:border-white/[0.07] dark:bg-ink/80">
+          <div
+            className={`flex h-full items-center gap-3 px-5 sm:px-8 ${wide ? "lg:px-10" : "mx-auto max-w-[1360px]"}`}
+          >
             <button
               aria-label="menu"
               className="-ms-1 rounded-lg p-1.5 text-gray-500 hover:bg-black/5 lg:hidden dark:hover:bg-white/10"
@@ -153,7 +158,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="mx-auto max-w-[1360px] px-5 py-8 sm:px-8 sm:py-10">
+        <main className={wide ? "px-5 sm:px-8 lg:px-10" : "mx-auto max-w-[1360px] px-5 py-8 sm:px-8 sm:py-10"}>
           {current ? (
             children
           ) : setupFailed ? (

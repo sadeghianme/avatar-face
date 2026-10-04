@@ -9,10 +9,11 @@
  * 3 Prepare  automatic: the background comes off and the AI makes the
  *            picture in the look, ready to speak (services.wizard); Retry,
  *            "describe a change", and for a realistic upload "use my
- *            original photo";
- * 4 Publish  the face found by itself, a talking preview, Publish (the
- *            points editor only when the face was not found, or on "Fix
- *            points"); a person's own mouth is made while it publishes.
+ *            original photo"; every version is kept and any can be taken
+ *            back (POST /version);
+ * 4 Publish  the face found by itself, its points on the picture to drag
+ *            if one is off, a talking preview, Publish; a person's own
+ *            mouth is made while it publishes.
  *
  * Steps 1 and 2 are this page's state (the URL's `?model=`); from step 3 on
  * there is a creation, whose `plan` says what was chosen. Framework-free
@@ -25,6 +26,7 @@ import type {
   CreationJob,
   CreationStep,
   DraftStore,
+  StepId,
 } from "@/features/avatars/creation";
 import type { FaceType } from "@/lib/types";
 
@@ -342,6 +344,147 @@ export function canUseOriginal(plan: Plan): boolean {
 /** AI tries left on step 3 (six per creation). */
 export function triesLeft(creation: WizardCreation): number {
   return creation.ai?.prepare_rounds_left ?? 0;
+}
+
+// --- Step 3: every version kept --------------------------------------------------------
+
+/** A picture made on step 3, kept to go back to (POST /version): the upload
+ * ("original") or an AI result ("adjusted:N"), each with its cut-out. */
+export type VersionKind = "photo" | "ai" | "change" | "generated";
+
+export interface Version {
+  /** "original" or "adjusted:N": what POST /version takes. */
+  id: StepId;
+  /** 1-based, in the strip's order. */
+  number: number;
+  kind: VersionKind;
+  /** The owner's words, on a change. */
+  instruction: string | null;
+  /** The picture to show for it: its cut-out when it has one. */
+  shown: CreationStep;
+  /** Can it be the picture used? Not the upload of a stylised plan (the
+   * avatar is made of the AI's picture), not a result that failed its checks. */
+  selectable: boolean;
+  /** An upload "use my original photo" has not prepared yet: choosing it
+   * prepares it (no AI) rather than switching to it. */
+  needsPrepare: boolean;
+}
+
+const ADJUSTED = "adjusted:";
+
+function adjustedNumber(id: string): number | null {
+  if (!id.startsWith(ADJUSTED)) return null;
+  const tail = id.slice(ADJUSTED.length);
+  return /^\d+$/.test(tail) ? Number(tail) : null;
+}
+
+/** The version the image `stepId` belongs to: a cut-out is its source's,
+ * the upload's framing is the upload's. */
+export function versionOfStep(creation: Pick<Creation, "steps">, stepId: string | null | undefined): StepId | null {
+  const byId = new Map(creation.steps.map((s) => [s.id as string, s]));
+  let id = stepId ?? null;
+  const seen = new Set<string>();
+  while (id && byId.has(id) && !seen.has(id)) {
+    seen.add(id);
+    if (id === "original" || adjustedNumber(id) !== null) return id as StepId;
+    if (id === "framed") return "original";
+    // A cut-out ("cutout", "cutout:N") is the version it was cut from.
+    const step = byId.get(id)!;
+    if (!step.cutout || !step.from) return null;
+    id = step.from;
+  }
+  return null;
+}
+
+/** Every version, the upload first, then each AI result in the order made
+ * (newest last). A character made from words has no upload: its first
+ * picture is the AI's. */
+export function versionsOf(creation: WizardCreation): Version[] {
+  const plan = planOf(creation);
+  const byId = new Map(creation.steps.map((s) => [s.id as string, s]));
+  const cutOf = (id: string): CreationStep | null => {
+    const n = adjustedNumber(id);
+    const cut = byId.get(n === null ? "cutout" : `cutout:${n}`);
+    return cut && cut.from === id ? cut : null;
+  };
+  const out: Version[] = [];
+  const original = byId.get("original");
+  if (original) {
+    const upload = plan.source === "upload";
+    const framed = upload ? byId.get("framed") ?? null : null;
+    const base = framed ?? original;
+    const cut = cutOf(base.id);
+    const last = (creation.ai?.last_prepare ?? null) as LastPrepare | null;
+    const prepared = !upload || Boolean(framed || cut || last?.mode === "original");
+    out.push({
+      id: "original",
+      number: 0,
+      kind: upload ? "photo" : "generated",
+      instruction: null,
+      shown: prepared ? cut ?? base : original,
+      selectable: !upload || canUseOriginal(plan),
+      needsPrepare: upload && canUseOriginal(plan) && !prepared,
+    });
+  }
+  const made = creation.steps
+    .filter((s) => adjustedNumber(s.id) !== null && !s.adjust?.rejected)
+    .sort((a, b) => adjustedNumber(a.id)! - adjustedNumber(b.id)!);
+  for (const step of made) {
+    const adjust = (step.adjust ?? null) as (CreationStep["adjust"] & { instruction?: string | null }) | null;
+    const instruction = adjust?.instruction?.trim() || null;
+    out.push({
+      id: step.id,
+      number: 0,
+      kind: instruction ? "change" : "ai",
+      instruction,
+      shown: cutOf(step.id) ?? step,
+      selectable: true,
+      needsPrepare: false,
+    });
+  }
+  return out.map((v, i) => ({ ...v, number: i + 1 }));
+}
+
+/** The version in use: the current picture's, once step 3 has made one. */
+export function selectedVersion(creation: WizardCreation): StepId | null {
+  return preparedStep(creation) ? versionOfStep(creation, creation.current) : null;
+}
+
+/** The words that name a version (its alt text), as an i18n key and its
+ * values: "Version 3: change “shorter hair”". */
+export function versionLabel(version: Pick<Version, "number" | "kind" | "instruction">): {
+  key: string;
+  values: Record<string, string | number>;
+} {
+  return {
+    key: `wzVersionAlt_${version.kind}`,
+    values: { n: version.number, change: version.instruction ?? "" },
+  };
+}
+
+// --- The footer -------------------------------------------------------------------------
+
+/** What the wizard's fixed footer offers on each screen: Back on the left
+ * (where it goes), the screen's one primary action on the right. */
+export interface FooterPlan {
+  back: "avatars" | "model" | "photo" | "prepare" | null;
+  primary: "create" | "continue" | "publish" | null;
+}
+
+export function footerPlan(
+  screen: Screen,
+  state: { prepared?: boolean; building?: boolean } = {}
+): FooterPlan {
+  switch (screen) {
+    case "model":
+      return { back: "avatars", primary: null };
+    case "photo":
+      return { back: "model", primary: "create" };
+    case "prepare":
+      return { back: "photo", primary: state.prepared ? "continue" : null };
+    case "publish":
+      return state.building ? { back: null, primary: null } : { back: "prepare", primary: "publish" };
+  }
 }
 
 // --- Step 4 ---------------------------------------------------------------------------

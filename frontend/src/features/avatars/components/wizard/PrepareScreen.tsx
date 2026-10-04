@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { BackButton, BarAction, StepFooter } from "@/features/avatars/components/wizard/Footer";
 import { Result, Working } from "@/features/avatars/components/wizard/Pictures";
+import { VersionStrip } from "@/features/avatars/components/wizard/Versions";
 import {
   errorText,
   isJobActive,
@@ -30,7 +32,11 @@ import {
   triesLeft,
   freeClearsLeft,
   clearBody,
+  footerPlan,
+  selectedVersion,
+  versionsOf,
   type LastPrepare,
+  type Version,
   type PrepareBody,
   type PrepareStage,
   type WizardCreation,
@@ -56,6 +62,9 @@ function tabStore(): DraftStore | null {
  * stages ticked off (Working). Then the result, big, compared with the
  * upload on a slider; Retry, "Describe a change" (the owner's words, on
  * the picture made), and for a realistic upload "Use my original photo".
+ * Nothing is lost by any of them: every version is kept, in a strip under
+ * the picture, and choosing one makes it the picture used (the server's
+ * POST /version, so a reload shows the same).
  * Every failure says why and what to do next: try again, use the photo as
  * it is, or go Back and change what was given.
  */
@@ -94,6 +103,8 @@ export function PrepareScreen({
   // agreement, or a draft whose agreement this tab does not know).
   const [askAi, setAskAi] = useState(false);
   const [agree, setAgree] = useState(false);
+  // The version being switched to, while the server does it.
+  const [pending, setPending] = useState<string | null>(null);
   const ids = useId();
 
   const prepare = (body: PrepareBody, agreed?: string) =>
@@ -219,17 +230,13 @@ export function PrepareScreen({
     </div>
   );
 
-  const backButton = (
-    <button type="button" className="btn-secondary min-h-11" onClick={onBack} disabled={busy !== null}>
-      <Icon name="back" className="h-4 w-4 rtl:-scale-x-100" />
-      {t("wzBack")}
-    </button>
-  );
+  const footer = footerPlan("prepare", { prepared: Boolean(result) });
+  const backButton = <BackButton onClick={onBack} disabled={busy !== null} />;
 
   if (!result) {
     if (working || (phase === "waiting" && !askAi)) {
       return (
-        <div className="space-y-6">
+        <>
           <Working
             before={before}
             model={plan.model}
@@ -239,13 +246,13 @@ export function PrepareScreen({
             fraction={fraction}
             hint={t(lastWasOriginal || choices?.intent === "original" ? "wzWorkingHintOriginal" : "wzWorkingHint")}
           />
-          <div className="flex border-t border-gray-100 pt-5 dark:border-line">{backButton}</div>
-        </div>
+          <StepFooter back={footer.back && backButton} />
+        </>
       );
     }
     // Failed with nothing to show, or waiting for the owner's agreement.
     return (
-      <div className="space-y-5">
+      <div className="max-w-2xl space-y-5">
         {failureText && phase === "failed" && (
           <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100">
             <p className="flex items-start gap-2">
@@ -277,9 +284,7 @@ export function PrepareScreen({
           </div>
         )}
         {askAi && agreementPanel}
-        {!(failureText && phase === "failed") && (
-          <div className="flex border-t border-gray-100 pt-5 dark:border-line">{backButton}</div>
-        )}
+        <StepFooter back={footer.back && backButton} />
       </div>
     );
   }
@@ -287,6 +292,7 @@ export function PrepareScreen({
   // --- The result ----------------------------------------------------------------
   const applied = activeChange(last);
   const redoing = working || busy === "prepare" || busy === "change" || busy === "retry";
+  const switching = busy === "version";
   const note = !last?.cut && last
     ? t("wzKeptBackground")
     : lastWasOriginal
@@ -294,22 +300,49 @@ export function PrepareScreen({
       : t("wzAiMadeNote");
   const applyChange = () => {
     const words = change.trim();
-    if (!words) return;
+    if (!words || redoing || busy !== null) return;
     void prepare({ mode: "change", instruction: words }).then((outcome) => {
       if (outcome.ok) setChange("");
     });
   };
+  const versions = versionsOf(creation);
+  const chooseVersion = (version: Version) => {
+    if (version.needsPrepare) {
+      // The photo as it is, never prepared yet: "use my original photo".
+      void prepare({ mode: "original" });
+      return;
+    }
+    setPending(version.id);
+    void run("version", () => api.post<Creation>(`${base}/version`, { version: version.id })).finally(() =>
+      setPending(null)
+    );
+  };
+  const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
   return (
-    <div className="grid gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-      <Result
-        before={before}
-        after={result}
-        busy={redoing}
-        busyLabel={stage ? t(`wzStage_${stage}`) : t("wzStage_create")}
-      />
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,1fr)] xl:gap-12">
+      <div className="min-w-0">
+        {/* As large as the viewport allows, never smaller than a phone's width. */}
+        {/* Big, yet with the versions under it in view on a laptop. */}
+        <div className="mx-auto w-full" style={{ maxWidth: "max(300px, min(100%, calc(100dvh - 31.5rem)))" }}>
+          <Result
+            before={before}
+            after={result}
+            busy={redoing || switching}
+            busyLabel={switching ? t("wzVersionLoading") : stage ? t(`wzStage_${stage}`) : t("wzStage_create")}
+          />
+        </div>
+        <VersionStrip
+          versions={versions}
+          selected={selectedVersion(creation)}
+          pending={pending}
+          disabled={redoing || busy !== null}
+          onChoose={chooseVersion}
+        />
+      </div>
+
       <div className="flex flex-col gap-5">
-        <p className="flex items-start gap-2 rounded-xl bg-gray-50 p-3 text-sm text-gray-700 dark:bg-white/[0.04] dark:text-gray-300">
+        <p className="flex items-start gap-2.5 rounded-2xl bg-gray-50 p-4 text-sm text-gray-700 dark:bg-white/[0.04] dark:text-gray-300">
           <Icon name={lastWasOriginal ? "image" : "sparkles"} className="mt-0.5 h-4 w-4 shrink-0 text-brand-600 dark:text-brand-300" />
           <span>
             {note}
@@ -351,7 +384,7 @@ export function PrepareScreen({
 
         {canAi && !askAi && (
           <form
-            className="space-y-2"
+            className="space-y-2.5"
             onSubmit={(e) => {
               e.preventDefault();
               applyChange();
@@ -360,16 +393,31 @@ export function PrepareScreen({
             <label htmlFor={`${ids}-change`} className="label mb-0">
               {t("wzChangeLabel")}
             </label>
-            <div className="flex gap-2">
-              <input
-                id={`${ids}-change`}
-                className="input min-h-11"
-                maxLength={MAX_WORDS}
-                placeholder={t("wzChangePlaceholder")}
-                value={change}
-                onChange={(e) => setChange(e.target.value)}
-                disabled={redoing || busy !== null}
-              />
+            <textarea
+              id={`${ids}-change`}
+              rows={3}
+              className="input min-h-[96px] resize-y text-[15px] leading-relaxed"
+              maxLength={MAX_WORDS}
+              placeholder={t("wzChangePlaceholder")}
+              value={change}
+              onChange={(e) => setChange(e.target.value)}
+              onKeyDown={(e) => {
+                // Cmd/Ctrl+Enter applies; Enter alone is a new line.
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  applyChange();
+                }
+              }}
+              aria-describedby={`${ids}-change-keys`}
+              // Read-only, not disabled, while a picture is made: the focus
+              // stays in the box (a disabled one drops it to the page).
+              readOnly={redoing || busy !== null}
+              aria-busy={redoing || busy !== null}
+            />
+            <div className="flex items-center justify-end gap-3 sm:justify-between">
+              <p id={`${ids}-change-keys`} className="hidden text-xs text-gray-500 dark:text-gray-400 sm:block">
+                {t("wzChangeShortcut", { keys: mac ? "⌘ Enter" : "Ctrl + Enter" })}
+              </p>
               <button type="submit" className="btn-secondary min-h-11 shrink-0" disabled={!change.trim() || redoing || busy !== null}>
                 {busy === "change" ? <Spinner className="h-4 w-4" /> : <Icon name="pencil" className="h-4 w-4" />}
                 {t("wzApply")}
@@ -378,60 +426,52 @@ export function PrepareScreen({
           </form>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          {canAi && !askAi && !lastWasOriginal && (
-            <button
-              type="button"
-              className="btn-secondary min-h-11"
-              onClick={() => void prepare(retryBody(plan, last))}
-              disabled={redoing || busy !== null}
-            >
-              <Icon name="refresh" className="h-4 w-4" />
-              {t("wzRetry")}
-            </button>
-          )}
-          {canAi && !askAi && lastWasOriginal && (
-            <button
-              type="button"
-              className="btn-secondary min-h-11"
-              onClick={() => (typeof consentId === "string" ? void prepare({ mode: "ai" }) : setAskAi(true))}
-              disabled={redoing || busy !== null}
-            >
-              <Icon name="sparkles" className="h-4 w-4" />
-              {t("wzUseAi")}
-            </button>
-          )}
-          {originalOffered && !lastWasOriginal && (
-            <button
-              type="button"
-              className="btn-secondary min-h-11"
-              onClick={() => void prepare({ mode: "original" })}
-              disabled={redoing || busy !== null}
-            >
-              <Icon name="image" className="h-4 w-4" />
-              {t("wzUseOriginal")}
-            </button>
-          )}
-        </div>
         {aiOn && (
-          <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
             {tries > 0 ? t("wzTriesLeft", { count: tries }) : t("wzNoTries")}
           </p>
         )}
+      </div>
 
-        <div className="mt-auto flex flex-col-reverse gap-3 border-t border-gray-100 pt-5 dark:border-line sm:flex-row sm:items-center sm:justify-between md:flex-col-reverse md:items-stretch lg:flex-row lg:items-center">
-          {backButton}
+      <StepFooter back={footer.back && <BackButton onClick={onBack} disabled={busy !== null} compact />}>
+        {canAi && !askAi && !lastWasOriginal && (
+          <BarAction
+            icon="refresh"
+            label={t("wzRetry")}
+            onClick={() => void prepare(retryBody(plan, last))}
+            disabled={redoing || busy !== null}
+            busy={busy === "prepare" && redoing}
+          />
+        )}
+        {canAi && !askAi && lastWasOriginal && (
+          <BarAction
+            icon="sparkles"
+            label={t("wzUseAi")}
+            onClick={() => (typeof consentId === "string" ? void prepare({ mode: "ai" }) : setAskAi(true))}
+            disabled={redoing || busy !== null}
+          />
+        )}
+        {originalOffered && !lastWasOriginal && (
+          <BarAction
+            icon="image"
+            label={t("wzUseOriginal")}
+            onClick={() => void prepare({ mode: "original" })}
+            disabled={redoing || busy !== null}
+          />
+        )}
+        {footer.primary === "continue" && (
           <button
             type="button"
-            className="btn-primary min-h-12 px-6 text-[15px] shadow-sm shadow-brand-600/20"
+            className="btn-primary min-h-12 whitespace-nowrap px-5 text-[15px] shadow-sm shadow-brand-600/20 sm:px-6"
             onClick={onContinue}
             disabled={redoing || busy !== null}
           >
-            {t("wzContinue")}
+            <span className="sm:hidden">{t("wzContinueShort")}</span>
+            <span className="hidden sm:inline">{t("wzContinue")}</span>
             <Icon name="arrow" className="h-4 w-4 rtl:-scale-x-100" strokeWidth={2} />
           </button>
-        </div>
-      </div>
+        )}
+      </StepFooter>
     </div>
   );
 }

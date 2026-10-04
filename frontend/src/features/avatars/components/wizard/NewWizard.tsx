@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { ActionErrorNote } from "@/features/avatars/components/create/JobProgress";
+import { FooterSlot, StepFooter } from "@/features/avatars/components/wizard/Footer";
 import { ModelStep } from "@/features/avatars/components/wizard/ModelStep";
 import { PhotoStep } from "@/features/avatars/components/wizard/PhotoStep";
 import { PrepareScreen } from "@/features/avatars/components/wizard/PrepareScreen";
@@ -39,6 +40,7 @@ import {
   type Screen,
   type WizardCreation,
 } from "@/features/avatars/wizard";
+import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, ApiError } from "@/lib/api";
 
@@ -67,7 +69,16 @@ function tabStore(): DraftStore | null {
  * region, always mounted, for what the server is doing. Every error has a
  * next action beside it.
  */
-export function NewWizard({ orgId, creationId }: { orgId: string; creationId?: string }) {
+export function NewWizard({
+  orgId,
+  creationId,
+  children,
+}: {
+  orgId: string;
+  creationId?: string;
+  /** Shown under the step, inside its scroll area (the other ways to add an avatar). */
+  children?: React.ReactNode;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -77,6 +88,8 @@ export function NewWizard({ orgId, creationId }: { orgId: string; creationId?: s
   const creation = loaded as WizardCreation | undefined;
   const { busy, error, setError, run } = useCreationActions(apply, refetch);
   const [fixing, setFixing] = useState(false);
+  // The action bar's element: the screens portal their buttons into it.
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const model = parseModel(params.get("model"));
 
   const screen: Screen = !creationId ? (model ? "photo" : "model") : creation ? screenFor(creation, params.get("step")) : "prepare";
@@ -153,7 +166,21 @@ export function NewWizard({ orgId, creationId }: { orgId: string; creationId?: s
 
   if (screen === "model") {
     intro = t("wzIntro_model");
-    body = <ModelStep chosen={recallChoices(tabStore(), null)?.model ?? null} onChoose={chooseModel} />;
+    body = (
+      <>
+        <ModelStep chosen={recallChoices(tabStore(), null)?.model ?? null} onChoose={chooseModel} />
+        <StepFooter
+          back={
+            <Link to="/app" className="btn-secondary min-h-11">
+              <Icon name="back" className="h-4 w-4 rtl:-scale-x-100" />
+              {t("wzCancel")}
+            </Link>
+          }
+        >
+          <p className="text-end text-sm text-gray-500 dark:text-gray-400">{t("wzModelPick")}</p>
+        </StepFooter>
+      </>
+    );
   } else if (screen === "photo" && model) {
     intro = t(`wzIntro_photo_${model}`);
     const last = recallChoices(tabStore(), null);
@@ -171,14 +198,16 @@ export function NewWizard({ orgId, creationId }: { orgId: string; creationId?: s
   } else if (loadError && (!creation || gone)) {
     title = t("wzHeading_prepareFailed");
     body = (
-      <div className="space-y-4">
+      <>
         <p role="alert" className="text-sm text-gray-600 dark:text-gray-300">
           {gone ? t("createErr_creation_not_found") : t("error")}
         </p>
-        <Link to="/avatars/new" className="btn-primary min-h-11">
-          {t("createStartNew")}
-        </Link>
-      </div>
+        <StepFooter>
+          <Link to="/avatars/new" className="btn-primary min-h-11">
+            {t("createStartNew")}
+          </Link>
+        </StepFooter>
+      </>
     );
   } else if (isLoading || !creation) {
     body = (
@@ -188,12 +217,14 @@ export function NewWizard({ orgId, creationId }: { orgId: string; creationId?: s
     );
   } else if (creation.status === "expired") {
     body = (
-      <div className="space-y-4">
+      <>
         <p className="text-sm text-gray-600 dark:text-gray-300">{t("createExpired")}</p>
-        <Link to="/avatars/new" className="btn-primary min-h-11">
-          {t("createStartNew")}
-        </Link>
-      </div>
+        <StepFooter>
+          <Link to="/avatars/new" className="btn-primary min-h-11">
+            {t("createStartNew")}
+          </Link>
+        </StepFooter>
+      </>
     );
   } else if (screen === "prepare") {
     const phase = preparePhase(creation);
@@ -231,20 +262,33 @@ export function NewWizard({ orgId, creationId }: { orgId: string; creationId?: s
 
   const actionError = error ? errorText(t, error.code, error.detail, error.retryAfter) : null;
   return (
-    <div className="mx-auto max-w-4xl">
-      <p className="mb-3 text-sm font-medium text-gray-500 dark:text-gray-400">{t("wzTitle")}</p>
-      <ProgressHeader screen={screen} />
-      <section aria-labelledby="wizard-heading" className="card p-5 sm:p-8">
-        <h1
-          id="wizard-heading"
-          ref={heading}
-          tabIndex={-1}
-          className="text-2xl font-semibold tracking-[-0.02em] outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:text-[28px]"
-        >
-          {title}
-        </h1>
-        {intro && <p className="mb-6 mt-1.5 text-sm text-gray-500 dark:text-gray-400 sm:text-[15px]">{intro}</p>}
-        {!intro && <div className="mb-6" />}
+    <FooterSlot value={slot}>
+      {/* The progress stays at the top of the content area, full-bleed
+          across it (the main column's padding undone), the steps centred. */}
+      <div className="sticky top-14 z-20 -mx-5 border-b border-black/[0.06] bg-white/85 px-5 backdrop-blur-xl dark:border-white/[0.06] dark:bg-ink/85 sm:-mx-8 sm:px-8 lg:-mx-10 lg:px-10">
+        <ProgressHeader screen={screen} />
+      </div>
+
+      {/* The step scrolls between the bars; its foot is padded past the
+          fixed action bar (and the iPhone's home indicator under it). */}
+      <section
+        aria-labelledby="wizard-heading"
+        className="pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-6 sm:pt-8"
+      >
+        <header className="mb-6 sm:mb-7">
+          <p className="mb-1 text-sm font-medium text-gray-500 dark:text-gray-400">{t("wzTitle")}</p>
+          {/* Focused on every change of screen, for screen readers: no
+              ring, it is not a control. */}
+          <h1
+            id="wizard-heading"
+            ref={heading}
+            tabIndex={-1}
+            className="scroll-mt-32 text-2xl font-semibold tracking-[-0.02em] outline-none sm:text-[28px]"
+          >
+            {title}
+          </h1>
+          {intro && <p className="mt-2 max-w-3xl text-sm text-gray-500 dark:text-gray-400 sm:text-[15px]">{intro}</p>}
+        </header>
         {reconnecting && (
           <p className="mb-4 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
             <Spinner className="h-4 w-4" /> {t("createReconnecting")}
@@ -252,11 +296,25 @@ export function NewWizard({ orgId, creationId }: { orgId: string; creationId?: s
         )}
         {body}
         <ActionErrorNote text={actionError} />
+        {children}
       </section>
+
+      {/* The step's actions: Back on the left, the primary one on the
+          right. A landmark, after the step in the DOM (Tab reaches it last),
+          fixed over the content area beside the rail. */}
+      <div
+        role="region"
+        aria-label={t("wzActionsLabel")}
+        className="fixed bottom-0 end-0 start-0 z-30 border-t border-black/[0.07] bg-white/90 backdrop-blur-xl dark:border-white/[0.08] dark:bg-ink/90 lg:start-[232px]"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div ref={setSlot} className="flex min-h-[72px] items-center px-4 py-3 sm:px-8 lg:px-10" />
+      </div>
+
       <p className="sr-only" aria-live="polite" role="status">
         {reconnecting ? t("createReconnecting") : announcement}
       </p>
       {consent.dialog}
-    </div>
+    </FooterSlot>
   );
 }
