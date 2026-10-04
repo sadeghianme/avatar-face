@@ -126,12 +126,22 @@ export function Working({
   );
 }
 
+/** The stage the result is compared on: the RESULT's own shape (an AI
+ * picture is often tall, the upload square), so the result fills it. */
+const RESULT_STAGE = "relative w-full overflow-hidden rounded-3xl border border-gray-200 dark:border-line";
+
 /**
  * The result, big. With a "before" (an upload), a slider compares them:
  * drag the handle, or use the arrow keys on it (a real range input, so a
  * screen reader hears where it is). Without one, the result alone. A
  * picture whose background came off sits on a checkerboard, so "no
  * background" is visible. `busy` dims it under a spinner while it is redone.
+ *
+ * The stage takes the result's aspect ratio and both pictures are drawn
+ * whole (contain): the result fills it, the upload sits letterboxed on the
+ * same stage. Drawing both "cover" into one square cropped them
+ * differently whenever their shapes differed (a whole head before, half a
+ * face after).
  */
 export function Result({
   before,
@@ -158,14 +168,17 @@ export function Result({
     <div className="absolute inset-0 overflow-hidden bg-white dark:bg-ink">
       <div className={`absolute inset-0 ${PICTURE_BACKDROP}`} />
       {transparent && <div className="absolute inset-0" style={CHECKER_STYLE} />}
-      <img src={after.url} alt={t("wzAfter")} className="absolute inset-0 h-full w-full object-cover object-top" draggable={false} />
+      <img src={after.url} alt={t("wzAfter")} className="absolute inset-0 h-full w-full object-contain" draggable={false} />
     </div>
   );
   return (
-    <div className={`${STAGE} ${PICTURE_BACKDROP} select-none`}>
+    <div
+      className={`${RESULT_STAGE} ${PICTURE_BACKDROP} select-none`}
+      style={{ aspectRatio: `${Math.max(1, after.width)} / ${Math.max(1, after.height)}` }}
+    >
       {before ? (
         <>
-          <img src={before.url} alt={t("wzBefore")} className="absolute inset-0 h-full w-full object-cover object-top" draggable={false} />
+          <img src={before.url} alt={t("wzBefore")} className="absolute inset-0 h-full w-full object-contain" draggable={false} />
           <div className="absolute inset-0" style={{ clipPath: `inset(0 0 0 ${split}%)` }}>
             {afterLayer}
           </div>

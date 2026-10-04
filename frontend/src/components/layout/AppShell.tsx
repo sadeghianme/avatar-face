@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const initial = (user?.display_name || user?.username || "?").charAt(0).toUpperCase();
 
   const sidebar = (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
       <Link
         to="/"
         className="flex items-center gap-2.5 px-5 pb-6 pt-5 text-[15px] font-semibold tracking-[-0.01em]"
@@ -124,14 +124,16 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="fixed inset-0 z-40 bg-black/50 lg:hidden"
             onClick={() => setOpen(false)}
           />
-          <aside className="fixed inset-y-0 start-0 z-50 w-[232px] bg-white lg:hidden dark:bg-panel">
+          {/* Fixed, so the body's side inset does not reach it: its own. */}
+          <aside className="fixed inset-y-0 start-0 z-50 box-content w-[232px] bg-white ps-[env(safe-area-inset-left)] lg:hidden dark:bg-panel">
             {sidebar}
           </aside>
         </>
       )}
 
       <div className="lg:ms-[232px]">
-        <header className="sticky top-0 z-30 h-14 border-b border-black/[0.07] bg-white/80 backdrop-blur-xl dark:border-white/[0.07] dark:bg-ink/80">
+        {/* 3.5rem under the status bar: the wizard's progress sticks just below it. */}
+        <header className="sticky top-0 z-30 h-[calc(3.5rem+env(safe-area-inset-top))] border-b pt-[env(safe-area-inset-top)] border-black/[0.07] bg-white/80 backdrop-blur-xl dark:border-white/[0.07] dark:bg-ink/80">
           <div
             className={`flex h-full items-center gap-3 px-5 sm:px-8 ${wide ? "lg:px-10" : "mx-auto max-w-[1360px]"}`}
           >

@@ -98,7 +98,7 @@ export function AuthShell({
       </aside>
 
       {/* ---- form side ---- */}
-      <main className="relative flex min-h-screen flex-col">
+      <main className="relative flex min-h-screen flex-col pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(60%_100%_at_50%_0%,rgba(249,115,22,0.10),transparent)] lg:hidden"

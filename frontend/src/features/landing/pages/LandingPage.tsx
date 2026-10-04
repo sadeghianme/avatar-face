@@ -21,7 +21,7 @@ export function LandingPage() {
   }, [t]);
 
   return (
-    <div className="min-h-screen bg-white text-gray-900 antialiased dark:bg-ink dark:text-gray-100">
+    <div className="min-h-screen bg-white pb-[env(safe-area-inset-bottom)] text-gray-900 antialiased dark:bg-ink dark:text-gray-100">
       <a
         href="#main"
         className="sr-only z-[60] rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white focus:not-sr-only focus:fixed focus:start-4 focus:top-4"

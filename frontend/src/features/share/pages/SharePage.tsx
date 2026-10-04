@@ -184,7 +184,7 @@ export function SharePage() {
 
   if (failed) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-950 px-6 text-center">
+      <div data-page-bg="night" className="flex min-h-screen items-center justify-center bg-gray-950 px-6 text-center">
         <div>
           <h1 className="text-xl font-semibold text-gray-100">{t("shareGoneTitle")}</h1>
           <p className="mt-2 text-sm text-gray-400">{t("shareGoneBody")}</p>
@@ -198,7 +198,10 @@ export function SharePage() {
        grow past the viewport, `flex-1` never bounds the middle row, and the
        canvas pushes the composer off the bottom of the screen. dvh so mobile
        browser chrome does not hide the input. */
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-gray-950">
+    <div
+      data-page-bg="night"
+      className="flex h-[100dvh] flex-col overflow-hidden bg-gray-950 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]"
+    >
       <header className="flex flex-wrap items-center gap-2 px-5 py-4">
         <h1 className="text-sm font-medium text-gray-300">{avatar?.name ?? ""}</h1>
         {/* A visitor is told when an AI made or changed this face. */}

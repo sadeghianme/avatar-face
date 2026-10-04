@@ -45,6 +45,13 @@ import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, ApiError } from "@/lib/api";
 
+/** The picture's width for its height to fit between the bars (the
+ * header, the progress and the title above, the action bar below). */
+function fitPicture(step: { width: number; height: number }): React.CSSProperties {
+  const ratio = Math.max(1, step.width) / Math.max(1, step.height);
+  return { maxWidth: `max(${Math.round(300 * ratio)}px, min(100%, calc((100dvh - 23.5rem) * ${ratio})))` };
+}
+
 function tabStore(): DraftStore | null {
   try {
     return window.sessionStorage;
@@ -320,11 +327,11 @@ export function PrepareScreen({
   const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,1fr)] xl:gap-12">
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:gap-12">
       <div className="min-w-0">
-        {/* As large as the viewport allows, never smaller than a phone's width. */}
-        {/* Big, yet with the versions under it in view on a laptop. */}
-        <div className="mx-auto w-full" style={{ maxWidth: "max(300px, min(100%, calc(100dvh - 31.5rem)))" }}>
+        {/* As big as Publish's: as tall as the viewport allows down to the
+            bar, in the result's own shape; the versions follow below. */}
+        <div className="mx-auto w-full" style={fitPicture(result)}>
           <Result
             before={before}
             after={result}

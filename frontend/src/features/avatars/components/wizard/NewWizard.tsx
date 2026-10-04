@@ -264,8 +264,10 @@ export function NewWizard({
   return (
     <FooterSlot value={slot}>
       {/* The progress stays at the top of the content area, full-bleed
-          across it (the main column's padding undone), the steps centred. */}
-      <div className="sticky top-14 z-20 -mx-5 border-b border-black/[0.06] bg-white/85 px-5 backdrop-blur-xl dark:border-white/[0.06] dark:bg-ink/85 sm:-mx-8 sm:px-8 lg:-mx-10 lg:px-10">
+          across it (the main column's padding undone), the steps centred.
+          On a short screen (a phone on its side) it scrolls away instead:
+          the step needs the height more. */}
+      <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-20 [@media(max-height:520px)]:static -mx-5 border-b border-black/[0.06] bg-white/85 px-5 backdrop-blur-xl dark:border-white/[0.06] dark:bg-ink/85 sm:-mx-8 sm:px-8 lg:-mx-10 lg:px-10">
         <ProgressHeader screen={screen} />
       </div>
 
@@ -306,7 +308,13 @@ export function NewWizard({
         role="region"
         aria-label={t("wzActionsLabel")}
         className="fixed bottom-0 end-0 start-0 z-30 border-t border-black/[0.07] bg-white/90 backdrop-blur-xl dark:border-white/[0.08] dark:bg-ink/90 lg:start-[232px]"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        // Fixed, so the body's side insets do not reach it: its own, and
+        // the home indicator's below.
+        style={{
+          paddingBottom: "env(safe-area-inset-bottom)",
+          paddingLeft: "env(safe-area-inset-left)",
+          paddingRight: "env(safe-area-inset-right)",
+        }}
       >
         <div ref={setSlot} className="flex min-h-[72px] items-center px-4 py-3 sm:px-8 lg:px-10" />
       </div>
