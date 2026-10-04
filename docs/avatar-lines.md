@@ -65,6 +65,12 @@ The owner's flow: **1 Model · 2 Photo · 3 Prepare · 4 Publish**.
             Result big, before/after slider; Retry, "Describe a change"
             (mode change, edits the AI picture), "Use my original photo"
             (realistic uploads: framed, cut out, no AI). Six AI tries.
+            "Remove this change" (`clear: true`, the plain picture again)
+            gives its try back: at most three per creation
+            (`FREE_CLEARS_PER_CREATION`, usable even with no tries left); each
+            is still a metered image call (monthly limit, usage log), and the
+            fourth counts as an ordinary try. A failed removal gives back its
+            free one; its Retry is a removal again.
 4 Publish   talking preview (preview-rig) with a play button; Publish =
             finish (a realistic person's mouth kit runs inside it, listed as
             stages). The points editor only when the face was not found
@@ -209,7 +215,7 @@ again (a chained background job, `cutout:N`).
 | `POST /{id}/retry` {consent_id?} | job | runs a failed job again; one that sends pixels out needs the retrying member's own consent |
 | `POST /creations` +{model, look} | job | the four-step wizard's upload: the line from the plan, kept as `plan` |
 | `POST /creations/generate` +{model, look} | job | the wizard's character prompt; cut-out and anchors in the same job |
-| `POST /{id}/prepare` {mode: ai\|change\|generate\|original, instruction?, consent_id?} | job | step 3: the picture in the look (adjusted:N), its cut-out (cutout:N) and anchors, in one write; six AI tries |
+| `POST /{id}/prepare` {mode: ai\|change\|generate\|original, instruction?, consent_id?, again?, clear?} | job | step 3: the picture in the look (adjusted:N), its cut-out (cutout:N) and anchors, in one write; six AI tries (`clear` redoes the plain picture without taking one, three per creation) |
 
 Races: a job records the `revision` it started from and stores its result only
 if the row is unchanged (`UPDATE … WHERE revision = :rev`). One active job per

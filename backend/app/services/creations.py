@@ -555,6 +555,8 @@ def ai_usage_of(creation: Creation) -> dict:
     usage.setdefault("vision_cache", [])
     # The four-step wizard's AI runs on step 3 (services.wizard).
     usage.setdefault("prepare_rounds", 0)
+    # "Remove this change" redos that gave their try back (services.wizard).
+    usage.setdefault("free_clears", 0)
     return usage
 
 

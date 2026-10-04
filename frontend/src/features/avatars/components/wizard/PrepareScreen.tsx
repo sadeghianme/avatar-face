@@ -21,7 +21,6 @@ import {
   MAX_WORDS,
   needsPrepare,
   planOf,
-  plainBody,
   prepareChecklist,
   preparedStep,
   preparePhase,
@@ -29,6 +28,8 @@ import {
   recallChoices,
   retryBody,
   triesLeft,
+  freeClearsLeft,
+  clearBody,
   type LastPrepare,
   type PrepareBody,
   type PrepareStage,
@@ -87,6 +88,7 @@ export function PrepareScreen({
   const aiOn = consent.aiEnabled && creation.ai?.enabled !== false;
   const consentId = consent.aiConsentId;
   const tries = triesLeft(creation);
+  const freeClear = freeClearsLeft(creation) > 0;
   const [change, setChange] = useState("");
   // The owner must agree before the AI is used here (a refused remembered
   // agreement, or a draft whose agreement this tab does not know).
@@ -319,17 +321,17 @@ export function PrepareScreen({
             {applied && (
               <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
                 {t("wzChangeApplied", { change: applied })}
-                {canAi && !askAi && (
+                {aiOn && !askAi && (canAi || freeClear) && (
                   <>
                     {" "}
                     <button
                       type="button"
                       className="inline min-h-6 rounded font-medium text-brand-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:opacity-50 dark:text-brand-300"
-                      onClick={() => void prepare(plainBody(plan))}
+                      onClick={() => void prepare(clearBody(plan))}
                       disabled={redoing || busy !== null}
-                      title={t("wzChangeClearHint")}
+                      title={t(freeClear ? "wzChangeClearHint" : "wzChangeClearPaidHint")}
                     >
-                      {t("wzChangeClear")}
+                      {t(freeClear ? "wzChangeClear" : "wzChangeClearPaid")}
                     </button>
                   </>
                 )}

@@ -634,3 +634,94 @@ async def test_a_declined_change_is_asked_once_more_on_the_crop_too(client, face
     assert body["job"]["state"] == "done", body["job"]
     assert len(images.calls) == 3
     assert body["current"] == "cutout:1"
+
+
+async def test_removing_a_change_gives_its_try_back_but_is_still_metered(
+    client, faces, images
+):
+    images.script = [studio(), studio(shirt=(150, 40, 40)), studio()]
+    headers, org_id = await _org(client, "clearer")
+    base, _ = await _upload(client, headers, org_id, look="cartoon")
+    consent_id = await ai_consent(client, headers, org_id)
+    await _prepare(client, headers, base, consent_id=consent_id)
+    await _prepare(
+        client, headers, base, mode="change", instruction="a red shirt", consent_id=consent_id
+    )
+    body = await _get(client, headers, base)
+    assert body["ai"]["prepare_rounds_left"] == wizard.PREPARE_ROUNDS_PER_CREATION - 2
+    assert body["ai"]["free_clears_left"] == wizard.FREE_CLEARS_PER_CREATION
+
+    cleared = await _prepare(client, headers, base, clear=True, consent_id=consent_id)
+    assert cleared.status_code == 202, cleared.text
+    body = await _get(client, headers, base)
+    assert body["job"]["state"] == "done", body["job"]
+    assert _step(body, "adjusted:2")["from"] == "original"
+    assert body["ai"]["last_prepare"]["instruction"] is None
+    # The try is not taken, the redo is one paid image call all the same.
+    assert body["ai"]["prepare_rounds_left"] == wizard.PREPARE_ROUNDS_PER_CREATION - 2
+    assert body["ai"]["free_clears_left"] == wizard.FREE_CLEARS_PER_CREATION - 1
+    assert len(images.calls) == 3
+    assert await _usage(org_id, IMAGE_KIND) == ["prepare"] * 3
+
+    bad = await _prepare(
+        client, headers, base, mode="change", instruction="x", clear=True, consent_id=consent_id
+    )
+    assert bad.status_code == 422 and bad.json()["code"] == "clear_not_plain"
+
+
+async def test_only_a_few_removals_per_creation_are_free_after_that_they_count(
+    client, faces, images, monkeypatch
+):
+    monkeypatch.setattr(wizard, "FREE_CLEARS_PER_CREATION", 2)
+    monkeypatch.setattr(wizard, "PREPARE_ROUNDS_PER_CREATION", 2)
+    images.script = [studio()] * 5
+    headers, org_id = await _org(client, "clear-cap")
+    base, _ = await _upload(client, headers, org_id, look="cartoon")
+    consent_id = await ai_consent(client, headers, org_id)
+    await _prepare(client, headers, base, consent_id=consent_id)
+    await _prepare(client, headers, base, consent_id=consent_id)
+    body = await _get(client, headers, base)
+    assert body["ai"]["prepare_rounds_left"] == 0
+    # No tries left, yet the free removals still work.
+    for left in (1, 0):
+        done = await _prepare(client, headers, base, clear=True, consent_id=consent_id)
+        assert done.status_code == 202, done.text
+        body = await _get(client, headers, base)
+        assert body["ai"]["prepare_rounds_left"] == 0
+        assert body["ai"]["free_clears_left"] == left
+    # The cap is reached: the next one is an ordinary try, refused with none left.
+    capped = await _prepare(client, headers, base, clear=True, consent_id=consent_id)
+    assert capped.status_code == 409 and capped.json()["code"] == "budget_spent"
+    assert len(images.calls) == 4
+
+    # And with a try left it counts.
+    monkeypatch.setattr(wizard, "PREPARE_ROUNDS_PER_CREATION", 3)
+    counted = await _prepare(client, headers, base, clear=True, consent_id=consent_id)
+    assert counted.status_code == 202, counted.text
+    body = await _get(client, headers, base)
+    assert body["ai"]["prepare_rounds_left"] == 0
+    assert body["ai"]["free_clears_left"] == 0
+
+
+async def test_a_removal_that_nothing_answered_gives_back_its_free_one(
+    client, faces, images
+):
+    images.script = [studio(), "error"]
+    headers, org_id = await _org(client, "clear-fail")
+    base, _ = await _upload(client, headers, org_id, look="cartoon")
+    consent_id = await ai_consent(client, headers, org_id)
+    await _prepare(client, headers, base, consent_id=consent_id)
+    await _prepare(client, headers, base, clear=True, consent_id=consent_id)
+    body = await _get(client, headers, base)
+    assert body["job"]["state"] == "failed"
+    assert body["ai"]["free_clears_left"] == wizard.FREE_CLEARS_PER_CREATION
+    assert body["ai"]["prepare_rounds_left"] == wizard.PREPARE_ROUNDS_PER_CREATION - 1
+
+    # Its retry is a removal again: free, not a try.
+    images.script = [studio()]
+    retried = await _run(client, headers, "POST", f"{base}/retry")
+    assert retried.status_code == 202, retried.text
+    body = await _get(client, headers, base)
+    assert body["job"]["state"] == "done"
+    assert body["ai"]["free_clears_left"] == wizard.FREE_CLEARS_PER_CREATION - 1
+    assert body["ai"]["prepare_rounds_left"] == wizard.PREPARE_ROUNDS_PER_CREATION - 1

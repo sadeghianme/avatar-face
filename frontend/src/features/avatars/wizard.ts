@@ -60,7 +60,7 @@ export interface LastPrepare {
 /** The creation fields this module reads beyond creation.ts's. */
 export type WizardCreation = Creation & {
   plan?: Plan | null;
-  ai: Creation["ai"] & { prepare_rounds_left?: number; last_prepare?: LastPrepare | null };
+  ai: Creation["ai"] & { prepare_rounds_left?: number; free_clears_left?: number; last_prepare?: LastPrepare | null };
 };
 
 /** Model × look → the line the avatar is rigged and rendered on
@@ -297,6 +297,9 @@ export interface PrepareBody {
   instruction?: string;
   /** With `change`: Retry of the last change (from the same base). */
   again?: boolean;
+  /** With `ai` or `generate`: "Remove this change". Costs no try while the
+   * creation's few free ones last (the server decides), still one image call. */
+  clear?: boolean;
 }
 
 /** The change in effect: the owner's last instruction, when the last try
@@ -309,6 +312,17 @@ export function activeChange(last: LastPrepare | null | undefined): string | nul
  * made anew, with no change in effect. */
 export function plainBody(plan: Plan): PrepareBody {
   return { mode: plan.source === "generate" ? "generate" : "ai" };
+}
+
+/** "Remove this change": the plain try, asked as a removal so it gives its
+ * try back. */
+export function clearBody(plan: Plan): PrepareBody {
+  return { ...plainBody(plan), clear: true };
+}
+
+/** Removals that still cost no try (three per creation). */
+export function freeClearsLeft(creation: WizardCreation): number {
+  return creation.ai?.free_clears_left ?? 0;
 }
 
 /** What Retry asks: "try again" means the same request. When the last try

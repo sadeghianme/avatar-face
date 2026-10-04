@@ -254,6 +254,7 @@ def _ai_out(creation: Creation, org: Organization | None, recommendation: dict |
         last_round=AdjustRoundOut(**last) if last and last["source"] else None,
         auto_adjust=_auto_adjust(creation) if enabled else None,
         prepare_rounds_left=max(0, wizard.PREPARE_ROUNDS_PER_CREATION - usage["prepare_rounds"]),
+        free_clears_left=max(0, wizard.FREE_CLEARS_PER_CREATION - usage["free_clears"]),
         last_prepare=usage.get("last_prepare"),
     )
 
@@ -1017,6 +1018,11 @@ async def _start_prepare(
             if body.mode != wizard.CHANGE:
                 raise Validation422("Only a change is tried again", code="again_not_a_change")
             params["again"] = True
+        if body.clear and body.mode not in (wizard.AI, wizard.GENERATE):
+            raise Validation422(
+                "Only the plain picture can be asked for with the change removed",
+                code="clear_not_plain",
+            )
         if body.mode == wizard.GENERATE and plan["source"] != "generate":
             raise Validation422(
                 "Only a character described in words is made again from its words",
@@ -1030,7 +1036,10 @@ async def _start_prepare(
                 "AI image making is not configured on this server", code="imagegen_unavailable"
             )
         usage = svc.ai_usage_of(creation)
-        if usage["prepare_rounds"] >= wizard.PREPARE_ROUNDS_PER_CREATION:
+        # "Remove this change" gives its try back while the free ones last
+        # (even with no tries left); still one metered image call.
+        free = body.clear and usage["free_clears"] < wizard.FREE_CLEARS_PER_CREATION
+        if not free and usage["prepare_rounds"] >= wizard.PREPARE_ROUNDS_PER_CREATION:
             raise Conflict409(
                 "This avatar has used all its AI tries; continue with the picture you have",
                 code="budget_spent",
@@ -1038,7 +1047,11 @@ async def _start_prepare(
         # Refused now rather than failing in the job: nothing is spent.
         await check_image_limit(db, creation.org_id)
         # Taken with the job, atomically: two presses cannot both pass.
-        usage["prepare_rounds"] += 1
+        if free:
+            usage["free_clears"] += 1
+            params["free"] = True
+        else:
+            usage["prepare_rounds"] += 1
         params["consent_id"] = agreed.id
         values["ai_usage"] = usage
         values["consent_ids"] = consent.with_consent(creation.consent_ids, agreed.id)
@@ -1293,6 +1306,7 @@ async def retry_job(
             mode=params.get("mode") or wizard.AI,
             instruction=params.get("instruction"),
             consent_id=given or params.get("consent_id"),
+            clear=bool(params.get("free")),
         )
         return await _start_prepare(db, creation, prepare, ctx.org, ctx.membership.user_id)
     if job.step == "detect":

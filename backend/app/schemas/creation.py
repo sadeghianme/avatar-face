@@ -135,6 +135,10 @@ class PrepareRequest(BaseModel):
     # again from the picture the last try was made from, not stacked on the
     # last result.
     again: bool = False
+    # With `ai` or `generate`: "Remove this change", the plain picture again.
+    # It gives its try back (up to wizard.FREE_CLEARS_PER_CREATION per
+    # creation; after that it counts) but is still metered as an image call.
+    clear: bool = False
 
 
 class PlanOut(BaseModel):
@@ -283,6 +287,8 @@ class AiOut(BaseModel):
     # was ({mode, look, instruction, step, cut}: `cut` false when the
     # backdrop could not be taken off and the picture is kept whole).
     prepare_rounds_left: int = 0
+    # "Remove this change" redos that still cost no try.
+    free_clears_left: int = 0
     last_prepare: dict | None = None
 
 

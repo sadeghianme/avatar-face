@@ -70,6 +70,11 @@ PLAN = "plan"
 # paid image call, and the monthly image limit holds them all as well; a
 # picture that needs more than this needs a new photo or a new description.
 PREPARE_ROUNDS_PER_CREATION = 6
+# "Remove this change" (the plain picture again) gives its try back: the
+# owner is undoing something, not shopping for a result. It is still a paid
+# image call, so it stays metered (the monthly image limit counts it) and
+# only this many per creation are free; after that each one counts as a try.
+FREE_CLEARS_PER_CREATION = 3
 # How long a change or a description may be (the owner's words, quoted).
 MAX_WORDS = 300
 
@@ -399,6 +404,10 @@ def _refund(usage: dict) -> None:
     usage["prepare_rounds"] = max(0, int(usage.get("prepare_rounds") or 0) - 1)
 
 
+def _refund_free(usage: dict) -> None:
+    usage["free_clears"] = max(0, int(usage.get("free_clears") or 0) - 1)
+
+
 def head_crop_source(data: bytes) -> tuple[bytes, str] | None:
     """The head-and-shoulders crop of the picture about its face, as it may
     be sent to the model (opaque, shrunk, JPEG), or None when there is no
@@ -603,7 +612,8 @@ async def prepare_job(job: Job, params: dict) -> None:
             ):
                 # Nothing was sent, or nothing answered: the try is given back.
                 # (A refusal or an answer without a picture was billed.)
-                await svc._update_ai_usage(job, _refund)
+                give_back = _refund_free if params.get("free") else _refund
+                await svc._update_ai_usage(job, give_back)
             raise
         job.report(0.6, "checking the picture")
         png, width, height = await run_cpu(_png, answer)

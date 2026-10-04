@@ -21,6 +21,8 @@ import {
   needsPrepare,
   photoBlocker,
   plainBody,
+  clearBody,
+  freeClearsLeft,
   planOf,
   preparedStep,
   prepareStage,
@@ -273,6 +275,13 @@ describe("retry", () => {
   it("clears the change with a plain try", () => {
     assert.deepEqual(plainBody(upload), { mode: "ai" });
     assert.deepEqual(plainBody(generated), { mode: "generate" });
+  });
+
+  it("asks for the removal as a removal, so the server gives its try back", () => {
+    assert.deepEqual(clearBody(upload), { mode: "ai", clear: true });
+    assert.deepEqual(clearBody(generated), { mode: "generate", clear: true });
+    assert.equal(freeClearsLeft({ ai: { free_clears_left: 2 } }), 2);
+    assert.equal(freeClearsLeft({ ai: {} }), 0);
   });
 });
 
