@@ -66,6 +66,7 @@ from app.schemas.creation import (
     PreviewRigRequest,
     RetryRequest,
     StepOut,
+    VersionRequest,
 )
 from app.services import creations as svc
 from app.services import wizard
@@ -1081,6 +1082,60 @@ async def prepare_photo(
     """
     creation = await _get(db, ctx.org.id, creation_id)
     return await _start_prepare(db, creation, body, ctx.org, ctx.membership.user_id)
+
+
+@router.post("/{creation_id}/version", response_model=CreationOut)
+async def use_version(
+    creation_id: str, body: VersionRequest, ctx: OrgMember, db: DB
+) -> CreationOut:
+    """Step 3 of the four-step wizard: make one of the pictures already made
+    the one the avatar is built from (200). Nothing is lost by a Retry, a
+    change, its removal or the original photo: every one is a version, and
+    any of them can be taken back. Free: no AI runs.
+
+    The version's cut-out is used when it has one, its points come back as
+    they were found (found again, by the detector only, on a version made
+    before points were kept with it), and `ai.last_prepare` becomes the try
+    that made it, so Retry and "describe a change" carry on from it.
+
+    409 creation_busy while a picture is being made; 422 unknown_version,
+    candidate_rejected, original_not_for_look; 409 version_not_prepared for
+    an upload "use my original photo" has not prepared yet.
+    """
+    creation = await _get(db, ctx.org.id, creation_id)
+    _require_draft(creation)
+    _require_image(creation)
+    face_type = _require_face_type(creation)
+    if (creation.job or {}).get("state") in ACTIVE_STATES:
+        raise Conflict409("Wait for the picture being made", code="creation_busy")
+    items = svc.step_items(creation.steps)
+    plan = wizard.plan_of(creation.steps) or wizard.inferred_plan(
+        face_type, bool(items["original"].get("generated"))
+    )
+    if wizard.version_of(creation.steps, svc.current_step(creation.steps)) == body.version and (
+        svc.anchors_are_current(creation)
+    ):
+        return await _out(db, creation)
+    steps, anchors, record = wizard.use_version(creation.steps, body.version, plan)
+    current = steps["current"]
+    if not (
+        anchors
+        and anchors.get("face_type") == face_type
+        and anchors.get("frame") == svc.frame_key(steps, current)
+    ):
+        data = await get_storage().get_bytes(items[current]["key"])
+        found = await run_cpu(svc.detect_anchors, data, face_type)
+        anchors = {
+            "id": new_id(),
+            "frame": svc.frame_key(steps, current),
+            "face_type": face_type,
+            "source": "mediapipe" if found["detected"] else "template",
+            **found,
+        }
+    usage = svc.ai_usage_of(creation)
+    usage["last_prepare"] = record
+    await _update(db, creation, steps=steps, anchors=anchors, ai_usage=usage)
+    return await _reloaded(db, creation)
 
 
 @router.post("/{creation_id}/preview-rig", response_model=PreviewRigOut)

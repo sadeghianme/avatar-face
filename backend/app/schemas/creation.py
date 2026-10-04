@@ -155,6 +155,15 @@ class ChooseRequest(BaseModel):
     choice: str = Field(min_length=1, max_length=32)
 
 
+class VersionRequest(BaseModel):
+    """Step 3 of the four-step wizard: go back to one of the pictures made.
+    A version is "original" (the upload, or a generated character's first
+    picture) or "adjusted:N" (an AI result); its cut-out is used when it
+    has one."""
+
+    version: str = Field(min_length=1, max_length=32)
+
+
 class PreviewRigRequest(BaseModel):
     # The anchors the marks were placed on (anchors.id from the creation).
     anchors_id: str = Field(min_length=1, max_length=64)

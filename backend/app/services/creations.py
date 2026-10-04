@@ -1461,11 +1461,14 @@ async def _generate(job: Job, params: dict) -> None:
             job, creation, steps, "original", clean, params.get("consent_id"), new_keys
         )
 
+        record = {
+            "mode": wizard.GENERATE, "look": plan["look"], "instruction": None,
+            "step": "original", "cut": cut,
+        }
+        steps["items"]["original"][wizard.KEPT_RECORD] = dict(record)
+
         def remember(usage: dict) -> None:
-            usage["last_prepare"] = {
-                "mode": wizard.GENERATE, "look": plan["look"], "instruction": None,
-                "step": "original", "cut": cut,
-            }
+            usage["last_prepare"] = record
 
         await _update_ai_usage(job, remember)
     await _store_result(job, params, values, new_keys)

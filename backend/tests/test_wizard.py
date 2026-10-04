@@ -725,3 +725,108 @@ async def test_a_removal_that_nothing_answered_gives_back_its_free_one(
     assert body["job"]["state"] == "done"
     assert body["ai"]["free_clears_left"] == wizard.FREE_CLEARS_PER_CREATION - 1
     assert body["ai"]["prepare_rounds_left"] == wizard.PREPARE_ROUNDS_PER_CREATION - 1
+
+
+# --- Versions ----------------------------------------------------------------------
+
+
+async def _version(client, headers, base, version):
+    return await client.post(f"{base}/version", json={"version": version}, headers=headers)
+
+
+async def test_every_version_stays_and_any_can_be_taken_back(client, faces, images, segmenter):
+    images.script = [studio(), studio(shirt=(150, 40, 40))]
+    headers, org_id = await _org(client, "versions")
+    base, _ = await _upload(client, headers, org_id)
+    consent_id = await ai_consent(client, headers, org_id)
+    await _prepare(client, headers, base, mode="original")
+    own = await _get(client, headers, base)
+    await _prepare(client, headers, base, consent_id=consent_id)
+    first = await _get(client, headers, base)
+    await _prepare(
+        client, headers, base, mode="change", instruction="shorter hair", consent_id=consent_id
+    )
+    body = await _get(client, headers, base)
+    assert body["current"] == "cutout:1"
+    left = body["ai"]["prepare_rounds_left"]
+
+    # Back to the first AI picture: its cut-out, its own points, its record.
+    response = await _version(client, headers, base, "adjusted:0")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["current"] == "cutout:0"
+    assert body["anchors"]["id"] == first["anchors"]["id"]
+    assert body["anchors"]["image"] == "adjusted:0"
+    assert body["ai"]["last_prepare"] == first["ai"]["last_prepare"]
+    # Free, and nothing was made or lost.
+    assert body["ai"]["prepare_rounds_left"] == left
+    assert len(images.calls) == 2
+    assert {"cutout", "cutout:0", "cutout:1"} <= {s["id"] for s in body["steps"]}
+
+    # The photo itself, as "use my original photo" prepared it.
+    body = (await _version(client, headers, base, "original")).json()
+    assert body["current"] == own["current"]
+    assert body["anchors"]["id"] == own["anchors"]["id"]
+    assert body["ai"]["last_prepare"]["mode"] == "original"
+
+    # The change again: Retry then carries that change from its own base.
+    body = (await _version(client, headers, base, "adjusted:1")).json()
+    assert body["ai"]["last_prepare"]["instruction"] == "shorter hair"
+    images.script = [studio()]
+    await _prepare(
+        client, headers, base, mode="change", instruction="shorter hair", again=True,
+        consent_id=consent_id,
+    )
+    body = await _get(client, headers, base)
+    assert _step(body, "adjusted:2")["from"] == "adjusted:0"
+
+    # Only versions: not a cut-out, not a made-up id.
+    for wrong in ("cutout:0", "adjusted:9", "framed"):
+        refused = await _version(client, headers, base, wrong)
+        assert refused.status_code == 422 and refused.json()["code"] == "unknown_version"
+
+
+async def test_an_upload_is_a_version_only_once_prepared_and_only_when_realistic(
+    client, faces, images, segmenter
+):
+    images.script = [studio(), studio()]
+    headers, org_id = await _org(client, "versions-original")
+    consent_id = await ai_consent(client, headers, org_id)
+    base, _ = await _upload(client, headers, org_id)
+    await _prepare(client, headers, base, consent_id=consent_id)
+    early = await _version(client, headers, base, "original")
+    assert early.status_code == 409 and early.json()["code"] == "version_not_prepared"
+
+    styled, _ = await _upload(client, headers, org_id, look="cartoon")
+    await _prepare(client, headers, styled, consent_id=consent_id)
+    refused = await _version(client, headers, styled, "original")
+    assert refused.status_code == 422 and refused.json()["code"] == "original_not_for_look"
+
+
+def test_a_version_made_before_records_were_kept_is_read_off_its_step():
+    plan = wizard.make_plan("human", "cartoon", "upload")
+    steps = {
+        "current": "cutout:1",
+        "items": {
+            "original": {"key": "o", "width": 10, "height": 10, "from": None},
+            "adjusted:0": {"key": "a0", "width": 10, "height": 10, "from": "original",
+                           "adjust": {"mode": "stylise", "instruction": None}},
+            "cutout:0": {"key": "c0", "width": 10, "height": 10, "from": "adjusted:0",
+                         "cutout": True},
+            "adjusted:1": {"key": "a1", "width": 10, "height": 10, "from": "adjusted:0",
+                           "adjust": {"mode": "stylise", "instruction": "a hat"}},
+            "cutout:1": {"key": "c1", "width": 10, "height": 10, "from": "adjusted:1",
+                         "cutout": True},
+        },
+    }
+    out, anchors, record = wizard.use_version(steps, "adjusted:0", plan)
+    assert out["current"] == "cutout:0" and out["background"] == "remove"
+    assert anchors is None
+    assert record == {
+        "mode": "ai", "look": "cartoon", "instruction": None, "step": "adjusted:0", "cut": True,
+    }
+    _, _, record = wizard.use_version(steps, "adjusted:1", plan)
+    assert record["mode"] == "change" and record["instruction"] == "a hat"
+    # The input is never edited in place.
+    assert steps["current"] == "cutout:1"
+    assert wizard.version_of(steps, "cutout:1") == "adjusted:1"
