@@ -10,6 +10,8 @@
     "typecheck": "tsc -b",
     "build": "tsc -b && esbuild src/widget.ts --bundle --format=iife --outfile=dist/liveface.js --minify && esbuild src/widget3d.ts --bundle --format=iife --outfile=dist/liveface-3d.js --minify && esbuild src/widget-mouth.ts --bundle --format=iife --outfile=dist/liveface-mouth.js --minify && cp assets/mouth-motion.json assets/mouth-teeth.webp assets/mouth-teeth.rig.json dist/",
     "dev": "esbuild src/widget.ts --bundle --format=iife --outfile=dist/liveface.js --watch --servedir=.",
+    "build:head3d-bake": "esbuild src/head3d/bake/cli.ts --bundle --platform=node --format=esm --outfile=dist/head3d-bake.mjs",
+    "build:head3d-harness": "esbuild src/head3d/harness/harness.ts --bundle --format=iife --outfile=dist/head3d-harness.js",
     "test": "vitest run"
   },
   "devDependencies": {
