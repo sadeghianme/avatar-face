@@ -17,6 +17,13 @@ import type { BlendWeights, Rig } from "../../types";
  * the bundled mouth-motion.json driven through a fixed sequence of mouth
  * shapes, digested vertex by vertex. The digests were recorded before
  * version 2 existed; if one changes, an avatar already live changed.
+ *
+ * Re-recorded ONCE, deliberately, with the lower-face rig (jaw-rig.ts): the
+ * poses' chin and jaw motion is now applied in full (the radial falloff it
+ * replaced reached the chin tip at 0.16, so the lower lip dropped onto a
+ * chin that stood still), and the eyes and nose take none of the poses'
+ * registration drift. Every live continuous-mouth avatar changed that way,
+ * by decision.
  */
 
 const bundled = () => JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8"));
@@ -54,19 +61,19 @@ describe("the bundled Reference motion renders exactly as before", () => {
   it("on the Reference's own face", () => {
     const manifest = validatePerformanceManifest(bundled());
     const neutral = manifest.poses[0].points.map(([x, y]) => ({ x: x * 1000, y: y * 1000 }));
-    expect(digest(new ContinuousMouth(manifest), neutral)).toBe("7dd3bf9ecaf6965e");
+    expect(digest(new ContinuousMouth(manifest), neutral)).toBe("4caea79e44d889b1");
   });
   it("on another face, with a fitted jaw range", () => {
     const manifest = validatePerformanceManifest(bundled());
     const mouth = new ContinuousMouth(manifest);
     mouth.setProfile(normalizeProfile({ jawRange: 0.7 }));
-    expect(digest(mouth, otherFace())).toBe("4ef2419f7b445111");
+    expect(digest(mouth, otherFace())).toBe("d3ecb4c71fe81d26");
   });
   it("and through the loader that also takes avatar manifests", () => {
     const manifest = validateMotionManifest(bundled());
     const mouth = new ContinuousMouth(manifest);
     mouth.setProfile(normalizeProfile({ jawRange: 0.7 }));
-    expect(digest(mouth, otherFace())).toBe("4ef2419f7b445111");
+    expect(digest(mouth, otherFace())).toBe("d3ecb4c71fe81d26");
   });
 });
 

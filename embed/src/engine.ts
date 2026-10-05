@@ -31,6 +31,7 @@ import {
 } from "./character-mouth";
 import { TONGUE_RAISE, paintCharacter } from "./character-paint";
 import { HeadMotion } from "./headmotion";
+import { applyLowerFace, buildLowerFaceRig, buildNeckBand, UPPER_FACE, type LowerFaceRig } from "./jaw-rig";
 import { kindProfile, type KindProfile } from "./kind-profile";
 import { MediaClock } from "./media-clock";
 import type { MouthExtension, MouthPose } from "./mouth-extension";
@@ -483,6 +484,9 @@ export class AvatarEngine {
    *  for it: the jaw field, what the picture looks like, the owner's traits
    *  and how high the tongue is now. Null for every classic rig. */
   private field: CharacterField | null = null;
+  /** The jaw, chin and cheeks for every mouth driver (jaw-rig.ts), built
+   *  from the rest mesh with the framing. */
+  private lowerFace: LowerFaceRig | null = null;
   private look: CharacterLook = DEFAULT_LOOK;
   private traits: CharacterTraits;
   private tongue = 0;
@@ -500,6 +504,10 @@ export class AvatarEngine {
   // Mouth-region subdivision: extra midpoint vertices (index >= 478) that
   // follow their two parents, and the refined triangle list using them.
   private derivedParents: [number, number][] = [];
+  // The neck band (jaw-rig.ts): derived vertices below the jaw line, after
+  // the midpoints, each hanging from a jaw-line vertex by a share of its
+  // motion, so the chin drops over stretching neck skin, not a still one.
+  private neckBand: { base: Point; parent: number; share: number }[] = [];
   private triangles: [number, number, number][] = [];
   private innerRing: number[] = [];
 
@@ -621,6 +629,7 @@ export class AvatarEngine {
     this.sampleCharacterLook();
     this.sampleLidColours();
     this.subdivideMouthRegion();
+    this.buildNeckBand();
     this.startTime = performance.now();
     this.blinks.reset(this.startTime);
     this.nextNodAt = this.startTime + 2500;
@@ -671,6 +680,7 @@ export class AvatarEngine {
     this.sampleCharacterLook();
     this.sampleLidColours();
     this.subdivideMouthRegion();
+    this.buildNeckBand();
   }
 
   /**
@@ -758,6 +768,7 @@ export class AvatarEngine {
     this.measureBody();
     this.buildHeadLayer();
     this.field = this.profile.mouth === "character" ? new CharacterField(this.basePoints) : null;
+    this.lowerFace = buildLowerFaceRig(this.basePoints);
   }
 
   /**
@@ -1124,7 +1135,8 @@ export class AvatarEngine {
    * to paint in. Only a rig whose profile asks for that mouth pays for it.
    */
   private sampleCharacterLook(): void {
-    if (this.profile.mouth !== "character") return;
+    // For every profile: the character mouth paints with it, and the mesh
+    // pads its seams on flat art whichever mouth it has (trianglePads).
     const skin: Rgb = this.skinColour ?? DEFAULT_LOOK.skin;
     this.look = { ...DEFAULT_LOOK, lip: this.lipColour, skin };
     try {
@@ -1249,6 +1261,27 @@ export class AvatarEngine {
         this.triangles.push([a, b, c]);
       }
     }
+  }
+
+  /**
+   * The neck band below the jaw line (jaw-rig.ts buildNeckBand), appended
+   * after the mouth subdivision's midpoints: its vertices, their texture
+   * positions (the still picture below the chin) and its triangles. Every
+   * rig gets one, derived from its own points.
+   */
+  private buildNeckBand(): void {
+    this.neckBand = [];
+    const band = buildNeckBand(this.basePoints, this.basePoints.length + this.derivedParents.length);
+    const tw = this.texture.naturalWidth / this.rig.image_size[0];
+    const th = this.texture.naturalHeight / this.rig.image_size[1];
+    for (const v of band.vertices) {
+      this.neckBand.push({ base: { x: v.x, y: v.y }, parent: v.parent, share: v.share });
+      this.texPoints.push({
+        x: ((v.x - this.offsetX) / this.scale) * tw,
+        y: ((v.y - this.offsetY) / this.scale) * th,
+      });
+    }
+    this.triangles.push(...band.triangles);
   }
 
   /**
@@ -1765,6 +1798,9 @@ export class AvatarEngine {
     // A character profile moves the mouth with its own field instead.
     const classic = !this.field;
     for (let i = 0; classic && i < pts.length; i++) {
+      // The eyes, brows, nose and forehead are no part of a mouth: the
+      // field's reach used to lift the nose tip a little on every open vowel.
+      if (UPPER_FACE.has(i)) continue;
       const px = pts[i].x - mcx;
       const py = pts[i].y - mcy;
       const dist = Math.hypot(px, py * 1.35); // squashed: motion spreads wider than tall
@@ -1817,21 +1853,9 @@ export class AvatarEngine {
 
     if (this.field) this.field.apply(pts, w, this.tuning.mouthOpen, this.traits);
 
-    // Cheek response: points lateral to the mouth corners push outward as
-    // the jaw opens. (Jaw drop itself is handled by the continuous field
-    // above — doing it again here, skipping mouth points, was what created
-    // the torn seam along the lower lip.)
-    if (classic && w.jawOpen > 0.01) {
-      for (let i = 0; i < pts.length; i++) {
-        const dx = pts[i].x - mcx;
-        const dyFromMouth = pts[i].y - mcy;
-        const lateral = Math.abs(dx) - mw * 0.4;
-        if (lateral > 0 && lateral < mw * 0.8 && Math.abs(dyFromMouth) < mh * 2.5) {
-          const cheekFalloff = 1 - lateral / (mw * 0.8);
-          pts[i].x += Math.sign(dx) * w.jawOpen * mw * 0.02 * cheekFalloff * this.tuning.mouthOpen;
-        }
-      }
-    }
+    // (The jaw, the chin and the cheeks come after every driver, below:
+    // applyLowerFace. The outward cheek push that lived here pushed the
+    // cheeks the wrong way — an opening jaw narrows the face.)
 
     // Face half-height, for expression amplitudes.
     const ys = pts.map((p) => p.y);
@@ -1912,10 +1936,22 @@ export class AvatarEngine {
 
     this.mouthExtension?.deform?.(pts, this.basePoints, this.rig, w);
 
+    // The lower face, for every driver: the chin and the jaw line hinge
+    // with the lower lip wherever the driver left them behind (the classic
+    // field always did; a photographed pose whose chin lags its lip), and
+    // the cheeks follow the jaw and the lip shapes. After the driver, so it
+    // reads what the lip actually did, jaw range and all.
+    if (this.lowerFace) applyLowerFace(pts, this.basePoints, this.lowerFace, w, this.tuning.mouthOpen);
+
     // Derived midpoint vertices (mouth subdivision) follow their parents
     // through EVERY layer above — computed last, from final positions.
     for (const [a, b] of this.derivedParents) {
       pts.push({ x: (pts[a].x + pts[b].x) / 2, y: (pts[a].y + pts[b].y) / 2 });
+    }
+    // The neck band follows the jaw line by each vertex's share.
+    for (const v of this.neckBand) {
+      const p = pts[v.parent], b = this.basePoints[v.parent];
+      pts.push({ x: v.base.x + (p.x - b.x) * v.share, y: v.base.y + (p.y - b.y) * v.share });
     }
 
     return pts;
@@ -2122,10 +2158,12 @@ export class AvatarEngine {
   private pads: Float32Array | null = null;
 
   /** Each triangle's overlap with its neighbours, px, for a character profile
-   *  (null for the others, which draw exactly as they always did). Worked out
-   *  once per mesh. */
+   *  and for any flat picture (null for a photograph, which draws exactly as
+   *  it always did: the skin under a seam is the same skin). Flat art shows
+   *  the seams once the chin moves: the drawn jaw line of the still picture
+   *  beneath threads through them. Worked out once per mesh. */
   private trianglePads(): Float32Array | null {
-    if (!this.field) return null;
+    if (!this.field && !this.look.flat) return null;
     if (this.padsFor !== this.triangles || !this.pads) {
       this.padsFor = this.triangles;
       this.pads = Float32Array.from(this.triangles, ([a, b, c]) => (this.touchesMouth(a, b, c) ? 0.45 : 1));

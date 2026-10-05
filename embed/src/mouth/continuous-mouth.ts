@@ -2,11 +2,12 @@ import { centralMouthAnchors, type MouthExtension, type MouthPoint, type MouthSu
 import type { BlendWeights, Rig } from "../types";
 import { MouthMotion, mouthMixWeights } from "./continuous-mouth-model";
 import { dentalOpening, openingPath } from "./lip-occlusion-model";
-import { performanceInfluence, validateMotionManifest, type AvatarPerformanceManifest, type MotionManifest } from "./photographic-performance-model";
+import { validateMotionManifest, type AvatarPerformanceManifest, type MotionManifest } from "./photographic-performance-model";
 import { validateOralRig, type OralPhoto } from "./photographic-oral-surface";
 import { DentalOralSurface } from "./dental-oral-surface";
 import { ReferenceMouth } from "./reference-mouth";
 import { DEFAULT_REFERENCE_PROFILE, type ReferenceProfile } from "./reference-mouth-model";
+import { buildLowerFaceRig, type LowerFaceRig } from "../jaw-rig";
 
 /** How much of the corners' inward travel is removed at full rounding. */
 export const CORNER_EASE = 0.4;
@@ -46,10 +47,19 @@ export class ContinuousMouth implements MouthExtension {
   private rounding = 0;
   private geometric = new ReferenceMouth(DEFAULT_REFERENCE_PROFILE);
   private oral?: DentalOralSurface;
+  /**
+   * How much of each pose's displacement a landmark takes (jaw-rig.ts): the
+   * lips, the chin and the jaw whole, the lower cheeks fading, the eyes and
+   * nose nothing. Built on the motion's own rest pose, whose landmarks the
+   * poses are differences from. The radial falloff this replaces reached
+   * the chin tip at 0.16, so the chin stayed while the lip dropped onto it.
+   */
+  private readonly lowerFace: LowerFaceRig;
   /** Throws DentalPhotoError for a teeth photo that does not show the upper
    *  teeth clearly enough to draw them from. */
   constructor(private template: MotionManifest, oral?: OralPhoto) {
     if (oral) this.oral = new DentalOralSurface(oral);
+    this.lowerFace = buildLowerFaceRig(template.poses[0].points.map(([x, y]) => ({ x, y })));
   }
 
   /** `templateUrl` is the bundled Reference motion (mouth-motion.json) or an
@@ -105,9 +115,12 @@ export class ContinuousMouth implements MouthExtension {
     const sourceWidth = this.template.mouth_width;
     const [cx, cy] = this.template.center;
     for (let i = 0; i < base.length; i++) {
+      // A landmark the poses may not move keeps whatever the engine's own
+      // field did to it; the poses' own drift there (registration) never
+      // reaches the face.
+      const influence = this.lowerFace.weight[i];
+      if (!(influence > 0)) continue;
       const [x, y] = base[i];
-      if (Math.abs(x - cx) > sourceWidth * 1.5 || y < cy - sourceWidth || y > cy + sourceWidth * 1.5) continue;
-      const influence = performanceInfluence(x, y, this.template.center, sourceWidth);
       let dx = 0, dy = 0;
       for (let p = 1; p < mix.length; p++) {
         dx += (this.template.poses[p].points[i][0] - x) * mix[p];

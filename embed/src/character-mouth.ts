@@ -1,4 +1,7 @@
 import type { BlendWeights } from "./types";
+import { INNER_LOWER, INNER_UPPER, LIP_CORNERS, LOWER_ROWS, UPPER_FACE, UPPER_ROWS, mouthFrame as lipFrame, type MouthFrame as LipFrame } from "./jaw-rig";
+
+export { INNER_LOWER, INNER_UPPER } from "./jaw-rig";
 
 /**
  * The mouth of a drawn or rendered character, and of an animal.
@@ -25,24 +28,9 @@ import type { BlendWeights } from "./types";
 export interface Pt { x: number; y: number }
 export type Rgb = [number, number, number];
 
-// MediaPipe's lip rows, corner to corner, image left to right. Upper and
-// lower rows run from the inner lip outward; the commissure landmarks are
-// the corners. The same indices the backend's anchor fit places.
-export const INNER_UPPER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308];
-export const INNER_LOWER = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308];
-const UPPER_ROWS = [
-  [191, 80, 81, 82, 13, 312, 311, 310, 415],
-  [183, 42, 41, 38, 12, 268, 271, 272, 407],
-  [184, 74, 73, 72, 11, 302, 303, 304, 408],
-  [185, 40, 39, 37, 0, 267, 269, 270, 409],
-];
-const LOWER_ROWS = [
-  [95, 88, 178, 87, 14, 317, 402, 318, 324],
-  [96, 89, 179, 86, 15, 316, 403, 319, 325],
-  [77, 90, 180, 85, 16, 315, 404, 320, 307],
-  [146, 91, 181, 84, 17, 314, 405, 321, 375],
-];
-const CORNERS = [61, 76, 62, 78, 291, 306, 292, 308];
+// MediaPipe's lip rows and corners are shared with the lower-face rig
+// (jaw-rig.ts), which also hinges the jaw this field stops short of.
+const CORNERS = LIP_CORNERS;
 const OUTER_LOWER = LOWER_ROWS[3];
 
 const smooth = (x: number) => {
@@ -101,26 +89,15 @@ const JAW_GAIN = 0.5;
  *  jaw as it opens, so the chin travels less than the lip does. */
 const CHIN_SHARE = 0.72;
 
-export interface MouthFrame {
-  cx: number; cy: number;
-  /** Mouth width, corner to corner. */
-  w: number;
-  /** Unit vectors: along the mouth, and down the face. */
-  ax: number; ay: number; nx: number; ny: number;
-}
+export type MouthFrame = LipFrame;
 
-/** The mouth's own frame in a mesh: its corners, its centre, its tilt. */
+/** The mouth's own frame in a mesh: its corners, its tilt, and a centre
+ *  halfway between the lip seam and the corners' midpoint (the field's
+ *  lens and ramps were tuned about that centre). */
 export function mouthFrame(points: readonly Pt[]): MouthFrame {
+  const f = lipFrame(points);
   const l = points[61], r = points[291];
-  const w = Math.max(Math.hypot(r.x - l.x, r.y - l.y), 1);
-  let ax = (r.x - l.x) / w, ay = (r.y - l.y) / w;
-  if (ax < 0) { ax = -ax; ay = -ay; }
-  const seam = { x: (points[13].x + points[14].x) / 2, y: (points[13].y + points[14].y) / 2 };
-  const mid = { x: (l.x + r.x) / 2, y: (l.y + r.y) / 2 };
-  return {
-    cx: (seam.x + mid.x) / 2, cy: (seam.y + mid.y) / 2, w,
-    ax, ay, nx: -ay, ny: ax,
-  };
+  return { ...f, cx: (f.cx + (l.x + r.x) / 2) / 2, cy: (f.cy + (l.y + r.y) / 2) / 2 };
 }
 
 
@@ -168,6 +145,9 @@ export class CharacterField {
     for (const row of UPPER_ROWS) for (const i of row) if (i < this.n) this.role[i] = 1;
     for (const row of LOWER_ROWS) for (const i of row) if (i < this.n) this.role[i] = 2;
     for (const i of CORNERS) if (i < this.n) this.role[i] = 3;
+    // The eyes, brows, nose and forehead: no mouth moves them. The field's
+    // reach used to narrow a toon's nose on every rounded vowel.
+    for (const i of UPPER_FACE) if (i < this.n) this.role[i] = 4;
     for (const i of [...INNER_UPPER, ...INNER_LOWER]) if (i < this.n) this.inner[i] = 1;
     for (let i = 0; i < this.n; i++) {
       const dx = base[i].x - f.cx, dy = base[i].y - f.cy;
@@ -208,9 +188,10 @@ export class CharacterField {
     const spread = (w.mouthStretch * 0.26 + w.mouthSmile * 0.16 - w.mouthPucker * 0.32 - w.mouthFunnel * 0.18) * (W / 2);
 
     for (let i = 0; i < this.n; i++) {
+      const role = this.role[i];
+      if (role === 4) continue;
       const nxi = this.nxs[i];
       const vi = this.vs[i];
-      const role = this.role[i];
       const lens = Math.max(0, 1 - Math.pow(Math.abs(nxi) / lensW, 2.2));
 
       let da = 0; // along the mouth
@@ -253,17 +234,9 @@ export class CharacterField {
         pts[i].y += (da * f.ay + dn * f.ny) * gain;
       }
     }
-
-    // Cheeks bulge sideways as the jaw drops, as the classic field does.
-    if (w.jawOpen > 0.01) {
-      for (let i = 0; i < this.n; i++) {
-        if (this.role[i] === 2 || this.role[i] === 3) continue;
-        const lateral = Math.abs(this.nxs[i]) * (W / 2) - W * 0.4;
-        if (lateral > 0 && lateral < W * 0.8 && Math.abs(this.vs[i]) < 1.2) {
-          pts[i].x += Math.sign(this.nxs[i]) * w.jawOpen * W * 0.02 * (1 - lateral / (W * 0.8)) * gain;
-        }
-      }
-    }
+    // The cheeks follow in the engine's lower-face pass (jaw-rig.ts), for
+    // every driver alike: they used to be pushed outward here as the jaw
+    // dropped, and an opening jaw narrows a face.
   }
 }
 
