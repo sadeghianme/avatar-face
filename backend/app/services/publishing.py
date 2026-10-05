@@ -102,15 +102,7 @@ async def publish(avatar, storage) -> dict:
     published snapshot serving, not a half-built one.
     """
     revision = getattr(avatar, "draft_revision", 0) or 0
-    prefix = published_prefix(avatar.org_id, avatar.id, revision)
-
-    async def copy(source: str | None, name: str, default_ext: str) -> str | None:
-        if not source or not await storage.exists(source):
-            return None
-        target = f"{prefix}/{name}.{_ext(source, default_ext)}"
-        data = await storage.get_bytes(source)
-        await storage.put_bytes(target, data, _content_type(target))
-        return target
+    copy = _copier(storage, published_prefix(avatar.org_id, avatar.id, revision))
 
     image_key = await copy(avatar.image_key, "image", "png")
     if image_key is None:
@@ -131,42 +123,13 @@ async def publish(avatar, storage) -> dict:
             if copied:
                 layer_keys[name] = copied
 
-    # The mouth: settings by value, the optional teeth photo and the
-    # avatar's own motion by copy — same reason as everything else here, a
-    # later edit must not reach visitors.
-    from app.services.mouth import load as load_mouth, renderer_allowed
+    from app.services.mouth import load as load_mouth
     from app.services.mouth_kit import without_ai_shapes
     from app.services.mouth_photo import without_ai_teeth
 
     face_type = getattr(avatar, "face_type", "human")
     mouth = load_mouth(getattr(avatar, "mouth_config", None))
-    mouth_published = None
-    # A mouth this face type may not use publishes as the classic one (None),
-    # whatever route put it in the draft: the photographic mouth draws human
-    # teeth, and a visitor must never see them in a muzzle.
-    if mouth and renderer_allowed(mouth["renderer"], face_type):
-        mouth_published = {"renderer": mouth["renderer"], "profile": mouth.get("profile") or {}}
-        if mouth.get("character") is not None:
-            # How the owner set the character mouth (services.mouth): carried
-            # by value, like the fit, so a later edit reaches nobody unpublished.
-            mouth_published["character"] = mouth["character"]
-        oral_image = await copy(mouth.get("oral_image_key"), "mouth", "png")
-        oral_rig = await copy(mouth.get("oral_rig_key"), "mouth-rig", "json")
-        if oral_image and oral_rig:
-            mouth_published.update(oral_image_key=oral_image, oral_rig_key=oral_rig)
-        motion = await copy(mouth.get("motion_key"), "mouth-motion", "json")
-        if motion:
-            mouth_published["motion_key"] = motion
-        if mouth.get("teeth") is not None:
-            # Where the teeth photo came from (services.mouth_photo), kept so
-            # Discard can put it back with the photo: without it, restored AI
-            # teeth would read as the owner's upload. Owner-facing only:
-            # _mouth_view never hands it to a visitor.
-            mouth_published["teeth"] = mouth["teeth"]
-        if mouth.get("kit") is not None:
-            # What the motion is made of (services.mouth_kit), for Discard
-            # likewise, and as owner-facing.
-            mouth_published["kit"] = mouth["kit"]
+    mouth_published = await publish_mouth(mouth, face_type, copy)
 
     # AI-made teeth are disclosed only while a visitor can see them: on the
     # photographic mouth, with the photo. The classic mouth (chosen in the
@@ -226,6 +189,86 @@ async def publish(avatar, storage) -> dict:
     await _sweep_mouth_files(avatar, storage, mouth)
     await scene_service.sweep_files(avatar, storage, scene)
     logger.info("published avatar %s at revision %d", avatar.id, revision)
+    return config
+
+
+def _copier(storage, prefix: str):
+    """`copy(source, name, default_ext)`: the file at `source` copied under
+    `prefix` as `name` with the source's extension, and the copy's key;
+    None for no file. How every published file is written."""
+
+    async def copy(source: str | None, name: str, default_ext: str) -> str | None:
+        if not source or not await storage.exists(source):
+            return None
+        target = f"{prefix}/{name}.{_ext(source, default_ext)}"
+        data = await storage.get_bytes(source)
+        await storage.put_bytes(target, data, _content_type(target))
+        return target
+
+    return copy
+
+
+async def publish_mouth(mouth: dict | None, face_type: str, copy) -> dict | None:
+    """The snapshot's `mouth` for the draft's (services.mouth.load): the
+    settings by value, the optional teeth photo and the avatar's own motion
+    by `copy` (a `_copier`) — same reason as everything else published, a
+    later edit must not reach visitors. None is the classic mouth.
+
+    A mouth this face type may not use publishes as the classic one (None),
+    whatever route put it in the draft: the photographic mouth draws human
+    teeth, and a visitor must never see them in a muzzle."""
+    from app.services.mouth import renderer_allowed
+
+    if not mouth or not renderer_allowed(mouth["renderer"], face_type):
+        return None
+    published = {"renderer": mouth["renderer"], "profile": mouth.get("profile") or {}}
+    if mouth.get("character") is not None:
+        # How the owner set the character mouth (services.mouth): carried
+        # by value, like the fit, so a later edit reaches nobody unpublished.
+        published["character"] = mouth["character"]
+    oral_image = await copy(mouth.get("oral_image_key"), "mouth", "png")
+    oral_rig = await copy(mouth.get("oral_rig_key"), "mouth-rig", "json")
+    if oral_image and oral_rig:
+        published.update(oral_image_key=oral_image, oral_rig_key=oral_rig)
+    motion = await copy(mouth.get("motion_key"), "mouth-motion", "json")
+    if motion:
+        published["motion_key"] = motion
+    if mouth.get("teeth") is not None:
+        # Where the teeth photo came from (services.mouth_photo), kept so
+        # Discard can put it back with the photo: without it, restored AI
+        # teeth would read as the owner's upload. Owner-facing only:
+        # _mouth_view never hands it to a visitor.
+        published["teeth"] = mouth["teeth"]
+    if mouth.get("kit") is not None:
+        # What the motion is made of (services.mouth_kit), for Discard
+        # likewise, and as owner-facing.
+        published["kit"] = mouth["kit"]
+    return published
+
+
+async def republish_mouth(avatar, storage) -> dict | None:
+    """Rewrite the live snapshot's `mouth` from the draft's, exactly as
+    `publish` would write it, and nothing else: the revision, the files,
+    the disclosure and the publish date stay, so an avatar in step with
+    its snapshot stays in step, and one with unpublished edits keeps them
+    unpublished. For a one-off migration of the mouth alone
+    (scripts/migrate_classic_mouths.py), never for an owner's edit, which
+    reaches visitors through Publish. Returns the new snapshot, or None
+    for an avatar never published (nothing to rewrite).
+
+    Files the draft mouth names are copied under the snapshot's own prefix,
+    as `publish` copies them; the snapshot's line decides whether the mouth
+    may be the photographic one, as it does for everything it serves."""
+    config = config_of(avatar)
+    if config is None:
+        return None
+    from app.services.mouth import load as load_mouth
+
+    prefix = published_prefix(avatar.org_id, avatar.id, config.get("revision", 0))
+    face_type = config.get("face_type") or getattr(avatar, "face_type", "human")
+    mouth = load_mouth(getattr(avatar, "mouth_config", None))
+    config["mouth"] = await publish_mouth(mouth, face_type, _copier(storage, prefix))
+    avatar.published_config = json.dumps(config)
     return config
 
 
