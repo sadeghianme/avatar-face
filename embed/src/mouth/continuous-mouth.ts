@@ -9,6 +9,21 @@ import { dentalLighting } from "./dental-lighting-model";
 import { ReferenceMouth } from "./reference-mouth";
 import { DEFAULT_REFERENCE_PROFILE, type ReferenceProfile } from "./reference-mouth-model";
 import { buildLowerFaceRig, type LowerFaceRig } from "../jaw-rig";
+import { apertureFeather, edgeSoftness, FeatheredLayer } from "./aperture-feather";
+
+const smooth = (t: number) => {
+  const s = Math.max(0, Math.min(1, t));
+  return s * s * (3 - 2 * s);
+};
+
+/** How much of the inner lip's bands show at a lip gap of `gap` on a mouth
+ *  `width` wide, with the interior `interior` revealed: nothing below 0.01
+ *  of the width (the contact seam owns that), whole from 0.04; 0 when it
+ *  would be too faint to paint. */
+export function innerLipStrength(gap: number, width: number, interior: number): number {
+  const strength = smooth((gap / width - 0.01) / 0.03) * interior;
+  return strength < 0.01 ? 0 : strength;
+}
 
 /** How much of the corners' inward travel is removed at full rounding. */
 export const CORNER_EASE = 0.4;
@@ -48,6 +63,9 @@ export class ContinuousMouth implements MouthExtension {
   private rounding = 0;
   private geometric = new ReferenceMouth(DEFAULT_REFERENCE_PROFILE);
   private oral?: DentalOralSurface;
+  /** The layer the interior is painted into and feathered through
+   *  (aperture-feather.ts); its canvases are made on the first frame. */
+  private layer = new FeatheredLayer();
   /**
    * How much of each pose's displacement a landmark takes (jaw-rig.ts): the
    * lips, the chin and the jaw whole, the lower cheeks fading, the eyes and
@@ -183,20 +201,98 @@ export class ContinuousMouth implements MouthExtension {
     // lip-occlusion-model). A small aperture is a seam, never a white line.
     const reveal = enamelReveal(gap, width);
     const interior = cavityReveal(gap, width);
+    // The edge between the lip and the interior is as soft as the picture's
+    // own edges (aperture-feather.ts): the interior is painted into a layer
+    // and brought through a mask that fades out inside the lip's edge.
+    const feather = apertureFeather(width, frame.soft);
     if (this.rounding > 0.02) this.paintMoundShadow(ctx, left, right, width);
-    ctx.save(); ctx.clip(aperture);
-    ctx.globalAlpha = interior;
+    // The rim comes with the interior, squared: lips only just apart show a
+    // slit, not a halo.
+    this.paintRim(ctx, aperture, feather, edgeSoftness(frame.soft) * interior * interior, frame.lipColour);
+    const layer = this.layer.begin(ctx, ring, feather);
+    // Without a layer (no document), straight onto the face, clipped.
+    const target = layer ?? ctx;
+    if (!layer) { ctx.save(); ctx.clip(aperture); }
+    target.globalAlpha = interior;
     if (this.oral) {
-      this.oral.draw(ctx, { ...frame, weights }, left, right, reveal);
+      this.oral.draw(target, { ...frame, weights }, left, right, reveal);
     } else {
-      this.geometric.draw(ctx, { weights, viseme: frame.viseme, aperture,
+      this.geometric.draw(target, { weights, viseme: frame.viseme, aperture,
         upper: ring.slice(10), lower: ring.slice(0, 11), neutralLeft: left, neutralRight: right,
         lipColour: frame.lipColour ?? [150, 90, 84], skinColour: frame.skinColour, cavityAlpha: interior, teethAlpha: reveal },
       openingPath(dentalOpening(ring, left, right, weights)));
     }
-    ctx.restore();
+    const innerLip = innerLipStrength(gap, width, interior);
+    const paintInnerLip = (c: CanvasRenderingContext2D) => this.paintInnerLip(c, ring, width, gap, feather, innerLip, frame.lipColour);
+    if (layer) {
+      if (innerLip > 0) this.layer.blurred(paintInnerLip, feather * 0.5);
+      this.layer.end(ctx, aperture, feather);
+    } else {
+      if (innerLip > 0) paintInnerLip(ctx);
+      ctx.restore();
+    }
     this.paintContactSeam(ctx, ring, width, contactSeam(gap, width), frame.lipColour);
     return true;
+  }
+
+  /**
+   * The inner lip, just inside the edge: a band of the lips' own inner tone
+   * fading into the dark of the mouth (the wet vermilion turning the corner),
+   * and under the upper lip, which overhangs, the shadow it casts on the top
+   * of the teeth, as every photograph of an open mouth shows. Widths with
+   * the feather and the opening; stronger above than below (the lower lip
+   * is lit from above, and rolls out rather than over); nothing while the
+   * lips are only just apart, where the contact seam owns the aperture.
+   * Painted into the layer through one blur of half the feather (its
+   * steps run together), and the mask feathers its outer half away with
+   * the rest of the interior.
+   */
+  private paintInnerLip(ctx: CanvasRenderingContext2D, ring: readonly MouthPoint[], width: number, gap: number, feather: number, strength: number, lipColour?: [number, number, number]): void {
+    if (strength <= 0 || ring.length < 20) return;
+    const light = dentalLighting(lipColour);
+    const lip = lipColour ?? [150, 90, 84];
+    const wet = lip.map((c, i) => c + (light.tissue[i] - c) * 0.5);
+    const upper = [...ring.slice(10), ring[0]], lower = ring.slice(0, 11);
+    const band = (line: readonly MouthPoint[], depth: number, colour: readonly number[], alphas: readonly number[]) => {
+      ctx.beginPath(); ctx.moveTo(line[0].x, line[0].y);
+      for (let k = 1; k < line.length; k++) ctx.lineTo(line[k].x, line[k].y);
+      // Three strokes centred on the edge, the widest first: a band that
+      // fades inward in steps the blur runs together.
+      [1, 0.6, 0.3].forEach((share, i) => {
+        ctx.lineWidth = Math.max(1, 2 * depth * share);
+        ctx.strokeStyle = `rgba(${colour.map(Math.round).join(",")},${(alphas[i] * strength).toFixed(3)})`;
+        ctx.stroke();
+      });
+    };
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    // The upper lip's shadow on the teeth: as deep as the opening allows.
+    band(upper, Math.min(width * 0.05, Math.max(feather * 1.5, gap * 0.14)), light.recess, [0.1, 0.12, 0.15]);
+    // The lower lip's wet inner edge: narrower, in the lip's own tone.
+    band(lower, Math.min(width * 0.025, Math.max(feather * 0.8, gap * 0.06)), wet, [0.1, 0.12, 0.14]);
+    ctx.restore();
+  }
+
+  /**
+   * The rim: on the lip side of the edge, the faint dark halo a soft
+   * picture's own edges carry (its blur spreads the dark of the mouth a
+   * little onto the lip, as the mask, which only fades inward, cannot).
+   * Scaled by how soft the picture is and how far the interior shows:
+   * nothing on a crisp photograph, nothing on lips only just apart. Under
+   * the interior, so inside the edge it only deepens the feather.
+   */
+  private paintRim(ctx: CanvasRenderingContext2D, aperture: Path2D, feather: number, amount: number, lipColour?: [number, number, number]): void {
+    if (amount < 0.01) return;
+    const shade = dentalLighting(lipColour).cavity;
+    ctx.save();
+    ctx.lineJoin = "round";
+    for (const [k, a] of [[5, 0.02], [2.6, 0.04], [1.2, 0.07]] as const) {
+      ctx.strokeStyle = `rgba(${shade.join(",")},${(a * amount).toFixed(3)})`;
+      ctx.lineWidth = Math.max(1, feather * k);
+      ctx.stroke(aperture);
+    }
+    ctx.restore();
   }
 
   /**

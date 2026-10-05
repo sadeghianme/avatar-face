@@ -96,7 +96,7 @@ describe("lip-driven tooth visibility", () => {
     mouth.deform(points, neutral, rig, REFERENCE_POSES.aa.weights);
     // One step of the spring leaves the lips barely apart: the contact seam
     // is painted too, with these.
-    const ctx = { save() {}, restore() {}, clip() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {} } as unknown as CanvasRenderingContext2D;
+    const ctx = { save() {}, restore() {}, clip() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, setTransform() {}, drawImage() {} } as unknown as CanvasRenderingContext2D;
     const frame = { points, neutral, rig, weights: REFERENCE_POSES.oo.weights, viseme: "ou" };
     const geometric = vi.spyOn(ReferenceMouth.prototype, "draw").mockImplementation(() => {});
     mouth.paint(ctx, frame);

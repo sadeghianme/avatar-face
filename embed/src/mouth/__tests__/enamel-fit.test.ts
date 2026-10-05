@@ -116,48 +116,83 @@ describe("the photographic mouth as the lips part", () => {
   const rig = { inner_lip_ring: manifest.inner_ring } as Rig;
   const width = Math.hypot(neutral[291].x - neutral[61].x, neutral[291].y - neutral[61].y);
 
-  /** The mouth with a recording oral surface, its lips `gap` apart. */
+  /** A 2D context that records its calls and property sets into `calls`;
+   *  its transform is the identity, as a face drawn straight has. */
+  const recording = (calls: string[]) => new Proxy({ globalAlpha: 1, getTransform: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }) } as Record<string, unknown>, {
+    get: (obj, key: string) => (key in obj ? obj[key] : (...args: unknown[]) => { calls.push(`${key}${typeof args[0] === "string" ? `(${args[0]})` : ""}`); }),
+    set: (obj, key: string, value) => { obj[key] = value; calls.push(`${key}=${value}`); return true; },
+  }) as unknown as CanvasRenderingContext2D;
+
+  /** The mouth with a recording oral surface, its lips `gap` apart: what
+   *  reaches the face's own context, and what is painted into the layer the
+   *  interior is feathered through (aperture-feather.ts). */
   function parted(gap: number) {
     const mouth = new ContinuousMouth(manifest);
-    const draws: number[] = [];
-    Object.assign(mouth, { oral: { draw: (_c: unknown, _f: unknown, _l: unknown, _r: unknown, alpha: number) => draws.push(alpha) } });
+    const draws: { alpha: number; ctx: unknown }[] = [];
+    Object.assign(mouth, { oral: { draw: (c: unknown, _f: unknown, _l: unknown, _r: unknown, alpha: number) => draws.push({ alpha, ctx: c }) } });
     const points = neutral.map((p) => ({ ...p }));
     points[13].y -= gap / 2; points[14].y += gap / 2;
     const calls: string[] = [];
-    const ctx = new Proxy({ globalAlpha: 1 } as Record<string, unknown>, {
-      get: (obj, key: string) => (key in obj ? obj[key] : (...args: unknown[]) => calls.push(`${key}${typeof args[0] === "string" ? `(${args[0]})` : ""}`)),
-      set: (obj, key: string, value) => { obj[key] = value; calls.push(`${key}=${value}`); return true; },
-    }) as unknown as CanvasRenderingContext2D;
+    const layer: string[] = [];
+    const layerCtx = recording(layer);
+    vi.stubGlobal("document", { createElement: () => ({ width: 0, height: 0, getContext: () => layerCtx }) });
+    const ctx = recording(calls);
     const painted = mouth.paint(ctx, { points, neutral, rig, weights: REFERENCE_POSES.rest.weights, viseme: "sil", lipColour: [150, 90, 84] });
-    return { painted, draws, calls };
+    return { painted, draws: draws.map((d) => d.alpha), onLayer: draws.every((d) => d.ctx === layerCtx), calls, layer };
   }
 
   beforeEach(() => vi.stubGlobal("Path2D", TestPath));
   afterEach(() => vi.unstubAllGlobals());
 
   it("paints nothing at the Reference's closed rest, exactly as before", () => {
-    const { painted, draws, calls } = parted(0);
+    const { painted, draws, calls, layer } = parted(0);
     expect(painted).toBe(true);
     expect(draws).toEqual([]);
     expect(calls).toEqual([]);
+    expect(layer).toEqual([]);
   });
 
   it("between words: the lips' own seam, a soft dark line, no enamel", () => {
-    const { draws, calls } = parted(width * 0.035);
+    const { draws, onLayer, calls, layer } = parted(width * 0.035);
     expect(draws).toHaveLength(1);
     expect(draws[0]).toBeLessThan(0.05);
-    // The interior is let through only partly, and the seam line is stroked.
-    const alpha = calls.find((c) => c.startsWith("globalAlpha="));
+    expect(onLayer).toBe(true);
+    // The interior is let through only partly (into the layer), and on the
+    // face the seam line is the only stroke: the layer comes as one image.
+    const alpha = layer.find((c) => c.startsWith("globalAlpha=") && c !== "globalAlpha=1");
     expect(alpha).toBeDefined();
     expect(Number(alpha!.slice("globalAlpha=".length))).toBeLessThan(0.5);
     expect(calls.filter((c) => c === "stroke")).toHaveLength(1);
+    expect(calls.filter((c) => c === "drawImage")).toHaveLength(1);
+    // No halo on the lips of a picture whose softness is unknown.
+    expect(calls.filter((c) => c === "stroke(aperture)" || c.startsWith("strokeStyle"))).toHaveLength(1);
   });
 
   it("open: the teeth whole, the interior whole, no seam line", () => {
-    const { draws, calls } = parted(width * 0.15);
+    const { draws, onLayer, calls, layer } = parted(width * 0.15);
     expect(draws).toEqual([1]);
-    expect(calls).toContain("globalAlpha=1");
+    expect(onLayer).toBe(true);
+    expect(layer).toContain("globalAlpha=1");
     expect(calls.filter((c) => c === "stroke")).toHaveLength(0);
+    expect(calls.filter((c) => c === "drawImage")).toHaveLength(1);
+    // The inner lip's bands are painted into the layer, never onto the face.
+    expect(layer.filter((c) => c === "stroke").length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("paints straight onto the face, clipped, when no layer can be had", () => {
+    const mouth = new ContinuousMouth(manifest);
+    const draws: unknown[] = [];
+    Object.assign(mouth, { oral: { draw: (c: unknown) => draws.push(c) } });
+    const points = neutral.map((p) => ({ ...p }));
+    points[13].y -= width * 0.075; points[14].y += width * 0.075;
+    vi.stubGlobal("document", undefined);
+    const calls: string[] = [];
+    const ctx = recording(calls);
+    mouth.paint(ctx, { points, neutral, rig, weights: REFERENCE_POSES.rest.weights, viseme: "sil", lipColour: [150, 90, 84] });
+    expect(draws).toHaveLength(1);
+    expect(draws[0]).toBe(ctx);
+    expect(calls.slice(0, 2)).toEqual(["save", "clip"]);
+    expect(calls).not.toContain("drawImage");
   });
 
   it("hands the reveal to the geometric fallback as its teeth alpha", () => {
@@ -165,7 +200,7 @@ describe("the photographic mouth as the lips part", () => {
     const geometric = vi.spyOn((mouth as unknown as { geometric: { draw: (...a: unknown[]) => void } }).geometric, "draw").mockImplementation(() => {});
     const points = neutral.map((p) => ({ ...p }));
     points[13].y -= width * 0.025; points[14].y += width * 0.025;
-    const ctx = { save() {}, restore() {}, clip() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, globalAlpha: 1 } as unknown as CanvasRenderingContext2D;
+    const ctx = { save() {}, restore() {}, clip() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, setTransform() {}, drawImage() {}, globalAlpha: 1 } as unknown as CanvasRenderingContext2D;
     mouth.paint(ctx, { points, neutral, rig, weights: REFERENCE_POSES.rest.weights, viseme: "sil" });
     const frame = geometric.mock.calls[0][1] as { teethAlpha: number; cavityAlpha: number };
     expect(frame.teethAlpha).toBeGreaterThan(0);
