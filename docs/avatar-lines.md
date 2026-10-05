@@ -609,6 +609,60 @@ as the classic mouth and was clearly better on all three, with two tells:
   EE identical. Still weak: scan grain is not a blur, and the hard aperture
   edge against a soft lip remains the strongest cut-out tell.
 
+### The aperture's edge (2026-10-05)
+
+The interior of the photographic mouth (cavity, teeth, geometric fallback)
+was drawn inside a pixel-hard clip of the inner lip ring. On a soft picture
+every edge is 2 to 5 px wide and the cavity ended in a 1 px cut, so the
+interior read as pasted in: measured in the rendered 1200 px frame, the
+aperture's edge was 2 to 3 px wide (contrast over the steepest 1 px step of
+the luma profile across the lip line, the measure `character-mouth.ts`
+reads the picture with) against the pictures' own 4 to 6 (`look.soft` ×
+mouth width) and 5 to 9 (their outer lips, read the same way).
+`embed/src/mouth/aperture-feather.ts` now does for the photographic mouth
+what `character-paint.ts` does for a render:
+
+- **The interior is feathered, not clipped.** It is painted into a layer of
+  its own (`FeatheredLayer`: two small canvases, made once, grown when the
+  mouth needs more, the face's transform carried over so the painting code
+  is unchanged) and brought back through a mask: the aperture filled,
+  eroded by half the feather (a destination-out stroke of the feather's
+  width) and blurred by 0.4 of it (`destination-in`), so the interior fades
+  out INSIDE the lip's edge and is nothing (< 1/255) a feather outside it.
+  The feather is the picture's own edge width in the mouth's pixels
+  (`look.soft` × W, as `MouthSurfaceFrame.soft`), floor 1.2 px, ceiling
+  0.03 W. The model of the mask (`featherAlpha`) and the clamp are tested;
+  a context without `filter` support (decided once) gets the same profile
+  as nine stepped rings. One blur per frame on a mouth-sized canvas: at a
+  300 px mouth the paint pass is 1.7 to 2.4 ms in software raster, and the
+  whole frame costs what it did (the old path's blur-filtered strokes on
+  the full canvas were as dear, only deferred).
+- **The inner lip.** Just inside the edge, bands in the layer (one blur
+  pass, on the mask's canvas first): under the upper lip, which overhangs,
+  its shadow on the top of the teeth (`dentalLighting(lip).recess`, as deep
+  as 0.14 of the opening, at most 0.05 W); on the lower lip, its wet inner
+  tone (the lip half way to `tissue`), narrower. Both with the feather and
+  the gap; nothing under 0.01 W, where the contact seam owns the aperture.
+- **The rim.** Outside the edge, a faint dark halo (`cavity` tone, alpha
+  ≤ 0.13 at full) scaled by how soft the picture is (`edgeSoftness`: 0 at
+  `soft` 0.01, 1 at 0.03) and by the cavity reveal squared, so lips only
+  just apart show a slit, not a halo.
+
+Measured on the three published people and the lab Reference (its own
+teeth and the standard ones), held AA/EE/OO and a mid-speech frame, the
+aperture's edge went from 2.0–3.4 px to 4.3–7.6 (0.95–1.49 × `look.soft` ×
+W; with the character mouth's own ±5 px window, 0.65–1.1 × everywhere but
+the scan's OO at 1.38), never past the pictures' own outer-lip edges. The
+Reference's EE enamel luma moved 2 (198/218 → 196/216); the standard
+teeth's p50 on the render and the warm photo 3 to 5 lower, which is the
+upper lip's shadow on them. Outside the aperture, near-closed frames
+(gap < 0.045 W) changed by at most 6 levels; at 0.055 W a 1 px line along
+the edge darkens 10. Rest and the classic and character mouths are
+untouched; the human and character goldens are unchanged. Still weak: the
+corners of a wide smile go soft on a smooth render (its own corners are),
+and the contact seam's blur-filtered stroke is still drawn on the full
+canvas, the one whole-canvas filter pass left between words.
+
 ### Step 5: preparing your avatar (2026-09-26)
 
 What makes the Reference avatar look as it does is its kit: its own mouth
