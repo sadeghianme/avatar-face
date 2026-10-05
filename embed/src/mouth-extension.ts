@@ -33,8 +33,15 @@ export interface MouthSurfaceFrame {
    *  the ceiling for anything drawn into it. Absent on a tainted texture. */
   faceHighlight?: number;
   /** How soft the picture's own edges are, as a share of the mouth's width
-   *  (CharacterLook.soft). */
+   *  (CharacterLook.soft: read across the lip seam, the character mouth's
+   *  measure). */
   soft?: number;
+  /** The width of the picture's crispest edges, in texture pixels
+   *  (face-sharpness.ts), and how many of this frame's pixels one texture
+   *  pixel is: their product is the picture's sharpness in the frame.
+   *  Absent on a flat or tainted picture. */
+  sharpness?: number;
+  pixelScale?: number;
   points: readonly MouthPoint[];
   neutral: readonly MouthPoint[];
   rig: Rig;

@@ -74,10 +74,12 @@ export class DentalOralSurface {
   get match(): EnamelMatch | null { return this.fitted?.match ?? null; }
 
   /** The arches as this face lights them (enamel-match-model), fitted once
-   *  per face and reused every frame after. */
-  private fit(frame: MouthSurfaceFrame): Arch[] {
-    const face: FaceLook = { lip: frame.lipColour ?? [150, 90, 84], skin: frame.skinColour, highlight: frame.faceHighlight, soft: frame.soft };
-    const key = [face.lip, face.skin ?? "-", face.highlight ?? "-", face.soft ?? "-"].join("/");
+   *  per face and reused every frame after. `width` is the mouth's, in the
+   *  frame's pixels: the picture's sharpness is taken as a share of it. */
+  private fit(frame: MouthSurfaceFrame, width: number): Arch[] {
+    const sharp = frame.sharpness !== undefined && frame.pixelScale && width > 0 ? (frame.sharpness * frame.pixelScale) / width : undefined;
+    const face: FaceLook = { lip: frame.lipColour ?? [150, 90, 84], skin: frame.skinColour, highlight: frame.faceHighlight, sharp };
+    const key = [face.lip, face.skin ?? "-", face.highlight ?? "-", sharp === undefined ? "-" : sharp.toFixed(5)].join("/");
     if (this.fitted?.key === key) return this.fitted.arches;
     const match = enamelMatch(face, this.enamel, this.origin === "own");
     this.fitted = { key, match, arches: this.arches.map(arch => ({ layer: arch.layer, canvas: fitTexture(arch.canvas, match) })) };
@@ -104,7 +106,7 @@ export class DentalOralSurface {
       y: (-(p.x - cx) * Math.sin(angle) + (p.y - cy) * Math.cos(angle)) / width,
     })));
     const rgb = (colour: readonly number[]) => `rgb(${colour.join(",")})`;
-    const arches = this.fit(frame);
+    const arches = this.fit(frame, width);
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle); ctx.scale(width, width);
     const cavity = ctx.createRadialGradient(0, .04, .01, 0, .12, .49);
     cavity.addColorStop(0, rgb(light.recess));

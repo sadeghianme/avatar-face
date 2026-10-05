@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { DentalOralSurface } from "../dental-oral-surface";
-import { ContinuousMouth } from "../continuous-mouth";
+import { ContinuousMouth, SEAM_STROKES } from "../continuous-mouth";
 import { DEFAULT_REFERENCE_PROFILE, REFERENCE_POSES } from "../reference-mouth-model";
 import { validatePerformanceManifest } from "../photographic-performance-model";
 import { ZERO_WEIGHTS, type Rig } from "../../types";
@@ -43,7 +43,7 @@ function context() {
 const points = Array.from({ length: 478 }, () => ({ x: 50, y: 25 }));
 const ring = [{ x: 0, y: 0 }, { x: 50, y: 30 }, { x: 100, y: 0 }, { x: 50, y: -10 }];
 ring.forEach((p, i) => { points[i] = p; });
-const warmFace = { lipColour: [175, 79, 66], skinColour: [247, 166, 105], faceHighlight: 207, soft: 0.027 };
+const warmFace = { lipColour: [175, 79, 66], skinColour: [247, 166, 105], faceHighlight: 207, sharpness: 2.7, pixelScale: 1 };
 const frame = (face: Partial<MouthSurfaceFrame> = warmFace) => ({
   points, neutral: points, rig: { inner_lip_ring: [0, 1, 2, 3, ...Array(17).fill(3)] }, weights: { ...ZERO_WEIGHTS }, viseme: "aa", ...face,
 } as unknown as MouthSurfaceFrame);
@@ -91,7 +91,7 @@ describe("the teeth photo on a face", () => {
     const s = surface("own");
     const { ctx, drawn } = context();
     // The Reference's own face, crisp: its own teeth photo needs nothing.
-    s.draw(ctx, frame({ lipColour: [144, 89, 66], skinColour: [233, 170, 135], faceHighlight: 214, soft: 0.006 }), { x: 0, y: 0 }, { x: 100, y: 0 });
+    s.draw(ctx, frame({ lipColour: [144, 89, 66], skinColour: [233, 170, 135], faceHighlight: 214, sharpness: 0.6, pixelScale: 1 }), { x: 0, y: 0 }, { x: 100, y: 0 });
     for (const g of s.match!.gain) expect(Math.abs(g - 1)).toBeLessThan(1e-3);
     expect(s.match!.blur).toBe(0);
     expect(created).toBe(0);
@@ -118,7 +118,8 @@ describe("the photographic mouth as the lips part", () => {
 
   /** A 2D context that records its calls and property sets into `calls`;
    *  its transform is the identity, as a face drawn straight has. */
-  const recording = (calls: string[]) => new Proxy({ globalAlpha: 1, getTransform: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }) } as Record<string, unknown>, {
+  const gradient = { addColorStop() {} };
+  const recording = (calls: string[]) => new Proxy({ globalAlpha: 1, getTransform: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }), createRadialGradient: () => { calls.push("createRadialGradient"); return gradient; } } as Record<string, unknown>, {
     get: (obj, key: string) => (key in obj ? obj[key] : (...args: unknown[]) => { calls.push(`${key}${typeof args[0] === "string" ? `(${args[0]})` : ""}`); }),
     set: (obj, key: string, value) => { obj[key] = value; calls.push(`${key}=${value}`); return true; },
   }) as unknown as CanvasRenderingContext2D;
@@ -158,14 +159,19 @@ describe("the photographic mouth as the lips part", () => {
     expect(draws[0]).toBeLessThan(0.05);
     expect(onLayer).toBe(true);
     // The interior is let through only partly (into the layer), and on the
-    // face the seam line is the only stroke: the layer comes as one image.
+    // face the seam line's stacked strokes are the only strokes, with no
+    // filter: the layer comes as one image.
     const alpha = layer.find((c) => c.startsWith("globalAlpha=") && c !== "globalAlpha=1");
     expect(alpha).toBeDefined();
     expect(Number(alpha!.slice("globalAlpha=".length))).toBeLessThan(0.5);
-    expect(calls.filter((c) => c === "stroke")).toHaveLength(1);
+    expect(calls.filter((c) => c === "stroke")).toHaveLength(SEAM_STROKES.length);
+    expect(calls.some((c) => c.startsWith("filter="))).toBe(false);
     expect(calls.filter((c) => c === "drawImage")).toHaveLength(1);
-    // No halo on the lips of a picture whose softness is unknown.
-    expect(calls.filter((c) => c === "stroke(aperture)" || c.startsWith("strokeStyle"))).toHaveLength(1);
+    // No halo on the lips of a picture whose sharpness is unknown.
+    expect(calls.filter((c) => c === "stroke(aperture)" || c.startsWith("strokeStyle"))).toHaveLength(SEAM_STROKES.length);
+    // The corners' stamps are on the mask, never on the face.
+    expect(calls).not.toContain("createRadialGradient");
+    expect(layer.filter((c) => c === "createRadialGradient")).toHaveLength(2);
   });
 
   it("open: the teeth whole, the interior whole, no seam line", () => {

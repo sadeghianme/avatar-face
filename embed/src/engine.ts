@@ -18,6 +18,7 @@ import { BlinkScheduler, blinkEase } from "./blink";
 import { eyeExtent, lidAmount, lidSamplePoints, medianColour, paintLid, type Blit, type LidTone } from "./blink-lid";
 import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
 import { FACE_OVAL, faceHighlight } from "./face-light";
+import { faceSharpness, lumaField, sharpnessBoxes } from "./face-sharpness";
 import {
   CharacterField,
   DEFAULT_LOOK,
@@ -589,6 +590,9 @@ export class AvatarEngine {
   /** Luma of the picture's brightest skin or sclera (face-light.ts): the
    *  ceiling for the teeth a mouth renderer draws into it. */
   private faceHighlight: number | null = null;
+  /** The width of the picture's crispest edges, texture px (face-sharpness.ts);
+   *  null on a flat or tainted picture. */
+  private faceSharpness: number | null = null;
   /** The face's own lip colour, sampled at load. The mouth interior is
    * derived from it rather than hardcoded. */
   private lipColour: [number, number, number] = [150, 90, 84];
@@ -1116,9 +1120,31 @@ export class AvatarEngine {
         this.skinColour = skin[Math.floor(skin.length / 2)].rgb;
       }
       this.sampleFaceHighlight();
+      this.sampleFaceSharpness(ctx);
     } catch {
       // Tainted texture: keep the default, which is a mid warm lip.
     }
+  }
+
+  /**
+   * How sharp the picture is (face-sharpness.ts): the width of its crispest
+   * strong edges round the mouth and the eyes, in its own pixels, read
+   * from `ctx`, which holds the texture 1:1 (no filtering: the widths are
+   * the picture's). The photographic mouth feathers its aperture by it and
+   * softens the teeth to it. Null on a flat picture.
+   */
+  private sampleFaceSharpness(ctx: CanvasRenderingContext2D): void {
+    const fields = sharpnessBoxes(this.texPoints, this.texture.naturalWidth, this.texture.naturalHeight).map((b) => {
+      const d = ctx.getImageData(b.x, b.y, b.w, b.h);
+      return lumaField(d.data, d.width, d.height);
+    });
+    this.faceSharpness = faceSharpness(fields);
+  }
+
+  /** How many canvas pixels one texture pixel is, at rest. */
+  private pixelScale(): number {
+    const tw = this.texture.naturalWidth / Math.max(1, this.rig.image_size[0]);
+    return tw > 0 ? this.scale / tw : this.scale;
   }
 
   /**
@@ -2259,6 +2285,8 @@ export class AvatarEngine {
           skinColour: this.skinColour ?? undefined,
           faceHighlight: this.faceHighlight ?? undefined,
           soft: this.look.soft,
+          sharpness: this.faceSharpness ?? undefined,
+          pixelScale: this.pixelScale(),
           viseme: this.pose?.()?.viseme ?? this.currentViseme(performance.now()),
         });
       } finally { this.ctx.restore(); }

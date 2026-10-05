@@ -26,9 +26,11 @@ export interface FaceLook {
    *  percentile over the face, read from a box-filtered copy so a specular
    *  pinpoint does not set it. */
   highlight?: number;
-  /** How soft the picture's own edges are, as a share of the mouth's width
-   *  (character-mouth's edgeWidth over the lip seam). */
-  soft?: number;
+  /** The width of the picture's crispest edges as a share of the mouth's
+   *  width (face-sharpness.ts: the strong edges round the mouth and the
+   *  eyes, a low percentile of their 10-90% rise). Absent when unknown, and
+   *  then the enamel is not softened. */
+  sharp?: number;
 }
 
 /** What the teeth photo is like, measured once from its extracted upper arch. */
@@ -70,7 +72,9 @@ export const LUMA_FLOOR = 0.78;
 export const OWN_TEETH_STRENGTH = 0.4;
 /** The extraction canvas maps one mouth width to this many pixels. */
 export const ENAMEL_TEXTURE_WIDTH = 512;
-/** A Gaussian edge's width (contrast over steepest step) is about 2.5 sigma. */
+/** A Gaussian edge's width is about 2.5 sigma, by contrast over steepest
+ *  step (the enamel's own edge, sampleEnamel) and by 10-90% rise (the
+ *  picture's, face-sharpness.ts: 2.56) alike. */
 export const EDGE_TO_SIGMA = 1 / 2.5;
 export const MAX_BLUR = 6;
 const CHROMA_GAIN_LIMIT: readonly [number, number] = [0.85, 1.15];
@@ -123,12 +127,13 @@ export function enamelMatch(face: FaceLook, enamel: EnamelSample, own = false): 
     for (let i = 0; i < 3; i++) gain[i] *= cap;
   }
 
-  // Sharpness: blur until the enamel's edges are as wide as the picture's.
-  // Sigmas add in quadrature; a crisp picture, or teeth already softer than
-  // it, get nothing.
+  // Sharpness: blur until the enamel's edges are as wide as the picture's
+  // crispest. Sigmas add in quadrature; a crisp picture, or teeth already
+  // softer than it, get nothing; so does a picture whose sharpness is
+  // unknown.
   let blur = 0;
-  if (finite(face.soft) && face.soft > 0) {
-    const faceSigma = face.soft * ENAMEL_TEXTURE_WIDTH * EDGE_TO_SIGMA;
+  if (finite(face.sharp) && face.sharp > 0) {
+    const faceSigma = face.sharp * ENAMEL_TEXTURE_WIDTH * EDGE_TO_SIGMA;
     const ownSigma = (finite(enamel.edge) ? Math.max(0, enamel.edge) : 0) * EDGE_TO_SIGMA;
     blur = Math.sqrt(Math.max(0, faceSigma ** 2 - ownSigma ** 2)) * strength;
     blur = blur < 0.4 ? 0 : Math.min(MAX_BLUR, blur);

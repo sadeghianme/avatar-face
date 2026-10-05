@@ -10,42 +10,44 @@ import type { MouthPoint } from "../mouth-extension";
  * bleeds outward over the lip. Clipped to the pixel-hard aperture, as it
  * was, every edge in a soft picture (a scan, a smooth render, a warm photo)
  * was 2 to 5 px wide while the cavity and the teeth ended in a 1 px cut, and
- * the interior read as pasted in. The character mouth softens its opening
- * the same way, by the same measure of the picture (character-paint.ts).
+ * the interior read as pasted in. The feather is the width of the picture's
+ * crispest edges (face-sharpness.ts), and the corners of the aperture, the
+ * acute tips of a smile, are kept crisp under it. The character mouth
+ * softens its opening the same way, by its own measure of the picture
+ * (character-paint.ts).
  */
 
 /** The feather never under this, px: a hard clip is a 1 px cut, and the
- *  antialiasing of one is not a feather. */
+ *  antialiasing of one is not a feather. A picture whose sharpness is
+ *  unknown (flat, tainted) gets this. */
 export const FEATHER_FLOOR = 1.2;
-/** ...and never over this share of the mouth's width. The measure of a
- *  picture's edges is capped at 4 px of its own (character-mouth.ts), which
- *  on a small mouth upscaled is a wide feather; past this the teeth fade
- *  into the lips and the mouth goes mushy. */
+/** ...and never over this share of the mouth's width: past this the teeth
+ *  fade into the lips and the mouth goes mushy (a very soft picture, or a
+ *  small mouth upscaled). */
 export const FEATHER_CEILING = 0.03;
-/** A picture whose edge width is unknown (a tainted texture): the character
- *  mouth's default (DEFAULT_LOOK.soft). */
-export const DEFAULT_SOFT = 0.006;
 
 const smooth = (t: number) => {
   const s = Math.max(0, Math.min(1, t));
   return s * s * (3 - 2 * s);
 };
 
-/** The feather, px, for a mouth `width` px wide on a picture whose edges
- *  are `soft` of a mouth width (MouthSurfaceFrame.soft): the picture's own
- *  edge width in these pixels, clamped. */
-export function apertureFeather(width: number, soft?: number): number {
-  const own = Number.isFinite(soft) && (soft as number) > 0 ? (soft as number) : DEFAULT_SOFT;
-  return Math.max(FEATHER_FLOOR, Math.min(FEATHER_CEILING * width, own * width));
+/** The feather, px, for a mouth `width` px wide on a picture whose
+ *  crispest edges are `edge` px wide in the same pixels (face-sharpness.ts,
+ *  MouthSurfaceFrame.sharpness × pixelScale): the picture's own edge width,
+ *  clamped; the floor when unknown. */
+export function apertureFeather(width: number, edge?: number): number {
+  const own = Number.isFinite(edge) && (edge as number) > 0 ? (edge as number) : 0;
+  return Math.max(FEATHER_FLOOR, Math.min(FEATHER_CEILING * width, own));
 }
 
-/** How soft the picture is, 0 to 1, from its edge width as a share of the
- *  mouth's width: 0 at a crisp photograph (the Reference, 0.015), full at a
- *  smooth render or an upscaled snapshot (0.03). The rim halo outside the
- *  edge is scaled by it: a crisp picture's lip edge has no halo. */
-export function edgeSoftness(soft?: number): number {
-  const s = Number.isFinite(soft) ? (soft as number) : DEFAULT_SOFT;
-  return smooth((s - 0.01) / 0.02);
+/** How soft the picture is, 0 to 1, from its crispest edge width as a
+ *  share of the mouth's width: 0 at a crisp photograph (the Reference,
+ *  0.011), full at a smooth render or an upscaled snapshot (0.03). The rim
+ *  halo outside the edge is scaled by it: a crisp picture's lip edge has
+ *  no halo, nor has one whose sharpness is unknown. */
+export function edgeSoftness(share?: number): number {
+  if (!Number.isFinite(share)) return 0;
+  return smooth(((share as number) - 0.01) / 0.02);
 }
 
 /** The mask's erosion (how far inside the edge its own edge sits) and its
@@ -72,6 +74,33 @@ function normalCdf(z: number): number {
 export function featherAlpha(d: number, feather: number): number {
   return normalCdf((d - MASK_ERODE * feather) / (MASK_SIGMA * feather));
 }
+
+/** The corners stay crisp: the hard aperture is stamped back over the
+ *  feathered mask, whole at each mouth corner and gone this share of the
+ *  mouth's width inward. Eroded and blurred alike everywhere, the mask
+ *  rounded off the acute tips of a wide smile. */
+export const CORNER_REACH = 0.2;
+
+/** How much of the hard aperture is stamped back `distance` px from a
+ *  corner whose stamp reaches `reach` px: 1 at the corner, 0 at the reach,
+ *  smooth between. */
+export function cornerWeight(distance: number, reach: number): number {
+  return reach > 0 ? smooth(1 - distance / reach) : 0;
+}
+
+/** The mask's alpha `d` px inside the edge where the corner stamp is
+ *  `corner` strong (cornerWeight): the feathered alpha and the stamp
+ *  composited, one over the other (source-over of two alphas is their
+ *  screen), so it is whole where either is, and outside the hard edge the
+ *  stamp adds nothing. */
+export function featherAlphaAt(d: number, feather: number, corner: number): number {
+  const soft = featherAlpha(d, feather), hard = d > 0 ? corner : 0;
+  return 1 - (1 - soft) * (1 - hard);
+}
+
+/** The stamp's radial gradient stops: cornerWeight, as a gradient's
+ *  straight runs between stops follow it. */
+export const CORNER_STOPS: readonly [number, number][] = [0, 0.25, 0.5, 0.75, 1].map((t) => [t, cornerWeight(t, 1)] as [number, number]);
 
 /** Without canvas filters: the erosion and blur as rings stroked out of the
  *  filled aperture (destination-out), the widest first, each taking the
@@ -203,11 +232,18 @@ export class FeatheredLayer {
     lc.restore();
   }
 
-  /** The layer through the mask onto `ctx`: the aperture filled, eroded by
-   *  half the feather (a stroke of the feather's width taken out of the
-   *  fill) and blurred by 0.4 of it, kept of the layer (destination-in),
-   *  then drawn onto the face in device pixels, as it was painted. */
-  end(ctx: CanvasRenderingContext2D, aperture: Path2D, feather: number): void {
+  /**
+   * The layer through the mask onto `ctx`: the aperture filled, eroded by
+   * half the feather (a stroke of the feather's width taken out of the
+   * fill), blurred by 0.4 of it in place, and at each of `corners` the hard
+   * aperture stamped back through a radial weight (whole at the corner,
+   * gone `reach` px inward, in the face's units), kept of the layer
+   * (destination-in), then drawn onto the face in device pixels, as it was
+   * painted. The stamp is composited over the feathered mask, so the alpha
+   * is whole where either is and nothing is added outside the hard edge
+   * (featherAlphaAt).
+   */
+  end(ctx: CanvasRenderingContext2D, aperture: Path2D, feather: number, corners?: { points: readonly MouthPoint[]; reach: number }): void {
     if (!this.open) return;
     this.open = false;
     const { x, y, w, h, matrix } = this;
@@ -227,6 +263,14 @@ export class FeatheredLayer {
     if (this.filters) {
       mc.lineWidth = 2 * MASK_ERODE * feather;
       mc.stroke(aperture);
+      // Blurred in place: the mask drawn over itself (a snapshot is taken
+      // first) through the filter, replacing what was there.
+      mc.setTransform(1, 0, 0, 1, 0, 0);
+      mc.globalCompositeOperation = "copy";
+      mc.filter = `blur(${(MASK_SIGMA * feather * this.scale).toFixed(2)}px)`;
+      mc.drawImage(this.mask!, 0, 0, w, h, 0, 0, w, h);
+      mc.filter = "none";
+      mc.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e - x, matrix.f - y);
     } else {
       for (const step of featherSteps(feather)) {
         mc.lineWidth = step.lineWidth;
@@ -236,12 +280,27 @@ export class FeatheredLayer {
       mc.globalAlpha = 1;
     }
     mc.globalCompositeOperation = "source-over";
+    if (corners && corners.reach > 0) {
+      for (const c of corners.points) {
+        // Clipped to the stamp's own box: the gradient is nothing past its
+        // reach, and filling the whole aperture through it cost as much as
+        // the blur.
+        const r = corners.reach;
+        mc.save();
+        mc.beginPath();
+        mc.rect(c.x - r, c.y - r, 2 * r, 2 * r);
+        mc.clip();
+        const stamp = mc.createRadialGradient(c.x, c.y, 0, c.x, c.y, r);
+        for (const [t, a] of CORNER_STOPS) stamp.addColorStop(t, `rgba(0,0,0,${a.toFixed(3)})`);
+        mc.fillStyle = stamp;
+        mc.fill(aperture);
+        mc.restore();
+      }
+    }
     lc.setTransform(1, 0, 0, 1, 0, 0);
     lc.globalAlpha = 1;
     lc.globalCompositeOperation = "destination-in";
-    if (this.filters) lc.filter = `blur(${(MASK_SIGMA * feather * this.scale).toFixed(2)}px)`;
     lc.drawImage(this.mask!, 0, 0, w, h, 0, 0, w, h);
-    if (this.filters) lc.filter = "none";
     lc.globalCompositeOperation = "source-over";
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);

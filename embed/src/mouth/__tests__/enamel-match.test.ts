@@ -10,9 +10,9 @@ import { faceHighlight, insidePolygon, lumaPercentile } from "../../face-light";
  *  from the photo's upscale to the extraction canvas. */
 const STANDARD: EnamelSample = { cast: [1.093, 0.984, 0.922], bright: 227, edge: 8.7 };
 const luma = (c: readonly number[]) => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
-const warm: FaceLook = { lip: [175, 79, 66], skin: [247, 166, 105], highlight: 207, soft: 0.027 };
-const cool: FaceLook = { lip: [150, 100, 110], skin: [150, 160, 200], highlight: 207, soft: 0.027 };
-const neutral: FaceLook = { lip: [150, 90, 84], skin: [180, 180, 180], highlight: 240, soft: 0.004 };
+const warm: FaceLook = { lip: [175, 79, 66], skin: [247, 166, 105], highlight: 207, sharp: 0.027 };
+const cool: FaceLook = { lip: [150, 100, 110], skin: [150, 160, 200], highlight: 207, sharp: 0.027 };
+const neutral: FaceLook = { lip: [150, 90, 84], skin: [180, 180, 180], highlight: 240, sharp: 0.004 };
 
 describe("the teeth come into the light as the lips part", () => {
   it("shows nothing at a closed mouth and everything once the gap is clear", () => {
@@ -78,7 +78,7 @@ describe("the enamel fitted to the face", () => {
   });
   it("leaves enamel that already has the face's cast alone", () => {
     // The Reference: its teeth photo against its own portrait's cheeks.
-    const reference: FaceLook = { lip: [144, 89, 66], skin: [233, 170, 135], highlight: 214, soft: 0.0154 };
+    const reference: FaceLook = { lip: [144, 89, 66], skin: [233, 170, 135], highlight: 214, sharp: 0.0113 };
     const { gain, blur } = enamelMatch(reference, STANDARD, true);
     for (const g of gain) expect(Math.abs(g - 1)).toBeLessThan(0.012);
     expect(blur).toBe(0);
@@ -95,17 +95,17 @@ describe("the enamel fitted to the face", () => {
     expect(dim.gain[0] / dim.gain[2]).toBeCloseTo(bright.gain[0] / bright.gain[2], 6);
   });
   it("softens the enamel to a soft picture and leaves a crisp one sharp", () => {
-    const soft = enamelMatch({ ...neutral, soft: 0.03 }, STANDARD);
+    const soft = enamelMatch({ ...neutral, sharp: 0.03 }, STANDARD);
     expect(soft.blur).toBeGreaterThan(1);
     expect(soft.blur).toBeLessThanOrEqual(MAX_BLUR);
-    expect(enamelMatch({ ...neutral, soft: 0.004 }, STANDARD).blur).toBe(0);
+    expect(enamelMatch({ ...neutral, sharp: 0.004 }, STANDARD).blur).toBe(0);
     // Teeth already softer than the picture are not softened further.
-    expect(enamelMatch({ ...neutral, soft: 0.03 }, { ...STANDARD, edge: 60 }).blur).toBe(0);
+    expect(enamelMatch({ ...neutral, sharp: 0.03 }, { ...STANDARD, edge: 60 }).blur).toBe(0);
     // Sigmas add in quadrature: a sharper source needs more blur to match.
-    expect(enamelMatch({ ...neutral, soft: 0.03 }, { ...STANDARD, edge: 2 }).blur).toBeGreaterThan(soft.blur);
+    expect(enamelMatch({ ...neutral, sharp: 0.03 }, { ...STANDARD, edge: 2 }).blur).toBeGreaterThan(soft.blur);
   });
   it("fits a face's own teeth photo the same way, gently", () => {
-    const face: FaceLook = { ...warm, highlight: 150, soft: 0.03 };
+    const face: FaceLook = { ...warm, highlight: 150, sharp: 0.03 };
     const standard = enamelMatch(face, STANDARD), own = enamelMatch(face, STANDARD, true);
     expect(own.blur).toBeCloseTo(standard.blur * OWN_TEETH_STRENGTH, 6);
     for (let i = 0; i < 3; i++) {
@@ -126,7 +126,7 @@ describe("the enamel fitted to the face", () => {
     for (const g of reference.gain) expect(g).toBeCloseTo(1, 9);
     expect(reference.blur).toBe(0);
     expect(enamelMatch({ lip: [0, 0, 0] }, STANDARD)).toEqual({ gain: [1, 1, 1], blur: 0 });
-    expect(enamelMatch({ lip: [NaN, 1, 2] as unknown as [number, number, number], highlight: NaN, soft: NaN }, { cast: [NaN, 1, 1], bright: NaN, edge: NaN }))
+    expect(enamelMatch({ lip: [NaN, 1, 2] as unknown as [number, number, number], highlight: NaN, sharp: NaN }, { cast: [NaN, 1, 1], bright: NaN, edge: NaN }))
       .toEqual({ gain: [1, 1, 1], blur: 0 });
   });
   it("is deterministic", () => {

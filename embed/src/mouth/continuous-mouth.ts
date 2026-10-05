@@ -9,7 +9,7 @@ import { dentalLighting } from "./dental-lighting-model";
 import { ReferenceMouth } from "./reference-mouth";
 import { DEFAULT_REFERENCE_PROFILE, type ReferenceProfile } from "./reference-mouth-model";
 import { buildLowerFaceRig, type LowerFaceRig } from "../jaw-rig";
-import { apertureFeather, edgeSoftness, FeatheredLayer } from "./aperture-feather";
+import { apertureFeather, CORNER_REACH, edgeSoftness, FeatheredLayer } from "./aperture-feather";
 
 const smooth = (t: number) => {
   const s = Math.max(0, Math.min(1, t));
@@ -24,6 +24,18 @@ export function innerLipStrength(gap: number, width: number, interior: number): 
   const strength = smooth((gap / width - 0.01) / 0.03) * interior;
   return strength < 0.01 ? 0 : strength;
 }
+
+/** The contact seam: a line SEAM_WIDTH of the mouth wide at SEAM_ALPHA (at
+ *  full strength), as it was, blurred by 0.006 of the width; drawn instead
+ *  as SEAM_STROKES, [width share, alpha share] each, one over the other
+ *  (the order makes no difference to the alpha they leave), so the profile
+ *  across the line is a stair that fits the blurred one: least squares over
+ *  the line, RMS 7.4% of the peak, the area 99.2%, the peak 90% (a
+ *  filtered stroke on the face's canvas was a whole-canvas filter pass
+ *  between words, 8 ms at 1200 px in software raster). */
+export const SEAM_WIDTH = 0.018;
+export const SEAM_ALPHA = 0.3;
+export const SEAM_STROKES: readonly [number, number][] = [[2.3, 0.1], [1.5, 0.323], [0.8, 0.417]];
 
 /** How much of the corners' inward travel is removed at full rounding. */
 export const CORNER_EASE = 0.4;
@@ -201,14 +213,17 @@ export class ContinuousMouth implements MouthExtension {
     // lip-occlusion-model). A small aperture is a seam, never a white line.
     const reveal = enamelReveal(gap, width);
     const interior = cavityReveal(gap, width);
-    // The edge between the lip and the interior is as soft as the picture's
-    // own edges (aperture-feather.ts): the interior is painted into a layer
-    // and brought through a mask that fades out inside the lip's edge.
-    const feather = apertureFeather(width, frame.soft);
+    // The edge between the lip and the interior is as sharp as the picture's
+    // own crispest edges (face-sharpness.ts, in this frame's pixels; unknown
+    // on a flat or tainted picture): the interior is painted into a layer
+    // and brought through a mask that fades out inside the lip's edge
+    // (aperture-feather.ts).
+    const sharp = frame.sharpness !== undefined && frame.pixelScale ? frame.sharpness * frame.pixelScale : undefined;
+    const feather = apertureFeather(width, sharp);
     if (this.rounding > 0.02) this.paintMoundShadow(ctx, left, right, width);
     // The rim comes with the interior, squared: lips only just apart show a
     // slit, not a halo.
-    this.paintRim(ctx, aperture, feather, edgeSoftness(frame.soft) * interior * interior, frame.lipColour);
+    this.paintRim(ctx, aperture, feather, edgeSoftness(sharp === undefined ? undefined : sharp / width) * interior * interior, frame.lipColour);
     const layer = this.layer.begin(ctx, ring, feather);
     // Without a layer (no document), straight onto the face, clipped.
     const target = layer ?? ctx;
@@ -226,7 +241,9 @@ export class ContinuousMouth implements MouthExtension {
     const paintInnerLip = (c: CanvasRenderingContext2D) => this.paintInnerLip(c, ring, width, gap, feather, innerLip, frame.lipColour);
     if (layer) {
       if (innerLip > 0) this.layer.blurred(paintInnerLip, feather * 0.5);
-      this.layer.end(ctx, aperture, feather);
+      // The corners (ring[0], ring[10]) stay crisp: the feather tapers to a
+      // cut at the tips of a wide smile.
+      this.layer.end(ctx, aperture, feather, { points: [ring[0], ring[10]], reach: width * CORNER_REACH });
     } else {
       if (innerLip > 0) paintInnerLip(ctx);
       ctx.restore();
@@ -301,10 +318,11 @@ export class ContinuousMouth implements MouthExtension {
    * strongest while the aperture is a slit the teeth are not yet in, gone
    * as they arrive. Down the middle of the aperture, each lower-lip point
    * paired with the upper-lip point across from it, so a smile's bow or a
-   * tilted head keeps the line on the seam.
+   * tilted head keeps the line on the seam. Stacked round-capped strokes
+   * (SEAM_STROKES), not a filtered one: no filter pass on the face's canvas.
    */
   private paintContactSeam(ctx: CanvasRenderingContext2D, ring: readonly MouthPoint[], width: number, strength: number, lipColour?: [number, number, number]): void {
-    const alpha = 0.3 * strength;
+    const alpha = SEAM_ALPHA * strength;
     if (alpha < 0.01 || ring.length < 20) return;
     const seam: MouthPoint[] = [];
     for (let k = 0; k <= 10; k++) {
@@ -313,13 +331,14 @@ export class ContinuousMouth implements MouthExtension {
     }
     const shade = dentalLighting(lipColour).cavity;
     ctx.save();
-    ctx.filter = `blur(${(width * 0.006).toFixed(2)}px)`;
-    ctx.strokeStyle = `rgba(${shade.join(",")},${alpha.toFixed(3)})`;
-    ctx.lineWidth = Math.max(1, width * 0.018);
     ctx.lineCap = "round"; ctx.lineJoin = "round";
     ctx.beginPath(); ctx.moveTo(seam[0].x, seam[0].y);
     for (let k = 1; k < seam.length; k++) ctx.lineTo(seam[k].x, seam[k].y);
-    ctx.stroke();
+    for (const [share, scale] of SEAM_STROKES) {
+      ctx.strokeStyle = `rgba(${shade.join(",")},${(alpha * scale).toFixed(3)})`;
+      ctx.lineWidth = Math.max(1, width * SEAM_WIDTH * share);
+      ctx.stroke();
+    }
     ctx.restore();
   }
   /** The soft shadow a protruding mouth casts on the skin around it: a ring
