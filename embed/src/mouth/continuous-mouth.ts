@@ -1,10 +1,11 @@
 import { centralMouthAnchors, type MouthExtension, type MouthPoint, type MouthSurfaceFrame } from "../mouth-extension";
 import type { BlendWeights, Rig } from "../types";
 import { MouthMotion, mouthMixWeights } from "./continuous-mouth-model";
-import { dentalOpening, openingPath } from "./lip-occlusion-model";
+import { cavityReveal, contactSeam, dentalOpening, enamelReveal, openingPath } from "./lip-occlusion-model";
 import { validateMotionManifest, type AvatarPerformanceManifest, type MotionManifest } from "./photographic-performance-model";
 import { validateOralRig, type OralPhoto } from "./photographic-oral-surface";
-import { DentalOralSurface } from "./dental-oral-surface";
+import { DentalOralSurface, type TeethOrigin } from "./dental-oral-surface";
+import { dentalLighting } from "./dental-lighting-model";
 import { ReferenceMouth } from "./reference-mouth";
 import { DEFAULT_REFERENCE_PROFILE, type ReferenceProfile } from "./reference-mouth-model";
 import { buildLowerFaceRig, type LowerFaceRig } from "../jaw-rig";
@@ -56,9 +57,11 @@ export class ContinuousMouth implements MouthExtension {
    */
   private readonly lowerFace: LowerFaceRig;
   /** Throws DentalPhotoError for a teeth photo that does not show the upper
-   *  teeth clearly enough to draw them from. */
-  constructor(private template: MotionManifest, oral?: OralPhoto) {
-    if (oral) this.oral = new DentalOralSurface(oral);
+   *  teeth clearly enough to draw them from. `teeth` says whose they are:
+   *  the face's own are fitted to it gently, the standard ones fully
+   *  (enamel-match-model). */
+  constructor(private template: MotionManifest, oral?: OralPhoto, teeth: TeethOrigin = "own") {
+    if (oral) this.oral = new DentalOralSurface(oral, teeth);
     this.lowerFace = buildLowerFaceRig(template.poses[0].points.map(([x, y]) => ({ x, y })));
   }
 
@@ -175,17 +178,53 @@ export class ContinuousMouth implements MouthExtension {
     if (width < 2 || gap < width * .008) return true;
     const aperture = openingPath(ring);
     const weights = mouthMixWeights(this.motion.values);
+    // Lips only just apart show their own seam under a soft dark line, then
+    // the dark of the mouth, then the teeth as the gap grows (the ramps in
+    // lip-occlusion-model). A small aperture is a seam, never a white line.
+    const reveal = enamelReveal(gap, width);
+    const interior = cavityReveal(gap, width);
     if (this.rounding > 0.02) this.paintMoundShadow(ctx, left, right, width);
     ctx.save(); ctx.clip(aperture);
+    ctx.globalAlpha = interior;
     if (this.oral) {
-      this.oral.draw(ctx, { ...frame, weights }, left, right);
+      this.oral.draw(ctx, { ...frame, weights }, left, right, reveal);
     } else {
       this.geometric.draw(ctx, { weights, viseme: frame.viseme, aperture,
         upper: ring.slice(10), lower: ring.slice(0, 11), neutralLeft: left, neutralRight: right,
-        lipColour: frame.lipColour ?? [150, 90, 84], skinColour: frame.skinColour, cavityAlpha: 1, teethAlpha: 1 },
+        lipColour: frame.lipColour ?? [150, 90, 84], skinColour: frame.skinColour, cavityAlpha: interior, teethAlpha: reveal },
       openingPath(dentalOpening(ring, left, right, weights)));
     }
-    ctx.restore(); return true;
+    ctx.restore();
+    this.paintContactSeam(ctx, ring, width, contactSeam(gap, width), frame.lipColour);
+    return true;
+  }
+
+  /**
+   * The soft dark line where the lips meet, in the lips' own shadow colour
+   * (the engine's contact line, for the classic mouth, is the same idea):
+   * strongest while the aperture is a slit the teeth are not yet in, gone
+   * as they arrive. Down the middle of the aperture, each lower-lip point
+   * paired with the upper-lip point across from it, so a smile's bow or a
+   * tilted head keeps the line on the seam.
+   */
+  private paintContactSeam(ctx: CanvasRenderingContext2D, ring: readonly MouthPoint[], width: number, strength: number, lipColour?: [number, number, number]): void {
+    const alpha = 0.3 * strength;
+    if (alpha < 0.01 || ring.length < 20) return;
+    const seam: MouthPoint[] = [];
+    for (let k = 0; k <= 10; k++) {
+      const a = ring[k], b = ring[(20 - k) % 20];
+      seam.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    }
+    const shade = dentalLighting(lipColour).cavity;
+    ctx.save();
+    ctx.filter = `blur(${(width * 0.006).toFixed(2)}px)`;
+    ctx.strokeStyle = `rgba(${shade.join(",")},${alpha.toFixed(3)})`;
+    ctx.lineWidth = Math.max(1, width * 0.018);
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(seam[0].x, seam[0].y);
+    for (let k = 1; k < seam.length; k++) ctx.lineTo(seam[k].x, seam[k].y);
+    ctx.stroke();
+    ctx.restore();
   }
   /** The soft shadow a protruding mouth casts on the skin around it: a ring
    *  just outside the lips, deepest below (light comes from above), fading

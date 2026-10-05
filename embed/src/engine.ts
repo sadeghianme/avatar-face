@@ -17,6 +17,7 @@
 import { BlinkScheduler, blinkEase } from "./blink";
 import { eyeExtent, lidAmount, lidSamplePoints, medianColour, paintLid, type Blit, type LidTone } from "./blink-lid";
 import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
+import { FACE_OVAL, faceHighlight } from "./face-light";
 import {
   CharacterField,
   DEFAULT_LOOK,
@@ -585,6 +586,9 @@ export class AvatarEngine {
   /** Mid-cheek skin, sampled with the lips: the scene's exposure and colour
    *  cast, which a mouth renderer needs to light anything it draws. */
   private skinColour: [number, number, number] | null = null;
+  /** Luma of the picture's brightest skin or sclera (face-light.ts): the
+   *  ceiling for the teeth a mouth renderer draws into it. */
+  private faceHighlight: number | null = null;
   /** The face's own lip colour, sampled at load. The mouth interior is
    * derived from it rather than hardcoded. */
   private lipColour: [number, number, number] = [150, 90, 84];
@@ -1111,9 +1115,36 @@ export class AvatarEngine {
         skin.sort((a, b) => a.lum - b.lum);
         this.skinColour = skin[Math.floor(skin.length / 2)].rgb;
       }
+      this.sampleFaceHighlight();
     } catch {
       // Tainted texture: keep the default, which is a mid warm lip.
     }
+  }
+
+  /**
+   * The face's brightest skin or sclera, from a small box-filtered copy of
+   * its silhouette's box: one draw and one read, so a glint of a pixel or
+   * two cannot set it, and nothing outside the face oval (hair, a collar, a
+   * white wall) counts.
+   */
+  private sampleFaceHighlight(): void {
+    const oval = FACE_OVAL.map((i) => this.texPoints[i]).filter(Boolean);
+    if (oval.length < 8) return;
+    const x0 = Math.min(...oval.map((p) => p.x)), x1 = Math.max(...oval.map((p) => p.x));
+    const y0 = Math.min(...oval.map((p) => p.y)), y1 = Math.max(...oval.map((p) => p.y));
+    if (!(x1 > x0) || !(y1 > y0)) return;
+    const grid = 96;
+    const small = document.createElement("canvas");
+    small.width = grid;
+    small.height = grid;
+    const ctx = small.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return;
+    ctx.drawImage(this.texture, x0, y0, x1 - x0, y1 - y0, 0, 0, grid, grid);
+    const data = ctx.getImageData(0, 0, grid, grid).data;
+    this.faceHighlight = faceHighlight(oval, (column, row) => {
+      const i = (row * grid + column) * 4;
+      return data[i + 3] < 128 ? null : [data[i], data[i + 1], data[i + 2]];
+    }, grid);
   }
 
   /** Each eye's lid colour, from the skin beside it, for the painted lid. */
@@ -2226,6 +2257,8 @@ export class AvatarEngine {
           points: pts, neutral: this.basePoints, rig: this.rig, weights: this.weights,
           lipColour: this.lipColour,
           skinColour: this.skinColour ?? undefined,
+          faceHighlight: this.faceHighlight ?? undefined,
+          soft: this.look.soft,
           viseme: this.pose?.()?.viseme ?? this.currentViseme(performance.now()),
         });
       } finally { this.ctx.restore(); }

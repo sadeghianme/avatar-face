@@ -4,6 +4,7 @@ import { DentalOralSurface } from "../dental-oral-surface";
 import { DEFAULT_REFERENCE_PROFILE } from "../reference-mouth-model";
 import { ZERO_WEIGHTS } from "../../types";
 import type { MouthSurfaceFrame } from "../../mouth-extension";
+import { fakeCanvas } from "../../__tests__/browser-fakes";
 
 describe("photographic dental lighting", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -63,10 +64,11 @@ describe("photographic dental lighting", () => {
       clip() {}, rect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke: () => operations.push("lip contact"),
     } as unknown as CanvasRenderingContext2D;
     // Draw-only fixture; extraction and source coverage have separate tests.
+    // The first frame fits the enamel to the face on a canvas of its own.
+    vi.stubGlobal("document", { createElement: () => fakeCanvas() });
     const surface = Object.create(DentalOralSurface.prototype) as DentalOralSurface;
-    Object.assign(surface, { lowerIncisal: 0, arches: [0, 1].map(() => ({
-      canvas: {}, layer: { count: 1000, box: { x: 100, y: 120, width: 400, height: 80 } },
-    })) });
+    Object.assign(surface, { lowerIncisal: 0, origin: "own", enamel: { cast: [1, 1, 1], bright: 220, edge: 4 },
+      arches: [0, 1].map(() => ({ canvas: {}, layer: { count: 1000, box: { x: 100, y: 120, width: 400, height: 80 } } })) });
     surface.setProfile(DEFAULT_REFERENCE_PROFILE);
     const frame = {
       points: Array.from({ length: 21 }, () => ({ x: .5, y: .25 })),

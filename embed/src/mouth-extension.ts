@@ -29,6 +29,12 @@ export interface MouthSurfaceFrame {
   lipColour?: [number, number, number];
   /** Mid-cheek skin: the scene's exposure and cast. Absent on a tainted texture. */
   skinColour?: [number, number, number];
+  /** Luma (0-255) of the picture's brightest skin or sclera (face-light.ts):
+   *  the ceiling for anything drawn into it. Absent on a tainted texture. */
+  faceHighlight?: number;
+  /** How soft the picture's own edges are, as a share of the mouth's width
+   *  (CharacterLook.soft). */
+  soft?: number;
   points: readonly MouthPoint[];
   neutral: readonly MouthPoint[];
   rig: Rig;

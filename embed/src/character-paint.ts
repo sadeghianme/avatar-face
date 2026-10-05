@@ -9,6 +9,7 @@ import {
   type Pt,
   type Rgb,
 } from "./character-mouth";
+import { enamelReveal } from "./mouth/lip-occlusion-model";
 import type { BlendWeights } from "./types";
 
 /**
@@ -72,11 +73,14 @@ export const bump = (t: number, edge: number) =>
   Math.pow(Math.max(0, 1 - Math.pow(Math.abs(2 * t - 1), edge)), 0.6);
 
 /** How much of the upper teeth show, 0..1: the mouth open, or the lips drawn
- *  back, and never on a rounded mouth. */
+ *  back, and never on a rounded mouth. A jaw that has only just parted the
+ *  lips shows the dark of the mouth, not a line of enamel (the photographic
+ *  mouth's reveal, lip-occlusion-model); lips drawn back show teeth in a
+ *  slit, as on "fifty". */
 export function teethShown(open: number, w: BlendWeights, traits: CharacterTraits): number {
   if (traits.teeth !== "upper") return 0;
   const rounded = Math.min(1, w.mouthPucker + w.mouthFunnel * 0.6);
-  const lift = Math.max(open / 0.16, w.mouthStretch * 1.2);
+  const lift = Math.max(Math.min(open / 0.16, enamelReveal(open, 1)), w.mouthStretch * 1.2);
   return Math.max(0, Math.min(1, lift)) * (1 - Math.min(1, rounded * 1.8));
 }
 

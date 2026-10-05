@@ -9,6 +9,7 @@ import { DEFAULT_REFERENCE_PROFILE, REFERENCE_POSES } from "../reference-mouth-m
 import { PERFORMANCE_POSES, validatePerformanceManifest } from "../photographic-performance-model";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
 import { centralMouthAnchors, type MouthPoint, type MouthSurfaceFrame } from "../../mouth-extension";
+import { fakeCanvas } from "../../__tests__/browser-fakes";
 
 class TestPath { points: MouthPoint[] = []; moveTo(x: number, y: number) { this.points.push({ x, y }); }
   lineTo(x: number, y: number) { this.points.push({ x, y }); } closePath() {} }
@@ -93,7 +94,9 @@ describe("lip-driven tooth visibility", () => {
     const mouth = new ContinuousMouth(manifest);
     const rig = { inner_lip_ring: manifest.inner_ring } as Rig;
     mouth.deform(points, neutral, rig, REFERENCE_POSES.aa.weights);
-    const ctx = { save() {}, restore() {}, clip() {} } as unknown as CanvasRenderingContext2D;
+    // One step of the spring leaves the lips barely apart: the contact seam
+    // is painted too, with these.
+    const ctx = { save() {}, restore() {}, clip() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {} } as unknown as CanvasRenderingContext2D;
     const frame = { points, neutral, rig, weights: REFERENCE_POSES.oo.weights, viseme: "ou" };
     const geometric = vi.spyOn(ReferenceMouth.prototype, "draw").mockImplementation(() => {});
     mouth.paint(ctx, frame);
@@ -125,10 +128,11 @@ describe("lip-driven tooth visibility", () => {
 
   it("draws both photo arches opaque with spatial clips through the entire rounding range", () => {
     vi.stubGlobal("Path2D", TestPath);
+    // The first frame fits the enamel to the face on a canvas of its own.
+    vi.stubGlobal("document", { createElement: () => fakeCanvas() });
     const surface = Object.create(DentalOralSurface.prototype) as DentalOralSurface;
-    Object.assign(surface, { lowerIncisal: 0, arches: [0, 1].map(() => ({ canvas: {},
-      layer: { count: 1000, box: { x: 100, y: 120, width: 400, height: 80 } },
-    })) });
+    Object.assign(surface, { lowerIncisal: 0, origin: "own", enamel: { cast: [1, 1, 1], bright: 220, edge: 4 },
+      arches: [0, 1].map(() => ({ canvas: {}, layer: { count: 1000, box: { x: 100, y: 120, width: 400, height: 80 } } })) });
     surface.setProfile(DEFAULT_REFERENCE_PROFILE);
     for (let step = 0; step <= 20; step++) {
       const alpha: number[] = [], clips: unknown[] = [], stack: number[] = [];

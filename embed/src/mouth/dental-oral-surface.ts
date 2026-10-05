@@ -4,18 +4,32 @@ import { validateOralRig, type OralPhoto } from "./photographic-oral-surface";
 import { DEFAULT_REFERENCE_PROFILE, normalizeProfile, type ReferenceProfile } from "./reference-mouth-model";
 import { dentalLighting, ENAMEL_EDGE_STOPS, ORAL_CORNER_STOPS } from "./dental-lighting-model";
 import { dentalOpening, openingPath } from "./lip-occlusion-model";
+import { enamelMatch, sampleEnamel, type EnamelMatch, type EnamelSample, type FaceLook } from "./enamel-match-model";
 
 export class DentalPhotoError extends Error {
   constructor() { super("The mouth photo needs a clearer view of the upper teeth."); this.name = "DentalPhotoError"; }
 }
 
+/** Whose teeth a photo shows: the face's own (its kit, or the Reference's
+ *  own photo in the lab) or the standard teeth borrowed from the Reference. */
+export type TeethOrigin = "own" | "standard";
+
+interface Arch { canvas: HTMLCanvasElement; layer: DentalLayer }
+
 /** One photo-derived enamel surface per arch. No source lips or frozen
  * mouth-opening texture are drawn into the animated mouth. */
 export class DentalOralSurface {
-  private arches: { canvas: HTMLCanvasElement; layer: DentalLayer }[];
+  /** The arches as extracted from the photo, lit as the photo lit them. */
+  private arches: Arch[];
   private lowerIncisal = 0;
   private profile = { ...DEFAULT_REFERENCE_PROFILE };
-  constructor(photo: OralPhoto) {
+  /** The upper arch measured for the match (enamel-match-model). */
+  readonly enamel: EnamelSample;
+  /** The arches fitted to one face, built on the first frame that face is
+   *  known and kept while its sampled values hold (the texture upgrading
+   *  from the thumbnail changes them once). */
+  private fitted: { key: string; match: EnamelMatch; arches: Arch[] } | null = null;
+  constructor(photo: OralPhoto, private readonly origin: TeethOrigin = "own") {
     const canvas = document.createElement("canvas"); canvas.width = 640; canvas.height = 480;
     const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
     const { points, image_size, inner_lip_ring } = validateOralRig(photo.rig);
@@ -30,8 +44,10 @@ export class DentalOralSurface {
     inner_lip_ring.forEach((id, i) => { const p = points[id]; if (!i) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]); });
     ctx.closePath(); ctx.clip(); ctx.drawImage(photo.image, 0, 0, image_size[0], image_size[1]);
     const ring = inner_lip_ring.map(point);
-    const layers = extractDentalLayers(ctx.getImageData(0, 0, 640, 480), [...ring.slice(10), ring[0]], ring.slice(0, 11));
+    const source = ctx.getImageData(0, 0, 640, 480);
+    const layers = extractDentalLayers(source, [...ring.slice(10), ring[0]], ring.slice(0, 11));
     if (layers[0].box.width < 110 || layers[0].count < 180 || dentalCrownCoverage(layers[0], 320, 512) < .10) throw new DentalPhotoError();
+    this.enamel = sampleEnamel(layers[0], source);
     const edges: number[] = [];
     for (let x = 308; x <= 332; x++) for (let y = 0; y < 480; y++) {
       if (layers[1].pixels.data[(y * 640 + x) * 4 + 3] < 150) continue;
@@ -52,7 +68,25 @@ export class DentalOralSurface {
     });
   }
   setProfile(profile: ReferenceProfile): void { this.profile = normalizeProfile(profile); }
-  draw(ctx: CanvasRenderingContext2D, frame: MouthSurfaceFrame, left: MouthPoint, right: MouthPoint): void {
+
+  /** How the enamel was fitted to the face it is drawn into; null before
+   *  the first frame. */
+  get match(): EnamelMatch | null { return this.fitted?.match ?? null; }
+
+  /** The arches as this face lights them (enamel-match-model), fitted once
+   *  per face and reused every frame after. */
+  private fit(frame: MouthSurfaceFrame): Arch[] {
+    const face: FaceLook = { lip: frame.lipColour ?? [150, 90, 84], skin: frame.skinColour, highlight: frame.faceHighlight, soft: frame.soft };
+    const key = [face.lip, face.skin ?? "-", face.highlight ?? "-", face.soft ?? "-"].join("/");
+    if (this.fitted?.key === key) return this.fitted.arches;
+    const match = enamelMatch(face, this.enamel, this.origin === "own");
+    this.fitted = { key, match, arches: this.arches.map(arch => ({ layer: arch.layer, canvas: fitTexture(arch.canvas, match) })) };
+    return this.fitted.arches;
+  }
+
+  /** `teethAlpha` is how much of the teeth shows through the lips (the
+   *  enamel reveal); the cavity behind them is always whole. */
+  draw(ctx: CanvasRenderingContext2D, frame: MouthSurfaceFrame, left: MouthPoint, right: MouthPoint, teethAlpha = 1): void {
     const width = Math.hypot(right.x - left.x, right.y - left.y);
     const angle = Math.atan2(right.y - left.y, right.x - left.x);
     const cx = (left.x + right.x) / 2, cy = (left.y + right.y) / 2;
@@ -70,6 +104,7 @@ export class DentalOralSurface {
       y: (-(p.x - cx) * Math.sin(angle) + (p.y - cy) * Math.cos(angle)) / width,
     })));
     const rgb = (colour: readonly number[]) => `rgb(${colour.join(",")})`;
+    const arches = this.fit(frame);
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle); ctx.scale(width, width);
     const cavity = ctx.createRadialGradient(0, .04, .01, 0, .12, .49);
     cavity.addColorStop(0, rgb(light.recess));
@@ -90,8 +125,8 @@ export class DentalOralSurface {
       sides.addColorStop(position, `rgba(${light.recess.join(",")},${alpha})`);
     }
     ctx.fillStyle = sides; ctx.fillRect(-.7, -.4, 1.4, 1.1);
-    for (const i of [1, 0]) {
-      const arch = this.arches[i];
+    if (teethAlpha > .004) for (const i of [1, 0]) {
+      const arch = arches[i];
       const box = arch.layer.box;
       if (!box.width || !box.height || arch.layer.count < 100) continue;
       const p = dentalPlacement(i === 1, box.width, box.height, this.profile.teethScale, this.profile.teethY, jaw, this.lowerIncisal);
@@ -104,6 +139,7 @@ export class DentalOralSurface {
         // intersect the fixed upper crowns.
         ctx.beginPath(); ctx.rect(-.8, .055 + this.profile.teethY + .045, 1.6, 1.3); ctx.clip();
       }
+      ctx.globalAlpha = Math.min(1, teethAlpha);
       ctx.filter = `brightness(${light.enamelBrightness}) sepia(${light.enamelSepia})`;
       ctx.drawImage(arch.canvas, box.x, box.y, box.width, box.height, p.x, p.y, p.width, p.height);
       ctx.restore();
@@ -116,4 +152,28 @@ export class DentalOralSurface {
     ctx.filter = `blur(${width * .008}px)`;
     ctx.strokeStyle = `rgba(${light.recess.join(",")},.22)`; ctx.lineWidth = width * .014; ctx.lineJoin = "round"; ctx.stroke(); ctx.restore();
   }
+}
+
+/** `source` softened and tinted as `match` says, on a canvas of its own.
+ *  The blur is the canvas's; the per-channel gain is applied to the pixels,
+ *  since no canvas filter scales channels apart. */
+function fitTexture(source: HTMLCanvasElement, match: EnamelMatch): HTMLCanvasElement {
+  const plain = match.blur <= 0 && match.gain.every(g => Math.abs(g - 1) < 1e-3);
+  if (plain) return source;
+  const texture = document.createElement("canvas"); texture.width = source.width; texture.height = source.height;
+  const ctx = texture.getContext("2d", { willReadFrequently: true })!;
+  if (match.blur > 0) ctx.filter = `blur(${match.blur.toFixed(2)}px)`;
+  ctx.drawImage(source, 0, 0);
+  ctx.filter = "none";
+  if (match.gain.some(g => Math.abs(g - 1) >= 1e-3)) {
+    const pixels = ctx.getImageData(0, 0, texture.width, texture.height);
+    const data = pixels.data;
+    const [r, g, b] = match.gain;
+    for (let i = 0; i < data.length; i += 4) {
+      if (!data[i + 3]) continue;
+      data[i] = data[i] * r; data[i + 1] = data[i + 1] * g; data[i + 2] = data[i + 2] * b;
+    }
+    ctx.putImageData(pixels, 0, 0);
+  }
+  return texture;
 }

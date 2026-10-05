@@ -95,7 +95,7 @@ async function withStandardTeeth(
   try {
     const oral = await ContinuousMouth.loadOralPhoto(standardTeeth(motionUrl), signal);
     throwIfCancelled(signal);
-    return new ContinuousMouth(template, oral);
+    return new ContinuousMouth(template, oral, "standard");
   } catch (error) {
     if (signal?.aborted) throw error;
     return new ContinuousMouth(template);
