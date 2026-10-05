@@ -189,6 +189,9 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
       fullPhoto: info.framing === "full",
       scene: info.scene ?? undefined,
       zoom,
+      // data-warp="2d" keeps the mesh on the Canvas 2D path (warp-gl.ts):
+      // for a site that must not use WebGL, and for comparing the two.
+      warp: script.dataset.warp === "2d" ? "2d" : undefined,
     });
     engine = photoEngine;
     // How the owner set a character mouth (jaw, teeth, tongue); a classic

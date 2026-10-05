@@ -37,6 +37,7 @@ import { applyLowerFace, buildLowerFaceRig, buildNeckBand, UPPER_FACE, type Lowe
 import { kindProfile, type KindProfile } from "./kind-profile";
 import { padTriangle } from "./seam-pad";
 import { eyeLine, viewportFor } from "./viewport";
+import { IDENTITY, WarpRenderer, buildWarpMesh, rotate, translate, type Affine } from "./warp-gl";
 import { MediaClock } from "./media-clock";
 import type { MouthExtension, MouthPose } from "./mouth-extension";
 import { centralMouthAnchors } from "./mouth-extension";
@@ -481,7 +482,16 @@ export interface EngineOptions {
   /** The scene the avatar is shown in (zoom, pan, background): what the
    *  owner set and published. `setScene` changes it live. */
   scene?: Scene | null;
+  /**
+   * How the mesh is warped: "auto" (the default) draws it on the GPU
+   * (warp-gl.ts) wherever WebGL works and in 2D everywhere else; "2d"
+   * forces the Canvas 2D path, for tests and for comparing the two.
+   */
+  warp?: WarpMode;
 }
+
+/** See EngineOptions.warp. */
+export type WarpMode = "auto" | "2d";
 
 /** What is behind a cut-out: nothing, a colour, or a picture (cover-fitted
  *  to the canvas). An opaque picture covers it, so it is not drawn then. */
@@ -645,6 +655,16 @@ export class AvatarEngine {
     head: HTMLImageElement;
   } | null = null;
 
+  // The GPU warp (warp-gl.ts): null where WebGL is unavailable or the page
+  // asked for 2D. What it holds is checked against the engine's texture
+  // and triangle list by reference each frame, so a new texture or a
+  // rebuilt mesh is uploaded once, the frame it first draws.
+  private warp: WarpRenderer | null = null;
+  private warpMode: WarpMode;
+  private warpTextureFor: HTMLImageElement | null = null;
+  private warpTextureOk = false;
+  private warpMeshFor: unknown = null;
+
 
   constructor(canvas: HTMLCanvasElement, rig: Rig, texture: HTMLImageElement, opts: EngineOptions = {}) {
     this.canvas = canvas;
@@ -667,6 +687,8 @@ export class AvatarEngine {
     this.loadBackground();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
+    this.warpMode = opts.warp ?? "auto";
+    if (this.warpMode !== "2d") this.warp = WarpRenderer.create(canvas.width, canvas.height);
     this.innerRing = this.validInnerRing();
     this.computeFraming();
     this.sampleLipColour();
@@ -843,6 +865,31 @@ export class AvatarEngine {
     this.stopAudio();
     if (this.audioCtx) void this.audioCtx.close().catch(() => undefined);
     this.audioCtx = null;
+    this.warp?.destroy();
+    this.warp = null;
+  }
+
+  /**
+   * Choose the warp path live: "2d" for the Canvas 2D triangle loop, "auto"
+   * for the GPU wherever it works. For the lab's side-by-side and for a
+   * page that must not use WebGL.
+   */
+  setWarp(mode: WarpMode): void {
+    if (this.destroyed || mode === this.warpMode) return;
+    this.warpMode = mode;
+    if (mode === "2d") {
+      this.warp?.destroy();
+      this.warp = null;
+    } else {
+      this.warp = WarpRenderer.create(this.canvas.width, this.canvas.height);
+    }
+    this.warpTextureFor = null;
+    this.warpMeshFor = null;
+  }
+
+  /** Which path the next frame takes: "gl" when the GPU warp is ready. */
+  warpPath(): "gl" | "2d" {
+    return this.glWarp() ? "gl" : "2d";
   }
 
   // --- Framing -------------------------------------------------------------
@@ -2159,7 +2206,9 @@ export class AvatarEngine {
     // are things a camera sees a whole subject do, so moving the whole
     // drawing is not an approximation — it is exactly right.
     ctx.save();
-    this.applyBodyTransform(ctx);
+    // The same transform is kept as an affine alongside the context's own,
+    // for the GPU warp, which draws the mesh through it (drawWarp).
+    let affine = this.applyBodyTransform(ctx);
 
     // --- Head motion ------------------------------------------------------
     //
@@ -2177,11 +2226,7 @@ export class AvatarEngine {
     const head = this.headOffsets();
     const geom = this.headGeom;
     const asOne = !this.cutOut;
-    if (asOne && geom) {
-      ctx.translate(geom.pivotX + head.dx, geom.pivotY + head.dy);
-      ctx.rotate(head.roll);
-      ctx.translate(-geom.pivotX, -geom.pivotY);
-    }
+    if (asOne && geom) affine = this.applyHeadTransform(ctx, geom, head, affine);
 
     // Base layer: the whole un-warped photo, through the viewport. Triangle
     // seams and sub-pixel gaps in the warp then reveal original pixels
@@ -2199,9 +2244,7 @@ export class AvatarEngine {
     }
     ctx.save();
     if (layered) {
-      ctx.translate(geom.pivotX + head.dx, geom.pivotY + head.dy);
-      ctx.rotate(head.roll);
-      ctx.translate(-geom.pivotX, -geom.pivotY);
+      affine = this.applyHeadTransform(ctx, geom, head, affine);
       // ADDED back, not laid over: the punch-out left base * (1 - a) where
       // the layer's feathered alpha is a, and the layer brings hair * a.
       // Source-over would attenuate the remainder a second time, by
@@ -2213,13 +2256,10 @@ export class AvatarEngine {
       ctx.drawImage(this.headLayer!, geom.x, geom.y);
       ctx.globalCompositeOperation = "source-over";
       ctx.translate(head.fdx, head.fdy);
+      affine = translate(affine, head.fdx, head.fdy);
     }
 
-    const pads = this.trianglePads();
-    let t = 0;
-    for (const [a, b, c] of this.triangles) {
-      this.drawWarpedTriangle(pts, a, b, c, pads ? pads[t++] : 0);
-    }
+    this.drawWarp(pts, affine);
 
     this.drawEyes(pts);
     this.drawLids(pts);
@@ -2255,24 +2295,16 @@ export class AvatarEngine {
     if (L.background) this.drawFullFrame(L.background);
 
     ctx.save();
-    this.applyBodyTransform(ctx, true);
+    let affine = this.applyBodyTransform(ctx, true);
     this.drawFullFrame(L.body);
 
     const head = this.headOffsets();
     const geom = this.headGeom;
     ctx.save();
-    if (geom) {
-      ctx.translate(geom.pivotX + head.dx, geom.pivotY + head.dy);
-      ctx.rotate(head.roll);
-      ctx.translate(-geom.pivotX, -geom.pivotY);
-    }
+    if (geom) affine = this.applyHeadTransform(ctx, geom, head, affine);
     this.drawFullFrame(L.head);
 
-    const pads = this.trianglePads();
-    let t = 0;
-    for (const [a, b, c] of this.triangles) {
-      this.drawWarpedTriangle(pts, a, b, c, pads ? pads[t++] : 0);
-    }
+    this.drawWarp(pts, affine);
     this.drawEyes(pts);
     this.drawLids(pts);
     this.drawLashes(pts);
@@ -2332,15 +2364,108 @@ export class AvatarEngine {
    * shifting their weight, and it walks the photo's own edge into view. A
    * cut-out has no edge to expose, so it gets the full amount.
    */
-  private applyBodyTransform(ctx: CanvasRenderingContext2D, layered = false): void {
+  private applyBodyTransform(ctx: CanvasRenderingContext2D, layered = false): Affine {
     const scale =
       (layered || this.cutOut ? 1 : OPAQUE_BACKGROUND_SCALE) * this.tuning.bodyMotion;
-    if (scale <= 0) return;
+    if (scale <= 0) return IDENTITY;
     const angle = this.body.sway * this.swayAngle * scale;
     const rise = this.body.breath * this.breathRise * scale;
     ctx.translate(this.bodyPivot.x, this.bodyPivot.y);
     ctx.rotate(angle);
     ctx.translate(-this.bodyPivot.x, -this.bodyPivot.y - rise);
+    // The same three steps, as the affine the GPU warp is given.
+    let m = translate(IDENTITY, this.bodyPivot.x, this.bodyPivot.y);
+    m = rotate(m, angle);
+    return translate(m, -this.bodyPivot.x, -this.bodyPivot.y - rise);
+  }
+
+  /**
+   * The head's rigid shift and roll about its pivot, on the context and on
+   * the affine alike (the GPU warp draws the mesh through the affine).
+   */
+  private applyHeadTransform(
+    ctx: CanvasRenderingContext2D,
+    geom: { pivotX: number; pivotY: number },
+    head: { dx: number; dy: number; roll: number },
+    affine: Affine
+  ): Affine {
+    ctx.translate(geom.pivotX + head.dx, geom.pivotY + head.dy);
+    ctx.rotate(head.roll);
+    ctx.translate(-geom.pivotX, -geom.pivotY);
+    let m = translate(affine, geom.pivotX + head.dx, geom.pivotY + head.dy);
+    m = rotate(m, head.roll);
+    return translate(m, -geom.pivotX, -geom.pivotY);
+  }
+
+  /**
+   * The warped mesh: on the GPU as one draw when the warp renderer is
+   * ready, and in 2D, a clipped drawImage per triangle, otherwise (no
+   * WebGL, a lost context, a texture it cannot take, `warp: "2d"`).
+   *
+   * The GPU canvas is already in canvas pixels (it was drawn through
+   * `affine`, the context's own transform), so it is drawn under the
+   * identity: the picture is resampled once either way.
+   */
+  private drawWarp(pts: Point[], affine: Affine): void {
+    const warp = this.glWarp();
+    if (warp && warp.draw(pts, affine)) {
+      // Only the mesh's box is copied: outside it the GPU canvas is clear,
+      // so the drawing is the same, and the copy is the one GPU-path cost
+      // that grows with the canvas rather than with the mesh. Two pixels
+      // of margin for the anti-aliased hull.
+      const ctx = this.ctx;
+      const box = this.warpBox(pts, affine, 2);
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(warp.canvas, box.x, box.y, box.w, box.h, box.x, box.y, box.w, box.h);
+      ctx.restore();
+      return;
+    }
+    const pads = this.trianglePads();
+    let t = 0;
+    for (const [a, b, c] of this.triangles) {
+      this.drawWarpedTriangle(pts, a, b, c, pads ? pads[t++] : 0);
+    }
+  }
+
+  /** The mesh's bounding box on the canvas, through `affine`, grown by
+   *  `margin` px and clipped to the canvas; whole pixels. */
+  private warpBox(pts: Point[], affine: Affine, margin: number): { x: number; y: number; w: number; h: number } {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of pts) {
+      const x = affine.a * p.x + affine.c * p.y + affine.e;
+      const y = affine.b * p.x + affine.d * p.y + affine.f;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+    const cw = this.canvas.width, ch = this.canvas.height;
+    const x = Math.max(0, Math.floor(x0 - margin)), y = Math.max(0, Math.floor(y0 - margin));
+    const w = Math.min(cw, Math.ceil(x1 + margin)) - x, h = Math.min(ch, Math.ceil(y1 + margin)) - y;
+    return w > 0 && h > 0 ? { x, y, w, h } : { x: 0, y: 0, w: cw, h: ch };
+  }
+
+  /**
+   * The GPU warp, brought up to date with the engine (canvas size, the
+   * texture, the mesh), or null when the frame must be drawn in 2D.
+   */
+  private glWarp(): WarpRenderer | null {
+    const warp = this.warp;
+    if (!warp || !warp.available) return null;
+    warp.resize(this.canvas.width, this.canvas.height);
+    if (this.warpTextureFor !== this.texture) {
+      this.warpTextureFor = this.texture;
+      this.warpTextureOk = warp.setTexture(this.texture);
+      // The mesh's texture coordinates are over this texture's size.
+      this.warpMeshFor = null;
+    }
+    if (!this.warpTextureOk) return null;
+    if (this.warpMeshFor !== this.triangles) {
+      this.warpMeshFor = this.triangles;
+      warp.setMesh(buildWarpMesh(this.texPoints, this.triangles, this.texture.naturalWidth, this.texture.naturalHeight));
+    }
+    return warp;
   }
 
   private padsFor: unknown = null;
