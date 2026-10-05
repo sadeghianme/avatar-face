@@ -663,6 +663,94 @@ corners of a wide smile go soft on a smooth render (its own corners are),
 and the contact seam's blur-filtered stroke is still drawn on the full
 canvas, the one whole-canvas filter pass left between words.
 
+### The picture's sharpness, the corners, the seam (2026-10-05)
+
+Three things the feather above got wrong, measured and put right:
+
+- **The lip seam is the wrong edge to read.** The feather (and the enamel
+  blur) followed `look.soft`, the character mouth's measure of the picture:
+  the width of the luma step across the closed lips' seam, clamped 1–4 px.
+  The seam of a closed mouth is a shadow in a crease, a rounded shading, 3
+  px wide in the lab Reference as in the soft scan (3.0 and 3.2 of their
+  own pixels), so the crisp photo got the same feather as the scan and its
+  teeth were blurred to it. The edge the aperture stands for is a depth
+  edge, and a picture's depth edges are as sharp as its sharpest strong
+  edges anywhere near. `embed/src/face-sharpness.ts` reads those: in a box
+  round the mouth (2.2 × 1.6 W) and one round each eye (1.8 × 1.2 of the
+  eye's width), the gradients above the box's 90th percentile, kept where
+  the edge is a crest and keeps its direction for 2 px each way along
+  itself, each measured along its own gradient as the 10–90% rise of the
+  luma profile (sub-pixel, over the monotone run through the edge), and
+  only above 50 levels of contrast: grain is not an edge, and on these four
+  pictures the scan's grain stops under 50 while the lashes against the
+  sclera, the iris and the lip corners carry 80 to 150. Each box's
+  sharpness is the 15th percentile of its widths (40 edges at least), the
+  picture's the sharpest box: for a closed-mouth portrait that is an eye,
+  where its real depth edges are. Nothing is clamped in pixels, so a 4K
+  photograph's wider edges give a wider feather in the same pixels. The
+  engine samples it once beside the highlight, on the texture's own pixels,
+  and hands it to the mouth as `MouthSurfaceFrame.sharpness` (texture px)
+  with `pixelScale`; the feather is that width in the frame (floor 1.2 px,
+  ceiling 0.03 W as before), the enamel blur uses it in place of `soft`,
+  and the rim halo scales by it. `look.soft` and the character mouth are
+  exactly as they were (the character mouth could adopt the measure later).
+  Synthetic: a hard step reads 0.8 px, Gaussian edges of σ 1/2/3 read
+  2.7/5.2/7.6 (10–90% is 2.56 σ), in order with and without grain, and a
+  flat box, grainy or not, returns null (the feather then sits at its
+  floor). Measured, in texture px: the Reference 2.42, the scan 3.44, the
+  render 1.80 (its eyes are crisp; its mouth is soft shading, with no depth
+  edge to read), the painterly render 1.50; the five real character crops
+  1.1 to 1.2 for the drawn lines, 4.6 for the soft human animation. In the
+  1200 px frame that is a feather of 3.9 / 4.6 / 3.6 / 3.0 px (was 4.9 /
+  4.3 / 6.1 / 4.5). The honest finding: the Reference is not a 1-px-crisp
+  picture at 1254 px, its lashes rise in about 2.4 px (σ ≈ 0.9), so its
+  feather comes down to 3.9 px and not to the hard clip's 2–3, and its
+  teeth photo, a closer shot, keeps a small blur (own 1.09 → 0.78, standard
+  2.69 → 1.93 in the 512 px enamel space, under 1.2 px in the frame).
+- **The corners stay crisp.** Eroded by half the feather and blurred
+  everywhere, the mask rounded off the acute tips of a wide smile. Now the
+  mask is blurred in place (drawn over itself through the filter, `copy`),
+  and at each mouth corner the hard aperture is stamped back through a
+  radial weight (`CORNER_REACH`: whole at the corner, gone 0.2 W inward,
+  a smoothstep), composited over the feathered mask, so the alpha is whole
+  where either is and the stamp adds nothing outside the hard edge
+  (`featherAlphaAt`, tested on the model; on a rendered mask the alpha a
+  feather outside is 0 everywhere, corners included, and the tip error goes
+  3.5 → 0.5 px at a 4.5 px feather). Each stamp is clipped to its own box
+  (0.06 ms the pair, not 0.26). On the renders, the dark's reach from the
+  corner along the aperture's axis: the render 8.0 → 1.2 px (AA), 9.2 → 1.2
+  (EE); the scan 5.2 → 0.2, 8.0 → 0; the Reference 7.8 → 1.5. The ring
+  probes by the corners: the render 10.5 → 4.6–6.9.
+- **The seam without a filter.** The contact seam was one round-capped
+  stroke, 0.018 W wide, through `blur(0.006 W)` on the face's canvas: a
+  whole-canvas filter pass between words, 8 ms at 1200 px in software
+  raster. It is now three stacked strokes (`SEAM_STROKES`: 0.8, 1.5 and
+  2.3 of the width at 0.417, 0.323 and 0.10 of the alpha, fitted by least
+  squares to the blurred profile: RMS 7.4% of the peak, the area 99.2%,
+  the peak 90%), 0.01 ms. Pixel for pixel against the blurred stroke the
+  difference is at most 4.6 levels (RMS 1.6 where either darkens the lip).
+
+Measured on the three published people and the lab Reference as before
+(before = the feather at `look.soft`): the aperture's edge at the lip
+middles went on the Reference from 6.7 / 6.7 / 7.3 / 6.4 px (AA / EE / OO /
+mid) to 4.2 / 5.8 / 5.2 / 5.6, within its own lips' edges (4.0 to 7.4); on
+the render from 6.9–7.6 to 4.9–5.5; on the painterly render from 4.3–5.5
+to 3.6–5.2; on the scan it stayed (5.2–5.8). EE enamel luma unchanged on
+the Reference (196/216), the render's up 4 (180 → 184), the painterly
+render's up 5. Outside the aperture, near-closed frames changed by at most
+7 levels and no pixel by 8 (the seam's stair against its blur). The paint
+pass costs 0.1 to 0.3 ms more a frame at these sizes (the mask copied
+through its blur, the stamps); the whole frame is the same at held AA and
+through the open frames of a sentence, and the frames between words (gap
+0.015–0.07 W, the seam's range) cost 6 to 8 ms less at 1200 px in software
+raster (53.7 → 47.9, 50.2 → 42.7, 46.2 → 37.8 ms on the scan, the render
+and the Reference): the filter pass is gone. Still weak: a crisp tip on a very
+soft scan is crisper than the scan's own corners (the stamp does not
+scale with the picture's softness); the measure needs a strong edge
+somewhere, so a flat, low-contrast portrait falls to the feather's floor;
+and the Reference's standard teeth keep a 1 px blur because its portrait
+is softer than its teeth photo.
+
 ### Step 5: preparing your avatar (2026-09-26)
 
 What makes the Reference avatar look as it does is its kit: its own mouth
