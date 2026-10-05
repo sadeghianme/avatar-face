@@ -39,24 +39,17 @@ export function LipSyncPreview({ avatar, clock, onEngine, mouthExtension, pose, 
       if (!response.ok) throw new Error("Could not load face rig");
       const rig = await response.json() as Rig;
       if (cancelled || !canvas.current) return;
-      // Match the engine's square-canvas framing, then zoom the already
-      // rendered canvas with CSS. Switching view never restarts speech.
-      const [iw, ih] = rig.image_size;
-      const [x0, y0, x1, y1] = rig.face_box;
-      const left = framing === "full" ? 0 : Math.max(0, x0 - (x1 - x0) * 0.25);
-      const top = framing === "full" ? 0 : Math.max(0, y0 - (y1 - y0) * 0.55);
-      const width = framing === "full" ? iw : Math.min(iw, x1 + (x1 - x0) * 0.25) - left;
-      const height = framing === "full" ? ih : Math.min(ih, y1 + (y1 - y0) * 0.18) - top;
-      const size = Math.max(width, height);
-      const lips = rig.outer_lip_ring.map(i => rig.points[i]);
-      if (lips.length && size > 0) {
-        const minX = Math.min(...lips.map(p => p[0])), maxX = Math.max(...lips.map(p => p[0]));
-        const cy = lips.reduce((sum, p) => sum + p[1], 0) / lips.length;
-        setFocus({ x: ((minX + maxX) / 2 - left + (size - width) / 2) / size,
-          y: (cy - top + (size - height) / 2) / size,
-          zoom: Math.min(5, Math.max(1, size * 0.6 / Math.max(1, maxX - minX))) });
-      }
       engine = new AvatarEngine(canvas.current, rig, image, { fullPhoto: framing === "full", cueClock: clock, mouthExtension, pose });
+      // Where the mouth landed on the canvas, from the engine's own
+      // viewport, for the CSS zoom of the mouth-only view: zooming the
+      // already rendered canvas never restarts speech.
+      const lips = rig.outer_lip_ring.map(i => engine!.landmarks()[i]).filter(Boolean);
+      if (lips.length) {
+        const minX = Math.min(...lips.map(p => p.x)), maxX = Math.max(...lips.map(p => p.x));
+        const cy = lips.reduce((sum, p) => sum + p.y, 0) / lips.length;
+        setFocus({ x: (minX + maxX) / 2 / resolution, y: cy / resolution,
+          zoom: Math.min(5, Math.max(1, resolution * 0.6 / Math.max(1, maxX - minX))) });
+      }
       // Remove random head motion from the comparison: judge the mouth.
       engine.tuning.headMotion = 0;
       if (still) { engine.tuning.bodyMotion = 0; engine.tuning.blink = 0; }

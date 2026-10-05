@@ -3,279 +3,279 @@
 exports[`animal@2 golden output > flat art, E (spread): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 62.95,
-  "drawCalls": 32687,
-  "drawing": "25a4ab53e383465d",
+  "drawCalls": 32685,
+  "drawing": "9e8e931edbb32515",
   "lipGapPx": 82.45,
-  "mesh": "65570a1097858889",
+  "mesh": "2074d7c28e448967",
 }
 `;
 
 exports[`animal@2 golden output > flat art, FF: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 1.01,
-  "drawCalls": 32604,
-  "drawing": "4a078280967ed300",
+  "drawCalls": 32602,
+  "drawing": "ae2257891b72ed1a",
   "lipGapPx": 1.14,
-  "mesh": "e40299fe44647bf1",
+  "mesh": "67a0854c270bb73b",
 }
 `;
 
 exports[`animal@2 golden output > flat art, TH, tongue up: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 31.83,
-  "drawCalls": 32687,
-  "drawing": "d256db8605c4c351",
+  "drawCalls": 32685,
+  "drawing": "4f4a7ab17778c1fd",
   "lipGapPx": 40.55,
-  "mesh": "29dfd3446b56f9ca",
+  "mesh": "80e57ee84f11741f",
 }
 `;
 
 exports[`animal@2 golden output > flat art, aa (open): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 100.5,
-  "drawCalls": 32687,
-  "drawing": "56b9d2a5f10454a8",
+  "drawCalls": 32685,
+  "drawing": "92d66b6781482039",
   "lipGapPx": 126.24,
-  "mesh": "7de75622100960a9",
+  "mesh": "3746e9ab9d477704",
 }
 `;
 
 exports[`animal@2 golden output > flat art, blink full: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 0,
-  "drawCalls": 32752,
-  "drawing": "23d4ef721d0b7437",
+  "drawCalls": 32750,
+  "drawing": "a241347b937104d0",
   "lipGapPx": 0.83,
-  "mesh": "99b37c21cc3866fd",
+  "mesh": "0c67777b3363014d",
 }
 `;
 
 exports[`animal@2 golden output > flat art, oh (rounded): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 73.97,
-  "drawCalls": 32687,
-  "drawing": "12f172710fa8014f",
+  "drawCalls": 32685,
+  "drawing": "8b23d9ccfa558e09",
   "lipGapPx": 93.08,
-  "mesh": "2085f88aeca10a29",
+  "mesh": "915c1a0f6f0fffc3",
 }
 `;
 
 exports[`animal@2 golden output > flat art, rest: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 0,
-  "drawCalls": 32604,
-  "drawing": "5eb8ba24397179ec",
+  "drawCalls": 32602,
+  "drawing": "274cd20f3960c7e7",
   "lipGapPx": 0.83,
-  "mesh": "99b37c21cc3866fd",
+  "mesh": "0c67777b3363014d",
 }
 `;
 
 exports[`animal@2 golden output > render, E (spread): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 62.95,
-  "drawCalls": 32785,
-  "drawing": "47e1f9ed5b7f90ac",
+  "drawCalls": 32783,
+  "drawing": "09e76a7a71ec3913",
   "lipGapPx": 82.45,
-  "mesh": "65570a1097858889",
+  "mesh": "2074d7c28e448967",
 }
 `;
 
 exports[`animal@2 golden output > render, FF: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 1.01,
-  "drawCalls": 32604,
-  "drawing": "4a078280967ed300",
+  "drawCalls": 32602,
+  "drawing": "ae2257891b72ed1a",
   "lipGapPx": 1.14,
-  "mesh": "e40299fe44647bf1",
+  "mesh": "67a0854c270bb73b",
 }
 `;
 
 exports[`animal@2 golden output > render, TH, tongue up: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 31.83,
-  "drawCalls": 32785,
-  "drawing": "e1ff3d109f937988",
+  "drawCalls": 32783,
+  "drawing": "b6af93f63e36fe67",
   "lipGapPx": 40.55,
-  "mesh": "29dfd3446b56f9ca",
+  "mesh": "80e57ee84f11741f",
 }
 `;
 
 exports[`animal@2 golden output > render, aa (open): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 100.5,
-  "drawCalls": 32785,
-  "drawing": "fe15535329b92d75",
+  "drawCalls": 32783,
+  "drawing": "3b1472d736794c7f",
   "lipGapPx": 126.24,
-  "mesh": "7de75622100960a9",
+  "mesh": "3746e9ab9d477704",
 }
 `;
 
 exports[`animal@2 golden output > render, blink full: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 0,
-  "drawCalls": 32764,
-  "drawing": "412d047254b91aed",
+  "drawCalls": 32762,
+  "drawing": "951184a8f8068b88",
   "lipGapPx": 0.83,
-  "mesh": "99b37c21cc3866fd",
+  "mesh": "0c67777b3363014d",
 }
 `;
 
 exports[`animal@2 golden output > render, oh (rounded): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 73.97,
-  "drawCalls": 32785,
-  "drawing": "e059c1d02ec1d520",
+  "drawCalls": 32783,
+  "drawing": "ad3b0a1e7f862181",
   "lipGapPx": 93.08,
-  "mesh": "2085f88aeca10a29",
+  "mesh": "915c1a0f6f0fffc3",
 }
 `;
 
 exports[`animal@2 golden output > render, rest: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 0,
-  "drawCalls": 32604,
-  "drawing": "5eb8ba24397179ec",
+  "drawCalls": 32602,
+  "drawing": "274cd20f3960c7e7",
   "lipGapPx": 0.83,
-  "mesh": "99b37c21cc3866fd",
+  "mesh": "0c67777b3363014d",
 }
 `;
 
 exports[`toon@1 golden output > flat art, E (spread): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 55.37,
-  "drawCalls": 32731,
-  "drawing": "0f79013138836b2d",
+  "drawCalls": 32729,
+  "drawing": "4e95a9107eecafc6",
   "lipGapPx": 73,
-  "mesh": "45c852583a1a61af",
+  "mesh": "0040f6f02ee00d7b",
 }
 `;
 
 exports[`toon@1 golden output > flat art, FF: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 16.54,
-  "drawCalls": 32690,
-  "drawing": "2c6d7bbf05d0a397",
+  "drawCalls": 32688,
+  "drawing": "279d81a7d6589719",
   "lipGapPx": 26.31,
-  "mesh": "6fcce7f20e23beea",
+  "mesh": "2b2dc910cdf755e5",
 }
 `;
 
 exports[`toon@1 golden output > flat art, TH, tongue up: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 27.7,
-  "drawCalls": 32731,
-  "drawing": "83cfa2648fe2883a",
+  "drawCalls": 32729,
+  "drawing": "89b4a4541fbbaf50",
   "lipGapPx": 35.39,
-  "mesh": "408d13cdb3eef356",
+  "mesh": "2d7472a1e6c3314c",
 }
 `;
 
 exports[`toon@1 golden output > flat art, aa (open): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 87.41,
-  "drawCalls": 32731,
-  "drawing": "25d5f436066866df",
+  "drawCalls": 32729,
+  "drawing": "487d577e56938980",
   "lipGapPx": 109.91,
-  "mesh": "7c2ecd3f2843ad8c",
+  "mesh": "9db745c85b884155",
 }
 `;
 
 exports[`toon@1 golden output > flat art, blink full: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 0,
-  "drawCalls": 32752,
-  "drawing": "23d4ef721d0b7437",
+  "drawCalls": 32750,
+  "drawing": "a241347b937104d0",
   "lipGapPx": 0.83,
-  "mesh": "99b37c21cc3866fd",
+  "mesh": "0c67777b3363014d",
 }
 `;
 
 exports[`toon@1 golden output > flat art, oh (rounded): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 64.32,
-  "drawCalls": 32731,
-  "drawing": "51493be4b0f8923d",
+  "drawCalls": 32729,
+  "drawing": "a24cf1b9469675bc",
   "lipGapPx": 81.05,
-  "mesh": "748407e83c0baa0e",
+  "mesh": "78b73d30c307dd08",
 }
 `;
 
 exports[`toon@1 golden output > flat art, rest: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 0,
-  "drawCalls": 32604,
-  "drawing": "5eb8ba24397179ec",
+  "drawCalls": 32602,
+  "drawing": "274cd20f3960c7e7",
   "lipGapPx": 0.83,
-  "mesh": "99b37c21cc3866fd",
+  "mesh": "0c67777b3363014d",
 }
 `;
 
 exports[`toon@1 golden output > render, E (spread): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 55.37,
-  "drawCalls": 32842,
-  "drawing": "ae9ba159a950486b",
+  "drawCalls": 32840,
+  "drawing": "38c42f0a4852ba31",
   "lipGapPx": 73,
-  "mesh": "45c852583a1a61af",
+  "mesh": "0040f6f02ee00d7b",
 }
 `;
 
 exports[`toon@1 golden output > render, FF: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 16.54,
-  "drawCalls": 32751,
-  "drawing": "631a0876daa6fcbe",
+  "drawCalls": 32749,
+  "drawing": "85c886a8ad64254d",
   "lipGapPx": 26.31,
-  "mesh": "6fcce7f20e23beea",
+  "mesh": "2b2dc910cdf755e5",
 }
 `;
 
 exports[`toon@1 golden output > render, TH, tongue up: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 27.7,
-  "drawCalls": 32842,
-  "drawing": "784d3261a11e02d8",
+  "drawCalls": 32840,
+  "drawing": "94c8726de6c15391",
   "lipGapPx": 35.39,
-  "mesh": "408d13cdb3eef356",
+  "mesh": "2d7472a1e6c3314c",
 }
 `;
 
 exports[`toon@1 golden output > render, aa (open): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 87.41,
-  "drawCalls": 32842,
-  "drawing": "a9f57131c350e279",
+  "drawCalls": 32840,
+  "drawing": "48c4d20c8f12098e",
   "lipGapPx": 109.91,
-  "mesh": "7c2ecd3f2843ad8c",
+  "mesh": "9db745c85b884155",
 }
 `;
 
 exports[`toon@1 golden output > render, blink full: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 0,
-  "drawCalls": 32764,
-  "drawing": "412d047254b91aed",
+  "drawCalls": 32762,
+  "drawing": "951184a8f8068b88",
   "lipGapPx": 0.83,
-  "mesh": "99b37c21cc3866fd",
+  "mesh": "0c67777b3363014d",
 }
 `;
 
 exports[`toon@1 golden output > render, oh (rounded): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 64.32,
-  "drawCalls": 32842,
-  "drawing": "86d25025907e011b",
+  "drawCalls": 32840,
+  "drawing": "4e8b82ac69bc552a",
   "lipGapPx": 81.05,
-  "mesh": "748407e83c0baa0e",
+  "mesh": "78b73d30c307dd08",
 }
 `;
 
 exports[`toon@1 golden output > render, rest: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 0,
-  "drawCalls": 32604,
-  "drawing": "5eb8ba24397179ec",
+  "drawCalls": 32602,
+  "drawing": "274cd20f3960c7e7",
   "lipGapPx": 0.83,
-  "mesh": "99b37c21cc3866fd",
+  "mesh": "0c67777b3363014d",
 }
 `;

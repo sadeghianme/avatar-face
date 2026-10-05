@@ -34,6 +34,7 @@ import { HeadMotion } from "./headmotion";
 import { applyLowerFace, buildLowerFaceRig, buildNeckBand, UPPER_FACE, type LowerFaceRig } from "./jaw-rig";
 import { kindProfile, type KindProfile } from "./kind-profile";
 import { padTriangle } from "./seam-pad";
+import { eyeLine, viewportFor } from "./viewport";
 import { MediaClock } from "./media-clock";
 import type { MouthExtension, MouthPose } from "./mouth-extension";
 import { centralMouthAnchors } from "./mouth-extension";
@@ -466,12 +467,15 @@ export interface EngineOptions {
   /** Opt-in lab clock, in audio milliseconds. Omitted by all existing pages. */
   cueClock?: () => number;
   /**
-   * Show the ENTIRE photo (hair, shoulders, background) with the animated
-   * face composited over it, instead of cropping to the face box. Roll and
-   * breathing sway are disabled in this mode so the mesh rim stays glued
-   * to the static background.
+   * The "full" framing: the whole picture, contained and centred. Without
+   * it (or with `zoom` 1) the "face" framing: the picture composed as a
+   * portrait that fills the canvas. Either way the whole picture is drawn;
+   * the two are zoom levels of one viewport (viewport.ts).
    */
   fullPhoto?: boolean;
+  /** The zoom directly: 1 the face, 0 the whole picture, between in
+   *  proportion. Wins over `fullPhoto`. */
+  zoom?: number;
 }
 
 export class AvatarEngine {
@@ -595,9 +599,11 @@ export class AvatarEngine {
   debugMesh: boolean;
   /** Live animation parameters — mutate freely, applied next frame. */
   tuning: EngineTuning = { ...DEFAULT_TUNING };
-  private fullPhoto: boolean;
-  // Source crop (rig-image coords) that the canvas displays.
-  private crop = { x: 0, y: 0, w: 0, h: 0 };
+  /** The zoom the viewport is at: 1 the face, 0 the whole picture. */
+  private zoom: number;
+  /** Where the whole picture lies on the canvas, canvas px (viewport.ts);
+   *  parts of it may be outside the canvas. */
+  private picture = { x: 0, y: 0, w: 0, h: 0 };
 
   // Layered render path (see setLayers). Null means single-photo.
   private layers: {
@@ -620,7 +626,7 @@ export class AvatarEngine {
     this.mouthExtension = opts.mouthExtension;
     this.pose = opts.pose;
     this.debugMesh = opts.debugMesh ?? false;
-    this.fullPhoto = opts.fullPhoto ?? false;
+    this.zoom = opts.zoom ?? (opts.fullPhoto ? 0 : 1);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     this.innerRing = this.validInnerRing();
@@ -729,32 +735,25 @@ export class AvatarEngine {
   // --- Framing -------------------------------------------------------------
 
   /**
-   * Frame the face from face_box: expand upward for forehead/hair and a
-   * little down for the chin, fit into the canvas at TRUE aspect, center.
+   * Lay the whole picture on the canvas (viewport.ts): the face zoom
+   * composes it as a portrait that fills the canvas, the full zoom shows
+   * all of it. Nothing is cropped; what falls outside the canvas is
+   * outside. The mapping is rig image px -> canvas px.
    */
   private computeFraming(): void {
-    let cropX = 0;
-    let cropY = 0;
-    let cropW = this.rig.image_size[0];
-    let cropH = this.rig.image_size[1];
-    if (!this.fullPhoto) {
-      const [bx0, by0, bx1, by1] = this.rig.face_box;
-      const bw = bx1 - bx0;
-      const bh = by1 - by0;
-      cropX = Math.max(0, bx0 - bw * 0.25);
-      cropY = Math.max(0, by0 - bh * 0.55); // forehead + hair
-      const cropX1 = Math.min(this.rig.image_size[0], bx1 + bw * 0.25);
-      const cropY1 = Math.min(this.rig.image_size[1], by1 + bh * 0.18); // chin
-      cropW = cropX1 - cropX;
-      cropH = cropY1 - cropY;
-    }
-    this.crop = { x: cropX, y: cropY, w: cropW, h: cropH };
-
-    const cw = this.canvas.width;
-    const ch = this.canvas.height;
-    this.scale = Math.min(cw / cropW, ch / cropH);
-    this.offsetX = (cw - cropW * this.scale) / 2 - cropX * this.scale;
-    this.offsetY = (ch - cropH * this.scale) / 2 - cropY * this.scale;
+    const [imageW, imageH] = this.rig.image_size;
+    const view = viewportFor({
+      imageW, imageH,
+      faceBox: this.rig.face_box,
+      eyeY: eyeLine(this.rig.points, this.rig.face_box),
+      canvasW: this.canvas.width,
+      canvasH: this.canvas.height,
+      zoom: this.zoom,
+    });
+    this.scale = view.scale;
+    this.offsetX = view.offsetX;
+    this.offsetY = view.offsetY;
+    this.picture = { x: view.offsetX, y: view.offsetY, w: imageW * view.scale, h: imageH * view.scale };
 
     // Texture coords use the texture's OWN dimensions — the thumbnail may
     // be a scaled copy of the original image.
@@ -793,11 +792,33 @@ export class AvatarEngine {
     const faceW = fx1 - fx0, faceH = fy1 - fy0;
     if (faceW < 4 || faceH < 4) return;
 
-    const x = Math.max(0, fx0 - faceW * 0.42);
-    const y = Math.max(0, fy0 - faceH * 0.9);
-    const w = Math.min(this.canvas.width, fx1 + faceW * 0.42) - x;
-    const h = Math.min(this.canvas.height, fy1 + faceH * 0.5) - y;
+    // Within the picture, not the canvas: the head may reach past the
+    // canvas edge (hair above a face zoom) and still be the unit that moves.
+    const pic = this.picture;
+    const x = Math.max(pic.x, fx0 - faceW * 0.42);
+    const y = Math.max(pic.y, fy0 - faceH * 0.9);
+    const w = Math.min(pic.x + pic.w, fx1 + faceW * 0.42) - x;
+    const h = Math.min(pic.y + pic.h, fy1 + faceH * 0.5) - y;
     if (w < 8 || h < 8) return;
+
+    // The geometry (pivot, travel) serves every picture; the cut-out layer
+    // itself only a cut-out, whose head moves over transparency. An opaque
+    // picture moves as one instead (render), so it needs no copy.
+    this.headGeom = {
+      x, y, w, h,
+      pivotX: (fx0 + fx1) / 2,
+      // A head pivots where it meets the spine, in the upper chest — not
+      // about its own middle, which reads as the face rotating in the skull.
+      pivotY: fy1 + faceH * 0.85,
+      // Peak travel, |pose|=1 extremes the signed-square draw rarely
+      // reaches. Kept close to SitePal's measured ~2% drift: anything
+      // livelier drags the layer boundary across hair and background
+      // detail, which reads as the image tearing, not the head turning.
+      yawPx: faceW * 0.03,
+      pitchPx: faceH * 0.025,
+      faceH,
+    };
+    if (!this.cutOut) return;
 
     const layer = document.createElement("canvas");
     layer.width = Math.round(w);
@@ -845,20 +866,6 @@ export class AvatarEngine {
     lctx.globalCompositeOperation = "source-over";
 
     this.headLayer = layer;
-    this.headGeom = {
-      x, y, w, h,
-      pivotX: (fx0 + fx1) / 2,
-      // A head pivots where it meets the spine, in the upper chest — not
-      // about its own middle, which reads as the face rotating in the skull.
-      pivotY: fy1 + faceH * 0.85,
-      // Peak travel, |pose|=1 extremes the signed-square draw rarely
-      // reaches. Kept close to SitePal's measured ~2% drift: anything
-      // livelier drags the layer boundary across hair and background
-      // detail, which reads as the image tearing, not the head turning.
-      yawPx: faceW * 0.03,
-      pitchPx: faceH * 0.025,
-      faceH,
-    };
   }
 
   /** Current head displacement in canvas px, plus the face's parallax share. */
@@ -1981,43 +1988,57 @@ export class AvatarEngine {
     ctx.save();
     this.applyBodyTransform(ctx);
 
-    // Base layer: the un-warped photo. Triangle seams and sub-pixel gaps in
-    // the warp then reveal original pixels instead of holes — and in
-    // fullPhoto mode this is what shows hair/shoulders/background.
-    const tw = this.texture.naturalWidth / this.rig.image_size[0];
-    const th = this.texture.naturalHeight / this.rig.image_size[1];
-    ctx.drawImage(
-      this.texture,
-      this.crop.x * tw,
-      this.crop.y * th,
-      this.crop.w * tw,
-      this.crop.h * th,
-      this.crop.x * this.scale + this.offsetX,
-      this.crop.y * this.scale + this.offsetY,
-      this.crop.w * this.scale,
-      this.crop.h * this.scale
-    );
-
-    // --- Head layer -------------------------------------------------------
+    // --- Head motion ------------------------------------------------------
     //
-    // The whole head — hair included — moves as one rigid unit over the
-    // still body, with the face given a slightly larger share of the same
-    // travel (parallax), which is what makes a shift read as a turn. For a
-    // cut-out, the head is erased from the base first so the moved layer
-    // does not leave a ghost of itself behind.
+    // The whole head — hair included — moves as one rigid unit, which is
+    // what makes a shift read as a turn. HOW depends on what is behind it.
+    // A cut-out has nothing behind its head but transparency: the head is
+    // cut out as its own feathered layer, erased from the base and drawn
+    // moved, and its edges are the hair's own. A picture with an opaque
+    // background has no such edge: a moved copy of the head over the still
+    // picture leaves a seam wherever the copy's rectangle meets what it
+    // covers, and at the picture's boundary (a scan on white, a portrait
+    // on grey) the rotated copy pokes past the edge as a torn, jagged rim.
+    // So an opaque picture moves AS ONE, picture and mesh together: there
+    // is no second copy, and nothing to seam.
     const head = this.headOffsets();
     const geom = this.headGeom;
-    if (geom && this.headLayer && this.cutOut) {
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.drawImage(this.headLayer, geom.x, geom.y);
-      ctx.globalCompositeOperation = "source-over";
-    }
-    ctx.save();
-    if (geom && this.headLayer) {
+    const asOne = !this.cutOut;
+    if (asOne && geom) {
       ctx.translate(geom.pivotX + head.dx, geom.pivotY + head.dy);
       ctx.rotate(head.roll);
       ctx.translate(-geom.pivotX, -geom.pivotY);
-      ctx.drawImage(this.headLayer, geom.x, geom.y);
+    }
+
+    // Base layer: the whole un-warped photo, through the viewport. Triangle
+    // seams and sub-pixel gaps in the warp then reveal original pixels
+    // instead of holes, and the hair, shoulders and background are simply
+    // there, as far as the canvas reaches.
+    this.drawFullFrame(this.texture);
+
+    const layered = !asOne && geom && this.headLayer;
+    if (layered) {
+      // The head erased from the base first, so the moved layer does not
+      // leave a ghost of itself behind.
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.drawImage(this.headLayer!, geom.x, geom.y);
+      ctx.globalCompositeOperation = "source-over";
+    }
+    ctx.save();
+    if (layered) {
+      ctx.translate(geom.pivotX + head.dx, geom.pivotY + head.dy);
+      ctx.rotate(head.roll);
+      ctx.translate(-geom.pivotX, -geom.pivotY);
+      // ADDED back, not laid over: the punch-out left base * (1 - a) where
+      // the layer's feathered alpha is a, and the layer brings hair * a.
+      // Source-over would attenuate the remainder a second time, by
+      // (1 - a) again, and the feather band came out a quarter transparent
+      // at rest: a faint rectangle around every cut-out's head, over
+      // whatever the page showed behind it. Summed, the two are the base
+      // again exactly where nothing moved, and the moved copy elsewhere.
+      ctx.globalCompositeOperation = "lighter";
+      ctx.drawImage(this.headLayer!, geom.x, geom.y);
+      ctx.globalCompositeOperation = "source-over";
       ctx.translate(head.fdx, head.fdy);
     }
 
@@ -2037,21 +2058,11 @@ export class AvatarEngine {
     ctx.restore();
   }
 
-  /** Draw a full-frame layer through the same crop/scale mapping as the photo. */
+  /** Draw a whole full-frame image (the photo, or a layer aligned to it)
+   *  through the viewport. */
   private drawFullFrame(img: HTMLImageElement): void {
-    const tw = img.naturalWidth / this.rig.image_size[0];
-    const th = img.naturalHeight / this.rig.image_size[1];
-    this.ctx.drawImage(
-      img,
-      this.crop.x * tw,
-      this.crop.y * th,
-      this.crop.w * tw,
-      this.crop.h * th,
-      this.crop.x * this.scale + this.offsetX,
-      this.crop.y * this.scale + this.offsetY,
-      this.crop.w * this.scale,
-      this.crop.h * this.scale
-    );
+    const pic = this.picture;
+    this.ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, pic.x, pic.y, pic.w, pic.h);
   }
 
   /**
