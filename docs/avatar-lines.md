@@ -991,6 +991,92 @@ drawn mouth, make your own in the Mouth panel).
   the opening is crisper than its own lips, as the measure intends (a depth
   edge is as sharp as the picture's crispest edges) but not what that
   render's own mouth shows; and the seam fallback is still the old measure.
+- The warp on the GPU (2026-10-06, every photo engine; `embed/src/warp-gl.ts`).
+  *The measured problem*: on the owner's M1 Max in GPU Chrome, the live share
+  page of "Sakineh hero white 1536" (canvas 1440×1440 at dpr 2, texture
+  1264×843, 2318 triangles, layers background/body/head) ran its animation
+  frame in 3.4 ms of JavaScript (p50, max 6) and still got frames 8, 8, ~55 ms
+  apart: 45 fps with a 50–60 ms stall every third frame, speaking or idle.
+  Disabling every `ctx.filter` changed nothing, the classic mouth instead of
+  the photographic one nothing, the canvas at 720×720 ran a clean 121 fps with
+  no stall. The cost was the raster of ~2300 `save / clip(triangle) /
+  transform / drawImage(texture) / restore` calls a frame on a 1440² canvas,
+  which Chrome does off the JavaScript thread. Reproduced in headless Chrome
+  (Metal): 2315 `drawImage` and 2312 `clip` a frame, 3.2 ms of JavaScript,
+  56.7 ms once each frame is forced to raster. *The design*: `WarpRenderer`
+  owns an offscreen WebGL 1 canvas the engine's size (antialias on,
+  premultiplied alpha, no depth or stencil). The picture goes up once as a
+  texture (LINEAR, CLAMP_TO_EDGE, no mipmaps; again on `setTexture`, never
+  on `setLayers`, since the triangles always sample the picture), the texture
+  coordinates and the triangle list once per geometry (with the mesh:
+  `setTexture`, `setScene`), the deformed positions every frame; one
+  `drawElements`. The triangle list is the engine's own in its draw order,
+  mouth subdivision and neck band included, minus the source-degenerate
+  triangles the 2D path skips (|det| < 1e-6). The body sway and breath and
+  the head's rigid transform are the same translate/rotate/translate the 2D
+  path puts on its context, composed as an affine beside it
+  (`applyBodyTransform`, `applyHeadTransform`) and given to the vertex shader,
+  so the GL canvas is in canvas pixels and is drawn under the identity: the
+  picture is resampled once, not twice. Blending is source-over on
+  premultiplied texels, as `drawImage` composites, so a cut-out's edge and a
+  fold in the mesh come out as before. The frame: the scene background, the
+  full frame(s) and the head layer as before, then the mesh's bounding box of
+  the GL canvas in ONE `drawImage` where the loop was, then the eyes, lids,
+  lashes and mouth in 2D on top, untouched. No seam pads: the GPU rasterizes
+  shared edges exactly, and the pads exist to hide the half-pixel hairlines
+  adjacent 2D clips leave. *The fallback*: the 2D path is intact and taken,
+  frame by frame, where there is no WebGL (none in Node: the golden tests take
+  it, byte-identical), while the context is lost (`webglcontextlost`,
+  default prevented; `webglcontextrestored` uploads the texture and the mesh
+  again), when the texture cannot be uploaded (tainted, past
+  MAX_TEXTURE_SIZE), and when asked: the `warp: "2d"` option, `setWarp("2d" |
+  "auto")` live, `warpPath()` to read which, the widget's `data-warp="2d"`.
+  One context per engine, freed in `destroy()` (WEBGL_lose_context). The
+  dashboard previews, the lab and the share page construct the engine as
+  before and get it. Bundle 83.8 → 92.0 KB minified, 31.4 → 34.4 KB gzipped.
+  *Parity* (headless Chrome, Metal and SwiftShader, 1440² face framing; one
+  engine rendered twice per frame from one state, 18 frames: rest, held
+  AA/EE/OO, 12 frames of the production cue track, a blink mid-sweep, a
+  sway/breath/head-turn frame; bita, mehdi, mehdi_avatar, the Reference,
+  human-animation and human-cartoon `toon@1`, animal-realistic `animal@2`):
+  PSNR over the mesh's box away from the triangle edges (±1.5 px), worst
+  frame per subject, 51.6–57.5 dB (bita 54.4, mehdi 57.5, mehdi_avatar 52.7,
+  Reference 55.3, human-animation 56.7, human-cartoon 51.9, animal-realistic
+  51.6); edges included 44.0–54.9; the whole frame 48.7–55.2; the mouth
+  44.6–57.4 (the animal's held AA: the 2D pads' mitres spike on the sliver
+  triangles at the mouth corner, which GL does not draw); the eyes 40.8 (the
+  cartoon's drawn lines) to 54.1; chin and neck band 41.4–56.0. Pixels off by
+  more than 16 levels away from the edges: at most 37 per million. Hairlines
+  along the triangle edges (the luma on the edge against the mean of both
+  sides, over 10 levels): 2D-only 6–230 against GL-only 2–151 per subject of
+  0.4–0.94 million edge samples, and none of either is a seam in the 3×
+  zooms: they are the picture's own lines crossing an edge under sub-pixel
+  differences in resampling. In the sheets (mouth, eyes, chin and neck at
+  1:1, jaw line and mouth corner at 3×) the two rows are indistinguishable;
+  the diff shows up to a pixel of edge shift on flat art, where the 2D pads
+  overlap, and the spikes above. *Performance* (headless, Metal; the 2D
+  canvas in headless is software-rasterized, a scaled full-frame `drawImage`
+  costs 6 ms at any quality and a same-size canvas copy 0.9 ms, so these are
+  not the owner's Chrome's numbers): per frame 2D 2315 `drawImage` + 2312
+  `clip`, GL 4 `drawImage` + none; JavaScript 3.2 → 0.1 ms (p50); the frame
+  forced to raster 56.7 → 22.3 ms, of which the GL mesh draw is 1.1 ms, its
+  composite 3 ms and the three full-frame layers 18.8 ms. Frame spacing on
+  the engine's own loop at 1440², bita, 3 s each idle and speaking: 2D p50
+  66.6 / p90 116.7 / max 216.6 ms (15 fps, 30 of 47 frames over 30 ms); GL
+  p50 33.3 / p90 33.4 / max 66.7 ms (32 fps, every frame two vsyncs: the
+  software full-frame draws of the three layers). The Reference at 1440²
+  (one full frame, a PNG): 2D idle 60 fps without a stall (a still mesh
+  draws every triangle through one matrix, which Skia serves from a cache;
+  bita's JPEG-backed picture stalled idle too), speaking p50 16.7 / p90
+  33.3 / max 50 ms, 48 fps, 34 frames over 20 ms; GL 60 fps idle and
+  speaking, p90 16.7, max 16.8, no frame over 20 ms. At 720² both paths sit
+  at the 60 Hz headless cap. The owner's GPU Chrome re-measures with
+  `__liveface.setWarp("2d")` and `("auto")`. *Still weak*: no measurement
+  on an accelerated 2D canvas; on a software one the full-frame layer draws
+  are now the frame's largest cost, untouched here; MSAA and the composite
+  cost per canvas pixel; no GPU timer; GL magnifies bilinearly where Skia's
+  "high" filter is what the pixel of edge difference is; Safari and iOS
+  untried.
 
 ## Data changes
 
