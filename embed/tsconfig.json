@@ -21,7 +21,6 @@
     "src"
   ],
   "exclude": [
-    "src/**/__tests__",
-    "src/head3d/bake/cli.ts"
+    "src/**/__tests__"
   ]
 }

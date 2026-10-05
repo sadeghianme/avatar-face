@@ -1,13 +1,15 @@
 /**
  * node dist/head3d-bake.mjs <rig.json> <out.json>
  *
- * Bundled by `npm run build:head3d-bake` (esbuild, platform node). The
+ * Bundled by `npm run build:head3d-bake` (esbuild, platform node). Lives
+ * outside src/ because it is Node-only (node:fs, process) and src/ is also
+ * typechecked by the dashboard, which has no Node types. The
  * backend's head3d.bake runs it for every head it builds.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 
-import type { Rig } from "../../types";
-import { bakeMorphTargets } from "./bake-morphs";
+import type { Rig } from "../src/types";
+import { bakeMorphTargets } from "../src/head3d/bake/bake-morphs";
 
 const [rigPath, outPath] = process.argv.slice(2);
 if (!rigPath || !outPath) {

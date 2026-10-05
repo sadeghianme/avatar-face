@@ -18,7 +18,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[4]
 EMBED = REPO / "embed"
 BUNDLE = EMBED / "dist/head3d-bake.mjs"
-ENTRY = EMBED / "src/head3d/bake/cli.ts"
+ENTRY = EMBED / "scripts/head3d-bake.ts"
 ESBUILD = EMBED / "node_modules/.bin/esbuild"
 
 BAKED_SYMMETRIC = ("jawOpen", "mouthClose", "mouthPucker", "mouthFunnel", "mouthStretch", "mouthSmile", "eyeBlink")
