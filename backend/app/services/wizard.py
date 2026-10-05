@@ -52,6 +52,7 @@ import copy
 import hashlib
 import io
 import logging
+import re
 from uuid import uuid4
 
 from PIL import Image
@@ -125,6 +126,78 @@ def inferred_plan(face_type: str | None, generated: bool) -> dict:
     model = "animal" if face_type == "animal" else "human"
     look = "cartoon" if face_type == "cartoon" else "realistic"
     return make_plan(model, look, GENERATE if generated else "upload")
+
+
+# --- The default name --------------------------------------------------------------
+#
+# The name the wizard proposes is decided ONCE, when the creation is made,
+# and kept in its `steps` beside the plan: every screen and the finish say
+# the same, whatever tab or reload shows them. (It used to be worked out
+# again by each screen from what the tab remembered of the file name, so a
+# reload renamed the avatar.)
+
+NAME = "name"
+NAME_MAX = 40
+# Words a camera or an app puts in a file name: they say nothing about who
+# is in the picture, and a name made of them ("Animal realistic raw") is
+# worse than the plan's own ("Animal avatar").
+TECHNICAL_WORDS = frozenset(
+    "img image dsc dscn dscf pxl mvimg photo picture pic screenshot screen shot capture "
+    "scan scanned raw copy final export edit edited crop cropped resized untitled "
+    "download downloaded received whatsapp signal telegram file new tmp temp test "
+    "sample".split()
+)
+_ARTICLE = re.compile(r"^(a|an|the|un|une|le|la|les|des|l')\s+", re.IGNORECASE)
+_SEPARATORS = re.compile(r"[\s_\-.]+")
+
+
+def _as_name(text: str) -> str:
+    """At most NAME_MAX characters, cut at a word boundary when one is near,
+    the first letter up."""
+    if len(text) > NAME_MAX:
+        head = text[: NAME_MAX + 1]
+        space = head.rfind(" ")
+        text = (head[:space] if space > NAME_MAX / 2 else text[:NAME_MAX]).strip()
+    return text[:1].upper() + text[1:]
+
+
+def technical_file_name(stem: str) -> bool:
+    """Is this file name (its extension off) a camera's or an app's rather
+    than someone's words? Yes for one of TECHNICAL_WORDS or a digit anywhere
+    in it ("IMG_1234", "animal-realistic.raw", "Screenshot 2026-10-05"), for
+    a slug (separators and digits are a third or more of it: "a-b-c"), and
+    for fewer than two letters ("p", "")."""
+    words = [w for w in _SEPARATORS.split(stem) if w]
+    if sum(c.isalpha() for c in stem) < 2:
+        return True
+    if any(w.lower() in TECHNICAL_WORDS or any(c.isdigit() for c in w) for w in words):
+        return True
+    heavy = sum(1 for c in stem if c in "_-." or c.isdigit())
+    return heavy * 3 >= len(stem)
+
+
+def default_name(*, file_name: str | None = None, description: str | None = None) -> str | None:
+    """A first name for the avatar, from what the owner gave (renamed on its
+    page in one click): the description's own words ("a cheerful baker with
+    flour on her apron" → "Cheerful baker with flour on her apron"), or a
+    file name that means something ("maria_headshot.jpg" → "Maria headshot").
+    None when neither does (no description; a technical file name): the
+    dashboard then names it after the plan ("Human avatar", "Avatar animal")
+    in the member's language, which the server does not know."""
+    words = _ARTICLE.sub("", re.sub(r"\s+", " ", description or "").strip())
+    words = words.rstrip(".,;:!?").strip()
+    if words:
+        return _as_name(words)
+    stem = re.sub(r"\.[^.]+$", "", (file_name or "").strip()).strip()
+    if stem and not technical_file_name(stem):
+        return _as_name(re.sub(r"\s+", " ", _SEPARATORS.sub(" ", stem)).strip())
+    return None
+
+
+def name_of(steps: dict | None) -> str | None:
+    """The name kept with the creation, or None (the plan's default)."""
+    name = (steps or {}).get(NAME)
+    return name.strip() if isinstance(name, str) and name.strip() else None
 
 
 # --- Prompts -----------------------------------------------------------------------

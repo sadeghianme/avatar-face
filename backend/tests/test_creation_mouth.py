@@ -171,6 +171,30 @@ async def test_a_closed_mouth_finishes_without_warnings(client, faces):
     assert response.json()["warnings"] == []
 
 
+def test_the_mouth_notes_are_about_the_photographic_mouth_only():
+    """A published realistic dog once said "the mouth is open in this
+    picture": MediaPipe's landmarker had read its muzzle as a mouth. The
+    notes are about the picture's own lips moving (the human line); every
+    other line draws its mouth over the picture."""
+    from types import SimpleNamespace
+
+    from app.services.creations import mouth_warnings
+
+    def creation(face_type, **state):
+        item = {"key": "k", "width": 1, "height": 1, "check": {"face_state": state}}
+        return SimpleNamespace(
+            face_type=face_type, steps={"current": "original", "items": {"original": item}}
+        )
+
+    assert [w["code"] for w in mouth_warnings(creation("human", mouth_open=True))] == ["mouth_open"]
+    assert [w["code"] for w in mouth_warnings(creation("human", teeth_showing=True))] == [
+        "teeth_showing"
+    ]
+    assert mouth_warnings(creation("animal", mouth_open=True, teeth_showing=True)) == []
+    assert mouth_warnings(creation("cartoon", mouth_open=True)) == []
+    assert mouth_warnings(creation(None, mouth_open=True)) == []
+
+
 # --- once per photo, and only for the lips -----------------------------------------------
 
 

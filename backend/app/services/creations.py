@@ -347,7 +347,13 @@ def statement_for(creation: Creation) -> str | None:
       on the human line;
     - an upload: "depiction" when it is on the human line, or when the
       photo check found a human face on an image in its lineage that no AI
-      made (the upload, its framing, its cut-out);
+      made (the upload, its framing, its cut-out). So it is for a photo
+      uploaded under an "Animal" plan on which the detector read a face:
+      someone may pick Animal and upload a real person. The dashboard words
+      that case for the plan ("this photo shows an animal, not a real
+      person; or, if it shows a person, I am that person or have their
+      permission…"): the same statement, made conditional, the same scope
+      (the plan on the creation says which form was shown);
     - otherwise (an animal, a drawing the detector does not read as a
       face) nothing.
     """
@@ -725,11 +731,13 @@ async def _ingest(job: Job, params: dict) -> None:
             }
         },
     }
-    # The four-step wizard's plan (services.wizard), given at upload.
+    # The four-step wizard's plan, and the name it proposes (services.wizard),
+    # both given at upload.
     creation = await _load(job)
-    plan = (creation.steps or {}).get("plan") if creation is not None else None
-    if plan:
-        steps["plan"] = plan
+    given = (creation.steps or {}) if creation is not None else {}
+    for kept in ("plan", "name"):
+        if given.get(kept):
+            steps[kept] = given[kept]
     stored = await _store_result(
         job,
         params,
@@ -1128,7 +1136,15 @@ def mouth_warnings(creation: Creation) -> list[dict]:
     """What finishing the current image will look like around the mouth, as
     {code, detail} warnings: an open mouth rests open, and parted lips keep
     the photo's teeth painted on them. Empty when the check found neither,
-    or has not looked (no face, a draft from before checks were kept)."""
+    or has not looked (no face, a draft from before checks were kept).
+
+    The human line only: both are about the photographic mouth, which is the
+    picture's own lips moving. An animal's muzzle and a drawing's mouth are
+    drawn over the picture, so what its lips do at rest does not show; and
+    the check that measured them is MediaPipe's face landmarker reading a
+    dog's muzzle as a mouth, which says nothing."""
+    if creation.face_type != "human":
+        return []
     state = (check_of(creation.steps, current_step(creation.steps)) or {}).get("face_state") or {}
     if state.get("mouth_open"):
         return [error_record(
@@ -1457,6 +1473,9 @@ async def _generate(job: Job, params: dict) -> None:
         from app.services import wizard
 
         steps["plan"] = plan
+        # The name the wizard proposed from the description, given with the plan.
+        if (creation.steps or {}).get("name"):
+            steps["name"] = creation.steps["name"]
         values["anchors"], cut = await wizard.settle(
             job, creation, steps, "original", clean, params.get("consent_id"), new_keys
         )

@@ -93,6 +93,37 @@ def test_the_owners_words_are_quoted_and_cannot_break_out():
     assert len(wizard.character_prompt("human", "realistic", "x" * 5000)) < 5000
 
 
+# --- the default name ----------------------------------------------------------------
+
+
+def test_the_default_name_is_the_owners_words_never_a_technical_file_name():
+    assert wizard.default_name(description="a cheerful baker.") == "Cheerful baker"
+    assert wizard.default_name(description="une chouette rousse") == "Chouette rousse"
+    long = wizard.default_name(
+        description="a very friendly golden retriever wearing a tiny blue bow tie and glasses"
+    )
+    assert long.startswith("Very friendly golden retriever") and len(long) <= wizard.NAME_MAX
+    assert not long.endswith(" ")
+    assert wizard.default_name(description="  ") is None
+    # A file name that says who is in the picture.
+    assert wizard.default_name(file_name="maria_headshot.jpg") == "Maria headshot"
+    assert wizard.default_name(file_name="Grandpa Joe.webp") == "Grandpa Joe"
+    assert wizard.default_name(file_name="Rex the dog.jpeg") == "Rex the dog"
+    # A camera's or an app's: digits, its words, a slug. "Animal realistic
+    # raw" was once an avatar's name.
+    for technical in (
+        "animal-realistic.raw.png", "IMG_20260101_123456.jpg", "DSC_0001.JPG",
+        "Screenshot 2026-10-05 at 10.15.32.png", "PXL_2026.png", "12345.png", "a-b-c-d.png",
+        "photo of mum.jpg", "p.png", ".png", "",
+    ):
+        assert wizard.default_name(file_name=technical) is None, technical
+    assert wizard.default_name() is None
+    # The description wins over the file name.
+    assert wizard.default_name(file_name="maria.jpg", description="a baker") == "Baker"
+    assert wizard.name_of({"name": " Maria "}) == "Maria"
+    assert wizard.name_of({"name": None}) is None and wizard.name_of(None) is None
+
+
 # --- the backdrop keyer --------------------------------------------------------------
 
 
@@ -501,6 +532,74 @@ async def test_a_statement_about_another_creation_does_not_publish_this_one(clie
         json={"name": "Ada", "anchors_id": body["anchors"]["id"]},
     )
     assert finish.status_code == 403 and finish.json()["code"] == "consent_required"
+
+
+async def test_an_animal_upload_the_detector_reads_as_a_person_is_still_attested(client, faces):
+    """Someone may choose "Animal" and upload a real person: a human face the
+    photo check finds on the upload keeps the statement (the depiction scope;
+    the dashboard words it for the plan: "this photo shows an animal, not a
+    real person; or, if it shows a person…"). A photo no detector reads as a
+    face needs none, and a person's plan asks the usual statement."""
+    headers, org_id = await _org(client, "kennel")
+    # MediaPipe (the fixture's Faces) reads a face on this upload, as it did
+    # on a realistic dog photo.
+    _, body = await _upload(client, headers, org_id, model="animal", look="realistic")
+    assert body["plan"]["model"] == "animal" and body["face_type"] == "animal"
+    assert body["analysis"]["detected"] is True
+    assert body["statement"] == "depiction"
+    # The same plan, a photo with no face in it: nothing is asked.
+    faces.none_for.add((600, 750))
+    _, body = await _upload(client, headers, org_id, model="animal", look="realistic")
+    assert body["analysis"]["detected"] is False
+    assert body["statement"] is None
+    faces.none_for.clear()
+    # A person's plan: the usual statement, whatever the detector saw.
+    _, body = await _upload(client, headers, org_id, model="human", look="realistic")
+    assert body["statement"] == "depiction"
+
+
+async def test_the_name_is_decided_once_when_the_creation_is_made(client, faces, images):
+    """The dashboard once worked the name out again on each screen from what
+    the tab remembered of the file name, so a reload renamed the avatar. It
+    is now the server's, set with the creation, and the finish takes it."""
+    headers, org_id = await _org(client, "namer")
+
+    async def upload(file_name, model="human", look="realistic"):
+        response = await _run(
+            client, headers, "POST", f"/orgs/{org_id}/creations",
+            files={"file": (file_name, portrait(600, 750), "image/png")},
+            data={"model": model, "look": look},
+        )
+        assert response.status_code == 202, response.text
+        return await _get(client, headers, f"/orgs/{org_id}/creations/{response.json()['id']}")
+
+    assert (await upload("maria_headshot.png"))["name"] == "Maria headshot"
+    # A technical file name proposes nothing: the dashboard names it after
+    # the plan, in the member's language.
+    assert (await upload("animal-realistic.raw.png", model="animal"))["name"] is None
+    assert (await upload("IMG_4021.png"))["name"] is None
+
+    # A described character: from the description.
+    images.script = [studio()]
+    consent_id = await ai_consent(client, headers, org_id)
+    response = await _run(
+        client, headers, "POST", f"/orgs/{org_id}/creations/generate",
+        json={
+            "model": "human", "look": "realistic", "prompt": "a cheerful baker",
+            "consent_id": consent_id,
+        },
+    )
+    base = f"/orgs/{org_id}/creations/{response.json()['id']}"
+    body = await _get(client, headers, base)
+    assert body["name"] == "Cheerful baker"
+    # The finish without a name takes the one kept with the creation.
+    await depiction(client, headers, base, "generated_face")
+    finish = await _run(
+        client, headers, "POST", f"{base}/finish", json={"anchors_id": body["anchors"]["id"]}
+    )
+    assert finish.status_code == 202, finish.text
+    avatar = await _get(client, headers, f"/orgs/{org_id}/avatars/{finish.json()['avatar_id']}")
+    assert avatar["name"] == "Cheerful baker"
 
 
 async def test_an_animals_points_come_from_the_ai_when_the_detector_is_blind(

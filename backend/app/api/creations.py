@@ -325,6 +325,7 @@ async def _out(db: DB, creation: Creation) -> CreationOut:
         ai=_ai_out(creation, await db.get(Organization, creation.org_id), recommendation),
         statement=svc.statement_for(creation),
         plan=wizard.plan_of(creation.steps),
+        name=wizard.name_of(creation.steps),
         created_at=creation.created_at,
         updated_at=creation.updated_at,
     )
@@ -369,14 +370,22 @@ async def create_creation(
 
     The four-step wizard sends `model` and `look` (both, or neither): the
     line follows from them (services.wizard.line_for) and the creation keeps
-    them as its `plan`; step 3 then prepares the photo (POST /prepare).
+    them as its `plan`, with the `name` it proposes (from the file name when
+    that means something; wizard.default_name), decided here once so every
+    screen and the finish say the same; step 3 then prepares the photo
+    (POST /prepare).
     """
     settings = get_settings()
-    plan = None
+    steps = None
     if (model is None) != (look is None):
         raise Validation422("Send both the model and the look", code="plan_incomplete")
     if model is not None and look is not None:
-        plan = wizard.make_plan(model, look, "upload")
+        steps = {
+            "current": None,
+            "items": {},
+            wizard.PLAN: wizard.make_plan(model, look, "upload"),
+            wizard.NAME: wizard.default_name(file_name=file.filename),
+        }
         face_type = wizard.line_for(model, look)
     if file.content_type not in settings.allowed_image_types:
         raise Validation422("Choose a JPEG, PNG or WebP photo", code="unsupported_image_type")
@@ -403,7 +412,7 @@ async def create_creation(
             face_type=face_type,
             status=CreationStatus.draft,
             revision=0,
-            steps={"current": None, "items": {}, wizard.PLAN: plan} if plan else None,
+            steps=steps,
             job=svc.job_record(job, QUEUED, {}),
         )
         db.add(creation)
@@ -453,6 +462,7 @@ async def generate_creation(
 
     consent.require_ai_enabled(ctx.org)
     plan = None
+    steps = None
     face_type = body.face_type
     if (body.model is None) != (body.look is None):
         raise Validation422("Send both the model and the look", code="plan_incomplete")
@@ -463,6 +473,13 @@ async def generate_creation(
                 code="plan_with_source",
             )
         plan = wizard.make_plan(body.model, body.look, "generate", body.prompt)
+        # The name it proposes, from the description, decided here once.
+        steps = {
+            "current": None,
+            "items": {},
+            wizard.PLAN: plan,
+            wizard.NAME: wizard.default_name(description=body.prompt),
+        }
         face_type = wizard.line_for(body.model, body.look)
     if face_type is None:
         raise Validation422("Say what kind of face to make", code="face_type_required")
@@ -512,7 +529,7 @@ async def generate_creation(
             face_type=face_type,
             status=CreationStatus.draft,
             revision=0,
-            steps={"current": None, "items": {}, wizard.PLAN: plan} if plan else None,
+            steps=steps,
             consent_ids=consent_ids or None,
             job=svc.job_record(job, QUEUED, params),
         )
@@ -1229,11 +1246,15 @@ async def _start_finish(
             extra={"reasons": [r.model_dump() for r in reasons]},
         )
 
+    # The name the dashboard shows is the one kept with the creation (set
+    # when it was made); a client that sends one has the last word, and a
+    # creation the old wizard made has neither.
+    name = (body.name or "").strip() or wizard.name_of(creation.steps) or "Avatar"
     avatar = Avatar(
         id=new_id(),
         org_id=creation.org_id,
         created_by_id=user_id,
-        name=body.name,
+        name=name,
         kind=AvatarKind.photo,
         content_type="image/png",
         face_type=face_type,
@@ -1245,7 +1266,7 @@ async def _start_finish(
     )
     db.add(avatar)
     params = {
-        "name": body.name,
+        "name": name,
         "anchors_id": body.anchors_id,
         "marks": marks,
         "consent_id": body.consent_id,
@@ -1288,6 +1309,8 @@ async def finish_creation(
     refused (409 anchors_stale), as is a fit that would fold (422 with the
     reasons). Follow the creation until `status` is finished; if the job
     fails the creation is a draft again and Finish can be pressed again.
+    The avatar takes `name`, or without one the name kept with the creation
+    (`CreationOut.name`, decided when it was made), else "Avatar".
 
     When `statement` is set, it needs that statement by this user, recorded
     for this creation (403 consent_required, with its `scope`): a person's

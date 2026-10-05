@@ -36,7 +36,13 @@ Three scopes:
 - `depiction`: "I am this person or have their permission, and they are 18
   or older". Required to finish a creation made from a person's photo, AI
   or not, on whatever line it ends up (services.creations.statement_for):
-  an avatar is a person's face talking on someone's site.
+  an avatar is a person's face talking on someone's site. A photo uploaded
+  under the wizard's "Animal" plan on which the detector read a human face
+  is asked the same statement in a conditional form ("this photo shows an
+  animal, not a real person; or, if it shows a person, I am that person or
+  have their permission, and they are 18 or older"): the same scope and
+  version, since the attestation about any person in it is the same, and
+  the creation's plan says which form was shown.
 - `generated_face`: "this face was made by AI and is not a real,
   identifiable person". The same place in the flow, for a face the image
   model made from words, of which "I am this person" cannot be true.

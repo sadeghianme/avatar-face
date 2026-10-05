@@ -56,6 +56,13 @@ The owner's flow: **1 Model · 2 Photo · 3 Prepare · 4 Publish**.
             a description) are ticked HERE; the statement is recorded for the
             creation as soon as it exists, and finish finds it
             (consent.statement_about). A realistic upload may go without AI.
+            "Create my avatar" also fixes the avatar's default name, once, on
+            the server (wizard.default_name → `steps.name`, `CreationOut.name`):
+            the description's words, or a file name that means something;
+            a camera's or an app's ("IMG_1234", "animal-realistic.raw") gives
+            null and the dashboard says the plan's own ("Animal avatar",
+            "Avatar animal"). Publish shows it and the finish takes it, so a
+            reload never renames the avatar.
 3 Prepare   automatic, one job (POST /prepare, services.wizard): the AI makes
             the picture in the look on a plain backdrop, it is cut out (the
             person segmenter for a person, else services.backdrop, the
@@ -365,7 +372,16 @@ unchanged changes nothing. A head sent without diagonals keeps the saved ones.
   `generated_face` instead ("made by AI, not a real, identifiable person"),
   except an animal the wizard drew in an animated or cartoon look, whose
   detected "face" (MediaPipe on a cartoon dog) is a false positive: nothing
-  is asked of it. A realistic animal read as a face still gets it.
+  is asked of it. A realistic animal read as a face still gets it. A photo
+  uploaded under an "Animal" plan on which the detector read a human face
+  keeps `depiction` (someone may pick Animal and upload a real person), but
+  the dashboard words it for the plan (`wizard.statementKey`,
+  `createDepictionStatement_animal`): "This photo shows an animal, not a
+  real person — or, if it shows a person, I am that person or have their
+  permission, and they are 18 or older." The same statement about any
+  person in it, made conditional, so the same scope and version are
+  recorded; the plan on the creation says which form was shown. An animal
+  upload with no face found is asked nothing.
   Both are recorded for one creation (`subject_id`, migration 025) and
   accepted for it only; neither is remembered across creations.
 - Choosing a stylised version remembers the line and background answer it
@@ -486,7 +502,12 @@ except for the clock, a bug fix every avatar gets):
   builds; they are kept for the tab (sessionStorage, `rememberFinishNotice`)
   and shown on the avatar's page (`FinishNotice`: what step 5 gave the
   mouth, its own shapes and teeth or standard ones and why), until
-  dismissed. An avatar step 5 is still preparing is listed as Processing;
+  dismissed. The mouth warnings (`mouth_warnings`, mouth_open and
+  teeth_showing) are the human line's only: they are about the photographic
+  mouth, the picture's own lips; the animal and cartoon lines draw their
+  mouth over the picture, and the landmarker's "open mouth" on a dog's
+  muzzle (a published realistic dog once carried the note) says nothing.
+  An avatar step 5 is still preparing is listed as Processing;
   its page links to the wizard's step 5 (`preparing_creation_id`) instead of
   the rig job's stepper, and its Retry is refused (409 `avatar_preparing`).
   The Mouth panel says where the shapes come from (all six, some, or

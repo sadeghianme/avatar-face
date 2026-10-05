@@ -171,7 +171,9 @@ class PreviewRigRequest(BaseModel):
 
 
 class FinishRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=128)
+    # The avatar's name. Omitted, the one kept with the creation
+    # (CreationOut.name, decided when it was made) is used, else "Avatar".
+    name: str | None = Field(default=None, min_length=1, max_length=128)
     anchors_id: str = Field(min_length=1, max_length=64)
     # Omitted (or partial) means the marks detect opened on, for the regions
     # left out. Animals must send all of theirs.
@@ -330,6 +332,11 @@ class CreationOut(BaseModel):
     statement: Literal["depiction", "generated_face"] | None = None
     # The four-step wizard's plan; null for a creation the old wizard made.
     plan: PlanOut | None = None
+    # The name the wizard proposes, decided once when the creation was made
+    # (services.wizard.default_name: the description's words, or a file name
+    # that means something). Null when nothing was worth a name (a technical
+    # file name, an old draft): the dashboard names it after the plan then.
+    name: str | None = None
     created_at: datetime
     updated_at: datetime
 
