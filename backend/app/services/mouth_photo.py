@@ -48,7 +48,13 @@ published snapshot keeps it beside the files so Discard can restore it,
 and never hands it to a visitor):
 `{"source": "ai", "model"}` for AI teeth, `{"source": "upload"}` for the
 owner's photo, or `{"source": null, "note": {code, detail}}` when an avatar
-was finished with the standard teeth, saying why, for the avatar page.
+was finished with the standard teeth, saying why, for the avatar page. The
+note's codes are the TeethFailure codes below, services.mouth_kit's
+(`teeth_photo_rejected`, `mouth_teeth_unclear`), creations.TEETH_FAILED,
+`no_ai_consent`, and `migrated_standard` (`migrated_teeth_record`): an
+existing avatar moved from the classic mouth onto the standard teeth by
+scripts/migrate_classic_mouths.py. The dashboard words each
+(frontend features/avatars/teeth.ts TEETH_NOTE_CODES).
 
 AI-made teeth are disclosed like any AI edit: `ai_edited` gains
 `"teeth": {"model"}` (`with_ai_teeth`), and becomes `{"mode": "teeth"}` when
@@ -168,6 +174,22 @@ def upload_teeth_record() -> dict:
 def generic_teeth_record(note: dict | None) -> dict:
     """The record of the standard teeth (no teeth photo of its own), and why."""
     return {"source": None, "note": note}
+
+
+# The note code of an avatar that was not finished with the standard teeth
+# but moved onto them: it had the classic drawn mouth from before a new
+# person got the photographic one (scripts/migrate_classic_mouths.py).
+MIGRATED_STANDARD = "migrated_standard"
+
+
+def migrated_teeth_record(day: str) -> dict:
+    """The standard teeth's record for an existing avatar moved from the
+    classic mouth on `day` (an ISO date): `default_config`'s mouth is what
+    it gets, and this says why it has no teeth of its own."""
+    return generic_teeth_record({
+        "code": MIGRATED_STANDARD,
+        "detail": f"Standard teeth: moved from the classic mouth on {day}",
+    })
 
 
 # The disclosure's modes that say only the MOUTH was AI-made, the picture

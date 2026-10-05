@@ -212,6 +212,7 @@ export const avatars = {
   mouthTeethNote_face_turned: "Standard teeth are in use: the head is turned too far to make teeth for it.",
   mouthTeethNote_landmarks_unavailable: "Standard teeth are in use: face detection is not available on this server.",
   mouthTeethNote_teeth_failed: "Standard teeth are in use: the teeth could not be made. Try again.",
+  mouthTeethNote_migrated_standard: "Standard teeth. This avatar was moved from the older drawn mouth; make its own teeth and mouth shapes in the Mouth panel.",
   mouthShapesInUse: "Mouth shapes:",
   mouthShapesKind_own: "Made from your photo · {{generated}} of {{total}}",
   mouthShapesKind_mixed: "{{generated}} of {{total}} from your photo, {{standard}} standard",

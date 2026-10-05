@@ -20,7 +20,10 @@ export type TeethView =
  * words (`mouthTeethNote_<code>`); a code not here shows the server's own
  * sentence. The kit's teeth photo not usable is its request's own reason,
  * `mouth_teeth_unclear`, or `teeth_photo_rejected` naming the check it
- * failed (mouth-kit.teethNoteText). */
+ * failed (mouth-kit.teethNoteText). `migrated_standard` is not a reason AI
+ * made nothing: the avatar had the older drawn mouth and was moved onto the
+ * photographic one with the standard teeth (backend
+ * scripts/migrate_classic_mouths.py). */
 export const TEETH_NOTE_CODES = [
   "no_ai_consent",
   "third_party_ai_disabled",
@@ -40,6 +43,7 @@ export const TEETH_NOTE_CODES = [
   "face_turned",
   "landmarks_unavailable",
   "teeth_failed",
+  "migrated_standard",
 ] as const;
 
 const KNOWN_NOTES: ReadonlySet<string> = new Set(TEETH_NOTE_CODES);

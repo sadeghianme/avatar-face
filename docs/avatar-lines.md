@@ -627,6 +627,43 @@ they just confirmed, before the first publish (`services.creations._own_mouth`,
   and that they are kept and published with the avatar, labelled as
   AI-made.
 
+### Migrating classic mouths (2026-10-05)
+
+A new person gets the photographic mouth; a person made before 2026-09-26
+still speaks with the classic drawn mouth, draft and snapshot alike, and
+principle 6 (nothing changes until its owner publishes) would leave them
+there for good. `backend/scripts/migrate_classic_mouths.py` is the one-off
+move of those avatars onto exactly what a new person gets today without AI:
+`mouth_photo.default_config("human")` (the photographic mouth, the standard
+teeth's seat and size) plus the teeth record `{source: null, note: {code:
+"migrated_standard", detail}}`, which the Mouth panel words
+(`mouthTeethNote_migrated_standard`: standard teeth, moved from the older
+drawn mouth, make your own in the Mouth panel).
+
+- **Which avatars.** Photo avatars of the human line, ready, whose
+  `mouth_config` is null or names the classic renderer with no character
+  settings, and that have no mouth files of their own (no teeth photo, no
+  kit or motion). Never a 3D model, an animal or an animation, an avatar
+  mid-build, or one that already has the photographic mouth.
+- **Both sides, nothing else.** The draft gets the new config; the live
+  snapshot's `mouth` key is rewritten from it exactly as Publish writes it
+  (`publishing.republish_mouth`, the mouth part of `publish` shared as
+  `publish_mouth`), and nothing else in the snapshot moves: not the
+  revision, the files, the disclosure or the publish date. So an avatar in
+  step with its snapshot stays in step (no Publish bar appears), and one
+  with unpublished edits keeps them unpublished with its mouth moved on both
+  sides. Visitors see it on their next page load; owners republish nothing.
+- **Safe and reversible.** Dry run by default (a table: id, name, current
+  renderer, published, what would change). `--apply --yes --backup-dir DIR`
+  first writes a JSON backup of every touched avatar's previous
+  `mouth_config` and `published_config` (and the values written), then
+  moves each avatar in its own transaction, writing nothing for a row that
+  changed since the plan was made; exit 1 if any failed, the rest done.
+  `--revert <backup.json>` puts the exact previous values back, skipping an
+  avatar edited since unless `--force`. Idempotent: a moved avatar is not
+  selected again. The operator takes a database backup first
+  (`deploy/backup_db.py`, the online backup through the WAL).
+
 ## Embed engine
 
 - Render profile lives in rig.json (`render_profile: "animal@1"`); published

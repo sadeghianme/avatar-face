@@ -212,6 +212,7 @@ export const avatars = {
   mouthTeethNote_face_turned: "Des dents standard sont utilisées : la tête est trop tournée pour créer ses dents.",
   mouthTeethNote_landmarks_unavailable: "Des dents standard sont utilisées : la détection de visage n’est pas disponible sur ce serveur.",
   mouthTeethNote_teeth_failed: "Des dents standard sont utilisées : les dents n’ont pas pu être créées. Réessayez.",
+  mouthTeethNote_migrated_standard: "Dents standard. Cet avatar a quitté l’ancienne bouche dessinée ; créez ses propres dents et formes de bouche dans le panneau Bouche.",
   mouthShapesInUse: "Formes de bouche :",
   mouthShapesKind_own: "Créées à partir de votre photo · {{generated}} sur {{total}}",
   mouthShapesKind_mixed: "{{generated}} sur {{total}} à partir de votre photo, {{standard}} standard",
