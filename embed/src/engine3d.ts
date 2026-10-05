@@ -49,7 +49,37 @@ const VISEME_TO_ARKIT: Record<string, ArkitWeights> = {
   oh: { jawOpen: 0.6, mouthPucker: 0.5, mouthFunnel: 0.55 },
   ou: { jawOpen: 0.35, mouthPucker: 0.85, mouthFunnel: 0.6 },
 };
-const ARKIT_NAMES = [...new Set(Object.values(VISEME_TO_ARKIT).flatMap((w) => Object.keys(w)))];
+const arkitNamesOf = (table: Record<string, ArkitWeights>) =>
+  [...new Set(Object.values(table).flatMap((w) => Object.keys(w)))];
+
+/** A head pose in radians, applied over the model's rest pose. */
+export interface HeadPose { yaw: number; pitch: number; roll: number }
+
+/** Drives the head's idle motion in place of the built-in drift: called
+ *  once per frame with the step in ms, the frame time, whether the avatar
+ *  is speaking and its smoothed speech energy (0..1). */
+export interface HeadPoseDriver {
+  update(dt: number, now: number, speaking: boolean, energy: number): HeadPose;
+}
+
+/** What a model may ask of the engine beyond its geometry. Every field is
+ *  optional and its absence is exactly the engine as it was: Ready Player
+ *  Me and Avaturn models pass nothing. A head3d GLB (head3d/load.ts)
+ *  carries its rig's own viseme table, a lighting that suits a photograph,
+ *  where to frame, and a livelier head. */
+export interface Avatar3DOptions {
+  /** Viseme -> ARKit weights, replacing the built-in decomposition. */
+  visemes?: Record<string, ArkitWeights>;
+  /** Light intensities (and the hemisphere's ground colour). */
+  lights?: { hemisphere: number; key: number; groundColor?: number };
+  /** Frame the camera on this centre with this visible height (model units)
+   *  instead of guessing from the Head bone and the bounds. */
+  frame?: { center: [number, number, number]; height: number };
+  /** The head's idle motion. */
+  headPose?: HeadPoseDriver;
+}
+
+const DEFAULT_LIGHTS = { hemisphere: 1.4, key: 1.6, groundColor: 0x8888aa };
 
 /** Look up a morph index tolerating both ARKit suffix conventions
  * (mouthSmileLeft vs mouthSmile_L). */
@@ -76,6 +106,15 @@ export class Avatar3DEngine {
   private neckRest = new THREE.Euler();
   private destroyed = false;
   private useArkit = false;
+  /** The viseme decomposition in use and the ARKit names it drives. */
+  private readonly visemeTable: Record<string, ArkitWeights>;
+  private readonly arkitNames: string[];
+  private readonly frameSpec: Avatar3DOptions["frame"];
+  private readonly headPose: HeadPoseDriver | null;
+  /** Morph weights by target name held in place of the cue track (a still,
+   *  a test); null lets the speech drive them. */
+  private heldMorphs: Record<string, number> | null = null;
+  private lastTickAt = 0;
   /** Live animation parameters — mouthOpen/smoothness/headMotion apply
    * (teeth are part of the model's own geometry in 3D). */
   tuning: EngineTuning = { ...DEFAULT_TUNING };
@@ -100,7 +139,7 @@ export class Avatar3DEngine {
   private audioClock: MediaClock | null = null;
   private onAudioEnd: (() => void) | null = null;
 
-  static async load(canvas: HTMLCanvasElement, modelUrl: string): Promise<Avatar3DEngine> {
+  static async load(canvas: HTMLCanvasElement, modelUrl: string, options: Avatar3DOptions = {}): Promise<Avatar3DEngine> {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     const ktx2 = new KTX2Loader()
       .setTranscoderPath(BASIS_TRANSCODER_PATH)
@@ -108,13 +147,18 @@ export class Avatar3DEngine {
     const loader = new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
     try {
       const gltf = await loader.loadAsync(modelUrl);
-      return new Avatar3DEngine(canvas, gltf.scene, renderer);
+      return new Avatar3DEngine(canvas, gltf.scene, renderer, options);
     } finally {
       ktx2.dispose();
     }
   }
 
-  constructor(canvas: HTMLCanvasElement, model: THREE.Group, renderer?: THREE.WebGLRenderer) {
+  constructor(canvas: HTMLCanvasElement, model: THREE.Group, renderer?: THREE.WebGLRenderer, options: Avatar3DOptions = {}) {
+    this.visemeTable = options.visemes ?? VISEME_TO_ARKIT;
+    this.arkitNames = arkitNamesOf(this.visemeTable);
+    this.frameSpec = options.frame;
+    this.headPose = options.headPose ?? null;
+    const lights = { ...DEFAULT_LIGHTS, ...(options.lights ?? {}) };
     this.renderer = renderer ?? new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     // setSize writes the scaled buffer size back into canvas.width — so a
     // re-created engine (StrictMode remounts, HMR) must NOT read
@@ -126,8 +170,8 @@ export class Avatar3DEngine {
     this.renderer.setSize(baseW, baseH, false);
     this.camera = new THREE.PerspectiveCamera(30, baseW / baseH, 0.01, 50);
 
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8888aa, 1.4));
-    const key = new THREE.DirectionalLight(0xffffff, 1.6);
+    this.scene.add(new THREE.HemisphereLight(0xffffff, lights.groundColor, lights.hemisphere));
+    const key = new THREE.DirectionalLight(0xffffff, lights.key);
     key.position.set(0.5, 1.2, 1.5);
     this.scene.add(key);
     this.scene.add(model);
@@ -175,6 +219,14 @@ export class Avatar3DEngine {
   /** Frame head-and-shoulders: target the Head bone if present, else bbox top. */
   private frameHead(model: THREE.Group): void {
     model.updateWorldMatrix(true, true);
+    if (this.frameSpec) {
+      // The model says where to look and how much to show.
+      const centre = new THREE.Vector3(...this.frameSpec.center);
+      const distance = (this.frameSpec.height / 2) / Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
+      this.camera.position.set(centre.x, centre.y, centre.z + distance);
+      this.camera.lookAt(centre);
+      return;
+    }
     const box = new THREE.Box3().setFromObject(model);
     const size = box.getSize(new THREE.Vector3());
     const target = new THREE.Vector3();
@@ -246,6 +298,35 @@ export class Avatar3DEngine {
 
   isSpeaking(): boolean {
     return this.speaking;
+  }
+
+  /** Hold these morph targets, by name (viseme_aa, jawOpen...), instead of
+   *  the cue track's (a still of one shape, a test): every speech-driven
+   *  target not named goes to 0; null hands the mouth back to speech.
+   *  Blinks, gaze and the head carry on. */
+  holdMorphs(weights: Record<string, number> | null): void {
+    // A target held outside the speech set would otherwise keep its value
+    // after release, since speech never writes it.
+    for (const name of Object.keys(this.heldMorphs ?? {})) {
+      for (const { dictionary, influences } of this.morphMeshes) {
+        const index = morphIndex(dictionary, name);
+        if (index !== undefined) influences[index] = 0;
+      }
+    }
+    this.heldMorphs = weights ? { ...weights } : null;
+  }
+
+  /** One frame now: animate and draw. For harnesses and tests that drive
+   *  the clock themselves; the animation loop calls the same two steps. */
+  step(now: number = performance.now()): void {
+    this.tick(now);
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  /** What the last frame cost the GPU. */
+  stats(): { calls: number; triangles: number } {
+    const info = this.renderer.info.render;
+    return { calls: info.calls, triangles: info.triangles };
   }
 
   private finishSpeech(): void {
@@ -343,12 +424,12 @@ export class Avatar3DEngine {
 
     // ARKit fallback: decompose viseme weights into blendshape values.
     const arkitValues: Record<string, number> = {};
-    if (this.useArkit) {
-      for (const name of ARKIT_NAMES) arkitValues[name] = 0;
+    if (this.useArkit && !this.heldMorphs) {
+      for (const name of this.arkitNames) arkitValues[name] = 0;
       for (const [viseme, morphName] of Object.entries(VISEME_TO_MORPH)) {
         const weight = this.morphWeights[morphName];
         if (weight < 0.01) continue;
-        for (const [arkitName, value] of Object.entries(VISEME_TO_ARKIT[viseme] ?? {})) {
+        for (const [arkitName, value] of Object.entries(this.visemeTable[viseme] ?? {})) {
           arkitValues[arkitName] = Math.min(1, (arkitValues[arkitName] ?? 0) + value * weight);
         }
       }
@@ -381,8 +462,18 @@ export class Avatar3DEngine {
 
     // Apply morphs to every mesh that has them (head, teeth, eyes...).
     for (const { dictionary, influences } of this.morphMeshes) {
-      if (this.useArkit) {
-        for (const name of ARKIT_NAMES) {
+      if (this.heldMorphs) {
+        // A still: the speech-driven targets rest, the held ones are set.
+        for (const name of [...MORPH_NAMES, ...this.arkitNames]) {
+          const index = morphIndex(dictionary, name);
+          if (index !== undefined) influences[index] = 0;
+        }
+        for (const [name, value] of Object.entries(this.heldMorphs)) {
+          const index = morphIndex(dictionary, name);
+          if (index !== undefined) influences[index] = value;
+        }
+      } else if (this.useArkit) {
+        for (const name of Object.keys(arkitValues)) {
           const index = morphIndex(dictionary, name);
           if (index !== undefined) influences[index] = arkitValues[name];
         }
@@ -412,7 +503,17 @@ export class Avatar3DEngine {
     if (this.nodPhase < 1) this.nodPhase = Math.min(1, this.nodPhase + 16 / 650);
     const nod = this.nodPhase < 1 ? Math.sin(this.nodPhase * Math.PI) : 0;
     const amp = (0.35 + this.energy * 0.65) * this.tuning.headMotion;
-    if (this.headBone) {
+    const dt = Math.min(64, Math.max(4, now - (this.lastTickAt || now - 16.7)));
+    this.lastTickAt = now;
+    if (this.headBone && this.headPose) {
+      // A driver's pose, scaled by the owner's head-motion setting, with
+      // the speech nods on top.
+      const pose = this.headPose.update(dt, now, this.speaking, this.energy);
+      const s = this.tuning.headMotion;
+      this.headBone.rotation.y = this.headRest.y + pose.yaw * s;
+      this.headBone.rotation.x = this.headRest.x + pose.pitch * s + nod * 0.05 * this.energy;
+      this.headBone.rotation.z = this.headRest.z + pose.roll * s;
+    } else if (this.headBone) {
       this.headBone.rotation.y = this.headRest.y + (Math.sin(t * 0.43) * 0.05 + Math.sin(t * 0.117) * 0.04) * amp;
       this.headBone.rotation.x = this.headRest.x + Math.sin(t * 0.31 + 1.3) * 0.03 * amp + nod * 0.05 * this.energy;
       this.headBone.rotation.z = this.headRest.z + Math.sin(t * 0.27 + 0.7) * 0.015 * amp;
