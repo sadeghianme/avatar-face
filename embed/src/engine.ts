@@ -33,6 +33,7 @@ import { TONGUE_RAISE, paintCharacter } from "./character-paint";
 import { HeadMotion } from "./headmotion";
 import { applyLowerFace, buildLowerFaceRig, buildNeckBand, UPPER_FACE, type LowerFaceRig } from "./jaw-rig";
 import { kindProfile, type KindProfile } from "./kind-profile";
+import { padTriangle } from "./seam-pad";
 import { MediaClock } from "./media-clock";
 import type { MouthExtension, MouthPose } from "./mouth-extension";
 import { centralMouthAnchors } from "./mouth-extension";
@@ -2157,16 +2158,26 @@ export class AvatarEngine {
   private padsFor: unknown = null;
   private pads: Float32Array | null = null;
 
-  /** Each triangle's overlap with its neighbours, px, for a character profile
-   *  and for any flat picture (null for a photograph, which draws exactly as
-   *  it always did: the skin under a seam is the same skin). Flat art shows
-   *  the seams once the chin moves: the drawn jaw line of the still picture
-   *  beneath threads through them. Worked out once per mesh. */
+  /**
+   * Each triangle's overlap with its neighbours, px. Worked out once per
+   * mesh. A pixel everywhere for a character profile and for any flat
+   * picture, whose drawn lines thread through every seam; for a photograph,
+   * a pixel wherever the lower-face rig can move the mesh over the still
+   * picture (the jaw, the chin, the cheeks, the neck band: the lit neck
+   * showed through the seams of the dropped chin as a faint lattice), and
+   * none about the eyes and forehead, which draw exactly as they always
+   * did. Half a pixel where the lips' own drawn line crosses the mesh.
+   */
   private trianglePads(): Float32Array | null {
-    if (!this.field && !this.look.flat) return null;
     if (this.padsFor !== this.triangles || !this.pads) {
       this.padsFor = this.triangles;
-      this.pads = Float32Array.from(this.triangles, ([a, b, c]) => (this.touchesMouth(a, b, c) ? 0.45 : 1));
+      const everywhere = !!this.field || this.look.flat;
+      const rig = this.lowerFace;
+      const moves = (i: number) =>
+        i >= 478 || (!!rig && (rig.jaw[i] > 0 || rig.weight[i] > 0 || rig.cheek[i] > 0));
+      this.pads = Float32Array.from(this.triangles, ([a, b, c]) =>
+        this.touchesMouth(a, b, c) ? 0.45 : everywhere || moves(a) || moves(b) || moves(c) ? 1 : 0
+      );
     }
     return this.pads;
   }
@@ -2220,23 +2231,12 @@ export class AvatarEngine {
 
     ctx.save();
     ctx.beginPath();
-    // Slightly inflate the clip triangle to hide seams between triangles.
-    const cx = (d0.x + d1.x + d2.x) / 3;
-    const cy = (d0.y + d1.y + d2.y) / 3;
-    // A character's flat art shows the seams the photograph hides: where two
-    // triangles meet, their anti-aliased edges each cover half a pixel, and
-    // what is underneath (the un-warped picture, a moved chin's old outline)
-    // shows through as a faint wire. A fixed pixel of overlap closes them; a
-    // percentage of the triangle's size does not on a small one.
-    // (Less where a thin drawn line crosses the triangles, as the lips do: a
-    // wide overlap would redraw a pixel of it from the wrong triangle.)
-        const grow = (p: Point) => {
-      const x = p.x + (p.x - cx) * 0.015, y = p.y + (p.y - cy) * 0.015;
-      if (!pad) return { x, y };
-      const d = Math.hypot(p.x - cx, p.y - cy) || 1;
-      return { x: x + ((p.x - cx) / d) * pad, y: y + ((p.y - cy) / d) * pad };
-    };
-    const g0 = grow(d0), g1 = grow(d1), g2 = grow(d2);
+    // Inflate the clip triangle to hide the seams between triangles: a
+    // little in proportion on every triangle, plus `pad` px of edge offset
+    // where the mesh moves over the still picture (seam-pad.ts). Less where
+    // a thin drawn line crosses the triangles, as the lips do: a wide
+    // overlap would redraw a pixel of it from the wrong triangle.
+    const [g0, g1, g2] = padTriangle(d0, d1, d2, pad);
     ctx.moveTo(g0.x, g0.y);
     ctx.lineTo(g1.x, g1.y);
     ctx.lineTo(g2.x, g2.y);
