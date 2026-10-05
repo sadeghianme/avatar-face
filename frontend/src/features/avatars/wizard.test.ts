@@ -4,14 +4,16 @@
  * the module by its file name and uses no syntax that needs compiling.
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
   activeChange,
   aiRequired,
+  applyKeys,
+  avatarName,
   beforeStep,
   canUseOriginal,
-  defaultName,
   faceFound,
   checklistRow,
   forgetChoices,
@@ -31,6 +33,7 @@ import {
   retryBody,
   screenFor,
   statementFor,
+  statementKey,
   statementToAsk,
   footerPlan,
   selectedVersion,
@@ -291,27 +294,61 @@ describe("retry", () => {
 });
 
 describe("names", () => {
-  it("takes the description's words", () => {
-    assert.equal(defaultName({ description: "a cheerful baker.", fallback: "X" }), "Cheerful baker");
-    assert.equal(defaultName({ description: "une chouette rousse", fallback: "X" }), "Chouette rousse");
-    const long = defaultName({ description: "a very friendly golden retriever wearing a tiny blue bow tie and glasses", fallback: "X" });
-    assert.ok(long.length <= 40 && !long.endsWith(" "), long);
-    assert.ok(long.startsWith("Very friendly golden retriever"));
+  it("is the server's, decided once with the creation, else the plan's own", () => {
+    // What the server made of the file name or the description is used as
+    // it is: the same on every screen, after a reload, and at the finish.
+    assert.equal(avatarName({ name: "Maria headshot" }, "Human avatar"), "Maria headshot");
+    assert.equal(avatarName({ name: "Cheerful baker" }, "Human avatar"), "Cheerful baker");
+    // Nothing worth a name (a technical file name), or a server before it
+    // said: the plan in words, in the member's language.
+    assert.equal(avatarName({ name: null }, "Avatar animal"), "Avatar animal");
+    assert.equal(avatarName({ name: "  " }, "Animal avatar"), "Animal avatar");
+    assert.equal(avatarName({}, "Animal avatar"), "Animal avatar");
+  });
+});
+
+describe("the statement's words", () => {
+  it("fit the plan: a person's, or an animal's plan on a photo read as a person", () => {
+    assert.equal(statementKey("depiction", { model: "human" }), "createDepictionStatement");
+    assert.equal(statementKey("depiction", { model: "animal" }), "createDepictionStatement_animal");
+    assert.equal(statementKey("generated_face", { model: "human" }), "createGeneratedFaceStatement");
+    assert.equal(statementKey("generated_face", { model: "animal" }), "createGeneratedFaceStatement");
   });
 
-  it("takes a file name only when it means something", () => {
-    assert.equal(defaultName({ fileName: "maria_headshot.jpg", fallback: "X" }), "Maria headshot");
-    assert.equal(defaultName({ fileName: "IMG_20260101_123456.jpg", fallback: "Realistic human" }), "Realistic human");
-    assert.equal(defaultName({ fileName: "PXL_2026.png", fallback: "F" }), "F");
-    assert.equal(defaultName({ fileName: "12345.png", fallback: "F" }), "F");
-    assert.equal(defaultName({ fileName: null, fallback: "F" }), "F");
+  it("are asked of an animal plan only when the server found a person, as worded for it", () => {
+    // An uploaded dog photo the detector read as a human face.
+    const plan = { model: "animal", look: "realistic", source: "upload", description: null };
+    const asked = statementToAsk({ statement: "depiction", face_type: "animal" }, null);
+    assert.equal(asked, "depiction");
+    assert.equal(statementKey(asked, plan), "createDepictionStatement_animal");
+    // A person's plan: the usual words.
+    assert.equal(statementKey("depiction", { model: "human" }), "createDepictionStatement");
+    // The same dog, no face found: nothing.
+    assert.equal(statementToAsk({ statement: null, face_type: "animal" }, null), null);
+  });
+
+  it("exist in every language", () => {
+    const keys = ["createDepictionStatement", "createDepictionStatement_animal", "createGeneratedFaceStatement"];
+    for (const lang of ["en", "fr"]) {
+      const text = readFileSync(new URL(`../../i18n/locales/${lang}/avatars.ts`, import.meta.url), "utf8");
+      for (const key of keys) assert.match(text, new RegExp(`^\\s{2}${key}:`, "m"), `${lang} ${key}`);
+    }
+  });
+});
+
+describe("the keyboard", () => {
+  it("names the keys that apply a change for the platform", () => {
+    for (const apple of ["MacIntel", "macOS", "iPhone", "iPad", "iPod"]) assert.equal(applyKeys(apple), "⌘ Enter", apple);
+    for (const other of ["Win32", "Windows", "Linux x86_64", "Android", "Chrome OS", "", null, undefined]) {
+      assert.equal(applyKeys(other), "Ctrl+Enter", String(other));
+    }
   });
 });
 
 describe("this tab's memory", () => {
   it("keeps the choices for a creation and as the last ones, and survives junk", () => {
     const store = memoryStore();
-    const choices = { model: "animal", source: "generate", look: "cartoon", description: "a fox", fileName: null, intent: "ai", statement: null };
+    const choices = { model: "animal", source: "generate", look: "cartoon", description: "a fox", intent: "ai", statement: null };
     rememberChoices(store, "c9", choices);
     assert.deepEqual(recallChoices(store, "c9"), choices);
     assert.deepEqual(recallChoices(store, null), choices);
@@ -385,10 +422,17 @@ describe("versions", () => {
   it("has no upload for a character made from words: its first picture is the AI's", () => {
     const words = creation({
       plan: { model: "animal", look: "cartoon", source: "generate", description: "a fox" },
-      steps: [step("original", { generated: { model: "m", style: "illustrated", provider: "gemini" } }), made("adjusted:0", "original")],
+      steps: [
+        step("original", { generated: { model: "m", style: "illustrated", provider: "gemini" } }),
+        // An adjust round of the old wizard: the AI's picture of a picture.
+        made("adjusted:0", "original"),
+        // Its Retry: made anew from the description, like the first.
+        step("adjusted:1", { from: "original", adjust: { mode: "generate", instruction: null, rejected: null } }),
+        made("adjusted:2", "adjusted:1", "a red collar"),
+      ],
     });
     const list = versionsOf(words);
-    assert.deepEqual(list.map((v) => v.kind), ["generated", "ai"]);
+    assert.deepEqual(list.map((v) => v.kind), ["generated", "ai", "generated", "change"]);
     assert.ok(list.every((v) => v.selectable && !v.needsPrepare));
   });
 

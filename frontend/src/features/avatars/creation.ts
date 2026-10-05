@@ -32,7 +32,9 @@ export type AdjustStyle = "photoreal" | "illustrated" | "anime" | "render3d";
 
 /** What AI adjust made an "adjusted:N" image from, and how it fared. */
 export interface StepAdjust {
-  mode: AdjustMode;
+  /** An adjust round's mode, or "generate": a picture made anew from the
+   * description (a described character's Retry, services.wizard). */
+  mode: AdjustMode | "generate";
   style: AdjustStyle | null;
   model: string;
   /** The photo's eyes were closed and these are the model's invention:
@@ -240,6 +242,11 @@ export interface Creation {
    * stylised photo is still that person), "generated_face" for a face made
    * from words, null for none. Absent from a server before it said so. */
   statement?: FaceStatement | null;
+  /** The name the wizard proposes, decided once by the server when the
+   * creation was made (the description's words, or a file name that means
+   * something). Null when nothing was worth a name: the plan's own then
+   * (wizard.avatarName). Absent from a server before it said so. */
+  name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -501,9 +508,13 @@ export function finishRows(
  * (services.creations.mouth_warnings), read off the photo check of the
  * image on screen. An open mouth says it all (it is also why the lips are
  * parted), so it alone is named, as the server does. Empty when the check
- * is not about this image, or found neither.
+ * is not about this image, or found neither; and on every line but the
+ * human one, whose photographic mouth is the picture's own lips (an
+ * animal's muzzle and a drawing's mouth are drawn over the picture, and
+ * the detector's "mouth" on a muzzle says nothing).
  */
 export function expectedMouthWarnings(creation: Creation): string[] {
+  if (creation.face_type !== "human") return [];
   const reasons = recommendationOf(creation)?.reasons ?? [];
   if (reasons.includes("mouth_open")) return ["mouth_open"];
   if (reasons.includes("teeth_showing")) return ["teeth_showing"];

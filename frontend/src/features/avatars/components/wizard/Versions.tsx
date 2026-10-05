@@ -7,10 +7,16 @@ import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 
 /**
- * Every picture step 3 made, under the main one: the upload first, then
- * each AI result in the order made, the newest last. The one in use is
- * marked "Using this"; choosing another makes it the picture the avatar is
- * built from (the server's, so a reload shows the same).
+ * Every picture step 3 made: the upload first, then each AI result in the
+ * order made, the newest last. The one in use is marked "Using this";
+ * choosing another makes it the picture the avatar is built from (the
+ * server's, so a reload shows the same).
+ *
+ * Two layouts of the same tiles, by CSS alone. On a phone, a row of square
+ * thumbnails under the picture, scrolled sideways, each with a word under
+ * it. From a laptop up (where PrepareScreen puts it in the right column,
+ * under the change box) two to a row, wrapping, each tile a thumbnail with
+ * its words beside it, so a change's own words get room.
  *
  * A radio group for assistive tech, one tab stop. The arrow keys move the
  * focus and Enter or Space chooses: switching asks the server, so it does
@@ -22,6 +28,7 @@ export function VersionStrip({
   pending,
   disabled,
   onChoose,
+  className = "",
 }: {
   versions: Version[];
   selected: string | null;
@@ -29,6 +36,8 @@ export function VersionStrip({
   pending: string | null;
   disabled: boolean;
   onChoose: (version: Version) => void;
+  /** Where the parent's grid puts it. */
+  className?: string;
 }) {
   const { t } = useTranslation();
   const ids = useId();
@@ -54,7 +63,7 @@ export function VersionStrip({
 
   if (versions.length < 2) return null;
   return (
-    <div className="mt-4">
+    <div className={`min-w-0 ${className}`}>
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
         <p id={`${ids}-label`} className="text-sm font-semibold text-gray-900 dark:text-white">
           {t("wzVersionsLabel")}
@@ -68,7 +77,9 @@ export function VersionStrip({
         role="radiogroup"
         aria-labelledby={`${ids}-label`}
         aria-describedby={`${ids}-hint`}
-        className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 pt-1"
+        // The side padding keeps the focus ring inside the scroll box on a
+        // phone; the laptop's grid clips nothing.
+        className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 pt-1 lg:mx-0 lg:grid lg:grid-cols-2 lg:gap-x-4 lg:gap-y-2 lg:overflow-visible lg:p-0"
       >
         {versions.map((v) => {
           const on = v.id === selected;
@@ -107,12 +118,12 @@ export function VersionStrip({
                   if (target) move(target.id, 0);
                 }
               }}
-              className={`group w-[84px] shrink-0 snap-start text-start focus-visible:outline-none sm:w-[88px] ${
+              className={`group w-[84px] shrink-0 snap-start text-start focus-visible:outline-none sm:w-[88px] lg:flex lg:w-auto lg:min-w-0 lg:items-center lg:gap-3 lg:rounded-xl lg:p-1 ${
                 v.selectable ? "" : "cursor-not-allowed"
               }`}
             >
               <span
-                className={`relative block aspect-square overflow-hidden rounded-xl border transition ${PICTURE_BACKDROP} ${
+                className={`relative block aspect-square overflow-hidden rounded-xl border transition lg:w-16 lg:shrink-0 ${PICTURE_BACKDROP} ${
                   on
                     ? "border-brand-500 ring-2 ring-brand-500 ring-offset-2 ring-offset-white dark:ring-offset-ink"
                     : v.selectable
@@ -148,11 +159,22 @@ export function VersionStrip({
                   </span>
                 )}
               </span>
-              <span aria-hidden="true" className="mt-1.5 block truncate text-xs text-gray-600 dark:text-gray-300">
-                {on ? (
-                  <span className="font-semibold text-brand-700 dark:text-brand-300">{t("wzVersionUsing")}</span>
-                ) : (
-                  caption
+              {/* Under the thumbnail on a phone, one line: "Using this" or
+                  the words. Beside it from a laptop up: the words, up to two
+                  lines, and "Using this" under them. */}
+              <span aria-hidden="true" className="mt-1.5 block min-w-0 text-xs text-gray-600 dark:text-gray-300 lg:mt-0 lg:flex-1">
+                {on && (
+                  <span className="block truncate font-semibold text-brand-700 dark:text-brand-300 lg:hidden">
+                    {t("wzVersionUsing")}
+                  </span>
+                )}
+                <span className={`${on ? "hidden lg:block lg:text-gray-900 dark:lg:text-white" : "block"} truncate lg:line-clamp-2 lg:whitespace-normal`}>
+                  {caption}
+                </span>
+                {on && (
+                  <span className="mt-0.5 hidden font-semibold text-brand-700 dark:text-brand-300 lg:block">
+                    {t("wzVersionUsing")}
+                  </span>
                 )}
               </span>
             </button>

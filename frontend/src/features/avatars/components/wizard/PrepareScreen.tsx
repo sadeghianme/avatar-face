@@ -16,6 +16,7 @@ import type { ConsentApi } from "@/features/avatars/hooks/useConsent";
 import type { Run } from "@/features/avatars/hooks/useCreation";
 import {
   activeChange,
+  applyKeys,
   heldStage,
   beforeStep,
   canUseOriginal,
@@ -59,6 +60,13 @@ function tabStore(): DraftStore | null {
     return null;
   }
 }
+
+// The keys that apply a change, for this platform: read once, not per render.
+const APPLY_KEYS = applyKeys(
+  typeof navigator === "undefined"
+    ? null
+    : (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform || navigator.platform
+);
 
 /**
  * Step 3: the picture the avatar is made of, made by itself.
@@ -324,13 +332,18 @@ export function PrepareScreen({
       setPending(null)
     );
   };
-  const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:gap-12">
-      <div className="min-w-0">
+    // Three cells. On a phone, a column in this order: the picture, the
+    // versions, then the words and the change box. From a laptop up, the
+    // picture on the left spans both rows (as tall as the viewport allows),
+    // the words and the change box top right, and the versions under them
+    // where the right column had room to spare; below the picture they fell
+    // under the fixed bar on a 1440x900 screen.
+    <div className="grid gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:grid-rows-[auto_1fr] lg:gap-y-6 xl:gap-x-12">
+      <div className="min-w-0 lg:row-span-2">
         {/* As big as Publish's: as tall as the viewport allows down to the
-            bar, in the result's own shape; the versions follow below. */}
+            bar, in the result's own shape. */}
         <div className="mx-auto w-full" style={fitPicture(result)}>
           <Result
             before={before}
@@ -339,16 +352,18 @@ export function PrepareScreen({
             busyLabel={switching ? t("wzVersionLoading") : stage ? t(`wzStage_${stage}`) : t("wzStage_create")}
           />
         </div>
-        <VersionStrip
-          versions={versions}
-          selected={selectedVersion(creation)}
-          pending={pending}
-          disabled={redoing || busy !== null}
-          onChoose={chooseVersion}
-        />
       </div>
 
-      <div className="flex flex-col gap-5">
+      <VersionStrip
+        versions={versions}
+        selected={selectedVersion(creation)}
+        pending={pending}
+        disabled={redoing || busy !== null}
+        onChoose={chooseVersion}
+        className="lg:col-start-2 lg:row-start-2 lg:self-start"
+      />
+
+      <div className="flex flex-col gap-5 lg:col-start-2 lg:row-start-1">
         <p className="flex items-start gap-2.5 rounded-2xl bg-gray-50 p-4 text-sm text-gray-700 dark:bg-white/[0.04] dark:text-gray-300">
           <Icon name={lastWasOriginal ? "image" : "sparkles"} className="mt-0.5 h-4 w-4 shrink-0 text-brand-600 dark:text-brand-300" />
           <span>
@@ -423,7 +438,7 @@ export function PrepareScreen({
             />
             <div className="flex items-center justify-end gap-3 sm:justify-between">
               <p id={`${ids}-change-keys`} className="hidden text-xs text-gray-500 dark:text-gray-400 sm:block">
-                {t("wzChangeShortcut", { keys: mac ? "⌘ Enter" : "Ctrl + Enter" })}
+                {t("wzChangeShortcut", { keys: APPLY_KEYS })}
               </p>
               <button type="submit" className="btn-secondary min-h-11 shrink-0" disabled={!change.trim() || redoing || busy !== null}>
                 {busy === "change" ? <Spinner className="h-4 w-4" /> : <Icon name="pencil" className="h-4 w-4" />}

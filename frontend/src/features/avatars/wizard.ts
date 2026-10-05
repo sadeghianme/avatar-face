@@ -136,6 +136,22 @@ export function statementToAsk(
   return needed && needed !== made ? needed : null;
 }
 
+/**
+ * The words of a statement, as an i18n key, for the plan it is asked under.
+ * The depiction statement under an "Animal" plan is the case of a photo the
+ * detector read a person's face on (someone may pick Animal and upload a
+ * real person; a dog's photo may read as one): "I am this person…" on a
+ * dog is nonsense, so it is asked in a conditional form, "this photo shows
+ * an animal, not a real person; or, if it shows a person, I am that person
+ * or have their permission…". The same statement about any person in it,
+ * so the same scope and version are recorded (services.consent): the plan
+ * on the creation says which form was shown.
+ */
+export function statementKey(scope: FaceStatement, plan: Pick<Plan, "model">): string {
+  if (scope === "generated_face") return "createGeneratedFaceStatement";
+  return plan.model === "animal" ? "createDepictionStatement_animal" : "createDepictionStatement";
+}
+
 export interface PhotoForm {
   model: AvatarModel;
   source: PhotoSource;
@@ -435,7 +451,9 @@ export function versionsOf(creation: WizardCreation): Version[] {
     out.push({
       id: step.id,
       number: 0,
-      kind: instruction ? "change" : "ai",
+      // A described character's Retry is made anew from the description,
+      // like its first picture; the AI's picture of an upload is "ai".
+      kind: instruction ? "change" : adjust?.mode === "generate" ? "generated" : "ai",
       instruction,
       shown: cutOf(step.id) ?? step,
       selectable: true,
@@ -514,51 +532,39 @@ export function faceFound(anchors: Pick<CreationAnchors, "detected" | "source" |
 
 // --- Names ----------------------------------------------------------------------------
 
-// Camera and app file names say nothing about who is in the picture.
-const MEANINGLESS_FILE =
-  /^(img|image|dsc|dscn|dscf|pxl|photo|picture|pic|screenshot|screen shot|capture|whatsapp|signal|telegram|mvimg|received|download|untitled|p)(?=$|[\W_\d])|^[\d\W_]+$|\d{6,}/i;
-const ARTICLES = /^(a|an|the|un|une|le|la|les|des|l')\s+/i;
-const NAME_MAX = 40;
-
-function capitalised(text: string): string {
-  return text.charAt(0).toLocaleUpperCase() + text.slice(1);
-}
-
-function cut(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const head = text.slice(0, max + 1);
-  const space = head.lastIndexOf(" ");
-  return (space > max / 2 ? head.slice(0, space) : text.slice(0, max)).trim();
-}
-
 /**
- * A sensible first name for a new avatar (renamed on its page in one
- * click): the description's own words ("a cheerful baker with flour on her
- * apron" → "Cheerful baker with flour on her"), a file name that means
- * something ("maria_headshot.jpg" → "Maria headshot"), else `fallback` (the
- * model and look in words, "Realistic human").
+ * What the avatar will be called (renamed on its page in one click): the
+ * name the server decided once when the creation was made
+ * (services.wizard.default_name: the description's own words, "a cheerful
+ * baker" → "Cheerful baker", or a file name that means something,
+ * "maria_headshot.jpg" → "Maria headshot"), else `fallback`, the plan in
+ * words ("Human avatar"), in the member's language. Never worked out here
+ * from what this tab remembers: a reload once renamed "Animal realistic
+ * raw" to "Animal avatar", and published the second.
  */
-export function defaultName(input: { description?: string | null; fileName?: string | null; fallback: string }): string {
-  const words = (input.description ?? "").replace(/\s+/g, " ").trim().replace(ARTICLES, "");
-  if (words) return capitalised(cut(words.replace(/[.,;:!?]+$/, ""), NAME_MAX));
-  const stem = (input.fileName ?? "").replace(/\.[^.]+$/, "").trim();
-  if (stem && !MEANINGLESS_FILE.test(stem)) {
-    const clean = stem.replace(/[_\-.]+/g, " ").replace(/\s+/g, " ").trim();
-    if (clean) return capitalised(cut(clean, NAME_MAX));
-  }
-  return input.fallback;
+export function avatarName(creation: Pick<WizardCreation, "name">, fallback: string): string {
+  return creation.name?.trim() || fallback;
+}
+
+// --- The keyboard -----------------------------------------------------------------------
+
+/** The keys that apply a change from its box, named for the platform the
+ * page runs on (`navigator.platform`, or userAgentData's): "⌘ Enter" on a
+ * Mac, an iPhone or an iPad, "Ctrl+Enter" everywhere else. */
+export function applyKeys(platform: string | null | undefined): string {
+  return /mac|iphone|ipad|ipod/i.test(platform ?? "") ? "⌘ Enter" : "Ctrl+Enter";
 }
 
 // --- This tab's memory ----------------------------------------------------------------
 
 /** What step 2 was given, kept for this tab: going Back from step 3 opens
- * step 2 as it was, and step 3 knows how to start and what to call it. */
+ * step 2 as it was, and step 3 knows how to start. (Not the file's name:
+ * what the avatar is called is the server's, `Creation.name`.) */
 export interface Choices {
   model: AvatarModel;
   source: PhotoSource;
   look: Look;
   description: string;
-  fileName: string | null;
   intent: PrepareIntent;
   /** The statement about the face the member made on step 2, if any. */
   statement: FaceStatement | null;
@@ -590,7 +596,6 @@ function parseChoices(raw: string | null | undefined): Choices | null {
       look,
       source,
       description: typeof value?.description === "string" ? value.description.slice(0, MAX_WORDS) : "",
-      fileName: typeof value?.fileName === "string" ? value.fileName : null,
       intent: value?.intent === "original" ? "original" : "ai",
       statement: value?.statement === "depiction" || value?.statement === "generated_face" ? value.statement : null,
     };

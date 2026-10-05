@@ -185,7 +185,6 @@ export function PhotoStep({
         source,
         look,
         description,
-        fileName: file?.name ?? null,
         intent: intentFor({ source, look, aiAgreed, aiEnabled }),
         statement: made,
       });

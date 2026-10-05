@@ -923,6 +923,12 @@ describe("the mouth, before finishing", () => {
     assert.deepEqual(expectedMouthWarnings(checked(["teeth_showing"], { current: "cutout" })), []);
     assert.deepEqual(expectedMouthWarnings(creation()), []);
   });
+  it("says nothing on a line whose mouth is drawn over the picture, as the server does", () => {
+    // A realistic dog the landmarker read a "mouth" on: the muzzle is drawn.
+    assert.deepEqual(expectedMouthWarnings(checked(["mouth_open"], { face_type: "animal" })), []);
+    assert.deepEqual(expectedMouthWarnings(checked(["teeth_showing"], { face_type: "cartoon" })), []);
+    assert.deepEqual(expectedMouthWarnings(checked(["mouth_open"], { face_type: null })), []);
+  });
 });
 
 describe("the finish notice", () => {

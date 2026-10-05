@@ -29,11 +29,12 @@ import type { ConsentApi } from "@/features/avatars/hooks/useConsent";
 import type { Run } from "@/features/avatars/hooks/useCreation";
 import { LINES } from "@/features/avatars/lines";
 import {
-  defaultName,
+  avatarName,
   faceFound,
   footerPlan,
   planOf,
   recallChoices,
+  statementKey,
   statementToAsk,
   type WizardCreation,
 } from "@/features/avatars/wizard";
@@ -265,11 +266,9 @@ function Editor({
         : null;
   const failure = creation.job?.step === "finish" ? jobFailure(creation.job) : null;
 
-  const name = defaultName({
-    description: plan.description,
-    fileName: recallChoices(tabStore(), creation.id)?.fileName ?? null,
-    fallback: t(`wzName_${plan.model}_${plan.look}`),
-  });
+  // The server's, decided when the creation was made: the same on every
+  // screen and after a reload, and what the finish takes.
+  const name = avatarName(creation, t(`wzName_${plan.model}_${plan.look}`));
 
   const publish = async () => {
     // The server keeps a detection it may confirm as found (one click);
@@ -478,7 +477,9 @@ function Editor({
                 checked={statement}
                 onChange={(e) => setStatement(e.target.checked)}
               />
-              <span>{t(statementScope === "generated_face" ? "createGeneratedFaceStatement" : "createDepictionStatement")}</span>
+              {/* Worded for the plan: on an "Animal" plan, the detector's
+                  person on a photo may be a dog (see wizard.statementKey). */}
+              <span>{t(statementKey(statementScope, plan))}</span>
             </label>
           )}
 

@@ -369,6 +369,8 @@ export const avatars = {
   createMarksMissing: "Placez ces éléments avant d’enregistrer : {{parts}}.",
   createLooksRight: "C’est bon",
   createDepictionStatement: "Je suis cette personne, ou j'ai son autorisation, et elle a 18 ans ou plus.",
+  createDepictionStatement_animal:
+    "Cette photo montre un animal, pas une personne réelle — ou, si elle montre une personne, je suis cette personne ou j’ai son autorisation, et elle a 18 ans ou plus.",
   createDepictionFirst: "Cochez d'abord la déclaration ci-dessus.",
   createGeneratedFaceStatement: "Ce visage a été créé par l’IA à partir d’une description. Ce n’est pas une personne réelle et identifiable, et je n’en ai pas demandé une.",
   createSavePoints: "Enregistrer les points",
