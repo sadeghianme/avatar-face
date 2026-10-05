@@ -567,6 +567,48 @@ wider than his own, and far better. So they are now the **standard teeth**:
   its picture; the disclosure (`ai_edited`) does not list them. The Mouth
   panel calls them standard teeth, as before.
 
+### Teeth in another face's light (2026-10-05)
+
+Rendered with the real engine on three published people (a soft scan, a
+3D-style render, a warm saturated photo) with the production cue track,
+the photographic mouth with the standard teeth opened about twice as far
+as the classic mouth and was clearly better on all three, with two tells:
+
+- **A white line between words.** Between words and on /p/ /b/ /m/ the
+  lips settle 0.02 to 0.06 of a mouth apart, and the upper teeth drawn at
+  full strength through that slit were a bright line between the lips (a
+  glint, a false tooth line, worst on dark lips); 8 or 9 of 50 frames a
+  sentence. Lips only just apart show the dark of the mouth, not enamel.
+  `embed/src/mouth/lip-occlusion-model.ts` now ramps three things over the
+  gap as a share of the mouth's width: the teeth (`enamelReveal`, 0 at
+  0.03 → 1 at 0.09), the dark interior (`cavityReveal`, 0.025 → 0.07, the
+  classic mouth's own range; whole from the first pixel it was a hard dark
+  slot cut into the lips), and a soft dark seam in the lips' own shadow
+  colour (`contactSeam`, in as the lips part, out as the teeth arrive).
+  Both the teeth-photo path and the geometric one take them; rest
+  (gap < 0.008 W) is untouched, so the Reference's authored "sil" is
+  pixel-identical. The character mouth's jaw-driven teeth band takes the
+  same reveal (lip retraction, as on "fifty", unchanged).
+- **Teeth pasted in.** The Reference's teeth on another face were whiter
+  and cooler than anything in a warm photo and cleaner than a soft scan.
+  What a photograph's teeth share with its skin is the light, so
+  `enamel-match-model.ts` fits the arch textures to the face once, on the
+  first painted frame (cached on the sampled values): the enamel's cast is
+  moved to 0.31 of the face's cheek cast (the share the Reference's own
+  teeth carry of its skin's), luma-neutral; its brightest crowns are capped
+  at the face's own highlight (`face-light.ts`: the 97th-percentile luma
+  inside the face oval, from a box-filtered copy, so a glint cannot set
+  it) × 1.04 + 6, floor 0.78, as a multiplier so the cream stays; and it is
+  blurred until its edges are as wide as the picture's (`look.soft`, in
+  quadrature with the enamel's own measured edge width; none on a crisp
+  picture). A face's own teeth photo (its kit, the lab Reference) gets the
+  same at 0.4 strength (`TeethOrigin`, set by `withStandardTeeth`). The
+  warmth slider is unchanged: its middle is "as the face lights them".
+  Measured on a held EE at 1200 px, enamel over the face's highlight: scan
+  +58 → +21, render +36 → +19, warm photo +26 → +19; the Reference's own
+  EE identical. Still weak: scan grain is not a blur, and the hard aperture
+  edge against a soft lip remains the strongest cut-out tell.
+
 ### Step 5: preparing your avatar (2026-09-26)
 
 What makes the Reference avatar look as it does is its kit: its own mouth
