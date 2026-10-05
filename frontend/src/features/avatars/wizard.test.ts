@@ -36,7 +36,11 @@ import {
   statementKey,
   statementToAsk,
   footerPlan,
+  forgetLastChoices,
+  FRESH_ENTRY,
+  isFreshEntry,
   selectedVersion,
+  startFresh,
   versionLabel,
   versionOfStep,
   versionsOf,
@@ -361,6 +365,28 @@ describe("this tab's memory", () => {
     store.setItem("liveface.wizard.last", JSON.stringify({ model: "robot", look: "cartoon", source: "upload" }));
     assert.equal(recallChoices(store, null), null);
     assert.equal(recallChoices(null, null), null);
+  });
+
+  it("a fresh entry forgets the last choices and keeps a creation's own", () => {
+    const store = memoryStore();
+    const choices = { model: "human", source: "upload", look: "animation", description: "", intent: "ai", statement: "depiction" };
+    rememberChoices(store, "c1", choices);
+    // Back from step 3 (no state) and a plain reload: nothing is forgotten.
+    assert.equal(isFreshEntry(null), false);
+    assert.equal(isFreshEntry(undefined), false);
+    assert.equal(isFreshEntry({ from: "/app" }), false);
+    assert.equal(isFreshEntry({ fresh: "yes" }), false);
+    assert.equal(startFresh(store, null), false);
+    assert.deepEqual(recallChoices(store, null), choices);
+    // "New avatar": the last choices go, step 3's and 4's memory of c1 stays.
+    assert.equal(isFreshEntry(FRESH_ENTRY), true);
+    assert.equal(startFresh(store, FRESH_ENTRY), true);
+    assert.equal(recallChoices(store, null), null);
+    assert.deepEqual(recallChoices(store, "c1"), choices);
+    // Without storage it still answers, and forgetting twice is harmless.
+    assert.equal(startFresh(null, FRESH_ENTRY), true);
+    forgetLastChoices(store);
+    assert.equal(recallChoices(store, null), null);
   });
 });
 

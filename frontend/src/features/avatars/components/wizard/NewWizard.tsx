@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { ActionErrorNote } from "@/features/avatars/components/create/JobProgress";
 import { FooterSlot, StepFooter } from "@/features/avatars/components/wizard/Footer";
@@ -29,6 +29,9 @@ import {
 import { useConsent } from "@/features/avatars/hooks/useConsent";
 import {
   forgetChoices,
+  forgetLastChoices,
+  FRESH_ENTRY,
+  isFreshEntry,
   isPrepareJob,
   parseModel,
   planOf,
@@ -36,6 +39,7 @@ import {
   prepareStage,
   recallChoices,
   screenFor,
+  startFresh,
   type AvatarModel,
   type Screen,
   type WizardCreation,
@@ -81,9 +85,26 @@ export function NewWizard({
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [params] = useSearchParams();
   const consent = useConsent(orgId);
+
+  // --- A fresh start -------------------------------------------------------------------
+  // "New avatar" arrives with FRESH_ENTRY in its state: every step at its
+  // default. The last choices are forgotten before this render reads them
+  // (no flash of the old model or description), once per arrival, and the
+  // state is then replaced so the browser's Back to this entry is not a
+  // fresh start again.
+  const freshened = useRef<string | null>(null);
+  if (isFreshEntry(location.state) && freshened.current !== location.key) {
+    freshened.current = location.key;
+    startFresh(tabStore(), location.state);
+  }
+  useEffect(() => {
+    if (!isFreshEntry(location.state)) return;
+    navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
+  }, [location.key, location.state, location.pathname, location.search, navigate]);
   const { creation: loaded, error: loadError, isLoading, refetch, apply } = useCreation(orgId, creationId);
   const creation = loaded as WizardCreation | undefined;
   const { busy, error, setError, run } = useCreationActions(apply, refetch);
@@ -111,6 +132,8 @@ export function NewWizard({
     if (creation?.status !== "finished" || !creation.avatar_id) return;
     forgetDraftMarks(tabStore(), creation.id);
     forgetChoices(tabStore(), creation.id);
+    // The next avatar starts from nothing, not from this one's choices.
+    forgetLastChoices(tabStore());
     void queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
     void queryClient.invalidateQueries({ queryKey: draftsKey(orgId) });
     navigate(`/avatars/${creation.avatar_id}`, { replace: true });
@@ -203,7 +226,7 @@ export function NewWizard({
           {gone ? t("createErr_creation_not_found") : t("error")}
         </p>
         <StepFooter>
-          <Link to="/avatars/new" className="btn-primary min-h-11">
+          <Link to="/avatars/new" state={FRESH_ENTRY} className="btn-primary min-h-11">
             {t("createStartNew")}
           </Link>
         </StepFooter>
@@ -220,7 +243,7 @@ export function NewWizard({
       <>
         <p className="text-sm text-gray-600 dark:text-gray-300">{t("createExpired")}</p>
         <StepFooter>
-          <Link to="/avatars/new" className="btn-primary min-h-11">
+          <Link to="/avatars/new" state={FRESH_ENTRY} className="btn-primary min-h-11">
             {t("createStartNew")}
           </Link>
         </StepFooter>

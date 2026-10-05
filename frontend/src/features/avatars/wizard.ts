@@ -620,3 +620,37 @@ export function forgetChoices(store: DraftStore | null, creationId: string): voi
     // best effort
   }
 }
+
+/** Forget the last choices alone: the next wizard opens every step at its
+ * default. A creation's own choices stay (its step 3 and 4 still read them). */
+export function forgetLastChoices(store: DraftStore | null): void {
+  try {
+    store?.removeItem(LAST_KEY);
+  } catch {
+    // best effort
+  }
+}
+
+// --- A fresh start --------------------------------------------------------------------
+
+/**
+ * "New avatar" (the list's button, the empty state, "Start a new one") is
+ * a fresh start: every step at its default, whatever this tab remembers
+ * from the last creation. The links say so in their history state
+ * (`FRESH_ENTRY`); the wizard consumes it once on arrival. The browser's
+ * Back from step 3 to step 2 is not a fresh start: it carries no state,
+ * and step 2 opens as it was filled in.
+ */
+export const FRESH_ENTRY = { fresh: true } as const;
+
+export function isFreshEntry(state: unknown): boolean {
+  return typeof state === "object" && state !== null && (state as { fresh?: unknown }).fresh === true;
+}
+
+/** Start fresh when the entry asks for it: the last choices forgotten.
+ * Returns whether it did, so the caller can consume the entry's state. */
+export function startFresh(store: DraftStore | null, state: unknown): boolean {
+  if (!isFreshEntry(state)) return false;
+  forgetLastChoices(store);
+  return true;
+}

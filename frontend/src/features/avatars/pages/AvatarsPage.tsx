@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import { DraftCreations } from "@/features/avatars/components/create/DraftCreations";
+import { FRESH_ENTRY } from "@/features/avatars/wizard";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { api } from "@/lib/api";
@@ -143,8 +144,10 @@ export function AvatarsPage() {
             {t("dashSubtitle")}
           </p>
         </div>
+        {/* A fresh start: every step of the wizard at its default (wizard.FRESH_ENTRY). */}
         <Link
           to="/avatars/new"
+          state={FRESH_ENTRY}
           className="btn-primary min-h-11 shrink-0 self-start px-5 shadow-sm shadow-brand-600/15"
         >
           <Icon name="plus" className="h-4 w-4" strokeWidth={2} />
@@ -408,6 +411,7 @@ function CreateAvatarCard() {
   return (
     <Link
       to="/avatars/new"
+      state={FRESH_ENTRY}
       className="group grid min-h-[300px] place-items-center rounded-2xl border border-dashed border-gray-300 bg-gray-50/60 p-8 text-center transition-colors hover:border-brand-400 hover:bg-brand-50/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:border-gray-700 dark:bg-white/[0.025] dark:hover:border-brand-500/60 dark:hover:bg-brand-500/[0.05] dark:focus-visible:ring-offset-ink"
     >
       <div>
@@ -450,7 +454,7 @@ function EmptyState() {
       <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-gray-500 dark:text-gray-400">
         {t("emptyBody")}
       </p>
-      <Link to="/avatars/new" className="btn-primary mt-6 min-h-11 px-5">
+      <Link to="/avatars/new" state={FRESH_ENTRY} className="btn-primary mt-6 min-h-11 px-5">
         <Icon name="plus" className="h-4 w-4" strokeWidth={2} />
         {t("newAvatar")}
       </Link>
