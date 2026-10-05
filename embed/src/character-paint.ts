@@ -166,7 +166,9 @@ export function paintCharacter(ctx: CanvasRenderingContext2D, f: CharacterFrameI
   const W = o.width;
   const flat = look.flat;
   const open = o.gap / W;
-  // The edge's feather, in px: as soft as the picture's own edges are.
+  // The edge's feather, in px: as soft as the picture's own edges are
+  // (look.soft: its sharpness as a share of the mouth's width), never
+  // under the antialiasing of a hard edge.
   const feather = Math.max(1.2, look.soft * W);
   // /f/ /v/: the upper teeth rest on the lower lip, which rises and curls in.
   const tuck = traits.teeth === "upper" ? smooth((tuckAmount(f.weights) - 0.08) / 0.5) : 0;

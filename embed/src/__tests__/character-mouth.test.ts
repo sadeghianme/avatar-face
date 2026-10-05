@@ -4,15 +4,18 @@ import { describe, expect, it } from "vitest";
 import { eyeExtent, lidEdge, lidAmount, lidSamplePoints, medianColour, regularEye } from "../blink-lid";
 import {
   CharacterField,
+  DEFAULT_LOOK,
   DEFAULT_TRAITS,
   INNER_LOWER,
   INNER_UPPER,
+  SOFT_CEILING,
   characterOpening,
   edgeWidth,
   tuckAmount,
   mergeTraits,
   mouthFrame,
   sampleLook,
+  softness,
   type Pt,
   type Rgb,
 } from "../character-mouth";
@@ -199,6 +202,40 @@ describe("what the mouth takes from the picture", () => {
       sampleLook(edge(0.01), seam, box, [150, 90, 80], [200, 160, 140]).soft
     );
     expect(edgeWidth(() => [200, 200, 200], seam)).toBeNull();
+  });
+
+  it("takes its softness from the picture's sharpness when it has one, and from the seam only when it has none", () => {
+    // A seam 4 px soft (a crease's shadow) on a picture whose crispest
+    // edges are 1.1 px: the drawn line, not the seam, sets the feather.
+    const edge = (_x: number, y: number): Rgb => {
+      const v = 240 - 200 * Math.max(0, Math.min(1, (y - 100) / 4 + 0.5));
+      return [v, v, v];
+    };
+    const crisp = sampleLook(edge, seam, box, [150, 90, 80], [200, 160, 140], 1.1);
+    expect(crisp.soft).toBeCloseTo(1.1 / box.w, 9);
+    // The same picture read as a soft render: its own 4.6 px edges, on a
+    // mouth 200 px wide (on this 40 px one that would pass the ceiling).
+    expect(sampleLook(edge, seam, { ...box, w: 200 }, [150, 90, 80], [200, 160, 140], 4.6).soft).toBeCloseTo(4.6 / 200, 9);
+    expect(sampleLook(edge, seam, box, [150, 90, 80], [200, 160, 140], 4.6).soft).toBe(SOFT_CEILING);
+    // No sharpness (a flat or tainted picture): the seam, clamped 1 to 4
+    // px, as the mouth always read it; nonsense counts as none.
+    const seamOnly = sampleLook(edge, seam, box, [150, 90, 80], [200, 160, 140]);
+    expect(seamOnly.soft).toBeCloseTo(Math.max(1, Math.min(4, edgeWidth(edge, seam)!)) / box.w, 9);
+    expect(sampleLook(edge, seam, box, [150, 90, 80], [200, 160, 140], null).soft).toBe(seamOnly.soft);
+    expect(sampleLook(edge, seam, box, [150, 90, 80], [200, 160, 140], Number.NaN).soft).toBe(seamOnly.soft);
+    expect(sampleLook(edge, seam, box, [150, 90, 80], [200, 160, 140], 0).soft).toBe(seamOnly.soft);
+    expect(crisp.soft).toBeLessThan(seamOnly.soft);
+    // Neither: the default.
+    expect(sampleLook(() => [200, 200, 200], seam, box, [150, 90, 80], [200, 160, 140]).soft).toBe(DEFAULT_LOOK.soft);
+    // The measure itself: the sharpness over the width, the seam clamped,
+    // the default last; never past the photographic mouth's ceiling.
+    expect(softness(2, null, 100)).toBe(0.02);
+    expect(softness(2, 4, 100)).toBe(0.02);
+    expect(softness(null, 6, 100)).toBe(0.04);
+    expect(softness(null, 0.3, 100)).toBe(0.01);
+    expect(softness(null, null, 100)).toBe(DEFAULT_LOOK.soft);
+    expect(softness(9, null, 100)).toBe(SOFT_CEILING);
+    expect(SOFT_CEILING).toBe(0.03);
   });
 
   it("takes the line from the darkest tone on the mouth's own seam", () => {

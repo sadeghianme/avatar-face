@@ -311,8 +311,12 @@ export interface CharacterLook {
   line: Rgb;
   lip: Rgb;
   skin: Rgb;
-  /** How soft the picture's own edges are, as a fraction of the mouth's
-   *  width: the opening's edge is feathered by the same amount. */
+  /** How soft the picture's own edges are, as a share of the mouth's width
+   *  (texture px over the mouth's width in the same px): the opening's edge
+   *  is feathered by the same share of its width. The picture's sharpness
+   *  (face-sharpness.ts: its crispest strong edges round the mouth and the
+   *  eyes) when the engine has it; the width of the step across the lip
+   *  seam (`edgeWidth`) only when it has none; DEFAULT_LOOK's last. */
   soft: number;
 }
 
@@ -320,10 +324,36 @@ export const DEFAULT_LOOK: CharacterLook = {
   flat: false, line: [60, 28, 26], lip: [150, 90, 84], skin: [200, 150, 130], soft: 0.006,
 };
 
+/** The feather is never more than this share of the mouth's width: the
+ *  photographic mouth's ceiling (mouth/aperture-feather.ts), so a soft
+ *  picture of a small mouth does not get a feather that swallows it. */
+export const SOFT_CEILING = 0.03;
+
+/**
+ * `CharacterLook.soft` from what the engine read of the picture.
+ *
+ * The sharpness (face-sharpness.ts, texture px) is the measure: a crisp
+ * cel-art drawing has 1 px lines but a soft seam (a shadow in a crease,
+ * 3 to 5 px wide in a crisp picture as in a soft one), and a smooth render
+ * has soft lines and a soft seam, so the seam cannot tell them apart and
+ * the sharpness does. The seam's step (`seamEdge`, clamped 1 to 4 px, as
+ * the mouth always read it) is the fallback for a picture whose sharpness
+ * is null (flat, or tainted); the default is the last resort.
+ */
+export function softness(sharpness: number | null | undefined, seamEdge: number | null, mouthWidth: number): number {
+  const w = Math.max(mouthWidth, 1);
+  if (typeof sharpness === "number" && Number.isFinite(sharpness) && sharpness > 0) return Math.min(SOFT_CEILING, sharpness / w);
+  if (seamEdge !== null) return Math.max(1, Math.min(4, seamEdge)) / w;
+  return DEFAULT_LOOK.soft;
+}
+
 /**
  * How wide the picture's edges are, in pixels, read across its mouth seam:
  * the contrast of the profile over its steepest step. A photograph of fur is
  * a pixel or two; a render a little more; an upscaled drawing, several.
+ * The fallback measure of the look's softness (`softness`): the seam of a
+ * closed mouth is a crease's shadow, as wide on a crisp picture as on a soft
+ * one, which is why the picture's sharpness is read first.
  */
 export function edgeWidth(pixel: (x: number, y: number) => Rgb | null, seam: readonly Pt[]): number | null {
   const widths: number[] = [];
@@ -361,14 +391,17 @@ export const rgb = (c: Rgb, a = 1) =>
  * Flat art is told by its palette: a handful of colours cover nearly all of
  * the area round the mouth. A render's skin and a photograph's fur spread over
  * hundreds. The line is the darkest quarter of the samples on the mouth's own
- * seam, wherever the artist drew it.
+ * seam, wherever the artist drew it. `sharpness` is the picture's, in the
+ * same pixels (face-sharpness.ts), null or absent when it has none: the
+ * look's softness (`softness`) is read from it, and from the seam only then.
  */
 export function sampleLook(
   pixel: (x: number, y: number) => Rgb | null,
   seam: readonly Pt[],
   box: { cx: number; cy: number; w: number },
   lip: Rgb,
-  skin: Rgb
+  skin: Rgb,
+  sharpness: number | null = null
 ): CharacterLook {
   const bins = new Map<number, number>();
   let total = 0;
@@ -415,8 +448,10 @@ export function sampleLook(
     dark.sort((p, q) => p.l - q.l);
     line = dark[Math.floor(dark.length * 0.12)].c;
   }
-  const edge = edgeWidth(pixel, seam);
-  const soft = edge === null ? DEFAULT_LOOK.soft : Math.max(1, Math.min(4, edge)) / Math.max(box.w, 1);
+  // The seam is read only for a picture without a sharpness: the measure
+  // the sharpness replaced (see `softness`).
+  const hasSharpness = typeof sharpness === "number" && Number.isFinite(sharpness) && sharpness > 0;
+  const soft = softness(sharpness, hasSharpness ? null : edgeWidth(pixel, seam), box.w);
   return { flat, line, lip, skin, soft };
 }
 

@@ -1131,9 +1131,13 @@ export class AvatarEngine {
    * strong edges round the mouth and the eyes, in its own pixels, read
    * from `ctx`, which holds the texture 1:1 (no filtering: the widths are
    * the picture's). The photographic mouth feathers its aperture by it and
-   * softens the teeth to it. Null on a flat picture.
+   * softens the teeth to it; the character mouth's look takes its softness
+   * from it (sampleCharacterLook, which runs after this). Null on a flat
+   * picture, and cleared first, so a texture that cannot be read leaves
+   * no stale value from the one before it.
    */
   private sampleFaceSharpness(ctx: CanvasRenderingContext2D): void {
+    this.faceSharpness = null;
     const fields = sharpnessBoxes(this.texPoints, this.texture.naturalWidth, this.texture.naturalHeight).map((b) => {
       const d = ctx.getImageData(b.x, b.y, b.w, b.h);
       return lumaField(d.data, d.width, d.height);
@@ -1302,8 +1306,12 @@ export class AvatarEngine {
   }
 
   /**
-   * Cel art or a render, and the picture's own line, for the character mouth
-   * to paint in. Only a rig whose profile asks for that mouth pays for it.
+   * Cel art or a render, the picture's own line and how soft its edges are,
+   * for the character mouth to paint in. The softness is the picture's
+   * sharpness (`faceSharpness`, read by sampleLipColour, which always runs
+   * before this: in the constructor and again in setTexture, so a texture
+   * upgraded from its thumbnail rebuilds the look from its own sharpness);
+   * the lip seam is read for it only when the sharpness is null.
    */
   private sampleCharacterLook(): void {
     // For every profile: the character mouth paints with it, and the mesh
@@ -1334,7 +1342,7 @@ export class AvatarEngine {
         return [data.data[i], data.data[i + 1], data.data[i + 2]];
       };
       const seam = INNER_UPPER.map((i) => this.texPoints[i]).filter(Boolean);
-      this.look = sampleLook(pixel, seam, { cx, cy, w }, this.lipColour, skin);
+      this.look = sampleLook(pixel, seam, { cx, cy, w }, this.lipColour, skin, this.faceSharpness);
     } catch {
       // Tainted texture: the default look, shaded.
     }

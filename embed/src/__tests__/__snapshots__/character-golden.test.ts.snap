@@ -74,7 +74,7 @@ exports[`animal@2 golden output > render, E (spread): mesh and drawing are uncha
 {
   "chinDropPx": 62.95,
   "drawCalls": 32783,
-  "drawing": "09e76a7a71ec3913",
+  "drawing": "04d0db96fdbf951b",
   "lipGapPx": 82.45,
   "mesh": "2074d7c28e448967",
 }
@@ -94,7 +94,7 @@ exports[`animal@2 golden output > render, TH, tongue up: mesh and drawing are un
 {
   "chinDropPx": 31.83,
   "drawCalls": 32783,
-  "drawing": "b6af93f63e36fe67",
+  "drawing": "3af1fb21c3276c6c",
   "lipGapPx": 40.55,
   "mesh": "80e57ee84f11741f",
 }
@@ -104,7 +104,7 @@ exports[`animal@2 golden output > render, aa (open): mesh and drawing are unchan
 {
   "chinDropPx": 100.5,
   "drawCalls": 32783,
-  "drawing": "3b1472d736794c7f",
+  "drawing": "4f3bf82db78d0277",
   "lipGapPx": 126.24,
   "mesh": "3746e9ab9d477704",
 }
@@ -124,7 +124,7 @@ exports[`animal@2 golden output > render, oh (rounded): mesh and drawing are unc
 {
   "chinDropPx": 73.97,
   "drawCalls": 32783,
-  "drawing": "ad3b0a1e7f862181",
+  "drawing": "679db765acb254f1",
   "lipGapPx": 93.08,
   "mesh": "915c1a0f6f0fffc3",
 }
@@ -214,7 +214,7 @@ exports[`toon@1 golden output > render, E (spread): mesh and drawing are unchang
 {
   "chinDropPx": 55.37,
   "drawCalls": 32840,
-  "drawing": "38c42f0a4852ba31",
+  "drawing": "66395ac461ea06d6",
   "lipGapPx": 73,
   "mesh": "0040f6f02ee00d7b",
 }
@@ -224,7 +224,7 @@ exports[`toon@1 golden output > render, FF: mesh and drawing are unchanged 1`] =
 {
   "chinDropPx": 16.54,
   "drawCalls": 32749,
-  "drawing": "85c886a8ad64254d",
+  "drawing": "c0d1b483c46cc445",
   "lipGapPx": 26.31,
   "mesh": "2b2dc910cdf755e5",
 }
@@ -234,7 +234,7 @@ exports[`toon@1 golden output > render, TH, tongue up: mesh and drawing are unch
 {
   "chinDropPx": 27.7,
   "drawCalls": 32840,
-  "drawing": "94c8726de6c15391",
+  "drawing": "957e638aed8cb84f",
   "lipGapPx": 35.39,
   "mesh": "2d7472a1e6c3314c",
 }
@@ -244,7 +244,7 @@ exports[`toon@1 golden output > render, aa (open): mesh and drawing are unchange
 {
   "chinDropPx": 87.41,
   "drawCalls": 32840,
-  "drawing": "48c4d20c8f12098e",
+  "drawing": "f728dbe1101b50cb",
   "lipGapPx": 109.91,
   "mesh": "9db745c85b884155",
 }
@@ -264,7 +264,7 @@ exports[`toon@1 golden output > render, oh (rounded): mesh and drawing are uncha
 {
   "chinDropPx": 64.32,
   "drawCalls": 32840,
-  "drawing": "4e8b82ac69bc552a",
+  "drawing": "c385fb8f7dbf4f4b",
   "lipGapPx": 81.05,
   "mesh": "78b73d30c307dd08",
 }
