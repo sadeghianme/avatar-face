@@ -1077,6 +1077,59 @@ drawn mouth, make your own in the Mouth panel).
   cost per canvas pixel; no GPU timer; GL magnifies bilinearly where Skia's
   "high" filter is what the pixel of edge difference is; Safari and iOS
   untried.
+- The motion of speech (2026-10-06). Measured with the real engine in
+  headless Chrome on a virtual clock stepped at exactly 60 fps, the
+  production cue track (native Kokoro timing, 59 events for one sentence)
+  on three published people and the lab Reference (its own kit and the
+  standard motion move identically: one chain, one geometry), the
+  photographic mouth's lip gap lagged the blend by 42 ms (cross-correlation
+  of the jaw's blend at the audio clock against the gap; the median vowel's
+  peak 67 ms after its bell's, the latest 133: a voice leading its mouth by
+  more than about 45 ms is what people see as out of sync), moved up to
+  0.081 of the mouth's width in one frame (every /p/ /b/ /m/: the pose
+  spring switched from 65 to 125 mid-flight), re-mixed more than half its
+  pose mass in one frame 17 times in the sentence (inverse-square mixing
+  makes a small move of the weights a large move of the mixture) and
+  popped the teeth on whole in one frame 11 times (an opening after a
+  closure crosses the enamel ramp, 0.03 to 0.09 W, in a frame). Not the
+  cause: the 25 to 50 ms `sil` events between syllables (prepareCues folds
+  the ones under its floors; this sentence keeps only its three pauses),
+  the head's beats (three nods, 0.46 px a frame at most), or the clock
+  (steps of 16.0 to 17.7 ms with a finely refreshed `currentTime`; a
+  browser that quantises it to 20 ms would step 3 to 30 ms, which
+  media-clock.ts does not yet slew). Now: the blend reads the track ahead
+  of the audio clock by the articulation's own delay (`ARTICULATION_LEAD_MS`
+  50, `articulationLead`: the filter's half scaled by `tune({smoothness})`,
+  the spring's not); a silence shorter than `SHORT_SILENCE_MS` (110)
+  between two voiced cues pulls toward rest in proportion to its length,
+  since a mouth closes on /p/ /b/ /m/ and at phrase ends, not between
+  syllables; the pose spring is softer (`SPRING_OMEGA` 65 to 35) and
+  stiffens toward a bilabial smoothly by the mixture's own seal
+  (`CLOSURE_OMEGA` 125 to 80, `bilabialSeal`); and the teeth and cavity
+  reveals rise over at least `REVEAL_RISE_MS` (60) and fall at once
+  (`RevealRamp`, in continuous-mouth.ts's paint). A second-order weight
+  filter with the same delay was tried and measured worse (the gap's
+  acceleration up 7%, its jerk up 13%), so TAU_OPEN/TAU_CLOSE stay.
+  Measured after, same track: lag 9 ms (median vowel peak 42, latest 83),
+  the largest step 0.063 W (a bilabial closing: a /p/ still shuts in 50 ms,
+  as it should), half-mass re-mixes 4, teeth pops none (0.28 a frame at
+  most), the gap's acceleration −34% and its jerk −48%, the peak opening
+  −1%, a 127 ms comma pause now a near-closure (0.055 W) rather than a shut
+  mouth; the classic mouth's gap is the same shape 17 ms early (it has no
+  spring to wait for; video leading sound is seen only past ~125 ms).
+  Every live photographic mouth moves this way (the avatar-motion digests,
+  which hash every frame between the poses, re-recorded; the held poses,
+  rest, blink and the single-frame goldens are unchanged, a first frame
+  taking its reveal whole). Pinned by `articulation.test.ts`: the lead, a
+  vowel's peak within 40 ms of its centre and begun before its sound, the
+  short-silence rule, and on the production track a largest step under
+  0.07 W, acceleration under 0.04, teeth rising at most 0.28 a frame and
+  closures only on bilabials, in pauses and at the end. Still weak: a long
+  pause after a vowel dilutes that vowel's peak (its bell is as wide as
+  the pause); the bilabial snap is still the largest step; the clock is
+  not slewed; and the people the owner named (Sakineh, Tareq) were stood
+  in for by published people with the same motion, their own published
+  assets needing a signed URL this measurement did not have.
 
 ## Data changes
 

@@ -24,6 +24,12 @@ import type { BlendWeights, Rig } from "../../types";
  * chin that stood still), and the eyes and nose take none of the poses'
  * registration drift. Every live continuous-mouth avatar changed that way,
  * by decision.
+ *
+ * Re-recorded a second time (2026-10-06) for the pose spring's stiffness
+ * (SPRING_OMEGA 65 -> 35, CLOSURE_OMEGA 125 -> 80, reached smoothly): the
+ * digest covers every frame of the way between the poses, which is what
+ * changed; the poses themselves, where each run of 12 frames arrives, are
+ * the same geometry (the held-pose tests below are unchanged).
  */
 
 const bundled = () => JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8"));
@@ -61,19 +67,19 @@ describe("the bundled Reference motion renders exactly as before", () => {
   it("on the Reference's own face", () => {
     const manifest = validatePerformanceManifest(bundled());
     const neutral = manifest.poses[0].points.map(([x, y]) => ({ x: x * 1000, y: y * 1000 }));
-    expect(digest(new ContinuousMouth(manifest), neutral)).toBe("4caea79e44d889b1");
+    expect(digest(new ContinuousMouth(manifest), neutral)).toBe("6e5fa046bfac16e7");
   });
   it("on another face, with a fitted jaw range", () => {
     const manifest = validatePerformanceManifest(bundled());
     const mouth = new ContinuousMouth(manifest);
     mouth.setProfile(normalizeProfile({ jawRange: 0.7 }));
-    expect(digest(mouth, otherFace())).toBe("d3ecb4c71fe81d26");
+    expect(digest(mouth, otherFace())).toBe("9b3e444093f1a506");
   });
   it("and through the loader that also takes avatar manifests", () => {
     const manifest = validateMotionManifest(bundled());
     const mouth = new ContinuousMouth(manifest);
     mouth.setProfile(normalizeProfile({ jawRange: 0.7 }));
-    expect(digest(mouth, otherFace())).toBe("d3ecb4c71fe81d26");
+    expect(digest(mouth, otherFace())).toBe("9b3e444093f1a506");
   });
 });
 

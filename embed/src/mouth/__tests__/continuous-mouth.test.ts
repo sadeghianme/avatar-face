@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { continuousMouthMix, dampMouth, MouthMotion } from "../continuous-mouth-model";
+import { bilabialSeal, continuousMouthMix, dampMouth, MouthMotion } from "../continuous-mouth-model";
 import { REFERENCE_POSES } from "../reference-mouth-model";
 import { PERFORMANCE_POSES, validatePerformanceManifest } from "../photographic-performance-model";
 import { validateOralRig } from "../photographic-oral-surface";
@@ -41,6 +41,26 @@ describe("continuous mouth movement", () => {
     };
     for (const fps of [30, 60, 120]) sample(fps).forEach((v, i) => expect(v).toBeCloseTo(sample(120)[i], 8));
   });
+  it("stiffens toward a closure smoothly, with no jolt at a threshold", () => {
+    // mouthClose rising through the old switch point (0.65) over half a
+    // second: the rest pose's share climbs monotonically, in small steps.
+    const motion = new MouthMotion();
+    for (let i = 0; i < 60; i++) motion.step(REFERENCE_POSES.aa.weights, 1 / 60);
+    let previous = motion.values[0];
+    let largest = 0;
+    for (let i = 1; i <= 30; i++) {
+      const close = .3 + .7 * i / 30;
+      const mix = motion.step({ ...ZERO_WEIGHTS, jawOpen: .72 * (1 - close), mouthClose: close }, 1 / 60);
+      expect(mix[0]).toBeGreaterThanOrEqual(previous - 1e-9);
+      largest = Math.max(largest, mix[0] - previous);
+      previous = mix[0];
+    }
+    expect(previous).toBeGreaterThan(.95);
+    expect(largest).toBeLessThan(.12);
+    expect(bilabialSeal(REFERENCE_POSES.closed.weights)).toBe(1);
+    expect(bilabialSeal(REFERENCE_POSES.fv.weights)).toBe(0);
+    expect(bilabialSeal({ ...ZERO_WEIGHTS, mouthClose: .6 })).toBeCloseTo(.5, 10);
+  });
   it("retains velocity when interrupted instead of snapping to a new pose", () => {
     const [v, speed] = dampMouth(0, 0, 1, .02, 65);
     const [next, nextSpeed] = dampMouth(v, speed, 0, .000001, 65);
@@ -50,7 +70,10 @@ describe("continuous mouth movement", () => {
   it("closes quickly and stays finite during repeated interrupted movements", () => {
     const motion = new MouthMotion();
     for (let i = 0; i < 60; i++) motion.step(REFERENCE_POSES.aa.weights, 1 / 60);
-    for (let i = 0; i < 4; i++) motion.step(REFERENCE_POSES.closed.weights, 1 / 60);
+    // A /p/ /b/ /m/ is shut within 100 ms of being asked for (CLOSURE_OMEGA
+    // 80: 99.7% there in six frames; it was four at 125, and the jolt of
+    // switching to it mid-flight was the largest step of a sentence).
+    for (let i = 0; i < 6; i++) motion.step(REFERENCE_POSES.closed.weights, 1 / 60);
     expect(motion.values[0]).toBeGreaterThan(.99);
     for (let i = 0; i < 1000; i++) {
       const mix = motion.step(REFERENCE_POSES[PERFORMANCE_POSES[i % 7]].weights, 1 / 120);

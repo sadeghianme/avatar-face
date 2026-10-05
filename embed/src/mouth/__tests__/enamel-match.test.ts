@@ -3,7 +3,7 @@ import {
   enamelMatch, HIGHLIGHT_HEADROOM, LUMA_FLOOR, MAX_BLUR, OWN_TEETH_STRENGTH, sampleEnamel,
   type EnamelSample, type FaceLook,
 } from "../enamel-match-model";
-import { cavityReveal, CAVITY_REVEAL, contactSeam, enamelReveal, ENAMEL_REVEAL } from "../lip-occlusion-model";
+import { cavityReveal, CAVITY_REVEAL, contactSeam, enamelReveal, ENAMEL_REVEAL, REVEAL_RISE_MS, RevealRamp } from "../lip-occlusion-model";
 import { faceHighlight, insidePolygon, lumaPercentile } from "../../face-light";
 
 /** The standard teeth, as measured: a warm cream, bright crowns, soft edges
@@ -176,5 +176,48 @@ describe("the face's highlight", () => {
     const corners = (c: number, r: number) => (Math.abs((c + 0.5) * 10 - 50) + Math.abs((r + 0.5) * 10 - 50) > 60 ? [250, 250, 250] : [100, 100, 100]);
     expect(faceHighlight(diamond, corners, 10)).toBe(100);
     expect(faceHighlight(oval.slice(0, 3), pixel, 10)).toBeNull();
+  });
+});
+
+describe("a reveal followed over time (RevealRamp)", () => {
+  const frame = 1000 / 60;
+  it("takes its first value whole: a first frame is not a transition", () => {
+    expect(new RevealRamp().step(1, 0)).toBe(1);
+    expect(new RevealRamp().step(0.4, frame)).toBe(0.4);
+  });
+  it("rises over no less than REVEAL_RISE_MS, so teeth never pop on in one frame", () => {
+    const ramp = new RevealRamp();
+    ramp.step(0, frame);
+    const steps: number[] = [];
+    let value = 0, elapsed = 0;
+    while (value < 1 && elapsed < 1000) {
+      value = ramp.step(1, frame);
+      elapsed += frame;
+      steps.push(value);
+    }
+    expect(Math.max(...steps.map((v, i) => v - (steps[i - 1] ?? 0)))).toBeLessThanOrEqual(frame / REVEAL_RISE_MS + 1e-9);
+    expect(elapsed).toBeGreaterThanOrEqual(REVEAL_RISE_MS - 1e-9);
+    expect(elapsed).toBeLessThan(REVEAL_RISE_MS + 2 * frame);
+    expect(value).toBe(1);
+  });
+  it("falls at once: what closing lips cover is covered", () => {
+    const ramp = new RevealRamp();
+    ramp.step(1, frame);
+    expect(ramp.step(0, frame)).toBe(0);
+    // And a target under the ramp's own value is taken as it is.
+    ramp.step(0.5, frame);
+    expect(ramp.step(0.2, frame)).toBe(0.2);
+  });
+  it("takes the same time at any frame rate, and never overshoots its target", () => {
+    const at = (fps: number) => {
+      const ramp = new RevealRamp();
+      ramp.step(0, 0);
+      let value = 0, elapsed = 0;
+      while (value < 0.5) { value = ramp.step(0.5, 1000 / fps); elapsed += 1000 / fps; }
+      return { value, elapsed };
+    };
+    expect(at(30).value).toBe(0.5);
+    expect(at(120).value).toBe(0.5);
+    expect(Math.abs(at(30).elapsed - at(120).elapsed)).toBeLessThan(1000 / 30 + 1e-9);
   });
 });

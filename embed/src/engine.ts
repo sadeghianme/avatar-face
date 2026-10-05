@@ -386,6 +386,46 @@ const IMPERATIVE: Record<string, number> = {
 const IMPERATIVE_WIDTH = 0.7;
 const MIN_IMPERATIVE_MS = 30;
 
+/**
+ * How far ahead of the voice the blend reads the cue track, in ms, at the
+ * default smoothness: the articulation's own delay, given back.
+ *
+ * The shape of a sound is reached in the middle of its span by the bells
+ * above, and then the articulation filter (TAU_OPEN, TAU_CLOSE) and the
+ * photographic mouth's pose spring each take their time: measured with the
+ * real engine on the production cue track, stepped at 60 fps, the lip
+ * gap's peaks came 42 ms after the blend's (cross-correlation), the
+ * median vowel's peak 67 ms after its bell's and the latest 133 ms. A
+ * voice that leads its mouth by more than about 45 ms is seen as out of
+ * sync (the picture lagging the sound is the direction people notice).
+ * Reading the track this far ahead puts the peaks back on the bells
+ * (9 ms by cross-correlation, the median vowel 42 ms, the latest 83) and
+ * starts each shape before its sound, which is what a mouth does. The
+ * filter half of the delay scales with `smoothness` (articulationLead);
+ * the spring's does not.
+ */
+const ARTICULATION_LEAD_MS = 50;
+
+/** The blend's lead at a smoothness, ms: half the lead is the filter's
+ *  delay, which `tune({smoothness})` scales, and half the spring's. */
+export function articulationLead(smoothness: number): number {
+  return ARTICULATION_LEAD_MS / 2 + ARTICULATION_LEAD_MS / 2 / Math.max(0.15, smoothness);
+}
+
+/**
+ * A silence shorter than this between two voiced cues is the space between
+ * two sounds, not a closure. Native Kokoro timing puts a 25 to 50 ms "sil"
+ * between most syllables (`aa ou sil aa RR sil`); prepareCues folds the
+ * ones under its floors, and the ones that survive beside a transient
+ * (nn, DD, TH, PP, FF relax the floor to 40 ms) would shut the mouth for a
+ * frame or two in the middle of a word. A real speaker closes the lips on
+ * /p/ /b/ /m/ and at the ends of phrases, not between syllables, so such a
+ * silence pulls toward rest only in proportion to its length; a pause this
+ * long or longer, a silence at the start or the end of the track, or one
+ * beside another silence, pulls whole.
+ */
+const SHORT_SILENCE_MS = 110;
+
 const MIN_CUE_MS = 85;
 
 /**
@@ -1768,7 +1808,8 @@ export class AvatarEngine {
    */
   private blendedCueWeights(now: number): BlendWeights {
     if (this.voicePaused()) return { ...ZERO_WEIGHTS };
-    const t = this.cueTime(now);
+    // Ahead of the voice by the articulation's own delay (ARTICULATION_LEAD_MS).
+    const t = this.cueTime(now) + articulationLead(this.tuning.smoothness);
     let index = -1;
     for (let i = 0; i < this.cues.length; i++) {
       if (this.cues[i].t <= t) index = i;
@@ -1792,6 +1833,15 @@ export class AvatarEngine {
       const next = this.cues[i + 1];
       return next ? Math.max(1, next.t - this.cues[i].t) : DEFAULT_CUE_SPAN_MS;
     };
+    // A short silence between two voiced cues is the space between two
+    // sounds, not a closure (SHORT_SILENCE_MS): the mouth passes through,
+    // pulled toward rest only in proportion to how long the silence is.
+    const silShare = (i: number): number => {
+      if (this.cues[i].viseme !== "sil") return 1;
+      const before = this.cues[i - 1], after = this.cues[i + 1];
+      if (!before || !after || before.viseme === "sil" || after.viseme === "sil") return 1;
+      return Math.min(1, spanOf(i) / SHORT_SILENCE_MS);
+    };
 
     let totalWeight = 0;
     for (let i = from; i < to; i++) {
@@ -1799,7 +1849,7 @@ export class AvatarEngine {
       // Bell centred on the cue's own span, widened for longer sounds.
       const sigma = Math.max(MIN_DOMINANCE_MS, span * 0.62);
       const z = Math.abs(t - (this.cues[i].t + span / 2)) / sigma;
-      const weight = Math.exp(-0.5 * Math.pow(z, BELL_EXPONENT));
+      const weight = Math.exp(-0.5 * Math.pow(z, BELL_EXPONENT)) * silShare(i);
       if (weight < 1e-3) continue;
       const shape = this.rig.visemes[this.cues[i].viseme] ?? {};
       // Stress amplitude: an unstressed syllable is a smaller mouth, not a
@@ -1893,6 +1943,12 @@ export class AvatarEngine {
     // Jaws CLOSE faster than they open (muscle + gravity). Closing slower
     // than opening left the mouth hanging open through a whole sentence —
     // measured only 1% closed frames before that was corrected.
+    // A second-order (critically damped) filter with the same mean delay
+    // was tried here (2026-10-06): it moves the weights with no corner at
+    // a target change, but with the bells already continuous it measured
+    // worse (the lip gap's acceleration up 7%, its jerk up 13%: the same
+    // travel in a steeper middle), so the first-order filter stays, with
+    // its delay given back by ARTICULATION_LEAD_MS instead.
     const TAU_OPEN = 47 / smoothing; // ms; matches the old 0.30/frame @60fps
     const TAU_CLOSE = 33 / smoothing; // ms; matches the old 0.40/frame @60fps
     const keys = Object.keys(this.weights) as (keyof BlendWeights)[];

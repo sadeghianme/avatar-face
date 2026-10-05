@@ -34,6 +34,11 @@ first word, however long a phone takes to start the audio.
 - Visual lead starts at zero. It is a manual playback adjustment, not a
   measured accuracy claim. Mouth interpolation/smoothing still introduces
   articulation dynamics; native timestamps alone do not prove perceptual parity.
+  Since 2026-10-06 the engine itself reads the cue track 50 ms ahead of
+  the clock it is given (`ARTICULATION_LEAD_MS`, the articulation's measured
+  delay: the lip gap's peaks then sit within 9 ms of the blend's by
+  cross-correlation); the lab's visual lead is on top of that, on both
+  sides alike.
 
 ## Model and runtime
 

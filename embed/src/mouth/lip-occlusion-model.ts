@@ -88,6 +88,37 @@ export function contactSeam(gap: number, width: number): number {
   return smooth((g - 0.008) / 0.012) * (1 - smooth((g - 0.05) / 0.06));
 }
 
+/**
+ * A reveal rises from nothing to whole over no less than this many ms.
+ *
+ * The ramps above are over the gap, and a mouth opening after a closure
+ * crosses the whole enamel ramp (0.03 to 0.09 of the width) in a single
+ * frame at 60 fps: the teeth popped on, whole, in one frame, eleven times
+ * in the production sentence. Over 60 ms (four frames) they come into the
+ * light as the lips part. Falls are not slowed: what closing lips cover is
+ * covered, and a slit holding yesterday's enamel would be the white line
+ * between the lips this model exists to prevent.
+ */
+export const REVEAL_RISE_MS = 60;
+
+/**
+ * A reveal's alpha followed over time: it falls as fast as the lips close
+ * and rises over at least REVEAL_RISE_MS. The first value is taken whole:
+ * a first frame is not a transition, so a single rendered frame (a golden,
+ * a held pose) is what the ramps over the gap say.
+ */
+export class RevealRamp {
+  private value = Number.NaN;
+  step(target: number, dtMs: number): number {
+    if (!Number.isFinite(this.value) || target <= this.value) {
+      this.value = target;
+      return target;
+    }
+    this.value = Math.min(target, this.value + Math.max(0, dtMs) / REVEAL_RISE_MS);
+    return this.value;
+  }
+}
+
 export function openingPath(points: readonly MouthPoint[]): Path2D {
   const path = new Path2D();
   points.forEach((p, i) => { if (!i) path.moveTo(p.x, p.y); else path.lineTo(p.x, p.y); });

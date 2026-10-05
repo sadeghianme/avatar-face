@@ -1,7 +1,7 @@
 import { centralMouthAnchors, type MouthExtension, type MouthPoint, type MouthSurfaceFrame } from "../mouth-extension";
 import type { BlendWeights, Rig } from "../types";
 import { MouthMotion, mouthMixWeights } from "./continuous-mouth-model";
-import { cavityReveal, contactSeam, dentalOpening, enamelReveal, openingPath } from "./lip-occlusion-model";
+import { cavityReveal, contactSeam, dentalOpening, enamelReveal, openingPath, RevealRamp } from "./lip-occlusion-model";
 import { validateMotionManifest, type AvatarPerformanceManifest, type MotionManifest } from "./photographic-performance-model";
 import { validateOralRig, type OralPhoto } from "./photographic-oral-surface";
 import { DentalOralSurface, type TeethOrigin } from "./dental-oral-surface";
@@ -71,6 +71,9 @@ export function standardTeeth(motionUrl: string): OralPhotoSource {
 export class ContinuousMouth implements MouthExtension {
   private motion = new MouthMotion();
   private lastTime = 0;
+  private paintTime = 0;
+  private enamelRamp = new RevealRamp();
+  private cavityRamp = new RevealRamp();
   private movement = 1;
   private rounding = 0;
   private geometric = new ReferenceMouth(DEFAULT_REFERENCE_PROFILE);
@@ -205,14 +208,22 @@ export class ContinuousMouth implements MouthExtension {
     const [left, right] = centralMouthAnchors(baseRing, neutral[61], neutral[291]);
     const width = Math.hypot(right.x - left.x, right.y - left.y);
     const gap = Math.hypot(points[13].x - points[14].x, points[13].y - points[14].y);
-    if (width < 2 || gap < width * .008) return true;
-    const aperture = openingPath(ring);
-    const weights = mouthMixWeights(this.motion.values);
     // Lips only just apart show their own seam under a soft dark line, then
     // the dark of the mouth, then the teeth as the gap grows (the ramps in
     // lip-occlusion-model). A small aperture is a seam, never a white line.
-    const reveal = enamelReveal(gap, width);
-    const interior = cavityReveal(gap, width);
+    // Followed over time (RevealRamp): what a frame uncovers comes into
+    // the light over a few frames; what the lips cover is covered at once,
+    // and a closed mouth reveals nothing, so the next opening rises from
+    // nothing over its own frames, not from where the last one left off.
+    const now = performance.now();
+    const dt = this.paintTime ? now - this.paintTime : 0;
+    this.paintTime = now;
+    const closed = width < 2 || gap < width * .008;
+    const reveal = this.enamelRamp.step(closed ? 0 : enamelReveal(gap, width), dt);
+    const interior = this.cavityRamp.step(closed ? 0 : cavityReveal(gap, width), dt);
+    if (closed) return true;
+    const aperture = openingPath(ring);
+    const weights = mouthMixWeights(this.motion.values);
     // The edge between the lip and the interior is as sharp as the picture's
     // own crispest edges (face-sharpness.ts, in this frame's pixels; unknown
     // on a flat or tainted picture): the interior is painted into a layer
