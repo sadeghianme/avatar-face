@@ -25,6 +25,7 @@ export function AvatarPreview({
   fullPhoto = false,
   scene,
   soft = false,
+  fit = "width",
   onEngine,
 }: {
   rigUrl: string;
@@ -39,6 +40,11 @@ export function AvatarPreview({
   /** The dashboard's framing: transparent over the page's backdrop, so a
    *  cut-out's own outline is its edge, instead of a grey card. */
   soft?: boolean;
+  /** How the square canvas is laid out: as wide as its container, its
+   *  height following ("width", the default), or filling a container of
+   *  any shape, letterboxed inside it ("box": the avatar page's stage,
+   *  sized to the window; the square visitors see stays a square). */
+  fit?: "width" | "box";
   onEngine?: (engine: AvatarEngine | null) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -114,9 +120,11 @@ export function AvatarPreview({
       height={Math.round(size * dpr)}
       // Fill the container: `size` is the backing-store resolution, not the
       // layout width, so the avatar uses the whole card instead of a 480px
-      // island in the middle of it.
-      style={{ width: "100%", height: "auto" }}
-      className={`mx-auto rounded-xl ${soft ? "" : "bg-gray-100 dark:bg-gray-700"}`}
+      // island in the middle of it. In a box, the whole box, letterboxed.
+      style={fit === "box" ? { width: "100%", height: "100%" } : { width: "100%", height: "auto" }}
+      className={`mx-auto ${fit === "box" ? "object-contain" : "rounded-xl"} ${
+        soft ? "" : "bg-gray-100 dark:bg-gray-700"
+      }`}
     />
   );
 }

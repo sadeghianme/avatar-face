@@ -39,8 +39,21 @@ const factKey = (fact: PreparedFact) => (fact.kind === "both_standard" ? "mouth"
  *
  * Shown to the tab that finished it (creation.rememberFinishNotice), until
  * dismissed; the Mouth panel keeps saying where the mouth comes from.
+ *
+ * One strip: the title, the facts after it, the two buttons; never a card
+ * that pushes the page down.
  */
-export function FinishNotice({ avatar, aiEnabled }: { avatar: Avatar; aiEnabled: boolean }) {
+export function FinishNotice({
+  avatar,
+  aiEnabled,
+  onToMouth,
+}: {
+  avatar: Avatar;
+  aiEnabled: boolean;
+  /** Opens the Mouth panel where the page keeps it folded, before this
+   *  scrolls to it. */
+  onToMouth?: () => void;
+}) {
   const { t } = useTranslation();
   const [notice, setNotice] = useState<Notice | null>(() => finishNoticeFor(tabStore(), avatar.id));
   if (!notice) return null;
@@ -75,42 +88,47 @@ export function FinishNotice({ avatar, aiEnabled }: { avatar: Avatar; aiEnabled:
     setNotice(null);
   };
   const toMouth = () => {
-    const panel = document.getElementById("mouth-panel");
-    panel?.scrollIntoView({ behavior: "smooth", block: "start" });
-    panel?.focus({ preventScroll: true });
+    onToMouth?.();
+    // After the panel has unfolded, where it is folded.
+    window.requestAnimationFrame(() => {
+      const panel = document.getElementById("mouth-panel");
+      panel?.scrollIntoView({ behavior: "smooth", block: "start" });
+      panel?.focus({ preventScroll: true });
+    });
   };
 
   return (
     <section
       aria-labelledby="finish-notice-title"
-      className={`card mb-6 ${attention ? "border-amber-300/60 dark:border-amber-500/30" : ""}`}
+      className={`card flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ${
+        attention ? "border-amber-300/60 dark:border-amber-500/30" : ""
+      }`}
     >
-      <h2
-        id="finish-notice-title"
-        className={`text-sm font-medium ${
-          attention ? "text-amber-800 dark:text-amber-300" : "text-gray-900 dark:text-gray-100"
-        }`}
-      >
-        {t(attention ? "finishNoticeTitle" : "finishNoticePreparedTitle")}
-      </h2>
-      <ul className="mt-2 space-y-1.5 text-[13.5px] text-gray-700 dark:text-gray-200">
-        {items.map((item) => (
-          <li key={item.key} className="flex items-start gap-2">
-            <Icon
-              name={item.icon}
-              className={`mt-0.5 h-4 w-4 shrink-0 ${
-                item.icon === "alert"
-                  ? "text-amber-600 dark:text-amber-400"
-                  : item.icon === "check"
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-brand-600 dark:text-brand-300"
-              }`}
-            />
-            <span>{item.text}</span>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="flex min-w-0 flex-1 basis-56 items-start gap-2.5">
+        <Icon
+          name={attention ? "alert" : "sparkles"}
+          className={`mt-0.5 h-4 w-4 shrink-0 ${
+            attention ? "text-amber-600 dark:text-amber-400" : "text-brand-600 dark:text-brand-300"
+          }`}
+        />
+        <p className="min-w-0 text-[13px] leading-snug text-gray-600 dark:text-gray-300">
+          <span
+            id="finish-notice-title"
+            className={`font-medium ${
+              attention ? "text-amber-800 dark:text-amber-300" : "text-gray-900 dark:text-gray-100"
+            }`}
+          >
+            {t(attention ? "finishNoticeTitle" : "finishNoticePreparedTitle")}
+          </span>
+          {items.map((item) => (
+            <span key={item.key}>
+              <span aria-hidden="true"> · </span>
+              {item.text}
+            </span>
+          ))}
+        </p>
+      </div>
+      <div className="flex shrink-0 gap-2">
         {toMouthPanel && (
           <button type="button" className="btn-secondary min-h-11" onClick={toMouth}>
             <Icon name="sparkles" className="h-4 w-4" />

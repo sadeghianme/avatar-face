@@ -1,7 +1,7 @@
 import type { SpeechPlayer } from "@liveface/embed";
 import type { AvatarMouthConfig, ClassicMouthConfig } from "@liveface/embed/mouth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -10,6 +10,7 @@ import { Icon } from "@/components/ui/Icon";
 import { MarkFacePanel } from "@/features/avatars/components/MarkFacePanel";
 import { Avatar3DPreview } from "@/features/avatars/components/Avatar3DPreview";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
+import { DetailSection, SectionGroup } from "@/features/avatars/components/DetailSection";
 import { EmbedSnippet } from "@/features/avatars/components/EmbedSnippet";
 import { FramingScenePanel } from "@/features/avatars/components/FramingScenePanel";
 import { engineScene, sceneOf, type SceneDraft } from "@/features/avatars/scene";
@@ -38,6 +39,44 @@ import { api, ApiError } from "@/lib/api";
 import { useOrg } from "@/providers/org";
 import type { Avatar } from "@/lib/types";
 
+/**
+ * The settings column's folded sections. Framing opens by itself: it is
+ * the one the preview answers to (drag to pan). The rest open on demand,
+ * and what was opened is kept for the next avatar (a member tuning mouths
+ * does not unfold Mouth on every page).
+ */
+type SectionId = "scene" | "mouth" | "share" | "embed" | "tuning";
+const OPEN_BY_DEFAULT: Record<SectionId, boolean> = {
+  scene: true,
+  mouth: false,
+  share: false,
+  embed: false,
+  tuning: false,
+};
+const OPEN_KEY = "liveface.avatarPage.open";
+
+function loadOpen(): Record<SectionId, boolean> {
+  try {
+    const raw = localStorage.getItem(OPEN_KEY);
+    return raw ? { ...OPEN_BY_DEFAULT, ...(JSON.parse(raw) as Partial<Record<SectionId, boolean>>) } : { ...OPEN_BY_DEFAULT };
+  } catch {
+    return { ...OPEN_BY_DEFAULT };
+  }
+}
+
+/**
+ * The avatar's page: the avatar on the left, everything about it on the
+ * right (docs/avatar-lines.md, "The avatar page").
+ *
+ * Three fifths of the width is the stage: the avatar, sized to the window
+ * and kept in view (sticky under the page head) while the settings scroll
+ * beside it; nothing sits under it. Two fifths is the settings column:
+ * the publish state first, then Speak, then the settings in named groups
+ * (DetailSection). The page head — back, the name, the status, what the
+ * AI did, and the actions on the picture — stays at the top of the window
+ * too, so Mark the face, Test and Delete are one click away from anywhere
+ * in the column. On a phone it is one column, the stage first.
+ */
 export function AvatarDetailPage() {
   const { t } = useTranslation();
   const { avatarId } = useParams<{ avatarId: string }>();
@@ -48,6 +87,10 @@ export function AvatarDetailPage() {
   const [debugMesh, setDebugMesh] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
   const [cropping, setCropping] = useState(false);
+  // Delete asks once, in place; nothing destructive on one click.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [open, setOpen] = useState<Record<SectionId, boolean>>(loadOpen);
   // The avatar's DRAFT voice. Seeded from the saved value once loaded, and
   // every change is written back — voice is a published property like
   // framing now, so picking one shows the Publish bar and publishing makes
@@ -67,8 +110,22 @@ export function AvatarDetailPage() {
   // preview; null means whatever the draft has saved.
   const [scenePreview, setScenePreview] = useState<SceneDraft | null>(null);
 
-  // Native fullscreen on the preview card. The `fullscreen` state exists so
-  // the toggle icon flips even when the user leaves with Esc, which never
+  // The page head's height, measured: the stage sticks just under it and
+  // is sized to what the window has left, whether the head's row of
+  // actions wraps or not.
+  const [headHeight, setHeadHeight] = useState(76);
+  const headObserver = useRef<ResizeObserver | null>(null);
+  const headRef = useCallback((el: HTMLDivElement | null) => {
+    headObserver.current?.disconnect();
+    headObserver.current = null;
+    if (!el) return;
+    setHeadHeight(el.offsetHeight);
+    headObserver.current = new ResizeObserver(() => setHeadHeight(el.offsetHeight));
+    headObserver.current.observe(el);
+  }, []);
+
+  // Native fullscreen on the stage. The `fullscreen` state exists so the
+  // toggle icon flips even when the user leaves with Esc, which never
   // passes through our button.
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -81,6 +138,20 @@ export function AvatarDetailPage() {
   const toggleFullscreen = () => {
     if (document.fullscreenElement) void document.exitFullscreen();
     else void previewBoxRef.current?.requestFullscreen();
+  };
+
+  const toggleSection = (id: SectionId) =>
+    setOpen((current) => {
+      const next = { ...current, [id]: !current[id] };
+      try {
+        localStorage.setItem(OPEN_KEY, JSON.stringify(next));
+      } catch {
+        // best effort: the defaults next time
+      }
+      return next;
+    });
+  const openSection = (id: SectionId) => {
+    if (!open[id]) toggleSection(id);
   };
 
   const saveVoice = async (selection: VoiceSelection) => {
@@ -115,6 +186,13 @@ export function AvatarDetailPage() {
       setVoice(avatar.voice as VoiceSelection);
     }
   }, [avatar]);
+
+  // Another avatar on this page is another page: nothing half-done carries over.
+  useEffect(() => {
+    setConfirmingDelete(false);
+    setCropping(false);
+    setAdjusting(false);
+  }, [avatarId]);
 
   // Saved draft mouth unless the panel is previewing something newer. The
   // preview resets whenever the saved copy changes (save, publish, discard).
@@ -187,136 +265,172 @@ export function AvatarDetailPage() {
   };
 
   const remove = async () => {
-    await api.delete(`/orgs/${current.id}/avatars/${avatar.id}`);
-    await queryClient.invalidateQueries({ queryKey: ["avatars", current.id] });
-    navigate("/app");
+    setDeleting(true);
+    try {
+      await api.delete(`/orgs/${current.id}/avatars/${avatar.id}`);
+      await queryClient.invalidateQueries({ queryKey: ["avatars", current.id] });
+      navigate("/app");
+    } finally {
+      setDeleting(false);
+    }
   };
 
+  const photo = avatar.kind === "photo";
+  const is3d = avatar.kind === "model3d";
+  const ready = avatar.status === "ready";
+  const editable = photo && ready;
+  const staged = ready && Boolean(avatar.rig_url && avatar.thumbnail_url);
+  const human = (avatar.face_type ?? "human") === "human";
+  const mouthSummary = human
+    ? t(avatar.mouth?.renderer === "continuous" ? "mouthContinuous" : "mouthClassic")
+    : t("mouthSummary");
+
   return (
-    <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        {/* Both rows wrap: on a phone the title's disclosure and the row of
-            tools are each wider than the screen, and one that cannot wrap
-            widens the whole page under it. */}
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-          {/* Back before the title, not buried in the sidebar: a detail page
-              reached from a list needs a way out of it that is where the eye
-              already is. */}
-          <Link
-            to="/app"
-            aria-label={t("avatars")}
-            title={t("avatars")}
-            className="-ms-1 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 dark:hover:bg-white/10 dark:hover:text-white"
-          >
-            <Icon name="back" className="h-5 w-5" />
-          </Link>
-          <InlineName name={avatar.name} onSave={rename} />
-          <StatusBadge status={avatar.status} />
-          {/* The same disclosure visitors get with the published avatar:
-              what the AI did to the picture, "AI teeth" when it made the
-              teeth photo too, "AI mouth shapes" when it made some of them. */}
-          {avatar.ai_edited && (
-            <span
-              className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-              title={
-                aiEditedModels(avatar.ai_edited).length > 0
-                  ? t("aiEditedModel", { model: aiEditedModels(avatar.ai_edited).join(", ") })
-                  : undefined
-              }
+    <div style={{ "--head-h": `${headHeight}px` } as CSSProperties}>
+      {/* The page head. On a wide screen it stays under the shell's header
+          (full-bleed across the main column's padding, like the wizard's
+          progress bar) while the settings scroll; the stage sticks under
+          it (--head-h). Both rows wrap: on a phone the title's disclosure
+          and the row of tools are each wider than the screen. */}
+      <div
+        ref={headRef}
+        className="pb-4 lg:sticky lg:top-[calc(3.5rem+env(safe-area-inset-top))] lg:z-20 lg:-mx-4 lg:-mt-4 lg:bg-white/85 lg:px-4 lg:pt-4 lg:backdrop-blur-xl dark:lg:bg-ink/85"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+            {/* Back before the title, not buried in the sidebar: a detail page
+                reached from a list needs a way out of it that is where the eye
+                already is. */}
+            <Link
+              to="/app"
+              aria-label={t("avatars")}
+              title={t("avatars")}
+              className="-ms-2 grid h-11 w-11 shrink-0 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 dark:hover:bg-white/10 dark:hover:text-white"
             >
-              <Icon name="sparkles" className="h-3.5 w-3.5" />
-              {aiEditedLabels(avatar.ai_edited).map((key) => t(key)).join(" · ")}
-            </span>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {avatar.kind === "photo" && (
-          <label className="btn-secondary cursor-pointer select-none">
-            <input
-              type="checkbox"
-              className="me-1"
-              checked={debugMesh}
-              onChange={(e) => setDebugMesh(e.target.checked)}
-            />
-            mesh
-          </label>
-          )}
-          {avatar.kind === "photo" && avatar.status === "ready" && (
-            <>
-              <button className="btn-secondary" onClick={() => setAdjusting((a) => !a)}>
-                <Icon name="target" className="me-1.5 inline h-4 w-4" />
-                {t("markFace")}
-              </button>
-              <button className="btn-secondary" onClick={() => setCropping((c) => !c)}>
-                <Icon name="crop" className="me-1.5 inline h-4 w-4" />
-                {t("crop")}
-              </button>
-              <button
-                className="btn-secondary"
-                onClick={() => void toggleBackground()}
-                disabled={busyBg}
-                title={t("removeBgHint")}
+              <Icon name="back" className="h-5 w-5 rtl:-scale-x-100" />
+            </Link>
+            <InlineName name={avatar.name} onSave={rename} />
+            <StatusBadge status={avatar.status} />
+            {/* The same disclosure visitors get with the published avatar:
+                what the AI did to the picture, "AI teeth" when it made the
+                teeth photo too, "AI mouth shapes" when it made some of them. */}
+            {avatar.ai_edited && (
+              <span
+                className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+                title={
+                  aiEditedModels(avatar.ai_edited).length > 0
+                    ? t("aiEditedModel", { model: aiEditedModels(avatar.ai_edited).join(", ") })
+                    : undefined
+                }
               >
-                <Icon name="eraser" className="me-1.5 inline h-4 w-4" />
-                {busyBg
-                  ? t("loading")
-                  : avatar.original_image_key
-                    ? t("restoreBg")
-                    : t("removeBg")}
+                <Icon name="sparkles" className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{aiEditedLabels(avatar.ai_edited).map((key) => t(key)).join(" · ")}</span>
+              </span>
+            )}
+          </div>
+
+          {/* The actions, ranked: the edits to the picture first, Test (the
+              widget on a page), then Delete, quiet and last. Publishing is
+              not here: it is the settings column's own state (PublishBar).
+              One row that scrolls sideways on a phone (three rows of
+              buttons used to sit between the title and the avatar); wrapped
+              on a wide screen. */}
+          <div className="-mx-4 flex min-w-0 max-w-[100vw] items-center gap-2 overflow-x-auto px-4 py-1 [scrollbar-width:none] lg:mx-0 lg:max-w-none lg:flex-wrap lg:overflow-visible lg:px-0 lg:py-0 [&>*]:shrink-0">
+            {editable && (
+              <>
+                <button
+                  className="btn-secondary min-h-11"
+                  aria-pressed={adjusting}
+                  onClick={() => setAdjusting((a) => !a)}
+                >
+                  <Icon name="target" className="h-4 w-4" />
+                  {t("markFace")}
+                </button>
+                <button
+                  className="btn-secondary min-h-11"
+                  aria-pressed={cropping}
+                  onClick={() => setCropping((c) => !c)}
+                >
+                  <Icon name="crop" className="h-4 w-4" />
+                  {t("crop")}
+                </button>
+                <button
+                  className="btn-secondary min-h-11"
+                  onClick={() => void toggleBackground()}
+                  disabled={busyBg}
+                  title={t("removeBgHint")}
+                >
+                  <Icon name="eraser" className="h-4 w-4" />
+                  {busyBg
+                    ? t("loading")
+                    : avatar.original_image_key
+                      ? t("restoreBg")
+                      : t("removeBg")}
+                </button>
+              </>
+            )}
+            {avatar.undo_label && (
+              <button
+                className="btn-secondary min-h-11"
+                onClick={() => void undo()}
+                title={t("undoWhat", { what: avatar.undo_label })}
+              >
+                <Icon name="undo" className="h-4 w-4" />
+                {t("undoWhat", { what: avatar.undo_label })}
               </button>
-              <Link className="btn-secondary" to={`/simulator?avatar=${avatar.id}`}>
-                <Icon name="play" className="me-1.5 inline h-4 w-4" />
+            )}
+            {editable && (
+              <Link className="btn-secondary min-h-11" to={`/simulator?avatar=${avatar.id}`}>
+                <Icon name="play" className="h-4 w-4" />
                 {t("testInSimulator")}
               </Link>
-            </>
-          )}
-          {avatar.undo_label && (
-            <button
-              className="btn-secondary"
-              onClick={() => void undo()}
-              title={t("undoWhat", { what: avatar.undo_label })}
-            >
-              <Icon name="undo" className="me-1.5 inline h-4 w-4" />
-              {t("undoWhat", { what: avatar.undo_label })}
-            </button>
-          )}
-          <button className="btn-danger" onClick={() => void remove()}>
-            {t("delete")}
-          </button>
+            )}
+            {confirmingDelete ? (
+              <span
+                role="group"
+                aria-label={t("deleteAsk")}
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 py-1 pe-1 ps-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setConfirmingDelete(false);
+                }}
+              >
+                {t("deleteAsk")}
+                <button
+                  type="button"
+                  className="btn-secondary min-h-9"
+                  autoFocus
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={deleting}
+                >
+                  {t("cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="btn-danger min-h-9"
+                  onClick={() => void remove()}
+                  disabled={deleting}
+                >
+                  {deleting ? <Spinner className="h-4 w-4" /> : t("delete")}
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="btn-secondary min-h-11 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                onClick={() => setConfirmingDelete(true)}
+              >
+                <Icon name="trash" className="h-4 w-4" />
+                {t("delete")}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {avatar.quality_note && avatar.status === "ready" && (
-        <div className="card mb-6 border-amber-300/60 dark:border-amber-500/30">
-          <p className="text-[13.5px] text-amber-700 dark:text-amber-400">
-            <span className="font-medium">
-              {avatar.published ? t("qualityNoteTitle") : t("qualityNoteFirstTitle")}
-            </span>{" "}
-            {avatar.quality_note}
-          </p>
-          {/* "It still works" is about a live avatar; before the first
-              publish the note itself says what to do. */}
-          {avatar.published && (
-            <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">
-              {t("qualityNoteHint")}
-            </p>
-          )}
-          {avatar.kind === "photo" && !adjusting && (
-            <button
-              className="btn-secondary mt-3 px-3 py-1.5 text-xs"
-              onClick={() => setAdjusting(true)}
-            >
-              <Icon name="target" className="h-4 w-4" />
-              {t("markFace")}
-            </button>
-          )}
-        </div>
-      )}
-
       {avatar.status === "failed" && (
-        <div className="card mb-6 border-red-200 dark:border-red-900">
+        <div className="card mb-4 border-red-200 dark:border-red-900">
           <p className="field-error">{avatar.error}</p>
-          <button className="btn-secondary mt-3" onClick={() => void retry()}>
+          <button className="btn-secondary mt-3 min-h-11" onClick={() => void retry()}>
             {t("retry")}
           </button>
           {retryError && (
@@ -327,16 +441,8 @@ export function AvatarDetailPage() {
         </div>
       )}
 
-      {avatar.status === "ready" && <PublishBar avatar={avatar} orgId={current.id} />}
-
-      {/* Keyed by avatar: a notice read for one avatar is not shown on the
-          next one this page opens. */}
-      {avatar.status === "ready" && (
-        <FinishNotice key={avatar.id} avatar={avatar} aiEnabled={current.third_party_ai_enabled ?? true} />
-      )}
-
       {preparing && (
-        <section className="card mb-6" aria-labelledby="preparing-title">
+        <section className="card mb-4" aria-labelledby="preparing-title">
           <h2 id="preparing-title" className="flex items-center gap-2 font-semibold">
             <Spinner className="h-4 w-4 shrink-0 text-brand-600" />
             {t("avatarPreparingTitle")}
@@ -349,24 +455,35 @@ export function AvatarDetailPage() {
       )}
 
       {!preparing && (avatar.status === "pending" || avatar.status === "processing") && (
-        <div className="mb-6">
+        <div className="mb-4">
           <PrepProgress avatar={avatar} onRetry={() => void retry()} error={retryError} />
         </div>
       )}
 
-      {adjusting && avatar.status === "ready" && (
-        <div className="mb-6">
+      {adjusting && ready && (
+        <div className="mb-4">
           <MarkFacePanel avatar={avatar} orgId={current.id} onClose={() => setAdjusting(false)} />
         </div>
       )}
 
-      {avatar.status === "ready" && avatar.rig_url && avatar.thumbnail_url && (
-        // One column on a phone, sized to the screen (minmax(0, 1fr)): an
-        // implicit column would grow to the embed snippet's longest line.
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {staged && (
+        // Three fifths the stage, two fifths the settings; one column on a
+        // phone, sized to the screen (minmax(0, …)): an implicit column
+        // would grow to the embed snippet's longest line.
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          {/* The stage: the avatar, and nothing under it. A square, the
+              shape visitors get, as wide as its column; on a wide screen
+              no taller than the window leaves under the page head (a wide,
+              short window gets a landscape stage with the square inside),
+              and stuck there while the settings scroll. The crop studio
+              takes the room it needs instead. */}
           <div
             ref={previewBoxRef}
-            className={`card relative ${fullscreen ? "preview-fullscreen" : ""}`}
+            className={`card relative overflow-hidden lg:self-start ${
+              cropping
+                ? "p-3"
+                : "aspect-square p-0 lg:sticky lg:top-[calc(3.5rem+env(safe-area-inset-top)+var(--head-h))] lg:max-h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-var(--head-h)-1rem)]"
+            } ${fullscreen ? "preview-fullscreen" : ""}`}
           >
             {!cropping && (
               <button
@@ -374,7 +491,7 @@ export function AvatarDetailPage() {
                 onClick={toggleFullscreen}
                 aria-label={t(fullscreen ? "exitFullscreen" : "fullscreen")}
                 title={t(fullscreen ? "exitFullscreen" : "fullscreen")}
-                className="absolute end-3 top-3 z-10 rounded-lg bg-black/40 p-2 text-white/90 backdrop-blur transition-colors hover:bg-black/60 hover:text-white"
+                className="absolute end-3 top-3 z-10 grid h-10 w-10 place-items-center rounded-lg bg-black/40 text-white/90 backdrop-blur transition-colors hover:bg-black/60 hover:text-white"
               >
                 <Icon name={fullscreen ? "compress" : "expand"} className="h-4 w-4" />
               </button>
@@ -391,59 +508,171 @@ export function AvatarDetailPage() {
                   });
                 }}
               />
-            ) : avatar.kind === "model3d" && avatar.model_url ? (
-              <Avatar3DPreview modelUrl={avatar.model_url} onEngine={setEngine} />
+            ) : is3d && avatar.model_url ? (
+              <Avatar3DPreview modelUrl={avatar.model_url} fit="box" onEngine={setEngine} />
             ) : (
               <AvatarPreview
-                rigUrl={avatar.rig_url}
+                rigUrl={avatar.rig_url!}
                 // Full-resolution texture: the 256px thumbnail looks blurry
                 // on a large preview canvas.
-                textureUrl={avatar.image_url ?? avatar.thumbnail_url}
+                textureUrl={avatar.image_url ?? avatar.thumbnail_url!}
                 layerUrls={avatar.layer_urls}
+                // The stage is most of a window: a 720-point square (1440
+                // device pixels on a 2× screen) keeps the teeth sharp.
+                size={720}
                 debugMesh={debugMesh}
                 scene={sceneShown}
                 soft
+                fit="box"
                 onEngine={setEngine}
               />
             )}
           </div>
-          <div className="flex flex-col gap-6">
+
+          {/* The settings: the publish state, Speak, then the groups. */}
+          <div className="flex min-w-0 flex-col gap-3">
+            {avatar.quality_note && (
+              <div className="card border-amber-300/60 px-4 py-3 dark:border-amber-500/30">
+                <p className="text-[13.5px] text-amber-700 dark:text-amber-400">
+                  <span className="font-medium">
+                    {avatar.published ? t("qualityNoteTitle") : t("qualityNoteFirstTitle")}
+                  </span>{" "}
+                  {avatar.quality_note}
+                </p>
+                {/* "It still works" is about a live avatar; before the first
+                    publish the note itself says what to do. */}
+                {avatar.published && (
+                  <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">
+                    {t("qualityNoteHint")}
+                  </p>
+                )}
+                {photo && !adjusting && (
+                  <button
+                    className="btn-secondary mt-3 min-h-10 px-3 text-xs"
+                    onClick={() => setAdjusting(true)}
+                  >
+                    <Icon name="target" className="h-4 w-4" />
+                    {t("markFace")}
+                  </button>
+                )}
+              </div>
+            )}
+
+            <PublishBar avatar={avatar} orgId={current.id} />
+
+            {/* Keyed by avatar: a notice read for one avatar is not shown on the
+                next one this page opens. */}
+            <FinishNotice
+              key={avatar.id}
+              avatar={avatar}
+              aiEnabled={current.third_party_ai_enabled ?? true}
+              onToMouth={() => openSection("mouth")}
+            />
+
             <SpeakPanel
               engine={engine}
               orgId={current.id}
               selection={voice}
               onSelectionChange={(next) => void saveVoice(next)}
+              title={t("speakPanelTitle")}
+              hint={t("speakPanelHint")}
             />
-            {avatar.kind === "photo" && avatar.status === "ready" && (
-              <FramingScenePanel
-                avatar={avatar}
-                orgId={current.id}
-                surfaceRef={previewBoxRef}
-                active={!cropping && !adjusting}
-                onPreview={setScenePreview}
-                onRemoveBackground={toggleBackground}
-                busyBackground={busyBg}
-              />
+
+            {!is3d && (
+              <SectionGroup label={t("sectionLook")}>
+                {photo && (
+                  <DetailSection
+                    id="scene"
+                    icon="image"
+                    title={t("sceneTitle")}
+                    summary={t("sceneSummary")}
+                    open={open.scene}
+                    onToggle={() => toggleSection("scene")}
+                  >
+                    <FramingScenePanel
+                      avatar={avatar}
+                      orgId={current.id}
+                      surfaceRef={previewBoxRef}
+                      active={!cropping && !adjusting}
+                      onPreview={setScenePreview}
+                      onRemoveBackground={toggleBackground}
+                      busyBackground={busyBg}
+                      embedded
+                    />
+                  </DetailSection>
+                )}
+                <DetailSection
+                  id="mouth"
+                  icon="faces"
+                  title={t("mouthTitle")}
+                  summary={mouthSummary}
+                  open={open.mouth}
+                  onToggle={() => toggleSection("mouth")}
+                >
+                  <MouthPanel
+                    avatar={avatar}
+                    orgId={current.id}
+                    onPreview={(renderer, profile) => setMouthPreview(draftMouthConfig(avatar, renderer, profile))}
+                    onPreviewCharacter={(settings) =>
+                      setMouthPreview(settings ? draftMouthConfig(avatar, undefined, undefined, settings) : undefined)
+                    }
+                    motion={motion}
+                    onMotion={setMotion}
+                    embedded
+                  />
+                </DetailSection>
+              </SectionGroup>
             )}
-            {avatar.kind !== "model3d" && (
-              <MouthPanel
-                avatar={avatar}
-                orgId={current.id}
-                onPreview={(renderer, profile) => setMouthPreview(draftMouthConfig(avatar, renderer, profile))}
-                onPreviewCharacter={(settings) =>
-                  setMouthPreview(settings ? draftMouthConfig(avatar, undefined, undefined, settings) : undefined)
-                }
-                motion={motion}
-                onMotion={setMotion}
-              />
-            )}
-            <SharePanel avatar={avatar} orgId={current.id} />
-            <TuningPanel
-              engine={engine}
-              avatarId={avatar.id}
-              is3d={avatar.kind === "model3d"}
-            />
-            <EmbedSnippet avatarId={avatar.id} voice={voice} />
+
+            <SectionGroup label={t("sectionPublish")}>
+              <DetailSection
+                id="share"
+                icon="link"
+                title={t("shareTitle")}
+                summary={avatar.share_token ? t("shareSummaryOn") : t("shareSummaryOff")}
+                open={open.share}
+                onToggle={() => toggleSection("share")}
+              >
+                <SharePanel avatar={avatar} orgId={current.id} embedded />
+              </DetailSection>
+              <DetailSection
+                id="embed"
+                icon="code"
+                title={t("embedSnippet")}
+                summary={t("embedSummary")}
+                open={open.embed}
+                onToggle={() => toggleSection("embed")}
+              >
+                <EmbedSnippet avatarId={avatar.id} voice={voice} embedded />
+              </DetailSection>
+            </SectionGroup>
+
+            <SectionGroup label={t("sectionAdvanced")}>
+              <DetailSection
+                id="tuning"
+                icon="sliders"
+                title={t("tuning")}
+                summary={t("tuningSummary")}
+                open={open.tuning}
+                onToggle={() => toggleSection("tuning")}
+              >
+                <TuningPanel engine={engine} avatarId={avatar.id} is3d={is3d} embedded />
+                {photo && (
+                  <label className="mt-4 flex min-h-11 cursor-pointer items-start gap-3 border-t border-gray-100 pt-4 text-sm dark:border-white/[0.07]">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-brand-600"
+                      checked={debugMesh}
+                      onChange={(e) => setDebugMesh(e.target.checked)}
+                    />
+                    <span>
+                      {t("debugMesh")}
+                      <span className="block text-xs text-gray-500 dark:text-gray-400">{t("debugMeshHint")}</span>
+                    </span>
+                  </label>
+                )}
+              </DetailSection>
+            </SectionGroup>
           </div>
         </div>
       )}

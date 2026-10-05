@@ -27,6 +27,8 @@ export function SpeakPanel({
   orgId,
   selection: controlledSelection,
   onSelectionChange,
+  title,
+  hint,
 }: {
   engine: SpeechPlayer | null;
   orgId: string;
@@ -34,6 +36,10 @@ export function SpeakPanel({
    *  can reproduce the voice that was tested. Standalone callers omit both. */
   selection?: VoiceSelection;
   onSelectionChange?: (selection: VoiceSelection) => void;
+  /** A heading for the card, where it is one section among others (the
+   *  avatar page); with a line under it when given. */
+  title?: string;
+  hint?: string;
 }) {
   const { t, i18n } = useTranslation();
   // Prefilled rather than empty: an empty box disables Speak, so the first
@@ -136,7 +142,13 @@ export function SpeakPanel({
   };
 
   return (
-    <div className="card flex flex-col gap-4">
+    <section className="card flex flex-col gap-4" aria-label={title}>
+      {title && (
+        <div>
+          <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h2>
+          {hint && <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{hint}</p>}
+        </div>
+      )}
       <VoicePicker value={selection} onChange={setSelection} />
       <textarea
         className="input min-h-24"
@@ -150,7 +162,7 @@ export function SpeakPanel({
       {error && <p className="field-error">{error}</p>}
       <div className="flex gap-2">
         <button
-          className="btn-primary flex-1"
+          className="btn-primary min-h-11 flex-1"
           disabled={!engine || !text.trim() || busy}
           onClick={() => void speak()}
         >
@@ -158,7 +170,7 @@ export function SpeakPanel({
           {t("speak")}
         </button>
         <button
-          className="btn-secondary"
+          className="btn-secondary min-h-11"
           disabled={!engine}
           onClick={() => {
             browserTts?.stop();
@@ -171,15 +183,16 @@ export function SpeakPanel({
         </button>
         {sttSupported() && (
           <button
-            className="btn-secondary"
+            className="btn-secondary min-h-11 min-w-11"
             disabled={listening}
             onClick={() => void dictate()}
             title={t("dictate")}
+            aria-label={t("dictate")}
           >
             <Icon name={listening ? "ear" : "mic"} className="h-4 w-4" />
           </button>
         )}
       </div>
-    </div>
+    </section>
   );
 }

@@ -120,6 +120,57 @@ and relaxed, soft even frontal light, sharp eyes and lips, a flat mid-grey
 backdrop (soft blue for a grey or white subject) that the keyer takes off;
 the owner's words are quoted and cannot move any of it.
 
+### The avatar page (2026-10-06)
+
+Where a built avatar is heard, dressed and published
+(`features/avatars/pages/AvatarDetailPage.tsx`). The owner's words: the
+avatar three fifths of the width, the settings two fifths, no room wasted
+under the character, the top of the page on every arrival, every step of
+"New avatar" at its default.
+
+```
+page head   back · name (renamed in place) · status · what the AI did
+            | Mark the face · Crop · Remove/Restore background · Undo · Test · Delete
+            Stuck under the shell header on a wide screen (its height is
+            measured into --head-h); one row that scrolls sideways on a phone.
+            Delete is quiet (red text) and asks once, in place.
+stage 60%   the avatar alone: a square, the shape the widget and the share
+            page show, as wide as its column and no taller than the window
+            leaves (a wide, short window gets a landscape stage, the square
+            letterboxed inside: AvatarPreview `fit="box"`, a 720-point
+            backing store), sticky under the page head while the settings
+            scroll. Fullscreen as before. The crop studio takes its own room.
+settings    the publish state (PublishBar, one strip) · the finish notice
+   40%      (one strip, dismissible) · Speak, always open ·
+            LOOK: Framing & scene (open by default) · Mouth ·
+            PUBLISH & SHARE: Public link · Embed snippet ·
+            ADVANCED: Animation tuning, with the face-mesh debug switch
+            (it was "mesh" in the page head).
+```
+
+The sections are `DetailSection`s: one row each — icon, name, one line of
+what it holds or is set to ("Off", "Photographic"), a chevron — under an
+eyebrow for the group. A folded section stays mounted, only hidden: a
+mouth kit it follows keeps running, the preview keeps answering the
+framing panel's drag. What was unfolded is kept (`liveface.avatarPage.open`,
+localStorage). Each panel takes `embedded` to drop its own card and title.
+"Open the Mouth panel" on the finish notice unfolds Mouth before scrolling.
+On a phone it is one column, the stage first.
+
+Scroll (`app/scroll.ts`, `ScrollToTop` in the router): a new route starts
+at the top — not the browser's Back and Forward (the browser restores the
+list where it was), not an anchor, not a change of query alone (the
+wizard's `?model=`, `?step=` are one page in another state).
+
+A fresh start (`wizard.FRESH_ENTRY`, `startFresh`): the list's "New
+avatar", its empty state and the wizard's "Start a new one" carry
+`{ fresh: true }` in their history state; the wizard forgets the last
+choices (`liveface.wizard.last`) before its first render and replaces the
+state, so Back to that entry is not a fresh start again. A creation's own
+choices stay (its steps 3 and 4 read them), and the browser's Back from
+step 3 to step 2 still opens step 2 as it was filled in. The last choices
+are also forgotten when a creation finishes.
+
 ### The five-step flow (2026-09-25, superseded)
 
 The owner's order (2026-09-25, Step 5 added 2026-09-26): **upload → background

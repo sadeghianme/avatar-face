@@ -54,21 +54,28 @@ export function EmbedSnippet({
   avatarId,
   apiKey,
   voice,
+  embedded = false,
 }: {
   avatarId: string;
   apiKey?: string;
   voice?: SnippetVoice;
+  /** Inside a section that carries the title: no card, no heading of its own. */
+  embedded?: boolean;
 }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const snippet = buildSnippet(avatarId, apiKey, voice);
 
   return (
-    <div className="card">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="font-medium">{t("embedSnippet")}</h3>
+    <div className={embedded ? "" : "card"}>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        {embedded ? (
+          <p className="text-[13px] text-gray-500 dark:text-gray-400">{t("embedSnippetHint")}</p>
+        ) : (
+          <h3 className="font-medium">{t("embedSnippet")}</h3>
+        )}
         <button
-          className="btn-secondary px-3 py-1 text-xs"
+          className="btn-secondary min-h-10 shrink-0 px-3 text-xs"
           onClick={() => {
             void navigator.clipboard.writeText(snippet);
             setCopied(true);

@@ -9,10 +9,13 @@ import { useEffect, useRef, useState } from "react";
 export function Avatar3DPreview({
   modelUrl,
   size = 480,
+  fit = "width",
   onEngine,
 }: {
   modelUrl: string;
   size?: number;
+  /** As AvatarPreview's: as wide as the container, or filling a box. */
+  fit?: "width" | "box";
   onEngine?: (engine: SpeechPlayer | null) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -52,7 +55,7 @@ export function Avatar3DPreview({
 
   if (error) return <p className="field-error">{error}</p>;
   return (
-    <div className="relative">
+    <div className={`relative ${fit === "box" ? "h-full w-full" : ""}`}>
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center text-gray-400">
           Loading 3D model…
@@ -62,7 +65,9 @@ export function Avatar3DPreview({
         ref={canvasRef}
         width={size}
         height={size}
-        className="mx-auto max-w-full rounded-xl bg-gradient-to-b from-indigo-100 to-slate-200 dark:from-gray-700 dark:to-gray-800"
+        className={`mx-auto bg-gradient-to-b from-indigo-100 to-slate-200 dark:from-gray-700 dark:to-gray-800 ${
+          fit === "box" ? "h-full w-full object-contain" : "max-w-full rounded-xl"
+        }`}
       />
     </div>
   );

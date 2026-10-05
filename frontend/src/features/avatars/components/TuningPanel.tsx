@@ -36,19 +36,24 @@ export function loadTuning(avatarId: string): EngineTuning {
 /**
  * Live animation sliders. Mutates engine.tuning directly (applied on the
  * next frame — no re-render of the preview) and persists per avatar.
+ *
+ * On its own it is a collapsed card; `embedded`, the sliders alone, for a
+ * page that gives it a section of its own (the avatar page's Advanced).
  */
 export function TuningPanel({
   engine,
   avatarId,
   is3d = false,
+  embedded = false,
 }: {
   engine: SpeechPlayer | null;
   avatarId: string;
   is3d?: boolean;
+  embedded?: boolean;
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState<EngineTuning>(() => loadTuning(avatarId));
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(embedded);
 
   // Apply persisted values whenever a (new) engine arrives.
   useEffect(() => {
@@ -76,19 +81,25 @@ export function TuningPanel({
   };
 
   return (
-    <div className="card">
-      <button
-        className="flex w-full items-center justify-between font-medium"
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span className="inline-flex items-center gap-2">
-          <Icon name="sliders" className="h-4 w-4" />
-          {t("tuning")}
-        </span>
-        <span className="text-gray-400">{open ? "▾" : "▸"}</span>
-      </button>
+    <div className={embedded ? "" : "card"}>
+      {!embedded && (
+        <button
+          className="flex w-full items-center justify-between font-medium"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <span className="inline-flex items-center gap-2">
+            <Icon name="sliders" className="h-4 w-4" />
+            {t("tuning")}
+          </span>
+          <Icon
+            name="chevron"
+            className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-90" : ""} rtl:-scale-x-100`}
+          />
+        </button>
+      )}
       {open && (
-        <div className="mt-4 flex flex-col gap-3">
+        <div className={`flex flex-col gap-3 ${embedded ? "" : "mt-4"}`}>
           {SLIDERS.filter((s) => !(is3d && s.photoOnly)).map((slider) => (
             <div key={slider.key}>
               <div className="mb-1 flex justify-between text-xs">
@@ -111,7 +122,7 @@ export function TuningPanel({
               />
             </div>
           ))}
-          <button className="btn-secondary self-end px-3 py-1 text-xs" onClick={reset}>
+          <button className="btn-secondary min-h-10 self-end px-3 text-xs" onClick={reset}>
             {t("tuneReset")}
           </button>
         </div>

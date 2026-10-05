@@ -13,7 +13,16 @@ import type { Avatar } from "@/lib/types";
  * with no password on it spends the owner's speech quota, so nobody should
  * discover that after the fact.
  */
-export function SharePanel({ avatar, orgId }: { avatar: Avatar; orgId: string }) {
+export function SharePanel({
+  avatar,
+  orgId,
+  embedded = false,
+}: {
+  avatar: Avatar;
+  orgId: string;
+  /** Inside a section that carries the title: no card, no heading of its own. */
+  embedded?: boolean;
+}) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -45,14 +54,16 @@ export function SharePanel({ avatar, orgId }: { avatar: Avatar; orgId: string })
   };
 
   return (
-    <div className="card">
+    <div className={embedded ? "" : "card"}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h3 className="flex items-center gap-2 font-medium">
-            <Icon name="link" className="h-4 w-4 text-gray-400" />
-            {t("shareTitle")}
-          </h3>
-          <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">
+          {!embedded && (
+            <h3 className="flex items-center gap-2 font-medium">
+              <Icon name="link" className="h-4 w-4 text-gray-400" />
+              {t("shareTitle")}
+            </h3>
+          )}
+          <p className={`text-[13px] text-gray-500 dark:text-gray-400 ${embedded ? "" : "mt-1"}`}>
             {token ? t("shareOnBody") : t("shareOffBody")}
           </p>
         </div>
@@ -75,12 +86,18 @@ export function SharePanel({ avatar, orgId }: { avatar: Avatar; orgId: string })
       </div>
 
       {token && (
-        <div className="mt-3 flex gap-2">
-          <input readOnly value={url} onFocus={(e) => e.target.select()} className="input text-xs" />
-          <button className="btn-secondary shrink-0" onClick={() => void copy()}>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <input
+            readOnly
+            value={url}
+            onFocus={(e) => e.target.select()}
+            aria-label={t("shareTitle")}
+            className="input min-h-11 min-w-0 flex-1 basis-40 text-xs"
+          />
+          <button className="btn-secondary min-h-11 shrink-0" onClick={() => void copy()}>
             {copied ? t("copied") : t("copy")}
           </button>
-          <a className="btn-secondary shrink-0" href={url} target="_blank" rel="noreferrer">
+          <a className="btn-secondary min-h-11 shrink-0" href={url} target="_blank" rel="noreferrer">
             {t("shareOpen")}
           </a>
         </div>

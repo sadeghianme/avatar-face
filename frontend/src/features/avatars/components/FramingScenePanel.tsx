@@ -36,6 +36,7 @@ export function FramingScenePanel({
   onRemoveBackground,
   busyBackground = false,
   active = true,
+  embedded = false,
 }: {
   avatar: Avatar;
   orgId: string;
@@ -49,6 +50,8 @@ export function FramingScenePanel({
   /** The page's own background removal, offered for an opaque photo. */
   onRemoveBackground: () => Promise<void>;
   busyBackground?: boolean;
+  /** Inside a section that carries the title: no card, no heading of its own. */
+  embedded?: boolean;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -245,8 +248,10 @@ export function FramingScenePanel({
   ];
 
   return (
-    <section className="card" aria-labelledby="scene-title">
-      <h2 id="scene-title" className="mb-1 text-base font-semibold">{t("sceneTitle")}</h2>
+    <section className={embedded ? "" : "card"} aria-labelledby={embedded ? undefined : "scene-title"} aria-label={embedded ? t("sceneTitle") : undefined}>
+      {!embedded && (
+        <h2 id="scene-title" className="mb-1 text-base font-semibold">{t("sceneTitle")}</h2>
+      )}
       <p className="mb-4 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t("sceneIntro")}</p>
 
       <div className="mb-4">
@@ -326,7 +331,9 @@ export function FramingScenePanel({
         </div>
         {!cutOut && (
           <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300/70 p-2.5 dark:border-amber-500/40">
-            <p className="min-w-0 flex-1 text-xs leading-relaxed text-gray-700 dark:text-gray-200">{t("sceneOpaqueHint")}</p>
+            {/* A basis, so a narrow column puts the button under the words
+                rather than the words in a column beside the button. */}
+            <p className="min-w-0 flex-1 basis-52 text-xs leading-relaxed text-gray-700 dark:text-gray-200">{t("sceneOpaqueHint")}</p>
             <button type="button" className="btn-secondary min-h-11" disabled={busyBackground} onClick={() => void onRemoveBackground()}>
               {busyBackground ? <Spinner className="h-4 w-4" /> : <Icon name="eraser" className="me-1.5 inline h-4 w-4" />}
               {t("sceneOpaqueAction")}

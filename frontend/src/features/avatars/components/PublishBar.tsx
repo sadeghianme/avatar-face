@@ -61,21 +61,25 @@ export function PublishBar({ avatar, orgId }: { avatar: Avatar; orgId: string })
     }
   };
 
+  // One slim strip: the state and its one line on the left, the actions on
+  // the right. It sits at the top of the avatar page's settings column,
+  // beside the preview, so it never pushes the page down.
   return (
     <div
-      className={`card mb-6 ${
+      role="status"
+      className={`card px-4 py-3 ${
         dirty ? "border-amber-300/70 dark:border-amber-500/40" : ""
       }`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-start gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-1 basis-56 items-start gap-2.5">
           <Icon
             name={dirty ? "clock" : "check"}
             className={`mt-0.5 h-4 w-4 shrink-0 ${
               dirty ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
             }`}
           />
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-medium">
               {neverPublished
                 ? t("publishFirstTitle")
@@ -83,7 +87,7 @@ export function PublishBar({ avatar, orgId }: { avatar: Avatar; orgId: string })
                   ? t("publishDraftTitle")
                   : t("publishLiveTitle")}
             </p>
-            <p className="mt-0.5 text-[13px] text-gray-500 dark:text-gray-400">
+            <p className="mt-0.5 text-xs leading-snug text-gray-500 dark:text-gray-400">
               {neverPublished
                 ? t("publishFirstBody")
                 : dirty
@@ -97,7 +101,7 @@ export function PublishBar({ avatar, orgId }: { avatar: Avatar; orgId: string })
           <div className="flex shrink-0 gap-2">
             {!neverPublished && (
               <button
-                className="btn-secondary"
+                className="btn-secondary min-h-11"
                 onClick={() => void run("discard")}
                 disabled={busy !== null}
               >
@@ -105,7 +109,7 @@ export function PublishBar({ avatar, orgId }: { avatar: Avatar; orgId: string })
               </button>
             )}
             <button
-              className="btn-primary"
+              className="btn-primary min-h-11"
               onClick={() => void run("publish")}
               disabled={busy !== null}
             >

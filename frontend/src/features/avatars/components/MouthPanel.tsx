@@ -75,6 +75,7 @@ export function MouthPanel({
   onPreviewCharacter,
   motion,
   onMotion,
+  embedded = false,
 }: {
   avatar: Avatar;
   orgId: string;
@@ -84,6 +85,8 @@ export function MouthPanel({
   /** The mouth shapes the dashboard preview plays (the compare switch). */
   motion: MotionChoice;
   onMotion: (choice: MotionChoice) => void;
+  /** Inside a section that carries the title: no card, no heading of its own. */
+  embedded?: boolean;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -289,10 +292,15 @@ export function MouthPanel({
   const spoken = running ? progressSpoken : promptPublish ? madeText : "";
 
   return (
-    <section id="mouth-panel" tabIndex={-1} className="card space-y-4 outline-none" aria-label={t("mouthTitle")}>
+    <section
+      id="mouth-panel"
+      tabIndex={-1}
+      className={`${embedded ? "" : "card"} space-y-4 outline-none`}
+      aria-label={t("mouthTitle")}
+    >
       <div>
-        <h3 className="font-semibold">{t("mouthTitle")}</h3>
-        <p className="mt-1 text-xs leading-relaxed text-gray-500">{t("mouthHint")}</p>
+        {!embedded && <h3 className="font-semibold">{t("mouthTitle")}</h3>}
+        <p className={`text-xs leading-relaxed text-gray-500 dark:text-gray-400 ${embedded ? "" : "mt-1"}`}>{t("mouthHint")}</p>
       </div>
 
       {!human && avatar.kind === "photo" && (
