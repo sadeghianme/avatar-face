@@ -894,7 +894,8 @@ drawn mouth, make your own in the Mouth panel).
     lip that rolls up over them; with teeth off the lips close to one clean
     seam (the jaw barely drops), so no slit and no white line.
   - *Soft mouths*: a render or photograph's opening has an edge as soft as the
-    picture's own (`look.soft`, read across the mouth seam), a ring of inner-lip
+    picture's own (`look.soft`: the picture's sharpness, since 2026-10-06
+    below; the mouth seam only for a picture without one), a ring of inner-lip
     tone inside it, darker gum at the corners, warmth towards the throat, and a
     tongue with a centre groove and a shine sized to the tongue that is there.
   - *Cel art or not* is told by the palette (top eight 16-level colour bins
@@ -946,6 +947,50 @@ drawn mouth, make your own in the Mouth panel).
   the timestamped model when it is installed and serves its own phoneme
   spans as cues (`lab_timing.native_cues`), falling back to the stretched
   table on any error; see docs/lip-sync-lab.md.
+- The character mouth's edge from the picture's sharpness (2026-10-06):
+  `look.soft` was the width of the luma step across the closed lips' seam,
+  clamped 1 to 4 px, over the mouth's width, and the seam is the wrong edge
+  to read for a character as for a person (the photographic mouth, above): a
+  crisp cel-art drawing has 1 px lines but a 3 px seam, a smooth render has
+  soft lines and a soft seam, and the seam told them apart only by accident.
+  `softness` (character-mouth.ts) now takes the picture's sharpness
+  (face-sharpness.ts, texture px, the crispest strong edges round the mouth
+  and the eyes) over the mouth's width, never past 0.03 W (the photographic
+  mouth's ceiling); the seam's step, clamped as before, only when the
+  sharpness is null (a flat or tainted picture); `DEFAULT_LOOK.soft` last.
+  The engine reads the sharpness in `sampleLipColour`, which runs before
+  `sampleCharacterLook` in the constructor and again in `setTexture`, so a
+  texture upgraded from its thumbnail rebuilds the look from its own
+  sharpness, and the value is cleared before each read so an unreadable
+  texture leaves nothing stale. The feather itself (`max(1.2, soft × W)`:
+  the inner-lip ring, the rim halo) and cel-art detection are unchanged, and
+  flat art never uses the feather (its rim is the drawn line), so the two
+  real cartoons render pixel for pixel as before. Measured on the five real
+  characters with the real engine at 2 canvas px per texture px (and at
+  1:1): sharpness 1.83 (the soft human animation: its eyes), 1.47 (the dog
+  photograph), 1.45 (the rendered animal), 1.14 and 1.07 (the cartoons'
+  lines) texture px; `soft × W` 4.7 → 3.7, 4.7 → 2.9 and 7.2 → 2.9 px on the
+  three shaded ones (the rendered animal's seam had read 3.6 px against its
+  1.45 px lines), the feather at held AA 4.9 → 3.8, 4.8 → 3.0, 7.4 → 3.0.
+  Every pixel that changed lies within the old halo's reach of the opening's
+  ring (feather × 2.75 outside, × 3 inside; p95 equal to it, max 1 to 3 px
+  past the strokes' round joins), nothing elsewhere. The ring-probe edge
+  width (the feather harness's measure, contrast over the steepest step at
+  12 points of the ring) moves little (medians at AA 3.3 → 3.2, 2.3 → 3.1,
+  3.7 → 3.9 px): the character painter's edge is a hard clip flanked by the
+  upper lip's gap-scaled shadow strokes and the feather's rings, so what the
+  feather sets is the halo's reach outside the lip and the tone ring inside
+  it (on the rendered animal's EE the ring over the teeth went from 24 to 10
+  px, and the teeth read whiter). Goldens: the `toon@1` and `animal@2` cases
+  on the position-dependent texture regenerated (9 of 28; its sawtooth wraps
+  read 0.80 px, the feather at its floor; the diff of the recorded draw
+  calls is six `lineWidth` values a case), the flat-art cases, rest and
+  blink unchanged, the human and `animal@1` snapshot byte-identical. Still
+  weak: the edge is not a true feather (the photographic mouth's mask is);
+  on the soft human render the eyes are 1.83 px but the lips 3.6 to 4.5, so
+  the opening is crisper than its own lips, as the measure intends (a depth
+  edge is as sharp as the picture's crispest edges) but not what that
+  render's own mouth shows; and the seam fallback is still the old measure.
 
 ## Data changes
 
