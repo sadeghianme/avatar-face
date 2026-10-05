@@ -135,7 +135,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* 3.5rem under the status bar: the wizard's progress sticks just below it. */}
         <header className="sticky top-0 z-30 h-[calc(3.5rem+env(safe-area-inset-top))] border-b pt-[env(safe-area-inset-top)] border-black/[0.07] bg-white/80 backdrop-blur-xl dark:border-white/[0.07] dark:bg-ink/80">
           <div
-            className={`flex h-full items-center gap-3 px-5 sm:px-8 ${wide ? "lg:px-10" : "mx-auto max-w-[1360px]"}`}
+            className="flex h-full items-center gap-3 px-4"
           >
             <button
               aria-label="menu"
@@ -160,7 +160,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className={wide ? "px-5 sm:px-8 lg:px-10" : "mx-auto max-w-[1360px] px-5 py-8 sm:px-8 sm:py-10"}>
+        {/* Every page spans the whole width with 16px around it; the wizard
+            keeps its top clear for its own sticky progress bar. */}
+        <main className={wide ? "px-4" : "p-4"}>
           {current ? (
             children
           ) : setupFailed ? (

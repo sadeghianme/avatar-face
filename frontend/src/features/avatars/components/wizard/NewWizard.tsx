@@ -267,7 +267,7 @@ export function NewWizard({
           across it (the main column's padding undone), the steps centred.
           On a short screen (a phone on its side) it scrolls away instead:
           the step needs the height more. */}
-      <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-20 [@media(max-height:520px)]:static -mx-5 border-b border-black/[0.06] bg-white/85 px-5 backdrop-blur-xl dark:border-white/[0.06] dark:bg-ink/85 sm:-mx-8 sm:px-8 lg:-mx-10 lg:px-10">
+      <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-20 [@media(max-height:520px)]:static -mx-4 border-b border-black/[0.06] bg-white/85 px-4 backdrop-blur-xl dark:border-white/[0.06] dark:bg-ink/85">
         <ProgressHeader screen={screen} />
       </div>
 
@@ -316,7 +316,7 @@ export function NewWizard({
           paddingRight: "env(safe-area-inset-right)",
         }}
       >
-        <div ref={setSlot} className="flex min-h-[72px] items-center px-4 py-3 sm:px-8 lg:px-10" />
+        <div ref={setSlot} className="flex min-h-[72px] items-center px-4 py-3" />
       </div>
 
       <p className="sr-only" aria-live="polite" role="status">

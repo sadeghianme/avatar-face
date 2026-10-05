@@ -103,7 +103,7 @@ export function AuthShell({
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(60%_100%_at_50%_0%,rgba(249,115,22,0.10),transparent)] lg:hidden"
         />
-        <header className="relative flex items-center justify-between px-5 py-4 sm:px-8 sm:py-5">
+        <header className="relative flex items-center justify-between p-4">
           <Link to="/" className="flex items-center gap-2.5 text-[16px] font-semibold tracking-[-0.02em] lg:invisible">
             <img src="/brand/liveface-mark-512.png" alt="" width={32} height={32} className="h-8 w-8 rounded-[10px]" />
             {t("appName")}
@@ -122,7 +122,7 @@ export function AuthShell({
           </div>
         </header>
 
-        <div className="relative flex flex-1 items-center justify-center px-5 pb-12 pt-4 sm:px-8">
+        <div className="relative flex flex-1 items-center justify-center px-4 pb-12 pt-4">
           <div className="w-full max-w-[380px]">
             {/* Phones get no brand panel; the face still says hello. */}
             <div className="mb-8 flex items-center gap-3 lg:hidden" aria-hidden="true">
