@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { GuestOnly, Protected } from "@/app/guards";
 import { lazyPage } from "@/app/lazyPage";
+import { ScrollToTop } from "@/app/ScrollToTop";
 import { LandingPage } from "@/features/landing";
 
 // The landing page is the front door and ships in the entry chunk; every
@@ -32,6 +33,9 @@ export default function App() {
     // the shell (see Protected) so the sidebar stays put between screens.
     // A screen that cannot load at all ends at the ErrorBoundary.
     <ErrorBoundary>
+      {/* A new route starts at the top (an avatar opened from the bottom of
+          the list used to open scrolled to its own bottom). */}
+      <ScrollToTop />
       <Suspense fallback={<div className="min-h-screen bg-white dark:bg-ink" />}>
         <Routes>
           {/* Public. The landing page is the front door; it does not redirect a
