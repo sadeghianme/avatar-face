@@ -106,6 +106,19 @@ class Avatar(TimestampedBase):
     # on: the depiction statement, and any third-party AI consent. Evidence,
     # read by nothing that renders.
     consent_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # The scene the avatar is shown in: {zoom, pan: {x, y}, background:
+    # {kind, color, image_key}} (services.scene). Null for an avatar made
+    # before scenes existed, which renders by `framing` alone. Draft/
+    # published like framing: changing it marks the draft dirty.
+    scene_config: Mapped[dict | None] = mapped_column("scene", JSON, nullable=True)
+
+    @property
+    def scene(self) -> dict | None:
+        """The owner's view of the scene: never the storage key, only
+        whether a background image exists."""
+        from app.services.scene import public_view
+
+        return public_view(self.scene_config)
 
     @property
     def mouth(self) -> dict | None:

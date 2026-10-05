@@ -180,9 +180,25 @@ async def publish(avatar, storage) -> dict:
     if not _plays_own_motion(mouth_published):
         ai_edited = without_ai_shapes(ai_edited)
 
+    # The scene (services.scene): by value, with its background picture
+    # copied like the other files, only when it is shown.
+    from app.services import scene as scene_service
+
+    scene = scene_service.load(avatar)
+    scene_published = None
+    if scene is not None:
+        scene_published = {**scene, "background": {k: v for k, v in scene["background"].items() if k != "image_key"}}
+        if scene_service.shows_image(scene):
+            copied = await copy(scene_service.image_key_of(scene), "scene", "webp")
+            if copied:
+                scene_published["background"]["image_key"] = copied
+            else:
+                scene_published["background"]["kind"] = "transparent"
+
     config = {
         "revision": revision,
         "framing": avatar.framing,
+        "scene": scene_published,
         "face_type": face_type,
         "voice": getattr(avatar, "voice", None),
         "mouth": mouth_published,
@@ -208,6 +224,7 @@ async def publish(avatar, storage) -> dict:
     # window where the config points at files that no longer exist.
     await _prune(avatar, storage, keep_from=[config, previous])
     await _sweep_mouth_files(avatar, storage, mouth)
+    await scene_service.sweep_files(avatar, storage, scene)
     logger.info("published avatar %s at revision %d", avatar.id, revision)
     return config
 
@@ -377,12 +394,28 @@ async def discard_draft(avatar, storage) -> list[str] | None:
     avatar.ai_edited = _restored_ai_edited(avatar, config, teeth, kit)
     avatar.has_layers = bool(layer_keys)
     avatar.framing = config.get("framing", avatar.framing)
+    # The scene goes back too, its picture into a fresh draft key; a
+    # snapshot from before scenes existed puts the draft back to none.
+    from app.services import scene as scene_service
+
+    discarded |= scene_service.keys(scene_service.load(avatar))
+    published_scene = config.get("scene")
+    if published_scene:
+        restored_scene = {**published_scene, "background": {k: v for k, v in (published_scene.get("background") or {}).items() if k != "image_key"}}
+        scene_image = await restore((published_scene.get("background") or {}).get("image_key"), "scene")
+        if scene_image:
+            restored_scene["background"]["image_key"] = scene_image
+        elif restored_scene["background"].get("kind") == "image":
+            restored_scene["background"]["kind"] = "transparent"
+        avatar.scene_config = restored_scene
+    else:
+        avatar.scene_config = None
     if config.get("face_type"):
         avatar.face_type = config["face_type"]
     # Back in step with what is published.
     avatar.draft_revision = config.get("revision", 0)
     logger.info("discarded draft for avatar %s", avatar.id)
-    restored_keys = _mouth_keys(load_mouth(avatar.mouth_config))
+    restored_keys = _mouth_keys(load_mouth(avatar.mouth_config)) | scene_service.keys(scene_service.load(avatar))
     return sorted(discarded - restored_keys)
 
 
@@ -470,8 +503,13 @@ async def published_view(avatar, storage) -> dict | None:
     layer_urls = {
         name: await storage.presign_get(key) for name, key in layer_keys.items()
     }
+    from app.services import scene as scene_service
+
     return {
         "framing": config.get("framing", "face"),
+        # Null for a snapshot from before scenes existed: the engine renders
+        # by the framing, as it always did.
+        "scene": await scene_service.visitor_view(config.get("scene"), storage),
         "voice": config.get("voice"),
         "mouth": await _mouth_view(config.get("mouth"), storage),
         "rig_url": await storage.presign_get(config["rig_key"]) if config.get("rig_key") else "",

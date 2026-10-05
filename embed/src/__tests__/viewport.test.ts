@@ -74,8 +74,11 @@ describe("the face zoom", () => {
           expect(p.x0).toBeLessThanOrEqual(1e-6);
           expect(p.x1).toBeGreaterThanOrEqual(cw - 1e-6);
         } else {
-          // Narrower: centred, the canvas background showing beside it.
-          expect(p.x0).toBeCloseTo(cw - p.x1, 6);
+          // Narrower: inside the canvas, the face box still centred, the
+          // canvas background showing beside it.
+          expect(p.x0).toBeGreaterThanOrEqual(-1e-6);
+          expect(p.x1).toBeLessThanOrEqual(cw + 1e-6);
+          expect(((bx0 + bx1) / 2) * v.scale + v.offsetX).toBeCloseTo(cw / 2, 6);
         }
       });
 
@@ -103,10 +106,10 @@ describe("the face zoom", () => {
     const i = at(tall, 800, 300, 1);
     const v = faceViewport(i);
     const p = picture(i, v);
-    const [, by0, , by1] = i.faceBox;
+    const [bx0, by0, bx1, by1] = i.faceBox;
     expect(p.x0).toBeGreaterThan(0);
     expect(p.x1).toBeLessThan(800);
-    expect(p.x0).toBeCloseTo(800 - p.x1, 6);
+    expect(((bx0 + bx1) / 2) * v.scale + v.offsetX).toBeCloseTo(400, 6);
     expect((by1 + (by1 - by0) * 0.12) * v.scale + v.offsetY).toBeLessThanOrEqual(300 + 1e-6);
   });
 
@@ -115,8 +118,13 @@ describe("the face zoom", () => {
     const v = faceViewport(i);
     expect(v.scale).toBe(MAX_UPSCALE);
     const p = picture(i, v);
-    expect(p.x0).toBeCloseTo(1000 - p.x1, 6);
-    expect(p.y0).toBeCloseTo(1000 - p.y1, 6);
+    // Inside the canvas, composed as a portrait: face centred, eyes on the line.
+    expect(p.x0).toBeGreaterThanOrEqual(0);
+    expect(p.x1).toBeLessThanOrEqual(1000);
+    expect(p.y0).toBeGreaterThanOrEqual(0);
+    expect(p.y1).toBeLessThanOrEqual(1000);
+    expect(100 * v.scale + v.offsetX).toBeCloseTo(500, 6);
+    expect((i.eyeY * v.scale + v.offsetY) / 1000).toBeCloseTo(EYE_LINE, 6);
   });
 });
 
@@ -150,9 +158,68 @@ describe("zoom between", () => {
     expect(half.scale).toBeCloseTo((face.scale + full.scale) / 2, 9);
     expect(half.offsetY).toBeCloseTo((face.offsetY + full.offsetY) / 2, 9);
     expect(viewportFor({ ...i, zoom: 1 })).toEqual(face);
-    expect(viewportFor({ ...i, zoom: 7 })).toEqual(face);
+    // Past the end of the range: the end of the range.
+    expect(viewportFor({ ...i, zoom: 7 })).toEqual(viewportFor({ ...i, zoom: 1.3 }));
     expect(viewportFor({ ...i, zoom: -1 })).toEqual(full);
     expect(viewportFor({ ...i, zoom: Number.NaN })).toEqual(face);
+  });
+});
+
+describe("closer in, and panned", () => {
+  it("zoom 1.3 draws the face view 1.6 times larger, the eyes still on the line", () => {
+    const face = faceViewport(at(tall, 600, 600, 1));
+    const close = viewportFor(at(tall, 600, 600, 1.3));
+    expect(close.scale).toBeCloseTo(Math.min(face.scale * 1.6, MAX_UPSCALE), 9);
+    expect((tall.eyeY * close.scale + close.offsetY) / 600).toBeCloseTo(EYE_LINE, 6);
+    // Still covering the canvas.
+    const p = picture(at(tall, 600, 600, 1.3), close);
+    expect(p.x0).toBeLessThanOrEqual(0);
+    expect(p.x1).toBeGreaterThanOrEqual(600);
+    expect(p.y0).toBeLessThanOrEqual(0);
+    expect(p.y1).toBeGreaterThanOrEqual(600);
+    expect(viewportFor(at(tall, 600, 600, 9)).scale).toBeCloseTo(close.scale, 9);
+  });
+
+  it("a pan moves the view, the picture the other way, as a fraction of the canvas", () => {
+    const i = at(tall, 600, 600, 1);
+    const still = faceViewport(i);
+    const right = faceViewport({ ...i, pan: { x: 0.1, y: 0 } });
+    const down = faceViewport({ ...i, pan: { x: 0, y: 0.1 } });
+    expect(right.offsetX).toBeCloseTo(still.offsetX - 60, 6);
+    expect(right.scale).toBe(still.scale);
+    expect(down.offsetY).toBeCloseTo(still.offsetY - 60, 6);
+    // Further than the picture allows: as far as it allows.
+    const far = faceViewport({ ...i, pan: { x: 0.9, y: 0 } });
+    expect(far.offsetX).toBeCloseTo(600 - tall.imageW * still.scale, 6);
+  });
+
+  it("a pan stops where the picture would stop covering the canvas", () => {
+    const i = at(tall, 300, 400, 1);
+    const far = faceViewport({ ...i, pan: { x: 1, y: 1 } });
+    const p = picture({ ...i, pan: { x: 1, y: 1 } }, far);
+    expect(p.x1).toBeCloseTo(300, 6);
+    expect(p.y1).toBeCloseTo(400, 6);
+    const back = faceViewport({ ...i, pan: { x: -1, y: -1 } });
+    const q = picture({ ...i, pan: { x: -1, y: -1 } }, back);
+    expect(q.x0).toBeCloseTo(0, 6);
+    expect(q.y0).toBeCloseTo(0, 6);
+  });
+
+  it("on the whole picture a pan slides it within the canvas, never out of it", () => {
+    const i = at(tall, 600, 600, 0);
+    const still = fullViewport(i);
+    const moved = fullViewport({ ...i, pan: { x: 1, y: 1 } });
+    // Tall picture in a square canvas: room beside it, none above or below.
+    expect(moved.offsetX).toBeCloseTo(0, 6);
+    expect(moved.offsetY).toBeCloseTo(still.offsetY, 6);
+    const p = picture(i, moved);
+    expect(p.x0).toBeGreaterThanOrEqual(-1e-6);
+    expect(p.x1).toBeLessThanOrEqual(600 + 1e-6);
+  });
+
+  it("ignores a pan that is not a number", () => {
+    const i = at(tall, 600, 600, 1);
+    expect(faceViewport({ ...i, pan: { x: Number.NaN, y: Number.POSITIVE_INFINITY } })).toEqual(faceViewport(i));
   });
 });
 

@@ -1,5 +1,6 @@
 export { AvatarEngine, prepareCues } from "./engine";
-export type { EngineOptions } from "./engine";
+export type { EngineOptions, Scene, SceneBackground } from "./engine";
+export { ZOOM_MAX, PAN_MAX } from "./viewport";
 // NOTE: Avatar3DEngine is intentionally NOT re-exported here — importing it
 // pulls Three.js (~600KB) into the consumer bundle. Dashboard and widget
 // both load it on demand: import("@liveface/embed/engine3d") / liveface-3d.js.

@@ -34,8 +34,12 @@ export interface ViewportInput {
   eyeY: number;
   canvasW: number;
   canvasH: number;
-  /** 1 is the face, 0 the whole picture. */
+  /** 1 is the face, 0 the whole picture, up to ZOOM_MAX closer in. */
   zoom: number;
+  /** The owner's move of the view from its own placement, as fractions of
+   *  the canvas (x to the right, y down): the picture moves the other way.
+   *  Clamped so the picture still covers the canvas where it can. */
+  pan?: { x: number; y: number };
 }
 
 /** The mapping rig image px -> canvas px: canvas = image * scale + offset. */
@@ -45,6 +49,22 @@ export interface Viewport { scale: number; offsetX: number; offsetY: number }
 export const EYE_LINE = 0.4;
 /** The picture is never drawn larger than this many times its own pixels. */
 export const MAX_UPSCALE = 2;
+/** The furthest zoom: 1.3 draws the face view ZOOM_IN_GAIN * 0.3 + 1 =
+ *  1.6 times larger, eyes still on the line. */
+export const ZOOM_MAX = 1.3;
+const ZOOM_IN_GAIN = 2;
+/** The furthest a pan moves the view, as a fraction of the canvas. */
+export const PAN_MAX = 1;
+
+const panOf = (i: ViewportInput): { x: number; y: number } => ({
+  x: clamp(Number.isFinite(i.pan?.x ?? 0) ? (i.pan?.x ?? 0) : 0, -PAN_MAX, PAN_MAX),
+  y: clamp(Number.isFinite(i.pan?.y ?? 0) ? (i.pan?.y ?? 0) : 0, -PAN_MAX, PAN_MAX),
+});
+
+/** The picture kept over the canvas where it is big enough to cover it,
+ *  and inside the canvas where it is not. */
+const settle = (offset: number, picture: number, canvas: number): number =>
+  picture >= canvas ? clamp(offset, canvas - picture, 0) : clamp(offset, 0, canvas - picture);
 /** The face view's margins, as fractions of the face box: to each side,
  *  above (hair) and, for the span that must always fit, below the chin. */
 export const FACE_MARGIN = { side: 0.25, top: 0.55, chin: 0.12 } as const;
@@ -54,13 +74,16 @@ const BROW = 0.25;
 
 const clamp = (v: number, lo: number, hi: number) => (lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v)));
 
-/** The whole picture, contained and centred. */
+/** The whole picture, contained and centred; a pan slides it within the
+ *  room the canvas has beside it. */
 export function fullViewport(i: ViewportInput): Viewport {
   const scale = Math.min(i.canvasW / i.imageW, i.canvasH / i.imageH, MAX_UPSCALE);
+  const pan = panOf(i);
+  const pictureW = i.imageW * scale, pictureH = i.imageH * scale;
   return {
     scale,
-    offsetX: (i.canvasW - i.imageW * scale) / 2,
-    offsetY: (i.canvasH - i.imageH * scale) / 2,
+    offsetX: settle((i.canvasW - pictureW) / 2 - pan.x * i.canvasW, pictureW, i.canvasW),
+    offsetY: settle((i.canvasH - pictureH) / 2 - pan.y * i.canvasH, pictureH, i.canvasH),
   };
 }
 
@@ -82,31 +105,39 @@ export function faceViewport(i: ViewportInput): Viewport {
 
   let scale = Math.max(i.canvasW / viewW, i.canvasH / viewH);
   scale = Math.min(scale, i.canvasH / mustH, MAX_UPSCALE);
+  // Closer in than the face view, when asked: the owner's choice, so the
+  // brows and chin may leave the canvas; the picture's own pixels still
+  // bound it.
+  const closer = clamp(Number.isFinite(i.zoom) ? i.zoom : 1, 1, ZOOM_MAX) - 1;
+  if (closer > 0) scale = Math.min(scale * (1 + closer * ZOOM_IN_GAIN), MAX_UPSCALE);
 
+  const pan = panOf(i);
   const pictureW = i.imageW * scale, pictureH = i.imageH * scale;
-  // Across: the face box centred, as far as the picture still covers the
-  // canvas; a picture narrower than the canvas sits centred.
-  let offsetX = i.canvasW / 2 - ((bx0 + bx1) / 2) * scale;
-  offsetX = pictureW >= i.canvasW ? clamp(offsetX, i.canvasW - pictureW, 0) : (i.canvasW - pictureW) / 2;
+  // Across: the face box centred, then the owner's pan, as far as the
+  // picture still covers the canvas; a picture narrower than the canvas
+  // sits where the pan puts it, inside the canvas.
+  const offsetX = settle(i.canvasW / 2 - ((bx0 + bx1) / 2) * scale - pan.x * i.canvasW, pictureW, i.canvasW);
   // Down: the eyes at EYE_LINE, moved only as far as keeping the brows and
-  // the chin on the canvas needs, and the picture still covering it.
+  // the chin on the canvas needs (at the face view: closer in, the owner
+  // decides), then the pan, and the picture still covering it.
   let offsetY = i.canvasH * EYE_LINE - i.eyeY * scale;
   // Brows on the canvas: offsetY >= -my0 * scale; the chin's margin on it:
   // offsetY <= canvasH - my1 * scale. The scale cap above keeps the two
-  // compatible.
-  offsetY = clamp(offsetY, -my0 * scale, i.canvasH - my1 * scale);
-  offsetY = pictureH >= i.canvasH ? clamp(offsetY, i.canvasH - pictureH, 0) : (i.canvasH - pictureH) / 2;
+  // compatible at the face view.
+  if (closer === 0) offsetY = clamp(offsetY, -my0 * scale, i.canvasH - my1 * scale);
+  offsetY = settle(offsetY - pan.y * i.canvasH, pictureH, i.canvasH);
   return { scale, offsetX, offsetY };
 }
 
-/** The viewport at a zoom: the face at 1, the whole picture at 0, laid
- *  over each other in proportion between. */
+/** The viewport at a zoom: the face at 1 (and closer in above it, to
+ *  ZOOM_MAX), the whole picture at 0, laid over each other in proportion
+ *  between. */
 export function viewportFor(i: ViewportInput): Viewport {
-  const z = Math.max(0, Math.min(1, Number.isFinite(i.zoom) ? i.zoom : 1));
-  if (z >= 1) return faceViewport(i);
+  const z = clamp(Number.isFinite(i.zoom) ? i.zoom : 1, 0, ZOOM_MAX);
+  if (z >= 1) return faceViewport({ ...i, zoom: z });
   const full = fullViewport(i);
   if (z <= 0) return full;
-  const face = faceViewport(i);
+  const face = faceViewport({ ...i, zoom: 1 });
   return {
     scale: full.scale + (face.scale - full.scale) * z,
     offsetX: full.offsetX + (face.offsetX - full.offsetX) * z,

@@ -1,4 +1,4 @@
-import { AvatarEngine, BrowserTTS, type Rig } from "@liveface/embed";
+import { AvatarEngine, BrowserTTS, type Rig, type Scene } from "@liveface/embed";
 import type { AvatarMouthConfig, ClassicMouthConfig } from "@liveface/embed/mouth";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,6 +13,9 @@ interface PublicAvatar {
   name: string;
   kind: string;
   framing: string;
+  /** The PUBLISHED scene; null for a snapshot from before scenes existed,
+   *  which renders by its framing. */
+  scene?: Scene | null;
   rig_url: string;
   image_url: string;
   thumbnail_url: string;
@@ -72,6 +75,9 @@ export function SharePage() {
       if (cancelled || !canvasRef.current) return;
       engine = new AvatarEngine(canvasRef.current, rig, texture, {
         fullPhoto: info.framing === "full",
+        // The owner's published scene: the same zoom, pan and background
+        // the widget and the dashboard show.
+        scene: info.scene ?? undefined,
       });
       engineRef.current = engine;
       setMouthEngine(engine);

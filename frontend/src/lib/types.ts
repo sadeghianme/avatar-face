@@ -59,8 +59,20 @@ export interface Avatar {
   image_url?: string | null;
   /** Set when the background has been removed — the pre-cut-out photo. */
   original_image_key?: string | null;
-  /** How embedding sites render it: cropped to the head, or the whole photo. */
+  /** How embedding sites render it: cropped to the head, or the whole photo.
+   *  Kept in step with the scene's zoom; the scene is what is edited now. */
   framing?: "face" | "full";
+  /** The DRAFT scene (features/avatars/scene): zoom 1 is the face view, 0
+   *  the whole picture; pan moves the view; the background sits behind a
+   *  cut-out. Null for an avatar made before scenes, which renders by its
+   *  framing. */
+  scene?: {
+    zoom: number;
+    pan: { x: number; y: number };
+    background: { kind: "transparent" | "color" | "image"; color?: string; has_image: boolean };
+  } | null;
+  /** Detail only: presigned URL of the draft's background picture. */
+  scene_image_url?: string | null;
   /** Non-null means the photo has been cropped and the crop can be reset. */
   precrop_image_key?: string | null;
   /** Names the change an undo would reverse; absent when there is nothing. */

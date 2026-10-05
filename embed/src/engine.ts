@@ -474,8 +474,28 @@ export interface EngineOptions {
    */
   fullPhoto?: boolean;
   /** The zoom directly: 1 the face, 0 the whole picture, between in
-   *  proportion. Wins over `fullPhoto`. */
+   *  proportion, up to 1.3 closer in. Wins over `scene.zoom` and `fullPhoto`. */
   zoom?: number;
+  /** The scene the avatar is shown in (zoom, pan, background): what the
+   *  owner set and published. `setScene` changes it live. */
+  scene?: Scene | null;
+}
+
+/** What is behind a cut-out: nothing, a colour, or a picture (cover-fitted
+ *  to the canvas). An opaque picture covers it, so it is not drawn then. */
+export interface SceneBackground {
+  kind: "transparent" | "color" | "image";
+  color?: string;
+  image_url?: string;
+}
+
+/** The scene (the owner's framing editor): zoom 1 is the face view, 0 the
+ *  whole picture, up to 1.3 closer in; pan moves the view as fractions of
+ *  the canvas; the background sits behind a cut-out. */
+export interface Scene {
+  zoom?: number;
+  pan?: { x: number; y: number };
+  background?: SceneBackground | null;
 }
 
 export class AvatarEngine {
@@ -599,8 +619,13 @@ export class AvatarEngine {
   debugMesh: boolean;
   /** Live animation parameters — mutate freely, applied next frame. */
   tuning: EngineTuning = { ...DEFAULT_TUNING };
-  /** The zoom the viewport is at: 1 the face, 0 the whole picture. */
-  private zoom: number;
+  /** The scene: the zoom the viewport is at (1 the face, 0 the whole
+   *  picture), the pan, and what is behind a cut-out. */
+  private scene: Scene;
+  /** The scene's background picture once it has loaded; null until then,
+   *  and null for good when it fails (the avatar never waits for it). */
+  private backgroundImage: HTMLImageElement | null = null;
+  private backgroundUrl: string | null = null;
   /** Where the whole picture lies on the canvas, canvas px (viewport.ts);
    *  parts of it may be outside the canvas. */
   private picture = { x: 0, y: 0, w: 0, h: 0 };
@@ -626,7 +651,12 @@ export class AvatarEngine {
     this.mouthExtension = opts.mouthExtension;
     this.pose = opts.pose;
     this.debugMesh = opts.debugMesh ?? false;
-    this.zoom = opts.zoom ?? (opts.fullPhoto ? 0 : 1);
+    // The zoom: the option, else the scene's, else the framing.
+    this.scene = {
+      ...(opts.scene ?? {}),
+      zoom: opts.zoom ?? opts.scene?.zoom ?? (opts.fullPhoto ? 0 : 1),
+    };
+    this.loadBackground();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     this.innerRing = this.validInnerRing();
@@ -680,14 +710,89 @@ export class AvatarEngine {
   setTexture(texture: HTMLImageElement): void {
     if (this.destroyed) return;
     this.texture = texture;
-    this.derivedParents = [];
-    this.computeFraming();
     this.sampleLipColour();
     this.sampleLashColour();
     this.sampleCharacterLook();
     this.sampleLidColours();
+    this.rebuildGeometry();
+  }
+
+  /**
+   * Lay the picture on the canvas again (the viewport changed): the base
+   * points, the mouth subdivision and the neck band are derived from it,
+   * and the subdivision APPENDS vertices, so it starts from a clean list.
+   */
+  private rebuildGeometry(): void {
+    this.derivedParents = [];
+    this.computeFraming();
     this.subdivideMouthRegion();
     this.buildNeckBand();
+  }
+
+  /**
+   * Change the scene live: the zoom and the pan move the viewport (the
+   * owner dragging the preview, a slider), the background swaps what is
+   * behind a cut-out. A background picture loads in the background and is
+   * drawn once it has; one that fails to load leaves the scene transparent
+   * and never holds the avatar up.
+   */
+  setScene(scene: Scene | null | undefined): void {
+    if (this.destroyed) return;
+    const next: Scene = { ...(scene ?? {}), zoom: scene?.zoom ?? this.scene.zoom ?? 1 };
+    const moved =
+      next.zoom !== this.scene.zoom ||
+      (next.pan?.x ?? 0) !== (this.scene.pan?.x ?? 0) ||
+      (next.pan?.y ?? 0) !== (this.scene.pan?.y ?? 0);
+    this.scene = next;
+    if (moved) this.rebuildGeometry();
+    this.loadBackground();
+  }
+
+  /** Start loading the scene's background picture, if it changed. */
+  private loadBackground(): void {
+    const background = this.scene.background;
+    const url = background?.kind === "image" && background.image_url ? background.image_url : null;
+    if (url === this.backgroundUrl) return;
+    this.backgroundUrl = url;
+    this.backgroundImage = null;
+    if (!url) return;
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        if (!this.destroyed && this.backgroundUrl === url) this.backgroundImage = img;
+      };
+      img.onerror = () => undefined; // transparent it stays
+      img.src = url;
+    } catch {
+      // No Image in this environment (tests): transparent.
+    }
+  }
+
+  /**
+   * What is behind a cut-out, drawn first and still: a colour, or a
+   * picture cover-fitted to the canvas. An opaque picture covers the whole
+   * canvas wherever it reaches, so nothing is drawn for it.
+   */
+  private drawSceneBackground(): void {
+    const background = this.scene.background;
+    if (!background || background.kind === "transparent" || !this.cutOut) return;
+    const ctx = this.ctx;
+    const cw = this.canvas.width, ch = this.canvas.height;
+    if (background.kind === "color" && background.color) {
+      ctx.save();
+      ctx.fillStyle = background.color;
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.restore();
+      return;
+    }
+    const img = this.backgroundImage;
+    if (background.kind !== "image" || !img) return;
+    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+    if (!iw || !ih) return;
+    const scale = Math.max(cw / iw, ch / ih);
+    const w = iw * scale, h = ih * scale;
+    ctx.drawImage(img, 0, 0, iw, ih, (cw - w) / 2, (ch - h) / 2, w, h);
   }
 
   /**
@@ -748,7 +853,8 @@ export class AvatarEngine {
       eyeY: eyeLine(this.rig.points, this.rig.face_box),
       canvasW: this.canvas.width,
       canvasH: this.canvas.height,
-      zoom: this.zoom,
+      zoom: this.scene.zoom ?? 1,
+      pan: this.scene.pan,
     });
     this.scale = view.scale;
     this.offsetX = view.offsetX;
@@ -1972,6 +2078,8 @@ export class AvatarEngine {
     const ctx = this.ctx;
     const pts = this.deformedPoints(now);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    // The scene's background first, under everything and still.
+    this.drawSceneBackground();
 
     if (this.layers) {
       this.renderLayered(pts);

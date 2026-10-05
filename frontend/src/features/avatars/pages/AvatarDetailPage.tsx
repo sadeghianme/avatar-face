@@ -11,6 +11,8 @@ import { MarkFacePanel } from "@/features/avatars/components/MarkFacePanel";
 import { Avatar3DPreview } from "@/features/avatars/components/Avatar3DPreview";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { EmbedSnippet } from "@/features/avatars/components/EmbedSnippet";
+import { FramingScenePanel } from "@/features/avatars/components/FramingScenePanel";
+import { engineScene, sceneOf, type SceneDraft } from "@/features/avatars/scene";
 import { FinishNotice } from "@/features/avatars/components/FinishNotice";
 import { InlineName } from "@/features/avatars/components/InlineName";
 import { PrepProgress } from "@/features/avatars/components/PrepProgress";
@@ -61,6 +63,9 @@ export function AvatarDetailPage() {
   const [motion, setMotion] = useState<MotionChoice>("own");
   // Why the rig job could not be run again, in words.
   const [retryError, setRetryError] = useState<string | null>(null);
+  // The scene being edited in the Framing & scene panel, shown live on the
+  // preview; null means whatever the draft has saved.
+  const [scenePreview, setScenePreview] = useState<SceneDraft | null>(null);
 
   // Native fullscreen on the preview card. The `fullscreen` state exists so
   // the toggle icon flips even when the user leaves with Esc, which never
@@ -133,14 +138,11 @@ export function AvatarDetailPage() {
     return <p className="text-gray-500">{t("loading")}</p>;
   }
 
-  // Framing is a property of the avatar, not a local view preference: it is
-  // what embedding sites render, so switching it here changes what visitors
-  // to those sites see.
-  const fullPhoto = avatar.framing === "full";
-  const setFraming = async (framing: "face" | "full") => {
-    await api.patch(`/orgs/${current!.id}/avatars/${avatar!.id}`, { framing });
-    await queryClient.invalidateQueries({ queryKey: ["avatar", current!.id, avatar!.id] });
-  };
+  // The scene (zoom, pan, background) is a property of the avatar, not a
+  // local view preference: it is what embedding sites render, so editing
+  // it in the Framing & scene panel changes what visitors to those sites
+  // see, once published. The preview shows the edit as it is made.
+  const sceneShown = engineScene(scenePreview ?? sceneOf(avatar), avatar.scene_image_url);
 
   /** The name, edited in place in the title (InlineName). */
   const rename = async (name: string) => {
@@ -228,22 +230,6 @@ export function AvatarDetailPage() {
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          {avatar.kind === "photo" && (
-          <div className="flex overflow-hidden rounded-lg border border-gray-300 dark:border-line">
-            <button
-              className={`px-3 py-2 text-sm font-medium ${!fullPhoto ? "bg-brand-600 text-white" : "bg-white text-gray-600 dark:bg-panel dark:text-gray-300"}`}
-              onClick={() => void setFraming("face")}
-            >
-              {t("viewFace")}
-            </button>
-            <button
-              className={`px-3 py-2 text-sm font-medium ${fullPhoto ? "bg-brand-600 text-white" : "bg-white text-gray-600 dark:bg-panel dark:text-gray-300"}`}
-              onClick={() => void setFraming("full")}
-            >
-              {t("viewFull")}
-            </button>
-          </div>
-          )}
           {avatar.kind === "photo" && (
           <label className="btn-secondary cursor-pointer select-none">
             <input
@@ -415,7 +401,7 @@ export function AvatarDetailPage() {
                 textureUrl={avatar.image_url ?? avatar.thumbnail_url}
                 layerUrls={avatar.layer_urls}
                 debugMesh={debugMesh}
-                fullPhoto={fullPhoto}
+                scene={sceneShown}
                 soft
                 onEngine={setEngine}
               />
@@ -428,6 +414,17 @@ export function AvatarDetailPage() {
               selection={voice}
               onSelectionChange={(next) => void saveVoice(next)}
             />
+            {avatar.kind === "photo" && avatar.status === "ready" && (
+              <FramingScenePanel
+                avatar={avatar}
+                orgId={current.id}
+                surfaceRef={previewBoxRef}
+                active={!cropping && !adjusting}
+                onPreview={setScenePreview}
+                onRemoveBackground={toggleBackground}
+                busyBackground={busyBg}
+              />
+            )}
             {avatar.kind !== "model3d" && (
               <MouthPanel
                 avatar={avatar}

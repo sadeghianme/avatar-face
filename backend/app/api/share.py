@@ -75,6 +75,7 @@ async def public_avatar(token: str, db: DB) -> dict:
         "name": avatar.name,
         "kind": avatar.kind.value,
         "framing": view["framing"],
+        "scene": view.get("scene"),
         "voice": view.get("voice"),
         "mouth": view.get("mouth"),
         "rig_url": view["rig_url"],

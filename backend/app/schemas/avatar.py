@@ -159,6 +159,10 @@ class AvatarOut(BaseModel):
     # (they read the rig); null on the list. The Mouth panel's character
     # section reads it to say which look the avatar has now.
     render_profile: str | None = None
+    # The DRAFT scene (services.scene): {zoom, pan: {x, y}, background:
+    # {kind, color, has_image}}; null for an avatar made before scenes
+    # existed, which renders by `framing`. Published on Publish.
+    scene: dict | None = None
     # True when the draft has moved ahead of the published snapshot — the
     # dashboard shows a Publish bar on this.
     unpublished: bool = False
@@ -217,6 +221,32 @@ class MouthKitOut(BaseModel):
     job: JobOut | None = None
 
 
+class ScenePan(BaseModel):
+    """Where the view is moved from the engine's own placement, as fractions
+    of the view's size."""
+
+    x: float = Field(default=0.0, ge=-1.0, le=1.0)
+    y: float = Field(default=0.0, ge=-1.0, le=1.0)
+
+
+class SceneBackgroundUpdate(BaseModel):
+    """What is behind a cut-out. The picture itself is uploaded by its own
+    endpoint; here the owner only says whether to show it."""
+
+    kind: Literal["transparent", "color", "image"] = "transparent"
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+
+
+class SceneUpdate(BaseModel):
+    """The scene (services.scene): zoom 1 is the face view, 0 the whole
+    picture, above 1 closer in. Ranges mirror the engine's; a published
+    config is served to strangers and must not trust the client's clamp."""
+
+    zoom: float = Field(default=1.0, ge=0.0, le=1.3)
+    pan: ScenePan = Field(default_factory=ScenePan)
+    background: SceneBackgroundUpdate = Field(default_factory=SceneBackgroundUpdate)
+
+
 class AvatarUpdate(BaseModel):
     """Owner-editable settings. Every field is optional; omitted means unchanged."""
 
@@ -226,6 +256,7 @@ class AvatarUpdate(BaseModel):
     voice: VoiceConfig | None = None
     mouth: MouthUpdate | None = None
     character: CharacterUpdate | None = None
+    scene: SceneUpdate | None = None
 
 
 class AvatarCreated(BaseModel):
@@ -236,6 +267,8 @@ class AvatarCreated(BaseModel):
 class AvatarDetail(AvatarOut):
     # Presigned {image_url, rig_url} of the draft mouth photo, when one exists.
     mouth_photo: dict | None = None
+    # Presigned URL of the draft scene's background picture, when one is stored.
+    scene_image_url: str | None = None
     image_url: str | None = None
     rig_url: str | None = None
     thumbnail_url: str | None = None

@@ -53,6 +53,7 @@ from app.services.anchor_fit import (
     write_fit_base,
 )
 from app.services.segment import SegmentationUnavailable, remove_background
+from app.services import scene as scene_service
 from app.services.edit_locks import avatar_edits
 from app.services import mouth_kit
 from app.services.publishing import confirmed, discard_draft, mark_dirty, publish
@@ -345,6 +346,24 @@ async def update_avatar(
         avatar.name = body.name
     if body.framing is not None:
         avatar.framing = body.framing
+        # A client that still sets the framing moves the scene's zoom with
+        # it, so the two never disagree about what visitors see.
+        current_scene = scene_service.load(avatar)
+        if current_scene is not None:
+            avatar.scene_config = scene_service.with_zoom(
+                current_scene, 0.0 if body.framing == "full" else 1.0
+            )
+    if body.scene is not None:
+        current_scene = scene_service.effective(avatar)
+        try:
+            avatar.scene_config = scene_service.clean(
+                body.scene.model_dump(), scene_service.image_key_of(current_scene)
+            )
+        except ValueError as exc:
+            code = "scene_image_missing" if "uploaded" in str(exc) else "scene_invalid"
+            raise Validation422(str(exc), code=code)
+        # Kept in step for clients that read only the framing.
+        avatar.framing = scene_service.framing_of(avatar.scene_config)
     if body.voice is not None:
         import json as _json
 
@@ -369,6 +388,7 @@ async def update_avatar(
         avatar.mouth_config = _json.dumps(current)
     if (
         body.framing is not None
+        or body.scene is not None
         or body.face_type is not None
         or body.voice is not None
         or body.mouth is not None
@@ -1219,7 +1239,58 @@ async def get_avatar_detail(avatar_id: str, ctx: OrgMember, db: DB) -> AvatarDet
     from app.services.mouth import load as load_mouth, photo_urls
 
     detail.mouth_photo = await photo_urls(load_mouth(avatar.mouth_config), storage)
+    scene_image = scene_service.image_key_of(scene_service.load(avatar))
+    if scene_image and await storage.exists(scene_image):
+        detail.scene_image_url = await storage.presign_get(scene_image)
     return detail
+
+
+@router.post("/{avatar_id}/scene-image", response_model=AvatarOut)
+@_one_edit_at_a_time
+async def upload_scene_image(avatar_id: str, file: UploadFile, ctx: OrgMember, db: DB) -> Avatar:
+    """A picture to show behind a cut-out (services.scene): validated,
+    re-encoded and stored under a fresh key, and shown from now on. A draft
+    edit like any other — visitors see it only after Publish. An opaque
+    picture may have one too (the dashboard says it will not show until the
+    background is removed)."""
+    from starlette.concurrency import run_in_threadpool
+
+    from app.services.portrait_photo import MAX_BYTES
+
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    if avatar.kind != AvatarKind.photo:
+        raise Conflict409("Only a photo avatar has a scene", code="not_a_photo")
+    if file.content_type not in get_settings().allowed_image_types:
+        raise Validation422("Choose a JPEG, PNG or WebP picture", code="unsupported_image_type")
+    data = await file.read(MAX_BYTES + 1)
+    if len(data) > MAX_BYTES:
+        raise Validation422("Picture must be 15 MB or smaller", code="image_too_large")
+    image = await run_in_threadpool(scene_service.prepare_image, data)
+    storage = get_storage()
+    previous = await scene_service.store_image(avatar, storage, image)
+    avatar.framing = scene_service.framing_of(avatar.scene_config)
+    mark_dirty(avatar)
+    await db.commit()
+    for key in previous:
+        await storage.delete(key)
+    return avatar
+
+
+@router.delete("/{avatar_id}/scene-image", response_model=AvatarOut)
+@_one_edit_at_a_time
+async def remove_scene_image(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
+    """Drop the background picture: nothing behind the avatar again. The
+    published snapshot keeps its own copy until the next Publish."""
+    avatar = await _get_avatar(db, ctx.org.id, avatar_id)
+    if not scene_service.image_key_of(scene_service.load(avatar)):
+        return avatar
+    storage = get_storage()
+    previous = scene_service.without_image(avatar)
+    mark_dirty(avatar)
+    await db.commit()
+    for key in previous:
+        await storage.delete(key)
+    return avatar
 
 
 @router.post("/{avatar_id}/mouth-photo", response_model=AvatarOut)

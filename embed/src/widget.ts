@@ -21,7 +21,7 @@
  */
 import { BrowserTTS, CuePlayer } from "./browser-tts";
 import { aiLabel, renderAiLabel, type Disclosure } from "./disclosure";
-import { AvatarEngine } from "./engine";
+import { AvatarEngine, type Scene } from "./engine";
 import type { Avatar3DEngine } from "./engine3d";
 import { SpeechPlayer, SpeechQueue } from "./speech";
 import { listen, sttSupported, ListenOptions } from "./stt";
@@ -127,6 +127,9 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
   const info: {
     kind?: string;
     framing?: string;
+    /** The published scene (zoom, pan, background), or null for a snapshot
+     *  from before scenes existed. */
+    scene?: Scene | null;
     rig_url: string;
     thumbnail_url: string;
     image_url?: string | null;
@@ -172,10 +175,20 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
         : thumbPromise,
     ]);
     const rig: Rig = await rigResponse.json();
+    // The zoom: data-zoom on the snippet wins, then data-framing (face is
+    // 1, full 0), then the avatar's published scene, then its framing — so
+    // what the owner sets in the dashboard reaches sites already embedding
+    // it, and a site that says otherwise keeps its say. The scene's pan
+    // and background come with it either way.
+    const zoomAttr = Number(script.dataset.zoom);
+    const framingAttr = script.dataset.framing;
+    const zoom = script.dataset.zoom !== undefined && Number.isFinite(zoomAttr)
+      ? zoomAttr
+      : framingAttr ? (framingAttr === "full" ? 0 : 1) : undefined;
     const photoEngine = new AvatarEngine(canvas, rig, first, {
-      // data-framing on the snippet wins; otherwise the avatar's own setting,
-      // so changing it in the dashboard reaches sites already embedding it.
-      fullPhoto: (script.dataset.framing ?? info.framing) === "full",
+      fullPhoto: info.framing === "full",
+      scene: info.scene ?? undefined,
+      zoom,
     });
     engine = photoEngine;
     // How the owner set a character mouth (jaw, teeth, tongue); a classic

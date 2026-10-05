@@ -134,6 +134,10 @@ async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
         "name": avatar.name,
         "kind": avatar.kind.value,
         "framing": view["framing"],
+        # The published scene (zoom, pan, background), or null for a
+        # snapshot from before scenes: the engine then renders by framing.
+        # data-framing / data-zoom on the snippet still override the zoom.
+        "scene": view.get("scene"),
         # The owner's published voice choice: like framing, it reaches every
         # embedding site on their next page load. A data-voice attribute on
         # the snippet still overrides — that is per-site intent.

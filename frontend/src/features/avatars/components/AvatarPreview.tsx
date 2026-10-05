@@ -1,4 +1,4 @@
-import { AvatarEngine, type Rig } from "@liveface/embed";
+import { AvatarEngine, type Rig, type Scene } from "@liveface/embed";
 import { useEffect, useRef, useState } from "react";
 import { loadImage } from "@/lib/image";
 
@@ -11,6 +11,10 @@ import { loadImage } from "@/lib/image";
  * the "full" framing shows the whole picture inside it. (A soft frame used
  * to fade the bottom of the canvas away, because the face framing cut the
  * shoulders in a straight line under the chin; it no longer does.)
+ *
+ * `scene` (zoom, pan, background) is applied live: changing it moves the
+ * running engine's viewport without rebuilding it, which is what the
+ * framing editor's drag and slider need.
  */
 export function AvatarPreview({
   rigUrl,
@@ -19,6 +23,7 @@ export function AvatarPreview({
   size = 480,
   debugMesh = false,
   fullPhoto = false,
+  scene,
   soft = false,
   onEngine,
 }: {
@@ -29,16 +34,22 @@ export function AvatarPreview({
   size?: number;
   debugMesh?: boolean;
   fullPhoto?: boolean;
+  /** The scene to show; its zoom wins over `fullPhoto`. */
+  scene?: Scene | null;
   /** The dashboard's framing: transparent over the page's backdrop, so a
    *  cut-out's own outline is its edge, instead of a grey card. */
   soft?: boolean;
   onEngine?: (engine: AvatarEngine | null) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const engineRef = useRef<AvatarEngine | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Read once and held: the engine reads canvas.width in computeFraming, so
   // this must not change under a mounted engine.
   const [dpr] = useState(() => Math.min(window.devicePixelRatio || 1, 2));
+  // The scene the engine starts with; later ones are applied live below.
+  const sceneRef = useRef(scene);
+  sceneRef.current = scene;
 
   useEffect(() => {
     let engine: AvatarEngine | null = null;
@@ -52,7 +63,8 @@ export function AvatarPreview({
       if (!rigResponse.ok) throw new Error(`rig fetch: ${rigResponse.status}`);
       const rig = (await rigResponse.json()) as Rig;
       if (cancelled || !canvasRef.current) return;
-      engine = new AvatarEngine(canvasRef.current, rig, texture, { debugMesh, fullPhoto });
+      engine = new AvatarEngine(canvasRef.current, rig, texture, { debugMesh, fullPhoto, scene: sceneRef.current });
+      engineRef.current = engine;
       // Lets tooling drive poses (gaze, head) for visual checks; harmless in
       // production, and this file's tsconfig lacks vite/client types for a
       // clean import.meta.env.DEV gate.
@@ -78,10 +90,18 @@ export function AvatarPreview({
     return () => {
       cancelled = true;
       onEngine?.(null);
+      engineRef.current = null;
       engine?.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rigUrl, textureUrl, debugMesh, fullPhoto, layerUrls]);
+
+  // A changed scene moves the running engine; by value, so a parent that
+  // builds the object each render does not move it for nothing.
+  const sceneKey = JSON.stringify(scene ?? null);
+  useEffect(() => {
+    engineRef.current?.setScene(sceneRef.current);
+  }, [sceneKey]);
 
   if (error) return <p className="field-error">{error}</p>;
   return (
