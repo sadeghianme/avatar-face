@@ -15,21 +15,14 @@
  *   StrictMode.
  */
 import { BlinkScheduler, blinkEase } from "./blink";
-import { eyeExtent, lidAmount, lidSamplePoints, medianColour, paintLid, type Blit, type LidTone } from "./blink-lid";
+import { lidAmount, paintLid, type Blit } from "./blink-lid";
 import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
-import { FACE_OVAL, faceHighlight } from "./face-light";
-import { faceSharpness, lumaField, sharpnessBoxes } from "./face-sharpness";
 import {
   CharacterField,
-  DEFAULT_LOOK,
-  INNER_UPPER,
   characterOpening,
   mergeTraits,
   openingPath,
-  sampleLook,
-  type CharacterLook,
   type CharacterTraits,
-  type Rgb,
 } from "./character-mouth";
 import { TONGUE_RAISE, paintCharacter } from "./character-paint";
 import { HeadMotion } from "./headmotion";
@@ -51,82 +44,13 @@ import {
   visemeAt,
   type Beat,
 } from "./engine/cues";
+import { EYE_CORNERS, IRISES, LEFT_BROW, LOWER_LIDS, RIGHT_BROW, UPPER_LIDS, eyeShape } from "./engine/landmarks";
+import type { Point } from "./engine/geometry";
+import { FaceSamples, probeCutOut } from "./engine/sampling";
 
 export { articulationLead, emphasisBeats, prepareCues, type Beat } from "./engine/cues";
-
-// Canonical MediaPipe brow rows, inner -> outer.
-const LEFT_BROW = [55, 65, 52, 53, 46];
-const RIGHT_BROW = [285, 295, 282, 283, 276];
-// Eyes split into lids: a blink is the UPPER lid sweeping down over the
-// eyeball (skin from above stretches down to cover it) — NOT the whole ring
-// squashing, which compresses the eyeball texture and looks alien.
-const UPPER_LIDS = [
-  [246, 161, 160, 159, 158, 157, 173],
-  [466, 388, 387, 386, 385, 384, 398],
-];
-const LOWER_LIDS = [
-  [7, 163, 144, 145, 153, 154, 155],
-  [249, 390, 373, 374, 380, 381, 382],
-];
-const EYE_CORNERS: [number, number][] = [
-  [33, 133],
-  [263, 362],
-];
-// The second eye detector: MediaPipe's iris ring — a center plus four rim
-// points per eye. Gives the pupil's position and radius directly, so the
-// gaze shift can be confined to a circle around the iris instead of the
-// whole eye opening.
-// Mid-cheek, both sides: clear of beard, brow shadow, nose highlight.
-const CHEEK_LANDMARKS = [50, 280, 205, 425, 101, 330];
-const IRISES: [number, number[]][] = [
-  [468, [469, 470, 471, 472]],
-  [473, [474, 475, 476, 477]],
-];
-
-export interface Sample {
-  lum: number;
-  rgb: [number, number, number];
-}
-
-export function luma(rgb: [number, number, number]): number {
-  return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
-}
-
-function chroma(rgb: [number, number, number]): number {
-  return Math.max(...rgb) - Math.min(...rgb);
-}
-
-/**
- * Pick the sclera colour out of samples taken beside the iris, or null if none
- * of them is plausibly an eye white.
- *
- * Getting this wrong is what made the eyes change when the avatar looked
- * around: the old version took the 85th brightness percentile of everything
- * inside the eye-opening polygon, which on a real avatar returned
- * rgb(174,156,142) — beige skin — and then painted it inside the eye.
- *
- * A sclera is the brightest NEUTRAL thing in an eye. Both halves matter and
- * neither works alone: skin is bright but strongly chromatic, while lash,
- * liner and pupil are neutral but dark. So the test is relative to the skin
- * just below the eye, which also handles exposure and skin tone — on a dark
- * face the sclera is far brighter than the cheek, on a pale one it is about
- * equal, but in both the sclera is markedly less chromatic.
- *
- * The thresholds are deliberately biased toward rejection. A false negative
- * costs gaze on one eye, which nobody notices. A false positive paints skin
- * colour inside an eyeball, which is the bug this replaces.
- */
-export function pickScleraColour(candidates: Sample[], skin: Sample | null): string | null {
-  if (!candidates.length) return null;
-  const brightestFirst = [...candidates].sort((a, b) => b.lum - a.lum);
-  const skinChroma = skin ? chroma(skin.rgb) : 40;
-  const maxChroma = Math.max(6, skinChroma * MAX_SCLERA_CHROMA_VS_SKIN);
-  const minLum = skin ? skin.lum * MIN_SCLERA_LUMA_VS_SKIN : 120;
-  const found = brightestFirst.find(
-    (s) => chroma(s.rgb) <= maxChroma && s.lum >= minLum
-  );
-  return found ? `rgb(${found.rgb.join(", ")})` : null;
-}
+export type { Point } from "./engine/geometry";
+export { luma, pickScleraColour, type Sample } from "./engine/sampling";
 
 // Durations for the involuntary motions, in real milliseconds. These used to
 // be per-frame increments, which made every one of them run at a speed that
@@ -259,21 +183,10 @@ const PAUSE_BREATH_MS = 260;
 const OPAQUE_BACKGROUND_SCALE = 0.3;
 const SACCADE_MS = 35;
 
-// A sclera's colour cast is a fraction of the surrounding skin's, and it is
-// never much darker than that skin. Tuned so a cartoon eye with no white at
-// all is rejected while real sclera under warm light still passes.
-const MAX_SCLERA_CHROMA_VS_SKIN = 0.45;
-const MIN_SCLERA_LUMA_VS_SKIN = 0.75;
-
 /** A beat gesture is quick — a dip and back, not a slow ambient nod. */
 const BEAT_NOD_MS = 420;
 /** Ambient nods, when a cue track carries no usable emphasis. */
 const AMBIENT_NOD_MS = 1050;
-
-export interface Point {
-  x: number;
-  y: number;
-}
 
 /**
  * Smooth closed curve through an ordered loop of points (Catmull-Rom
@@ -365,7 +278,6 @@ export class AvatarEngine {
   /** The jaw, chin and cheeks for every mouth driver (jaw-rig.ts), built
    *  from the rest mesh with the framing. */
   private lowerFace: LowerFaceRig | null = null;
-  private look: CharacterLook = DEFAULT_LOOK;
   private traits: CharacterTraits;
   private tongue = 0;
   private texture: HTMLImageElement;
@@ -433,35 +345,9 @@ export class AvatarEngine {
   private gaze = { x: 0, y: 0 };
   private gazeTarget = { x: 0, y: 0 };
   private nextSaccadeAt = 0;
-  // Separate iris layer: sclera colour sampled per eye, iris radius in
-  // texture pixels, and the texture->canvas scale factor.
-  /** Mid-cheek skin, sampled with the lips: the scene's exposure and colour
-   *  cast, which a mouth renderer needs to light anything it draws. */
-  private skinColour: [number, number, number] | null = null;
-  /** Luma of the picture's brightest skin or sclera (face-light.ts): the
-   *  ceiling for the teeth a mouth renderer draws into it. */
-  private faceHighlight: number | null = null;
-  /** The width of the picture's crispest edges, texture px (face-sharpness.ts);
-   *  null on a flat or tainted picture. */
-  private faceSharpness: number | null = null;
-  /** The face's own lip colour, sampled at load. The mouth interior is
-   * derived from it rather than hardcoded. */
-  private lipColour: [number, number, number] = [150, 90, 84];
-  /** Each eye's own lash colour. Not every face has black lashes — a fair or
-   * stylized one can have brown, auburn or near-white, and drawing black on
-   * those puts a stranger's eyelash on the face. */
-  private lashColour: string[] = ["rgba(60, 42, 38, 0.75)", "rgba(60, 42, 38, 0.75)"];
-  /** The same, as numbers, and each eye's lid colour: for the painted lid
-   *  of a profile that blinks that way (blink-lid.ts). */
-  private lashRgb: Rgb[] = [[60, 42, 38], [60, 42, 38]];
-  /** Each eye's real reach in texture pixels (blink-lid.ts eyeExtent), and
-   *  whether the skin below it is plain enough to copy for a lid. */
-  private lidExtent: (Point[] | null)[] = [null, null];
-  private lidCloneOk: boolean[] = [false, false];
-  private lidTone: LidTone[] = [
-    { above: [200, 150, 130], below: [200, 150, 130] },
-    { above: [200, 150, 130], below: [200, 150, 130] },
-  ];
+  /** What the picture looks like (sampling.ts), read again with every
+   *  texture. */
+  private readonly samples = new FaceSamples();
   private raf = 0;
   private startTime = 0;
   private lastTickAt = 0;
@@ -532,10 +418,7 @@ export class AvatarEngine {
     if (this.warpMode !== "2d") this.warp = WarpRenderer.create(canvas.width, canvas.height);
     this.innerRing = this.validInnerRing();
     this.computeFraming();
-    this.sampleLipColour();
-    this.sampleLashColour();
-    this.sampleCharacterLook();
-    this.sampleLidColours();
+    this.samples.sample(this.texture, this.texPoints, this.rig, this.profile);
     this.subdivideMouthRegion();
     this.buildNeckBand();
     this.startTime = performance.now();
@@ -581,10 +464,11 @@ export class AvatarEngine {
   setTexture(texture: HTMLImageElement): void {
     if (this.destroyed) return;
     this.texture = texture;
-    this.sampleLipColour();
-    this.sampleLashColour();
-    this.sampleCharacterLook();
-    this.sampleLidColours();
+    // NOTE: read at the texPoints laid out for the texture before this one
+    // (rebuildGeometry lays this one out after), so a texture of another
+    // size, the widget's full picture after its thumbnail, is sampled at
+    // the wrong pixels.
+    this.samples.sample(this.texture, this.texPoints, this.rig, this.profile);
     this.rebuildGeometry();
   }
 
@@ -766,7 +650,8 @@ export class AvatarEngine {
       x: x * this.scale + this.offsetX,
       y: y * this.scale + this.offsetY,
     }));
-    this.detectCutOut();
+    const cutOut = probeCutOut(this.texture);
+    if (cutOut !== null) this.cutOut = cutOut;
     this.measureBody();
     this.buildHeadLayer();
     this.field = this.profile.mouth === "character" ? new CharacterField(this.basePoints) : null;
@@ -899,36 +784,6 @@ export class AvatarEngine {
   }
 
   /**
-   * Does this photo have its background removed?
-   *
-   * Decides how far the body is allowed to move. Checked by sampling the
-   * corners rather than by asking the server, so the engine stays usable with
-   * any image and a cut-out made elsewhere still gets the full treatment.
-   * Several corners, because one of them can legitimately be part of the
-   * subject — a shoulder often reaches the bottom edge.
-   */
-  private detectCutOut(): void {
-    try {
-      const probe = document.createElement("canvas");
-      probe.width = 32;
-      probe.height = 32;
-      const ctx = probe.getContext("2d", { willReadFrequently: true });
-      if (!ctx) return;
-      ctx.drawImage(this.texture, 0, 0, 32, 32);
-      const data = ctx.getImageData(0, 0, 32, 32).data;
-      const at = (x: number, y: number) => data[(y * 32 + x) * 4 + 3];
-      const corners = [at(1, 1), at(30, 1), at(1, 30), at(30, 30)];
-      // Two clear corners is enough, and is what a head-and-shoulders cut-out
-      // reliably has at the top even when the body fills the bottom.
-      this.cutOut = corners.filter((a) => a < 24).length >= 2;
-    } catch {
-      // Tainted canvas (cross-origin texture): assume it is not a cut-out,
-      // which is the conservative choice — less movement, never a stray edge.
-      this.cutOut = false;
-    }
-  }
-
-  /**
    * Where the body pivots, and how far it may travel.
    *
    * The pivot goes below the canvas, roughly where the feet would be. A small
@@ -957,195 +812,10 @@ export class AvatarEngine {
     this.breathRise = faceH * BREATH_RISE;
   }
 
-  /**
-   * The lip's own colour, taken from the outer lip ring.
-   *
-   * The mouth interior used to be three hardcoded browns near black. On a
-   * pale face that is a hole punched in the skin, and it is the same hole on
-   * every avatar regardless of colouring. A real mouth interior is a darker,
-   * less saturated version of the lips in front of it, so sampling the lips
-   * gives every face an interior that belongs to it.
-   */
-  private sampleLipColour(): void {
-    try {
-      const off = document.createElement("canvas");
-      off.width = this.texture.naturalWidth;
-      off.height = this.texture.naturalHeight;
-      const ctx = off.getContext("2d", { willReadFrequently: true });
-      if (!ctx) return;
-      ctx.drawImage(this.texture, 0, 0);
-      const picks: { lum: number; rgb: [number, number, number] }[] = [];
-      for (const i of this.rig.mouth_indices) {
-        const p = this.texPoints[i];
-        if (!p) continue;
-        const x = Math.max(0, Math.min(off.width - 1, Math.round(p.x)));
-        const y = Math.max(0, Math.min(off.height - 1, Math.round(p.y)));
-        const d = ctx.getImageData(x, y, 1, 1).data;
-        const rgb: [number, number, number] = [d[0], d[1], d[2]];
-        picks.push({ lum: luma(rgb), rgb });
-      }
-      if (!picks.length) return;
-      // Median: the ring straddles the lip edge, so the extremes are skin on
-      // one side and the seam shadow on the other.
-      picks.sort((a, b) => a.lum - b.lum);
-      this.lipColour = picks[Math.floor(picks.length / 2)].rgb;
-
-      // Cheeks, not lips, say how the face is lit: lips are darker and far
-      // more saturated than the light falling on them (lipstick more so), so
-      // teeth exposed from lip luminance came out grey on a bright face.
-      const skin: { lum: number; rgb: [number, number, number] }[] = [];
-      for (const i of CHEEK_LANDMARKS) {
-        const q = this.texPoints[i];
-        if (!q) continue;
-        const sx = Math.max(0, Math.min(off.width - 1, Math.round(q.x)));
-        const sy = Math.max(0, Math.min(off.height - 1, Math.round(q.y)));
-        const c = ctx.getImageData(sx, sy, 1, 1).data;
-        const rgb: [number, number, number] = [c[0], c[1], c[2]];
-        skin.push({ lum: luma(rgb), rgb });
-      }
-      if (skin.length) {
-        skin.sort((a, b) => a.lum - b.lum);
-        this.skinColour = skin[Math.floor(skin.length / 2)].rgb;
-      }
-      this.sampleFaceHighlight();
-      this.sampleFaceSharpness(ctx);
-    } catch {
-      // Tainted texture: keep the default, which is a mid warm lip.
-    }
-  }
-
-  /**
-   * How sharp the picture is (face-sharpness.ts): the width of its crispest
-   * strong edges round the mouth and the eyes, in its own pixels, read
-   * from `ctx`, which holds the texture 1:1 (no filtering: the widths are
-   * the picture's). The photographic mouth feathers its aperture by it and
-   * softens the teeth to it; the character mouth's look takes its softness
-   * from it (sampleCharacterLook, which runs after this). Null on a flat
-   * picture, and cleared first, so a texture that cannot be read leaves
-   * no stale value from the one before it.
-   */
-  private sampleFaceSharpness(ctx: CanvasRenderingContext2D): void {
-    this.faceSharpness = null;
-    const fields = sharpnessBoxes(this.texPoints, this.texture.naturalWidth, this.texture.naturalHeight).map((b) => {
-      const d = ctx.getImageData(b.x, b.y, b.w, b.h);
-      return lumaField(d.data, d.width, d.height);
-    });
-    this.faceSharpness = faceSharpness(fields);
-  }
-
   /** How many canvas pixels one texture pixel is, at rest. */
   private pixelScale(): number {
     const tw = this.texture.naturalWidth / Math.max(1, this.rig.image_size[0]);
     return tw > 0 ? this.scale / tw : this.scale;
-  }
-
-  /**
-   * The face's brightest skin or sclera, from a small box-filtered copy of
-   * its silhouette's box: one draw and one read, so a glint of a pixel or
-   * two cannot set it, and nothing outside the face oval (hair, a collar, a
-   * white wall) counts.
-   */
-  private sampleFaceHighlight(): void {
-    const oval = FACE_OVAL.map((i) => this.texPoints[i]).filter(Boolean);
-    if (oval.length < 8) return;
-    const x0 = Math.min(...oval.map((p) => p.x)), x1 = Math.max(...oval.map((p) => p.x));
-    const y0 = Math.min(...oval.map((p) => p.y)), y1 = Math.max(...oval.map((p) => p.y));
-    if (!(x1 > x0) || !(y1 > y0)) return;
-    const grid = 96;
-    const small = document.createElement("canvas");
-    small.width = grid;
-    small.height = grid;
-    const ctx = small.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return;
-    ctx.drawImage(this.texture, x0, y0, x1 - x0, y1 - y0, 0, 0, grid, grid);
-    const data = ctx.getImageData(0, 0, grid, grid).data;
-    this.faceHighlight = faceHighlight(oval, (column, row) => {
-      const i = (row * grid + column) * 4;
-      return data[i + 3] < 128 ? null : [data[i], data[i + 1], data[i + 2]];
-    }, grid);
-  }
-
-  /** Each eye's lid colour, from the skin beside it, for the painted lid. */
-  private sampleLidColours(): void {
-    if (this.profile.blink !== "lid") return;
-    try {
-      const off = document.createElement("canvas");
-      off.width = this.texture.naturalWidth;
-      off.height = this.texture.naturalHeight;
-      const ctx = off.getContext("2d", { willReadFrequently: true });
-      if (!ctx) return;
-      ctx.drawImage(this.texture, 0, 0);
-      for (let e = 0; e < 2; e++) {
-        const shape = this.eyeShape(this.texPoints, e);
-        const read = (p: Point): Rgb | null => {
-          const x = Math.round(p.x), y = Math.round(p.y);
-          if (x < 0 || y < 0 || x >= off.width || y >= off.height) return null;
-          const d = ctx.getImageData(x, y, 1, 1).data;
-          return d[3] < 128 ? null : [d[0], d[1], d[2]];
-        };
-        const spots = lidSamplePoints(shape.upper, shape.lower);
-        const nUp = shape.upper.length - 2;
-        const readUp = spots.slice(0, nUp).map(read);
-        const readDown = spots.slice(nUp).map(read);
-        // A brow or a lash line can sit where "above the eye" is read, and it
-        // is dark: the lid's own skin is the lighter end of what both sides
-        // give, and the skin above is read from them together.
-        const below = medianColour(readDown, 0.65);
-        const above = medianColour([...readUp, ...readDown], 0.65);
-        const either = above ?? below;
-        if (either) this.lidTone[e] = { above: above ?? either, below: below ?? either };
-        // How far the eye really reaches, and whether the skin below is plain.
-        const w = Math.hypot(shape.upper[shape.upper.length - 1].x - shape.upper[0].x, shape.upper[shape.upper.length - 1].y - shape.upper[0].y);
-        const all = [...shape.upper, ...shape.lower];
-        const rx0 = Math.max(0, Math.floor(Math.min(...all.map((q) => q.x)) - w * 1.1));
-        const ry0 = Math.max(0, Math.floor(Math.min(...all.map((q) => q.y)) - w * 1.1));
-        const rx1 = Math.min(off.width, Math.ceil(Math.max(...all.map((q) => q.x)) + w * 1.1));
-        const ry1 = Math.min(off.height, Math.ceil(Math.max(...all.map((q) => q.y)) + w * 1.1));
-        if (rx1 > rx0 && ry1 > ry0 && either) {
-          const img = ctx.getImageData(rx0, ry0, rx1 - rx0, ry1 - ry0);
-          const at = (x: number, y: number): Rgb | null => {
-            const px = Math.round(x) - rx0, py = Math.round(y) - ry0;
-            if (px < 0 || py < 0 || px >= img.width || py >= img.height) return null;
-            const i = (py * img.width + px) * 4;
-            return img.data[i + 3] < 128 ? null : [img.data[i], img.data[i + 1], img.data[i + 2]];
-          };
-          // How much the skin's own texture varies: fur and pores are noise the
-          // eye's edge must stand out from, flat art has none.
-          const around = [...readUp, ...readDown].filter((c): c is Rgb => !!c);
-          const ref = either;
-          const spread = around.length
-            ? Math.sqrt(around.reduce((sum, c) => sum + (c[0] - ref[0]) ** 2 + (c[1] - ref[1]) ** 2 + (c[2] - ref[2]) ** 2, 0) / around.length)
-            : 0;
-          this.lidExtent[e] = eyeExtent(at, shape, Math.max(50, Math.min(95, spread * 2.5)));
-          // The patch the lid would copy: the skin below the eye. It must be one
-          // surface (fur, skin), not an outline or another shape.
-          const bottom = Math.max(...shape.lower.map((q) => q.y));
-          const left = Math.min(...all.map((q) => q.x));
-          let far = 0, n = 0;
-          for (let a = 0; a < 10; a++) {
-            for (let b = 0; b < 5; b++) {
-              const c = at(left + (w * (a + 0.5)) / 10, bottom + w * (0.08 + 0.1 * b));
-              if (!c) continue;
-              n++;
-              const ref = below ?? either;
-              if (Math.hypot(c[0] - ref[0], c[1] - ref[1], c[2] - ref[2]) > Math.max(70, spread * 3)) far++;
-            }
-          }
-          this.lidCloneOk[e] = n > 0 && far / n <= 0.18;
-        }
-      }
-    } catch {
-      // Tainted texture: the default skin tone.
-    }
-  }
-
-  /** An eye's two lids as ordered point lists, corner to corner. */
-  private eyeShape(pts: readonly Point[], e: number): { upper: Point[]; lower: Point[] } {
-    const [c0, c1] = EYE_CORNERS[e];
-    const byX = (a: Point, b: Point) => a.x - b.x;
-    const upper = [pts[c0], ...UPPER_LIDS[e].map((i) => pts[i]), pts[c1]].sort(byX);
-    const lower = [pts[c0], ...LOWER_LIDS[e].map((i) => pts[i]), pts[c1]].sort(byX);
-    return { upper, lower };
   }
 
   /**
@@ -1182,92 +852,14 @@ export class AvatarEngine {
   private drawLids(pts: Point[]): void {
     if (this.profile.blink !== "lid" || this.blink <= 0 || this.tuning.blink <= 0) return;
     const amount = lidAmount(blinkEase(this.blink));
-    const flat = this.look.flat;
+    const flat = this.samples.look.flat;
     for (let e = 0; e < 2; e++) {
-      const shape = this.eyeShape(pts, e);
-      const outline = this.lidExtent[e]
-        ? this.lidExtent[e]!.map((q) => this.fromTexture(e, pts, q))
+      const shape = eyeShape(pts, e);
+      const outline = this.samples.lidExtent[e]
+        ? this.samples.lidExtent[e]!.map((q) => this.fromTexture(e, pts, q))
         : null;
-      const blit = flat || !this.lidCloneOk[e] ? null : this.lidBlit(e, pts);
-      paintLid(this.ctx, shape, amount, this.lidTone[e], this.lashRgb[e], flat, blit, outline);
-    }
-  }
-
-  /**
-   * Cel art or a render, the picture's own line and how soft its edges are,
-   * for the character mouth to paint in. The softness is the picture's
-   * sharpness (`faceSharpness`, read by sampleLipColour, which always runs
-   * before this: in the constructor and again in setTexture, so a texture
-   * upgraded from its thumbnail rebuilds the look from its own sharpness);
-   * the lip seam is read for it only when the sharpness is null.
-   */
-  private sampleCharacterLook(): void {
-    // For every profile: the character mouth paints with it, and the mesh
-    // pads its seams on flat art whichever mouth it has (trianglePads).
-    const skin: Rgb = this.skinColour ?? DEFAULT_LOOK.skin;
-    this.look = { ...DEFAULT_LOOK, lip: this.lipColour, skin };
-    try {
-      const l = this.texPoints[61], r = this.texPoints[291];
-      if (!l || !r) return;
-      const w = Math.max(Math.hypot(r.x - l.x, r.y - l.y), 4);
-      const cx = (l.x + r.x) / 2, cy = (l.y + r.y) / 2;
-      const x0 = Math.max(0, Math.floor(cx - w * 2)), y0 = Math.max(0, Math.floor(cy - w * 1.2));
-      const x1 = Math.min(this.texture.naturalWidth, Math.ceil(cx + w * 2));
-      const y1 = Math.min(this.texture.naturalHeight, Math.ceil(cy + w * 1.7));
-      if (x1 <= x0 || y1 <= y0) return;
-      const off = document.createElement("canvas");
-      off.width = this.texture.naturalWidth;
-      off.height = this.texture.naturalHeight;
-      const ctx = off.getContext("2d", { willReadFrequently: true });
-      if (!ctx) return;
-      ctx.drawImage(this.texture, 0, 0);
-      const data = ctx.getImageData(x0, y0, x1 - x0, y1 - y0);
-      const pixel = (x: number, y: number): Rgb | null => {
-        const px = Math.round(x) - x0, py = Math.round(y) - y0;
-        if (px < 0 || py < 0 || px >= data.width || py >= data.height) return null;
-        const i = (py * data.width + px) * 4;
-        if (data.data[i + 3] < 128) return null;
-        return [data.data[i], data.data[i + 1], data.data[i + 2]];
-      };
-      const seam = INNER_UPPER.map((i) => this.texPoints[i]).filter(Boolean);
-      this.look = sampleLook(pixel, seam, { cx, cy, w }, this.lipColour, skin, this.faceSharpness);
-    } catch {
-      // Tainted texture: the default look, shaded.
-    }
-  }
-
-  /** The darkest run along each upper lid — the lashes as this face has them. */
-  private sampleLashColour(): void {
-    try {
-      const off = document.createElement("canvas");
-      off.width = this.texture.naturalWidth;
-      off.height = this.texture.naturalHeight;
-      const ctx = off.getContext("2d", { willReadFrequently: true });
-      if (!ctx) return;
-      ctx.drawImage(this.texture, 0, 0);
-      for (let e = 0; e < 2; e++) {
-        const lid = UPPER_LIDS[e].map((i) => this.texPoints[i]).filter(Boolean);
-        if (lid.length < 3) continue;
-        const picks: { lum: number; rgb: [number, number, number] }[] = [];
-        for (const p of lid) {
-          for (let dy = -1; dy <= 1; dy++) {
-            const x = Math.max(0, Math.min(off.width - 1, Math.round(p.x)));
-            const y = Math.max(0, Math.min(off.height - 1, Math.round(p.y + dy)));
-            const d = ctx.getImageData(x, y, 1, 1).data;
-            const rgb: [number, number, number] = [d[0], d[1], d[2]];
-            picks.push({ lum: luma(rgb), rgb });
-          }
-        }
-        if (!picks.length) continue;
-        // The darkest quartile along the lid IS the lash line, whatever
-        // colour this face's lashes happen to be.
-        picks.sort((a, b) => a.lum - b.lum);
-        const [r, g, b] = picks[Math.floor(picks.length * 0.15)].rgb;
-        this.lashColour[e] = `rgba(${r}, ${g}, ${b}, 0.8)`;
-        this.lashRgb[e] = [r, g, b];
-      }
-    } catch {
-      // Tainted texture: keep the neutral dark default.
+      const blit = flat || !this.samples.lidCloneOk[e] ? null : this.lidBlit(e, pts);
+      paintLid(this.ctx, shape, amount, this.samples.lidTone[e], this.samples.lashRgb[e], flat, blit, outline);
     }
   }
 
@@ -2095,11 +1687,11 @@ export class AvatarEngine {
       try {
         painted = this.mouthExtension.paint(this.ctx, {
           points: pts, neutral: this.basePoints, rig: this.rig, weights: this.weights,
-          lipColour: this.lipColour,
-          skinColour: this.skinColour ?? undefined,
-          faceHighlight: this.faceHighlight ?? undefined,
-          soft: this.look.soft,
-          sharpness: this.faceSharpness ?? undefined,
+          lipColour: this.samples.lipColour,
+          skinColour: this.samples.skinColour ?? undefined,
+          faceHighlight: this.samples.faceHighlight ?? undefined,
+          soft: this.samples.look.soft,
+          sharpness: this.samples.faceSharpness ?? undefined,
           pixelScale: this.pixelScale(),
           viseme: this.pose?.()?.viseme ?? this.currentViseme(performance.now()),
         });
@@ -2123,7 +1715,7 @@ export class AvatarEngine {
       opening,
       clip: openingPath(opening, () => new Path2D()),
       weights: this.weights,
-      look: this.look,
+      look: this.samples.look,
       traits: this.traits,
       tongueRaise: this.tongue,
       cavityShade: this.profile.cavityShade,
@@ -2258,7 +1850,7 @@ export class AvatarEngine {
   private trianglePads(): Float32Array | null {
     if (this.padsFor !== this.triangles || !this.pads) {
       this.padsFor = this.triangles;
-      const everywhere = !!this.field || this.look.flat;
+      const everywhere = !!this.field || this.samples.look.flat;
       const rig = this.lowerFace;
       const moves = (i: number) =>
         i >= 478 || (!!rig && (rig.jaw[i] > 0 || rig.weight[i] > 0 || rig.cheek[i] > 0));
@@ -2372,7 +1964,7 @@ export class AvatarEngine {
         ctx.quadraticCurveTo(lid[i].x, lid[i].y, mx, my);
       }
       ctx.lineTo(lid[lid.length - 1].x, lid[lid.length - 1].y);
-      ctx.strokeStyle = this.lashColour[e];
+      ctx.strokeStyle = this.samples.lashColour[e];
       ctx.globalAlpha = amount * 0.85;
       ctx.lineWidth = Math.max(1, width * 0.022);
       ctx.lineCap = "round";
@@ -2813,7 +2405,7 @@ export class AvatarEngine {
           upper: upperPts, lower: lowerPts, aperture,
           neutralLeft: anchorA.x <= anchorB.x ? anchorA : anchorB,
           neutralRight: anchorA.x <= anchorB.x ? anchorB : anchorA,
-          lipColour: this.lipColour, skinColour: this.skinColour ?? undefined, cavityAlpha, teethAlpha,
+          lipColour: this.samples.lipColour, skinColour: this.samples.skinColour ?? undefined, cavityAlpha, teethAlpha,
         });
       } finally { ctx.restore(); }
       return;
@@ -2828,7 +2420,7 @@ export class AvatarEngine {
     // shadows the cavity, warming toward the tongue below. Never fully black
     // — a real mouth is a lit red space, not a void, and pure black reads as
     // a hole cut in the face.
-    const [lr, lg, lb] = this.lipColour;
+    const [lr, lg, lb] = this.samples.lipColour;
     const shade = (k: number) =>
       `rgb(${Math.round(lr * k)}, ${Math.round(lg * k * 0.86)}, ${Math.round(lb * k * 0.86)})`;
     const [top, middle, bottom] = this.profile.cavityShade;
