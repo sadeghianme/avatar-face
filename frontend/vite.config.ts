@@ -16,8 +16,10 @@ export default defineConfig({
     host: true, // listen on LAN so phones/tablets on the same Wi-Fi can test
     allowedHosts: [".trycloudflare.com"], // remote testing via cloudflared tunnels
     port: 5174,
+    // "^/api/", not "/api": a reload of the dashboard's own /api-keys page
+    // must reach the dashboard, not the API.
     proxy: {
-      "/api": {
+      "^/api/": {
         target: "http://localhost:7002",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
