@@ -29,7 +29,14 @@ export function dentalSurfaceIn(state: DentalSurfaceState): DentalOralSurface {
   const surface = Object.create(DentalOralSurface.prototype) as DentalOralSurface;
   // Read once by name, so that a member renamed or dropped fails here, at
   // compile time, rather than leaving the test drawing an empty surface.
-  void [surface["arches"], surface["lowerIncisal"], surface["enamel"], surface["origin"], surface["fitted"], surface["profile"]];
+  void [
+    surface["arches"],
+    surface["lowerIncisal"],
+    surface["enamel"],
+    surface["origin"],
+    surface["fitted"],
+    surface["profile"],
+  ];
   return Object.assign(surface, { fitted: null, ...state });
 }
 

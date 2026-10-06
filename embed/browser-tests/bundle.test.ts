@@ -123,13 +123,16 @@ describe("liveface.js with its names renamed", () => {
     await page.addInitScript(pageClock);
     await serve(page, ORIGIN, (path) => {
       if (path === "/") {
-        return `<!doctype html><meta charset=utf-8><body style="margin:0">` +
-          `<script src="/liveface.js" data-avatar="${avatar}" data-key="lf_test" data-api="${ORIGIN}" data-size="256"></script>`;
+        return (
+          `<!doctype html><meta charset=utf-8><body style="margin:0">` +
+          `<script src="/liveface.js" data-avatar="${avatar}" data-key="lf_test" data-api="${ORIGIN}" data-size="256"></script>`
+        );
       }
       if (path === "/liveface.js") return bundles[variant];
       if (path === "/liveface-mouth.js") return bundles.mouth;
       if (path === `/embed/v1/avatars/${avatar}`) return JSON.stringify(AVATARS[avatar]);
-      if (["/mouth-motion.json", "/mouth-teeth.webp", "/mouth-teeth.rig.json"].includes(path)) return { file: `assets${path}` };
+      if (["/mouth-motion.json", "/mouth-teeth.webp", "/mouth-teeth.rig.json"].includes(path))
+        return { file: `assets${path}` };
       if (path.startsWith("/fixtures/")) return { file: `src/__tests__${path}` };
       return undefined;
     });
@@ -142,26 +145,38 @@ describe("liveface.js with its names renamed", () => {
       await page.evaluate(() => (window as unknown as { mouthAttached: Promise<unknown> }).mouthAttached);
     }
 
-    const shot = () => page.evaluate(() => (window as unknown as { frameHash: () => Promise<{ hash: string; opaque: number }> }).frameHash());
-    const step = (n: number) => page.evaluate((count) => (window as unknown as { step: (n: number) => void }).step(count), n);
+    const shot = () =>
+      page.evaluate(() =>
+        (window as unknown as { frameHash: () => Promise<{ hash: string; opaque: number }> }).frameHash()
+      );
+    const step = (n: number) =>
+      page.evaluate((count) => (window as unknown as { step: (n: number) => void }).step(count), n);
     const drawn: { name: string; hash: string; opaque: number }[] = [];
     const take = async (name: string) => drawn.push({ name, ...(await shot()) });
 
     await step(60);
     await take("rest");
     // Speech, through the page's API (window.Liveface.engine).
-    await page.evaluate((track) => (window as unknown as { Liveface: { engine: { playCues(c: unknown): void } } }).Liveface.engine.playCues(track), cues);
+    await page.evaluate(
+      (track) =>
+        (window as unknown as { Liveface: { engine: { playCues(c: unknown): void } } }).Liveface.engine.playCues(track),
+      cues
+    );
     for (const at of [10, 20, 30, 40]) {
       await step(at === 10 ? 10 : 10);
       await take(`speech +${at} frames`);
     }
-    await page.evaluate(() => (window as unknown as { Liveface: { stop(): void; engine: { stopSpeech(): void } } }).Liveface.engine.stopSpeech());
+    await page.evaluate(() =>
+      (window as unknown as { Liveface: { stop(): void; engine: { stopSpeech(): void } } }).Liveface.engine.stopSpeech()
+    );
     await page.evaluate(() =>
       (window as unknown as { Liveface: { tune(t: object): void } }).Liveface.tune({ mouthOpen: 1.2, headMotion: 0.5 })
     );
     await step(30);
     await take("tuned, at rest");
-    const path = await page.evaluate(() => (window as unknown as { Liveface: { engine: { warpPath(): string } } }).Liveface.engine.warpPath());
+    const path = await page.evaluate(() =>
+      (window as unknown as { Liveface: { engine: { warpPath(): string } } }).Liveface.engine.warpPath()
+    );
     await page.close();
     return { drawn, errors, path };
   }

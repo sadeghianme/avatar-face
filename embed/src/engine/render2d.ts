@@ -14,7 +14,12 @@ import type { BodyLean, HeadOffset } from "./motion";
  * fade at the neck, where a seam lands on a collar instead of across a
  * chin. Only a cut-out needs one (its head moves over transparency).
  */
-export function cutHeadLayer(texture: HTMLImageElement, rig: Rig, mesh: FaceMesh, geom: HeadGeom): HTMLCanvasElement | null {
+export function cutHeadLayer(
+  texture: HTMLImageElement,
+  rig: Rig,
+  mesh: FaceMesh,
+  geom: HeadGeom
+): HTMLCanvasElement | null {
   const { x, y, w, h } = geom;
   const layer = document.createElement("canvas");
   layer.width = Math.round(w);
@@ -31,7 +36,10 @@ export function cutHeadLayer(texture: HTMLImageElement, rig: Rig, mesh: FaceMesh
     ((y - mesh.offsetY) / mesh.scale) * th,
     (w / mesh.scale) * tw,
     (h / mesh.scale) * th,
-    0, 0, w, h
+    0,
+    0,
+    w,
+    h
   );
 
   // Feather. destination-out with gradients, one per edge; the bottom one
@@ -54,7 +62,9 @@ export function cutHeadLayer(texture: HTMLImageElement, rig: Rig, mesh: FaceMesh
   // Wide side/top bands: hair routinely crosses this boundary (long or
   // voluminous hair extends well past the face-derived rect), and a narrow
   // feather there turns every head shift into a visible slice through it.
-  const side = w * 0.16, top = h * 0.13, neck = h * 0.26;
+  const side = w * 0.16,
+    top = h * 0.13,
+    neck = h * 0.26;
   fade(side, 0, 0, 0);
   fade(w - side, 0, w, 0);
   fade(0, top, 0, 0);

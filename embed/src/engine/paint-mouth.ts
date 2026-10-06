@@ -39,7 +39,10 @@ export function paintMouthSurface(m: MouthSurface): void {
     ctx.save();
     try {
       painted = m.extension.paint(ctx, {
-        points: pts, neutral: mesh.basePoints, rig: m.rig, weights: m.face.weights,
+        points: pts,
+        neutral: mesh.basePoints,
+        rig: m.rig,
+        weights: m.face.weights,
         lipColour: samples.lipColour,
         skinColour: samples.skinColour ?? undefined,
         faceHighlight: samples.faceHighlight ?? undefined,
@@ -48,7 +51,9 @@ export function paintMouthSurface(m: MouthSurface): void {
         pixelScale: pixelScale(mesh, m.rig, picture.texture),
         viseme: m.viseme(),
       });
-    } finally { ctx.restore(); }
+    } finally {
+      ctx.restore();
+    }
   }
   if (painted) return;
   if (picture.field && !m.extension) {

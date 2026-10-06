@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  boxSharpness, EDGE_CONTRAST, edgeWidths, faceSharpness, lumaField, MIN_EDGES, profileReach, riseWidth, SHARPNESS_SHARE,
-  sharpnessBoxes, type LumaField,
+  boxSharpness,
+  EDGE_CONTRAST,
+  edgeWidths,
+  faceSharpness,
+  lumaField,
+  MIN_EDGES,
+  profileReach,
+  riseWidth,
+  SHARPNESS_SHARE,
+  sharpnessBoxes,
+  type LumaField,
 } from "../face-sharpness";
 import { decodePng, rgbaOf } from "../../__tests__/png-fixture";
 
@@ -14,7 +23,7 @@ import { decodePng, rgbaOf } from "../../__tests__/png-fixture";
 
 /** The normal CDF: a step blurred by a Gaussian of `sigma` is this ramp. */
 function cdf(z: number): number {
-  const t = 1 / (1 + 0.3275911 * Math.abs(z) / Math.SQRT2);
+  const t = 1 / (1 + (0.3275911 * Math.abs(z)) / Math.SQRT2);
   const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
   const erf = 1 - poly * Math.exp(-(z * z) / 2);
   return 0.5 * (1 + (z < 0 ? -erf : erf));
@@ -23,7 +32,10 @@ function cdf(z: number): number {
 /** Deterministic grain. */
 function noise(seed: number): () => number {
   let s = seed;
-  return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646 - 0.5; };
+  return () => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646 - 0.5;
+  };
 }
 
 /**
@@ -32,8 +44,11 @@ function noise(seed: number): () => number {
  * Gaussian-blurred one; optionally with `grain` levels of uniform noise.
  */
 function edgeField(sigma: number, angle = 0, grain = 0, seed = 3): LumaField {
-  const width = 160, height = 120, luma = new Float32Array(width * height);
-  const nx = Math.cos(angle), ny = Math.sin(angle);
+  const width = 160,
+    height = 120,
+    luma = new Float32Array(width * height);
+  const nx = Math.cos(angle),
+    ny = Math.sin(angle);
   const rnd = noise(seed);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -47,7 +62,9 @@ function edgeField(sigma: number, angle = 0, grain = 0, seed = 3): LumaField {
 }
 
 function flatField(level: number, grain = 0): LumaField {
-  const width = 120, height = 100, luma = new Float32Array(width * height);
+  const width = 120,
+    height = 100,
+    luma = new Float32Array(width * height);
   const rnd = noise(11);
   for (let i = 0; i < luma.length; i++) luma[i] = level + grain * 2 * rnd();
   return { width, height, luma };
@@ -63,7 +80,11 @@ describe("the width of a synthetic edge", () => {
         expect(hard).toBeLessThan(1.3);
         expect(hard).toBeGreaterThan(0.5);
         // The 10-90% rise of a Gaussian edge is 2.56 sigma.
-        for (const [sigma, w] of [[1, s1], [2, s2], [3, s3]] as const) {
+        for (const [sigma, w] of [
+          [1, s1],
+          [2, s2],
+          [3, s3],
+        ] as const) {
           expect(w).toBeGreaterThan(2.5 * sigma * 0.75);
           expect(w).toBeLessThan(2.5 * sigma * 1.25);
         }
@@ -84,7 +105,8 @@ describe("the width of a synthetic edge", () => {
   });
 
   it("takes the sharpest box, and only a box with enough edges", () => {
-    const sharp = edgeField(0.6), soft = edgeField(2.5);
+    const sharp = edgeField(0.6),
+      soft = edgeField(2.5);
     const s = faceSharpness([soft, sharp]);
     expect(s).toBe(boxSharpness(edgeWidths(sharp)));
     expect(s).toBeLessThan(boxSharpness(edgeWidths(soft))!);
@@ -116,13 +138,17 @@ describe("the width of a synthetic edge", () => {
 
   it("boxes the mouth and the eyes from the landmarks, clamped to the texture", () => {
     const points: { x: number; y: number }[] = Array.from({ length: 478 }, () => ({ x: 500, y: 500 }));
-    points[61] = { x: 400, y: 600 }; points[291] = { x: 600, y: 600 };
-    points[33] = { x: 380, y: 400 }; points[133] = { x: 460, y: 400 };
-    points[362] = { x: 540, y: 400 }; points[263] = { x: 620, y: 400 };
+    points[61] = { x: 400, y: 600 };
+    points[291] = { x: 600, y: 600 };
+    points[33] = { x: 380, y: 400 };
+    points[133] = { x: 460, y: 400 };
+    points[362] = { x: 540, y: 400 };
+    points[263] = { x: 620, y: 400 };
     const boxes = sharpnessBoxes(points, 1000, 1000);
     expect(boxes).toHaveLength(3);
     expect(boxes[0]).toEqual({ x: 280, y: 440, w: 440, h: 320 });
-    expect(boxes[1].w).toBe(144); expect(boxes[1].h).toBe(96);
+    expect(boxes[1].w).toBe(144);
+    expect(boxes[1].h).toBe(96);
     // Clamped at the picture's edge; an eye off the picture is dropped.
     const clamped = sharpnessBoxes(points, 500, 1000);
     expect(clamped[0]).toEqual({ x: 280, y: 440, w: 220, h: 320 });
@@ -152,8 +178,17 @@ describe("the sharpness of the real character crops", () => {
     return boxSharpness(edgeWidths(lumaField(rgbaOf(png), png.w, png.h)));
   };
   it("finds edges in every crop, the drawn cartoons at least as crisp as the soft animation", () => {
-    const s = Object.fromEntries(["human-cartoon", "animal-cartoon", "human-animation", "animal-animation", "animal-realistic"].map((n) => [n, sharpnessOf(`${n}-mouth.png`)]));
-    for (const v of Object.values(s)) { expect(v).not.toBeNull(); expect(v).toBeGreaterThan(0.5); expect(v).toBeLessThan(6); }
+    const s = Object.fromEntries(
+      ["human-cartoon", "animal-cartoon", "human-animation", "animal-animation", "animal-realistic"].map((n) => [
+        n,
+        sharpnessOf(`${n}-mouth.png`),
+      ])
+    );
+    for (const v of Object.values(s)) {
+      expect(v).not.toBeNull();
+      expect(v).toBeGreaterThan(0.5);
+      expect(v).toBeLessThan(6);
+    }
     // Cel art has a drawn line, which is as crisp as the picture gets.
     expect(s["human-cartoon"]).toBeLessThanOrEqual(s["human-animation"]! + 0.3);
     expect(s["animal-cartoon"]).toBeLessThanOrEqual(s["animal-animation"]! + 0.3);

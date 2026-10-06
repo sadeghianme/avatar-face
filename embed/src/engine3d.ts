@@ -27,7 +27,14 @@ import { FrameLoop, FrameStep } from "./engine/frame-loop";
 import { Voice } from "./engine/voice";
 import { HeadBones, type HeadPoseDriver } from "./engine3d/head";
 import { FaceLife, lookMorphs } from "./engine3d/life";
-import { applyMorphs, clearMorphs, findModelParts, frameCamera, type FrameSpec, type MorphMesh } from "./engine3d/model";
+import {
+  applyMorphs,
+  clearMorphs,
+  findModelParts,
+  frameCamera,
+  type FrameSpec,
+  type MorphMesh,
+} from "./engine3d/model";
 import {
   DEFAULT_VISEME_ARKIT,
   MORPH_NAMES,
@@ -107,11 +114,13 @@ export class Avatar3DEngine {
   /** Takes the console handle back (Avatar3DOptions.debug). */
   private readonly releaseDebugHandle: () => void;
 
-  static async load(canvas: HTMLCanvasElement, modelUrl: string, options: Avatar3DOptions = {}): Promise<Avatar3DEngine> {
+  static async load(
+    canvas: HTMLCanvasElement,
+    modelUrl: string,
+    options: Avatar3DOptions = {}
+  ): Promise<Avatar3DEngine> {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-    const ktx2 = new KTX2Loader()
-      .setTranscoderPath(BASIS_TRANSCODER_PATH)
-      .detectSupport(renderer);
+    const ktx2 = new KTX2Loader().setTranscoderPath(BASIS_TRANSCODER_PATH).detectSupport(renderer);
     const loader = new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
     try {
       const gltf = await loader.loadAsync(modelUrl);
@@ -121,7 +130,12 @@ export class Avatar3DEngine {
     }
   }
 
-  constructor(canvas: HTMLCanvasElement, model: THREE.Group, renderer?: THREE.WebGLRenderer, options: Avatar3DOptions = {}) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    model: THREE.Group,
+    renderer?: THREE.WebGLRenderer,
+    options: Avatar3DOptions = {}
+  ) {
     this.visemeTable = options.visemes ?? DEFAULT_VISEME_ARKIT;
     this.arkitNames = arkitNamesOf(this.visemeTable);
     this.speechNames = [...MORPH_NAMES, ...this.arkitNames];
@@ -248,9 +262,8 @@ export class Avatar3DEngine {
     this.energy += ((speaking ? jaw : 0) - this.energy) * 0.06;
 
     const blink = this.life.blink(now);
-    const arkit = this.useArkit && !this.heldMorphs
-      ? decomposeVisemes(this.morphWeights, this.visemeTable, this.arkitNames)
-      : null;
+    const arkit =
+      this.useArkit && !this.heldMorphs ? decomposeVisemes(this.morphWeights, this.visemeTable, this.arkitNames) : null;
     // Saccades: the 2D engine's behaviour, through the ARKit eyeLook* morphs.
     const look = lookMorphs(this.life.look(now, speaking), blink);
     applyMorphs(this.morphMeshes, {

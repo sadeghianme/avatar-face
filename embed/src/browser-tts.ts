@@ -10,10 +10,32 @@
 import { Cue } from "./types";
 
 const LATIN: Record<string, string> = {
-  a: "aa", e: "E", i: "ih", o: "oh", u: "ou", y: "ih",
-  b: "PP", p: "PP", m: "PP", f: "FF", v: "FF", w: "ou",
-  t: "DD", d: "DD", k: "kk", g: "kk", q: "kk", c: "kk", x: "SS",
-  j: "CH", h: "kk", s: "SS", z: "SS", n: "nn", l: "nn", r: "RR",
+  a: "aa",
+  e: "E",
+  i: "ih",
+  o: "oh",
+  u: "ou",
+  y: "ih",
+  b: "PP",
+  p: "PP",
+  m: "PP",
+  f: "FF",
+  v: "FF",
+  w: "ou",
+  t: "DD",
+  d: "DD",
+  k: "kk",
+  g: "kk",
+  q: "kk",
+  c: "kk",
+  x: "SS",
+  j: "CH",
+  h: "kk",
+  s: "SS",
+  z: "SS",
+  n: "nn",
+  l: "nn",
+  r: "RR",
 };
 const ROTATION = ["aa", "ih", "oh", "E", "ou", "kk", "nn", "DD"];
 
@@ -112,9 +134,7 @@ export class BrowserTTS {
     }
     return new Promise((resolve, reject) => {
       const utterance = new SpeechSynthesisUtterance(text);
-      const voice = speechSynthesis
-        .getVoices()
-        .find((v) => v.voiceURI === voiceURI || v.name === voiceURI);
+      const voice = speechSynthesis.getVoices().find((v) => v.voiceURI === voiceURI || v.name === voiceURI);
       if (voice) utterance.voice = voice;
       else if (lang) utterance.lang = lang;
 

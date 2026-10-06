@@ -198,9 +198,7 @@ async function mount(
     const fullPromise = fullUrl === info.thumbnail_url ? null : loadImage(fullUrl);
     const [rig, first] = await Promise.all([
       fetchJson<Rig>(info.rig_url, "rig"),
-      fullPromise
-        ? Promise.race([thumbPromise, fullPromise]).catch(() => thumbPromise)
-        : thumbPromise,
+      fullPromise ? Promise.race([thumbPromise, fullPromise]).catch(() => thumbPromise) : thumbPromise,
     ]);
     // The zoom: data-zoom on the snippet wins, then data-framing (face is
     // 1, full 0), then the avatar's published scene, then its framing — so
@@ -209,9 +207,14 @@ async function mount(
     // and background come with it either way.
     const zoomAttr = Number(script.dataset.zoom);
     const framingAttr = script.dataset.framing;
-    const zoom = script.dataset.zoom !== undefined && Number.isFinite(zoomAttr)
-      ? zoomAttr
-      : framingAttr ? (framingAttr === "full" ? 0 : 1) : undefined;
+    const zoom =
+      script.dataset.zoom !== undefined && Number.isFinite(zoomAttr)
+        ? zoomAttr
+        : framingAttr
+          ? framingAttr === "full"
+            ? 0
+            : 1
+          : undefined;
     const photoEngine = new AvatarEngine(canvas, rig, first, {
       fullPhoto: info.framing === "full",
       scene: info.scene ?? undefined,
@@ -242,9 +245,7 @@ async function mount(
       // which the API serves beside that motion.
       const mouthConfig = info.mouth;
       void loadScript(`${apiBase}/liveface-mouth.js`, () => !!window.__LivefaceMouth, "engine")
-        .then(() =>
-          window.__LivefaceMouth?.attach(photoEngine, mouthConfig, `${apiBase}/mouth-motion.json`)
-        )
+        .then(() => window.__LivefaceMouth?.attach(photoEngine, mouthConfig, `${apiBase}/mouth-motion.json`))
         .catch(() => undefined);
     }
 
@@ -259,9 +260,7 @@ async function mount(
         loadImage(body),
         loadImage(head),
       ])
-        .then(([bg, bodyImg, headImg]) =>
-          photoEngine.setLayers({ background: bg, body: bodyImg, head: headImg })
-        )
+        .then(([bg, bodyImg, headImg]) => photoEngine.setLayers({ background: bg, body: bodyImg, head: headImg }))
         .catch(() => undefined);
     }
   }
@@ -290,13 +289,10 @@ async function mount(
     const data = await response.json();
     return { cues: data.cues, durationMs: data.duration_ms, wordMarks: data.word_marks };
   };
-  const browserTts = useBrowserVoice
-    ? new BrowserTTS(engine, fetchCues)
-    : null;
+  const browserTts = useBrowserVoice ? new BrowserTTS(engine, fetchCues) : null;
 
   window.Liveface = {
-    speak: (text: string) =>
-      browserTts ? browserTts.speak(text, voice || undefined, locale) : queue.speak(text),
+    speak: (text: string) => (browserTts ? browserTts.speak(text, voice || undefined, locale) : queue.speak(text)),
     stop: () => {
       queue.stop();
       browserTts?.stop();

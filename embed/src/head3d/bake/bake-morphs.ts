@@ -40,7 +40,12 @@ import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
 import { fakeCanvas, installNodeEnvironment } from "./node-env";
 
 export const SYMMETRIC_WEIGHTS: readonly (keyof BlendWeights)[] = [
-  "jawOpen", "mouthClose", "mouthPucker", "mouthFunnel", "mouthStretch", "mouthSmile",
+  "jawOpen",
+  "mouthClose",
+  "mouthPucker",
+  "mouthFunnel",
+  "mouthStretch",
+  "mouthSmile",
 ];
 
 export interface BakedTarget {
@@ -70,7 +75,10 @@ export interface BakeResult {
   fidelity: Record<string, Fidelity>;
 }
 
-interface Pt { x: number; y: number }
+interface Pt {
+  x: number;
+  y: number;
+}
 
 const LANDMARKS = 478;
 const BAKE_CANVAS = 2048;
@@ -162,9 +170,7 @@ export function bakeMorphTargets(rig: Rig): BakeResult {
     // symmetric targets is from each of them.
     const visemes: Record<string, BakedTarget> = {};
     const fidelity: Record<string, Fidelity> = {};
-    const mouthWidth = Math.hypot(
-      rig.points[291][0] - rig.points[61][0], rig.points[291][1] - rig.points[61][1]
-    ) || 1;
+    const mouthWidth = Math.hypot(rig.points[291][0] - rig.points[61][0], rig.points[291][1] - rig.points[61][1]) || 1;
     for (const [viseme, weights] of Object.entries(rig.visemes ?? {})) {
       e.face.weights = { ...ZERO_WEIGHTS, ...weights };
       visemes[viseme] = { at: 1, ...deltas(e, base, scale, 1) };

@@ -77,7 +77,8 @@ export function translate(m: Affine, x: number, y: number): Affine {
 
 /** `ctx.rotate(angle)` on a context holding `m`. */
 export function rotate(m: Affine, angle: number): Affine {
-  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const cos = Math.cos(angle),
+    sin = Math.sin(angle);
   return multiply(m, { a: cos, b: sin, c: -sin, d: cos, e: 0, f: 0 });
 }
 
@@ -93,12 +94,9 @@ export function apply(m: Affine, p: Point): Point {
  */
 export function clipMatrix(affine: Affine, width: number, height: number): Float32Array {
   const { a, b, c, d, e, f } = affine;
-  const sx = 2 / width, sy = -2 / height;
-  return new Float32Array([
-    a * sx, b * sy, 0,
-    c * sx, d * sy, 0,
-    e * sx - 1, f * sy + 1, 1,
-  ]);
+  const sx = 2 / width,
+    sy = -2 / height;
+  return new Float32Array([a * sx, b * sy, 0, c * sx, d * sy, 0, e * sx - 1, f * sy + 1, 1]);
 }
 
 /** The 2D path skips a source triangle this degenerate (drawWarpedTriangle). */
@@ -135,10 +133,18 @@ export function buildWarpMesh(
   const kept: number[] = [];
   let skipped = 0;
   for (const [i0, i1, i2] of triangles) {
-    const s0 = texPoints[i0], s1 = texPoints[i1], s2 = texPoints[i2];
-    if (!s0 || !s1 || !s2) { skipped++; continue; }
+    const s0 = texPoints[i0],
+      s1 = texPoints[i1],
+      s2 = texPoints[i2];
+    if (!s0 || !s1 || !s2) {
+      skipped++;
+      continue;
+    }
     const det = s0.x * (s1.y - s2.y) + s1.x * (s2.y - s0.y) + s2.x * (s0.y - s1.y);
-    if (Math.abs(det) < MIN_SOURCE_DET) { skipped++; continue; }
+    if (Math.abs(det) < MIN_SOURCE_DET) {
+      skipped++;
+      continue;
+    }
     kept.push(i0, i1, i2);
   }
   const indices = n <= 0xffff ? Uint16Array.from(kept) : Uint32Array.from(kept);
@@ -326,7 +332,8 @@ export class WarpRenderer {
 
   /** Match the engine's canvas; a no-op when it already does. */
   resize(width: number, height: number): void {
-    const w = Math.max(1, width), h = Math.max(1, height);
+    const w = Math.max(1, width),
+      h = Math.max(1, height);
     if (this.canvas.width !== w) this.canvas.width = w;
     if (this.canvas.height !== h) this.canvas.height = h;
   }
@@ -346,7 +353,8 @@ export class WarpRenderer {
     const gl = this.gl;
     try {
       const size = image as { naturalWidth?: number; naturalHeight?: number; width?: number; height?: number };
-      const w = size.naturalWidth ?? size.width ?? 0, h = size.naturalHeight ?? size.height ?? 0;
+      const w = size.naturalWidth ?? size.width ?? 0,
+        h = size.naturalHeight ?? size.height ?? 0;
       const max = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
       if (!w || !h || w > max || h > max) return false;
       if (this.texture) gl.deleteTexture(this.texture);
@@ -414,7 +422,8 @@ export class WarpRenderer {
       positions[i * 2 + 1] = points[i].y;
     }
     try {
-      const w = this.canvas.width, h = this.canvas.height;
+      const w = this.canvas.width,
+        h = this.canvas.height;
       gl.viewport(0, 0, w, h);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.useProgram(this.program);

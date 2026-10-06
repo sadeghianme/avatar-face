@@ -1,5 +1,14 @@
 import type { BlendWeights } from "../types";
-import { INNER_LOWER, INNER_UPPER, LIP_CORNERS, LOWER_ROWS, UPPER_FACE, UPPER_ROWS, mouthFrame as lipFrame, type MouthFrame as LipFrame } from "./jaw-rig";
+import {
+  INNER_LOWER,
+  INNER_UPPER,
+  LIP_CORNERS,
+  LOWER_ROWS,
+  UPPER_FACE,
+  UPPER_ROWS,
+  mouthFrame as lipFrame,
+  type MouthFrame as LipFrame,
+} from "./jaw-rig";
 
 export { INNER_LOWER, INNER_UPPER } from "./jaw-rig";
 
@@ -25,7 +34,10 @@ export { INNER_LOWER, INNER_UPPER } from "./jaw-rig";
  * Pure geometry and colour here; the engine supplies points and a context.
  */
 
-export interface Pt { x: number; y: number }
+export interface Pt {
+  x: number;
+  y: number;
+}
 export type Rgb = [number, number, number];
 
 // MediaPipe's lip rows and corners are shared with the lower-face rig
@@ -69,9 +81,10 @@ export const TRAIT_LIMITS = { jaw: [0.5, 1.6] } as const;
 /** The traits the owner may override, clamped, over a profile's own. */
 export function mergeTraits(base: CharacterTraits, own: Partial<CharacterTraits> | null | undefined): CharacterTraits {
   if (!own) return base;
-  const jaw = typeof own.jaw === "number" && Number.isFinite(own.jaw)
-    ? Math.max(TRAIT_LIMITS.jaw[0], Math.min(TRAIT_LIMITS.jaw[1], own.jaw))
-    : base.jaw;
+  const jaw =
+    typeof own.jaw === "number" && Number.isFinite(own.jaw)
+      ? Math.max(TRAIT_LIMITS.jaw[0], Math.min(TRAIT_LIMITS.jaw[1], own.jaw))
+      : base.jaw;
   return {
     teeth: own.teeth === "none" || own.teeth === "upper" ? own.teeth : base.teeth,
     tongue: typeof own.tongue === "boolean" ? own.tongue : base.tongue,
@@ -96,10 +109,10 @@ export type MouthFrame = LipFrame;
  *  lens and ramps were tuned about that centre). */
 export function mouthFrame(points: readonly Pt[]): MouthFrame {
   const f = lipFrame(points);
-  const l = points[61], r = points[291];
+  const l = points[61],
+    r = points[291];
   return { ...f, cx: (f.cx + (l.x + r.x) / 2) / 2, cy: (f.cy + (l.y + r.y) / 2) / 2 };
 }
-
 
 /**
  * How much of an /f/ or /v/ the weights are, 0..1: the lower lip drawn up
@@ -150,7 +163,8 @@ export class CharacterField {
     for (const i of UPPER_FACE) if (i < this.n) this.role[i] = 4;
     for (const i of [...INNER_UPPER, ...INNER_LOWER]) if (i < this.n) this.inner[i] = 1;
     for (let i = 0; i < this.n; i++) {
-      const dx = base[i].x - f.cx, dy = base[i].y - f.cy;
+      const dx = base[i].x - f.cx,
+        dy = base[i].y - f.cy;
       this.nxs[i] = ((dx * f.ax + dy * f.ay) / f.w) * 2;
       this.vs[i] = (dx * f.nx + dy * f.ny) / f.w;
     }
@@ -181,11 +195,17 @@ export class CharacterField {
       (1 - rounding) ** 2 *
       Math.min(1, Math.max(0, (w.mouthStretch - 0.14) / 0.16));
     const tuck = w.mouthClose * Math.min(1, w.mouthStretch / 0.2) * (1 - rounding);
-    const part = Math.max(retract * 0.075 * (toothy ? 1 : 1 - tuckF), tuck * 0.02 * (toothy ? 1 : 1 - tuckF), toothy ? tuckF * 0.085 : 0) * W;
+    const part =
+      Math.max(
+        retract * 0.075 * (toothy ? 1 : 1 - tuckF),
+        tuck * 0.02 * (toothy ? 1 : 1 - tuckF),
+        toothy ? tuckF * 0.085 : 0
+      ) * W;
     const drop = jaw + part * 0.6;
     const lift = jaw * (0.1 + 0.28 * rounding) + part * 0.4;
     const reach = W * 1.15;
-    const spread = (w.mouthStretch * 0.26 + w.mouthSmile * 0.16 - w.mouthPucker * 0.32 - w.mouthFunnel * 0.18) * (W / 2);
+    const spread =
+      (w.mouthStretch * 0.26 + w.mouthSmile * 0.16 - w.mouthPucker * 0.32 - w.mouthFunnel * 0.18) * (W / 2);
 
     for (let i = 0; i < this.n; i++) {
       const role = this.role[i];
@@ -243,7 +263,8 @@ export class CharacterField {
 // --- The opening -------------------------------------------------------------
 
 export interface Opening {
-  upper: Pt[]; lower: Pt[];
+  upper: Pt[];
+  lower: Pt[];
   /** Mouth width, corner to corner, in px. */
   width: number;
   /** The widest the lips are apart, minus how far apart they rest, px. */
@@ -259,13 +280,11 @@ export interface Opening {
  * the same rings sit on the closed mouth (a few px of lip thickness) and is
  * not an opening.
  */
-export function characterOpening(
-  pts: readonly Pt[],
-  rest: readonly Pt[]
-): Opening | null {
+export function characterOpening(pts: readonly Pt[], rest: readonly Pt[]): Opening | null {
   const upper = INNER_UPPER.map((i) => pts[i]);
   const lower = INNER_LOWER.map((i) => pts[i]);
-  const l = pts[78], r = pts[308];
+  const l = pts[78],
+    r = pts[308];
   const width = Math.max(Math.hypot(r.x - l.x, r.y - l.y), 1);
   let gap = 0;
   for (let k = 1; k < upper.length - 1; k++) {
@@ -292,9 +311,12 @@ export function openingPath(o: Opening, make: () => Path2D): Path2D {
     const p2 = outline[(i + 1) % n];
     const p3 = outline[(i + 2) % n];
     path.bezierCurveTo(
-      p1.x + (p2.x - p0.x) / 6, p1.y + (p2.y - p0.y) / 6,
-      p2.x - (p3.x - p1.x) / 6, p2.y - (p3.y - p1.y) / 6,
-      p2.x, p2.y
+      p1.x + (p2.x - p0.x) / 6,
+      p1.y + (p2.y - p0.y) / 6,
+      p2.x - (p3.x - p1.x) / 6,
+      p2.y - (p3.y - p1.y) / 6,
+      p2.x,
+      p2.y
     );
   }
   path.closePath();
@@ -321,7 +343,11 @@ export interface CharacterLook {
 }
 
 export const DEFAULT_LOOK: CharacterLook = {
-  flat: false, line: [60, 28, 26], lip: [150, 90, 84], skin: [200, 150, 130], soft: 0.006,
+  flat: false,
+  line: [60, 28, 26],
+  lip: [150, 90, 84],
+  skin: [200, 150, 130],
+  soft: 0.006,
 };
 
 /** The feather is never more than this share of the mouth's width: the
@@ -342,7 +368,8 @@ export const SOFT_CEILING = 0.03;
  */
 export function softness(sharpness: number | null | undefined, seamEdge: number | null, mouthWidth: number): number {
   const w = Math.max(mouthWidth, 1);
-  if (typeof sharpness === "number" && Number.isFinite(sharpness) && sharpness > 0) return Math.min(SOFT_CEILING, sharpness / w);
+  if (typeof sharpness === "number" && Number.isFinite(sharpness) && sharpness > 0)
+    return Math.min(SOFT_CEILING, sharpness / w);
   if (seamEdge !== null) return Math.max(1, Math.min(4, seamEdge)) / w;
   return DEFAULT_LOOK.soft;
 }
@@ -357,7 +384,8 @@ export function softness(sharpness: number | null | undefined, seamEdge: number 
  */
 export function edgeWidth(pixel: (x: number, y: number) => Rgb | null, seam: readonly Pt[]): number | null {
   const widths: number[] = [];
-  const from = Math.floor(seam.length * 0.25), to = Math.ceil(seam.length * 0.75);
+  const from = Math.floor(seam.length * 0.25),
+    to = Math.ceil(seam.length * 0.75);
   for (let k = from; k < to; k++) {
     const p = seam[k];
     const lum: number[] = [];
@@ -379,10 +407,11 @@ export function edgeWidth(pixel: (x: number, y: number) => Rgb | null, seam: rea
 
 export const luma = (c: Rgb) => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
 export const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
-  a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t,
+  a[0] + (b[0] - a[0]) * t,
+  a[1] + (b[1] - a[1]) * t,
+  a[2] + (b[2] - a[2]) * t,
 ];
-export const rgb = (c: Rgb, a = 1) =>
-  `rgba(${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])}, ${a})`;
+export const rgb = (c: Rgb, a = 1) => `rgba(${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])}, ${a})`;
 
 /**
  * Cel art or not, and the picture's line colour, from `pixel(x, y)` in
@@ -405,8 +434,10 @@ export function sampleLook(
 ): CharacterLook {
   const bins = new Map<number, number>();
   let total = 0;
-  const x0 = box.cx - box.w * 1.5, x1 = box.cx + box.w * 1.5;
-  const y0 = box.cy - box.w * 0.9, y1 = box.cy + box.w * 1.5;
+  const x0 = box.cx - box.w * 1.5,
+    x1 = box.cx + box.w * 1.5;
+  const y0 = box.cy - box.w * 0.9,
+    y1 = box.cy + box.w * 1.5;
   const N = 28;
   // Cel art is told by two things together. Its palette: a handful of colours
   // cover nearly all of the area (a render's skin and a photograph's fur spread
@@ -419,7 +450,8 @@ export function sampleLook(
   const steps: number[] = [];
   for (let a = 0; a < N; a++) {
     for (let b = 0; b < N; b++) {
-      const x = x0 + ((x1 - x0) * (a + 0.5)) / N, y = y0 + ((y1 - y0) * (b + 0.5)) / N;
+      const x = x0 + ((x1 - x0) * (a + 0.5)) / N,
+        y = y0 + ((y1 - y0) * (b + 0.5)) / N;
       const c = pixel(x, y);
       if (!c) continue;
       const key = ((c[0] >> 4) << 8) | ((c[1] >> 4) << 4) | (c[2] >> 4);
@@ -431,7 +463,10 @@ export function sampleLook(
   }
   let flat = false;
   if (total > 0) {
-    const top = [...bins.values()].sort((p, q) => q - p).slice(0, 8).reduce((s, v) => s + v, 0);
+    const top = [...bins.values()]
+      .sort((p, q) => q - p)
+      .slice(0, 8)
+      .reduce((s, v) => s + v, 0);
     steps.sort((p, q) => p - q);
     const median = steps.length ? steps[Math.floor(steps.length / 2)] : 0;
     flat = top / total >= 0.7 && median <= 4;
@@ -454,4 +489,3 @@ export function sampleLook(
   const soft = softness(sharpness, hasSharpness ? null : edgeWidth(pixel, seam), box.w);
   return { flat, line, lip, skin, soft };
 }
-

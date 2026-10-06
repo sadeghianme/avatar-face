@@ -22,9 +22,12 @@ import { fakeCanvas, NoopPath } from "./browser-fakes";
  */
 
 const rig = JSON.parse(readFileSync(new URL("./fixtures/human-rig.json", import.meta.url), "utf8")) as Rig;
-const track = JSON.parse(readFileSync(new URL("./fixtures/native-cues-hello.json", import.meta.url), "utf8")) as { cues: Cue[] };
-const manifest = validatePerformanceManifest(JSON.parse(
-  readFileSync(new URL("../../../frontend/public/lab/reference/performance.json", import.meta.url), "utf8")));
+const track = JSON.parse(readFileSync(new URL("./fixtures/native-cues-hello.json", import.meta.url), "utf8")) as {
+  cues: Cue[];
+};
+const manifest = validatePerformanceManifest(
+  JSON.parse(readFileSync(new URL("../../../frontend/public/lab/reference/performance.json", import.meta.url), "utf8"))
+);
 
 const FRAME = 1000 / 60;
 
@@ -55,7 +58,10 @@ describe("the articulation of a cue track", () => {
 
   /** Settle, play, and tick at exactly 60 fps for `ms`, sampling each frame. */
   const play = (e: EngineSeam, engine: AvatarEngine, cues: Cue[], ms: number, sample: (t: number) => void) => {
-    for (let i = 0; i < 30; i++) { now += FRAME; e.tick(now); }
+    for (let i = 0; i < 30; i++) {
+      now += FRAME;
+      e.tick(now);
+    }
     engine.playCues(cues);
     const start = now;
     for (let t = 0; t <= ms; t += FRAME) {
@@ -78,7 +84,12 @@ describe("the articulation of a cue track", () => {
     // One 200 ms vowel, a word's silence either side. (A long silence
     // after it would dilute its peak: a bell as wide as a 700 ms pause
     // still pulls at the vowel's centre, which is the blend's own doing.)
-    const cues: Cue[] = [{ t: 0, viseme: "sil", a: 1 }, { t: 300, viseme: "aa", a: 1 }, { t: 500, viseme: "sil", a: 1 }, { t: 700, viseme: "sil", a: 1 }];
+    const cues: Cue[] = [
+      { t: 0, viseme: "sil", a: 1 },
+      { t: 300, viseme: "aa", a: 1 },
+      { t: 500, viseme: "sil", a: 1 },
+      { t: 700, viseme: "sil", a: 1 },
+    ];
     const jaw: { t: number; open: number }[] = [];
     play(e, engine, cues, 1000, (t) => jaw.push({ t, open: e.face.weights.jawOpen }));
     const peak = jaw.reduce((best, s) => (s.open > best.open ? s : best), jaw[0]);
@@ -102,9 +113,16 @@ describe("the articulation of a cue track", () => {
     // native timing writes, kept by prepareCues beside transients), then a
     // 300 ms pause before the next word.
     const cues: Cue[] = [
-      { t: 0, viseme: "sil", a: 1 }, { t: 100, viseme: "aa", a: 1 }, { t: 250, viseme: "nn", a: 1 },
-      { t: 300, viseme: "sil", a: 1 }, { t: 350, viseme: "DD", a: 1 }, { t: 400, viseme: "aa", a: 1 },
-      { t: 700, viseme: "sil", a: 1 }, { t: 1000, viseme: "aa", a: 1 }, { t: 1200, viseme: "sil", a: 1 }, { t: 1500, viseme: "sil", a: 1 },
+      { t: 0, viseme: "sil", a: 1 },
+      { t: 100, viseme: "aa", a: 1 },
+      { t: 250, viseme: "nn", a: 1 },
+      { t: 300, viseme: "sil", a: 1 },
+      { t: 350, viseme: "DD", a: 1 },
+      { t: 400, viseme: "aa", a: 1 },
+      { t: 700, viseme: "sil", a: 1 },
+      { t: 1000, viseme: "aa", a: 1 },
+      { t: 1200, viseme: "sil", a: 1 },
+      { t: 1500, viseme: "sil", a: 1 },
     ];
     speech.begin(cues);
     speech.startClock(now);
@@ -130,7 +148,14 @@ describe("the articulation of a cue track", () => {
     const width = manifest.mouth_width * scale;
     const ramp = new RevealRamp();
     const frames: { t: number; gap: number; teeth: number; viseme: string }[] = [];
-    const visemeAt = (t: number) => { let v = "sil"; for (const c of e.speech.cues) { if (c.t <= t) v = c.viseme; else break; } return v; };
+    const visemeAt = (t: number) => {
+      let v = "sil";
+      for (const c of e.speech.cues) {
+        if (c.t <= t) v = c.viseme;
+        else break;
+      }
+      return v;
+    };
     play(e, engine, track.cues, 4000, (t) => {
       const points = neutral.map((p) => ({ ...p }));
       mouth.deform(points, neutral, { inner_lip_ring: manifest.inner_ring } as Rig, e.face.weights);
@@ -154,13 +179,17 @@ describe("the articulation of a cue track", () => {
     // span runs to the next cue: the /m/ of "am" holds 116 ms, its own 34
     // and the folded silence after it), in a pause, or at the end: never
     // between two syllables.
-    const pauses = e.speech.cues.filter((c, i) => c.viseme === "sil" && (e.speech.cues[i + 1]?.t ?? Infinity) - c.t >= 110).map((c) => [c.t, e.speech.cues[e.speech.cues.indexOf(c) + 1]?.t ?? Infinity]);
+    const pauses = e.speech.cues
+      .filter((c, i) => c.viseme === "sil" && (e.speech.cues[i + 1]?.t ?? Infinity) - c.t >= 110)
+      .map((c) => [c.t, e.speech.cues[e.speech.cues.indexOf(c) + 1]?.t ?? Infinity]);
     const lead = articulationLead(1);
     const spanOf = (c: Cue) => (e.speech.cues[e.speech.cues.indexOf(c) + 1]?.t ?? c.t + 90) - c.t;
     for (const f of frames) {
       if (f.gap >= 0.03) continue;
       const heard = f.t + lead; // what the lips are shaping is this far ahead
-      const bilabial = e.speech.cues.some((c) => c.viseme === "PP" && heard >= c.t - 60 && heard <= c.t + spanOf(c) + 60);
+      const bilabial = e.speech.cues.some(
+        (c) => c.viseme === "PP" && heard >= c.t - 60 && heard <= c.t + spanOf(c) + 60
+      );
       const paused = pauses.some(([from, to]) => heard >= from - 20 && heard <= to + 60);
       expect(bilabial || paused || f.t > 3700, `closed at ${f.t.toFixed(0)} ms (${f.viseme})`).toBe(true);
     }

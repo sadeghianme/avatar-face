@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ContinuousMouth } from "../continuous-mouth";
 import { REFERENCE_POSES, normalizeProfile } from "../reference-mouth-model";
 import {
-  performanceInfluence, validateMotionManifest, validatePerformanceManifest,
+  performanceInfluence,
+  validateMotionManifest,
+  validatePerformanceManifest,
   type AvatarPerformanceManifest,
 } from "../photographic-performance-model";
 import type { BlendWeights, Rig } from "../../types";
@@ -39,8 +41,9 @@ const bundled = () => JSON.parse(readFileSync(new URL("../../../assets/mouth-mot
 let clock = 0;
 vi.spyOn(performance, "now").mockImplementation(() => clock);
 
-const SEQUENCE: BlendWeights[] = ["aa", "ee", "closed", "oo", "oh", "fv", "th", "rest"]
-  .flatMap(id => Array(12).fill(REFERENCE_POSES[id].weights));
+const SEQUENCE: BlendWeights[] = ["aa", "ee", "closed", "oo", "oh", "fv", "th", "rest"].flatMap((id) =>
+  Array(12).fill(REFERENCE_POSES[id].weights)
+);
 
 /** Every deformed vertex, rounded to 1/100 px, over the whole sequence. */
 function digest(mouth: ContinuousMouth, neutral: { x: number; y: number }[]): string {
@@ -48,18 +51,21 @@ function digest(mouth: ContinuousMouth, neutral: { x: number; y: number }[]): st
   clock = 1000;
   for (const weights of SEQUENCE) {
     clock += 1000 / 60;
-    const points = neutral.map(p => ({ ...p }));
+    const points = neutral.map((p) => ({ ...p }));
     mouth.deform(points, neutral, {} as Rig, weights);
-    hash.update(points.map(p => `${Math.round(p.x * 100)},${Math.round(p.y * 100)}`).join(";"));
+    hash.update(points.map((p) => `${Math.round(p.x * 100)},${Math.round(p.y * 100)}`).join(";"));
   }
   return hash.digest("hex").slice(0, 16);
 }
 
 /** A face that is not the Reference: smaller, tilted, elsewhere. */
 function otherFace(): { x: number; y: number }[] {
-  const angle = 5 * Math.PI / 180, c = Math.cos(angle), s = Math.sin(angle);
+  const angle = (5 * Math.PI) / 180,
+    c = Math.cos(angle),
+    s = Math.sin(angle);
   return bundled().poses[0].points.map(([x, y]: [number, number]) => ({
-    x: 120 + (x * c - y * s) * 640, y: 40 + (x * s + y * c) * 640,
+    x: 120 + (x * c - y * s) * 640,
+    y: 40 + (x * s + y * c) * 640,
   }));
 }
 
@@ -92,33 +98,113 @@ describe("validateMotionManifest", () => {
   it("passes the bundled Reference motion through exactly as before", () => {
     const value = bundled();
     expect(validateMotionManifest(value)).toBe(value);
-    expect(() => validateMotionManifest({ ...value, character: "someone-else" })).toThrow("Invalid photographic character manifest");
+    expect(() => validateMotionManifest({ ...value, character: "someone-else" })).toThrow(
+      "Invalid photographic character manifest"
+    );
   });
   it("accepts the backend's per-avatar manifest", () => {
     const manifest = validateMotionManifest(avatarManifest()) as AvatarPerformanceManifest;
     expect(manifest.version).toBe(2);
     expect(manifest.character).toBe("avatar-v1:contract-fixture");
-    expect(manifest.poses.map(p => p.provenance)).toEqual(
-      ["base", "generated", "generated", "generated", "retargeted", "retargeted", "retargeted"]);
+    expect(manifest.poses.map((p) => p.provenance)).toEqual([
+      "base",
+      "generated",
+      "generated",
+      "generated",
+      "retargeted",
+      "retargeted",
+      "retargeted",
+    ]);
   });
   it("is never accepted by the lab's crossfade player, which needs pose photos", () => {
     expect(() => validatePerformanceManifest(avatarManifest())).toThrow();
   });
   it.each([
-    ["an unversioned character", (m: AvatarPerformanceManifest) => { m.character = "lab-reference-v1"; }],
-    ["a character with a path in it", (m: AvatarPerformanceManifest) => { m.character = "avatar-v1:../x"; }],
-    ["a jaw range outside the profile's", (m: AvatarPerformanceManifest) => { m.jaw_range = 2; }],
-    ["a missing jaw range", (m: AvatarPerformanceManifest) => { delete (m as Partial<AvatarPerformanceManifest>).jaw_range; }],
-    ["poses out of order", (m: AvatarPerformanceManifest) => { m.poses.reverse(); }],
-    ["a retargeted rest pose", (m: AvatarPerformanceManifest) => { m.poses[0].provenance = "retargeted"; m.poses[0].registration_rms = null; }],
-    ["a generated pose without registration", (m: AvatarPerformanceManifest) => { m.poses[1].registration_rms = null; }],
-    ["a generated pose registered too loosely", (m: AvatarPerformanceManifest) => { m.poses[1].registration_rms = .01; }],
-    ["a retargeted pose claiming a registration", (m: AvatarPerformanceManifest) => { m.poses[4].registration_rms = .001; }],
-    ["an unknown provenance", (m: AvatarPerformanceManifest) => { (m.poses[2] as { provenance: string }).provenance = "guessed"; }],
-    ["a pose photo outside the kit", (m: AvatarPerformanceManifest) => { m.poses[2].image = "../../secret.png"; }],
-    ["a pose with missing points", (m: AvatarPerformanceManifest) => { m.poses[3].points.pop(); }],
-    ["a far-away point", (m: AvatarPerformanceManifest) => { m.poses[3].points[10] = [9, 9]; }],
-    ["a bad triangle", (m: AvatarPerformanceManifest) => { m.triangles[0] = [1, 1, 2]; }],
+    [
+      "an unversioned character",
+      (m: AvatarPerformanceManifest) => {
+        m.character = "lab-reference-v1";
+      },
+    ],
+    [
+      "a character with a path in it",
+      (m: AvatarPerformanceManifest) => {
+        m.character = "avatar-v1:../x";
+      },
+    ],
+    [
+      "a jaw range outside the profile's",
+      (m: AvatarPerformanceManifest) => {
+        m.jaw_range = 2;
+      },
+    ],
+    [
+      "a missing jaw range",
+      (m: AvatarPerformanceManifest) => {
+        delete (m as Partial<AvatarPerformanceManifest>).jaw_range;
+      },
+    ],
+    [
+      "poses out of order",
+      (m: AvatarPerformanceManifest) => {
+        m.poses.reverse();
+      },
+    ],
+    [
+      "a retargeted rest pose",
+      (m: AvatarPerformanceManifest) => {
+        m.poses[0].provenance = "retargeted";
+        m.poses[0].registration_rms = null;
+      },
+    ],
+    [
+      "a generated pose without registration",
+      (m: AvatarPerformanceManifest) => {
+        m.poses[1].registration_rms = null;
+      },
+    ],
+    [
+      "a generated pose registered too loosely",
+      (m: AvatarPerformanceManifest) => {
+        m.poses[1].registration_rms = 0.01;
+      },
+    ],
+    [
+      "a retargeted pose claiming a registration",
+      (m: AvatarPerformanceManifest) => {
+        m.poses[4].registration_rms = 0.001;
+      },
+    ],
+    [
+      "an unknown provenance",
+      (m: AvatarPerformanceManifest) => {
+        (m.poses[2] as { provenance: string }).provenance = "guessed";
+      },
+    ],
+    [
+      "a pose photo outside the kit",
+      (m: AvatarPerformanceManifest) => {
+        m.poses[2].image = "../../secret.png";
+      },
+    ],
+    [
+      "a pose with missing points",
+      (m: AvatarPerformanceManifest) => {
+        m.poses[3].points.pop();
+      },
+    ],
+    [
+      "a far-away point",
+      (m: AvatarPerformanceManifest) => {
+        m.poses[3].points[10] = [9, 9];
+      },
+    ],
+    [
+      "a bad triangle",
+      (m: AvatarPerformanceManifest) => {
+        m.triangles[0] = [1, 1, 2];
+      },
+    ],
   ])("refuses %s", (_, spoil) => {
     const manifest = avatarManifest();
     spoil(manifest);
@@ -132,7 +218,7 @@ describe("a per-avatar manifest in the continuous mouth", () => {
     let points = neutral;
     for (let i = 0; i < 400; i++) {
       clock += 1000 / 60;
-      points = neutral.map(p => ({ ...p }));
+      points = neutral.map((p) => ({ ...p }));
       mouth.deform(points, neutral, {} as Rig, weights);
     }
     return points;
@@ -145,9 +231,10 @@ describe("a per-avatar manifest in the continuous mouth", () => {
     // Any similarity of the manifest frame is a valid engine frame.
     const neutral = manifest.poses[0].points.map(([x, y]) => ({ x: x * 800 + 50, y: y * 800 + 20 }));
     const aa = settle(mouth, neutral, REFERENCE_POSES.aa.weights);
-    const rest = manifest.poses[0].points, pose = manifest.poses[1].points;
+    const rest = manifest.poses[0].points,
+      pose = manifest.poses[1].points;
     const cornerWidth = Math.hypot(rest[291][0] - rest[61][0], rest[291][1] - rest[61][1]);
-    const pixelsPerUnit = 800 * cornerWidth / manifest.mouth_width;
+    const pixelsPerUnit = (800 * cornerWidth) / manifest.mouth_width;
     for (const i of [13, 14, 17, 0]) {
       const influence = performanceInfluence(rest[i][0], rest[i][1], manifest.center, manifest.mouth_width);
       expect(aa[i].y - neutral[i].y).toBeCloseTo((pose[i][1] - rest[i][1]) * pixelsPerUnit * influence, 1);
@@ -157,15 +244,18 @@ describe("a per-avatar manifest in the continuous mouth", () => {
 
   it("scales movement from the jaw range its kit measured, not from the Reference's", () => {
     const at = (jawRange: number, measured: number) => {
-      const manifest = validateMotionManifest({ ...avatarManifest(), jaw_range: measured }) as AvatarPerformanceManifest;
+      const manifest = validateMotionManifest({
+        ...avatarManifest(),
+        jaw_range: measured,
+      }) as AvatarPerformanceManifest;
       const mouth = new ContinuousMouth(manifest);
       mouth.setProfile(normalizeProfile({ jawRange }));
       const neutral = manifest.poses[0].points.map(([x, y]) => ({ x: x * 800, y: y * 800 }));
       return digest(mouth, neutral);
     };
     // At its own fit the geometry is the same whatever that fit is.
-    expect(at(.7, .7)).toBe(at(.95, .95));
-    expect(at(.7, .7)).not.toBe(at(.85, .7));
+    expect(at(0.7, 0.7)).toBe(at(0.95, 0.95));
+    expect(at(0.7, 0.7)).not.toBe(at(0.85, 0.7));
   });
 
   it("loads from a URL like the bundled motion", async () => {
@@ -201,22 +291,33 @@ describe("a kit at the Reference's size", () => {
     let points = neutral;
     for (let i = 0; i < 400; i++) {
       clock += 1000 / 60;
-      points = neutral.map(p => ({ ...p }));
+      points = neutral.map((p) => ({ ...p }));
       mouth.deform(points, neutral, {} as Rig, REFERENCE_POSES[id].weights);
     }
-    const a = neutral[61], b = neutral[291], width = Math.hypot(b.x - a.x, b.y - a.y);
-    const ux = (b.x - a.x) / width, uy = (b.y - a.y) / width;
-    return LIPS.map(i => {
-      const dx = points[i].x - neutral[i].x, dy = points[i].y - neutral[i].y;
+    const a = neutral[61],
+      b = neutral[291],
+      width = Math.hypot(b.x - a.x, b.y - a.y);
+    const ux = (b.x - a.x) / width,
+      uy = (b.y - a.y) / width;
+    return LIPS.map((i) => {
+      const dx = points[i].x - neutral[i].x,
+        dy = points[i].y - neutral[i].y;
       return [(dx * ux + dy * uy) / width, (-dx * uy + dy * ux) / width];
     });
   };
 
   it("is true at the Reference's jaw range, its own shapes and the retargeted ones alike", () => {
     const manifest = validateMotionManifest(fittedManifest()) as AvatarPerformanceManifest;
-    expect(manifest.jaw_range).toBe(.85);
-    expect(manifest.poses.map(p => p.provenance)).toEqual(
-      ["base", "generated", "retargeted", "generated", "retargeted", "generated", "retargeted"]);
+    expect(manifest.jaw_range).toBe(0.85);
+    expect(manifest.poses.map((p) => p.provenance)).toEqual([
+      "base",
+      "generated",
+      "retargeted",
+      "generated",
+      "retargeted",
+      "generated",
+      "retargeted",
+    ]);
   });
 
   // The fixture's face is the Reference, so the bundled motion on it is the
@@ -228,21 +329,31 @@ describe("a kit at the Reference's size", () => {
   // kit's levelled frame does not, so its sideways parts differ by up to
   // 0.3 degrees of the vertical ones, and its falloff is sampled 0.3
   // degrees round.)
-  it.each([["aa", .85], ["oo", .85], ["fv", .85], ["oh", .85], ["th", .85], ["ee", .85],
-    ["aa", .7], ["oh", .75], ["th", .7]])(
-    "plays %s as the bundled Reference does on the same face, at jawRange %s", (id, jawRange) => {
-      const mine = played(fittedManifest(), jawRange, id);
-      const reference = played(bundled(), jawRange, id);
-      const near = (value: number, expected: number) =>
-        expect(Math.abs(value - expected)).toBeLessThan(.01 * Math.abs(expected) + 2e-4);
-      mine.forEach(([x, y], k) => {
-        const [rx, ry] = reference[k];
-        near(Math.hypot(x, y), Math.hypot(rx, ry));
-        near(y, ry);
-        expect(x).toBeCloseTo(rx, 2);
-      });
-      expect(Math.abs(reference[1][1])).toBeGreaterThan(.01);
+  it.each([
+    ["aa", 0.85],
+    ["oo", 0.85],
+    ["fv", 0.85],
+    ["oh", 0.85],
+    ["th", 0.85],
+    ["ee", 0.85],
+    ["aa", 0.7],
+    ["oh", 0.75],
+    ["th", 0.7],
+  ])("plays %s as the bundled Reference does on the same face, at jawRange %s", (id, jawRange) => {
+    const mine = played(fittedManifest(), jawRange, id);
+    const reference = played(bundled(), jawRange, id);
+    const near = (value: number, expected: number) =>
+      expect(Math.abs(value - expected)).toBeLessThan(0.01 * Math.abs(expected) + 2e-4);
+    mine.forEach(([x, y], k) => {
+      const [rx, ry] = reference[k];
+      near(Math.hypot(x, y), Math.hypot(rx, ry));
+      near(y, ry);
+      expect(x).toBeCloseTo(rx, 2);
     });
+    expect(Math.abs(reference[1][1])).toBeGreaterThan(0.01);
+  });
 });
 
-afterEach(() => { clock = 0; });
+afterEach(() => {
+  clock = 0;
+});

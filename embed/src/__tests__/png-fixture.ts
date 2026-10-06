@@ -8,14 +8,17 @@ import { inflateSync } from "node:zlib";
 export function decodePng(file: string): { w: number; h: number; rgb: Uint8Array } {
   const buf = readFileSync(new URL(`./fixtures/real-crops/${file}`, import.meta.url));
   let off = 8;
-  let w = 0, h = 0, channels = 3;
+  let w = 0,
+    h = 0,
+    channels = 3;
   const idat: Buffer[] = [];
   while (off < buf.length) {
     const len = buf.readUInt32BE(off);
     const type = buf.toString("ascii", off + 4, off + 8);
     const data = buf.subarray(off + 8, off + 8 + len);
     if (type === "IHDR") {
-      w = data.readUInt32BE(0); h = data.readUInt32BE(4);
+      w = data.readUInt32BE(0);
+      h = data.readUInt32BE(4);
       if (data[8] !== 8 || data[12] !== 0) throw new Error("8-bit, non-interlaced PNGs only");
       channels = data[9] === 6 ? 4 : 3;
     } else if (type === "IDAT") idat.push(Buffer.from(data));
@@ -38,7 +41,9 @@ export function decodePng(file: string): { w: number; h: number; rgb: Uint8Array
       else if (f === 3) add = (a + b) >> 1;
       else if (f === 4) {
         const p = a + b - c;
-        const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+        const pa = Math.abs(p - a),
+          pb = Math.abs(p - b),
+          pc = Math.abs(p - c);
         add = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
       }
       line[i] = (line[i] + add) & 255;
@@ -53,7 +58,10 @@ export function decodePng(file: string): { w: number; h: number; rgb: Uint8Array
 export function rgbaOf(png: { w: number; h: number; rgb: Uint8Array }): Uint8ClampedArray {
   const data = new Uint8ClampedArray(png.w * png.h * 4);
   for (let i = 0; i < png.w * png.h; i++) {
-    data[i * 4] = png.rgb[i * 3]; data[i * 4 + 1] = png.rgb[i * 3 + 1]; data[i * 4 + 2] = png.rgb[i * 3 + 2]; data[i * 4 + 3] = 255;
+    data[i * 4] = png.rgb[i * 3];
+    data[i * 4 + 1] = png.rgb[i * 3 + 1];
+    data[i * 4 + 2] = png.rgb[i * 3 + 2];
+    data[i * 4 + 3] = 255;
   }
   return data;
 }

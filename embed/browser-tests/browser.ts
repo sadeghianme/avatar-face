@@ -16,7 +16,9 @@ export const ROOT = fileURLToPath(new URL("../", import.meta.url));
 
 /** Chromium with WebGL on SwiftShader, whatever GPU the machine has. */
 export function launch(): Promise<Browser> {
-  return chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
+  return chromium.launch({
+    args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
+  });
 }
 
 const TYPES: Record<string, string> = {

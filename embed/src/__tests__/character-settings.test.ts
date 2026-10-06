@@ -7,9 +7,7 @@ import { ZERO_WEIGHTS, type Rig } from "../types";
 
 /** The owner's character settings and the lid blink, on the engine. */
 
-const rig = JSON.parse(
-  readFileSync(new URL("./fixtures/fitted-animal-rig.json", import.meta.url), "utf8")
-) as Rig;
+const rig = JSON.parse(readFileSync(new URL("./fixtures/fitted-animal-rig.json", import.meta.url), "utf8")) as Rig;
 
 class NoopPath {
   moveTo() {}

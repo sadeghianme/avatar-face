@@ -101,7 +101,11 @@ export async function playFrameScript(
 }
 
 /** Mean RGBA over a `cells` x `cells` grid of the box (x, y, w, h) of a frame. */
-export function grid(data: Uint8ClampedArray, box: readonly [number, number, number, number], cells = GRID): Uint8Array {
+export function grid(
+  data: Uint8ClampedArray,
+  box: readonly [number, number, number, number],
+  cells = GRID
+): Uint8Array {
   const [bx, by, bw, bh] = box;
   const out = new Uint8Array(cells * cells * 4);
   for (let gy = 0; gy < cells; gy++) {

@@ -10,7 +10,14 @@ import { engineSeam } from "../src/engine/seam";
 import type { WarpMode } from "../src/engine/mesh-warp";
 import type { MouthPose } from "../src/mouth-extension";
 import type { Cue, Rig } from "../src/types";
-import { CUES_FILE, SIZE, SUBJECT_FILES, playFrameScript, seededRandom, subjectRig } from "../src/__tests__/frame-script";
+import {
+  CUES_FILE,
+  SIZE,
+  SUBJECT_FILES,
+  playFrameScript,
+  seededRandom,
+  subjectRig,
+} from "../src/__tests__/frame-script";
 
 /** One frame drawn: its name, the path the warp took, its RGBA (base64). */
 export interface PageFrame {
@@ -21,7 +28,10 @@ export interface PageFrame {
 
 declare global {
   interface Window {
-    drawSubject(name: string, warp: WarpMode): Promise<{ frames: PageFrame[]; mouth: [number, number, number, number] }>;
+    drawSubject(
+      name: string,
+      warp: WarpMode
+    ): Promise<{ frames: PageFrame[]; mouth: [number, number, number, number] }>;
   }
 }
 

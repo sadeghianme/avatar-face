@@ -37,9 +37,7 @@ export function sttSupported(): boolean {
 export function listen(options: ListenOptions = {}): Promise<string> {
   const Ctor = recognitionCtor();
   if (!Ctor) {
-    return Promise.reject(
-      new Error("Speech recognition is not supported in this browser")
-    );
+    return Promise.reject(new Error("Speech recognition is not supported in this browser"));
   }
   return new Promise((resolve, reject) => {
     const recognition = new Ctor();

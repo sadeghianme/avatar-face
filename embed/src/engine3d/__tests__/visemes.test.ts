@@ -47,10 +47,19 @@ describe("the viseme tables", () => {
     const names = arkitNamesOf(DEFAULT_VISEME_ARKIT);
     expect(new Set(names).size).toBe(names.length);
     expect(names.sort()).toEqual([
-      "jawOpen", "mouthClose", "mouthFunnel", "mouthPucker",
-      "mouthSmileLeft", "mouthSmileRight", "mouthStretchLeft", "mouthStretchRight",
+      "jawOpen",
+      "mouthClose",
+      "mouthFunnel",
+      "mouthPucker",
+      "mouthSmileLeft",
+      "mouthSmileRight",
+      "mouthStretchLeft",
+      "mouthStretchRight",
     ]);
-    expect(arkitNamesOf({ aa: { jawOpen: 1 }, oh: { jawOpen: 0.5, mouthFunnel: 0.4 } })).toEqual(["jawOpen", "mouthFunnel"]);
+    expect(arkitNamesOf({ aa: { jawOpen: 1 }, oh: { jawOpen: 0.5, mouthFunnel: 0.4 } })).toEqual([
+      "jawOpen",
+      "mouthFunnel",
+    ]);
   });
 });
 
@@ -99,19 +108,40 @@ describe("the cue track's targets", () => {
 
   it("hold the last cue, and a cue with no span to the next", () => {
     expect(pushed(cueMorphTargets(cues, 9000))).toEqual({ viseme_U: CUE_PEAK });
-    const stacked: Cue[] = [{ t: 0, viseme: "E" }, { t: 0, viseme: "aa" }, { t: 0, viseme: "oh" }];
+    const stacked: Cue[] = [
+      { t: 0, viseme: "E" },
+      { t: 0, viseme: "aa" },
+      { t: 0, viseme: "oh" },
+    ];
     expect(pushed(cueMorphTargets(stacked, 0))).toEqual({ viseme_O: CUE_PEAK });
-    const unsorted: Cue[] = [{ t: 0, viseme: "E" }, { t: 50, viseme: "aa" }, { t: 50, viseme: "kk" }];
+    const unsorted: Cue[] = [
+      { t: 0, viseme: "E" },
+      { t: 50, viseme: "aa" },
+      { t: 50, viseme: "kk" },
+    ];
     expect(pushed(cueMorphTargets(unsorted, 60))).toEqual({ viseme_kk: CUE_PEAK });
   });
 
   it("keep a viseme repeated across two cues at its peak through the fade", () => {
-    const same: Cue[] = [{ t: 0, viseme: "aa" }, { t: 100, viseme: "aa" }];
+    const same: Cue[] = [
+      { t: 0, viseme: "aa" },
+      { t: 100, viseme: "aa" },
+    ];
     for (const t of [0, 33, 50, 99]) expect(cueMorphTargets(same, t).viseme_aa).toBeCloseTo(CUE_PEAK, 12);
   });
 
   it("ignore a viseme the table does not know", () => {
-    expect(pushed(cueMorphTargets([{ t: 0, viseme: "zz" }, { t: 100, viseme: "aa" }], 50))).toEqual({ viseme_aa: CUE_PEAK / 2 });
+    expect(
+      pushed(
+        cueMorphTargets(
+          [
+            { t: 0, viseme: "zz" },
+            { t: 100, viseme: "aa" },
+          ],
+          50
+        )
+      )
+    ).toEqual({ viseme_aa: CUE_PEAK / 2 });
   });
 });
 
@@ -165,6 +195,9 @@ describe("decomposing the visemes into ARKit values", () => {
     expect(Object.keys(out).sort()).toEqual([...names].sort());
     expect(Object.values(out).every((v) => v === 0)).toBe(true);
     const own = { aa: { jawOpen: 0.4, cheekPuff: 0.2 } };
-    expect(decomposeVisemes({ ...restingMorphs(), viseme_aa: 0.5 }, own, arkitNamesOf(own))).toEqual({ jawOpen: 0.2, cheekPuff: 0.1 });
+    expect(decomposeVisemes({ ...restingMorphs(), viseme_aa: 0.5 }, own, arkitNamesOf(own))).toEqual({
+      jawOpen: 0.2,
+      cheekPuff: 0.1,
+    });
   });
 });

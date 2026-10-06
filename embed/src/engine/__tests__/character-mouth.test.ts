@@ -101,7 +101,11 @@ describe("the jaw", () => {
     // The rows of one lip share a falloff; if they did not, an outer row would
     // spread less than the inner one and the drawn line would crumple.
     const pts = moved({ mouthPucker: 0.85, mouthFunnel: 0.6 });
-    const upperRows = [[80, 74, 40], [81, 73, 39], [82, 72, 37]];
+    const upperRows = [
+      [80, 74, 40],
+      [81, 73, 39],
+      [82, 72, 37],
+    ];
     for (const row of upperRows) {
       const shift = row.map((i) => pts[i].x - base[i].x);
       expect(Math.max(...shift) - Math.min(...shift)).toBeLessThan(Math.abs(shift[0]) * 0.2 + 2);
@@ -161,16 +165,35 @@ describe("teeth and tongue", () => {
 });
 
 describe("what the mouth takes from the picture", () => {
-  const palette = (colours: Rgb[]) => (x: number, y: number): Rgb =>
-    colours[(Math.floor(x / 30) + Math.floor(y / 30)) % colours.length];
+  const palette =
+    (colours: Rgb[]) =>
+    (x: number, y: number): Rgb =>
+      colours[(Math.floor(x / 30) + Math.floor(y / 30)) % colours.length];
   const noisy = (x: number, y: number): Rgb => [
-    (x * 37 + y * 11) % 256, (x * 7 + y * 53) % 256, (x * 13 + y * 29) % 256,
+    (x * 37 + y * 11) % 256,
+    (x * 7 + y * 53) % 256,
+    (x * 13 + y * 29) % 256,
   ];
-  const seam: Pt[] = [{ x: 100, y: 100 }, { x: 140, y: 100 }];
+  const seam: Pt[] = [
+    { x: 100, y: 100 },
+    { x: 140, y: 100 },
+  ];
   const box = { cx: 120, cy: 100, w: 40 };
 
   it("calls a few flat colours cel art, and a spread of colours a render", () => {
-    expect(sampleLook(palette([[240, 190, 160], [200, 140, 120], [60, 30, 25]]), seam, box, [150, 90, 80], [240, 190, 160]).flat).toBe(true);
+    expect(
+      sampleLook(
+        palette([
+          [240, 190, 160],
+          [200, 140, 120],
+          [60, 30, 25],
+        ]),
+        seam,
+        box,
+        [150, 90, 80],
+        [240, 190, 160]
+      ).flat
+    ).toBe(true);
     expect(sampleLook(noisy, seam, box, [150, 90, 80], [200, 160, 140]).flat).toBe(false);
   });
 
@@ -190,11 +213,13 @@ describe("what the mouth takes from the picture", () => {
   });
 
   it("reads how soft the picture's edges are, and feathers by that", () => {
-    const edge = (blur: number) => (_x: number, y: number): Rgb => {
-      const t = blur < 0.1 ? (y > 100 ? 1 : 0) : Math.max(0, Math.min(1, (y - 100) / blur + 0.5));
-      const v = 240 - 200 * t;
-      return [v, v, v];
-    };
+    const edge =
+      (blur: number) =>
+      (_x: number, y: number): Rgb => {
+        const t = blur < 0.1 ? (y > 100 ? 1 : 0) : Math.max(0, Math.min(1, (y - 100) / blur + 0.5));
+        const v = 240 - 200 * t;
+        return [v, v, v];
+      };
     const crisp = edgeWidth(edge(0.01), seam)!;
     const soft = edgeWidth(edge(4), seam)!;
     expect(crisp).toBeLessThan(1.2);
@@ -216,7 +241,10 @@ describe("what the mouth takes from the picture", () => {
     expect(crisp.soft).toBeCloseTo(1.1 / box.w, 9);
     // The same picture read as a soft render: its own 4.6 px edges, on a
     // mouth 200 px wide (on this 40 px one that would pass the ceiling).
-    expect(sampleLook(edge, seam, { ...box, w: 200 }, [150, 90, 80], [200, 160, 140], 4.6).soft).toBeCloseTo(4.6 / 200, 9);
+    expect(sampleLook(edge, seam, { ...box, w: 200 }, [150, 90, 80], [200, 160, 140], 4.6).soft).toBeCloseTo(
+      4.6 / 200,
+      9
+    );
     expect(sampleLook(edge, seam, box, [150, 90, 80], [200, 160, 140], 4.6).soft).toBe(SOFT_CEILING);
     // No sharpness (a flat or tainted picture): the seam, clamped 1 to 4
     // px, as the mouth always read it; nonsense counts as none.
@@ -257,7 +285,11 @@ describe("the owner's mouth settings", () => {
     expect(mergeTraits(DEFAULT_TRAITS, { jaw: 0 }).jaw).toBe(0.5);
     expect(mergeTraits(DEFAULT_TRAITS, { jaw: Number.NaN }).jaw).toBe(1);
     expect(mergeTraits(DEFAULT_TRAITS, { teeth: "fangs" as never }).teeth).toBe("upper");
-    expect(mergeTraits(DEFAULT_TRAITS, { teeth: "none", tongue: false })).toEqual({ teeth: "none", tongue: false, jaw: 1 });
+    expect(mergeTraits(DEFAULT_TRAITS, { teeth: "none", tongue: false })).toEqual({
+      teeth: "none",
+      tongue: false,
+      jaw: 1,
+    });
     expect(mergeTraits(DEFAULT_TRAITS, null)).toBe(DEFAULT_TRAITS);
   });
 });
@@ -282,8 +314,20 @@ describe("render profile selection", () => {
 
 describe("the painted lid", () => {
   const eye = {
-    upper: [{ x: 0, y: 10 }, { x: 10, y: 4 }, { x: 20, y: 2 }, { x: 30, y: 4 }, { x: 40, y: 10 }],
-    lower: [{ x: 0, y: 10 }, { x: 10, y: 15 }, { x: 20, y: 17 }, { x: 30, y: 15 }, { x: 40, y: 10 }],
+    upper: [
+      { x: 0, y: 10 },
+      { x: 10, y: 4 },
+      { x: 20, y: 2 },
+      { x: 30, y: 4 },
+      { x: 40, y: 10 },
+    ],
+    lower: [
+      { x: 0, y: 10 },
+      { x: 10, y: 15 },
+      { x: 20, y: 17 },
+      { x: 30, y: 15 },
+      { x: 40, y: 10 },
+    ],
   };
 
   it("comes down from the upper lid to the lower one, corners fixed", () => {
@@ -306,7 +350,13 @@ describe("the painted lid", () => {
   });
 
   it("prefers the lighter skin to the shadow round the eye", () => {
-    const samples: Rgb[] = [[100, 70, 60], [200, 150, 130], [210, 160, 140], [90, 60, 50], [205, 155, 135]];
+    const samples: Rgb[] = [
+      [100, 70, 60],
+      [200, 150, 130],
+      [210, 160, 140],
+      [90, 60, 50],
+      [205, 155, 135],
+    ];
     const c = medianColour(samples, 0.7)!;
     expect(c[0]).toBeGreaterThan(190);
     expect(medianColour([null, null])).toBeNull();
@@ -315,8 +365,20 @@ describe("the painted lid", () => {
   it("builds the lid on a smooth eye, however loose the marks are", () => {
     // Marks jittered by several px, one of them far off the eye.
     const loose = {
-      upper: [{ x: 0, y: 10 }, { x: 10, y: 7 }, { x: 20, y: -9 }, { x: 30, y: 1 }, { x: 40, y: 10 }],
-      lower: [{ x: 0, y: 10 }, { x: 10, y: 21 }, { x: 20, y: 13 }, { x: 30, y: 20 }, { x: 40, y: 10 }],
+      upper: [
+        { x: 0, y: 10 },
+        { x: 10, y: 7 },
+        { x: 20, y: -9 },
+        { x: 30, y: 1 },
+        { x: 40, y: 10 },
+      ],
+      lower: [
+        { x: 0, y: 10 },
+        { x: 10, y: 21 },
+        { x: 20, y: 13 },
+        { x: 30, y: 20 },
+        { x: 40, y: 10 },
+      ],
     };
     for (const e of [eye, loose]) {
       const r = regularEye(e);
@@ -338,8 +400,20 @@ describe("the painted lid", () => {
 
 describe("how far the eye really reaches", () => {
   const marks = {
-    upper: [{ x: 40, y: 50 }, { x: 55, y: 42 }, { x: 70, y: 40 }, { x: 85, y: 42 }, { x: 100, y: 50 }],
-    lower: [{ x: 40, y: 50 }, { x: 55, y: 58 }, { x: 70, y: 60 }, { x: 85, y: 58 }, { x: 100, y: 50 }],
+    upper: [
+      { x: 40, y: 50 },
+      { x: 55, y: 42 },
+      { x: 70, y: 40 },
+      { x: 85, y: 42 },
+      { x: 100, y: 50 },
+    ],
+    lower: [
+      { x: 40, y: 50 },
+      { x: 55, y: 58 },
+      { x: 70, y: 60 },
+      { x: 85, y: 58 },
+      { x: 100, y: 50 },
+    ],
   };
   // A drawn eye larger than its marks: an ellipse 40 x 13 round (70, 50),
   // on skin, with a darker patch of shadow touching its right side.
@@ -376,7 +450,9 @@ describe("how far the eye really reaches", () => {
 describe("/f/ and /v/", () => {
   it("are told from /p/, /th/ and the vowels", () => {
     const w = (o: Partial<BlendWeights>) => ({ ...ZERO_WEIGHTS, ...o });
-    expect(tuckAmount(w({ jawOpen: 0.1, mouthClose: 0.55, mouthStretch: 0.25, mouthFunnel: 0.1 }))).toBeGreaterThan(0.7);
+    expect(tuckAmount(w({ jawOpen: 0.1, mouthClose: 0.55, mouthStretch: 0.25, mouthFunnel: 0.1 }))).toBeGreaterThan(
+      0.7
+    );
     expect(tuckAmount(w({ jawOpen: 0.12, mouthClose: 0.5, mouthStretch: 0.15 }))).toBeGreaterThan(0.5);
     expect(tuckAmount(w({ jawOpen: 0.05, mouthClose: 0.9, mouthPucker: 0.25 }))).toBe(0); // /p/
     expect(tuckAmount(w({ jawOpen: 0.25, mouthClose: 0.2, mouthStretch: 0.2 }))).toBe(0); // /th/

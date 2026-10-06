@@ -61,7 +61,7 @@ export const MASK_SIGMA = 0.4;
 
 /** The normal CDF (Abramowitz & Stegun 7.1.26, within 1.5e-7). */
 function normalCdf(z: number): number {
-  const t = 1 / (1 + 0.3275911 * Math.abs(z) / Math.SQRT2);
+  const t = 1 / (1 + (0.3275911 * Math.abs(z)) / Math.SQRT2);
   const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
   const erf = 1 - poly * Math.exp(-(z * z) / 2);
   return 0.5 * (1 + (z < 0 ? -erf : erf));
@@ -94,13 +94,16 @@ export function cornerWeight(distance: number, reach: number): number {
  *  screen), so it is whole where either is, and outside the hard edge the
  *  stamp adds nothing. */
 export function featherAlphaAt(d: number, feather: number, corner: number): number {
-  const soft = featherAlpha(d, feather), hard = d > 0 ? corner : 0;
+  const soft = featherAlpha(d, feather),
+    hard = d > 0 ? corner : 0;
   return 1 - (1 - soft) * (1 - hard);
 }
 
 /** The stamp's radial gradient stops: cornerWeight, as a gradient's
  *  straight runs between stops follow it. */
-export const CORNER_STOPS: readonly [number, number][] = [0, 0.25, 0.5, 0.75, 1].map((t) => [t, cornerWeight(t, 1)] as [number, number]);
+export const CORNER_STOPS: readonly [number, number][] = [0, 0.25, 0.5, 0.75, 1].map(
+  (t) => [t, cornerWeight(t, 1)] as [number, number]
+);
 
 /** Without canvas filters: the erosion and blur as rings stroked out of the
  *  filled aperture (destination-out), the widest first, each taking the
@@ -120,7 +123,14 @@ export function featherSteps(feather: number): { lineWidth: number; alpha: numbe
   return steps;
 }
 
-interface Matrix { a: number; b: number; c: number; d: number; e: number; f: number }
+interface Matrix {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  e: number;
+  f: number;
+}
 const IDENTITY: Matrix = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
 
 /**
@@ -141,7 +151,10 @@ export class FeatheredLayer {
   private tried = false;
   /** This frame: the layer's origin and extent in device pixels, the
    *  transform the interior is painted under, and the device scale. */
-  private x = 0; private y = 0; private w = 0; private h = 0;
+  private x = 0;
+  private y = 0;
+  private w = 0;
+  private h = 0;
   private matrix: Matrix = IDENTITY;
   private scale = 1;
   private open = false;
@@ -151,10 +164,15 @@ export class FeatheredLayer {
     this.tried = true;
     try {
       if (typeof document === "undefined") return false;
-      const layer = document.createElement("canvas"), mask = document.createElement("canvas");
-      const lc = layer.getContext("2d"), mc = mask.getContext("2d");
+      const layer = document.createElement("canvas"),
+        mask = document.createElement("canvas");
+      const lc = layer.getContext("2d"),
+        mc = mask.getContext("2d");
       if (!lc || !mc) return false;
-      this.layer = layer; this.mask = mask; this.lc = lc; this.mc = mc;
+      this.layer = layer;
+      this.mask = mask;
+      this.lc = lc;
+      this.mc = mc;
       this.filters = typeof lc.filter === "string";
       return true;
     } catch {
@@ -169,24 +187,39 @@ export class FeatheredLayer {
    * can be had (no document, no context): the interior is then painted
    * straight onto `ctx`, clipped, as it always was.
    */
-  begin(ctx: CanvasRenderingContext2D, points: readonly MouthPoint[], feather: number): CanvasRenderingContext2D | null {
+  begin(
+    ctx: CanvasRenderingContext2D,
+    points: readonly MouthPoint[],
+    feather: number
+  ): CanvasRenderingContext2D | null {
     if (!points.length || !this.make()) return null;
     const m = (typeof ctx.getTransform === "function" ? ctx.getTransform() : null) ?? IDENTITY;
     const matrix: Matrix = { a: m.a, b: m.b, c: m.c, d: m.d, e: m.e, f: m.f };
     if (![matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f].every(Number.isFinite)) return null;
     this.matrix = matrix;
     this.scale = Math.sqrt(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c)) || 1;
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    let x0 = Infinity,
+      y0 = Infinity,
+      x1 = -Infinity,
+      y1 = -Infinity;
     for (const p of points) {
-      const X = matrix.a * p.x + matrix.c * p.y + matrix.e, Y = matrix.b * p.x + matrix.d * p.y + matrix.f;
-      if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y;
+      const X = matrix.a * p.x + matrix.c * p.y + matrix.e,
+        Y = matrix.b * p.x + matrix.d * p.y + matrix.f;
+      if (X < x0) x0 = X;
+      if (X > x1) x1 = X;
+      if (Y < y0) y0 = Y;
+      if (Y > y1) y1 = Y;
     }
     // Room for the mask's blur to tail off, and the inner lip's own blur.
     const margin = Math.ceil(feather * this.scale * 2 + 2);
-    this.x = Math.floor(x0) - margin; this.y = Math.floor(y0) - margin;
-    this.w = Math.ceil(x1) - Math.floor(x0) + 2 * margin; this.h = Math.ceil(y1) - Math.floor(y0) + 2 * margin;
+    this.x = Math.floor(x0) - margin;
+    this.y = Math.floor(y0) - margin;
+    this.w = Math.ceil(x1) - Math.floor(x0) + 2 * margin;
+    this.h = Math.ceil(y1) - Math.floor(y0) + 2 * margin;
     if (this.w > 8192 || this.h > 8192) return null;
-    const layer = this.layer!, mask = this.mask!, lc = this.lc!;
+    const layer = this.layer!,
+      mask = this.mask!,
+      lc = this.lc!;
     if (layer.width < this.w || layer.height < this.h) {
       layer.width = mask.width = Math.max(layer.width, this.w);
       layer.height = mask.height = Math.max(layer.height, this.h);
@@ -212,9 +245,13 @@ export class FeatheredLayer {
    */
   blurred(draw: (ctx: CanvasRenderingContext2D) => void, sigma: number): void {
     if (!this.open) return;
-    const lc = this.lc!, mc = this.mc!, { x, y, w, h, matrix } = this;
+    const lc = this.lc!,
+      mc = this.mc!,
+      { x, y, w, h, matrix } = this;
     if (!this.filters) {
-      lc.save(); draw(lc); lc.restore();
+      lc.save();
+      draw(lc);
+      lc.restore();
       return;
     }
     mc.setTransform(1, 0, 0, 1, 0, 0);
@@ -222,7 +259,9 @@ export class FeatheredLayer {
     mc.globalAlpha = 1;
     mc.globalCompositeOperation = "source-over";
     mc.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e - x, matrix.f - y);
-    mc.save(); draw(mc); mc.restore();
+    mc.save();
+    draw(mc);
+    mc.restore();
     lc.save();
     lc.setTransform(1, 0, 0, 1, 0, 0);
     lc.globalAlpha = 1;
@@ -243,11 +282,17 @@ export class FeatheredLayer {
    * is whole where either is and nothing is added outside the hard edge
    * (featherAlphaAt).
    */
-  end(ctx: CanvasRenderingContext2D, aperture: Path2D, feather: number, corners?: { points: readonly MouthPoint[]; reach: number }): void {
+  end(
+    ctx: CanvasRenderingContext2D,
+    aperture: Path2D,
+    feather: number,
+    corners?: { points: readonly MouthPoint[]; reach: number }
+  ): void {
     if (!this.open) return;
     this.open = false;
     const { x, y, w, h, matrix } = this;
-    const lc = this.lc!, mc = this.mc!;
+    const lc = this.lc!,
+      mc = this.mc!;
     lc.restore();
     mc.setTransform(1, 0, 0, 1, 0, 0);
     mc.clearRect(0, 0, w, h);

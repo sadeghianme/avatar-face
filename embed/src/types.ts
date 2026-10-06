@@ -92,11 +92,7 @@ export const ZERO_WEIGHTS: BlendWeights = {
  * Derive v3 blendshape weights from legacy v1/v2 rigs that only stored
  * open/width/round per viseme.
  */
-export function weightsFromLegacy(v: {
-  open?: number;
-  width?: number;
-  round?: number;
-}): BlendWeights {
+export function weightsFromLegacy(v: { open?: number; width?: number; round?: number }): BlendWeights {
   const open = v.open ?? 0;
   const width = v.width ?? 0.5;
   const round = v.round ?? 0;

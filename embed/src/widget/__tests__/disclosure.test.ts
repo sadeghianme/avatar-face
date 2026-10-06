@@ -39,7 +39,8 @@ describe("aiLabel", () => {
 
 describe("renderAiLabel", () => {
   it("puts the label right after the canvas, leaving the canvas alone", () => {
-    const made: { textContent: string; title: string; attrs: Record<string, string>; style: Record<string, string> }[] = [];
+    const made: { textContent: string; title: string; attrs: Record<string, string>; style: Record<string, string> }[] =
+      [];
     const doc = {
       createElement: () => {
         const element = {

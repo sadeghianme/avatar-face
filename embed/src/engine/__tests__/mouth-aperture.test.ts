@@ -29,15 +29,24 @@ const bow = (h: number) => (u: number) => h * Math.sin(Math.PI * u);
 
 class RecordingPath {
   calls: string[] = [];
-  moveTo() { this.calls.push("moveTo"); }
-  bezierCurveTo() { this.calls.push("bezierCurveTo"); }
-  closePath() { this.calls.push("closePath"); }
+  moveTo() {
+    this.calls.push("moveTo");
+  }
+  bezierCurveTo() {
+    this.calls.push("bezierCurveTo");
+  }
+  closePath() {
+    this.calls.push("closePath");
+  }
 }
 
 describe("the quadratic fit", () => {
   it("recovers a quadratic exactly and falls back to a constant when the samples cannot fix one", () => {
     const ts = [0, 0.2, 0.5, 0.7, 1];
-    const c = fitQuadratic(ts.map((t) => 1 + 2 * t + 3 * t * t), ts);
+    const c = fitQuadratic(
+      ts.map((t) => 1 + 2 * t + 3 * t * t),
+      ts
+    );
     expect(c[0]).toBeCloseTo(1, 9);
     expect(c[1]).toBeCloseTo(2, 9);
     expect(c[2]).toBeCloseTo(3, 9);
@@ -130,7 +139,9 @@ describe("the aperture", () => {
     // A symmetric mouth opens symmetrically.
     expect(a.cx).toBeCloseTo(130, 6);
     expect(a.lower[0].y).toBeCloseTo(a.lower[a.lower.length - 1].y, 6);
-    expect((a.path as unknown as RecordingPath).calls.filter((c) => c === "bezierCurveTo")).toHaveLength(outline!.length);
+    expect((a.path as unknown as RecordingPath).calls.filter((c) => c === "bezierCurveTo")).toHaveLength(
+      outline!.length
+    );
   });
 
   it("keeps the outline but shows nothing for a parting too slight for the cavity or the teeth", () => {
@@ -148,9 +159,20 @@ describe("the aperture", () => {
   });
 
   it("smooths a closed outline through every point, and none through fewer than three", () => {
-    const square = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }];
-    expect((smoothClosedPath(square) as unknown as RecordingPath).calls).toEqual(
-      ["moveTo", "bezierCurveTo", "bezierCurveTo", "bezierCurveTo", "bezierCurveTo", "closePath"]);
+    const square = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0, y: 1 },
+    ];
+    expect((smoothClosedPath(square) as unknown as RecordingPath).calls).toEqual([
+      "moveTo",
+      "bezierCurveTo",
+      "bezierCurveTo",
+      "bezierCurveTo",
+      "bezierCurveTo",
+      "closePath",
+    ]);
     expect((smoothClosedPath(square.slice(0, 2)) as unknown as RecordingPath).calls).toEqual([]);
   });
 });

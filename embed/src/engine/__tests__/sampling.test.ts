@@ -16,7 +16,9 @@ import { FaceSamples, luma, pickScleraColour, probeCutOut, type Sample } from ".
  * and what survives a picture that cannot be read.
  */
 
-const rig = JSON.parse(readFileSync(new URL("../../__tests__/fixtures/human-rig.json", import.meta.url), "utf8")) as Rig;
+const rig = JSON.parse(
+  readFileSync(new URL("../../__tests__/fixtures/human-rig.json", import.meta.url), "utf8")
+) as Rig;
 const [W, H] = rig.image_size;
 const texPoints = rig.points.map(([x, y]) => ({ x, y }));
 
@@ -48,8 +50,9 @@ function fillOval(mask: Uint8Array, value: number): void {
   for (let y = 0; y < H; y++) {
     const xs: number[] = [];
     for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-      const [ax, ay] = poly[i], [bx, by] = poly[j];
-      if ((ay > y) !== (by > y)) xs.push(((bx - ax) * (y - ay)) / (by - ay) + ax);
+      const [ax, ay] = poly[i],
+        [bx, by] = poly[j];
+      if (ay > y !== by > y) xs.push(((bx - ax) * (y - ay)) / (by - ay) + ax);
     }
     xs.sort((a, b) => a - b);
     for (let k = 0; k + 1 < xs.length; k += 2) {
@@ -87,7 +90,12 @@ describe("luma and the sclera", () => {
   const skin = sample([190, 140, 110]);
 
   it("picks the brightest neutral beside the iris, never bright skin or dark lash", () => {
-    const candidates = [sample([200, 150, 120]), sample([205, 200, 196]), sample([40, 38, 36]), sample([180, 176, 172])];
+    const candidates = [
+      sample([200, 150, 120]),
+      sample([205, 200, 196]),
+      sample([40, 38, 36]),
+      sample([180, 176, 172]),
+    ];
     expect(pickScleraColour(candidates, skin)).toBe("rgb(205, 200, 196)");
   });
 
@@ -116,20 +124,26 @@ describe("the picture, sampled", () => {
 
   it("takes the lips' median, so the skin and the seam either side do not set it", () => {
     // Fifteen of the forty lip landmarks on a white glint.
-    const glinted = picture(paintMask((mask, disc) => {
-      fillOval(mask, 1);
-      rig.mouth_indices.forEach((i, k) => disc(i, 7, k < 15 ? 4 : 2));
-    }), COLOURS);
+    const glinted = picture(
+      paintMask((mask, disc) => {
+        fillOval(mask, 1);
+        rig.mouth_indices.forEach((i, k) => disc(i, 7, k < 15 ? 4 : 2));
+      }),
+      COLOURS
+    );
     expect(sampled(glinted).lipColour).toEqual(rgb(LIP));
   });
 
   it("finds the highlight inside the face, not on the wall behind it", () => {
     expect(sampled(face).faceHighlight).toBeCloseTo(luma(rgb(SKIN) as [number, number, number]), 9);
     // A lit cheek over more than 3% of the face is the highlight.
-    const lit = picture(paintMask((mask, disc) => {
-      fillOval(mask, 1);
-      for (const i of CHEEK_LANDMARKS) disc(i, 60, 4);
-    }), COLOURS);
+    const lit = picture(
+      paintMask((mask, disc) => {
+        fillOval(mask, 1);
+        for (const i of CHEEK_LANDMARKS) disc(i, 60, 4);
+      }),
+      COLOURS
+    );
     expect(sampled(lit).faceHighlight).toBeCloseTo(255, 9);
   });
 
@@ -201,7 +215,8 @@ describe("probeCutOut", () => {
   };
   const CLEAR: Pixel = [0, 0, 0, 0];
   /** Transparent where `clear` says, of a 640 px picture. */
-  const cut = (clear: (x: number, y: number) => boolean) => paintedImage(640, 640, (x, y) => (clear(x, y) ? CLEAR : SKIN));
+  const cut = (clear: (x: number, y: number) => boolean) =>
+    paintedImage(640, 640, (x, y) => (clear(x, y) ? CLEAR : SKIN));
 
   it("calls a picture with two clear corners a cut-out", () => {
     expect(probe(cut((_x, y) => y < 120))).toBe(true); // a head and shoulders: the top clear
@@ -214,7 +229,17 @@ describe("probeCutOut", () => {
   });
 
   it("assumes opaque for a picture it cannot read, and does not know without a canvas", () => {
-    expect(probe(cut(() => true), { taint: true })).toBe(false);
-    expect(probe(cut(() => true), { context: false })).toBeNull();
+    expect(
+      probe(
+        cut(() => true),
+        { taint: true }
+      )
+    ).toBe(false);
+    expect(
+      probe(
+        cut(() => true),
+        { context: false }
+      )
+    ).toBeNull();
   });
 });

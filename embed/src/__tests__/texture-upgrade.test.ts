@@ -116,7 +116,8 @@ describe("the texture upgrade", () => {
     const upgraded = engineOn(thumbnail);
     upgraded.setTexture(full);
     const direct = engineOn(full);
-    const a = engineSeam(upgraded), b = engineSeam(direct);
+    const a = engineSeam(upgraded),
+      b = engineSeam(direct);
     // Everything read from the picture: colours, highlight, sharpness,
     // lashes, lids, the character look.
     expect(a.samples).toEqual(b.samples);

@@ -75,7 +75,8 @@ export class SpeechTrack extends Voice {
   private attachAnalyser(audio: HTMLAudioElement): void {
     try {
       if (!this.audioCtx) {
-        const Ctor = window.AudioContext ?? (window as never as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const Ctor =
+          window.AudioContext ?? (window as never as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         this.audioCtx = new Ctor();
         this.analyser = this.audioCtx.createAnalyser();
         this.analyser.fftSize = 256;
@@ -153,8 +154,7 @@ export function articulate(weights: BlendWeights, target: BlendWeights, dt: numb
   const keys = Object.keys(weights) as (keyof BlendWeights)[];
   for (const key of keys) {
     const goal = target[key];
-    const tau =
-      (goal > weights[key] ? TAU_OPEN : TAU_CLOSE) * INERTIA[key];
+    const tau = (goal > weights[key] ? TAU_OPEN : TAU_CLOSE) * INERTIA[key];
     const rate = 1 - Math.exp(-dt / tau);
     weights[key] += (goal - weights[key]) * rate;
   }

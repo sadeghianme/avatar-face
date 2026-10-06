@@ -18,13 +18,20 @@ const rig = JSON.parse(readFileSync(new URL("./fixtures/human-rig.json", import.
 const scope = globalThis as { __liveface?: unknown; __liveface3d?: unknown };
 
 const photoEngine = (debug?: boolean) =>
-  new AvatarEngine(fakeCanvas(), structuredClone(rig), { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement, {
-    warp: "2d",
-    debug,
-  });
+  new AvatarEngine(
+    fakeCanvas(),
+    structuredClone(rig),
+    { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement,
+    {
+      warp: "2d",
+      debug,
+    }
+  );
 
 const modelEngine = (debug?: boolean) =>
-  new Avatar3DEngine(stubCanvas(), morphModel(["viseme_sil", "viseme_aa"], false).root, stubRenderer().renderer, { debug });
+  new Avatar3DEngine(stubCanvas(), morphModel(["viseme_sil", "viseme_aa"], false).root, stubRenderer().renderer, {
+    debug,
+  });
 
 describe("the engines' console handles", () => {
   beforeEach(() => {

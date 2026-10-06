@@ -47,15 +47,33 @@ class RecordingPath {
   private add(op: string, args: number[]) {
     this.ops.push(`${op}(${args.map(round).join(",")})`);
   }
-  moveTo(...a: number[]) { this.add("M", a); }
-  lineTo(...a: number[]) { this.add("L", a); }
-  quadraticCurveTo(...a: number[]) { this.add("Q", a); }
-  bezierCurveTo(...a: number[]) { this.add("C", a); }
-  arc(...a: number[]) { this.add("A", a); }
-  ellipse(...a: number[]) { this.add("E", a); }
-  rect(...a: number[]) { this.add("R", a); }
-  closePath() { this.ops.push("Z"); }
-  addPath(other: RecordingPath) { this.ops.push(...other.ops); }
+  moveTo(...a: number[]) {
+    this.add("M", a);
+  }
+  lineTo(...a: number[]) {
+    this.add("L", a);
+  }
+  quadraticCurveTo(...a: number[]) {
+    this.add("Q", a);
+  }
+  bezierCurveTo(...a: number[]) {
+    this.add("C", a);
+  }
+  arc(...a: number[]) {
+    this.add("A", a);
+  }
+  ellipse(...a: number[]) {
+    this.add("E", a);
+  }
+  rect(...a: number[]) {
+    this.add("R", a);
+  }
+  closePath() {
+    this.ops.push("Z");
+  }
+  addPath(other: RecordingPath) {
+    this.ops.push(...other.ops);
+  }
 }
 
 const describeArg = (a: unknown) =>
@@ -74,19 +92,16 @@ type Texture = (x: number, y: number) => Pixel;
 const flatSkin: Texture = () => [182, 128, 110, 255];
 /** Every channel a different function of position, none of them symmetric,
  *  so no two nearby sample points read the same colour by accident. */
-const positional: Texture = (x, y) => [
-  (x * 3 + y) % 256,
-  (x + y * 5) % 256,
-  (x * 7 + y * 11) % 256,
-  255,
-];
+const positional: Texture = (x, y) => [(x * 3 + y) % 256, (x + y * 5) % 256, (x * 7 + y * 11) % 256, 255];
 
 /** A 2D context that records what is drawn instead of drawing it. */
 function recordingContext(log: string[], texture: Texture) {
-  const gradient = (kind: string) => (...args: number[]) => {
-    log.push(`${kind}(${args.map(round).join(",")})`);
-    return { addColorStop: (o: number, c: string) => log.push(`stop(${round(o)},${c})`) };
-  };
+  const gradient =
+    (kind: string) =>
+    (...args: number[]) => {
+      log.push(`${kind}(${args.map(round).join(",")})`);
+      return { addColorStop: (o: number, c: string) => log.push(`stop(${round(o)},${c})`) };
+    };
   const target: Record<string, unknown> = {
     createLinearGradient: gradient("linear"),
     createRadialGradient: gradient("radial"),
@@ -110,7 +125,9 @@ function recordingContext(log: string[], texture: Texture) {
     set(obj, key: string, value: unknown) {
       obj[key] = value;
       if (key !== "imageSmoothingEnabled" && key !== "imageSmoothingQuality") {
-        log.push(`${key}=${typeof value === "number" ? round(value) : typeof value === "object" ? "grad" : String(value)}`);
+        log.push(
+          `${key}=${typeof value === "number" ? round(value) : typeof value === "object" ? "grad" : String(value)}`
+        );
       }
       return true;
     },
@@ -247,7 +264,10 @@ describe("legacy animal rig golden output", () => {
 describe("colour sampled from a position-dependent texture", () => {
   deterministic();
   const sampled = casesFor(rig).filter((c) => ["rest", "aa (open)", "blink full"].includes(c.name));
-  for (const [label, source] of [["human", rig], ["legacy animal", animalRig]] as const) {
+  for (const [label, source] of [
+    ["human", rig],
+    ["legacy animal", animalRig],
+  ] as const) {
     for (const c of sampled) {
       it(`${label}, ${c.name}: mesh and drawing are unchanged`, () => {
         expect(frame(makeEngine(source, { fullPhoto: false, texture: positional }), c)).toMatchSnapshot();

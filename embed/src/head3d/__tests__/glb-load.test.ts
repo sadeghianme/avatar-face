@@ -39,7 +39,18 @@ describe("a head3d GLB in three.js", () => {
     const scene = await loadFixture();
     const names = new Set<string>();
     scene.traverse((o) => names.add(o.name));
-    for (const name of ["Head", "Face", "Skull", "HairCard", "Cavity", "TeethUpper", "TeethLower", "Tongue", "Neck", "Body"]) {
+    for (const name of [
+      "Head",
+      "Face",
+      "Skull",
+      "HairCard",
+      "Cavity",
+      "TeethUpper",
+      "TeethLower",
+      "Tongue",
+      "Neck",
+      "Body",
+    ]) {
       expect(names.has(name), name).toBe(true);
     }
     const head = scene.getObjectByName("Head")!;
@@ -49,8 +60,23 @@ describe("a head3d GLB in three.js", () => {
     const face = scene.getObjectByName("Face") as THREE.Mesh;
     const dictionary = face.morphTargetDictionary!;
     expect(face.geometry.attributes.position.count).toBe(478);
-    for (const name of ["jawOpen", "mouthClose", "mouthPucker", "mouthFunnel", "mouthStretchLeft", "mouthStretchRight",
-      "mouthSmileLeft", "mouthSmileRight", "eyeBlinkLeft", "eyeBlinkRight", "viseme_sil", "viseme_aa", "viseme_I", "viseme_O", "viseme_U"]) {
+    for (const name of [
+      "jawOpen",
+      "mouthClose",
+      "mouthPucker",
+      "mouthFunnel",
+      "mouthStretchLeft",
+      "mouthStretchRight",
+      "mouthSmileLeft",
+      "mouthSmileRight",
+      "eyeBlinkLeft",
+      "eyeBlinkRight",
+      "viseme_sil",
+      "viseme_aa",
+      "viseme_I",
+      "viseme_O",
+      "viseme_U",
+    ]) {
       expect(dictionary[name], name).toBeDefined();
     }
     expect(Object.keys(dictionary)).toHaveLength(25);
@@ -76,7 +102,10 @@ describe("a head3d GLB in three.js", () => {
     vi.spyOn(performance, "now").mockImplementation(() => now);
     const engine = new Avatar3DEngine(stubCanvas(), scene, stubRenderer().renderer, optionsFor(extras));
     const face = scene.getObjectByName("Face") as THREE.Mesh;
-    engine.playCues([{ t: 0, viseme: "aa", a: 1 }, { t: 5000, viseme: "aa", a: 1 }]);
+    engine.playCues([
+      { t: 0, viseme: "aa", a: 1 },
+      { t: 5000, viseme: "aa", a: 1 },
+    ]);
     for (let t = 0; t < 600; t += 16) {
       now += 16;
       engine.step(now);

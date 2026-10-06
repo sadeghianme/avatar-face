@@ -131,7 +131,11 @@ describe("render profiles", () => {
     const shape = human.visemes.E; // open, but short of the human tongue
     const people = frame(human, shape).log;
     const muzzle = frame(withProfile(human, "animal@1"), shape).log;
-    const firstStop = (log: string) => log.match(/stop\(0,rgb\((\d+), (\d+), (\d+)\)\)/)!.slice(1).map(Number);
+    const firstStop = (log: string) =>
+      log
+        .match(/stop\(0,rgb\((\d+), (\d+), (\d+)\)\)/)!
+        .slice(1)
+        .map(Number);
     const [hr] = firstStop(people);
     const [ar] = firstStop(muzzle);
     expect(ar).toBeLessThan(hr);

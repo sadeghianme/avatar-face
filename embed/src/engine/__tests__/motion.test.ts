@@ -35,7 +35,12 @@ function setup(): { face: FaceState; motion: Motion } {
 }
 
 /** Speech as the engine reports it, at cue time `cue`. */
-const speaking = (cue: number, energy = 1): SpeechFrame => ({ speaking: true, wordActive: true, energy, cueTime: () => cue });
+const speaking = (cue: number, energy = 1): SpeechFrame => ({
+  speaking: true,
+  wordActive: true,
+  energy,
+  cueTime: () => cue,
+});
 const idle: SpeechFrame = { speaking: false, wordActive: false, energy: 0, cueTime: () => 0 };
 
 /** The nod alone, 0..1: the head's dy over everything that scales it. */
@@ -84,7 +89,10 @@ describe("the head's nods", () => {
 
   it("re-places the walker on a seek: beats behind the new position are spent", () => {
     const { motion } = setup();
-    motion.beginSpeech(0, 3000, [{ t: 300, strength: 1 }, { t: 1500, strength: 1 }]);
+    motion.beginSpeech(0, 3000, [
+      { t: 300, strength: 1 },
+      { t: 1500, strength: 1 },
+    ]);
     motion.placeBeatWalker(1000);
     for (let now = FRAME; now <= 400; now += FRAME) {
       motion.update(FRAME, now, speaking(1000 + now));
@@ -212,7 +220,11 @@ describe("the body's lean", () => {
   afterEach(() => vi.restoreAllMocks());
 
   // A face 200 px wide and 260 tall, centred at (300, 330) on a 1000 px canvas.
-  const face: Point[] = [{ x: 200, y: 200 }, { x: 400, y: 200 }, { x: 300, y: 460 }];
+  const face: Point[] = [
+    { x: 200, y: 200 },
+    { x: 400, y: 200 },
+    { x: 300, y: 460 },
+  ];
 
   it("pivots below the frame, under the face, and travels the measured sway at head height", () => {
     const { motion } = setup();

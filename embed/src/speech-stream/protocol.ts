@@ -64,9 +64,16 @@ function validateCues(value: unknown, duration: number): asserts value is Cue[] 
   if (!Array.isArray(value) || !value.length || value.length > 12000) throw new Error("Missing speech timings");
   let previous = -1;
   for (const cue of value) {
-    if (!cue || !Number.isFinite(cue.t) || cue.t < previous || cue.t < 0 || cue.t > duration + 2
-        || typeof cue.viseme !== "string" || cue.viseme.length > 12
-        || (cue.a !== undefined && (!Number.isFinite(cue.a) || cue.a < 0 || cue.a > 1))) {
+    if (
+      !cue ||
+      !Number.isFinite(cue.t) ||
+      cue.t < previous ||
+      cue.t < 0 ||
+      cue.t > duration + 2 ||
+      typeof cue.viseme !== "string" ||
+      cue.viseme.length > 12 ||
+      (cue.a !== undefined && (!Number.isFinite(cue.a) || cue.a < 0 || cue.a > 1))
+    ) {
       throw new Error("Invalid speech timings");
     }
     previous = cue.t;
@@ -90,56 +97,95 @@ export class SpeechAssembly {
 
   append(event: Record<string, unknown>): { samples: Float32Array; offset: number } {
     const chunk = event as unknown as SpeechChunk;
-    if (chunk.type !== "chunk" || chunk.sequence !== this.chunks || chunk.start_sample !== this.samples
-        || chunk.sample_rate !== this.sampleRate || !Number.isInteger(chunk.sample_count)
-        || chunk.sample_count <= 0 || chunk.sample_count > this.sampleRate * 90
-        || this.samples + chunk.sample_count > this.sampleRate * 180 || typeof chunk.pcm_b64 !== "string") {
+    if (
+      chunk.type !== "chunk" ||
+      chunk.sequence !== this.chunks ||
+      chunk.start_sample !== this.samples ||
+      chunk.sample_rate !== this.sampleRate ||
+      !Number.isInteger(chunk.sample_count) ||
+      chunk.sample_count <= 0 ||
+      chunk.sample_count > this.sampleRate * 90 ||
+      this.samples + chunk.sample_count > this.sampleRate * 180 ||
+      typeof chunk.pcm_b64 !== "string"
+    ) {
       throw new Error("Speech chunks arrived out of order or with an invalid format");
     }
-    const duration = chunk.sample_count * 1000 / this.sampleRate;
-    validateCues(chunk.cues, duration); validateCues(chunk.baseline_cues, duration);
+    const duration = (chunk.sample_count * 1000) / this.sampleRate;
+    validateCues(chunk.cues, duration);
+    validateCues(chunk.baseline_cues, duration);
     const binary = atob(chunk.pcm_b64);
     if (binary.length !== chunk.sample_count * 2) throw new Error("Incomplete speech audio");
-    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
     const view = new DataView(bytes.buffer);
     const samples = new Float32Array(chunk.sample_count);
     for (let i = 0; i < samples.length; i++) samples[i] = view.getInt16(i * 2, true) / 32768;
     const offset = this.samples / this.sampleRate;
     const join = (previous: Cue[], next: Cue[]) => [
-      ...previous.filter(c => c.t < offset * 1000),
-      ...next.map(c => ({ ...c, t: offset * 1000 + Math.min(c.t, duration) })),
+      ...previous.filter((c) => c.t < offset * 1000),
+      ...next.map((c) => ({ ...c, t: offset * 1000 + Math.min(c.t, duration) })),
     ];
     this.cues = join(this.cues, chunk.cues);
     this.baseline = join(this.baseline, chunk.baseline_cues);
-    this.pcm.push(bytes); this.samples += chunk.sample_count; this.chunks++;
+    this.pcm.push(bytes);
+    this.samples += chunk.sample_count;
+    this.chunks++;
     return { samples, offset };
   }
 
   finish(event: Record<string, unknown>): StreamedSpeech {
-    if (event.type !== "done" || !this.chunks || event.chunks !== this.chunks
-        || event.total_samples !== this.samples || event.sample_rate !== this.sampleRate) {
+    if (
+      event.type !== "done" ||
+      !this.chunks ||
+      event.chunks !== this.chunks ||
+      event.total_samples !== this.samples ||
+      event.sample_rate !== this.sampleRate
+    ) {
       throw new Error("Speech ended before all audio arrived");
     }
     const bytes = new Uint8Array(44 + this.samples * 2);
     const view = new DataView(bytes.buffer);
-    const tag = (at: number, text: string) => [...text].forEach((c, i) => bytes[at + i] = c.charCodeAt(0));
-    tag(0, "RIFF"); view.setUint32(4, bytes.length - 8, true); tag(8, "WAVE"); tag(12, "fmt ");
-    view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
-    view.setUint32(24, this.sampleRate, true); view.setUint32(28, this.sampleRate * 2, true);
-    view.setUint16(32, 2, true); view.setUint16(34, 16, true); tag(36, "data");
+    const tag = (at: number, text: string) => [...text].forEach((c, i) => (bytes[at + i] = c.charCodeAt(0)));
+    tag(0, "RIFF");
+    view.setUint32(4, bytes.length - 8, true);
+    tag(8, "WAVE");
+    tag(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, this.sampleRate, true);
+    view.setUint32(28, this.sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    tag(36, "data");
     view.setUint32(40, this.samples * 2, true);
     let at = 44;
-    for (const part of this.pcm) { bytes.set(part, at); at += part.length; }
-    return { audio_b64: base64(bytes), audio_mime: "audio/wav", duration_ms: this.samples * 1000 / this.sampleRate,
-      cues: this.cues, baseline_cues: this.baseline, timing_source: "native_phonemes" };
+    for (const part of this.pcm) {
+      bytes.set(part, at);
+      at += part.length;
+    }
+    return {
+      audio_b64: base64(bytes),
+      audio_mime: "audio/wav",
+      duration_ms: (this.samples * 1000) / this.sampleRate,
+      cues: this.cues,
+      baseline_cues: this.baseline,
+      timing_source: "native_phonemes",
+    };
   }
 }
 
 export function bufferedRecording(event: Record<string, unknown>): StreamedSpeech {
-  if (event.type !== "recording" || typeof event.audio_b64 !== "string" || !event.audio_b64.length
-      || typeof event.audio_mime !== "string" || !event.audio_mime.startsWith("audio/")
-      || !Number.isFinite(event.duration_ms) || (event.duration_ms as number) <= 0
-      || event.timing_source !== "existing_provider") throw new Error("Invalid recording");
+  if (
+    event.type !== "recording" ||
+    typeof event.audio_b64 !== "string" ||
+    !event.audio_b64.length ||
+    typeof event.audio_mime !== "string" ||
+    !event.audio_mime.startsWith("audio/") ||
+    !Number.isFinite(event.duration_ms) ||
+    (event.duration_ms as number) <= 0 ||
+    event.timing_source !== "existing_provider"
+  )
+    throw new Error("Invalid recording");
   validateCues(event.cues, event.duration_ms as number);
   validateCues(event.baseline_cues, event.duration_ms as number);
   return event as unknown as StreamedSpeech;

@@ -90,7 +90,9 @@ function widgetCanvas(): Canvas {
 }
 
 interface Page {
-  window: Record<string, unknown> & { Liveface?: { speak(t: string): Promise<void>; isSpeaking(): boolean; engine: unknown } };
+  window: Record<string, unknown> & {
+    Liveface?: { speak(t: string): Promise<void>; isSpeaking(): boolean; engine: unknown };
+  };
   network: FakeNetwork;
   canvases: Canvas[];
   scripts: FakeElement[];
@@ -195,7 +197,11 @@ describe("liveface.js on a customer's page", () => {
       ["the network is down", { [meta("av_1")]: { offline: true } }, "avatar", /the avatar request failed/],
       [
         "the rig is not JSON",
-        { [meta("av_1")]: { json: photoAvatar }, [RIG]: { status: 200 } as Resource, [THUMB]: { image: [182, 128, 110, 255] } },
+        {
+          [meta("av_1")]: { json: photoAvatar },
+          [RIG]: { status: 200 } as Resource,
+          [THUMB]: { image: [182, 128, 110, 255] },
+        },
         "rig",
         /the rig request answered 200/,
       ],
@@ -232,7 +238,10 @@ describe("liveface.js on a customer's page", () => {
         [meta("av_1")]: { json: photoAvatar },
         [RIG]: { json: rig },
         [THUMB]: { image: [182, 128, 110, 255] },
-        [meta("av_2")]: { status: 404, error: { detail: "Avatar has not been published", code: "avatar_not_published" } },
+        [meta("av_2")]: {
+          status: 404,
+          error: { detail: "Avatar has not been published", code: "avatar_not_published" },
+        },
       });
       await settled(await p.embed({ avatar: "av_1" }));
       const working = p.window.Liveface;
@@ -246,7 +255,11 @@ describe("liveface.js on a customer's page", () => {
   });
 
   describe("an avatar that is shown", () => {
-    const resources = { [meta("av_1")]: { json: photoAvatar }, [RIG]: { json: rig }, [THUMB]: { image: [182, 128, 110, 255] as const } };
+    const resources = {
+      [meta("av_1")]: { json: photoAvatar },
+      [RIG]: { json: rig },
+      [THUMB]: { image: [182, 128, 110, 255] as const },
+    };
 
     it("says it is ready, and sends the key only in a header", async () => {
       const p = page(resources as Record<string, Resource>);
@@ -282,7 +295,7 @@ describe("liveface.js on a customer's page", () => {
       expect("__liveface" in globalThis).toBe(false);
     });
 
-    it("keeps the handle off for data-debug=\"off\"", async () => {
+    it('keeps the handle off for data-debug="off"', async () => {
       const p = page(resources as Record<string, Resource>);
       await settled(await p.embed({ avatar: "av_1", debug: "off" }));
       expect("__liveface" in globalThis).toBe(false);
@@ -291,7 +304,11 @@ describe("liveface.js on a customer's page", () => {
   });
 
   describe("two 3D avatars on one page", () => {
-    const model = (avatar: string) => ({ ...photoAvatar, kind: "model3d", model_url: `https://storage.example/${avatar}.glb` });
+    const model = (avatar: string) => ({
+      ...photoAvatar,
+      kind: "model3d",
+      model_url: `https://storage.example/${avatar}.glb`,
+    });
 
     it("share one liveface-3d.js, and the second waits for it to load", async () => {
       const p = page({ [meta("m_1")]: { json: model("m_1") }, [meta("m_2")]: { json: model("m_2") } });

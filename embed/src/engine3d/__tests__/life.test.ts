@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FaceLife, blinkAmount, lookMorphs } from "../life";
 
 /** A random that answers `values` in turn, then 0.5. */
-const scripted = (...values: number[]) => () => values.shift() ?? 0.5;
+const scripted =
+  (...values: number[]) =>
+  () =>
+    values.shift() ?? 0.5;
 
 const FRAME = 1000 / 60;
 

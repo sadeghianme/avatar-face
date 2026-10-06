@@ -176,20 +176,19 @@ export class PhotoFaceHDEngine implements SpeechPlayer {
 
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin("anonymous");
-    const urls = [
-      source.imageUrl,
-      source.layerUrls?.background,
-      source.layerUrls?.body,
-      source.layerUrls?.head,
-    ];
-    const loaded = await Promise.all(
-      urls.map((url) => (url ? loadTexture(loader, url) : Promise.resolve(null)))
+    const urls = [source.imageUrl, source.layerUrls?.background, source.layerUrls?.body, source.layerUrls?.head];
+    const loaded = await Promise.all(urls.map((url) => (url ? loadTexture(loader, url) : Promise.resolve(null))));
+    return new PhotoFaceHDEngine(
+      canvas,
+      rig,
+      loaded[0]!,
+      {
+        background: loaded[1],
+        body: loaded[2],
+        head: loaded[3],
+      },
+      source.depthZ ?? null
     );
-    return new PhotoFaceHDEngine(canvas, rig, loaded[0]!, {
-      background: loaded[1],
-      body: loaded[2],
-      head: loaded[3],
-    }, source.depthZ ?? null);
   }
 
   private constructor(
@@ -255,8 +254,7 @@ export class PhotoFaceHDEngine implements SpeechPlayer {
       const noseX = rig.points[1]?.[0] ?? (x0 + x1) / 2;
       const noseY = rig.points[1]?.[1] ?? (y0 + y1) / 2;
       const noseDistance =
-        ((px - noseX) / Math.max((x1 - x0) * 0.22, 1)) ** 2 +
-        ((py - noseY) / Math.max((y1 - y0) * 0.25, 1)) ** 2;
+        ((px - noseX) / Math.max((x1 - x0) * 0.22, 1)) ** 2 + ((py - noseY) / Math.max((y1 - y0) * 0.25, 1)) ** 2;
       return 0.035 + dome * this.faceWidth * 0.18 + Math.exp(-noseDistance * 2.2) * this.faceWidth * 0.08;
     };
 
@@ -274,12 +272,13 @@ export class PhotoFaceHDEngine implements SpeechPlayer {
       measured = (index: number) => 0.035 + Math.max(0, (median - depthZ[index]) * scale * 1.35);
     }
 
-    this.localPoints = rig.points.map(([px, py], index) =>
-      new THREE.Vector3(
-        (px / imageWidth - 0.5) * worldWidth - faceCenterX,
-        (0.5 - py / imageHeight) * worldHeight - faceCenterY,
-        measured ? measured(index) : depthAt(px, py)
-      )
+    this.localPoints = rig.points.map(
+      ([px, py], index) =>
+        new THREE.Vector3(
+          (px / imageWidth - 0.5) * worldWidth - faceCenterX,
+          (0.5 - py / imageHeight) * worldHeight - faceCenterY,
+          measured ? measured(index) : depthAt(px, py)
+        )
     );
     this.facePositions = new Float32Array(this.localPoints.length * 3);
     this.localPoints.forEach((point, index) => point.toArray(this.facePositions, index * 3));

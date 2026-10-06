@@ -14,9 +14,7 @@ import type { Rig } from "../types";
  * picture has no sharpness.
  */
 
-const rig = JSON.parse(
-  readFileSync(new URL("./fixtures/fitted-animal-rig.json", import.meta.url), "utf8")
-) as Rig;
+const rig = JSON.parse(readFileSync(new URL("./fixtures/fitted-animal-rig.json", import.meta.url), "utf8")) as Rig;
 
 class NoopPath {
   moveTo() {}
@@ -58,12 +56,14 @@ const grey = (v: number): [number, number, number, number] => [v, v, v, 255];
  *  few percent of the pixels, as a picture's are), each edge a ramp `ramp`
  *  px wide (0: a hard step). The 10-90% rise of a hard step reads 0.8 px,
  *  of a ramp 0.8 of its width. */
-const stripes = (ramp: number): Texture => (x) => {
-  const phase = ((x % 256) + 256) % 256;
-  const d = Math.min(phase, 256 - phase) - 64; // distance into the bright half, signed
-  const t = ramp > 0 ? Math.max(0, Math.min(1, d / ramp + 0.5)) : d >= 0 ? 1 : 0;
-  return grey(60 + 140 * t);
-};
+const stripes =
+  (ramp: number): Texture =>
+  (x) => {
+    const phase = ((x % 256) + 256) % 256;
+    const d = Math.min(phase, 256 - phase) - 64; // distance into the bright half, signed
+    const t = ramp > 0 ? Math.max(0, Math.min(1, d / ramp + 0.5)) : d >= 0 ? 1 : 0;
+    return grey(60 + 140 * t);
+  };
 const flat: Texture = () => grey(140);
 
 describe("the look's softness on the engine", () => {
@@ -82,12 +82,16 @@ describe("the look's softness on the engine", () => {
     vi.unstubAllGlobals();
   });
 
-  const image = (size: number) => ({ naturalWidth: size, naturalHeight: size, width: size, height: size }) as HTMLImageElement;
-  const mouthWidth = (e: EngineSeam) => Math.hypot(e.mesh.texPoints[291].x - e.mesh.texPoints[61].x, e.mesh.texPoints[291].y - e.mesh.texPoints[61].y);
+  const image = (size: number) =>
+    ({ naturalWidth: size, naturalHeight: size, width: size, height: size }) as HTMLImageElement;
+  const mouthWidth = (e: EngineSeam) =>
+    Math.hypot(e.mesh.texPoints[291].x - e.mesh.texPoints[61].x, e.mesh.texPoints[291].y - e.mesh.texPoints[61].y);
 
   it("is the picture's sharpness over the mouth's width, and is rebuilt from the upgraded texture", () => {
     texture = stripes(0);
-    const engine = new AvatarEngine(fakeCanvas(texture), { ...rig, render_profile: "toon@1" }, image(1024), { fullPhoto: false });
+    const engine = new AvatarEngine(fakeCanvas(texture), { ...rig, render_profile: "toon@1" }, image(1024), {
+      fullPhoto: false,
+    });
     const e = engineSeam(engine);
     const sharp = e.samples.faceSharpness;
     expect(sharp).not.toBeNull();
@@ -118,7 +122,9 @@ describe("the look's softness on the engine", () => {
     // (contrast 25 and over), none to the sharpness (50 and over).
     const seamY = (rig.points[13][1] * 1024) / rig.image_size[1];
     texture = (_x, y) => grey(y < seamY ? 170 : 140);
-    const engine = new AvatarEngine(fakeCanvas(texture), { ...rig, render_profile: "toon@1" }, image(1024), { fullPhoto: false });
+    const engine = new AvatarEngine(fakeCanvas(texture), { ...rig, render_profile: "toon@1" }, image(1024), {
+      fullPhoto: false,
+    });
     const e = engineSeam(engine);
     expect(e.samples.faceSharpness).toBeNull();
     // A hard 30-level step: contrast over its steepest step is 1 px.

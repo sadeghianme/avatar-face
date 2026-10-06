@@ -35,7 +35,10 @@ export async function fetchJson<T>(url: string, stage: WidgetStage, init?: Reque
   try {
     response = await fetch(url, init);
   } catch (error) {
-    throw new WidgetFailure(stage, `the ${stage} request failed (${error instanceof Error ? error.message : String(error)})`);
+    throw new WidgetFailure(
+      stage,
+      `the ${stage} request failed (${error instanceof Error ? error.message : String(error)})`
+    );
   }
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { code?: unknown; detail?: unknown } | null;

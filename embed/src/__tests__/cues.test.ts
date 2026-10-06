@@ -32,21 +32,14 @@ describe("prepareCues", () => {
   it("lets a vowel win a genuine collision, and takes its whole cue", () => {
     // The old in-place assignment copied only the viseme, so a vowel could
     // inherit the consonant's stress amplitude and be drawn at the wrong size.
-    const out = prepareCues([
-      cue(0, "sil"),
-      cue(100, "kk", 0.2),
-      cue(105, "aa", 0.9),
-      cue(400, "sil"),
-    ]);
+    const out = prepareCues([cue(0, "sil"), cue(100, "kk", 0.2), cue(105, "aa", 0.9), cue(400, "sil")]);
     const vowel = out.find((c) => c.viseme === "aa");
     expect(vowel).toBeDefined();
     expect(vowel!.a).toBe(0.9);
   });
 
   it("drops repeats but never reorders time", () => {
-    const out = prepareCues([
-      cue(0, "sil"), cue(120, "aa"), cue(240, "aa"), cue(360, "E"), cue(600, "sil"),
-    ]);
+    const out = prepareCues([cue(0, "sil"), cue(120, "aa"), cue(240, "aa"), cue(360, "E"), cue(600, "sil")]);
     for (let i = 1; i < out.length; i++) {
       expect(out[i].t).toBeGreaterThan(out[i - 1].t);
     }
@@ -62,8 +55,7 @@ describe("prepareCues", () => {
 describe("splitSentences", () => {
   it("splits on sentence ends and keeps the punctuation", () => {
     const out = splitSentences(
-      "This is a full length sentence. And here is another complete one? "
-      + "Finally a third that is long enough!"
+      "This is a full length sentence. And here is another complete one? " + "Finally a third that is long enough!"
     );
     expect(out).toEqual([
       "This is a full length sentence.",
@@ -76,9 +68,7 @@ describe("splitSentences", () => {
     // Deliberate: sending "Fine!" as its own request produces a clipped,
     // choppy clip and an extra round trip. Pinned because it looks like a
     // splitting bug to anyone who has not read the reason.
-    expect(splitSentences("Hello there. How are you? Fine!")).toEqual([
-      "Hello there. How are you? Fine!",
-    ]);
+    expect(splitSentences("Hello there. How are you? Fine!")).toEqual(["Hello there. How are you? Fine!"]);
   });
 
   it("keeps every character of the input", () => {

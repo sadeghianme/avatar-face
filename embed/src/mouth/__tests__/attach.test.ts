@@ -47,15 +47,16 @@ const teethRig = {
   outer_lip_ring: bundled.outer_ring,
 };
 
-const network = (answers: Record<string, Resource> = {}) => stubNetwork({
-  [MOTION]: { json: bundled },
-  [KIT]: { json: avatarMotion },
-  [TEETH.image_url]: { image: ENAMEL },
-  [TEETH.rig_url]: { json: teethRig },
-  [STANDARD.image_url]: { image: ENAMEL },
-  [STANDARD.rig_url]: { json: teethRig },
-  ...answers,
-});
+const network = (answers: Record<string, Resource> = {}) =>
+  stubNetwork({
+    [MOTION]: { json: bundled },
+    [KIT]: { json: avatarMotion },
+    [TEETH.image_url]: { image: ENAMEL },
+    [TEETH.rig_url]: { json: teethRig },
+    [STANDARD.image_url]: { image: ENAMEL },
+    [STANDARD.rig_url]: { json: teethRig },
+    ...answers,
+  });
 
 const host = () => ({ setMouthExtension: vi.fn(), tuning: { mouthOpen: 1.4 } });
 /** The motion a loaded mouth plays, by its manifest's character. */
@@ -147,8 +148,9 @@ describe("the motion an avatar plays", () => {
     const { requested } = network();
     const controller = new AbortController();
     controller.abort();
-    await expect(loadAvatarMouth({ renderer: "continuous", motion_url: KIT }, MOTION, controller.signal))
-      .rejects.toMatchObject({ name: "AbortError" });
+    await expect(
+      loadAvatarMouth({ renderer: "continuous", motion_url: KIT }, MOTION, controller.signal)
+    ).rejects.toMatchObject({ name: "AbortError" });
     expect(requested).toEqual([KIT]);
   });
 
@@ -164,8 +166,9 @@ describe("the motion an avatar plays", () => {
       controller.abort();
       return response;
     });
-    await expect(loadAvatarMouth({ renderer: "continuous", motion_url: KIT, oral: TEETH }, MOTION, controller.signal))
-      .rejects.toThrow();
+    await expect(
+      loadAvatarMouth({ renderer: "continuous", motion_url: KIT, oral: TEETH }, MOTION, controller.signal)
+    ).rejects.toThrow();
     expect(requested).toEqual([KIT]);
   });
 
@@ -196,19 +199,41 @@ describe("the avatar's teeth photo", () => {
   // motion, and nothing is downloaded again. The load rejects, and the
   // caller keeps the classic mouth.
   it.each<[string, Record<string, Resource>, string[], (error: unknown) => void]>([
-    ["does not show the upper teeth", { [TEETH.image_url]: { image: LIPS } },
-      [KIT, TEETH.image_url, TEETH.rig_url], (error) => expect(error).toBeInstanceOf(DentalPhotoError)],
-    ["does not decode", { [TEETH.image_url]: { broken: true } },
-      [KIT, TEETH.image_url], (error) => expect(error).toMatchObject({ name: "EncodingError" })],
-    ["has lost its rig", { [TEETH.rig_url]: { status: 404 } },
-      [KIT, TEETH.image_url, TEETH.rig_url], (error) => expect(error).toMatchObject({ message: "Mouth detail could not load" })],
-    ["has a rig that is not one", { [TEETH.rig_url]: { json: { points: [] } } },
-      [KIT, TEETH.image_url, TEETH.rig_url], (error) => expect(error).toMatchObject({ message: "Invalid mouth photograph rig" })],
+    [
+      "does not show the upper teeth",
+      { [TEETH.image_url]: { image: LIPS } },
+      [KIT, TEETH.image_url, TEETH.rig_url],
+      (error) => expect(error).toBeInstanceOf(DentalPhotoError),
+    ],
+    [
+      "does not decode",
+      { [TEETH.image_url]: { broken: true } },
+      [KIT, TEETH.image_url],
+      (error) => expect(error).toMatchObject({ name: "EncodingError" }),
+    ],
+    [
+      "has lost its rig",
+      { [TEETH.rig_url]: { status: 404 } },
+      [KIT, TEETH.image_url, TEETH.rig_url],
+      (error) => expect(error).toMatchObject({ message: "Mouth detail could not load" }),
+    ],
+    [
+      "has a rig that is not one",
+      { [TEETH.rig_url]: { json: { points: [] } } },
+      [KIT, TEETH.image_url, TEETH.rig_url],
+      (error) => expect(error).toMatchObject({ message: "Invalid mouth photograph rig" }),
+    ],
   ])("that %s leaves the classic mouth, each file downloaded once", async (_, answers, downloads, expectError) => {
     const { requested } = network(answers);
     const engine = host();
-    const error = await attachAvatarMouth(engine, { renderer: "continuous", motion_url: KIT, oral: TEETH }, MOTION)
-      .then(() => null, (reason: unknown) => reason);
+    const error = await attachAvatarMouth(
+      engine,
+      { renderer: "continuous", motion_url: KIT, oral: TEETH },
+      MOTION
+    ).then(
+      () => null,
+      (reason: unknown) => reason
+    );
     expectError(error);
     expect(engine.setMouthExtension).not.toHaveBeenCalled();
     expect(engine.tuning.mouthOpen).toBe(1.4);
@@ -260,14 +285,28 @@ describe("the standard teeth", () => {
   // drawn teeth, as before the standard ones existed; nothing is asked for
   // twice.
   it.each<[string, Record<string, Resource>, string[]]>([
-    ["are not served (a server without them)", { [STANDARD.image_url]: { status: 404 }, [STANDARD.rig_url]: { status: 404 } },
-      [MOTION, STANDARD.image_url]],
+    [
+      "are not served (a server without them)",
+      { [STANDARD.image_url]: { status: 404 }, [STANDARD.rig_url]: { status: 404 } },
+      [MOTION, STANDARD.image_url],
+    ],
     ["do not decode", { [STANDARD.image_url]: { broken: true } }, [MOTION, STANDARD.image_url]],
     ["have lost their rig", { [STANDARD.rig_url]: { status: 404 } }, [MOTION, STANDARD.image_url, STANDARD.rig_url]],
-    ["cannot be reached for their rig", { [STANDARD.rig_url]: { offline: true } }, [MOTION, STANDARD.image_url, STANDARD.rig_url]],
-    ["have a rig that is not one", { [STANDARD.rig_url]: { json: { points: [] } } }, [MOTION, STANDARD.image_url, STANDARD.rig_url]],
-    ["do not show the upper teeth (DentalPhotoError)", { [STANDARD.image_url]: { image: LIPS } },
-      [MOTION, STANDARD.image_url, STANDARD.rig_url]],
+    [
+      "cannot be reached for their rig",
+      { [STANDARD.rig_url]: { offline: true } },
+      [MOTION, STANDARD.image_url, STANDARD.rig_url],
+    ],
+    [
+      "have a rig that is not one",
+      { [STANDARD.rig_url]: { json: { points: [] } } },
+      [MOTION, STANDARD.image_url, STANDARD.rig_url],
+    ],
+    [
+      "do not show the upper teeth (DentalPhotoError)",
+      { [STANDARD.image_url]: { image: LIPS } },
+      [MOTION, STANDARD.image_url, STANDARD.rig_url],
+    ],
   ])("that %s leave the drawn teeth, and the mouth loads", async (_, answers, downloads) => {
     const { requested } = network(answers);
     const engine = host();
@@ -296,8 +335,9 @@ describe("the standard teeth", () => {
       return fetch(url, init);
     });
     const engine = host();
-    await expect(attachAvatarMouth(engine, { renderer: "continuous" }, MOTION, controller.signal))
-      .rejects.toMatchObject({ name: "AbortError" });
+    await expect(
+      attachAvatarMouth(engine, { renderer: "continuous" }, MOTION, controller.signal)
+    ).rejects.toMatchObject({ name: "AbortError" });
     expect(engine.setMouthExtension).not.toHaveBeenCalled();
     expect(requested).toEqual([MOTION, STANDARD.image_url, STANDARD.rig_url]);
   });

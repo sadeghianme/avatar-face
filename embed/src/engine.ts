@@ -184,7 +184,8 @@ export class AvatarEngine {
     this.profile = kindProfile(rig);
     this.traits = this.profile.traits;
     this.picture = new FacePicture(canvas, rig, this.profile, texture, (pts) =>
-      this.motion.measureBody(pts, canvas.height));
+      this.motion.measureBody(pts, canvas.height)
+    );
     this.speech = new SpeechTrack(opts.cueClock, {
       onSync: (ms) => this.motion.placeBeatWalker(ms),
       onEnded: () => this.finishSpeech(),
@@ -228,11 +229,7 @@ export class AvatarEngine {
    * the punch-out and feathered-cutout machinery of the single-photo path
    * becomes unnecessary and is simply not used.
    */
-  setLayers(layers: {
-    background?: HTMLImageElement;
-    body: HTMLImageElement;
-    head: HTMLImageElement;
-  }): void {
+  setLayers(layers: { background?: HTMLImageElement; body: HTMLImageElement; head: HTMLImageElement }): void {
     if (this.destroyed) return;
     this.layers = layers;
   }
@@ -410,7 +407,8 @@ export class AvatarEngine {
     const face = this.face;
     // Viseme targets: co-articulated blend across cues (+ amplitude
     // fallback when the track is silent but audio clearly isn't).
-    const visemeWeights = this.pose?.()?.weights ?? (speech.speaking ? this.blendedCueWeights(now) : { ...ZERO_WEIGHTS });
+    const visemeWeights =
+      this.pose?.()?.weights ?? (speech.speaking ? this.blendedCueWeights(now) : { ...ZERO_WEIGHTS });
     const silent = speech.speaking && speech.currentViseme(now) === "sil";
     if (silent) {
       const amp = speech.amplitude();

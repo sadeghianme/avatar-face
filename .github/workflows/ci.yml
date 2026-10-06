@@ -76,6 +76,9 @@ jobs:
       - run: npm ci
       - name: Lint
         run: npm run lint
+      # Prettier, with the dashboard's settings (.prettierrc.json).
+      - name: Formatting
+        run: npm run format:check
       # The build's sources, then the tests and the bake script the build
       # leaves out (tsconfig.test.json): a test that no longer type-checks
       # against the code it tests fails here, not by passing on stale casts.

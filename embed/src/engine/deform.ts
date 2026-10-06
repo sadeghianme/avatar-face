@@ -39,12 +39,44 @@ const MOUTH_CORNERS = new Set([61, 291, 78, 308, 76, 306, 62, 292]);
 // MediaPipe lip landmarks, outer and inner rows. Membership decides which
 // side of the hinge a vertex is on.
 const LOWER_LIP = new Set([
-  146, 91, 181, 84, 17, 314, 405, 321, 375, // outer
-  95, 88, 178, 87, 14, 317, 402, 318, 324, // inner
+  146,
+  91,
+  181,
+  84,
+  17,
+  314,
+  405,
+  321,
+  375, // outer
+  95,
+  88,
+  178,
+  87,
+  14,
+  317,
+  402,
+  318,
+  324, // inner
 ]);
 const UPPER_LIP = new Set([
-  185, 40, 39, 37, 0, 267, 269, 270, 409, // outer
-  191, 80, 81, 82, 13, 312, 311, 310, 415, // inner
+  185,
+  40,
+  39,
+  37,
+  0,
+  267,
+  269,
+  270,
+  409, // outer
+  191,
+  80,
+  81,
+  82,
+  13,
+  312,
+  311,
+  310,
+  415, // inner
 ]);
 
 /**
@@ -191,7 +223,8 @@ export function deformFace(f: DeformInput): Point[] {
   }
   // The neck band follows the jaw line by each vertex's share.
   for (const v of mesh.neckBand) {
-    const p = pts[v.parent], b = mesh.basePoints[v.parent];
+    const p = pts[v.parent],
+      b = mesh.basePoints[v.parent];
     pts.push({ x: v.base.x + (p.x - b.x) * v.share, y: v.base.y + (p.y - b.y) * v.share });
   }
 
@@ -210,7 +243,10 @@ interface MouthBox {
 function mouthBox(pts: readonly Point[], mouthIdx: readonly number[]): MouthBox {
   let mcx = 0;
   let mcy = 0;
-  let mMinX = Infinity, mMaxX = -Infinity, mMinY = Infinity, mMaxY = -Infinity;
+  let mMinX = Infinity,
+    mMaxX = -Infinity,
+    mMinY = Infinity,
+    mMaxY = -Infinity;
   for (const i of mouthIdx) {
     mcx += pts[i].x;
     mcy += pts[i].y;
@@ -324,12 +360,7 @@ function blinkLids(pts: Point[], amount: number, strength: number): void {
       // a translucent smear with the iris showing through. Stopping
       // short keeps the motion inside the range where the mesh still
       // looks like an eye narrowing.
-      pts[i].y +=
-        (eyeBottom - pts[i].y) *
-        amount *
-        LID_VERTEX_SWEEP *
-        strength *
-        (0.15 + 0.85 * centrality);
+      pts[i].y += (eyeBottom - pts[i].y) * amount * LID_VERTEX_SWEEP * strength * (0.15 + 0.85 * centrality);
     }
     for (const i of LOWER_LIDS[e]) {
       const centrality = Math.max(0, 1 - ((pts[i].x - ecx) / halfW) ** 2);

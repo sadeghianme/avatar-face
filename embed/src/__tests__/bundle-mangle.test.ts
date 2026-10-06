@@ -21,7 +21,8 @@ import { analyseMangling, bundleInputs, type ManglingAnalysis } from "../../scri
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const read = (path: string) => readFileSync(join(root, path), "utf8");
-const kinds = (analysis: ManglingAnalysis, name: string) => (analysis.kept.get(name) ?? []).map((why) => why.split(":")[0]);
+const kinds = (analysis: ManglingAnalysis, name: string) =>
+  (analysis.kept.get(name) ?? []).map((why) => why.split(":")[0]);
 
 describe("the rules: a program built to break each one", () => {
   // liveface.js is src/widget.ts; src/other.ts is another bundle, and
@@ -116,7 +117,7 @@ describe("the rules: a program built to break each one", () => {
     ["run", "contract", "the name of a method the page calls on the engine"],
     ["canvas", "foreign", "a member of the browser's objects, read here (ctx.canvas)"],
     ["then", "foreign", "a name the browser reads on its own (a thenable's)"],
-    ["quotedName", "quoted", "read as this[\"quotedName\"]"],
+    ["quotedName", "quoted", 'read as this["quotedName"]'],
     ["loose", "unresolved", "read off an untyped value"],
     ["literal", "unresolved", "a key of an object literal nothing types"],
     ["bracketed", "reached", "read by bracket access in another bundle"],
@@ -159,7 +160,7 @@ describe("the names liveface.js renames", () => {
     for (const file of inputs["liveface.js"]) {
       const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true);
       const hidden = (node: ts.Node) =>
-        (ts.canHaveModifiers(node) ? ts.getModifiers(node) ?? [] : []).some(
+        (ts.canHaveModifiers(node) ? (ts.getModifiers(node) ?? []) : []).some(
           (m) => m.kind === ts.SyntaxKind.PrivateKeyword || m.kind === ts.SyntaxKind.ProtectedKeyword
         );
       const visit = (node: ts.Node) => {
@@ -193,7 +194,11 @@ describe("the names liveface.js renames", () => {
       return into;
     };
     const dirs = ["assets", "src/__tests__/fixtures", "src/mouth/__tests__/fixtures"];
-    const json = dirs.flatMap((d) => readdirSync(join(root, d)).filter((f) => f.endsWith(".json")).map((f) => `${d}/${f}`));
+    const json = dirs.flatMap((d) =>
+      readdirSync(join(root, d))
+        .filter((f) => f.endsWith(".json"))
+        .map((f) => `${d}/${f}`)
+    );
     expect(json.length).toBeGreaterThan(5);
     const keys = new Set(json.flatMap((f) => [...keysOf(JSON.parse(read(f)))]));
     expect(analysis.names.filter((name) => keys.has(name))).toEqual([]);
@@ -212,18 +217,25 @@ describe("the names liveface.js renames", () => {
 
   it("are none of the page's API: window.Liveface.engine's public members", () => {
     const pageApi = new Set<string>();
-    for (const [file, owner] of [["src/engine.ts", "AvatarEngine"], ["src/engine3d.ts", "Avatar3DEngine"]]) {
+    for (const [file, owner] of [
+      ["src/engine.ts", "AvatarEngine"],
+      ["src/engine3d.ts", "Avatar3DEngine"],
+    ]) {
       const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true);
       ts.forEachChild(source, (node) => {
         if (!ts.isClassDeclaration(node) || node.name?.text !== owner) return;
         for (const m of node.members) {
-          const mods = ts.canHaveModifiers(m) ? ts.getModifiers(m) ?? [] : [];
-          const hidden = mods.some((x) => x.kind === ts.SyntaxKind.PrivateKeyword || x.kind === ts.SyntaxKind.ProtectedKeyword);
+          const mods = ts.canHaveModifiers(m) ? (ts.getModifiers(m) ?? []) : [];
+          const hidden = mods.some(
+            (x) => x.kind === ts.SyntaxKind.PrivateKeyword || x.kind === ts.SyntaxKind.ProtectedKeyword
+          );
           if (!hidden && m.name && ts.isIdentifier(m.name)) pageApi.add(m.name.text);
         }
       });
     }
-    expect([...pageApi]).toEqual(expect.arrayContaining(["playAudio", "setActive", "destroy", "tuning", "isSpeaking", "landmarks"]));
+    expect([...pageApi]).toEqual(
+      expect.arrayContaining(["playAudio", "setActive", "destroy", "tuning", "isSpeaking", "landmarks"])
+    );
     expect(analysis.names.filter((name) => pageApi.has(name))).toEqual([]);
   });
 
@@ -235,8 +247,13 @@ describe("the names liveface.js renames", () => {
       const visit = (node: ts.Node) => {
         let key: string | undefined;
         if (ts.isElementAccessExpression(node)) key = text(node.argumentExpression);
-        else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.InKeyword) key = text(node.left);
-        else if ((ts.isPropertyAssignment(node) || ts.isPropertySignature(node) || ts.isPropertyDeclaration(node)) && node.name) key = text(node.name);
+        else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.InKeyword)
+          key = text(node.left);
+        else if (
+          (ts.isPropertyAssignment(node) || ts.isPropertySignature(node) || ts.isPropertyDeclaration(node)) &&
+          node.name
+        )
+          key = text(node.name);
         if (key !== undefined) quoted.add(key);
         ts.forEachChild(node, visit);
       };

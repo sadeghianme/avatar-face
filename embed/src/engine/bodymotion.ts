@@ -93,7 +93,7 @@ const CATCH_MIN_GAP_MS = 1200;
 const SWAY_TAU_S = 2.6;
 
 /** Standing sd of the sway, in units of the peak amplitude. */
-const SWAY_SD = 0.30;
+const SWAY_SD = 0.3;
 
 /**
  * Inertia, in seconds.
@@ -117,7 +117,7 @@ export class BodyMotion {
   /** Breath, 0 at rest to 1 at the top of an inhale. */
   breath = 0;
 
-  private drift = 0;  // the raw process; `sway` follows it with inertia
+  private drift = 0; // the raw process; `sway` follows it with inertia
   private centre = 0; // where the drift is currently pulled toward
   private nextShiftAt = 0;
   private phase = 0;
@@ -184,8 +184,7 @@ export class BodyMotion {
     // The long exhale: from the peak toward the floor, exponentially, so it
     // is fastest just after the inhale — which is also how lungs empty.
     const since = t - SPEECH_INHALE_MS;
-    let value =
-      SPEECH_EXHALE_FLOOR + (SPEECH_INHALE_PEAK - SPEECH_EXHALE_FLOOR) * Math.exp(-since / sp.exhaleTauMs);
+    let value = SPEECH_EXHALE_FLOOR + (SPEECH_INHALE_PEAK - SPEECH_EXHALE_FLOOR) * Math.exp(-since / sp.exhaleTauMs);
     const sinceCatch = now - sp.catchAt;
     if (sinceCatch >= 0 && sinceCatch < CATCH_MS) {
       value = sp.catchFrom + (CATCH_PEAK - sp.catchFrom) * smoothstep(sinceCatch / CATCH_MS);
@@ -229,8 +228,7 @@ export class BodyMotion {
     // is derived from the target standing deviation rather than tuned, so
     // changing tau does not silently change how far the body wanders.
     const sigma = SWAY_SD * Math.sqrt(2 / SWAY_TAU_S);
-    this.drift +=
-      (-(this.drift - this.centre) / SWAY_TAU_S) * step + sigma * Math.sqrt(step) * this.gauss();
+    this.drift += (-(this.drift - this.centre) / SWAY_TAU_S) * step + sigma * Math.sqrt(step) * this.gauss();
     this.drift = Math.max(-1, Math.min(1, this.drift));
 
     // Frame-rate independent lag, so the smoothing is the same at 30fps and
@@ -274,8 +272,6 @@ export function phaseForExhaleValue(value: number): number {
 export function breathCurve(phase: number): number {
   const p = ((phase % 1) + 1) % 1;
   const skewed =
-    p < INHALE_FRACTION
-      ? (p / INHALE_FRACTION) * 0.5
-      : 0.5 + ((p - INHALE_FRACTION) / (1 - INHALE_FRACTION)) * 0.5;
+    p < INHALE_FRACTION ? (p / INHALE_FRACTION) * 0.5 : 0.5 + ((p - INHALE_FRACTION) / (1 - INHALE_FRACTION)) * 0.5;
   return 0.5 - 0.5 * Math.cos(skewed * Math.PI * 2);
 }

@@ -8,9 +8,15 @@ import { optionsFor } from "../load";
 
 describe("what a head3d GLB tells the engine", () => {
   const extras = {
-    version: 1, kind: "head3d", subject: "x", look: "render", profile: "toon@1",
+    version: 1,
+    kind: "head3d",
+    subject: "x",
+    look: "render",
+    profile: "toon@1",
     visemes: { aa: { jawOpen: 0.85, mouthStretch: 0.2 }, sil: { mouthClose: 0.1 } },
-    frame: { center: [0, 0.02, 0.03], height: 0.3 }, face_width_m: 0.14, morphs: ["jawOpen"],
+    frame: { center: [0, 0.02, 0.03], height: 0.3 },
+    face_width_m: 0.14,
+    morphs: ["jawOpen"],
   };
 
   it("reads its extras from the scene and ignores any other model", () => {
@@ -48,7 +54,8 @@ describe("what a head3d GLB tells the engine", () => {
     // mix at a sideways normal plus the key's share come to one.
     const photo = lightsFor("photo");
     const ground = ((photo.groundColor! >> 16) & 255) / 255;
-    const facing = (photo.hemisphere * (1 + ground)) / 2 / Math.PI + (photo.key * (1.5 / Math.hypot(0.5, 1.2, 1.5))) / Math.PI;
+    const facing =
+      (photo.hemisphere * (1 + ground)) / 2 / Math.PI + (photo.key * (1.5 / Math.hypot(0.5, 1.2, 1.5))) / Math.PI;
     expect(facing).toBeCloseTo(1, 6);
     expect(lightsFor("render").key).toBeGreaterThan(photo.key);
     expect(lightsFor("flat").key).toBe(0);

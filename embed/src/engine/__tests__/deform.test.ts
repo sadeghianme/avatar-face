@@ -22,7 +22,16 @@ const UPPER_OUTER = [185, 40, 39, 37, 0, 267, 269, 270, 409];
 const UPPER_INNER = [191, 80, 81, 82, 13, 312, 311, 310, 415];
 const LOWER_INNER = [95, 88, 178, 87, 14, 317, 402, 318, 324];
 const LOWER_OUTER = [146, 91, 181, 84, 17, 314, 405, 321, 375];
-const CORNERS: [number, number][] = [[61, 400], [76, 402], [78, 405], [62, 408], [292, 592], [308, 595], [306, 598], [291, 600]];
+const CORNERS: [number, number][] = [
+  [61, 400],
+  [76, 402],
+  [78, 405],
+  [62, 408],
+  [292, 592],
+  [308, 595],
+  [306, 598],
+  [291, 600],
+];
 const INNER_RING = [78, ...LOWER_INNER, 308, ...[...UPPER_INNER].reverse()];
 const CHIN = 152;
 
@@ -62,25 +71,40 @@ const rig = syntheticRig();
 function mesh(): FaceMesh {
   const basePoints = rig.points.map(([x, y]) => ({ x, y }));
   return {
-    scale: 1, offsetX: 0, offsetY: 0,
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
     picture: { x: 0, y: 0, w: 3500, h: 1000 },
     basePoints,
     texPoints: basePoints.map((p) => ({ ...p })),
-    derivedParents: [[13, 14], [61, 13]],
+    derivedParents: [
+      [13, 14],
+      [61, 13],
+    ],
     neckBand: [{ base: { x: 500, y: 900 }, parent: CHIN, share: 0.5 }],
     triangles: [],
   };
 }
 
-function deform(weights: Partial<BlendWeights> = {}, extra: Partial<DeformInput> & { blink?: number; gaze?: Point } = {}): Point[] {
+function deform(
+  weights: Partial<BlendWeights> = {},
+  extra: Partial<DeformInput> & { blink?: number; gaze?: Point } = {}
+): Point[] {
   const face = restingFace();
   face.weights = { ...ZERO_WEIGHTS, ...weights };
   face.blink = extra.blink ?? 0;
   face.gaze = extra.gaze ?? { x: 0, y: 0 };
   return deformFace({
-    rig, mesh: mesh(), innerRing: INNER_RING, face,
-    tuning: { ...DEFAULT_TUNING }, profile: HUMAN_PROFILE, field: null,
-    traits: HUMAN_PROFILE.traits, lowerFace: null, mouthExtension: undefined,
+    rig,
+    mesh: mesh(),
+    innerRing: INNER_RING,
+    face,
+    tuning: { ...DEFAULT_TUNING },
+    profile: HUMAN_PROFILE,
+    field: null,
+    traits: HUMAN_PROFILE.traits,
+    lowerFace: null,
+    mouthExtension: undefined,
     ...extra,
   });
 }
@@ -151,7 +175,10 @@ describe("deformFace", () => {
   });
 
   it("moves nothing of the mouth when the tuning's mouthOpen is 0", () => {
-    const pts = deform({ jawOpen: 1, mouthStretch: 1, mouthPucker: 0.5 }, { tuning: { ...DEFAULT_TUNING, mouthOpen: 0 } });
+    const pts = deform(
+      { jawOpen: 1, mouthStretch: 1, mouthPucker: 0.5 },
+      { tuning: { ...DEFAULT_TUNING, mouthOpen: 0 } }
+    );
     for (const i of rig.mouth_indices) expect(pts[i]).toEqual(base[i]);
     expect(pts[CHIN]).toEqual(base[CHIN]);
   });

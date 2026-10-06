@@ -15,20 +15,30 @@ import type { Rig } from "../types";
 /** Signed distance of `p` from the line through a and b, positive on the
  *  side away from `inside`. */
 function edgeDistance(a: Pt, b: Pt, p: Pt, inside: Pt): number {
-  let nx = -(b.y - a.y), ny = b.x - a.x;
+  let nx = -(b.y - a.y),
+    ny = b.x - a.x;
   const len = Math.hypot(nx, ny);
-  nx /= len; ny /= len;
-  if (nx * (inside.x - a.x) + ny * (inside.y - a.y) > 0) { nx = -nx; ny = -ny; }
+  nx /= len;
+  ny /= len;
+  if (nx * (inside.x - a.x) + ny * (inside.y - a.y) > 0) {
+    nx = -nx;
+    ny = -ny;
+  }
   return nx * (p.x - a.x) + ny * (p.y - a.y);
 }
 
 describe("padTriangle", () => {
   it("offsets every edge outward by a whole pad on a plump triangle", () => {
-    const plump: [Pt, Pt, Pt] = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 20, y: 35 }];
+    const plump: [Pt, Pt, Pt] = [
+      { x: 0, y: 0 },
+      { x: 40, y: 0 },
+      { x: 20, y: 35 },
+    ];
     const c = { x: 20, y: 35 / 3 };
     const grown = padTriangle(plump[0], plump[1], plump[2], 1, 0);
     for (let k = 0; k < 3; k++) {
-      const a = plump[k], b = plump[(k + 1) % 3];
+      const a = plump[k],
+        b = plump[(k + 1) % 3];
       // Both grown corners of this edge sit a pad outside it.
       expect(edgeDistance(a, b, grown[k], c)).toBeCloseTo(1, 9);
       expect(edgeDistance(a, b, grown[(k + 1) % 3], c)).toBeCloseTo(1, 9);
@@ -38,11 +48,15 @@ describe("padTriangle", () => {
   it("keeps a thin triangle's long edges covered, where the centroid growth it replaces left them bare", () => {
     // The stretched triangle under a moving chin: long and thin, corners
     // of about 17 degrees.
-    const thin: [Pt, Pt, Pt] = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 20, y: 12 }];
+    const thin: [Pt, Pt, Pt] = [
+      { x: 0, y: 0 },
+      { x: 40, y: 0 },
+      { x: 20, y: 12 },
+    ];
     const c = { x: 20, y: 4 };
     const centroidGrown = thin.map((p) => {
       const d = Math.hypot(p.x - c.x, p.y - c.y);
-      return { x: p.x + ((p.x - c.x) / d), y: p.y + ((p.y - c.y) / d) };
+      return { x: p.x + (p.x - c.x) / d, y: p.y + (p.y - c.y) / d };
     });
     // The long edge (0 -> 40) moved a fifth of a pixel at its ends that way...
     expect(edgeDistance(thin[0], thin[1], centroidGrown[0], c)).toBeLessThan(0.25);
@@ -56,13 +70,21 @@ describe("padTriangle", () => {
   });
 
   it("cuts a sharp corner's mitre short instead of growing a spike", () => {
-    const needle: [Pt, Pt, Pt] = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 0.5 }];
+    const needle: [Pt, Pt, Pt] = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 0.5 },
+    ];
     const grown = padTriangle(needle[0], needle[1], needle[2], 1, 0);
     expect(Math.hypot(grown[0].x - needle[0].x, grown[0].y - needle[0].y)).toBeLessThanOrEqual(MITRE_LIMIT + 1e-9);
   });
 
   it("with no pad, grows only in proportion, as every triangle always did", () => {
-    const tri: [Pt, Pt, Pt] = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 20, y: 35 }];
+    const tri: [Pt, Pt, Pt] = [
+      { x: 0, y: 0 },
+      { x: 40, y: 0 },
+      { x: 20, y: 35 },
+    ];
     const grown = padTriangle(tri[0], tri[1], tri[2], 0);
     const c = { x: 20, y: 35 / 3 };
     grown.forEach((g, k) => {
@@ -94,13 +116,21 @@ function fakeCanvas(texture: Texture, size = 512): HTMLCanvasElement {
     measureText: () => ({ width: 0 }),
   };
   const ctx = new Proxy(target, {
-    get(obj, key: string) { return key in obj ? obj[key] : () => undefined; },
-    set(obj, key: string, value: unknown) { obj[key] = value; return true; },
+    get(obj, key: string) {
+      return key in obj ? obj[key] : () => undefined;
+    },
+    set(obj, key: string, value: unknown) {
+      obj[key] = value;
+      return true;
+    },
   });
   return { width: size, height: size, getContext: () => ctx } as unknown as HTMLCanvasElement;
 }
 
-function padsFor(texture: Texture, profile?: string): { tris: [number, number, number][]; pads: Float32Array; flat: boolean } {
+function padsFor(
+  texture: Texture,
+  profile?: string
+): { tris: [number, number, number][]; pads: Float32Array; flat: boolean } {
   vi.stubGlobal("document", { createElement: () => fakeCanvas(texture, 64) });
   const image = { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement;
   const source = { ...rig } as Rig;
@@ -112,7 +142,10 @@ function padsFor(texture: Texture, profile?: string): { tris: [number, number, n
   return { tris: e.mesh.triangles, pads, flat: e.samples.look.flat };
 }
 
-const EYE = 159, BROW = 65, CHIN = 152, LIP = 14;
+const EYE = 159,
+  BROW = 65,
+  CHIN = 152,
+  LIP = 14;
 const padOfTrianglesWith = (tris: [number, number, number][], pads: Float32Array, index: number) =>
   tris.map((t, k) => (t.includes(index) ? pads[k] : null)).filter((p): p is number => p !== null);
 
@@ -122,7 +155,20 @@ describe("seam pads per picture", () => {
     vi.spyOn(performance, "now").mockReturnValue(10_000);
     vi.stubGlobal("requestAnimationFrame", () => 1);
     vi.stubGlobal("cancelAnimationFrame", () => undefined);
-    vi.stubGlobal("Path2D", class { moveTo() {} lineTo() {} closePath() {} bezierCurveTo() {} quadraticCurveTo() {} arc() {} ellipse() {} rect() {} addPath() {} });
+    vi.stubGlobal(
+      "Path2D",
+      class {
+        moveTo() {}
+        lineTo() {}
+        closePath() {}
+        bezierCurveTo() {}
+        quadraticCurveTo() {}
+        arc() {}
+        ellipse() {}
+        rect() {}
+        addPath() {}
+      }
+    );
   });
   afterEach(() => {
     vi.restoreAllMocks();

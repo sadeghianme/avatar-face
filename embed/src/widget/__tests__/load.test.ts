@@ -21,15 +21,24 @@ describe("fetchJson", () => {
   });
 
   it("says which part failed, with the status and the API's code, for an HTTP error", async () => {
-    answer({ ok: false, status: 429, json: async () => ({ code: "rate_limited", detail: "Embed rate limit exceeded" }) });
+    answer({
+      ok: false,
+      status: 429,
+      json: async () => ({ code: "rate_limited", detail: "Embed rate limit exceeded" }),
+    });
     const failure = await fetchJson("https://x/a", "avatar").catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(WidgetFailure);
-    expect(failure).toMatchObject({ stage: "avatar", message: "the avatar request answered 429 (rate_limited: Embed rate limit exceeded)" });
+    expect(failure).toMatchObject({
+      stage: "avatar",
+      message: "the avatar request answered 429 (rate_limited: Embed rate limit exceeded)",
+    });
   });
 
   it("says nothing it does not know: an error page is only its status", async () => {
     answer({ ok: false, status: 502, json: async () => Promise.reject(new SyntaxError("Unexpected token '<'")) });
-    await expect(fetchJson("https://x/rig.json", "rig")).rejects.toMatchObject({ message: "the rig request answered 502" });
+    await expect(fetchJson("https://x/rig.json", "rig")).rejects.toMatchObject({
+      message: "the rig request answered 502",
+    });
   });
 });
 
@@ -37,7 +46,10 @@ describe("asFailure", () => {
   it("keeps a WidgetFailure, and files anything else under the stage given", () => {
     const own = new WidgetFailure("rig", "the rig request answered 403");
     expect(asFailure(own, "engine")).toBe(own);
-    expect(asFailure(new TypeError("x is undefined"), "engine")).toMatchObject({ stage: "engine", message: "x is undefined" });
+    expect(asFailure(new TypeError("x is undefined"), "engine")).toMatchObject({
+      stage: "engine",
+      message: "x is undefined",
+    });
     expect(asFailure("plain", "model")).toMatchObject({ stage: "model", message: "plain" });
   });
 });

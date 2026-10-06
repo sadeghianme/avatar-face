@@ -29,12 +29,24 @@
  * the same pixels: nothing here is clamped in px.
  */
 
-export interface Pt { x: number; y: number }
-export interface Box { x: number; y: number; w: number; h: number }
+export interface Pt {
+  x: number;
+  y: number;
+}
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 /** The luma of a box of the texture, row-major; NaN where the texture is
  *  transparent (a cut-out's hole). */
-export interface LumaField { width: number; height: number; luma: Float32Array }
+export interface LumaField {
+  width: number;
+  height: number;
+  luma: Float32Array;
+}
 
 /** The percentile of the strong edges' widths that is the box's sharpness:
  *  low, "the sharpest this picture gets", but not the single sharpest
@@ -60,7 +72,10 @@ export const MOUTH_BOX: readonly [number, number] = [2.2, 1.6];
 /** ...and of an eye's width, the box round it. */
 export const EYE_BOX: readonly [number, number] = [1.8, 1.2];
 
-const EYES: readonly [number, number][] = [[33, 133], [362, 263]];
+const EYES: readonly [number, number][] = [
+  [33, 133],
+  [362, 263],
+];
 
 /** The boxes to read, in texture pixels: round the mouth (landmarks 61 and
  *  291 are its corners), and round each eye (33/133, 362/263); clamped to
@@ -71,9 +86,12 @@ export function sharpnessBoxes(points: readonly (Pt | undefined)[], width: numbe
     if (!a || !b) return;
     const w = Math.hypot(b.x - a.x, b.y - a.y);
     if (!(w > 4)) return;
-    const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-    const x0 = Math.max(0, Math.floor(cx - (w * span[0]) / 2)), y0 = Math.max(0, Math.floor(cy - (w * span[1]) / 2));
-    const x1 = Math.min(width, Math.ceil(cx + (w * span[0]) / 2)), y1 = Math.min(height, Math.ceil(cy + (w * span[1]) / 2));
+    const cx = (a.x + b.x) / 2,
+      cy = (a.y + b.y) / 2;
+    const x0 = Math.max(0, Math.floor(cx - (w * span[0]) / 2)),
+      y0 = Math.max(0, Math.floor(cy - (w * span[1]) / 2));
+    const x1 = Math.min(width, Math.ceil(cx + (w * span[0]) / 2)),
+      y1 = Math.min(height, Math.ceil(cy + (w * span[1]) / 2));
     if (x1 - x0 >= 24 && y1 - y0 >= 24) boxes.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
   };
   add(points[61], points[291], MOUTH_BOX);
@@ -106,15 +124,26 @@ export function edgeWidths(field: LumaField, reach = profileReach(field.width)):
   const { width: w, height: h, luma } = field;
   if (w < 2 * reach + 3 || h < 2 * reach + 3) return [];
   // Sobel gradients; a hole in the texture makes no gradient.
-  const gx = new Float32Array(w * h), gy = new Float32Array(w * h), mag = new Float32Array(w * h);
+  const gx = new Float32Array(w * h),
+    gy = new Float32Array(w * h),
+    mag = new Float32Array(w * h);
   let maxMag = 0;
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const i = y * w + x;
-      const a = luma[i - w - 1], b = luma[i - w], c = luma[i - w + 1], d = luma[i - 1], f = luma[i + 1], g = luma[i + w - 1], k = luma[i + w], l = luma[i + w + 1];
-      const sx = (c + 2 * f + l - a - 2 * d - g) / 8, sy = (g + 2 * k + l - a - 2 * b - c) / 8;
+      const a = luma[i - w - 1],
+        b = luma[i - w],
+        c = luma[i - w + 1],
+        d = luma[i - 1],
+        f = luma[i + 1],
+        g = luma[i + w - 1],
+        k = luma[i + w],
+        l = luma[i + w + 1];
+      const sx = (c + 2 * f + l - a - 2 * d - g) / 8,
+        sy = (g + 2 * k + l - a - 2 * b - c) / 8;
       if (Number.isNaN(sx) || Number.isNaN(sy)) continue;
-      gx[i] = sx; gy[i] = sy;
+      gx[i] = sx;
+      gy[i] = sy;
       const m = Math.hypot(sx, sy);
       mag[i] = m;
       if (m > maxMag) maxMag = m;
@@ -122,7 +151,8 @@ export function edgeWidths(field: LumaField, reach = profileReach(field.width)):
   }
   if (!(maxMag > 0)) return [];
   // The strong gradients: above the STRONG_SHARE percentile, by histogram.
-  const bins = 512, hist = new Uint32Array(bins);
+  const bins = 512,
+    hist = new Uint32Array(bins);
   let counted = 0;
   for (let y = reach; y < h - reach; y++) {
     for (let x = reach; x < w - reach; x++) {
@@ -130,8 +160,12 @@ export function edgeWidths(field: LumaField, reach = profileReach(field.width)):
       counted++;
     }
   }
-  let acc = 0, bin = 0;
-  for (; bin < bins; bin++) { acc += hist[bin]; if (acc >= counted * STRONG_SHARE) break; }
+  let acc = 0,
+    bin = 0;
+  for (; bin < bins; bin++) {
+    acc += hist[bin];
+    if (acc >= counted * STRONG_SHARE) break;
+  }
   const threshold = Math.max(1e-3, ((bin + 1) / bins) * maxMag);
   const candidates: number[] = [];
   for (let y = reach; y < h - reach; y++) {
@@ -142,26 +176,42 @@ export function edgeWidths(field: LumaField, reach = profileReach(field.width)):
   const stride = Math.max(1, Math.ceil(candidates.length / MAX_PROBES));
   const at = (x: number, y: number): number => {
     // Bilinear luma; NaN off the field or over a hole.
-    const ix = Math.floor(x), iy = Math.floor(y);
+    const ix = Math.floor(x),
+      iy = Math.floor(y);
     if (ix < 0 || iy < 0 || ix + 1 >= w || iy + 1 >= h) return NaN;
-    const tx = x - ix, ty = y - iy, i = iy * w + ix;
+    const tx = x - ix,
+      ty = y - iy,
+      i = iy * w + ix;
     return (luma[i] * (1 - tx) + luma[i + 1] * tx) * (1 - ty) + (luma[i + w] * (1 - tx) + luma[i + w + 1] * tx) * ty;
   };
   const widths: number[] = [];
   const profile = new Float64Array(2 * reach + 1);
   for (let n = 0; n < candidates.length; n += stride) {
-    const i = candidates[n], x = i % w, y = (i - x) / w;
-    const m = mag[i], nx = gx[i] / m, ny = gy[i] / m;
+    const i = candidates[n],
+      x = i % w,
+      y = (i - x) / w;
+    const m = mag[i],
+      nx = gx[i] / m,
+      ny = gy[i] / m;
     // The crest of the edge: no stronger gradient a pixel either way along it.
-    if (m < mag[Math.round(y + ny) * w + Math.round(x + nx)] || m < mag[Math.round(y - ny) * w + Math.round(x - nx)]) continue;
+    if (m < mag[Math.round(y + ny) * w + Math.round(x + nx)] || m < mag[Math.round(y - ny) * w + Math.round(x - nx)])
+      continue;
     // Coherent: the gradient holds its direction along the edge.
     let coherent = true;
     for (let s = 1; s <= EDGE_COHERENCE && coherent; s++) {
       for (const sign of [1, -1]) {
-        const qx = Math.round(x - ny * s * sign), qy = Math.round(y + nx * s * sign);
-        if (qx < 0 || qy < 0 || qx >= w || qy >= h) { coherent = false; break; }
-        const q = qy * w + qx, mq = mag[q];
-        if (mq < EDGE_HOLD * m || (gx[q] * nx + gy[q] * ny) / mq < EDGE_ALIGN) { coherent = false; break; }
+        const qx = Math.round(x - ny * s * sign),
+          qy = Math.round(y + nx * s * sign);
+        if (qx < 0 || qy < 0 || qx >= w || qy >= h) {
+          coherent = false;
+          break;
+        }
+        const q = qy * w + qx,
+          mq = mag[q];
+        if (mq < EDGE_HOLD * m || (gx[q] * nx + gy[q] * ny) / mq < EDGE_ALIGN) {
+          coherent = false;
+          break;
+        }
       }
     }
     if (!coherent) continue;
@@ -169,7 +219,10 @@ export function edgeWidths(field: LumaField, reach = profileReach(field.width)):
     let whole = true;
     for (let t = -reach; t <= reach; t++) {
       const v = at(x + nx * t, y + ny * t);
-      if (Number.isNaN(v)) { whole = false; break; }
+      if (Number.isNaN(v)) {
+        whole = false;
+        break;
+      }
       profile[t + reach] = v;
     }
     if (!whole) continue;
@@ -183,18 +236,23 @@ export function edgeWidths(field: LumaField, reach = profileReach(field.width)):
  *  middle sample `c`; null under EDGE_CONTRAST of contrast or when a
  *  crossing is missing. A rise of 0.5 levels against the run is noise. */
 export function riseWidth(profile: ArrayLike<number>, c: number): number | null {
-  let lo = c, hi = c;
+  let lo = c,
+    hi = c;
   while (lo > 0 && profile[lo - 1] <= profile[lo] + 0.5) lo--;
   while (hi < profile.length - 1 && profile[hi + 1] >= profile[hi] - 0.5) hi++;
-  const min = profile[lo], max = profile[hi], contrast = max - min;
+  const min = profile[lo],
+    max = profile[hi],
+    contrast = max - min;
   if (!(contrast >= EDGE_CONTRAST)) return null;
   const cross = (level: number): number | null => {
     for (let k = lo; k < hi; k++) {
-      if (profile[k] <= level && level <= profile[k + 1]) return k + (level - profile[k]) / Math.max(1e-9, profile[k + 1] - profile[k]);
+      if (profile[k] <= level && level <= profile[k + 1])
+        return k + (level - profile[k]) / Math.max(1e-9, profile[k + 1] - profile[k]);
     }
     return null;
   };
-  const a = cross(min + 0.1 * contrast), b = cross(min + 0.9 * contrast);
+  const a = cross(min + 0.1 * contrast),
+    b = cross(min + 0.9 * contrast);
   return a === null || b === null ? null : b - a;
 }
 

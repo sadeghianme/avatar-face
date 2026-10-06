@@ -51,8 +51,7 @@ describe("HeadMotion", () => {
     const frames = simulate(120, false);
     let still = 0;
     for (let i = 1; i < frames.length; i++) {
-      const step = Math.abs(frames[i].yaw - frames[i - 1].yaw)
-        + Math.abs(frames[i].pitch - frames[i - 1].pitch);
+      const step = Math.abs(frames[i].yaw - frames[i - 1].yaw) + Math.abs(frames[i].pitch - frames[i - 1].pitch);
       if (step < 0.001) still++;
     }
     expect(still / frames.length).toBeGreaterThan(0.5);

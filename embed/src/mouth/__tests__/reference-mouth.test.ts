@@ -1,19 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { createDentalArch, createTongue, DEFAULT_REFERENCE_PROFILE, enamelExposure, normalizeProfile, PROFILE_LIMITS, projectOralPoint, REFERENCE_POSES, rotateJaw } from "../reference-mouth-model";
+import {
+  createDentalArch,
+  createTongue,
+  DEFAULT_REFERENCE_PROFILE,
+  enamelExposure,
+  normalizeProfile,
+  PROFILE_LIMITS,
+  projectOralPoint,
+  REFERENCE_POSES,
+  rotateJaw,
+} from "../reference-mouth-model";
 import { ReferenceMouth } from "../reference-mouth";
 import { ZERO_WEIGHTS, type Rig } from "../../types";
 import { centralMouthAnchors } from "../../mouth-extension";
 
 describe("reference mouth geometry", () => {
   it("seats teeth on the central bow, not the higher corner chord", () => {
-    const left = { x: 0, y: 0 }, right = { x: 100, y: 0 };
-    expect(centralMouthAnchors([left, right, { x: 50, y: 10 }, { x: 50, y: 12 }], left, right))
-      .toEqual([{ x: 0, y: 11 }, { x: 100, y: 11 }]);
+    const left = { x: 0, y: 0 },
+      right = { x: 100, y: 0 };
+    expect(centralMouthAnchors([left, right, { x: 50, y: 10 }, { x: 50, y: 12 }], left, right)).toEqual([
+      { x: 0, y: 11 },
+      { x: 100, y: 11 },
+    ]);
     expect(left.y).toBe(0);
   });
   it("preserves the seam correction when the portrait is tilted", () => {
     const rotate = (p: { x: number; y: number }) => ({ x: (p.x - p.y) / Math.SQRT2, y: (p.x + p.y) / Math.SQRT2 });
-    const left = rotate({ x: 0, y: 0 }), right = rotate({ x: 100, y: 0 });
+    const left = rotate({ x: 0, y: 0 }),
+      right = rotate({ x: 100, y: 0 });
     const anchors = centralMouthAnchors([left, right, rotate({ x: 50, y: 10 }), rotate({ x: 50, y: 12 })], left, right);
     expect(anchors[0].x).toBeCloseTo(rotate({ x: 0, y: 11 }).x);
     expect(anchors[1].y).toBeCloseTo(rotate({ x: 100, y: 11 }).y);
@@ -38,7 +52,8 @@ describe("reference mouth geometry", () => {
       const [a, b] = tooth.vertices;
       const distance = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
       for (const jaw of [0, 0.2, 0.7, 1]) {
-        const ar = rotateJaw(a, jaw), br = rotateJaw(b, jaw);
+        const ar = rotateJaw(a, jaw),
+          br = rotateJaw(b, jaw);
         expect(Math.hypot(ar.x - br.x, ar.y - br.y, ar.z - br.z)).toBeCloseTo(distance, 10);
       }
     }
@@ -48,7 +63,7 @@ describe("reference mouth geometry", () => {
     const upper = createDentalArch(false, DEFAULT_REFERENCE_PROFILE);
     expect(upper).toHaveLength(8);
     expect(upper).toEqual(createDentalArch(false, DEFAULT_REFERENCE_PROFILE));
-    expect(upper.every(s => s.vertices.every(p => Number.isFinite(p.x + p.y + p.z)))).toBe(true);
+    expect(upper.every((s) => s.vertices.every((p) => Number.isFinite(p.x + p.y + p.z)))).toBe(true);
   });
 
   it("projects depth, scale and rotation in the neutral mouth coordinate frame", () => {
@@ -62,7 +77,8 @@ describe("reference mouth geometry", () => {
   });
 
   it("lifts the tongue for contact instead of simply scaling a painted ellipse", () => {
-    const low = createTongue(0, 0.2), raised = createTongue(1, 0.2);
+    const low = createTongue(0, 0.2),
+      raised = createTongue(1, 0.2);
     const centerY = (points: typeof low.vertices) => points.reduce((sum, p) => sum + p.y, 0) / points.length;
     expect(centerY(raised.vertices)).toBeLessThan(centerY(low.vertices));
   });
@@ -76,10 +92,16 @@ describe("reference mouth geometry", () => {
   });
 
   it("leaves neutral skin untouched and bounds projection to the lip region", () => {
-    const neutral = [{ x: -50, y: 0 }, { x: 50, y: 0 }, { x: 0, y: -10 }, { x: 0, y: 10 }, { x: 500, y: 500 }];
+    const neutral = [
+      { x: -50, y: 0 },
+      { x: 50, y: 0 },
+      { x: 0, y: -10 },
+      { x: 0, y: 10 },
+      { x: 500, y: 500 },
+    ];
     const rig = { outer_lip_ring: [0, 1, 2, 3], inner_lip_ring: [0, 1, 2, 3] } as Rig;
     const mouth = new ReferenceMouth(DEFAULT_REFERENCE_PROFILE);
-    const points = neutral.map(p => ({ ...p }));
+    const points = neutral.map((p) => ({ ...p }));
     mouth.deform(points, neutral, rig, ZERO_WEIGHTS);
     expect(points).toEqual(neutral);
     mouth.deform(points, neutral, rig, REFERENCE_POSES.oo.weights);

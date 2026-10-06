@@ -69,19 +69,25 @@ export async function bundleInputs(root = ROOT, bundles = BUNDLES) {
       outfile: "out.js",
       logLevel: "silent",
     });
-    out[name] = Object.keys(result.metafile.inputs).filter((f) => !f.includes("node_modules/") && /\.[mc]?tsx?$/.test(f));
+    out[name] = Object.keys(result.metafile.inputs).filter(
+      (f) => !f.includes("node_modules/") && /\.[mc]?tsx?$/.test(f)
+    );
   }
   return out;
 }
 
 const HIDDEN = new Set([ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.ProtectedKeyword]);
-const modifiers = (node) => (ts.canHaveModifiers(node) ? ts.getModifiers(node) ?? [] : []);
+const modifiers = (node) => (ts.canHaveModifiers(node) ? (ts.getModifiers(node) ?? []) : []);
 /** A class member (or parameter property) declared `private` or `protected`. */
 const isHidden = (decl) => modifiers(decl).some((m) => HIDDEN.has(m.kind));
 const isClassMember = (decl) =>
   (decl.parent && ts.isClassLike(decl.parent)) || (ts.isParameter(decl) && ts.isConstructorDeclaration(decl.parent));
 const nameOf = (node) =>
-  node && (ts.isIdentifier(node) || ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isNumericLiteral(node))
+  node &&
+  (ts.isIdentifier(node) ||
+    ts.isStringLiteral(node) ||
+    ts.isNoSubstitutionTemplateLiteral(node) ||
+    ts.isNumericLiteral(node))
     ? node.text
     : undefined;
 
@@ -106,12 +112,21 @@ export async function analyseMangling(root = ROOT, { bundles = BUNDLES, mangled 
 
   const configPath = join(root, "tsconfig.json");
   const options = existsSync(configPath)
-    ? ts.getParsedCommandLineOfConfigFile(configPath, {}, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {} }).options
+    ? ts.getParsedCommandLineOfConfigFile(configPath, {}, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {} })
+        .options
     : { target: ts.ScriptTarget.ES2020, lib: ["lib.es2020.d.ts", "lib.dom.d.ts"], strict: true };
-  const program = ts.createProgram([...own, ...others], { ...options, noEmit: true, composite: false, declaration: false });
+  const program = ts.createProgram([...own, ...others], {
+    ...options,
+    noEmit: true,
+    composite: false,
+    declaration: false,
+  });
   const checker = program.getTypeChecker();
   const rel = (file) => relative(root, file);
-  const isForeignFile = (sf) => program.isSourceFileDefaultLibrary(sf) || program.isSourceFileFromExternalLibrary(sf) || sf.fileName.includes("/node_modules/");
+  const isForeignFile = (sf) =>
+    program.isSourceFileDefaultLibrary(sf) ||
+    program.isSourceFileFromExternalLibrary(sf) ||
+    sf.fileName.includes("/node_modules/");
 
   // --- The candidates: private and protected members of liveface.js's classes.
   const members = new Map();
@@ -148,8 +163,19 @@ export async function analyseMangling(root = ROOT, { bundles = BUNDLES, mangled 
   for (const sf of program.getSourceFiles()) {
     if (!program.isSourceFileDefaultLibrary(sf)) continue;
     const visit = (node) => {
-      if ((ts.isPropertySignature(node) || ts.isMethodSignature(node) || ts.isPropertyDeclaration(node) || ts.isMethodDeclaration(node) || ts.isGetAccessor(node) || ts.isSetAccessor(node)) && nameOf(node.name)) {
-        keep(nameOf(node.name), `foreign: the browser's or the language's own member (${sf.fileName.split("/").pop()})`);
+      if (
+        (ts.isPropertySignature(node) ||
+          ts.isMethodSignature(node) ||
+          ts.isPropertyDeclaration(node) ||
+          ts.isMethodDeclaration(node) ||
+          ts.isGetAccessor(node) ||
+          ts.isSetAccessor(node)) &&
+        nameOf(node.name)
+      ) {
+        keep(
+          nameOf(node.name),
+          `foreign: the browser's or the language's own member (${sf.fileName.split("/").pop()})`
+        );
       }
       ts.forEachChild(node, visit);
     };
@@ -165,16 +191,29 @@ export async function analyseMangling(root = ROOT, { bundles = BUNDLES, mangled 
   const pushDeclared = (decl) => {
     const sym = decl.symbol ?? (decl.name && checker.getSymbolAtLocation(decl.name));
     if (!sym) return;
-    if (ts.isClassLike(decl) || ts.isInterfaceDeclaration(decl) || ts.isTypeAliasDeclaration(decl) || ts.isEnumDeclaration(decl)) {
+    if (
+      ts.isClassLike(decl) ||
+      ts.isInterfaceDeclaration(decl) ||
+      ts.isTypeAliasDeclaration(decl) ||
+      ts.isEnumDeclaration(decl)
+    ) {
       push(checker.getDeclaredTypeOfSymbol(sym));
     }
-    if (!ts.isInterfaceDeclaration(decl) && !ts.isTypeAliasDeclaration(decl)) push(checker.getTypeOfSymbolAtLocation(sym, decl));
+    if (!ts.isInterfaceDeclaration(decl) && !ts.isTypeAliasDeclaration(decl))
+      push(checker.getTypeOfSymbolAtLocation(sym, decl));
   };
   /** Push everything `files` declare. */
   const pushFiles = (files) => {
     for (const file of files) {
       const visit = (node) => {
-        if (ts.isClassLike(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node) || ts.isEnumDeclaration(node) || ts.isVariableDeclaration(node) || ts.isFunctionDeclaration(node)) {
+        if (
+          ts.isClassLike(node) ||
+          ts.isInterfaceDeclaration(node) ||
+          ts.isTypeAliasDeclaration(node) ||
+          ts.isEnumDeclaration(node) ||
+          ts.isVariableDeclaration(node) ||
+          ts.isFunctionDeclaration(node)
+        ) {
           pushDeclared(node);
         }
         ts.forEachChild(node, visit);
@@ -199,7 +238,10 @@ export async function analyseMangling(root = ROOT, { bundles = BUNDLES, mangled 
             if (!type) return;
             const loose = (t) => t.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown);
             // Directly, or a member of an options bag (CustomEventInit.detail).
-            if (loose(type) || checker.getPropertiesOfType(type).some((p) => loose(checker.getTypeOfSymbolAtLocation(p, node)))) {
+            if (
+              loose(type) ||
+              checker.getPropertiesOfType(type).some((p) => loose(checker.getTypeOfSymbolAtLocation(p, node)))
+            ) {
               push(checker.getTypeAtLocation(arg));
             }
           });
@@ -248,15 +290,24 @@ export async function analyseMangling(root = ROOT, { bundles = BUNDLES, mangled 
 
   // --- Every use of a name in liveface.js, as the checker resolves it.
   const PROPERTY_DECL = (node) =>
-    ts.isPropertyDeclaration(node) || ts.isMethodDeclaration(node) || ts.isGetAccessor(node) || ts.isSetAccessor(node) ||
-    ts.isPropertySignature(node) || ts.isMethodSignature(node) || ts.isPropertyAssignment(node) ||
-    ts.isShorthandPropertyAssignment(node) || ts.isEnumMember(node) || (ts.isParameter(node) && isClassMember(node) && modifiers(node).length > 0);
+    ts.isPropertyDeclaration(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isGetAccessor(node) ||
+    ts.isSetAccessor(node) ||
+    ts.isPropertySignature(node) ||
+    ts.isMethodSignature(node) ||
+    ts.isPropertyAssignment(node) ||
+    ts.isShorthandPropertyAssignment(node) ||
+    ts.isEnumMember(node) ||
+    (ts.isParameter(node) && isClassMember(node) && modifiers(node).length > 0);
   const judge = (name, decls, where) => {
     if (!members.has(name)) return;
     if (!decls?.length) return keep(name, `unresolved: ${where}`);
-    if (decls.some(ts.isIndexSignatureDeclaration)) return keep(name, `unresolved: through an index signature, ${where}`);
+    if (decls.some(ts.isIndexSignatureDeclaration))
+      return keep(name, `unresolved: through an index signature, ${where}`);
     for (const d of decls) {
-      if (isForeignDecl(d)) return keep(name, `foreign: a member of ${d.getSourceFile().fileName.split("/node_modules/").pop()}`);
+      if (isForeignDecl(d))
+        return keep(name, `foreign: a member of ${d.getSourceFile().fileName.split("/node_modules/").pop()}`);
       if (contract.has(d)) return keep(name, `contract: ${where} is ${describe(d)}`);
     }
   };
@@ -281,9 +332,14 @@ export async function analyseMangling(root = ROOT, { bundles = BUNDLES, mangled 
         else {
           // A computed key on an object: any of its members may be meant.
           const target = checker.getTypeAtLocation(node.expression);
-          if (!checker.isArrayLikeType(target)) for (const p of checker.getPropertiesOfType(target)) keep(p.name, `quoted: a computed key at ${at(node)}`);
+          if (!checker.isArrayLikeType(target))
+            for (const p of checker.getPropertiesOfType(target)) keep(p.name, `quoted: a computed key at ${at(node)}`);
         }
-      } else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.InKeyword && nameOf(node.left) !== undefined) {
+      } else if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === ts.SyntaxKind.InKeyword &&
+        nameOf(node.left) !== undefined
+      ) {
         quoted(nameOf(node.left), node);
       } else if (ts.isBindingElement(node) && ts.isObjectBindingPattern(node.parent)) {
         const key = nameOf(node.propertyName ?? node.name);
@@ -328,8 +384,11 @@ export async function analyseMangling(root = ROOT, { bundles = BUNDLES, mangled 
         if (!decls?.length) keep(node.name.text, `reached: unresolved in another bundle, ${at(node)}`);
       } else if (ts.isElementAccessExpression(node) && nameOf(node.argumentExpression) !== undefined) {
         const key = nameOf(node.argumentExpression);
-        const decls = checker.getSymbolAtLocation(node.argumentExpression)?.declarations ?? checker.getPropertyOfType(checker.getTypeAtLocation(node.expression), key)?.declarations;
-        if (members.has(key) && (!decls?.length || decls.some((d) => isClassMember(d) && isHidden(d)))) keep(key, `reached: by bracket access in another bundle, ${at(node)}`);
+        const decls =
+          checker.getSymbolAtLocation(node.argumentExpression)?.declarations ??
+          checker.getPropertyOfType(checker.getTypeAtLocation(node.expression), key)?.declarations;
+        if (members.has(key) && (!decls?.length || decls.some((d) => isClassMember(d) && isHidden(d))))
+          keep(key, `reached: by bracket access in another bundle, ${at(node)}`);
       }
       ts.forEachChild(node, visit);
     };
@@ -361,7 +420,8 @@ export async function mangledNames(root = ROOT) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const { names, kept } = await analyseMangling();
   if (process.argv.includes("--why")) {
-    for (const [name, why] of [...kept].sort(([a], [b]) => a.localeCompare(b))) console.log(`${name}: ${why.join("; ")}`);
+    for (const [name, why] of [...kept].sort(([a], [b]) => a.localeCompare(b)))
+      console.log(`${name}: ${why.join("; ")}`);
   } else {
     console.log(names.join("\n"));
   }

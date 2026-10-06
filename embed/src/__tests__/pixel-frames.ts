@@ -31,7 +31,10 @@ export interface Subject {
 }
 
 export const SUBJECTS: Record<string, Subject> = Object.fromEntries(
-  Object.entries(SUBJECT_FILES).map(([name, files]) => [name, { rig: subjectRig(name, json<Rig>(files.rig)), texture: files.texture }])
+  Object.entries(SUBJECT_FILES).map(([name, files]) => [
+    name,
+    { rig: subjectRig(name, json<Rig>(files.rig)), texture: files.texture },
+  ])
 );
 
 /** One frame drawn: its name, its pixels and where the mouth is. */

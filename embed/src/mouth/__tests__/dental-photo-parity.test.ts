@@ -35,15 +35,20 @@ describe("the backend's port of the teeth-photo extraction", () => {
     const data = new Uint8ClampedArray(inflateSync(Buffer.from(f.rgba_zlib_base64, "base64")));
     expect(data.length).toBe(f.width * f.height * 4);
     const contour = (points: [number, number][]) => points.map(([x, y]) => ({ x, y }));
-    const [upper, lower] = extractDentalLayers({ width: f.width, height: f.height, data },
-      contour(f.upper_contour), contour(f.lower_contour));
+    const [upper, lower] = extractDentalLayers(
+      { width: f.width, height: f.height, data },
+      contour(f.upper_contour),
+      contour(f.lower_contour)
+    );
     const digest = (layer: typeof upper) => ({
       box: [layer.box.x, layer.box.y, layer.box.width, layer.box.height],
       count: layer.count,
       sha256: createHash("sha256").update(layer.pixels.data).digest("hex"),
     });
     expect(digest(lower)).toEqual(f.expected.lower);
-    expect({ ...digest(upper), coverage: dentalCrownCoverage(upper, f.coverage.center, f.coverage.mouth_width) })
-      .toEqual(f.expected.upper);
+    expect({
+      ...digest(upper),
+      coverage: dentalCrownCoverage(upper, f.coverage.center, f.coverage.mouth_width),
+    }).toEqual(f.expected.upper);
   });
 });

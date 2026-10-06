@@ -26,5 +26,5 @@ export default defineConfig(
       "@typescript-eslint/no-misused-promises": "error",
       "@typescript-eslint/switch-exhaustiveness-check": "error",
     },
-  },
+  }
 );

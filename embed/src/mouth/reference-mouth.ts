@@ -1,8 +1,15 @@
 import type { MouthExtension, MouthFrame, MouthPoint } from "../mouth-extension";
 import type { BlendWeights, Rig } from "../types";
 import {
-  createDentalArch, createTongue, enamelExposure, normalizeProfile, projectOralPoint, rotateJaw,
-  type OralSurface, type ReferenceProfile, type Vec3,
+  createDentalArch,
+  createTongue,
+  enamelExposure,
+  normalizeProfile,
+  projectOralPoint,
+  rotateJaw,
+  type OralSurface,
+  type ReferenceProfile,
+  type Vec3,
 } from "./reference-mouth-model";
 
 /** Software-projected 3D oral surfaces under the photo's existing lip mask.
@@ -28,10 +35,12 @@ export class ReferenceMouth implements MouthExtension {
   }
 
   deform(points: MouthPoint[], neutral: readonly MouthPoint[], rig: Rig, w: BlendWeights): void {
-    const ring = rig.outer_lip_ring.map(i => neutral[i]).filter(Boolean);
+    const ring = rig.outer_lip_ring.map((i) => neutral[i]).filter(Boolean);
     if (ring.length < 4) return;
-    const minX = Math.min(...ring.map(p => p.x)), maxX = Math.max(...ring.map(p => p.x));
-    const cx = (minX + maxX) / 2, cy = ring.reduce((sum, p) => sum + p.y, 0) / ring.length;
+    const minX = Math.min(...ring.map((p) => p.x)),
+      maxX = Math.max(...ring.map((p) => p.x));
+    const cx = (minX + maxX) / 2,
+      cy = ring.reduce((sum, p) => sum + p.y, 0) / ring.length;
     const width = maxX - minX;
     if (width < 2) return;
     const rounding = Math.min(1, w.mouthPucker + w.mouthFunnel * 0.6);
@@ -43,7 +52,8 @@ export class ReferenceMouth implements MouthExtension {
     // Project a shallow lip mound toward the camera. This acts continuously
     // on neighbouring skin too; a lip-only offset would tear mesh edges.
     for (let i = 0; i < neutral.length; i++) {
-      const dx = neutral[i].x - cx, dy = neutral[i].y - cy;
+      const dx = neutral[i].x - cx,
+        dy = neutral[i].y - cy;
       const r = (dx / (width * 0.65)) ** 2 + (dy / (width * 0.27)) ** 2;
       if (r >= 1) continue;
       const z = rounding * this.profile.lipProjection * 0.22 * (1 - r) ** 2;
@@ -61,7 +71,8 @@ export class ReferenceMouth implements MouthExtension {
     const { neutralLeft: left, neutralRight: right, weights: w } = frame;
     const width = Math.hypot(right.x - left.x, right.y - left.y);
     if (width < 2) return;
-    const cx = (left.x + right.x) / 2, cy = (left.y + right.y) / 2;
+    const cx = (left.x + right.x) / 2,
+      cy = (left.y + right.y) / 2;
     ctx.clip(frame.aperture);
     const [r, g, b] = frame.lipColour;
     // Never near-black. A mouth is a lit red space; at 0.22 of the lip colour
@@ -82,7 +93,7 @@ export class ReferenceMouth implements MouthExtension {
     const surfaces: (OralSurface & { lower?: boolean })[] = [
       createTongue(this.tongueLift, jaw),
       ...this.upper,
-      ...this.lower.map(s => ({ ...s, lower: true, vertices: s.vertices.map(p => rotateJaw(p, jaw)) })),
+      ...this.lower.map((s) => ({ ...s, lower: true, vertices: s.vertices.map((p) => rotateJaw(p, jaw)) })),
     ];
     // The continuous module supplies a moving inner-lip opening. Preserve
     // the previous prototype's behaviour when that optional mask is absent.
@@ -90,10 +101,19 @@ export class ReferenceMouth implements MouthExtension {
     const light = sceneLight(frame.skinColour ?? null, frame.lipColour);
     const enamel = litEnamel(this.profile.warmth, frame.skinColour ?? frame.lipColour, light);
     const tongue: [number, number, number] = [r * 0.9, g * 0.72, b * 0.74];
-    const faces = surfaces.flatMap(surface => surface.triangles.map(indices => {
-      const vertices = indices.map(i => surface.vertices[i]) as [Vec3, Vec3, Vec3];
-      return { vertices, material: surface.material, lower: surface.lower === true, depth: vertices.reduce((sum, p) => sum + p.z, 0) / 3 };
-    })).sort((a, b2) => a.depth - b2.depth);
+    const faces = surfaces
+      .flatMap((surface) =>
+        surface.triangles.map((indices) => {
+          const vertices = indices.map((i) => surface.vertices[i]) as [Vec3, Vec3, Vec3];
+          return {
+            vertices,
+            material: surface.material,
+            lower: surface.lower === true,
+            depth: vertices.reduce((sum, p) => sum + p.z, 0) / 3,
+          };
+        })
+      )
+      .sort((a, b2) => a.depth - b2.depth);
     // One clip per RUN of enamel facets, not one per facet. Depth order is
     // untouched — the tongue still passes in front of the lower teeth on TH —
     // but save/clip/restore was the dominant cost of this path: a few hundred
@@ -102,15 +122,28 @@ export class ReferenceMouth implements MouthExtension {
     for (const face of faces) {
       if (face.material === "enamel" && exposure <= 0) continue;
       const [a, b2, c] = face.vertices;
-      const ux = b2.x - a.x, uy = b2.y - a.y, uz = b2.z - a.z;
-      const vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
-      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-      if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      const ux = b2.x - a.x,
+        uy = b2.y - a.y,
+        uz = b2.z - a.z;
+      const vx = c.x - a.x,
+        vy = c.y - a.y,
+        vz = c.z - a.z;
+      let nx = uy * vz - uz * vy,
+        ny = uz * vx - ux * vz,
+        nz = ux * vy - uy * vx;
+      if (nz < 0) {
+        nx = -nx;
+        ny = -ny;
+        nz = -nz;
+      }
       const normalLength = Math.hypot(nx, ny, nz);
       if (normalLength < 1e-10) continue;
       const wantsClip = Boolean(face.material === "enamel" && enamelAperture);
       if (wantsClip !== clipping) {
-        if (wantsClip) { ctx.save(); ctx.clip(enamelAperture!); } else ctx.restore();
+        if (wantsClip) {
+          ctx.save();
+          ctx.clip(enamelAperture!);
+        } else ctx.restore();
         clipping = wantsClip;
       }
       const diffuse = Math.max(0, (nx * -0.2 + ny * -0.5 + nz * 0.84) / normalLength);
@@ -123,35 +156,44 @@ export class ReferenceMouth implements MouthExtension {
       const ambient = face.material === "enamel" ? 0.86 : 0.74;
       const intensity = (ambient + diffuse * (0.98 - ambient)) * sideShadow * archShade;
       const color = face.material === "enamel" ? enamel : tongue;
-      ctx.fillStyle = `rgb(${color.map(channel => Math.round(channel * intensity)).join(",")})`;
+      ctx.fillStyle = `rgb(${color.map((channel) => Math.round(channel * intensity)).join(",")})`;
       ctx.globalAlpha = face.material === "enamel" ? frame.teethAlpha * exposure : frame.cavityAlpha;
-      const projected = face.vertices.map(p => projectOralPoint(p, left, right));
-      ctx.beginPath(); ctx.moveTo(projected[0].x, projected[0].y);
-      ctx.lineTo(projected[1].x, projected[1].y); ctx.lineTo(projected[2].x, projected[2].y); ctx.closePath();
+      const projected = face.vertices.map((p) => projectOralPoint(p, left, right));
+      ctx.beginPath();
+      ctx.moveTo(projected[0].x, projected[0].y);
+      ctx.lineTo(projected[1].x, projected[1].y);
+      ctx.lineTo(projected[2].x, projected[2].y);
+      ctx.closePath();
       ctx.fill();
       // Subpixel overlap prevents background-colored cracks between facets.
-      ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 0.35; ctx.stroke();
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.lineWidth = 0.35;
+      ctx.stroke();
     }
     if (clipping) ctx.restore();
     const rim = (points: MouthPoint[], color: string, thickness: number) => {
-      ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
-      points.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
-      ctx.strokeStyle = color; ctx.lineWidth = width * thickness; ctx.lineJoin = "round"; ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      points.slice(1).forEach((p) => ctx.lineTo(p.x, p.y));
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width * thickness;
+      ctx.lineJoin = "round";
+      ctx.stroke();
     };
     ctx.globalAlpha = Math.max(frame.cavityAlpha, frame.teethAlpha);
     // The upper lip overhangs the teeth and shadows them. Without this the
     // enamel is evenly lit to its top edge and reads as a sticker behind a
     // cut-out. Wide and soft first, then a tighter core — the same two-pass
     // shadow the classic interior uses, scaled to the opening.
-    const ys = [...frame.upper, ...frame.lower].map(p => p.y);
+    const ys = [...frame.upper, ...frame.lower].map((p) => p.y);
     const opening = Math.max(1, Math.max(...ys) - Math.min(...ys));
     // Widths are a share of the OPENING, not of the mouth: at the first
     // attempt's 0.55 the two passes covered most of a small opening and the
     // enamel went grey-blue. The shadow is warm (it is lip-coloured light
     // that is missing), never neutral black.
-    rim(frame.upper, "rgba(46,16,14,.22)", Math.min(0.07, opening / width * 0.34));
-    rim(frame.upper, "rgba(34,10,10,.28)", Math.min(0.03, opening / width * 0.14));
-    rim(frame.lower, "rgba(60,22,22,.22)", Math.min(0.04, opening / width * 0.2));
+    rim(frame.upper, "rgba(46,16,14,.22)", Math.min(0.07, (opening / width) * 0.34));
+    rim(frame.upper, "rgba(34,10,10,.28)", Math.min(0.03, (opening / width) * 0.14));
+    rim(frame.lower, "rgba(60,22,22,.22)", Math.min(0.04, (opening / width) * 0.2));
     rim(frame.lower, "rgba(240,195,182,.12)", 0.006);
     // Teeth recede into darkness toward the commissures instead of stopping
     // at a hard end against the lip corner.
@@ -206,7 +248,7 @@ export function litEnamel(
   // the light that falls on them, and at 0.18 a warm portrait's teeth came
   // out pink. A failed or black sample carries no cast at all.
   return base.map((channel, i) => {
-    const cast = mean < 8 ? 1 : 1 + ((tone[i] / mean) - 1) * 0.1;
+    const cast = mean < 8 ? 1 : 1 + (tone[i] / mean - 1) * 0.1;
     return Math.round(Math.min(255, channel * light * cast));
   }) as [number, number, number];
 }
