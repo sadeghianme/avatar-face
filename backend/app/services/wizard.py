@@ -59,7 +59,7 @@ from uuid import uuid4
 from PIL import Image
 
 from app.core.errors import AppError, Conflict409, Validation422
-from app.services.jobs import Job, run_cpu, runner
+from app.services.jobs import FAILED, Job, run_cpu, runner
 
 logger = logging.getLogger("liveface.wizard")
 
@@ -616,7 +616,7 @@ async def prepare_job(job: Job, params: dict) -> None:
     items = svc.step_items(creation.steps)
     original = items.get("original")
     if original is None or creation.face_type is None:
-        await svc._write_job(job, svc.FAILED, params, svc.SUPERSEDED)
+        await svc._write_job(job, FAILED, params, svc.SUPERSEDED)
         return
     storage = get_storage()
     steps = svc.copied(creation.steps)

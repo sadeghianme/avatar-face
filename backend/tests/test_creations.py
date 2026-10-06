@@ -72,17 +72,26 @@ def no_segmenter(monkeypatch):
 class Gate:
     """Holds every creation job at its next CPU section until opened."""
 
+    # The modules whose jobs run CPU sections (services.creations' works).
+    JOB_MODULES = ("adjust", "detect", "finish", "generate", "ingest")
+
     def __init__(self, monkeypatch):
+        from app.services.jobs import run_cpu
+
         self._monkeypatch = monkeypatch
         self._event = asyncio.Event()
-        self._real = svc.run_cpu
+        self._real = run_cpu
 
     def close(self) -> None:
+        import importlib
+
         async def held(fn, *args, **kwargs):
             await self._event.wait()
             return await self._real(fn, *args, **kwargs)
 
-        self._monkeypatch.setattr(svc, "run_cpu", held)
+        for name in self.JOB_MODULES:
+            module = importlib.import_module(f"app.services.creations.{name}")
+            self._monkeypatch.setattr(module, "run_cpu", held)
 
     def open(self) -> None:
         self._event.set()
@@ -1032,9 +1041,11 @@ class _Unreachable:
         self.real_undo = svc._undo_finish
         self.real_publish = publishing.publish
         self._monkeypatch = monkeypatch
-        monkeypatch.setattr(svc, "UNDO_FINISH_BACKOFF_SECONDS", (0.0, 0.0))
+        from app.services.creations import finish
+
+        monkeypatch.setattr(finish, "UNDO_FINISH_BACKOFF_SECONDS", (0.0, 0.0))
         monkeypatch.setattr(publishing, "publish", self.publish)
-        monkeypatch.setattr(svc, "_undo_finish", self.undo)
+        monkeypatch.setattr(finish, "_undo_finish", self.undo)
 
     async def publish(self, avatar, storage):
         raise RuntimeError("database is locked")
