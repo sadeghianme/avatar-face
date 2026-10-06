@@ -118,8 +118,6 @@ export interface DeformInput {
   traits: CharacterTraits;
   lowerFace: LowerFaceRig | null;
   mouthExtension: MouthExtension | undefined;
-  speaking: boolean;
-  energy: number;
 }
 
 /** Every vertex of the mesh this frame, canvas px, in vertex order. */
@@ -164,18 +162,16 @@ export function deformFace(f: DeformInput): Point[] {
     }
   }
 
-  // Brow layer: lift rows inner->outer on eased sin pulses + rest browInnerUp.
-  // No brow pulse. It ran on its own random timer, independent of the
-  // blink's, so the two coincided often enough to read as a tic — brows up,
-  // then a blink. An involuntary motion that draws attention to itself is
-  // worse than none.
-  const browPulse = 0;
-  const browLift = browPulse * (f.speaking ? 0.45 + f.energy * 0.3 : 0.4);
+  // The brows at rest: the inner ends a little raised (browInnerUp), the
+  // outer ends not at all. There is no brow pulse. It ran on its own random
+  // timer, independent of the blink's, so the two coincided often enough to
+  // read as a tic — brows up, then a blink. An involuntary motion that draws
+  // attention to itself is worse than none.
   for (const brow of [LEFT_BROW, RIGHT_BROW]) {
     for (let j = 0; j < brow.length; j++) {
       const innerness = 1 - j / (brow.length - 1); // inner moves most
       const rest = 0.06 * innerness; // resting browInnerUp
-      pts[brow[j]].y -= fh * 0.035 * (browLift * (0.4 + 0.6 * innerness) + rest);
+      pts[brow[j]].y -= fh * 0.035 * rest;
     }
   }
 

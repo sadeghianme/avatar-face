@@ -489,8 +489,6 @@ export class AvatarEngine {
       traits: this.traits,
       lowerFace: this.lowerFace,
       mouthExtension: this.mouthExtension,
-      speaking: this.speech.speaking,
-      energy: this.motion.energy,
     });
   }
 
