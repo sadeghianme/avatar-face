@@ -87,7 +87,7 @@ export function DemoAvatar({
       ]);
       if (disposed) return;
       const rig = rigModule.default as unknown as Rig;
-      const created = new AvatarEngine(canvas, rig, texture, { fullPhoto: true });
+      const created = new AvatarEngine(canvas, rig, texture, { fullPhoto: true, debug: true });
       engine = created;
       const scanning = mode === "showcase" && !reduced;
       if (scanning) {

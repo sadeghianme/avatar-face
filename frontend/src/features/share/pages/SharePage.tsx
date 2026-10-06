@@ -61,6 +61,9 @@ export function SharePage() {
         // The owner's published scene: the same zoom, pan and background
         // the widget and the dashboard show.
         scene: info.scene ?? undefined,
+        // `__liveface` for measuring a live share page (frame cadence, lip
+        // gap); our own page, so the handle is opted into here.
+        debug: true,
       });
       engineRef.current = engine;
       setMouthEngine(engine);
