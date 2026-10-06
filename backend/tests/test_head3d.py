@@ -628,3 +628,53 @@ def test_the_node_bake_runs_on_a_real_rig():
     assert jaw["dy"][T.LOWER_INNER_LIP] > 0 > -jaw["dy"][T.CHIN]  # the lip and the chin go down
     assert abs(jaw["dy"][T.FOREHEAD]) < 1e-6
     assert all(0 <= f["mean"] <= f["max"] for f in bake["fidelity"].values())
+
+
+# --- The bake bundle ----------------------------------------------------------------
+
+
+def _fake_embed(tmp_path: Path, monkeypatch, *, with_src: bool) -> Path:
+    from app.services.head3d import bake as B
+
+    embed = tmp_path / "embed"
+    bundle = embed / "dist/head3d-bake.mjs"
+    bundle.parent.mkdir(parents=True)
+    bundle.write_text("// bundle")
+    if with_src:
+        (embed / "src/engine").mkdir(parents=True)
+        (embed / "scripts").mkdir()
+        (embed / "scripts/head3d-bake.ts").write_text("// entry")
+        (embed / "src/engine/deform.ts").write_text("// source")
+    monkeypatch.setattr(B, "EMBED", embed)
+    monkeypatch.setattr(B, "BUNDLE", bundle)
+    monkeypatch.setattr(B, "ENTRY", embed / "scripts/head3d-bake.ts")
+    monkeypatch.setattr(B, "ESBUILD", embed / "node_modules/.bin/esbuild")
+    return bundle
+
+
+def test_the_bundle_is_used_as_shipped_where_there_are_no_sources(tmp_path, monkeypatch):
+    # The API image ships embed/dist only: nothing to compare against, and
+    # an empty max() used to raise instead of using the bundle.
+    from app.services.head3d.bake import ensure_bundle
+
+    bundle = _fake_embed(tmp_path, monkeypatch, with_src=False)
+    assert ensure_bundle() == bundle
+
+
+def test_a_bundle_older_than_any_engine_source_is_stale(tmp_path, monkeypatch):
+    # The bake drives the whole 2D engine, so a change anywhere under src/
+    # (not only src/head3d/bake) must rebuild it; without esbuild that is
+    # reported, never silently served stale.
+    import os
+
+    from app.services.head3d.bake import BakeUnavailable, ensure_bundle
+
+    bundle = _fake_embed(tmp_path, monkeypatch, with_src=True)
+    source = tmp_path / "embed/src/engine/deform.ts"
+    os.utime(tmp_path / "embed/scripts/head3d-bake.ts", (500, 500))
+    os.utime(bundle, (1_000, 1_000))
+    os.utime(source, (2_000, 2_000))
+    with pytest.raises(BakeUnavailable):
+        ensure_bundle()
+    os.utime(bundle, (3_000, 3_000))
+    assert ensure_bundle() == bundle

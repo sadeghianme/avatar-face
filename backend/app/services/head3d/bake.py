@@ -28,11 +28,22 @@ class BakeUnavailable(RuntimeError):
     """Node or the bake bundle is missing."""
 
 
+def _sources() -> list[Path]:
+    """Everything the bundle is built from: the entry script and the engine
+    sources it imports (the bake drives the whole 2D engine, not only
+    src/head3d/bake), tests excluded. Empty in the API image, which ships
+    embed/dist only."""
+    src = EMBED / "src"
+    files = [p for p in src.rglob("*.ts") if "__tests__" not in p.parts] if src.is_dir() else []
+    return files + ([ENTRY] if ENTRY.exists() else [])
+
+
 def ensure_bundle() -> Path:
-    """The bake bundle, built if it is missing or older than its sources."""
+    """The bake bundle, built if it is missing or older than any of its
+    sources; used as it is where the sources are not there to compare."""
     if BUNDLE.exists():
-        newest = max(p.stat().st_mtime for p in (EMBED / "src/head3d/bake").glob("*.ts"))
-        if BUNDLE.stat().st_mtime >= newest:
+        sources = _sources()
+        if not sources or BUNDLE.stat().st_mtime >= max(p.stat().st_mtime for p in sources):
             return BUNDLE
     if not ESBUILD.exists():
         raise BakeUnavailable(f"no bake bundle at {BUNDLE} and no esbuild at {ESBUILD}")
