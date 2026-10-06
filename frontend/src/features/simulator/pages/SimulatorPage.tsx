@@ -1,123 +1,36 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 
+import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { Input } from "@/components/ui/Input";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Textarea } from "@/components/ui/Textarea";
 import { buildSnippet } from "@/features/avatars";
-import { api } from "@/lib/api";
+import { useSimulatorToken } from "@/features/simulator/api";
+import { buildDocument, type Entry, needsNewToken, type Parsed, parseSnippet } from "@/features/simulator/snippet";
+import { cx } from "@/lib/cx";
 import { useOrg } from "@/providers/org";
 
-/** What we could pull out of the pasted snippet. */
-interface Parsed {
-  src?: string;
-  avatar?: string;
-  key?: string;
-  api?: string;
-  size?: string;
-  provider?: string;
-  voice?: string;
-  locale?: string;
-}
+/** The pasted snippet: a code box of its own, not the form field look. */
+const SNIPPET_BOX = cx(
+  "h-44 resize-y rounded-xl border-black/[0.1] p-3.5 font-mono text-[12.5px] leading-relaxed text-gray-800",
+  "focus:border-brand-400 focus:ring-brand-500/20 dark:border-white/[0.12] dark:text-gray-200"
+);
+
+/** The run's state, as a pill beside Run. */
+const RUN_STATE = {
+  failed: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+  ok: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
+  checking: "bg-black/[0.05] text-gray-500 dark:bg-white/[0.06] dark:text-gray-400",
+};
 
 /**
- * Read the attributes out of a pasted `<script>` tag.
- *
- * Parsed with DOMParser rather than a regex: the snippet is HTML, people
- * reformat it across lines, and single vs double quotes and attribute order
- * are all legal. A regex would reject perfectly valid paste-ins.
+ * The page a customer would have: the pasted snippet runs in an iframe
+ * (snippet.ts, buildDocument), with a short-lived key minted for this
+ * page or the snippet's own, and a log of what the widget reports.
  */
-function parseSnippet(text: string): Parsed | null {
-  if (!text.trim()) return null;
-  const doc = new DOMParser().parseFromString(`<body>${text}</body>`, "text/html");
-  const tag = [...doc.querySelectorAll("script[src]")].find((s) => (s.getAttribute("src") ?? "").includes("liveface"));
-  if (!tag) return null;
-  return {
-    src: tag.getAttribute("src") ?? undefined,
-    avatar: tag.getAttribute("data-avatar") ?? undefined,
-    key: tag.getAttribute("data-key") ?? undefined,
-    api: tag.getAttribute("data-api") ?? undefined,
-    size: tag.getAttribute("data-size") ?? undefined,
-    provider: tag.getAttribute("data-provider") ?? undefined,
-    voice: tag.getAttribute("data-voice") ?? undefined,
-    locale: tag.getAttribute("data-locale") ?? undefined,
-  };
-}
-
-type Level = "info" | "ok" | "error";
-interface Entry {
-  at: number;
-  level: Level;
-  message: string;
-}
-
-/**
- * The page a customer would have.
- *
- * The snippet runs inside an iframe rather than on this page. That is not
- * caution for its own sake: the widget defines `window.Liveface` and mounts a
- * canvas, so running it here would collide with the dashboard and would also
- * not prove anything about a clean page. An iframe IS the customer's page —
- * same load order, same globals, same CORS — so if it works here it works
- * there.
- */
-function buildDocument(p: Parsed): string {
-  const attrs = [
-    p.avatar && `data-avatar="${p.avatar}"`,
-    p.key && `data-key="${p.key}"`,
-    p.api && `data-api="${p.api}"`,
-    p.size && `data-size="${p.size}"`,
-    p.provider && `data-provider="${p.provider}"`,
-    p.voice && `data-voice="${p.voice}"`,
-    p.locale && `data-locale="${p.locale}"`,
-  ]
-    .filter(Boolean)
-    .join("\n    ");
-
-  return `<!doctype html>
-<html><head><meta charset="utf-8"></head>
-<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:transparent">
-<script>
-  const send = (level, message) => parent.postMessage({ lf: true, level, message }, "*");
-  window.onerror = (m) => send("error", String(m));
-  window.addEventListener("unhandledrejection", (e) => send("error", "unhandled: " + e.reason));
-  // The widget reports its own failures through console.error; forward them
-  // so a bad key or a missing avatar shows up in the log instead of only in
-  // devtools, which is the whole point of running this here.
-  const realError = console.error;
-  console.error = (...a) => { send("error", a.map(String).join(" ")); realError(...a); };
-</script>
-<script src="${p.src}"
-    ${attrs}
-    onerror='parent.postMessage({lf:true,level:"error",message:"script failed to load: ${p.src}"},"*")'
-></script>
-<script>
-  let tries = 0;
-  const poll = setInterval(() => {
-    if (window.Liveface) {
-      clearInterval(poll);
-      send("ok", "widget loaded — window.Liveface is available");
-      const canvas = document.querySelector("canvas");
-      send(canvas ? "ok" : "error",
-        canvas ? "canvas mounted (" + canvas.width + "x" + canvas.height + ")"
-               : "no canvas was mounted");
-    } else if (++tries > 100) {
-      clearInterval(poll);
-      send("error", "timed out after 10s — window.Liveface never appeared");
-    }
-  }, 100);
-  window.addEventListener("message", (e) => {
-    if (e.data && e.data.speak && window.Liveface) {
-      send("info", "speak(" + JSON.stringify(e.data.speak) + ")");
-      Promise.resolve(window.Liveface.speak(e.data.speak))
-        .then(() => send("ok", "finished speaking"))
-        .catch((err) => send("error", "speak failed: " + err));
-    }
-    if (e.data && e.data.stop && window.Liveface) window.Liveface.stop();
-  });
-</script>
-</body></html>`;
-}
-
 export function SimulatorPage() {
   const { t } = useTranslation();
   // Arriving from an avatar's "Test in Simulator" prefills the snippet, so
@@ -136,6 +49,7 @@ export function SimulatorPage() {
   const [mode, setMode] = useState<"token" | "own">("token");
   const frame = useRef<HTMLIFrameElement>(null);
   const { current } = useOrg();
+  const { mutateAsync: requestToken } = useSimulatorToken(current?.id);
 
   const parsed = useMemo(() => parseSnippet(snippet), [snippet]);
   // In token mode the key in the snippet is irrelevant — it is replaced at
@@ -153,17 +67,16 @@ export function SimulatorPage() {
     return () => window.removeEventListener("message", onMessage);
   }, []);
 
-  /** Mint a fresh Simulator credential. Cheap, so it is done per run. */
-  const mintToken = async (): Promise<string | null> => {
+  /** Mint a fresh Simulator credential (per run); a failure goes to the log. */
+  const mintToken = useCallback(async (): Promise<string | null> => {
     if (!current) return null;
     try {
-      const r = await api.post<{ token: string }>(`/orgs/${current.id}/api-keys/simulator-token`);
-      return r.token;
+      return await requestToken();
     } catch (e) {
       setLog((prev) => [...prev, { at: Date.now(), level: "error", message: `${t("simTokenFailed")} ${String(e)}` }]);
       return null;
     }
-  };
+  }, [current, requestToken, t]);
 
   const run = async () => {
     if (!parsed) return;
@@ -187,11 +100,12 @@ export function SimulatorPage() {
 
   // Re-mint and re-run when the credential ages out mid-session. This is what
   // makes the short lifetime free: without it the expiry would surface as
-  // Speak dying for no visible reason, which reads as a broken product.
+  // Speak dying for no visible reason, which reads as a broken product. Only
+  // a refusal since the last start or renewal counts (needsNewToken): the
+  // old one stays in the log and used to renew again on every render.
   useEffect(() => {
     if (mode !== "token" || !running) return;
-    const stale = log.some((l) => l.level === "error" && /simulator_token_invalid|401/i.test(l.message));
-    if (!stale) return;
+    if (!needsNewToken(log, [t("simStarting"), t("simRenewed")])) return;
     let cancelled = false;
     void (async () => {
       const token = await mintToken();
@@ -202,8 +116,7 @@ export function SimulatorPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [log, mode, running]);
+  }, [log, mode, running, mintToken, t]);
 
   const ok = log.some((l) => l.level === "ok" && l.message.includes("canvas mounted"));
   const failed = log.some((l) => l.level === "error");
@@ -219,15 +132,13 @@ export function SimulatorPage() {
           <label htmlFor="snippet" className="mb-2 block text-[13px] font-medium">
             {t("simPasteLabel")}
           </label>
-          <textarea
+          <Textarea
             id="snippet"
             value={snippet}
             onChange={(e) => setSnippet(e.target.value)}
             spellCheck={false}
             placeholder={`<script\n  src="https://avatar.mehdisadeghian.com/api/liveface.js"\n  data-avatar="…"\n  data-key="…"\n></script>`}
-            className="h-44 w-full resize-y rounded-xl border border-black/[0.1] bg-white p-3.5 font-mono text-[12.5px] leading-relaxed
-              text-gray-800 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20
-              dark:border-white/[0.12] dark:bg-raised dark:text-gray-200"
+            className={SNIPPET_BOX}
           />
 
           {snippet.trim() && !parsed && (
@@ -267,21 +178,17 @@ export function SimulatorPage() {
             </p>
           )}
 
-          <div className="mt-4 flex overflow-hidden rounded-lg border border-black/10 dark:border-white/15">
-            {(["token", "own"] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`flex-1 px-3 py-2 text-[12.5px] font-medium transition-colors ${
-                  mode === m
-                    ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                    : "text-gray-500 hover:bg-black/5 dark:hover:bg-white/10"
-                }`}
-              >
-                {t(m === "token" ? "simModeToken" : "simModeOwn")}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            className="mt-4"
+            itemClassName="flex-1"
+            label={t("simModeLabel")}
+            options={[
+              { value: "token", label: t("simModeToken") },
+              { value: "own", label: t("simModeOwn") },
+            ]}
+            value={mode}
+            onChange={setMode}
+          />
           <p className="mt-2 text-[12.5px] text-gray-500 dark:text-gray-400">
             {t(mode === "token" ? "simModeTokenHint" : "simModeOwnHint")}
           </p>
@@ -291,24 +198,21 @@ export function SimulatorPage() {
           )}
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button
+            <Button
+              variant="contrast"
+              className="gap-1.5 rounded-full text-[13px]"
+              icon={<Icon name="arrow" className="h-4 w-4" strokeWidth={2} />}
               onClick={() => void run()}
               disabled={!parsed || missing.length > 0 || placeholderKey}
-              className="inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-4 py-2 text-[13px] font-medium text-white
-                transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-900"
             >
-              <Icon name="arrow" className="h-4 w-4" strokeWidth={2} />
               {running ? t("simRerun") : t("simRun")}
-            </button>
+            </Button>
             {running && (
               <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-medium ${
-                  failed
-                    ? "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400"
-                    : ok
-                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
-                      : "bg-black/[0.05] text-gray-500 dark:bg-white/[0.06] dark:text-gray-400"
-                }`}
+                className={cx(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-medium",
+                  RUN_STATE[failed ? "failed" : ok ? "ok" : "checking"]
+                )}
               >
                 {failed ? t("simFailed") : ok ? t("simWorking") : t("simChecking")}
               </span>
@@ -318,22 +222,24 @@ export function SimulatorPage() {
           {running && (
             <div className="mt-5">
               <div className="flex gap-2">
-                <input
+                <Input
+                  aria-label={t("speakPlaceholder")}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && speak()}
                   placeholder={t("speakPlaceholder")}
-                  className="input py-2 text-[13.5px]"
+                  className="py-2 text-[13.5px]"
                 />
-                <button onClick={speak} className="btn-primary shrink-0 px-4 py-2 text-[13px]">
+                <Button onClick={speak} className="shrink-0 px-4 py-2 text-[13px]">
                   {t("speak")}
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="secondary"
                   onClick={() => frame.current?.contentWindow?.postMessage({ stop: true }, "*")}
-                  className="btn-secondary shrink-0 px-3 py-2 text-[13px]"
+                  className="shrink-0 px-3 py-2 text-[13px]"
                 >
                   {t("stop")}
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -375,7 +281,7 @@ export function SimulatorPage() {
                 // it loads from our own API, and the snippet is the user's own.
                 sandbox="allow-scripts allow-same-origin"
                 srcDoc={buildDocument(running)}
-                className="h-[420px] w-full bg-white dark:bg-[#101010]"
+                className="h-[420px] w-full bg-white dark:bg-well"
               />
             ) : (
               <div className="grid h-[420px] place-items-center px-6 text-center text-[13px] text-gray-400">

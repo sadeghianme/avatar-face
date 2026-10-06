@@ -13,6 +13,7 @@ export const simulator = {
   simFailed: "Failed",
   simPreview: "Result",
   simIdle: "Paste a snippet and press Run to see it load.",
+  simModeLabel: "Key to run with",
   simModeToken: "Use a test key",
   simModeOwn: "Use my own key",
   simModeTokenHint:
