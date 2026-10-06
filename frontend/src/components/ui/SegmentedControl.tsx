@@ -17,7 +17,7 @@ const LOOK: Record<SegmentedLook, { group: string; item: string; on: string; off
   // One bordered bar, the chosen part in ink (the Simulator's key, a crop's ratio).
   solid: {
     group: "flex overflow-hidden rounded-lg border border-black/10 dark:border-white/15",
-    item: "text-[12.5px] font-medium transition-colors",
+    item: "text-[12.5px] font-medium transition-colors coarse:min-h-11",
     on: "bg-gray-900 text-white dark:bg-white dark:text-gray-900",
     off: "text-gray-500 hover:bg-black/5 dark:hover:bg-white/10",
   },
