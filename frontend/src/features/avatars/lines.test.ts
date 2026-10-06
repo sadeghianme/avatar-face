@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { confirmedParts, marksAreGuessed, pickMarks } from "./creation/index.ts";
+import type { FaceMarks } from "./face-marks.ts";
 import { LINE_ORDER, LINES } from "./lines.ts";
 
 describe("lines", () => {
@@ -39,7 +40,12 @@ describe("guessed marks", () => {
     const parts = LINES.animal.marks;
     const confirmed = confirmedParts(parts, ["head"], ["chin"]);
     assert.deepEqual(confirmed, ["head", "chin"]);
-    const marks = { head: { left: { x: 1, y: 2 } }, chin: { x: 5, y: 6 }, left_eye: { left: { x: 3, y: 4 } } };
+    // Partial marks: pickMarks copies whole parts, whatever is in them.
+    const marks = {
+      head: { left: { x: 1, y: 2 } },
+      chin: { x: 5, y: 6 },
+      left_eye: { left: { x: 3, y: 4 } },
+    } as unknown as FaceMarks;
     // Nothing unconfirmed reaches finish, so the server sees it as missing.
     assert.deepEqual(pickMarks(marks, confirmed), { head: marks.head, chin: marks.chin });
     assert.deepEqual(pickMarks(marks, ["mouth_line"]), {});

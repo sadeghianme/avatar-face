@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { FaceMarks, Pt, RegionMarks } from "./face-marks.ts";
 import {
   catmullRom,
   closedCurvePath,
@@ -17,21 +18,29 @@ import {
   marksToSend,
 } from "./face-marks.ts";
 
-const pt = (x, y) => ({ x, y });
+/** A head with its outline's diagonals: the temples and the jaw corners. */
+type FullHead = RegionMarks & Required<Pick<RegionMarks, "upper_left" | "upper_right" | "lower_right" | "lower_left">>;
+
+const pt = (x: number, y: number): Pt => ({ x, y });
 
 // The backend's test head (tests/test_anchor_fit.py): centre 500,500, half
 // axes 300 by 350, with its temples and jaw corners at 45 degrees.
 const R = Math.SQRT1_2;
-const HEAD4 = { left: pt(200, 500), right: pt(800, 500), top: pt(500, 150), bottom: pt(500, 850) };
-const HEAD8 = {
+const HEAD4: RegionMarks = { left: pt(200, 500), right: pt(800, 500), top: pt(500, 150), bottom: pt(500, 850) };
+const HEAD8: FullHead = {
   ...HEAD4,
   upper_left: pt(500 - 300 * R, 500 - 350 * R),
   upper_right: pt(500 + 300 * R, 500 - 350 * R),
   lower_right: pt(500 + 300 * R, 500 + 350 * R),
   lower_left: pt(500 - 300 * R, 500 + 350 * R),
 };
-const EYE = (cx) => ({ left: pt(cx - 60, 400), right: pt(cx + 60, 400), top: pt(cx, 360), bottom: pt(cx, 440) });
-const marksWith = (head) => ({
+const EYE = (cx: number): RegionMarks => ({
+  left: pt(cx - 60, 400),
+  right: pt(cx + 60, 400),
+  top: pt(cx, 360),
+  bottom: pt(cx, 440),
+});
+const marksWith = (head: RegionMarks): FaceMarks => ({
   head,
   left_eye: EYE(390),
   right_eye: EYE(610),
@@ -40,8 +49,8 @@ const marksWith = (head) => ({
 });
 
 /** The cubic Bezier segments of a path from closedCurvePath. */
-function segments(d) {
-  const numbers = (s) => s.split(/[ ,]+/).filter(Boolean).map(Number);
+function segments(d: string): Pt[][] {
+  const numbers = (s: string) => s.split(/[ ,]+/).filter(Boolean).map(Number);
   const [move, ...curves] = d.replace(/Z$/, "").split("C");
   let from = numbers(move.slice(1));
   return curves.map((c) => {
@@ -52,13 +61,14 @@ function segments(d) {
   });
 }
 
-function bezier([p0, p1, p2, p3], t) {
+function bezier([p0, p1, p2, p3]: Pt[], t: number): Pt {
   const u = 1 - t;
-  const at = (a, b, c, d) => u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d;
+  const at = (a: number, b: number, c: number, d: number) =>
+    u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d;
   return pt(at(p0.x, p1.x, p2.x, p3.x), at(p0.y, p1.y, p2.y, p3.y));
 }
 
-const near = (a, b, tolerance = 0.02) =>
+const near = (a: Pt, b: Pt, tolerance = 0.02) =>
   assert.ok(Math.hypot(a.x - b.x, a.y - b.y) <= tolerance, `${JSON.stringify(a)} vs ${JSON.stringify(b)}`);
 
 describe("the head's outline", () => {
@@ -138,7 +148,7 @@ describe("the head's outline", () => {
 
 describe("the handles", () => {
   it("give the head eight, in order round the face, and a four-point head four", () => {
-    const ids = (marks) =>
+    const ids = (marks: FaceMarks) =>
       handlesFor(marks)
         .filter((h) => h.group === "head")
         .map((h) => h.id);
@@ -148,14 +158,14 @@ describe("the handles", () => {
     );
     assert.deepEqual(ids(marksWith(HEAD4)), ["head.top", "head.right", "head.bottom", "head.left"]);
     const temple = handlesFor(marksWith(HEAD8)).find((h) => h.id === "head.upper_left");
-    assert.equal(temple.label, "markEdgeUpperLeft");
-    assert.equal(handlesFor(marksWith(HEAD8)).find((h) => h.id === "head.lower_right").label, "markEdgeLowerRight");
+    assert.equal(temple!.label, "markEdgeUpperLeft");
+    assert.equal(handlesFor(marksWith(HEAD8)).find((h) => h.id === "head.lower_right")!.label, "markEdgeLowerRight");
   });
 
   it("move one point of the outline and nothing else", () => {
     const marks = marksWith(HEAD8);
     const jaw = handlesFor(marks).find((h) => h.id === "head.lower_left");
-    const moved = jaw.move(marks, pt(270, 760));
+    const moved = jaw!.move(marks, pt(270, 760));
     assert.deepEqual(moved.head.lower_left, pt(270, 760));
     assert.deepEqual({ ...moved.head, lower_left: HEAD8.lower_left }, HEAD8);
     assert.equal(moved.left_eye, marks.left_eye);
@@ -167,15 +177,15 @@ describe("the handles", () => {
     const scale = pt(0.5, 0.5); // a 500px-wide view of a 1000px photo
     // Between the top and the upper-right temple, nearer the temple.
     const between = pt(0.3 * HEAD8.top.x + 0.7 * HEAD8.upper_right.x, 0.3 * HEAD8.top.y + 0.7 * HEAD8.upper_right.y);
-    assert.equal(handleAt(handles, marks, between, scale, 40).id, "head.upper_right");
+    assert.equal(handleAt(handles, marks, between, scale, 40)!.id, "head.upper_right");
     // Right on the jaw corner, with the eyes and the mouth far away.
-    assert.equal(handleAt(handles, marks, HEAD8.lower_left, scale, 20).id, "head.lower_left");
+    assert.equal(handleAt(handles, marks, HEAD8.lower_left, scale, 20)!.id, "head.lower_left");
     // Out of reach of everything.
     assert.equal(handleAt(handles, marks, pt(500, 500), scale, 20), null);
     // The chin sits on the head's bottom: a second press picks the other.
     const first = handleAt(handles, marks, pt(500, 850), scale, 20);
-    const second = handleAt(handles, marks, pt(500, 850), scale, 20, first.id);
-    assert.deepEqual(new Set([first.id, second.id]), new Set(["head.bottom", "chin"]));
+    const second = handleAt(handles, marks, pt(500, 850), scale, 20, first!.id);
+    assert.deepEqual(new Set([first!.id, second!.id]), new Set(["head.bottom", "chin"]));
   });
 });
 

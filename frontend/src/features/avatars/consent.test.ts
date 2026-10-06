@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { ConsentRecord, MyConsent } from "./consent.ts";
 import {
   CONSENT_TEXT_VERSIONS,
   consentBody,
@@ -63,7 +64,7 @@ describe("recording a consent", () => {
 });
 
 describe("a remembered consent", () => {
-  const mine = (extra = {}) => ({
+  const mine = (extra: Partial<MyConsent> = {}): MyConsent => ({
     scope: "third_party_ai",
     text_version: version,
     consent_id: "c1",
@@ -86,7 +87,13 @@ describe("a remembered consent", () => {
     assert.equal(rememberedConsent(undefined, "third_party_ai"), null);
   });
   it("is what a fresh record answers, so the next step does not ask again", () => {
-    const record = { id: "c2", scope: "third_party_ai", providers: ["google"], text_version: version, created_at: "t" };
+    const record: ConsentRecord = {
+      id: "c2",
+      scope: "third_party_ai",
+      providers: ["google"],
+      text_version: version,
+      created_at: "t",
+    };
     assert.equal(rememberedConsent(mineFromRecord(record), "third_party_ai"), "c2");
   });
 });

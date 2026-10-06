@@ -33,6 +33,9 @@ export interface StepAdjust {
   /** Failed its checks: shown with the reason, never choosable. */
   rejected: PhotoCheck | null;
   checks: { detected?: boolean; fit_ok?: boolean; skin_delta_e?: number };
+  /** The owner's words for a change ("Describe a change", step 3); null or
+   * absent for a plain try. */
+  instruction?: string | null;
 }
 
 export interface CreationStep {

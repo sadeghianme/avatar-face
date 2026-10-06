@@ -6,10 +6,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { Translate } from "./index.ts";
 import { errorText } from "./index.ts";
 
 describe("errorText", () => {
-  const t = (key, options) => (options ? `${key}(${JSON.stringify(options)})` : key);
+  const t: Translate = (key, options) => (options ? `${key}(${JSON.stringify(options)})` : key);
   it("uses our words for a known code, the server's otherwise", () => {
     assert.equal(errorText(t, "too_many_drafts", "You have 10"), "createErr_too_many_drafts");
     assert.equal(errorText(t, "something_new", "Server says so"), "Server says so");

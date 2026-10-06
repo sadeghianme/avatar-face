@@ -7,6 +7,19 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
+import type {
+  Creation,
+  CreationAnchors,
+  CreationJob,
+  CreationStep,
+  JobState,
+  JobStep,
+  StepAdjust,
+  StepId,
+} from "@/features/avatars/creation";
+
+import { adjust, marks } from "./creation/fixtures.ts";
+import type { Choices, LastPrepare, PhotoForm, Plan, PrepareStage, WizardCreation } from "./wizard.ts";
 import {
   activeChange,
   aiRequired,
@@ -47,19 +60,19 @@ import {
 } from "./wizard.ts";
 
 function memoryStore() {
-  const map = new Map();
+  const map = new Map<string, string>();
   return {
-    getItem: (k) => (map.has(k) ? map.get(k) : null),
-    setItem: (k, v) => map.set(k, String(v)),
-    removeItem: (k) => map.delete(k),
-    key: (i) => [...map.keys()][i] ?? null,
+    getItem: (k: string) => (map.has(k) ? map.get(k)! : null),
+    setItem: (k: string, v: unknown) => map.set(k, String(v)),
+    removeItem: (k: string) => map.delete(k),
+    key: (i: number) => [...map.keys()][i] ?? null,
     get length() {
       return map.size;
     },
   };
 }
 
-const step = (id, extra = {}) => ({
+const step = (id: StepId, extra: Partial<CreationStep> = {}): CreationStep => ({
   id,
   url: `https://x/${id}.png?sig`,
   width: 600,
@@ -70,7 +83,10 @@ const step = (id, extra = {}) => ({
   ...extra,
 });
 
-function creation(overrides = {}) {
+/** An AI result with the owner's words for a change on it (null: none). */
+const instructed = (base: StepAdjust, instruction: string | null): StepAdjust => ({ ...base, instruction });
+
+function creation(overrides: Partial<WizardCreation> = {}): WizardCreation {
   return {
     id: "c1",
     face_type: "human",
@@ -101,18 +117,18 @@ function creation(overrides = {}) {
   };
 }
 
-const anchors = (image, extra = {}) => ({
+const anchors = (image: StepId, extra: Partial<CreationAnchors> = {}): CreationAnchors => ({
   id: "a1",
   source: "mediapipe",
   image,
   image_size: [600, 750],
   detected: true,
-  marks: {},
+  marks: marks(),
   validation: { ok: true, reasons: [], warnings: [], detected: true, one_click: true },
   ...extra,
 });
 
-const prepared = (overrides = {}) =>
+const prepared = (overrides: Partial<WizardCreation> = {}) =>
   creation({
     current: "cutout:0",
     steps: [
@@ -128,7 +144,7 @@ describe("model × look → line", () => {
   it("maps onto the three lines", () => {
     assert.equal(lineFor("human", "realistic"), "human");
     assert.equal(lineFor("animal", "realistic"), "animal");
-    for (const model of ["human", "animal"]) {
+    for (const model of ["human", "animal"] as const) {
       assert.equal(lineFor(model, "animation"), "cartoon");
       assert.equal(lineFor(model, "cartoon"), "cartoon");
     }
@@ -151,7 +167,7 @@ describe("model × look → line", () => {
 });
 
 describe("step 2", () => {
-  const form = {
+  const form: PhotoForm = {
     model: "human",
     source: "upload",
     look: "realistic",
@@ -179,7 +195,7 @@ describe("step 2", () => {
     // The Photo screen forecasts nothing for an animal...
     assert.equal(statementFor("animal", "generate"), null);
     // ...and the server's word, once there is a creation, is what Publish shows.
-    const dog = { face_type: "cartoon", statement: "generated_face" };
+    const dog: Pick<Creation, "face_type" | "statement"> = { face_type: "cartoon", statement: "generated_face" };
     assert.equal(statementToAsk(dog, null), "generated_face");
     assert.equal(statementToAsk({ face_type: "animal", statement: "depiction" }, null), "depiction");
     assert.equal(statementToAsk({ face_type: "animal", statement: null }, null), null);
@@ -276,7 +292,7 @@ describe("step 3", () => {
   });
 
   it("says where the work is, and nothing for a label it does not know", () => {
-    const job = (step, state, label) => ({
+    const job = (step: JobStep, state: JobState, label?: string): CreationJob => ({
       id: "j",
       step,
       state,
@@ -331,12 +347,15 @@ describe("step 4", () => {
   });
 
   it("publishes without points on a detection or the AI's fitting points, never on a guess", () => {
-    assert.equal(faceFound(anchors("x")), true);
-    assert.equal(faceFound(anchors("x", { detected: false, source: "ai" })), true);
-    assert.equal(faceFound(anchors("x", { detected: false, source: "template" })), false);
+    // "x" is no step of a creation: faceFound never reads the image.
+    assert.equal(faceFound(anchors("x" as StepId)), true);
+    assert.equal(faceFound(anchors("x" as StepId, { detected: false, source: "ai" })), true);
+    assert.equal(faceFound(anchors("x" as StepId, { detected: false, source: "template" })), false);
     assert.equal(
       faceFound(
-        anchors("x", { validation: { ok: false, reasons: [], warnings: [], detected: true, one_click: false } })
+        anchors("x" as StepId, {
+          validation: { ok: false, reasons: [], warnings: [], detected: true, one_click: false },
+        })
       ),
       false
     );
@@ -348,8 +367,8 @@ describe("the stage shown", () => {
   it("never goes back within a run", () => {
     // Reading (the upload), then the picture's job waiting for a slot, then
     // a poll of the older state: the words stay on the furthest stage.
-    let shown = null;
-    const seen = [];
+    let shown: PrepareStage | null = null;
+    const seen: (PrepareStage | null)[] = [];
     for (const next of [
       "queued",
       "upload",
@@ -365,7 +384,7 @@ describe("the stage shown", () => {
       "save",
       null,
       "background",
-    ]) {
+    ] as const) {
       shown = heldStage(shown, next);
       seen.push(shown);
     }
@@ -389,7 +408,7 @@ describe("the stage shown", () => {
   });
 
   it("lights a checklist row for every stage, so the list never blanks", () => {
-    const rows = ["upload", "create", "background", "face"];
+    const rows: PrepareStage[] = ["upload", "create", "background", "face"];
     assert.equal(checklistRow("upload", rows), 0);
     assert.equal(checklistRow("check", rows), 1);
     assert.equal(checklistRow("save", rows), 3);
@@ -400,9 +419,15 @@ describe("the stage shown", () => {
 });
 
 describe("retry", () => {
-  const upload = { model: "human", look: "cartoon", source: "upload", description: null };
-  const generated = { model: "animal", look: "cartoon", source: "generate", description: "a fox" };
-  const tried = (mode, instruction = null) => ({ mode, look: "cartoon", instruction, step: "adjusted:1", cut: true });
+  const upload: Plan = { model: "human", look: "cartoon", source: "upload", description: null };
+  const generated: Plan = { model: "animal", look: "cartoon", source: "generate", description: "a fox" };
+  const tried = (mode: LastPrepare["mode"], instruction: string | null = null): LastPrepare => ({
+    mode,
+    look: "cartoon",
+    instruction,
+    step: "adjusted:1",
+    cut: true,
+  });
 
   it("tries the owner's last change again, on the same base, until it is cleared", () => {
     const last = tried("change", "a red shirt");
@@ -427,8 +452,9 @@ describe("retry", () => {
   it("asks for the removal as a removal, so the server gives its try back", () => {
     assert.deepEqual(clearBody(upload), { mode: "ai", clear: true });
     assert.deepEqual(clearBody(generated), { mode: "generate", clear: true });
-    assert.equal(freeClearsLeft({ ai: { free_clears_left: 2 } }), 2);
-    assert.equal(freeClearsLeft({ ai: {} }), 0);
+    // Partial creations: freeClearsLeft reads ai.free_clears_left alone.
+    assert.equal(freeClearsLeft({ ai: { free_clears_left: 2 } } as unknown as WizardCreation), 2);
+    assert.equal(freeClearsLeft({ ai: {} } as unknown as WizardCreation), 0);
   });
 });
 
@@ -456,7 +482,7 @@ describe("the statement's words", () => {
 
   it("are asked of an animal plan only when the server found a person, as worded for it", () => {
     // An uploaded dog photo the detector read as a human face.
-    const plan = { model: "animal", look: "realistic", source: "upload", description: null };
+    const plan: Plan = { model: "animal", look: "realistic", source: "upload", description: null };
     const asked = statementToAsk({ statement: "depiction", face_type: "animal" }, null);
     assert.equal(asked, "depiction");
     assert.equal(statementKey(asked, plan), "createDepictionStatement_animal");
@@ -488,7 +514,7 @@ describe("the keyboard", () => {
 describe("this tab's memory", () => {
   it("keeps the choices for a creation and as the last ones, and survives junk", () => {
     const store = memoryStore();
-    const choices = {
+    const choices: Choices = {
       model: "animal",
       source: "generate",
       look: "cartoon",
@@ -500,7 +526,7 @@ describe("this tab's memory", () => {
     assert.deepEqual(recallChoices(store, "c9"), choices);
     assert.deepEqual(recallChoices(store, null), choices);
     rememberChoices(store, "c8", { ...choices, statement: "generated_face" });
-    assert.equal(recallChoices(store, "c8").statement, "generated_face");
+    assert.equal(recallChoices(store, "c8")!.statement, "generated_face");
     forgetChoices(store, "c9");
     assert.equal(recallChoices(store, "c9"), null);
     store.setItem("liveface.wizard.last", "{not json");
@@ -512,7 +538,7 @@ describe("this tab's memory", () => {
 
   it("a fresh entry forgets the last choices and keeps a creation's own", () => {
     const store = memoryStore();
-    const choices = {
+    const choices: Choices = {
       model: "human",
       source: "upload",
       look: "animation",
@@ -542,8 +568,8 @@ describe("this tab's memory", () => {
 
 describe("versions", () => {
   // An upload, its own photo prepared, an AI try, a change, the change removed.
-  const made = (id, from, instruction = null) =>
-    step(id, { from, adjust: { mode: "regenerate", instruction, rejected: null } });
+  const made = (id: StepId, from: StepId, instruction: string | null = null) =>
+    step(id, { from, adjust: instructed(adjust({ mode: "regenerate", rejected: null }), instruction) });
   const many = creation({
     current: "cutout:1",
     steps: [
@@ -615,7 +641,10 @@ describe("versions", () => {
         // An adjust round of the old wizard: the AI's picture of a picture.
         made("adjusted:0", "original"),
         // Its Retry: made anew from the description, like the first.
-        step("adjusted:1", { from: "original", adjust: { mode: "generate", instruction: null, rejected: null } }),
+        step("adjusted:1", {
+          from: "original",
+          adjust: instructed(adjust({ mode: "generate", rejected: null }), null),
+        }),
         made("adjusted:2", "adjusted:1", "a red collar"),
       ],
     });
@@ -631,7 +660,10 @@ describe("versions", () => {
     const refused = creation({
       steps: [
         step("original"),
-        step("adjusted:0", { from: "original", adjust: { mode: "regenerate", rejected: { code: "x", detail: "" } } }),
+        step("adjusted:0", {
+          from: "original",
+          adjust: adjust({ mode: "regenerate", rejected: { code: "x", detail: "" } }),
+        }),
       ],
     });
     assert.deepEqual(

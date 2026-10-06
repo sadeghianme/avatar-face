@@ -24,7 +24,7 @@ import { LINE_ORDER, LINES } from "./lines.ts";
 describe("strings", () => {
   // Read as text: importing a locale would take a path that climbs out of
   // this feature, which the structure check forbids.
-  const keysOf = (lang) =>
+  const keysOf = (lang: string) =>
     new Set(
       [
         ...readFileSync(new URL(`../../i18n/locales/${lang}/avatars.ts`, import.meta.url), "utf8").matchAll(

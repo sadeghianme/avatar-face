@@ -6,7 +6,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { adjustedStep, ai, creation, step } from "./fixtures.ts";
+import type { FaceType } from "@/lib/types";
+
+import { adjustedStep, ai, analysis, creation, step } from "./fixtures.ts";
+import type { AdjustRound, Creation, CreationAi, CreationAnchors, Recommendation } from "./index.ts";
 import {
   adjustModes,
   aiEditOf,
@@ -22,7 +25,7 @@ import {
 } from "./index.ts";
 
 describe("AI adjust", () => {
-  const round = (extra = {}) => ({
+  const round = (extra: Partial<AdjustRound> = {}): AdjustRound => ({
     mode: "touchup",
     style: null,
     source: "cutout",
@@ -40,12 +43,17 @@ describe("AI adjust", () => {
     adjustedStep(1, { from: "cutout" }),
     step("cutout:1", { from: "adjusted:1", cutout: true }),
   ];
-  const recommendation = (extra = {}) => ({ image: "cutout", mode: "touchup", reasons: ["eyes_closed"], ...extra });
-  const analysed = (extra = {}) =>
+  const recommendation = (extra: Partial<Recommendation> = {}): Recommendation => ({
+    image: "cutout",
+    mode: "touchup",
+    reasons: ["eyes_closed"],
+    ...extra,
+  });
+  const analysed = (extra: Partial<Creation> = {}) =>
     creation({
       current: "cutout",
       steps,
-      analysis: { checks: [], recommendation: recommendation() },
+      analysis: analysis({ checks: [], recommendation: recommendation() }),
       ai: ai({ suggested: ["touchup"] }),
       ...extra,
     });
@@ -88,12 +96,12 @@ describe("AI adjust", () => {
     assert.equal(aiResultInUse(analysed({ current: "adjusted:0" }))?.id, "adjusted:0");
   });
   it("keeps my photo by choosing what the round was made from, or nothing when it is on screen", () => {
-    const withRound = (extra) => analysed({ ai: ai({ last_round: round() }), ...extra });
+    const withRound = (extra: Partial<Creation>) => analysed({ ai: ai({ last_round: round() }), ...extra });
     assert.equal(keepChoice(withRound({ current: "cutout" })), null);
     assert.equal(keepChoice(withRound({ current: "adjusted:0" })), "cutout");
     assert.equal(keepChoice(withRound({ current: "cutout:1" })), "cutout");
     // An opaque "before" comes back as its cut-out when the background is off.
-    const opaque = (extra) =>
+    const opaque = (extra: Partial<Creation>) =>
       analysed({ ai: ai({ last_round: round({ source: "original" }) }), current: "cutout:1", ...extra });
     assert.equal(keepChoice(opaque({ background: "remove" })), "cutout");
     assert.equal(keepChoice(opaque({ background: "keep" })), "original");
@@ -116,7 +124,11 @@ describe("AI adjust", () => {
 });
 
 describe("AI points", () => {
-  const offer = (line, anchorsExtra = {}, aiExtra = {}) =>
+  const offer = (
+    line: FaceType,
+    anchorsExtra: Partial<Pick<CreationAnchors, "detected" | "source">> = {},
+    aiExtra: Partial<CreationAi> = {}
+  ) =>
     aiPointsOffer(creation({ face_type: line, ai: ai(aiExtra) }), {
       detected: false,
       source: "template",

@@ -6,6 +6,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
+import type { Avatar } from "@/lib/types";
+
 import {
   aiEditedLabels,
   aiEditedModels,
@@ -19,7 +21,9 @@ import {
   teethView,
 } from "./teeth.ts";
 
-const mouth = (extra = {}) => ({
+type Mouth = NonNullable<Avatar["mouth"]>;
+
+const mouth = (extra: Partial<Mouth> = {}): Mouth => ({
   renderer: "continuous",
   profile: {},
   has_oral_photo: false,
@@ -139,7 +143,7 @@ describe("teeth", () => {
     );
   });
 
-  const keysOf = (lang) =>
+  const keysOf = (lang: string) =>
     new Set(
       [
         ...readFileSync(new URL(`../../i18n/locales/${lang}/avatars.ts`, import.meta.url), "utf8").matchAll(
@@ -149,7 +153,8 @@ describe("teeth", () => {
     );
   for (const lang of ["en", "fr"]) {
     it(`has ${lang} words for every teeth note and finish warning`, () => {
-      const keys = keysOf(lang);
+      // mouthErrorKey names no key (null) for a code it does not know: missing too.
+      const keys: ReadonlySet<string | null> = keysOf(lang);
       const needed = [
         ...TEETH_NOTE_CODES.map((code) => `mouthTeethNote_${code}`),
         ...FINISH_WARNINGS.map((code) => `finishWarning_${code}`),

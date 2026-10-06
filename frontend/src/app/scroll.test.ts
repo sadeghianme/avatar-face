@@ -2,9 +2,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { Place } from "./scroll.ts";
 import { scrollsToTop } from "./scroll.ts";
 
-const at = (pathname, hash = "") => ({ pathname, hash });
+const at = (pathname: string, hash = ""): Place => ({ pathname, hash });
 
 describe("scroll to top on navigation", () => {
   it("a new page, opened or replaced, starts at the top", () => {

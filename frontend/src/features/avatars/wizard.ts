@@ -455,7 +455,7 @@ export function versionsOf(creation: WizardCreation): Version[] {
     .filter((s) => adjustedNumber(s.id) !== null && !s.adjust?.rejected)
     .sort((a, b) => adjustedNumber(a.id)! - adjustedNumber(b.id)!);
   for (const step of made) {
-    const adjust = (step.adjust ?? null) as (CreationStep["adjust"] & { instruction?: string | null }) | null;
+    const adjust = step.adjust ?? null;
     const instruction = adjust?.instruction?.trim() || null;
     out.push({
       id: step.id,

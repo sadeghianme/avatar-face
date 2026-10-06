@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "check": "node scripts/check-structure.mjs",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && tsc -p tsconfig.test.json",
     "test": "node --test \"src/**/*.test.ts\"",
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{js,ts}\" \"scripts/**/*.mjs\"",

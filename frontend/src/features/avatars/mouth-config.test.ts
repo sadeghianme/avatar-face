@@ -4,6 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { AvatarMouthConfig } from "@liveface/embed/mouth";
 
 import {
   draftMouthConfig,
@@ -82,7 +83,8 @@ describe("the owner's draft mouth", () => {
 
   it("carries the avatar's own motion, saved or previewed", () => {
     const motion = signed("/kit/motion.json", "a");
-    assert.equal(draftMouthConfig(avatar(motion))?.motion_url, motion);
+    // A person on the continuous renderer: the photographic mouth's config.
+    assert.equal((draftMouthConfig(avatar(motion)) as AvatarMouthConfig | null)?.motion_url, motion);
     const previewed = draftMouthConfig(avatar(motion), "continuous", { jawRange: 1 });
     assert.deepEqual(previewed, { renderer: "continuous", profile: { jawRange: 1 }, oral: oral(), motion_url: motion });
   });
@@ -144,6 +146,7 @@ describe("comparing the mouth shapes in the preview", () => {
   });
 
   it("composes with an unsaved slider preview", () => {
+    // A person on the continuous renderer: the photographic mouth's config.
     const previewed = draftMouthConfig(
       {
         face_type: "human",
@@ -152,7 +155,7 @@ describe("comparing the mouth shapes in the preview", () => {
       },
       "continuous",
       { jawRange: 1 }
-    );
+    ) as AvatarMouthConfig | null;
     assert.deepEqual(previewMotion(previewed, "standard"), { ...previewed, motion_url: null });
     assert.deepEqual(previewMotion(previewed, "standard")?.profile, { jawRange: 1 });
   });

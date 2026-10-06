@@ -157,6 +157,10 @@ jobs:
       - name: Install embed deps
         run: npm ci --prefix ../embed
       - run: npm ci
+      # The app, then the tests' own program (tsconfig.test.json): a test
+      # that no longer type-checks against the code it tests fails here.
+      - name: Typecheck (app, tests)
+        run: npm run typecheck
       - name: Typecheck and build
         run: npm run build
 

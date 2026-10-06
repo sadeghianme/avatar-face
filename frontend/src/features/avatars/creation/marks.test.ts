@@ -7,12 +7,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { memoryStore } from "./fixtures.ts";
+import type { DraftMarks } from "./index.ts";
 import { draftMarksKey, forgetDraftMarks, loadDraftMarks, saveDraftMarks } from "./index.ts";
 
 // Which marks are guessed, per line of faces: lines.test.ts (it reads lines.ts).
 
 describe("marks in progress", () => {
-  const draft = { marks: { chin: { x: 5, y: 6 } }, ticked: ["head"] };
+  const draft: DraftMarks = { marks: { chin: { x: 5, y: 6 } }, ticked: ["head"] };
   it("come back for the anchors they were placed on, and no others", () => {
     const store = memoryStore();
     saveDraftMarks(store, "c1", "a1", draft);
