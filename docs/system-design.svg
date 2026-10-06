@@ -94,7 +94,7 @@
 
   <rect class="box" x="540" y="586" width="268" height="146" fill="#ecfdf5" stroke="#34d399"/>
   <text class="t" x="674" y="614">Speech timing</text>
-  <text class="s" x="674" y="636">g2p.py — spelling → ARPABET</text>
+  <text class="s" x="674" y="636">g2p/ — spelling → ARPABET</text>
   <text class="s" x="674" y="654">stress → reduced vs full vowels</text>
   <text class="s" x="674" y="672">phonemes.py — ARPABET → visemes</text>
   <text class="s" x="674" y="690">coarticulation · flap · rounding</text>

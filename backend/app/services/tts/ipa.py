@@ -6,7 +6,7 @@ what language it is playing. Only the step *before* it — turning written text
 into sounds — is language-specific, and that is what espeak-ng does.
 
 That split is why this file is short and covers a hundred languages, while
-g2p.py is two thousand lines and covers one. English earns its own hand-written
+g2p is nearly nine hundred lines and covers one. English earns its own hand-written
 rules because it is the default and its orthography is uniquely irregular;
 everything else is better served by a real phonemizer than by a rule table
 written by someone who does not speak the language.
