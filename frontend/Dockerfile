@@ -18,5 +18,13 @@ FROM nginx:1.30-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed430715
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY frontend/nginx-security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY --from=build /build/frontend/dist /usr/share/nginx/html
-RUN nginx -t
+
+# The commit this image was built from (deploy/deploy.sh passes it), served
+# at /version.json so the deploy can prove the new dashboard is the one
+# answering. Last, so a new commit rebuilds only these small layers.
+ARG LIVEFACE_VERSION=dev
+RUN printf '{"version":"%s"}\n' "$LIVEFACE_VERSION" > /usr/share/nginx/html/version.json \
+ && nginx -t
+LABEL org.opencontainers.image.revision=$LIVEFACE_VERSION \
+      org.opencontainers.image.source=https://github.com/sadeghianme/avatar-face
 EXPOSE 80

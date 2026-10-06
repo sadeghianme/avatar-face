@@ -138,5 +138,13 @@ RUN pip install --no-cache-dir -c constraints.txt . "mediapipe==1.0.1"
 # Widget bundles served at /liveface.js and /liveface-3d.js
 COPY --from=embed-build /build/embed/dist /app/embed/dist
 
+# The commit this image was built from (deploy/deploy.sh passes it). Last,
+# so a new commit rebuilds only these metadata layers: /health reports it,
+# the label lets `docker inspect` and a rollback say which release an image is.
+ARG LIVEFACE_VERSION=dev
+ENV LIVEFACE_VERSION=$LIVEFACE_VERSION
+LABEL org.opencontainers.image.revision=$LIVEFACE_VERSION \
+      org.opencontainers.image.source=https://github.com/sadeghianme/avatar-face
+
 EXPOSE 7002
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7002"]

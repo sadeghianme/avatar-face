@@ -1,6 +1,9 @@
 # Production deployment behind the shared Caddy reverse proxy.
-# Run from the repo root on the server:
-#   docker compose -f deploy/docker-compose.prod.yml up -d --build
+# deploy/deploy.sh runs it (docs/process.md): it ships one commit, then on
+# the server, from deploy/:
+#   LIVEFACE_VERSION=<commit> docker compose -f docker-compose.prod.yml up -d --build
+# Built by hand without LIVEFACE_VERSION, the images say "dev" on /health
+# and /version.json, and deploy.sh --rollback cannot tell what they are.
 # Requires an external `web_proxy` network (the Caddy ingress network) and a
 # `.env` file next to this compose file providing JWT_SECRET.
 
@@ -16,6 +19,8 @@ services:
         # (services.tts.kokoro). The Dockerfile's default, stated here so a
         # change of default cannot silently drop native timing.
         INCLUDE_LIPSYNC_MODEL: "1"
+        # The release's commit: /health reports it, deploy.sh checks it.
+        LIVEFACE_VERSION: ${LIVEFACE_VERSION:-dev}
     restart: unless-stopped
     environment:
       PUBLIC_BASE_URL: https://avatar.mehdisadeghian.com/api
@@ -54,6 +59,9 @@ services:
     build:
       context: ..
       dockerfile: frontend/Dockerfile
+      args:
+        # Served at /version.json; deploy.sh checks it.
+        LIVEFACE_VERSION: ${LIVEFACE_VERSION:-dev}
     restart: unless-stopped
     networks:
       - web_proxy

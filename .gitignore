@@ -23,7 +23,9 @@ dist/
 backend/local_storage/
 backend/models/*.task
 
-# Editors / OS
+# Editors / OS / local tooling (.claude itself holds shared config; its
+# worktrees are whole local copies of this repository)
+.claude/worktrees/
 .DS_Store
 .idea/
 .vscode/
