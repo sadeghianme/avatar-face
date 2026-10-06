@@ -73,9 +73,7 @@ interface Pt { x: number; y: number }
 
 /** The engine's state the golden tests also reach into. */
 interface Internals {
-  weights: BlendWeights;
-  blink: number;
-  gaze: { x: number; y: number };
+  face: { weights: BlendWeights; blink: number; gaze: { x: number; y: number } };
   deformedPoints(now: number): Pt[];
 }
 
@@ -89,8 +87,8 @@ function engineFor(rig: Rig): { engine: AvatarEngine; e: Internals; base: readon
   const image = { naturalWidth: w, naturalHeight: h, width: w, height: h } as HTMLImageElement;
   const engine = new AvatarEngine(canvas, rig, image, { fullPhoto: true });
   const e = engine as unknown as Internals;
-  e.gaze = { x: 0, y: 0 };
-  e.blink = 0;
+  e.face.gaze = { x: 0, y: 0 };
+  e.face.blink = 0;
   const base = engine.landmarks();
   const scale = (base[454].x - base[234].x) / (rig.points[454][0] - rig.points[234][0]);
   if (!Number.isFinite(scale) || scale <= 0) throw new Error("the rig's ear landmarks coincide");
@@ -141,29 +139,29 @@ export function bakeMorphTargets(rig: Rig): BakeResult {
   try {
     for (const key of SYMMETRIC_WEIGHTS) {
       const at = maxima[key];
-      e.weights = { ...ZERO_WEIGHTS, [key]: at };
-      e.blink = 0;
+      e.face.weights = { ...ZERO_WEIGHTS, [key]: at };
+      e.face.blink = 0;
       targets[key] = { at, ...deltas(e, base, scale, at) };
     }
     // The blink: the mesh blink at the 2D engine's own default amplitude.
     // A profile that paints its lid (toon, animal) never moves the mesh, so
     // its blink is baked from the same rig under the classic profile.
     const profile = kindProfile(rig);
-    e.weights = { ...ZERO_WEIGHTS };
+    e.face.weights = { ...ZERO_WEIGHTS };
     if (profile.blink === "mesh") {
-      e.blink = closedBlinkPhase();
+      e.face.blink = closedBlinkPhase();
       targets.eyeBlink = { at: 1, ...deltas(e, base, scale, 1) };
     } else {
       const classic = engineFor({ ...rig, render_profile: null });
       try {
-        classic.e.weights = { ...ZERO_WEIGHTS };
-        classic.e.blink = closedBlinkPhase();
+        classic.e.face.weights = { ...ZERO_WEIGHTS };
+        classic.e.face.blink = closedBlinkPhase();
         targets.eyeBlink = { at: 1, ...deltas(classic.e, classic.base, classic.scale, 1) };
       } finally {
         classic.engine.destroy();
       }
     }
-    e.blink = 0;
+    e.face.blink = 0;
 
     // The viseme shapes themselves, and how far a linear blend of the
     // symmetric targets is from each of them.
@@ -173,7 +171,7 @@ export function bakeMorphTargets(rig: Rig): BakeResult {
       rig.points[291][0] - rig.points[61][0], rig.points[291][1] - rig.points[61][1]
     ) || 1;
     for (const [viseme, weights] of Object.entries(rig.visemes ?? {})) {
-      e.weights = { ...ZERO_WEIGHTS, ...weights };
+      e.face.weights = { ...ZERO_WEIGHTS, ...weights };
       visemes[viseme] = { at: 1, ...deltas(e, base, scale, 1) };
       const actual = e.deformedPoints(0);
       let max = 0;

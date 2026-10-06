@@ -61,9 +61,14 @@ jobs:
           cache: npm
           cache-dependency-path: embed/package-lock.json
       - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
       # Tests before build: the engine's motion and cue logic had no
       # automated coverage at all, and every regression in it this far has
-      # been invisible in a screenshot.
+      # been invisible in a screenshot. The golden render snapshots are
+      # compared, never rewritten: vitest run fails on a mismatch.
       - run: npm test
       - run: npm run build
 

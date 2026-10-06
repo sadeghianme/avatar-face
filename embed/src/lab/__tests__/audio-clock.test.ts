@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AudioClockComparison } from "../audio-clock";
-import { AvatarEngine } from "../../engine";
+import { SpeechTrack } from "../../engine/speech";
 
 class FakeAudio extends EventTarget {
   currentTime = 0;
@@ -103,7 +103,7 @@ describe("audio-locked comparison", () => {
 
 describe("renderer clock opt-in", () => {
   // The clock lookup is pure; do not need a DOM/canvas to exercise it.
-  const read = (AvatarEngine.prototype as unknown as { cueTime(now: number): number }).cueTime;
+  const read = (SpeechTrack.prototype as unknown as { cueTime(now: number): number }).cueTime;
   it("retains the original wall clock without opting in", () => {
     expect(read.call({ cueStart: 100 } as never, 700)).toBe(600);
   });

@@ -1,7 +1,7 @@
 /**
  * The picture's own light, read once from the face: how bright its
  * brightest skin or sclera is. The lips give the mouth its colour and the
- * cheeks its exposure (engine.sampleLipColour); this gives the teeth their
+ * cheeks its exposure (engine/sampling.ts); this gives the teeth their
  * ceiling, because enamel brighter than anything else in the photograph is
  * what makes it read as pasted in.
  */

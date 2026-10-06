@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
+import { ClassicMouth } from "../engine/paint-classic-mouth";
 import { HUMAN_PROFILE, kindProfile } from "../kind-profile";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
 
@@ -62,8 +63,12 @@ class NoopPath {
 }
 
 type Internals = {
-  weights: BlendWeights;
+  face: { weights: BlendWeights };
   render(): void;
+};
+
+/** The classic mouth's parts, to count which ran. */
+type ClassicMouthParts = {
   drawTeethRow(...args: unknown[]): void;
   drawLipContactLine(...args: unknown[]): void;
 };
@@ -73,13 +78,13 @@ function frame(rig: Rig, weights: Partial<BlendWeights>) {
   const log: string[] = [];
   vi.stubGlobal("document", { createElement: () => recordingCanvas([]) });
   const image = { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement;
-  const proto = AvatarEngine.prototype as unknown as Internals;
+  const proto = ClassicMouth.prototype as unknown as ClassicMouthParts;
   const teeth = vi.spyOn(proto, "drawTeethRow");
   const contact = vi.spyOn(proto, "drawLipContactLine");
   const engine = new AvatarEngine(recordingCanvas(log), rig, image, { fullPhoto: true });
   log.length = 0;
   const e = engine as unknown as Internals;
-  e.weights = { ...ZERO_WEIGHTS, ...weights };
+  e.face.weights = { ...ZERO_WEIGHTS, ...weights };
   e.render();
   engine.destroy();
   const result = { log: log.join("\n"), teeth: teeth.mock.calls.length, contact: contact.mock.calls.length };
@@ -185,7 +190,7 @@ describe("a rig fitted from a mouth line", () => {
     const engine = new AvatarEngine(recordingCanvas([]), fitted, image, { fullPhoto: true });
     const e = engine as unknown as Internals & { deformedPoints(now: number): { x: number; y: number }[] };
     const pose = (weights: Partial<BlendWeights>) => {
-      e.weights = { ...ZERO_WEIGHTS, ...weights };
+      e.face.weights = { ...ZERO_WEIGHTS, ...weights };
       return e.deformedPoints(10_000);
     };
     const rest = pose({});

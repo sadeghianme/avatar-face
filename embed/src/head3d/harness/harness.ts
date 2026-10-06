@@ -100,7 +100,7 @@ async function load(url: string, size: number, fixed = true): Promise<Loaded> {
   return { engine, extras, pose, table, renderer };
 }
 
-type Engine2DInternals = { weights: BlendWeights; tick(now: number): void; render(): void };
+type Engine2DInternals = { face: { weights: BlendWeights }; tick(now: number): void; render(): void };
 
 async function load2D(rigUrl: string, imageUrl: string, size: number): Promise<{ engine: AvatarEngine; canvas: HTMLCanvasElement; rig: Rig }> {
   const rig = (await (await fetch(rigUrl)).json()) as Rig;
@@ -185,7 +185,7 @@ async function runCompare(spec: CompareSpec): Promise<string> {
   ctx.fillRect(0, 0, sheet.width, sheet.height);
   label(ctx, `${spec.label ?? spec.glb}: 2D engine (top) vs 3D head (bottom), frontal`, 4, 2);
   visemes.forEach((viseme, c) => {
-    e2.weights = { ...ZERO_WEIGHTS, ...(flat.rig.visemes[viseme] ?? {}) };
+    e2.face.weights = { ...ZERO_WEIGHTS, ...(flat.rig.visemes[viseme] ?? {}) };
     e2.render();
     ctx.drawImage(flat.canvas, c * cell, 24, cell, cell);
     label(ctx, `2D ${VISEME_LABELS[viseme] ?? viseme}`, c * cell + 4, 28, 12);

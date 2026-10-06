@@ -29,13 +29,13 @@ const seeded = () => {
 describe("speech breathing", () => {
   it("inhales to a deeper-than-rest peak over the inhale window, starting from where the chest was", () => {
     const body = new BodyMotion(seeded());
-    let now = advance(body, 0, 1300, 16); // partway through a resting breath
+    const now = advance(body, 0, 1300, 16); // partway through a resting breath
     const before = body.breath;
     body.beginSpeech(now, 3000);
     body.update(1, now + 1);
     // No jump: one millisecond in, the chest is where it was.
     expect(Math.abs(body.breath - before)).toBeLessThan(0.01);
-    now = advance(body, now, SPEECH_INHALE_MS, 16);
+    advance(body, now, SPEECH_INHALE_MS, 16);
     expect(body.breath).toBeCloseTo(SPEECH_INHALE_PEAK, 1);
     expect(body.breath).toBeGreaterThan(1); // deeper than any resting breath
   });
@@ -48,7 +48,7 @@ describe("speech breathing", () => {
     now = advance(body, now, 2000, 16);
     const later = body.breath;
     expect(later).toBeLessThan(peak);
-    now = advance(body, now, 8000, 16);
+    advance(body, now, 8000, 16);
     // Long past the utterance: at the floor, not at zero.
     expect(body.breath).toBeGreaterThan(0.2);
     expect(body.breath).toBeLessThan(later);
@@ -67,13 +67,13 @@ describe("speech breathing", () => {
   it("hands back to the resting rhythm without a visible drop", () => {
     const body = new BodyMotion(seeded());
     body.beginSpeech(0, 3000);
-    let now = advance(body, 0, 2500, 16);
+    const now = advance(body, 0, 2500, 16);
     const during = body.breath;
     body.endSpeech();
     body.update(16, now + 16);
     // The next frame continues from the same value, continuing to exhale.
     expect(Math.abs(body.breath - during)).toBeLessThan(0.02);
-    now = advance(body, now + 16, 800, 16);
+    advance(body, now + 16, 800, 16);
     expect(body.breath).toBeLessThan(during);
   });
 
@@ -102,7 +102,7 @@ describe("speech breathing", () => {
 
     const afterFirst = body.breath;
     body.catchBreath(now); // 220ms later: ignored, one pause is one breath
-    now = advance(body, now, 300, 16);
+    advance(body, now, 300, 16);
     expect(body.breath).toBeLessThan(afterFirst);
   });
 

@@ -26,10 +26,9 @@ const manifest = validatePerformanceManifest(JSON.parse(
 
 type Internals = {
   tick(now: number): void;
-  weights: BlendWeights;
-  targetWeights: BlendWeights;
+  face: { weights: BlendWeights; targetWeights: BlendWeights };
   blendedCueWeights(now: number): BlendWeights;
-  cues: Cue[];
+  speech: { cues: Cue[] };
   tuning: { smoothness: number };
 };
 
@@ -87,7 +86,7 @@ describe("the articulation of a cue track", () => {
     // still pulls at the vowel's centre, which is the blend's own doing.)
     const cues: Cue[] = [{ t: 0, viseme: "sil", a: 1 }, { t: 300, viseme: "aa", a: 1 }, { t: 500, viseme: "sil", a: 1 }, { t: 700, viseme: "sil", a: 1 }];
     const jaw: { t: number; open: number }[] = [];
-    play(e, engine, cues, 1000, (t) => jaw.push({ t, open: e.weights.jawOpen }));
+    play(e, engine, cues, 1000, (t) => jaw.push({ t, open: e.face.weights.jawOpen }));
     const peak = jaw.reduce((best, s) => (s.open > best.open ? s : best), jaw[0]);
     expect(Math.abs(peak.t - 400)).toBeLessThanOrEqual(40);
     expect(peak.open).toBeGreaterThan(0.6);
@@ -111,7 +110,7 @@ describe("the articulation of a cue track", () => {
       { t: 700, viseme: "sil", a: 1 }, { t: 1000, viseme: "aa", a: 1 }, { t: 1200, viseme: "sil", a: 1 }, { t: 1500, viseme: "sil", a: 1 },
     ];
     engine.playCues(cues);
-    expect(e.cues.map((c) => [c.t, c.viseme])).toContainEqual([300, "sil"]);
+    expect(e.speech.cues.map((c) => [c.t, c.viseme])).toContainEqual([300, "sil"]);
     const lead = articulationLead(e.tuning.smoothness);
     const blendAt = (t: number) => e.blendedCueWeights(now + t - lead);
     // The short silence pulls toward rest by 50/110 of its bell: the jaw
@@ -132,10 +131,10 @@ describe("the articulation of a cue track", () => {
     const width = manifest.mouth_width * scale;
     const ramp = new RevealRamp();
     const frames: { t: number; gap: number; teeth: number; viseme: string }[] = [];
-    const visemeAt = (t: number) => { let v = "sil"; for (const c of e.cues) { if (c.t <= t) v = c.viseme; else break; } return v; };
+    const visemeAt = (t: number) => { let v = "sil"; for (const c of e.speech.cues) { if (c.t <= t) v = c.viseme; else break; } return v; };
     play(e, engine, track.cues, 4000, (t) => {
       const points = neutral.map((p) => ({ ...p }));
-      mouth.deform(points, neutral, { inner_lip_ring: manifest.inner_ring } as Rig, e.weights);
+      mouth.deform(points, neutral, { inner_lip_ring: manifest.inner_ring } as Rig, e.face.weights);
       const gap = Math.hypot(points[13].x - points[14].x, points[13].y - points[14].y) / width;
       frames.push({ t, gap, teeth: ramp.step(enamelReveal(gap * width, width), FRAME), viseme: visemeAt(t) });
     });
@@ -156,18 +155,18 @@ describe("the articulation of a cue track", () => {
     // span runs to the next cue: the /m/ of "am" holds 116 ms, its own 34
     // and the folded silence after it), in a pause, or at the end: never
     // between two syllables.
-    const pauses = e.cues.filter((c, i) => c.viseme === "sil" && (e.cues[i + 1]?.t ?? Infinity) - c.t >= 110).map((c) => [c.t, e.cues[e.cues.indexOf(c) + 1]?.t ?? Infinity]);
+    const pauses = e.speech.cues.filter((c, i) => c.viseme === "sil" && (e.speech.cues[i + 1]?.t ?? Infinity) - c.t >= 110).map((c) => [c.t, e.speech.cues[e.speech.cues.indexOf(c) + 1]?.t ?? Infinity]);
     const lead = articulationLead(1);
-    const spanOf = (c: Cue) => (e.cues[e.cues.indexOf(c) + 1]?.t ?? c.t + 90) - c.t;
+    const spanOf = (c: Cue) => (e.speech.cues[e.speech.cues.indexOf(c) + 1]?.t ?? c.t + 90) - c.t;
     for (const f of frames) {
       if (f.gap >= 0.03) continue;
       const heard = f.t + lead; // what the lips are shaping is this far ahead
-      const bilabial = e.cues.some((c) => c.viseme === "PP" && heard >= c.t - 60 && heard <= c.t + spanOf(c) + 60);
+      const bilabial = e.speech.cues.some((c) => c.viseme === "PP" && heard >= c.t - 60 && heard <= c.t + spanOf(c) + 60);
       const paused = pauses.some(([from, to]) => heard >= from - 20 && heard <= to + 60);
       expect(bilabial || paused || f.t > 3700, `closed at ${f.t.toFixed(0)} ms (${f.viseme})`).toBe(true);
     }
     // And the bilabials do close: each /p/ /b/ /m/ brings the lips together.
-    for (const c of e.cues.filter((c) => c.viseme === "PP")) {
+    for (const c of e.speech.cues.filter((c) => c.viseme === "PP")) {
       const near = frames.filter((f) => f.t + lead >= c.t - 20 && f.t + lead <= c.t + 140);
       expect(Math.min(...near.map((f) => f.gap)), `/p/ at ${c.t} ms`).toBeLessThan(0.03);
     }

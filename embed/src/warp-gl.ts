@@ -18,7 +18,7 @@
  *
  * What stays the same as the 2D path, on purpose:
  * - The triangles, in the same order, with the same exclusion: a source
- *   triangle with |det| < 1e-6 in texture space (engine.ts
+ *   triangle with |det| < 1e-6 in texture space (engine/mesh-warp.ts
  *   drawWarpedTriangle) is skipped here too, once, when the mesh is built.
  * - The body sway and breath and the head's rigid transform: the same
  *   affine the 2D path puts on its context goes in as the vertex matrix,

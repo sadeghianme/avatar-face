@@ -91,11 +91,7 @@ const random = () => {
 };
 
 type Internals = {
-  weights: BlendWeights;
-  blink: number;
-  gaze: { x: number; y: number };
-  tongue: number;
-  currentViseme: () => string;
+  face: { weights: BlendWeights; blink: number; gaze: { x: number; y: number }; tongue: number };
   deformedPoints(now: number): { x: number; y: number }[];
   render(): void;
 };
@@ -108,10 +104,10 @@ function frame(profile: string, texture: Texture, weights: Partial<BlendWeights>
   log.length = 0;
   const e = engine as unknown as Internals;
   const rest = e.deformedPoints(10_000);
-  e.weights = { ...ZERO_WEIGHTS, ...weights };
-  e.blink = extra.blink ?? 0;
-  e.gaze = { x: 0, y: 0 };
-  e.tongue = extra.tongue ?? 0;
+  e.face.weights = { ...ZERO_WEIGHTS, ...weights };
+  e.face.blink = extra.blink ?? 0;
+  e.face.gaze = { x: 0, y: 0 };
+  e.face.tongue = extra.tongue ?? 0;
   const pts = e.deformedPoints(10_000);
   e.render();
   engine.destroy();
@@ -181,7 +177,7 @@ describe("the character mouth is only for its profiles", () => {
     const engine = new AvatarEngine(fakeCanvas(log, flatSkin), r, image, { fullPhoto: false });
     log.length = 0;
     const e = engine as unknown as Internals;
-    e.weights = { ...ZERO_WEIGHTS, ...weights };
+    e.face.weights = { ...ZERO_WEIGHTS, ...weights };
     e.render();
     engine.destroy();
     return log.join("\n");

@@ -65,7 +65,7 @@ const stripes = (ramp: number): Texture => (x) => {
 };
 const flat: Texture = () => grey(140);
 
-type Internals = { look: CharacterLook; faceSharpness: number | null; texPoints: { x: number; y: number }[] };
+type Internals = { samples: { look: CharacterLook; faceSharpness: number | null }; mesh: { texPoints: { x: number; y: number }[] } };
 
 describe("the look's softness on the engine", () => {
   let texture: Texture = flat;
@@ -84,33 +84,33 @@ describe("the look's softness on the engine", () => {
   });
 
   const image = (size: number) => ({ naturalWidth: size, naturalHeight: size, width: size, height: size }) as HTMLImageElement;
-  const mouthWidth = (e: Internals) => Math.hypot(e.texPoints[291].x - e.texPoints[61].x, e.texPoints[291].y - e.texPoints[61].y);
+  const mouthWidth = (e: Internals) => Math.hypot(e.mesh.texPoints[291].x - e.mesh.texPoints[61].x, e.mesh.texPoints[291].y - e.mesh.texPoints[61].y);
 
   it("is the picture's sharpness over the mouth's width, and is rebuilt from the upgraded texture", () => {
     texture = stripes(0);
     const engine = new AvatarEngine(fakeCanvas(texture), { ...rig, render_profile: "toon@1" }, image(1024), { fullPhoto: false });
     const e = engine as unknown as Internals;
-    const sharp = e.faceSharpness;
+    const sharp = e.samples.faceSharpness;
     expect(sharp).not.toBeNull();
     expect(sharp!).toBeLessThan(1.3);
     // (Two-tone stripes are cel art to the palette; the softness is read
     // the same way whichever the picture is.)
-    expect(e.look.soft).toBeCloseTo(sharp! / mouthWidth(e), 9);
-    const crisp = e.look.soft;
+    expect(e.samples.look.soft).toBeCloseTo(sharp! / mouthWidth(e), 9);
+    const crisp = e.samples.look.soft;
 
     // The full-resolution picture lands, softer: the look follows it.
     texture = stripes(6);
     engine.setTexture(image(1024));
-    expect(e.faceSharpness).not.toBeNull();
-    expect(e.faceSharpness!).toBeGreaterThan(3.5);
-    expect(e.look.soft).toBeCloseTo(e.faceSharpness! / mouthWidth(e), 9);
-    expect(e.look.soft).toBeGreaterThan(crisp * 3);
+    expect(e.samples.faceSharpness).not.toBeNull();
+    expect(e.samples.faceSharpness!).toBeGreaterThan(3.5);
+    expect(e.samples.look.soft).toBeCloseTo(e.samples.faceSharpness! / mouthWidth(e), 9);
+    expect(e.samples.look.soft).toBeGreaterThan(crisp * 3);
 
     // A flat picture has no sharpness and no seam: the default, nothing stale.
     texture = flat;
     engine.setTexture(image(1024));
-    expect(e.faceSharpness).toBeNull();
-    expect(e.look.soft).toBe(DEFAULT_LOOK.soft);
+    expect(e.samples.faceSharpness).toBeNull();
+    expect(e.samples.look.soft).toBe(DEFAULT_LOOK.soft);
     engine.destroy();
   });
 
@@ -121,9 +121,9 @@ describe("the look's softness on the engine", () => {
     texture = (_x, y) => grey(y < seamY ? 170 : 140);
     const engine = new AvatarEngine(fakeCanvas(texture), { ...rig, render_profile: "toon@1" }, image(1024), { fullPhoto: false });
     const e = engine as unknown as Internals;
-    expect(e.faceSharpness).toBeNull();
+    expect(e.samples.faceSharpness).toBeNull();
     // A hard 30-level step: contrast over its steepest step is 1 px.
-    expect(e.look.soft).toBeCloseTo(1 / mouthWidth(e), 9);
+    expect(e.samples.look.soft).toBeCloseTo(1 / mouthWidth(e), 9);
     engine.destroy();
   });
 });

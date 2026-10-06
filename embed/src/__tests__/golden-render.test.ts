@@ -151,18 +151,16 @@ function makeEngine(
 }
 
 type EngineInternals = {
-  weights: BlendWeights;
-  blink: number;
-  gaze: { x: number; y: number };
+  face: { weights: BlendWeights; blink: number; gaze: { x: number; y: number } };
   deformedPoints(now: number): { x: number; y: number }[];
   render(): void;
 };
 
 function state(engine: AvatarEngine, weights: Partial<BlendWeights>, blink = 0, gaze = { x: 0, y: 0 }) {
   const e = engine as unknown as EngineInternals;
-  e.weights = { ...ZERO_WEIGHTS, ...weights };
-  e.blink = blink;
-  e.gaze = { ...gaze };
+  e.face.weights = { ...ZERO_WEIGHTS, ...weights };
+  e.face.blink = blink;
+  e.face.gaze = { ...gaze };
   return e;
 }
 
