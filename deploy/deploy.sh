@@ -288,9 +288,12 @@ BACKUP="/data/liveface.sqlite3.bak-$(date +%Y%m%d-%H%M%S)"
 echo "==> backing up the database to $BACKUP"
 ssh "$REMOTE" "docker exec -i $API_CONTAINER python - /data/liveface.sqlite3 $BACKUP" \
   < "$LOCAL_DIR/deploy/backup_db.py"
-# The stamp sorts by time, so the newest are last in name order.
+# The stamp sorts by time, so the newest are last in name order. Only the
+# backups this script makes (bak-YYYYMMDD-HHMMSS) are pruned: a backup made
+# by hand before a migration (e.g. bak-premigrate-<stamp>) is kept until
+# someone deletes it on purpose.
 ssh "$REMOTE" "docker exec $API_CONTAINER sh -c \
-  'ls -1 /data/liveface.sqlite3.bak-* | sort -r | tail -n +$((BACKUP_KEEP + 1)) | xargs -r rm -v --'" \
+  'ls -1 /data/liveface.sqlite3.bak-[0-9]* | sort -r | tail -n +$((BACKUP_KEEP + 1)) | xargs -r rm -v --'" \
   | sed 's/^/  pruned: /'
 
 # What is live now becomes :previous, the target of --rollback. That is the
