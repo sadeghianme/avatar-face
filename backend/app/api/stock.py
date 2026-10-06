@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, BackgroundTasks, Response
 from pydantic import BaseModel, Field
 
@@ -37,7 +39,8 @@ async def list_stock_avatars() -> list[StockAvatarOut]:
 
 @router.get("/stock-avatars/{style_id}.png")
 async def stock_avatar_image(style_id: str) -> Response:
-    data = get_stock_image(style_id)
+    # Drawn and PNG-encoded on first use per style, then cached: a thread.
+    data = await asyncio.to_thread(get_stock_image, style_id)
     if data is None:
         raise NotFound404("Unknown stock avatar", code="stock_not_found")
     return Response(
@@ -51,7 +54,7 @@ async def stock_avatar_image(style_id: str) -> Response:
 async def create_from_stock(
     body: FromStockRequest, ctx: OrgMember, db: DB, background: BackgroundTasks
 ) -> Avatar:
-    data = get_stock_image(body.stock_id)
+    data = await asyncio.to_thread(get_stock_image, body.stock_id)
     if data is None:
         raise NotFound404("Unknown stock avatar", code="stock_not_found")
     style = next(s for s in STOCK_STYLES if s.id == body.stock_id)

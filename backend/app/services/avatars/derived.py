@@ -13,6 +13,7 @@ import json
 import logging
 
 from app.models import Avatar, AvatarKind
+from app.services.jobs import run_cpu
 
 logger = logging.getLogger("liveface.avatars")
 
@@ -49,7 +50,8 @@ async def rebuild_thumbnail(avatar: Avatar, storage) -> None:
     if not avatar.image_key:
         return
     try:
-        thumb, thumb_type = make_thumbnail(await storage.get_bytes(avatar.image_key))
+        # Decode, resize, encode: the CPU thread's work.
+        thumb, thumb_type = await run_cpu(make_thumbnail, await storage.get_bytes(avatar.image_key))
     except Exception:
         # Broad on purpose: decoding and resizing any picture. A stale
         # thumbnail is a cosmetic problem. Failing the request is not: it

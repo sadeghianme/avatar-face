@@ -349,14 +349,19 @@ async def use_version(db: AsyncSession, creation: Creation, version: str) -> boo
 # --- Finishing ---------------------------------------------------------------------
 
 
-def preview_rig(creation: Creation, body: PreviewRigRequest):
+async def preview_rig(creation: Creation, body: PreviewRigRequest):
     """(rig, problems): the rig finish would build from these marks. Nothing
-    is saved."""
+    is saved.
+
+    The fit (a Delaunay mesh and a thin-plate warp, several milliseconds on
+    every drag) runs on a worker thread: off the loop, and not queued behind
+    someone's upload on the CPU thread, which would make the handles lag.
+    """
     require_draft(creation)
     face_type = require_face_type(creation)
     anchors = anchors_for(creation, body.anchors_id)
     marks = check_marks(body.marks, face_type, anchors["image_size"])
-    return fit_from_anchors(anchors, marks, face_type)
+    return await asyncio.to_thread(fit_from_anchors, anchors, marks, face_type)
 
 
 def finished_avatar(creation: Creation) -> str | None:
@@ -421,7 +426,7 @@ async def start_finish(
             code="marks_required",
             extra={"missing": missing},
         )
-    _, problems = fit_from_anchors(anchors, marks, face_type)
+    _, problems = await asyncio.to_thread(fit_from_anchors, anchors, marks, face_type)
     if problems:
         reasons = [FitReason(code=p.code, detail=p.detail, count=p.count) for p in problems]
         raise Validation422(

@@ -21,6 +21,7 @@ deliberate refusal rather than an approximation.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from sqlalchemy import Row, delete, distinct, func, select
@@ -80,7 +81,7 @@ class ClonedTTSProvider(TTSProvider):
                     audio=audio,
                     audio_mime="audio/wav",
                     duration_ms=duration_ms,
-                    cues=_cues(text, duration_ms, locale, audio=audio),
+                    cues=await asyncio.to_thread(_cues, text, duration_ms, locale, audio),
                 )
 
         raise NotFound404(
@@ -168,7 +169,10 @@ async def store_line(
         "char_count": len(text),
         "audio_mime": "audio/wav",
         "audio": audio,
-        "cues_json": json.dumps(cues_from_text(text, duration_ms, locale, audio=audio)),
+        # A pass over the whole recording (up to 10 MB) and the text: a thread's work.
+        "cues_json": json.dumps(
+            await asyncio.to_thread(cues_from_text, text, duration_ms, locale, audio=audio)
+        ),
         "duration_ms": duration_ms,
     }
     if existing is not None:

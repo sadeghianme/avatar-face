@@ -210,17 +210,18 @@ def _bundle_etag(path) -> str:
     import hashlib
 
     stat = path.stat()
-    key = (str(path), stat.st_mtime_ns, stat.st_size)
-    cached = _ETAG_CACHE.get(key)
-    if cached is None:
+    version = (stat.st_mtime_ns, stat.st_size)
+    cached = _ETAG_CACHE.get(str(path))
+    if cached is None or cached[0] != version:
         digest = hashlib.sha256(path.read_bytes()).hexdigest()[:32]
-        # Keyed by mtime and size, so a rebuild replaces rather than grows it.
-        _ETAG_CACHE.clear()
-        cached = _ETAG_CACHE[key] = f'"{digest}"'
-    return cached
+        # One entry per bundle, replaced when it is rebuilt. (A single entry
+        # for all of them re-hashed a bundle whenever another was asked for
+        # in between, which a page loading two of them always does.)
+        cached = _ETAG_CACHE[str(path)] = (version, f'"{digest}"')
+    return cached[1]
 
 
-_ETAG_CACHE: dict[tuple, str] = {}
+_ETAG_CACHE: dict[str, tuple[tuple[int, int], str]] = {}
 
 
 def _etag_matches(if_none_match: str | None, etag: str) -> bool:

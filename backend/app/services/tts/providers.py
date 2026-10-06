@@ -6,6 +6,7 @@ normalized to SynthesisResult with 15-viseme cue tracks.
 """
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import time
@@ -70,8 +71,6 @@ class AzureTTSProvider(TTSProvider):
             return await self._synthesize_rest(text, voice, locale)
 
     async def _synthesize_sdk(self, text: str, voice: str, locale: str) -> SynthesisResult:
-        import asyncio
-
         # An optional dependency, absent where the REST path is used instead.
         import azure.cognitiveservices.speech as speechsdk  # pyright: ignore[reportMissingImports]
 
@@ -126,7 +125,7 @@ class AzureTTSProvider(TTSProvider):
             audio=audio,
             audio_mime="audio/wav",
             duration_ms=duration,
-            cues=cues_from_text(text, duration, locale),
+            cues=await asyncio.to_thread(cues_from_text, text, duration, locale),
         )
 
 
@@ -178,7 +177,7 @@ class ElevenLabsTTSProvider(TTSProvider):
         duration = int((ends[-1] if ends else 0) * 1000)
         if duration == 0:
             duration = len(text) * 75
-            cues = cues_from_text(text, duration, locale)
+            cues = await asyncio.to_thread(cues_from_text, text, duration, locale)
         else:
             cues.append({"t": duration, "viseme": "sil"})
         return SynthesisResult(audio=audio, audio_mime="audio/mpeg", duration_ms=duration, cues=cues)
@@ -266,7 +265,7 @@ class GoogleTTSProvider(TTSProvider):
             audio=audio,
             audio_mime="audio/wav",
             duration_ms=duration,
-            cues=cues_from_text(text, duration, locale),
+            cues=await asyncio.to_thread(cues_from_text, text, duration, locale),
         )
 
 
@@ -297,5 +296,5 @@ class OpenAITTSProvider(TTSProvider):
             audio=audio,
             audio_mime="audio/wav",
             duration_ms=duration,
-            cues=cues_from_text(text, duration, locale),
+            cues=await asyncio.to_thread(cues_from_text, text, duration, locale),
         )

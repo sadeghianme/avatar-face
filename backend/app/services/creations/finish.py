@@ -143,7 +143,7 @@ async def _build_avatar(
         )
     # Current anchors were made on this line, on the current image.
     assert face_type is not None and current is not None
-    rig, problems = fit_from_anchors(anchors, params.get("marks"), face_type)
+    rig, problems = await run_cpu(fit_from_anchors, anchors, params.get("marks"), face_type)
     if problems:
         raise Validation422(
             "These marks would distort the face: " + "; ".join(p.detail for p in problems),

@@ -456,12 +456,12 @@ async def preview_rig(
     """The rig finish would build from these marks, with the validator's
     reasons. Nothing is saved.
 
-    Computed inline rather than as a job: a fit is tens of milliseconds, the
+    Computed per request rather than as a job: a fit is milliseconds, the
     same call the avatar rig-fit preview makes on every drag, and queueing it
     behind someone's background removal would make the handles lag.
     """
     creation = await repo.get(db, ctx.org.id, creation_id)
-    rig, problems = requests.preview_rig(creation, body)
+    rig, problems = await requests.preview_rig(creation, body)
     return PreviewRigOut(
         rig=rig,
         reasons=[FitReason(code=p.code, detail=p.detail, count=p.count) for p in problems],

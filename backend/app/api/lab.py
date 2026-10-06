@@ -24,6 +24,7 @@ from app.api.deps import DB, OrgMember
 from app.core.errors import Conflict409
 from app.models import AvatarKind, AvatarStatus
 from app.services.avatars import repo as avatars
+from app.services.jobs import run_cpu
 from app.services.storage import get_storage
 
 logger = logging.getLogger("liveface.lab")
@@ -45,7 +46,8 @@ async def landmark_depth(avatar_id: str, ctx: OrgMember, db: DB) -> dict:
 
     image_bytes = await get_storage().get_bytes(avatar.image_key)
     try:
-        z_values = _landmark_z(image_bytes)
+        # A decode and a MediaPipe pass: the CPU thread's work.
+        z_values = await run_cpu(_landmark_z, image_bytes)
     except (RuntimeError, OSError, ValueError) as exc:
         # No face, or no landmarker (RuntimeError); a picture Pillow cannot
         # read (OSError, ValueError).

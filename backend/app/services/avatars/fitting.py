@@ -6,6 +6,7 @@ avatar's line and mouth style.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -177,7 +178,8 @@ async def rig_anchors(avatar: Avatar) -> dict:
         raise Conflict409("Avatar rig is not adjustable", code="not_adjustable")
     base, rig_on_base = await fit_base(avatar, storage, rig)
     saved = saved_marks(rig, avatar.face_type, rig_on_base)
-    fitted, _ = fit_rig(rig, base, saved, avatar.face_type)
+    # A mesh and a warp, on every panel open: a thread's work.
+    fitted, _ = await asyncio.to_thread(fit_rig, rig, base, saved, avatar.face_type)
     # A head saved before it had diagonals opens with them where its fit put
     # them, so all eight handles are there, and the panel, which sends a head
     # it did not touch without them, saves it exactly as it was.
@@ -235,7 +237,8 @@ async def fit(avatar: Avatar, marks: dict) -> tuple[dict, list[FitProblem]]:
 
     base, rig_on_base = await fit_base(avatar, storage, rig)
     merged = merge(saved_marks(rig, face_type, rig_on_base), marks_from_dict(marks, face_type))
-    adjusted, problems = fit_rig(rig, base, merged, face_type)
+    # On every drag of a handle: a thread's work, off the loop.
+    adjusted, problems = await asyncio.to_thread(fit_rig, rig, base, merged, face_type)
     honour_mouth_style(adjusted, avatar, face_type)
     return adjusted, problems
 

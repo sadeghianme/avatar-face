@@ -158,7 +158,7 @@ class KokoroTTSProvider(TTSProvider):
             duration_ms=duration_ms,
             # The rendered audio, so vowel openness is measured from
             # this voice rather than predicted from spelling stress.
-            cues=cues_from_text(text, duration_ms, locale, audio=audio),
+            cues=await asyncio.to_thread(cues_from_text, text, duration_ms, locale, audio=audio),
             # Keyed as a native recording (the timed model is installed), so
             # a fallback must not be kept: the next request tries native again.
             cacheable=not fell_back,
@@ -228,11 +228,16 @@ async def _synthesize_native(
             raise refused from exc
         logger.exception("timestamped Kokoro synthesis failed; using the original model")
         return None
-    try:
-        cues = lab_timing.native_cues(spans, duration_ms, audio)
-    except ValueError as exc:
-        logger.warning("native timings unusable (%s); fitting cues to the audio instead", exc)
-        cues = cues_from_text(text, duration_ms, locale, audio=audio)
+
+    def timed_cues() -> list[dict]:
+        try:
+            return lab_timing.native_cues(spans, duration_ms, audio)
+        except ValueError as exc:
+            logger.warning("native timings unusable (%s); fitting cues to the audio instead", exc)
+            return cues_from_text(text, duration_ms, locale, audio=audio)
+
+    # A loop over the spans and a pass over the whole recording: a thread's work.
+    cues = await asyncio.to_thread(timed_cues)
     return SynthesisResult(audio=audio, audio_mime="audio/wav", duration_ms=duration_ms, cues=cues)
 
 
