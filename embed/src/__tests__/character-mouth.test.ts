@@ -152,9 +152,10 @@ describe("teeth and tongue", () => {
   });
 
   it("paints a tongue that is red whatever the lips are, and lighter than the cavity", () => {
-    const tan = tongueColour({ flat: true, line: [20, 10, 8], lip: [200, 150, 90], skin: [220, 170, 110] });
+    const soft = DEFAULT_LOOK.soft;
+    const tan = tongueColour({ flat: true, line: [20, 10, 8], lip: [200, 150, 90], skin: [220, 170, 110], soft });
     expect(tan[0]).toBeGreaterThan(tan[2] + 40);
-    const dark = tongueColour({ flat: true, line: [90, 60, 50], lip: [60, 40, 30], skin: [90, 70, 60] });
+    const dark = tongueColour({ flat: true, line: [90, 60, 50], lip: [60, 40, 30], skin: [90, 70, 60], soft });
     expect(dark[0] + dark[1] + dark[2]).toBeGreaterThan(150);
   });
 });

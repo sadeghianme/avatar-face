@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AvatarEngine } from "../engine";
+import { AvatarEngine, type EngineOptions } from "../engine";
 import { engineSeam } from "../engine/seam";
 import type { Rig } from "../types";
 
@@ -46,7 +46,7 @@ function fakeCanvas(log: string[], texture: Texture, size = 512): HTMLCanvasElem
   return { width: size, height: size, getContext: () => ctx } as unknown as HTMLCanvasElement;
 }
 
-function engineWith(texture: Texture, scene: ConstructorParameters<typeof AvatarEngine>[3]["scene"]) {
+function engineWith(texture: Texture, scene: EngineOptions["scene"]) {
   const log: string[] = [];
   vi.stubGlobal("document", { createElement: () => fakeCanvas([], texture, 64) });
   const image = { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement;

@@ -184,7 +184,7 @@ describe("deformFace", () => {
   });
 
   it("hands the mouth to a character field instead of the classic one", () => {
-    const apply = vi.fn((pts: Point[]) => {
+    const apply = vi.fn<CharacterField["apply"]>((pts) => {
       pts[14] = { x: pts[14].x, y: pts[14].y + 7 };
     });
     const field = { apply } as unknown as CharacterField;

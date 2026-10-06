@@ -118,7 +118,7 @@ describe("the articulation of a cue track", () => {
     // The pause pulls whole: closed in its middle (what is left is the
     // tail of the vowel's own bell, 0.03).
     expect(blendAt(850).jawOpen).toBeLessThan(0.05);
-    expect(blendAt(850).mouthClose).toBeCloseTo(rig.visemes.sil.mouthClose, 2);
+    expect(blendAt(850).mouthClose).toBeCloseTo(rig.visemes.sil.mouthClose!, 2);
     speech.destroy();
   });
 
