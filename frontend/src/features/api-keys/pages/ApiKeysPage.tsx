@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ROW_ACTION, STACK } from "@/components/ui/stackTable";
 import { api, ApiError } from "@/lib/api";
 import { useOrg } from "@/providers/org";
 import type { ApiKeyInfo } from "@/lib/types";
@@ -95,7 +96,7 @@ export function ApiKeysPage() {
             {t("keyCreatedOnce")}
           </p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 overflow-x-auto rounded bg-white px-3 py-2 text-sm dark:bg-panel">
+            <code className="min-w-0 flex-1 overflow-x-auto rounded bg-white px-3 py-2 text-sm dark:bg-panel">
               {revealed.plaintext}
             </code>
             <button
@@ -112,26 +113,26 @@ export function ApiKeysPage() {
       )}
 
       <div className="card p-0">
-        <table className="w-full text-sm">
-          <tbody>
+        <table className={STACK.table}>
+          <tbody className={STACK.body}>
             {keys?.map((key) => (
               <tr
                 key={key.id}
-                className={`border-b border-gray-100 last:border-0 dark:border-line ${
+                className={`${STACK.row} border-b border-gray-100 last:border-0 dark:border-line ${
                   key.revoked_at ? "opacity-50" : ""
                 }`}
               >
-                <td className="px-5 py-3">
+                <td className={STACK.lead}>
                   <div className="font-medium">{key.name}</div>
                   <code className="text-xs text-gray-400">{key.prefix}…</code>
                 </td>
-                <td className="px-5 py-3 text-xs text-gray-500">
+                <td className={`${STACK.cell} break-words text-xs text-gray-500 max-sm:w-full`}>
                   {key.allowed_domains || "any origin"}
                 </td>
-                <td className="px-5 py-3 text-end">
+                <td className={STACK.end}>
                   {!key.revoked_at && (
                     <button
-                      className="text-sm text-red-600 hover:underline"
+                      className={`text-sm text-red-600 hover:underline ${ROW_ACTION}`}
                       onClick={async () => {
                         await api.delete(`/orgs/${orgId}/api-keys/${key.id}`);
                         await queryClient.invalidateQueries({ queryKey: ["api-keys", orgId] });

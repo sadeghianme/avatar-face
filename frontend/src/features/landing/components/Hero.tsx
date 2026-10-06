@@ -140,7 +140,7 @@ function SoundToggle({ director, soundOn }: { director: DemoDirector; soundOn: b
       aria-pressed={soundOn}
       aria-label={soundOn ? t("soundOff") : t("soundOn")}
       title={soundOn ? t("soundOff") : t("soundOn")}
-      className="pointer-events-auto inline-flex h-9 items-center gap-1.5 rounded-full bg-black/45 px-3 text-[12px] font-medium text-white backdrop-blur-md transition hover:bg-black/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+      className="pointer-events-auto inline-flex h-9 min-w-9 items-center justify-center gap-1.5 rounded-full coarse:h-11 coarse:min-w-11 bg-black/45 px-3 text-[12px] font-medium text-white backdrop-blur-md transition hover:bg-black/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
     >
       <Icon name={soundOn ? "speaker" : "mute"} className="h-4 w-4" />
       <span className="hidden sm:inline">{soundOn ? t("soundOnState") : t("soundOffState")}</span>

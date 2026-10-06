@@ -63,7 +63,7 @@ export function SharePanel({
               {t("shareTitle")}
             </h3>
           )}
-          <p className={`text-[13px] text-gray-500 dark:text-gray-400 ${embedded ? "" : "mt-1"}`}>
+          <p className={`text-[13px] max-lg:text-sm text-gray-500 dark:text-gray-400 ${embedded ? "" : "mt-1"}`}>
             {token ? t("shareOnBody") : t("shareOffBody")}
           </p>
         </div>
@@ -74,7 +74,7 @@ export function SharePanel({
           aria-label={t("shareTitle")}
           onClick={() => void toggle()}
           disabled={busy || avatar.status !== "ready"}
-          className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors
+          className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors before:absolute before:-inset-2.5 before:content-[""]
             disabled:cursor-not-allowed disabled:opacity-60
             ${token ? "bg-brand-600" : "bg-gray-300 dark:bg-gray-600"}`}
         >

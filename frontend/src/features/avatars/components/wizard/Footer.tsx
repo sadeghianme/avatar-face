@@ -62,17 +62,21 @@ export function BackButton({ onClick, disabled, compact }: { onClick: () => void
   );
 }
 
-/** A secondary action in the bar: its words from a laptop up, its icon
- * alone (named for screen readers and on hover) on a phone or a tablet. */
+/** A secondary action in the bar: its words from a tablet up, and on a phone
+ * its short words (`short`) beside the icon: a finger has no hover to show
+ * the title, so an icon alone would be a guess. */
 export function BarAction({
   icon,
   label,
   onClick,
+  short,
   disabled,
   busy,
 }: {
   icon: IconName;
   label: string;
+  /** One word or two, for the phone's narrow bar. */
+  short: string;
   onClick: () => void;
   disabled?: boolean;
   busy?: boolean;
@@ -80,14 +84,15 @@ export function BarAction({
   return (
     <button
       type="button"
-      className="btn-secondary min-h-11 min-w-11 px-3 lg:px-4"
+      className="btn-secondary min-h-11 min-w-11 px-3 sm:px-4"
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
       title={label}
     >
       {busy ? <Spinner className="h-4 w-4" /> : <Icon name={icon} className="h-4 w-4" />}
-      <span className="hidden lg:inline">{label}</span>
+      <span className="sm:hidden">{short}</span>
+      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }

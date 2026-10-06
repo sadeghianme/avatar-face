@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ROW_ACTION, STACK } from "@/components/ui/stackTable";
 import { api, ApiError } from "@/lib/api";
 import { useOrg } from "@/providers/org";
 import type { Invitation, Member, Role } from "@/lib/types";
@@ -108,18 +109,18 @@ export function MembersPage() {
       {error && <p className="field-error mb-4">{error}</p>}
 
       <div className="card overflow-x-auto p-0">
-        <table className="w-full text-sm">
-          <tbody>
+        <table className={STACK.table}>
+          <tbody className={STACK.body}>
             {members?.map((member) => (
               <tr
                 key={member.membership_id}
-                className="border-b border-gray-100 last:border-0 dark:border-line"
+                className={`${STACK.row} border-b border-gray-100 last:border-0 dark:border-line`}
               >
-                <td className="px-5 py-3">
+                <td className={STACK.lead}>
                   <div className="font-medium">{member.display_name || member.username}</div>
                   <div className="text-xs text-gray-400">{member.email}</div>
                 </td>
-                <td className="px-5 py-3">
+                <td className={STACK.cell}>
                   {isAdmin ? (
                     <select
                       aria-label={`role-${member.username}`}
@@ -135,10 +136,10 @@ export function MembersPage() {
                     t(`roles.${member.role}`)
                   )}
                 </td>
-                <td className="px-5 py-3 text-end">
+                <td className={STACK.end}>
                   {isAdmin && (
                     <button
-                      className="text-sm text-red-600 hover:underline"
+                      className={`text-sm text-red-600 hover:underline ${ROW_ACTION}`}
                       onClick={() => void removeMember(member)}
                     >
                       {t("delete")}
@@ -155,21 +156,23 @@ export function MembersPage() {
         <>
           <h2 className="mb-3 mt-8 text-lg font-medium">{t("pendingInvitations")}</h2>
           <div className="card p-0">
-            <table className="w-full text-sm">
-              <tbody>
+            <table className={STACK.table}>
+          <tbody className={STACK.body}>
                 {invitations
                   .filter((i) => !i.accepted_at && !i.revoked_at)
                   .map((invitation) => (
                     <tr
                       key={invitation.id}
-                      className="border-b border-gray-100 last:border-0 dark:border-line"
+                      className={`${STACK.row} border-b border-gray-100 last:border-0 dark:border-line`}
                     >
-                      <td className="px-5 py-3">{invitation.email}</td>
-                      <td className="px-5 py-3">{t(`roles.${invitation.role}`)}</td>
-                      <td className="px-5 py-3 text-xs text-gray-400">
+                      <td className={STACK.lead}>
+                        <div>{invitation.email}</div>
+                      </td>
+                      <td className={STACK.cell}>{t(`roles.${invitation.role}`)}</td>
+                      <td className={`${STACK.cell} text-xs text-gray-400`}>
                         <code>/invite/{invitation.token.slice(0, 12)}…</code>
                         <button
-                          className="ms-2 text-brand-600 hover:underline"
+                          className={`ms-2 text-brand-600 hover:underline ${ROW_ACTION}`}
                           onClick={() =>
                             void navigator.clipboard.writeText(
                               `${window.location.origin}/invite/${invitation.token}`
@@ -179,9 +182,9 @@ export function MembersPage() {
                           {t("copy")}
                         </button>
                       </td>
-                      <td className="px-5 py-3 text-end">
+                      <td className={STACK.end}>
                         <button
-                          className="text-sm text-red-600 hover:underline"
+                          className={`text-sm text-red-600 hover:underline ${ROW_ACTION}`}
                           onClick={async () => {
                             await api.delete(`/orgs/${orgId}/invitations/${invitation.id}`);
                             await invalidate();

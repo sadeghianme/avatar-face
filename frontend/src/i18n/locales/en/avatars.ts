@@ -688,6 +688,7 @@ export const avatars = {
   sceneZoomPercent: "{{percent}}% of the face view",
   scenePan: "Position",
   scenePanHint: "Drag the preview to move the picture, or use the arrow keys here (Shift for bigger steps).",
+  scenePanHintTouch: "Use the arrows to move the picture.",
   scenePanUp: "Move up",
   scenePanDown: "Move down",
   scenePanLeft: "Move left",

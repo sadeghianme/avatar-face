@@ -181,7 +181,7 @@ export function VoicesPage() {
   return (
     <div>
       <h1 className="text-2xl font-semibold">{t("voicesTitle")}</h1>
-      <p className="mb-6 mt-1 text-[13px] text-gray-500 dark:text-gray-400">
+      <p className="mb-6 mt-1 text-[13px] max-lg:text-sm text-gray-500 dark:text-gray-400">
         {t("voicesSubtitle")}
       </p>
 
@@ -189,7 +189,7 @@ export function VoicesPage() {
         {/* ------------------------------------------------ record & submit */}
         <section className="card">
           <h2 className="mb-1 font-medium">{t("voicesRecordTitle")}</h2>
-          <p className="mb-3 text-[13px] text-gray-500 dark:text-gray-400">
+          <p className="mb-3 text-[13px] max-lg:text-sm text-gray-500 dark:text-gray-400">
             {t("voicesRecordHint", { seconds: MIN_REFERENCE_SECONDS })}
           </p>
           {/* Something to read: covers varied phonemes without feeling like a test. */}
@@ -197,7 +197,7 @@ export function VoicesPage() {
             {t("voicesPassage")}
           </blockquote>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               className={recording ? "btn-danger" : "btn-primary"}
               onClick={() => void toggleRecording()}
@@ -233,13 +233,13 @@ export function VoicesPage() {
           <label className="label mt-4" htmlFor="voice-lines">{t("voicesLines")}</label>
           <textarea
             id="voice-lines"
-            className="input min-h-28 font-mono text-xs"
+            className="input min-h-28 font-mono text-xs coarse:text-base"
             value={lines}
             onChange={(e) => setLines(e.target.value)}
           />
           <p className="mt-1 text-xs text-gray-500">{t("voicesLinesHint")}</p>
 
-          <label className="mt-4 flex items-start gap-2 text-[13px]">
+          <label className="mt-4 flex items-start gap-2 text-[13px] max-lg:text-sm coarse:min-h-11">
             <input
               type="checkbox"
               className="mt-0.5"
@@ -264,7 +264,7 @@ export function VoicesPage() {
         <div className="flex flex-col gap-6">
           {waiting && !renderCap?.available && (
             <div className="card border-amber-300/60 dark:border-amber-500/30">
-              <p className="text-[13px] text-amber-700 dark:text-amber-400">
+              <p className="text-[13px] max-lg:text-sm text-amber-700 dark:text-amber-400">
                 {t("voicesWorkerHint")}
               </p>
               <pre className="mt-2 overflow-x-auto rounded-lg bg-gray-900 p-3 text-[11px] text-gray-100">
@@ -283,7 +283,7 @@ export function VoicesPage() {
                 {jobs.map((job) => (
                   <div key={job.id} className="rounded-lg border border-gray-200 p-3 dark:border-line">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium">{job.name}</span>
+                      <span className="min-w-0 truncate font-medium">{job.name}</span>
                       <div className="flex items-center gap-2">
                         {renderCap?.available &&
                           (job.status === "pending" || job.status === "failed") && (
@@ -296,7 +296,7 @@ export function VoicesPage() {
                         )}
                         <JobStatus job={job} />
                         <button
-                          className="text-gray-400 hover:text-red-600"
+                          className="text-gray-400 hover:text-red-600 coarse:-me-2 coarse:grid coarse:h-11 coarse:w-11 coarse:place-items-center"
                           aria-label={t("delete")}
                           onClick={() => void removeJob(job.id)}
                         >
@@ -319,9 +319,9 @@ export function VoicesPage() {
                           const voiceId = `${orgId}:${job.name}`;
                           const key = `${voiceId}:${line}`;
                           return (
-                            <li key={line} className="flex items-center gap-2 text-[13px]">
+                            <li key={line} className="flex items-center gap-2 text-[13px] max-lg:text-sm">
                               <button
-                                className="btn-secondary px-2 py-1"
+                                className="btn-secondary px-2 py-1 coarse:min-w-11"
                                 onClick={() => void play(voiceId, line)}
                                 disabled={playing === key}
                                 aria-label={t("speak")}
@@ -348,7 +348,7 @@ export function VoicesPage() {
               <div className="flex flex-col gap-2">
                 {voices.map((voice) => (
                   <div key={voice.voice} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="font-medium">{voice.label}</span>
+                    <span className="min-w-0 truncate font-medium">{voice.label}</span>
                     <span className="text-xs text-gray-500">
                       {t("voicesStats", {
                         lines: voice.lines,
@@ -356,7 +356,7 @@ export function VoicesPage() {
                       })}
                     </span>
                     <button
-                      className="text-gray-400 hover:text-red-600"
+                      className="text-gray-400 hover:text-red-600 coarse:-me-2 coarse:grid coarse:h-11 coarse:w-11 coarse:place-items-center"
                       aria-label={t("delete")}
                       onClick={() => void removeVoice(voice.label)}
                     >

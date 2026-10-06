@@ -112,7 +112,7 @@ export function InlineName({ name, onSave }: { name: string; onSave: (next: stri
         ref={trigger}
         type="button"
         onClick={() => setEditing(true)}
-        className="group -mx-1.5 inline-flex min-w-0 items-center gap-2 rounded-lg px-1.5 py-0.5 text-start hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:hover:bg-white/[0.06]"
+        className="group -mx-1.5 inline-flex min-w-0 items-center gap-2 rounded-lg px-1.5 py-0.5 text-start coarse:min-h-11 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:hover:bg-white/[0.06]"
         aria-label={`${name}. ${t("wzRename")}`}
         title={t("wzRename")}
       >

@@ -17,6 +17,23 @@
   body:has([data-page-bg="night"]) {
     @apply bg-gray-950;
   }
+  /* Under a finger, no field is smaller than 16px: iOS Safari zooms the
+     page into a field with smaller text when it takes focus, and the page
+     stays zoomed. More specific than a text-* utility on purpose (a field
+     set to 15px or 12px for a mouse); a larger one (the name, text-xl) is
+     left alone. */
+  @media (pointer: coarse) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not(.text-xl),
+    textarea:not([hidden]),
+    select:not([hidden]) {
+      font-size: 1rem;
+    }
+    /* A slider's thumb is caught by its box: 44px of it, the track still
+       drawn thin in the middle. */
+    input[type="range"] {
+      min-height: 2.75rem;
+    }
+  }
 }
 
 /* RTL pass: use logical properties everywhere; `dir` is set on <html> by
@@ -63,6 +80,19 @@
   .field-error {
     @apply mt-1 text-xs text-red-600 dark:text-red-400;
   }
+  /* A finger as the main pointer (phones, tablets): 44px buttons and fields
+     (Apple's and WCAG's touch target), and 16px text in a field, under which
+     iOS Safari zooms the page on focus. A mouse keeps the compact desktop.
+     In this layer, so a component's own size (a utility) still wins. */
+  @media (pointer: coarse) {
+    .btn,
+    .btn-primary,
+    .btn-secondary,
+    .btn-danger,
+    .input {
+      min-height: 2.75rem;
+    }
+  }
 }
 
 /* The avatar preview card in native fullscreen. The canvas is square, so it
@@ -75,5 +105,5 @@
   /* !important on both: they must beat the element's inline width/height,
      which are what sizes the canvas in the normal card. */
   width: auto !important;
-  height: min(94vh, 94vw) !important;
+  height: min(94vh, 94dvh, 94vw) !important;
 }

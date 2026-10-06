@@ -290,7 +290,7 @@ export function PhotoStep({
                         setDescription(text);
                         describe.current?.focus();
                       }}
-                      className="min-h-9 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 transition-colors
+                      className="min-h-9 coarse:min-h-11 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 transition-colors
                         hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2
                         focus-visible:ring-brand-500 dark:border-line dark:bg-raised dark:text-gray-300 dark:hover:border-brand-500/40
                         dark:hover:bg-brand-500/10 dark:hover:text-brand-200"
@@ -372,7 +372,7 @@ export function PhotoStep({
             <div className="space-y-3 rounded-2xl border border-gray-200 bg-gray-50/70 p-4 dark:border-line dark:bg-white/[0.03]">
               {aiEnabled && (
                 <div>
-                  <label className="flex cursor-pointer items-start gap-3 text-sm text-gray-800 dark:text-gray-200">
+                  <label className="flex cursor-pointer items-start gap-3 coarse:min-h-11 text-sm text-gray-800 dark:text-gray-200">
                     <input
                       type="checkbox"
                       className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"
@@ -389,7 +389,7 @@ export function PhotoStep({
                       {t("wzConsentAiProvider", { providers })} {!needsAi && t("wzConsentOptional")}
                     </p>
                     <details className="group">
-                      <summary className="inline-flex cursor-pointer list-none items-center gap-1 font-medium text-brand-700 hover:underline dark:text-brand-300">
+                      <summary className="inline-flex cursor-pointer list-none items-center gap-1 font-medium text-brand-700 hover:underline coarse:min-h-11 dark:text-brand-300">
                         <Icon name="chevron" className="h-3.5 w-3.5 transition-transform group-open:rotate-90 rtl:-scale-x-100" />
                         {t("wzConsentDetails")}
                       </summary>
@@ -406,7 +406,7 @@ export function PhotoStep({
                 </div>
               )}
               {statement && (
-                <label className="flex cursor-pointer items-start gap-3 text-sm text-gray-800 dark:text-gray-200">
+                <label className="flex cursor-pointer items-start gap-3 coarse:min-h-11 text-sm text-gray-800 dark:text-gray-200">
                   <input
                     type="checkbox"
                     className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"

@@ -84,7 +84,7 @@ export function Developers() {
                       setTab(item.id);
                       setCopied(false);
                     }}
-                    className={`rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
+                    className={`rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition-colors coarse:min-h-11 ${
                       tab === item.id ? "bg-white/10 text-white" : "text-gray-400 hover:text-gray-200"
                     }`}
                   >
@@ -99,7 +99,7 @@ export function Developers() {
                   setCopied(true);
                   window.setTimeout(() => setCopied(false), 1600);
                 }}
-                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-gray-300 transition-colors coarse:min-h-11 hover:bg-white/10 hover:text-white"
               >
                 <Icon name={copied ? "check" : "copyIcon"} className="h-3.5 w-3.5" />
                 {copied ? t("copied") : t("copy")}

@@ -205,7 +205,7 @@ export function PrepareScreen({
       <p className="text-sm font-medium text-gray-900 dark:text-white">{t("wzAiNeeded")}</p>
       {aiOn ? (
         <>
-          <label className="mt-3 flex cursor-pointer items-start gap-3 text-sm text-gray-800 dark:text-gray-200">
+          <label className="mt-3 flex cursor-pointer items-start gap-3 coarse:min-h-11 text-sm text-gray-800 dark:text-gray-200">
             <input
               type="checkbox"
               className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"
@@ -460,6 +460,7 @@ export function PrepareScreen({
           <BarAction
             icon="refresh"
             label={t("wzRetry")}
+            short={t("wzRetry")}
             onClick={() => void prepare(retryBody(plan, last))}
             disabled={redoing || busy !== null}
             busy={busy === "prepare" && redoing}
@@ -469,6 +470,7 @@ export function PrepareScreen({
           <BarAction
             icon="sparkles"
             label={t("wzUseAi")}
+            short={t("wzUseAiShort")}
             onClick={() => (typeof consentId === "string" ? void prepare({ mode: "ai" }) : setAskAi(true))}
             disabled={redoing || busy !== null}
           />
@@ -477,6 +479,7 @@ export function PrepareScreen({
           <BarAction
             icon="image"
             label={t("wzUseOriginal")}
+            short={t("wzUseOriginalShort")}
             onClick={() => void prepare({ mode: "original" })}
             disabled={redoing || busy !== null}
           />

@@ -1,10 +1,11 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, useLocation } from "react-router-dom";
 
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { LanguageMenu } from "@/components/layout/LanguageMenu";
 import { Spinner } from "@/components/ui/Spinner";
+import { focusableIn, nextFocusIndex } from "@/lib/focus";
 import { useAuth } from "@/providers/auth";
 import { useOrg } from "@/providers/org";
 import { useTheme } from "@/providers/theme";
@@ -36,6 +37,7 @@ function useCrumb(): string {
   if (pathname.startsWith("/photoface-hd")) return t("photofaceHD");
   if (pathname.startsWith("/lip-sync-lab")) return t("lipSyncLab");
   if (pathname.startsWith("/reference-avatar")) return t("referenceLab");
+  if (pathname.startsWith("/voices")) return t("voicesNav");
   if (pathname.startsWith("/members")) return t("members");
   if (pathname.startsWith("/api-keys")) return t("apiKeys");
   if (pathname.startsWith("/settings")) return t("settings");
@@ -51,14 +53,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { theme, toggle } = useTheme();
   const [open, setOpen] = useState(false);
   const crumb = useCrumb();
+  const { pathname } = useLocation();
   // The creation wizard uses the whole content area beside the rail, with
   // its own sticky progress and fixed action bar (features/avatars wizard).
-  const wide = useLocation().pathname.startsWith("/avatars/new");
+  const wide = pathname.startsWith("/avatars/new");
+  const drawer = useDrawer(open, setOpen, pathname);
   const { current, loading, setupFailed, retrySetup } = useOrg();
   const initial = (user?.display_name || user?.username || "?").charAt(0).toUpperCase();
 
   const sidebar = (
-    <div className="flex h-full flex-col pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
+    <div className="flex min-h-full flex-col pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
       <Link
         to="/"
         className="flex items-center gap-2.5 px-5 pb-6 pt-5 text-[15px] font-semibold tracking-[-0.01em]"
@@ -79,7 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             end={item.to === "/app"}
             onClick={() => setOpen(false)}
             className={({ isActive }) =>
-              `flex items-center gap-3 rounded-lg px-3 py-[7px] text-[13.5px] transition-colors ${
+              `flex items-center gap-3 rounded-lg px-3 py-[7px] text-[13.5px] transition-colors coarse:min-h-11 coarse:text-[15px] ${
                 isActive
                   ? "bg-black/[0.06] font-medium text-gray-900 dark:bg-white/[0.08] dark:text-white"
                   : "text-gray-500 hover:bg-black/[0.03] hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.04] dark:hover:text-gray-100"
@@ -113,19 +117,33 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-white text-gray-900 antialiased dark:bg-ink dark:text-gray-100">
       {/* Fixed rail on desktop; a drawer below lg so the content gets the
           whole width on a phone rather than a squeezed column. */}
-      <aside className="fixed inset-y-0 start-0 z-40 hidden w-[232px] border-e border-black/[0.07] lg:block dark:border-white/[0.07]">
+      <aside className="fixed inset-y-0 start-0 z-40 hidden w-[232px] overflow-y-auto overscroll-contain border-e border-black/[0.07] lg:block dark:border-white/[0.07]">
         {sidebar}
       </aside>
 
       {open && (
         <>
           <button
-            aria-label="close menu"
+            type="button"
+            tabIndex={-1}
+            aria-label={t("closeMenu")}
             className="fixed inset-0 z-40 bg-black/50 lg:hidden"
             onClick={() => setOpen(false)}
           />
-          {/* Fixed, so the body's side inset does not reach it: its own. */}
-          <aside className="fixed inset-y-0 start-0 z-50 box-content w-[232px] bg-white ps-[env(safe-area-inset-left)] lg:hidden dark:bg-panel">
+          {/* A modal drawer: focus moves in and stays in (Tab wraps); Esc,
+              the backdrop and any navigation close it; focus goes back to
+              the menu button. Fixed, so the body's side inset does not
+              reach it: its own. It scrolls when a phone on its side is
+              shorter than the list. */}
+          <aside
+            id="app-drawer"
+            ref={drawer.ref}
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("navGroupMenu")}
+            onKeyDown={drawer.onKeyDown}
+            className="fixed inset-y-0 start-0 z-50 box-content w-[232px] overflow-y-auto overscroll-contain bg-white ps-[env(safe-area-inset-left)] lg:hidden dark:bg-panel"
+          >
             {sidebar}
           </aside>
         </>
@@ -138,8 +156,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="flex h-full items-center gap-3 px-4"
           >
             <button
-              aria-label="menu"
-              className="-ms-1 rounded-lg p-1.5 text-gray-500 hover:bg-black/5 lg:hidden dark:hover:bg-white/10"
+              ref={drawer.opener}
+              type="button"
+              aria-label={t("openMenu")}
+              aria-controls="app-drawer"
+              aria-expanded={open}
+              className="-ms-1 grid place-items-center rounded-lg p-1.5 text-gray-500 hover:bg-black/5 coarse:-ms-2.5 coarse:h-11 coarse:w-11 lg:hidden dark:hover:bg-white/10"
               onClick={() => setOpen(true)}
             >
               <Icon name="menu" />
@@ -150,7 +172,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="ms-auto flex items-center gap-1">
               <LanguageMenu />
               <button
-                className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 dark:hover:bg-white/10 dark:hover:text-white"
+                className="grid place-items-center rounded-lg p-2 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 coarse:h-11 coarse:w-11 dark:hover:bg-white/10 dark:hover:text-white"
                 onClick={toggle}
                 aria-label={t("theme")}
               >
@@ -181,4 +203,60 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
     </div>
   );
+}
+
+/**
+ * The phone and tablet drawer, as a modal: focus to the current page's link
+ * on open, Tab and Shift+Tab wrap inside it (lib/focus), Esc closes it, any
+ * change of route closes it, the page under it does not scroll, and focus
+ * goes back to the menu button. Widening the window to the rail's
+ * breakpoint closes it too, so the scroll lock never outlives it.
+ */
+function useDrawer(open: boolean, setOpen: (open: boolean) => void, pathname: string) {
+  const ref = useRef<HTMLElement>(null);
+  const opener = useRef<HTMLButtonElement>(null);
+
+  // Any navigation: a link in the drawer, or the browser's Back.
+  useEffect(() => setOpen(false), [pathname, setOpen]);
+
+  useEffect(() => {
+    if (!open) return;
+    const panel = ref.current;
+    if (panel) {
+      const items = focusableIn(panel);
+      (items.find((el) => el.getAttribute("aria-current") === "page") ?? items[0])?.focus();
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    const wide = window.matchMedia("(min-width: 1024px)");
+    const onWide = () => {
+      if (wide.matches) setOpen(false);
+    };
+    const root = document.documentElement;
+    const overflow = root.style.overflow;
+    root.style.overflow = "hidden";
+    document.addEventListener("keydown", onKey);
+    wide.addEventListener("change", onWide);
+    const button = opener.current;
+    return () => {
+      root.style.overflow = overflow;
+      document.removeEventListener("keydown", onKey);
+      wide.removeEventListener("change", onWide);
+      const active = document.activeElement;
+      if (!active || active === document.body || !active.isConnected || panel?.contains(active)) {
+        button?.focus({ preventScroll: true });
+      }
+    };
+  }, [open, setOpen]);
+
+  const onKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Tab" || !ref.current) return;
+    const items = focusableIn(ref.current);
+    const next = nextFocusIndex(items.indexOf(document.activeElement as HTMLElement), items.length, event.shiftKey);
+    event.preventDefault();
+    if (next >= 0) items[next].focus();
+  }, []);
+
+  return { ref, opener, onKeyDown };
 }

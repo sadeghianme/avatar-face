@@ -688,6 +688,7 @@ export const avatars = {
   sceneZoomPercent: "{{percent}} % de la vue du visage",
   scenePan: "Position",
   scenePanHint: "Faites glisser l’aperçu pour déplacer l’image, ou utilisez les flèches du clavier ici (Maj pour de plus grands pas).",
+  scenePanHintTouch: "Utilisez les flèches pour déplacer l’image.",
   scenePanUp: "Monter",
   scenePanDown: "Descendre",
   scenePanLeft: "Vers la gauche",

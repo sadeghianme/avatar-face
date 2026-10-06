@@ -86,7 +86,7 @@ export function LoginPage() {
             </label>
             <Link
               to="/forgot-password"
-              className="text-[13px] font-medium text-brand-600 hover:underline dark:text-brand-400"
+              className="text-[13px] font-medium text-brand-600 hover:underline coarse:-my-3 coarse:inline-block coarse:py-3 dark:text-brand-400"
             >
               {t("forgotPassword")}
             </Link>

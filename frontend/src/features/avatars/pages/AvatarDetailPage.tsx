@@ -135,10 +135,33 @@ export function AvatarDetailPage() {
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
+  // An iPhone has no fullscreen for an element (Safari gives it to video
+  // only; `requestFullscreen` is not there): the stage then covers the
+  // window itself, over the shell, and the same button or Esc leaves.
+  const [covering, setCovering] = useState(false);
+  useEffect(() => {
+    if (!covering) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setCovering(false);
+    };
+    const root = document.documentElement;
+    const overflow = root.style.overflow;
+    root.style.overflow = "hidden";
+    document.addEventListener("keydown", onKey);
+    return () => {
+      root.style.overflow = overflow;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [covering]);
   const toggleFullscreen = () => {
+    const box = previewBoxRef.current;
     if (document.fullscreenElement) void document.exitFullscreen();
-    else void previewBoxRef.current?.requestFullscreen();
+    else if (covering) setCovering(false);
+    else if (box && typeof box.requestFullscreen === "function" && document.fullscreenEnabled) {
+      box.requestFullscreen().catch(() => setCovering(true));
+    } else setCovering(true);
   };
+  const expanded = fullscreen || covering;
 
   const toggleSection = (id: SectionId) =>
     setOpen((current) => {
@@ -397,7 +420,7 @@ export function AvatarDetailPage() {
                 {t("deleteAsk")}
                 <button
                   type="button"
-                  className="btn-secondary min-h-9"
+                  className="btn-secondary min-h-9 coarse:min-h-11"
                   autoFocus
                   onClick={() => setConfirmingDelete(false)}
                   disabled={deleting}
@@ -406,7 +429,7 @@ export function AvatarDetailPage() {
                 </button>
                 <button
                   type="button"
-                  className="btn-danger min-h-9"
+                  className="btn-danger min-h-9 coarse:min-h-11"
                   onClick={() => void remove()}
                   disabled={deleting}
                 >
@@ -475,25 +498,36 @@ export function AvatarDetailPage() {
               shape visitors get, as wide as its column; on a wide screen
               no taller than the window leaves under the page head (a wide,
               short window gets a landscape stage with the square inside),
-              and stuck there while the settings scroll. The crop studio
-              takes the room it needs instead. */}
+              and stuck there while the settings scroll. In one column (a
+              phone, a tablet upright) it is capped too, so Speak is not a
+              screen away: at most 55% of an upright window (a 768px tablet
+              would otherwise get a 736px square), and the window under the
+              header on a phone on its side; the square is then centred
+              (max-height carries to the width through the aspect ratio).
+              The crop studio takes the room it needs instead. */}
           <div
             ref={previewBoxRef}
             className={`card relative overflow-hidden lg:self-start ${
               cropping
                 ? "p-3"
-                : "aspect-square p-0 lg:sticky lg:top-[calc(3.5rem+env(safe-area-inset-top)+var(--head-h))] lg:max-h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-var(--head-h)-1rem)]"
-            } ${fullscreen ? "preview-fullscreen" : ""}`}
+                : "aspect-square p-0 max-lg:mx-auto max-lg:portrait:max-h-[55dvh] max-lg:landscape:max-h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-2rem)] lg:sticky lg:top-[calc(3.5rem+env(safe-area-inset-top)+var(--head-h))] lg:max-h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-var(--head-h)-1rem)]"
+            } ${expanded ? "preview-fullscreen" : ""} ${
+              covering
+                ? "!fixed inset-0 z-[60] !m-0 !aspect-auto !max-h-none bg-white pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] dark:bg-ink"
+                : ""
+            }`}
           >
             {!cropping && (
               <button
                 type="button"
                 onClick={toggleFullscreen}
-                aria-label={t(fullscreen ? "exitFullscreen" : "fullscreen")}
-                title={t(fullscreen ? "exitFullscreen" : "fullscreen")}
-                className="absolute end-3 top-3 z-10 grid h-10 w-10 place-items-center rounded-lg bg-black/40 text-white/90 backdrop-blur transition-colors hover:bg-black/60 hover:text-white"
+                aria-label={t(expanded ? "exitFullscreen" : "fullscreen")}
+                title={t(expanded ? "exitFullscreen" : "fullscreen")}
+                className={`absolute end-3 z-10 grid h-10 w-10 place-items-center rounded-lg bg-black/40 text-white/90 backdrop-blur transition-colors hover:bg-black/60 hover:text-white coarse:h-11 coarse:w-11 ${
+                  covering ? "top-[calc(0.75rem+env(safe-area-inset-top))]" : "top-3"
+                }`}
               >
-                <Icon name={fullscreen ? "compress" : "expand"} className="h-4 w-4" />
+                <Icon name={expanded ? "compress" : "expand"} className="h-4 w-4" />
               </button>
             )}
             {cropping ? (
@@ -548,7 +582,7 @@ export function AvatarDetailPage() {
                 )}
                 {photo && !adjusting && (
                   <button
-                    className="btn-secondary mt-3 min-h-10 px-3 text-xs"
+                    className="btn-secondary mt-3 min-h-10 coarse:min-h-11 px-3 text-xs"
                     onClick={() => setAdjusting(true)}
                   >
                     <Icon name="target" className="h-4 w-4" />

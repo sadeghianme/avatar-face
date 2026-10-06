@@ -359,7 +359,7 @@ function Editor({
                     key={v}
                     type="button"
                     {...viewRadio(v)}
-                    className={`inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-4 ${
+                    className={`inline-flex min-h-10 coarse:min-h-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-4 ${
                       view === v
                         ? "bg-white text-gray-900 shadow-sm ring-1 ring-black/5 dark:bg-raised dark:text-white dark:ring-white/10"
                         : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
@@ -417,7 +417,7 @@ function Editor({
           <div>
             <button
               type="button"
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg text-sm font-medium text-brand-700 hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline dark:text-brand-300 dark:disabled:text-gray-600"
+              className="inline-flex min-h-10 coarse:min-h-11 items-center gap-2 rounded-lg text-sm font-medium text-brand-700 hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline dark:text-brand-300 dark:disabled:text-gray-600"
               onClick={() => setMarks(anchors.marks)}
               disabled={!edited || busy !== null}
             >
@@ -425,7 +425,7 @@ function Editor({
               {t("wzResetPoints")}
             </button>
             <details className="group mt-1 hidden text-xs text-gray-500 dark:text-gray-400 sm:block">
-              <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1 font-medium hover:text-gray-700 dark:hover:text-gray-200">
+              <summary className="inline-flex min-h-8 coarse:min-h-11 cursor-pointer list-none items-center gap-1 font-medium hover:text-gray-700 dark:hover:text-gray-200">
                 <Icon name="chevron" className="h-3.5 w-3.5 transition-transform group-open:rotate-90 rtl:-scale-x-100" />
                 {t("wzKeysTitle")}
               </summary>
@@ -457,7 +457,7 @@ function Editor({
           )}
 
           {needsConfirm && (
-            <label className="flex cursor-pointer items-start gap-3 text-sm text-gray-800 dark:text-gray-200">
+            <label className="flex cursor-pointer items-start gap-3 coarse:min-h-11 text-sm text-gray-800 dark:text-gray-200">
               <input
                 type="checkbox"
                 className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"
@@ -469,7 +469,7 @@ function Editor({
           )}
 
           {statementScope && (
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 p-3 text-sm text-gray-800 dark:border-line dark:text-gray-200">
+            <label className="flex cursor-pointer items-start gap-3 coarse:min-h-11 rounded-xl border border-gray-200 p-3 text-sm text-gray-800 dark:border-line dark:text-gray-200">
               <input
                 ref={statementBox}
                 type="checkbox"

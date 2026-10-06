@@ -100,7 +100,7 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
               <span className="text-xs text-gray-600 dark:text-gray-300">{t("createDraftDeleteConfirm")}</span>
               <button
                 type="button"
-                className="btn-danger min-h-9 px-3 py-1 text-xs"
+                className="btn-danger min-h-9 coarse:min-h-11 px-3 py-1 text-xs"
                 onClick={() => void remove()}
                 disabled={deleting}
               >
@@ -109,7 +109,7 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
               </button>
               <button
                 type="button"
-                className="btn-secondary min-h-9 px-3 py-1 text-xs"
+                className="btn-secondary min-h-9 coarse:min-h-11 px-3 py-1 text-xs"
                 onClick={() => setConfirming(false)}
                 disabled={deleting}
               >
@@ -120,14 +120,14 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
             <>
               <Link
                 to={`/avatars/new/${draft.id}`}
-                className="btn-primary min-h-9 px-3 py-1 text-xs"
+                className="btn-primary min-h-9 coarse:min-h-11 px-3 py-1 text-xs"
                 aria-label={t("createDraftResumeNamed", { line, when })}
               >
                 {t("createDraftResume")}
               </Link>
               <button
                 type="button"
-                className="btn-secondary min-h-9 px-3 py-1 text-xs"
+                className="btn-secondary min-h-9 coarse:min-h-11 px-3 py-1 text-xs"
                 onClick={() => setConfirming(true)}
                 aria-label={t("createDraftDeleteNamed", { line, when })}
               >

@@ -122,7 +122,7 @@ export function TuningPanel({
               />
             </div>
           ))}
-          <button className="btn-secondary min-h-10 self-end px-3 text-xs" onClick={reset}>
+          <button className="btn-secondary min-h-10 coarse:min-h-11 self-end px-3 text-xs" onClick={reset}>
             {t("tuneReset")}
           </button>
         </div>

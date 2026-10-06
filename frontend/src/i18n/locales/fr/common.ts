@@ -5,6 +5,8 @@ export const common = {
   avatarCount_other: "{{count}} avatars",
   dashboard: "Tableau de bord",
   navGroupMenu: "Menu",
+  openMenu: "Ouvrir le menu",
+  closeMenu: "Fermer le menu",
   navGroupTeam: "Équipe",
   navGroupAccount: "Compte",
   simulator: "Simulateur",

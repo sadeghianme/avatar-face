@@ -48,7 +48,7 @@ export function AuthShell({
           className="absolute left-1/2 top-[40%] -z-10 h-[460px] w-[460px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-500/25 blur-[110px] motion-safe:animate-glow"
         />
 
-        <Link to="/" className="flex w-fit items-center gap-2.5 text-[16px] font-semibold tracking-[-0.02em]">
+        <Link to="/" className="flex w-fit items-center gap-2.5 coarse:min-h-11 text-[16px] font-semibold tracking-[-0.02em]">
           <img src="/brand/liveface-mark-512.png" alt="" width={32} height={32} className="h-8 w-8 rounded-[10px]" />
           {t("appName")}
         </Link>
@@ -104,7 +104,7 @@ export function AuthShell({
           className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(60%_100%_at_50%_0%,rgba(249,115,22,0.10),transparent)] lg:hidden"
         />
         <header className="relative flex items-center justify-between p-4">
-          <Link to="/" className="flex items-center gap-2.5 text-[16px] font-semibold tracking-[-0.02em] lg:invisible">
+          <Link to="/" className="flex items-center gap-2.5 coarse:min-h-11 text-[16px] font-semibold tracking-[-0.02em] lg:invisible">
             <img src="/brand/liveface-mark-512.png" alt="" width={32} height={32} className="h-8 w-8 rounded-[10px]" />
             {t("appName")}
           </Link>
@@ -115,7 +115,7 @@ export function AuthShell({
               onClick={toggle}
               aria-label={t("theme")}
               title={t("theme")}
-              className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 dark:hover:bg-white/10 dark:hover:text-white"
+              className="grid place-items-center rounded-lg p-2 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 coarse:h-11 coarse:w-11 dark:hover:bg-white/10 dark:hover:text-white"
             >
               <Icon name={theme === "dark" ? "sun" : "moon"} className="h-[18px] w-[18px]" />
             </button>
@@ -149,7 +149,7 @@ export function AuthShell({
         <div className="relative pb-6 text-center">
           <Link
             to="/"
-            className="inline-flex items-center gap-1.5 text-[13px] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+            className="inline-flex items-center gap-1.5 text-[13px] text-gray-500 transition-colors coarse:min-h-11 coarse:px-2 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
           >
             <Icon name="arrow" className="h-3.5 w-3.5 rotate-180 rtl:rotate-0" />
             {t("backToSite")}

@@ -1,3 +1,5 @@
+import plugin from "tailwindcss/plugin";
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: "class",
@@ -67,5 +69,9 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // `coarse:` — a finger is the main pointer (phones, tablets): the touch
+    // sizes (44px targets) apply there and a mouse keeps the compact desktop.
+    plugin(({ addVariant }) => addVariant("coarse", "@media (pointer: coarse)")),
+  ],
 };

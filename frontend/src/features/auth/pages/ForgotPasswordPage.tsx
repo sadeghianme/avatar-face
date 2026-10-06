@@ -31,7 +31,7 @@ export function ForgotPasswordPage() {
       <AuthShell title={t("checkYourInbox")} subtitle={t("resetSentBody", { email })}>
         <Link
           to="/login"
-          className="font-medium text-brand-600 hover:underline dark:text-brand-400"
+          className="font-medium text-brand-600 hover:underline coarse:inline-flex coarse:min-h-11 coarse:items-center dark:text-brand-400"
         >
           {t("backToLogin")}
         </Link>
@@ -63,7 +63,7 @@ export function ForgotPasswordPage() {
         </button>
       </form>
       <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
-        <Link to="/login" className="font-medium text-brand-600 hover:underline dark:text-brand-400">
+        <Link to="/login" className="font-medium text-brand-600 hover:underline coarse:inline-flex coarse:min-h-11 coarse:items-center dark:text-brand-400">
           {t("backToLogin")}
         </Link>
       </p>

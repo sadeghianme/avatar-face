@@ -101,6 +101,8 @@ export const wizard = {
   wzRetry: "Retry",
   wzUseOriginal: "Use my original photo",
   wzUseAi: "Let AI prepare it",
+  wzUseAiShort: "AI",
+  wzUseOriginalShort: "Original",
   wzChangeLabel: "Describe a change",
   wzChangePlaceholder: "e.g. shorter hair, a blue shirt, no glasses",
   wzApply: "Apply",

@@ -185,7 +185,7 @@ function ProvidersCard({ orgId, kind }: { orgId: string; kind: "voice" | "image"
       <h2 className="mb-1 font-medium">
         {t(`${kind}Providers`)}
       </h2>
-      <p className="mb-4 text-[13px] text-gray-500 dark:text-gray-400">
+      <p className="mb-4 text-[13px] max-lg:text-sm text-gray-500 dark:text-gray-400">
         {t(`${kind}ProvidersHint`)}
       </p>
       {error && <p className="field-error mb-3">{error}</p>}
@@ -205,8 +205,8 @@ function ProvidersCard({ orgId, kind }: { orgId: string; kind: "voice" | "image"
             </div>
             <div className="flex flex-col gap-2">
               {integration.fields.map((field) => (
-                <div key={field.name} className="flex items-center gap-2">
-                  <label className="w-44 shrink-0 text-xs text-gray-500" htmlFor={field.name}>
+                <div key={field.name} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                  <label className="text-xs text-gray-500 sm:w-44 sm:shrink-0" htmlFor={field.name}>
                     {FIELD_LABELS[field.name] ?? field.name}
                     {field.source !== "unset" && (
                       <span className="ms-1 text-gray-400">({field.source})</span>
@@ -214,7 +214,7 @@ function ProvidersCard({ orgId, kind }: { orgId: string; kind: "voice" | "image"
                   </label>
                   <input
                     id={field.name}
-                    className="input flex-1"
+                    className="input sm:flex-1"
                     type="password"
                     autoComplete="off"
                     placeholder={field.masked || "—"}
@@ -226,7 +226,7 @@ function ProvidersCard({ orgId, kind }: { orgId: string; kind: "voice" | "image"
                 </div>
               ))}
             </div>
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
                 className="btn-primary px-3 py-1 text-xs"
                 onClick={() => void saveProvider(integration)}
@@ -295,7 +295,7 @@ function AiSwitchCard({ org }: { org: Org }) {
           <h2 id="ai-switch-heading" className="font-medium">
             {t("aiSwitchTitle")}
           </h2>
-          <p id="ai-switch-hint" className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">
+          <p id="ai-switch-hint" className="mt-1 text-[13px] max-lg:text-sm text-gray-500 dark:text-gray-400">
             {t("aiSwitchHint")}
           </p>
         </div>
@@ -307,7 +307,7 @@ function AiSwitchCard({ org }: { org: Org }) {
           aria-describedby="ai-switch-hint"
           disabled={!canChange || saving}
           onClick={() => void toggle()}
-          className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none
+          className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none before:absolute before:-inset-2 before:content-[""]
             focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${
               on ? "bg-brand-600" : "bg-gray-300 dark:bg-white/20"
             }`}

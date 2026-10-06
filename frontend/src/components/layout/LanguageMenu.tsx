@@ -23,14 +23,14 @@ export function LanguageMenu() {
 
   useEffect(() => {
     if (!open) return;
-    const onAway = (e: MouseEvent) => {
+    const onAway = (e: PointerEvent) => {
       if (!box.current?.contains(e.target as Node)) setOpen(false);
     };
     const onEscape = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", onAway);
+    document.addEventListener("pointerdown", onAway);
     document.addEventListener("keydown", onEscape);
     return () => {
-      document.removeEventListener("mousedown", onAway);
+      document.removeEventListener("pointerdown", onAway);
       document.removeEventListener("keydown", onEscape);
     };
   }, [open]);
@@ -45,7 +45,7 @@ export function LanguageMenu() {
         title={t("language")}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 dark:hover:bg-white/10 dark:hover:text-white"
+        className="grid place-items-center rounded-lg p-2 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 coarse:h-11 coarse:w-11 dark:hover:bg-white/10 dark:hover:text-white"
       >
         <Icon name="globe" className="h-[18px] w-[18px]" />
       </button>
@@ -66,7 +66,7 @@ export function LanguageMenu() {
                 void i18n.changeLanguage(lang.code);
                 setOpen(false);
               }}
-              className={`flex w-full items-center gap-2 px-3 py-2 text-start text-[13.5px] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06] ${
+              className={`flex w-full items-center gap-2 px-3 py-2 text-start text-[13.5px] coarse:min-h-11 coarse:text-[15px] transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06] ${
                 active === lang.code ? "font-medium" : "text-gray-600 dark:text-gray-300"
               }`}
             >

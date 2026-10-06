@@ -291,11 +291,13 @@ export function MouthPanel({
   // mounted with its text is not reliably read out.
   const spoken = running ? progressSpoken : promptPublish ? madeText : "";
 
+  // Scrolled to from the finish notice: it stops below the sticky header
+  // (and, from lg, the sticky page head) rather than under them.
   return (
     <section
       id="mouth-panel"
       tabIndex={-1}
-      className={`${embedded ? "" : "card"} space-y-4 outline-none`}
+      className={`${embedded ? "" : "card"} space-y-4 outline-none scroll-mt-[calc(3.5rem+env(safe-area-inset-top)+1rem)] lg:scroll-mt-[calc(3.5rem+env(safe-area-inset-top)+var(--head-h,0px)+1rem)]`}
       aria-label={t("mouthTitle")}
     >
       <div>

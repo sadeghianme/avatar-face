@@ -1,6 +1,7 @@
 /** fr: share strings. A key lives in exactly one file; add new ones here. */
 export const share = {
   sharePlaceholder: "Écrivez ce que l'avatar doit dire…",
+  sharePlaceholderShort: "Écrivez une phrase…",
   sharePlay: "Lire",
   sharePoweredBy: "Réalisé avec Liveface",
   shareGoneTitle: "Ce lien n'est pas disponible",

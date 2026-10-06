@@ -144,9 +144,12 @@ export function VoicePicker({
     );
 
   return (
+    // 12rem a field: side by side in a wide column, one under the other in
+    // a narrow one (a phone, the avatar page's two fifths on a tablet)
+    // rather than both cut to "Browser voice (fr…".
     <div className="flex flex-wrap gap-3">
       {languages && languages.length > 1 && (
-        <div className="min-w-36 flex-1">
+        <div className="min-w-48 flex-1">
           <label className="label" htmlFor="speech-language">{t("speechLanguage")}</label>
           <select
             id="speech-language"
@@ -168,7 +171,7 @@ export function VoicePicker({
           </select>
         </div>
       )}
-      <div className="min-w-36 flex-1">
+      <div className="min-w-48 flex-1">
         <label className="label" htmlFor="provider">{t("provider")}</label>
         <select
           id="provider"
@@ -183,7 +186,7 @@ export function VoicePicker({
           ))}
         </select>
       </div>
-      <div className="min-w-36 flex-1">
+      <div className="min-w-48 flex-1">
         <label className="label" htmlFor="voice">{t("voice")}</label>
         <select
           id="voice"

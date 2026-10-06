@@ -7,6 +7,7 @@ import { useParams } from "react-router-dom";
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { loadImage } from "@/lib/image";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import { useAvatarMouth } from "@/features/avatars";
 
 interface PublicAvatar {
@@ -50,6 +51,9 @@ export function SharePage() {
   const [avatar, setAvatar] = useState<PublicAvatar | null>(null);
   const [failed, setFailed] = useState(false);
   const [text, setText] = useState("");
+  // A narrow phone: the one-line box is ~270px, and the long hint would
+  // wrap and be cut in half.
+  const narrow = useMediaQuery("(max-width: 480px)");
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Held once: the engine reads canvas.width when it frames the face, so it
@@ -208,7 +212,9 @@ export function SharePage() {
       data-page-bg="night"
       className="flex h-[100dvh] flex-col overflow-hidden bg-gray-950 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]"
     >
-      <header className="flex flex-wrap items-center gap-2 px-5 py-4">
+      {/* A phone on its side (under 520px tall): the name and the composer
+          take less height, so the face keeps most of the window. */}
+      <header className="flex flex-wrap items-center gap-2 px-5 py-4 [@media(max-height:520px)]:py-2">
         <h1 className="text-sm font-medium text-gray-300">{avatar?.name ?? ""}</h1>
         {/* A visitor is told when an AI made or changed this face. */}
         {avatar?.disclosure?.ai_edited && (
@@ -235,7 +241,7 @@ export function SharePage() {
         />
       </main>
 
-      <footer className="px-4 pb-6 pt-3">
+      <footer className="px-4 pb-6 pt-3 [@media(max-height:520px)]:pb-2 [@media(max-height:520px)]:pt-2">
         <div className="mx-auto flex w-full max-w-2xl items-end gap-2">
           <textarea
             value={text}
@@ -250,20 +256,23 @@ export function SharePage() {
             }}
             rows={1}
             maxLength={600}
-            placeholder={t("sharePlaceholder")}
+            placeholder={t(narrow ? "sharePlaceholderShort" : "sharePlaceholder")}
             className="input min-h-[46px] resize-none bg-gray-900 text-gray-100 placeholder-gray-500"
           />
+          {/* On a narrow phone the button is its icon (named for screen
+              readers), so the box keeps the room for its words. */}
           <button
-            className="btn-primary h-[46px] shrink-0 px-5"
+            className="btn-primary h-[46px] min-w-[46px] shrink-0 px-3 sm:px-5"
             onClick={() => void speak()}
             disabled={speaking || !text.trim() || !avatar}
+            aria-label={t("sharePlay")}
           >
             {speaking ? <Spinner className="h-4 w-4" /> : <Icon name="speaker" className="h-4 w-4" />}
-            {t("sharePlay")}
+            <span className="max-[400px]:sr-only">{t("sharePlay")}</span>
           </button>
         </div>
         {error && <p className="mx-auto mt-2 max-w-2xl text-xs text-red-400">{error}</p>}
-        <p className="mx-auto mt-3 max-w-2xl text-center text-[11px] text-gray-600">
+        <p className="mx-auto mt-3 max-w-2xl text-center text-[11px] text-gray-500 [@media(max-height:520px)]:mt-1">
           {t("sharePoweredBy")}
         </p>
       </footer>

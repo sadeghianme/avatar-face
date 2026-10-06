@@ -6,6 +6,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, ApiError } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
+import { TOUCH_ONE_COLUMN, useMediaQuery } from "@/lib/useMediaQuery";
 import {
   clampScene, DEFAULT_COLOR, isCutOut, panned, panStepped, sameScene, sceneErrorKey, sceneOf, SWATCHES,
   ZOOM_FACE, ZOOM_FULL, ZOOM_MAX, ZOOM_STEP, zoomPreset, zoomText, type BackgroundKind, type SceneDraft,
@@ -67,6 +68,12 @@ export function FramingScenePanel({
   const fileRef = useRef<HTMLInputElement>(null);
   const hasImage = Boolean(avatar.scene?.background.has_image);
   const cutOut = isCutOut(avatar);
+  // On a phone or an upright tablet the preview is most of the screen and
+  // above this panel, not beside it: a swipe on it scrolls the page (it
+  // used to pan the picture, a draft change made by trying to scroll).
+  // The position pad moves it there; a drag still pans beside the panel.
+  const touchColumn = useMediaQuery(TOUCH_ONE_COLUMN);
+  const dragPans = active && !touchColumn;
 
   // Re-seed when the server's copy changes under us (publish, discard, an
   // upload), unless a save of a newer draft is still on its way.
@@ -130,7 +137,7 @@ export function FramingScenePanel({
   // does not rebuild the viewport more often than it can be drawn.
   useEffect(() => {
     const el = surfaceRef.current;
-    if (!el || !active) return;
+    if (!el || !dragPans) return;
     let drag: { x: number; y: number; pan: { x: number; y: number } } | null = null;
     let frame = 0;
     const down = (e: PointerEvent) => {
@@ -172,7 +179,7 @@ export function FramingScenePanel({
       if (frame) window.cancelAnimationFrame(frame);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [avatar.id, surfaceRef.current, active]);
+  }, [avatar.id, surfaceRef.current, dragPans]);
 
   const onPadKey = (e: React.KeyboardEvent) => {
     const next = panStepped(draft.pan, e.key, e.shiftKey);
@@ -286,7 +293,7 @@ export function FramingScenePanel({
 
       <div className="mb-4">
         <p className="label" id="scene-pan-label">{t("scenePan")}</p>
-        <p className="mb-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t("scenePanHint")}</p>
+        <p className="mb-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t(dragPans ? "scenePanHint" : "scenePanHintTouch")}</p>
         <div
           role="group"
           aria-labelledby="scene-pan-label"

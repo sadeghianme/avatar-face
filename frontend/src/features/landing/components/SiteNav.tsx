@@ -48,7 +48,7 @@ export function SiteNav() {
       }`}
     >
       <nav className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-5 sm:px-6" aria-label={t("navMain")}>
-        <Link to="/" className="flex shrink-0 items-center gap-2.5 text-[17px] font-semibold tracking-[-0.02em]">
+        <Link to="/" className="flex shrink-0 items-center gap-2.5 coarse:min-h-11 text-[17px] font-semibold tracking-[-0.02em]">
           <img src="/brand/liveface-mark-512.png" alt="" width={32} height={32} className="h-8 w-8 rounded-[10px]" />
           {t("appName")}
         </Link>
@@ -58,7 +58,7 @@ export function SiteNav() {
             <li key={link.key}>
               <a
                 href={link.href}
-                className="rounded-lg px-3 py-2 text-[14px] text-gray-600 transition-colors hover:text-gray-950 dark:text-gray-400 dark:hover:text-white"
+                className="rounded-lg px-3 py-2 text-[14px] text-gray-600 coarse:inline-flex coarse:min-h-11 coarse:items-center transition-colors hover:text-gray-950 dark:text-gray-400 dark:hover:text-white"
               >
                 {t(link.key)}
               </a>
@@ -73,7 +73,7 @@ export function SiteNav() {
             onClick={toggle}
             aria-label={t("theme")}
             title={t("theme")}
-            className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 dark:hover:bg-white/10 dark:hover:text-white"
+            className="grid place-items-center rounded-lg p-2 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 coarse:h-11 coarse:w-11 dark:hover:bg-white/10 dark:hover:text-white"
           >
             <Icon name={theme === "dark" ? "sun" : "moon"} className="h-[18px] w-[18px]" />
           </button>
@@ -85,7 +85,7 @@ export function SiteNav() {
             <>
               <Link
                 to="/login"
-                className="hidden rounded-full px-3.5 py-2 text-[14px] font-medium text-gray-700 transition-colors hover:text-gray-950 sm:inline-flex dark:text-gray-300 dark:hover:text-white"
+                className="hidden rounded-full px-3.5 py-2 coarse:min-h-11 coarse:items-center text-[14px] font-medium text-gray-700 transition-colors hover:text-gray-950 sm:inline-flex dark:text-gray-300 dark:hover:text-white"
               >
                 {t("login")}
               </Link>
@@ -96,7 +96,7 @@ export function SiteNav() {
           )}
           <button
             type="button"
-            className="rounded-lg p-2 text-gray-700 hover:bg-black/5 lg:hidden dark:text-gray-200 dark:hover:bg-white/10"
+            className="grid place-items-center rounded-lg p-2 text-gray-700 hover:bg-black/5 coarse:h-11 coarse:w-11 lg:hidden dark:text-gray-200 dark:hover:bg-white/10"
             aria-label={t("navMenu")}
             aria-expanded={open}
             aria-controls="mobile-nav"
