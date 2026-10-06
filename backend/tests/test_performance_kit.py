@@ -1563,7 +1563,7 @@ async def test_a_check_that_breaks_is_a_rejected_answer_and_the_others_carry_on(
             raise RuntimeError("the detector crashed on this answer")
         return real(answer, request, *args)
 
-    monkeypatch.setattr(pk, "register_answer", breaks)
+    monkeypatch.setattr(pk.kit, "register_answer", breaks)
     result = await kit(scene, FakeProvider(scene))
     assert result.report["oo"]["status"] == "retargeted"
     assert result.report["oo"]["outcome"] == "rejected"

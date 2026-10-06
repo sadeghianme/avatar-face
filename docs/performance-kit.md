@@ -3,7 +3,7 @@
 Status: wired, 2026-09-26 (Step 5, "Preparing your avatar"). Finishing a
 person makes their kit before the first publish; the Mouth panel makes it
 for an existing avatar; publishing serves it to the widget and the share
-page. `services/performance_kit.py` makes a kit; `services/mouth_kit.py` is
+page. `services/performance_kit/` makes a kit; `services/mouth_kit.py` is
 everything around it (who may send, metering, storage, disclosure, later
 edits). See "Wired" below. Revised after review the same day: the teeth
 photo is a request of its own, every shape is held to the Reference's size,
@@ -14,7 +14,8 @@ talks well because it was built from a kit: a neutral portrait, six photos of
 the same face saying AA, EE, OO, OH, F/V and TH registered onto it, a motion
 manifest (`performance.json`), and a hand-tuned mouth profile. Every other
 continuous-mouth avatar borrows that kit and retargets it by mouth width.
-`backend/app/services/performance_kit.py` makes the same kit from an uploaded
+`backend/app/services/performance_kit/` (a package: prompts, requests, answers,
+profile, manifest, kit) makes the same kit from an uploaded
 photo once its owner has confirmed the points.
 
 ## Pieces
