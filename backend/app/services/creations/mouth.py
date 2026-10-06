@@ -29,7 +29,7 @@ PUBLISH_LABEL = "publishing"
 PUBLISH_STANDARD_LABEL = "publishing with the standard mouth"
 
 
-def _animal_character_mouth(creation: Creation, avatar: Avatar) -> None:
+def animal_character_mouth(creation: Creation, avatar: Avatar) -> None:
     """A new animal-like character starts with no teeth in its character
     mouth. An animation or a cartoon is stored as the plain `cartoon` line
     whatever it shows, so the line cannot tell a dog from a woman; the
@@ -50,7 +50,7 @@ def _animal_character_mouth(creation: Creation, avatar: Avatar) -> None:
     avatar.mouth_config = json.dumps(config)
 
 
-async def _own_mouth(
+async def own_mouth(
     job: Job, creation: Creation, avatar: Avatar, image: bytes, rig: dict, storage
 ) -> bool | None:
     """The mouth a new avatar speaks with, set before its first publish:
@@ -61,7 +61,7 @@ async def _own_mouth(
 
     A person gets the photographic mouth (services.mouth_photo.default_config;
     every other line keeps the classic one, mouth_config null) and, when AI
-    may make it (_ai_allowed: the organization's switch, the image model,
+    may make it (ai_allowed: the organization's switch, the image model,
     the monthly limit, the finishing member's current consent), the quality
     the Reference avatar has: their own performance kit (services.mouth_kit)
     from `image`, the picture just chosen, and the rig's 478 points the
@@ -69,7 +69,7 @@ async def _own_mouth(
     photo when the embed would draw it, and the teeth fitted to it. Where
     the kit cannot be made on this server at all (no face detector for its
     registration; nothing was sent), the single "ee" photo is made instead
-    (_single_teeth), so a person can still get their teeth. Anything short
+    (single_teeth), so a person can still get their teeth. Anything short
     of that (no consent, AI off, the limit, a crash) publishes with the
     standard teeth (the Reference's own teeth photo, seated as the
     Reference's: mouth_photo.default_config) and the bundled motion, and
@@ -100,7 +100,7 @@ async def _own_mouth(
         return False
 
     try:
-        consent_id = await _ai_allowed(avatar)
+        consent_id = await ai_allowed(avatar)
     except mouth_photo.TeethFailure as exc:
         logger.info("finish %s: no AI mouth (%s)", job.id, exc.code)
         return standard(exc.note())
@@ -111,7 +111,7 @@ async def _own_mouth(
         return standard(TEETH_FAILED)
 
     async def sending() -> None:
-        await _record_finish_consent(creation, consent_id)
+        await record_finish_consent(creation, consent_id)
         avatar.consent_ids = consent.with_consent(avatar.consent_ids, consent_id)
         creation.consent_ids = consent.with_consent(creation.consent_ids, consent_id)
 
@@ -123,7 +123,7 @@ async def _own_mouth(
         )
     except (performance_kit.KitUnavailable, ValueError) as exc:
         logger.info("finish %s: no mouth kit on this server (%s); the teeth alone", job.id, exc)
-        return await _single_teeth(job, avatar, image, storage, sending)
+        return await single_teeth(job, avatar, image, storage, sending)
     except Exception:
         # Broad on purpose: a kit that fails is the standard mouth, never a
         # failed finish. Every call it sent was metered as it ended
@@ -146,7 +146,7 @@ async def _own_mouth(
     return kit["generated"] > 0 or bool(kit["teeth"]["used"])
 
 
-async def _record_finish_consent(creation: Creation, consent_id: str) -> None:
+async def record_finish_consent(creation: Creation, consent_id: str) -> None:
     """The consent that lets a finish's pictures go, on the creation's row
     and committed, before the first of them leaves: the finish's own write
     comes minutes later, or never (a failure deletes the half-built avatar
@@ -174,7 +174,7 @@ async def _record_finish_consent(creation: Creation, consent_id: str) -> None:
         await db.commit()
 
 
-async def _single_teeth(job: Job, avatar: Avatar, image: bytes, storage, sending) -> bool:
+async def single_teeth(job: Job, avatar: Avatar, image: bytes, storage, sending) -> bool:
     """A person's teeth alone: an "ee" photo the image model makes from
     `image`, admitted exactly like an uploaded mouth photo, when the kit
     cannot be made. Anything short of it publishes the standard teeth with
@@ -206,7 +206,7 @@ async def _single_teeth(job: Job, avatar: Avatar, image: bytes, storage, sending
     return False
 
 
-async def _ai_allowed(avatar: Avatar) -> str:
+async def ai_allowed(avatar: Avatar) -> str:
     """The finishing member's current third_party_ai consent, when AI may
     make this mouth at all: the organization allows third-party AI, the
     member agreed, the server has its image model, and the monthly image
@@ -216,7 +216,7 @@ async def _ai_allowed(avatar: Avatar) -> str:
     from app.services.mouth_photo import TeethFailure
     from app.services.usage import check_image_limit
 
-    consent_id = await _teeth_consent(avatar)
+    consent_id = await teeth_consent(avatar)
     if not imagegen.configured():
         raise TeethFailure(
             "imagegen_unavailable", "AI editing is not configured on this server", 409
@@ -229,7 +229,7 @@ async def _ai_allowed(avatar: Avatar) -> str:
     return consent_id
 
 
-async def _teeth_consent(avatar: Avatar) -> str:
+async def teeth_consent(avatar: Avatar) -> str:
     """The finishing member's current third_party_ai consent, in an
     organization that allows third-party AI; else TeethFailure (nothing is
     sent without both)."""

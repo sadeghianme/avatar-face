@@ -70,7 +70,7 @@ from app.schemas.creation import (
 )
 from app.services import creations as svc
 from app.services import orgs, wizard
-from app.services.creations import edits, new, repo, requests
+from app.services.creations import edits, new, repo, requests, rules
 from app.services.jobs import ACTIVE_STATES, runner
 from app.services.storage import get_storage
 
@@ -248,8 +248,8 @@ async def create_creation(
     line_or_given = line if line is not None else face_type
     if file.content_type not in get_settings().allowed_image_types:
         raise Validation422("Choose a JPEG, PNG or WebP photo", code="unsupported_image_type")
-    data = await file.read(svc.MAX_UPLOAD_BYTES + 1)
-    if len(data) > svc.MAX_UPLOAD_BYTES:
+    data = await file.read(rules.MAX_UPLOAD_BYTES + 1)
+    if len(data) > rules.MAX_UPLOAD_BYTES:
         raise Validation422("Photo must be 15 MB or smaller", code="image_too_large")
     creation = await new.create_from_upload(
         db, ctx.org.id, ctx.membership.user_id, data, file.content_type, line_or_given, steps
@@ -493,7 +493,7 @@ async def finish_creation(
     organization allows third-party AI and this member has agreed to send
     photos to Google, is "prepared" before it is published: its own mouth
     shapes, its teeth and a mouth profile fitted to it, made by AI from the
-    chosen picture and the confirmed points (services.creations._own_mouth,
+    chosen picture and the confirmed points (services.creations.mouth.own_mouth,
     services.mouth_kit; the job's progress counts the shapes, and the
     avatar's `mouth.kit` and `mouth.teeth` say what was made, or why not).
     `warnings` names what the picture will still show around the mouth

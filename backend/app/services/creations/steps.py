@@ -68,7 +68,7 @@ def ordered_step_ids(items: dict) -> list[str]:
     return ordered + sorted(i for i in items if i not in ordered)
 
 
-def _remove_steps(steps: dict, doomed: set[str]) -> list[str]:
+def remove_steps(steps: dict, doomed: set[str]) -> list[str]:
     """Remove the steps `doomed` (in place); their keys, to delete.
 
     A surviving step made from a removed one now names what that one was
@@ -101,7 +101,7 @@ def drop_adjusted(steps: dict) -> list[str]:
     """Remove every AI adjust candidate and its cut-out (the frame they were
     made from changed); their keys, to delete."""
     items = steps["items"]
-    return _remove_steps(
+    return remove_steps(
         steps,
         {i for i in items if adjusted_index(i) is not None or i.startswith(CUTOUT_PREFIX)},
     )
@@ -111,7 +111,7 @@ def drop_cutouts(steps: dict) -> list[str]:
     """Remove every cut-out, a touch-up of one included (the line changed,
     so the segmenter that made them no longer applies); their keys."""
     items = steps["items"]
-    return _remove_steps(steps, {i for i in items if is_cut_out(items, i)})
+    return remove_steps(steps, {i for i in items if is_cut_out(items, i)})
 
 
 def lineage(steps: dict | None, step_id: str | None) -> list[dict]:
@@ -140,7 +140,7 @@ def ai_edited_of(steps: dict | None, step_id: str | None) -> dict | None:
     return None
 
 
-def _detected_a_person(item: dict) -> bool:
+def detected_a_person(item: dict) -> bool:
     """Did the photo check find a human face on this image? MediaPipe's
     face landmarker is trained on people: a detection is a person's face,
     or a drawing close enough to one to be a likeness."""
@@ -190,12 +190,12 @@ def statement_for(creation: Creation) -> Literal["depiction", "generated_face"] 
     if generated:
         plan = (steps or {}).get("plan") or {}
         drawn_animal = plan.get("model") == "animal" and plan.get("look") in ("animation", "cartoon")
-        found_person = _detected_a_person(root) and not drawn_animal
+        found_person = detected_a_person(root) and not drawn_animal
         if not (human_line or found_person):
             return None
         return consent.DEPICTION if generated.get("source_avatar_id") else consent.GENERATED_FACE
     photographed = [item for item in chain if not item.get("adjust")]
-    if human_line or any(_detected_a_person(item) for item in photographed):
+    if human_line or any(detected_a_person(item) for item in photographed):
         return consent.DEPICTION
     # A draft made before checks were kept per step: the upload's analysis.
     if all(item.get("check") is None for item in photographed) and (
@@ -213,7 +213,7 @@ def round_source(steps: dict | None, last_round: dict | None) -> str | None:
     stylised version drops the cut-outs (the animation line keeps its drawn
     backdrop), and the round may have been made from one. The candidates'
     `from` links were moved to the nearest surviving ancestor then
-    (_remove_steps), so the first surviving candidate says where the round
+    (remove_steps), so the first surviving candidate says where the round
     now comes from; without one, the original.
     """
     if not last_round:
@@ -237,7 +237,7 @@ def stylised(steps: dict | None, step_id: str | None) -> bool:
     )
 
 
-def _through_cutouts(steps: dict | None, step_id: str | None) -> str | None:
+def through_cutouts(steps: dict | None, step_id: str | None) -> str | None:
     """`step_id`, or when it is a background removal's output, the image it
     was cut from (repeatedly): the step whose pixels it shows."""
     items = step_items(steps)
@@ -255,7 +255,7 @@ def frame_key(steps: dict | None, step_id: str | None) -> str | None:
     """The key of the image whose pixel grid `step_id` shares. A cut-out
     shares its source's (no pixel moved); every other step is its own, an
     AI result included (the model redrew it)."""
-    source = _through_cutouts(steps, step_id)
+    source = through_cutouts(steps, step_id)
     return step_items(steps)[source]["key"] if source else None
 
 
@@ -263,7 +263,7 @@ def check_of(steps: dict | None, step_id: str | None) -> dict | None:
     """The photo check of the image `step_id` shows (a cut-out shows its
     source's face, so it has its source's check). None for images made
     before checks were kept per step."""
-    source = _through_cutouts(steps, step_id)
+    source = through_cutouts(steps, step_id)
     return step_items(steps)[source].get("check") if source else None
 
 

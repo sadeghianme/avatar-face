@@ -7,7 +7,7 @@ from sqlalchemy import func
 
 from app.core.errors import Conflict409, Validation422
 from app.models import Creation
-from app.services.creations.records import SUPERSEDED, _load, _store_result, _write_job
+from app.services.creations.records import SUPERSEDED, load_creation, store_result, write_job
 from app.services.creations.rules import incoming_key, step_key
 from app.services.creations.steps import copied, cutout_id_for, step_check, step_items
 from app.services.jobs import (
@@ -18,7 +18,7 @@ from app.services.jobs import (
 from app.services.storage import get_storage
 
 
-async def _ingest(job: Job, params: dict) -> None:
+async def run_ingest(job: Job, params: dict) -> None:
     from app.services.photo_analysis import analyse
     from app.services.photo_io import STORED_MAX_EDGE, ingest_photo
 
@@ -49,17 +49,17 @@ async def _ingest(job: Job, params: dict) -> None:
     }
     # The four-step wizard's plan, and the name it proposes (services.wizard),
     # both given at upload.
-    creation = await _load(job)
+    creation = await load_creation(job)
     given = (creation.steps or {}) if creation is not None else {}
     for kept in ("plan", "name"):
         if given.get(kept):
             steps[kept] = given[kept]
-    stored = await _store_result(
+    stored = await store_result(
         job,
         params,
         {
             "steps": steps,
-            "analysis": _stored_analysis(analysis),
+            "analysis": stored_analysis(analysis),
             # The owner's choice at upload stands; otherwise the suggestion,
             # which is null when no face was found (the wizard then asks).
             "face_type": func.coalesce(Creation.face_type, analysis["suggested_face_type"]),
@@ -70,7 +70,7 @@ async def _ingest(job: Job, params: dict) -> None:
         await storage.delete(incoming)
 
 
-def _stored_analysis(analysis: dict) -> dict:
+def stored_analysis(analysis: dict) -> dict:
     """The upload's analysis as the creation keeps it: what step 1 reads.
     The per-line recommendations live on each step's check, so the one the
     wizard shows is always the current image's (api.creations)."""
@@ -80,19 +80,19 @@ def _stored_analysis(analysis: dict) -> dict:
 # --- Background -------------------------------------------------------------------
 
 
-async def _background(job: Job, params: dict) -> None:
+async def run_background(job: Job, params: dict) -> None:
     """Cut the subject out of `params["source"]` and make the cut-out the
     current image. Also what choosing an AI result runs, chained, when the
     owner chose to remove the background: the new picture is opaque."""
     from app.services import segment
 
-    creation = await _load(job)
+    creation = await load_creation(job)
     if creation is None:
         return
     source_id = params["source"]
     source = step_items(creation.steps).get(source_id)
     if source is None:
-        await _write_job(job, FAILED, params, SUPERSEDED)
+        await write_job(job, FAILED, params, SUPERSEDED)
         return
     storage = get_storage()
     data = await storage.get_bytes(source["key"])
@@ -120,5 +120,5 @@ async def _background(job: Job, params: dict) -> None:
     steps["current"] = cut_id
     # The owner's step 2 answer, which choosing an AI result later follows.
     steps["background"] = "remove"
-    if await _store_result(job, params, {"steps": steps}, [key]) and previous:
+    if await store_result(job, params, {"steps": steps}, [key]) and previous:
         await storage.delete(previous["key"])

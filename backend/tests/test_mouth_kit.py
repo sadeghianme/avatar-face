@@ -1318,13 +1318,13 @@ async def test_waiting_to_record_the_consent_is_not_the_providers_time(
     monkeypatch.setattr(imagegen, "TIMEOUT_SECONDS", 0.3)
     headers, org_id = await _org(client, "slowconsent")
     await ai_consent(client, headers, org_id)
-    real = creations._record_finish_consent
+    real = creations.mouth.record_finish_consent
 
     async def slow(creation, consent_id):
         await asyncio.sleep(0.6)
         await real(creation, consent_id)
 
-    monkeypatch.setattr(creations.mouth, "_record_finish_consent", slow)
+    monkeypatch.setattr(creations.mouth, "record_finish_consent", slow)
     avatar_id, _, _ = await _finished(client, headers, org_id)
     kit = (await _config(avatar_id))["kit"]
     assert kit["generated"] == 6

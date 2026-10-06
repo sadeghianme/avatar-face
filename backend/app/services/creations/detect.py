@@ -14,14 +14,14 @@ from app.db import get_session_factory
 from app.models import Creation
 from app.services.creations.records import (
     SUPERSEDED,
-    _ai_disabled_error,
-    _ai_switched_off,
-    _load,
-    _store_result,
-    _update_ai_usage,
-    _write_job,
+    ai_disabled_error,
+    ai_switched_off_now,
     ai_usage_of,
     error_record,
+    load_creation,
+    store_result,
+    update_ai_usage,
+    write_job,
 )
 from app.services.creations.rules import rules_for
 from app.services.creations.steps import current_step, frame_key, step_items
@@ -164,7 +164,7 @@ def source_on_backdrop(data: bytes) -> tuple[bytes, str]:
     return out.getvalue(), "image/jpeg"
 
 
-async def _ai_points(job: Job, params: dict, data: bytes, face_type: str, size) -> tuple[
+async def ai_points(job: Job, params: dict, data: bytes, face_type: str, size) -> tuple[
     dict | None, dict | None
 ]:
     """(anchors, warning): the point finder's anchors, or why not.
@@ -177,15 +177,15 @@ async def _ai_points(job: Job, params: dict, data: bytes, face_type: str, size) 
     from app.services import vision_points
     from app.services.usage import check_vision_limit, record_vision
 
-    creation = await _load(job)
+    creation = await load_creation(job)
     digest = params.get("sha256")
     points = vision_cache_hit(ai_usage_of(creation), digest, face_type) if creation else None
     if points is None:
         called = False
         warning = None
         try:
-            if await _ai_switched_off(job.org_id):
-                raise _ai_disabled_error()
+            if await ai_switched_off_now(job.org_id):
+                raise ai_disabled_error()
             async with get_session_factory()() as db:
                 await check_vision_limit(db, job.org_id)
             job.report(0.4, "asking the AI for the points")
@@ -213,7 +213,7 @@ async def _ai_points(job: Job, params: dict, data: bytes, face_type: str, size) 
                 }
                 usage["vision_cache"] = (usage["vision_cache"] + [entry])[-VISION_CACHE_SIZE:]
 
-        await _update_ai_usage(job, settle)
+        await update_ai_usage(job, settle)
     else:
         warning = None
     if points is None:
@@ -229,14 +229,14 @@ async def _ai_points(job: Job, params: dict, data: bytes, face_type: str, size) 
     return result.anchors, None
 
 
-async def _detect(job: Job, params: dict) -> None:
-    creation = await _load(job)
+async def run_detect(job: Job, params: dict) -> None:
+    creation = await load_creation(job)
     if creation is None:
         return
     current = current_step(creation.steps)
     image = step_items(creation.steps).get(current) if current is not None else None
     if image is None or creation.face_type is None:
-        await _write_job(job, FAILED, params, SUPERSEDED)
+        await write_job(job, FAILED, params, SUPERSEDED)
         return
     face_type = creation.face_type
     job.report(0.2, "finding the face")
@@ -246,7 +246,7 @@ async def _detect(job: Job, params: dict) -> None:
     if params.get("use_ai"):
         ai, warning = None, None
         if wants_ai_points(face_type, found["detected"]):
-            ai, warning = await _ai_points(
+            ai, warning = await ai_points(
                 job, params, data, face_type, tuple(found["image_size"])
             )
         else:
@@ -255,7 +255,7 @@ async def _detect(job: Job, params: dict) -> None:
                 usage["detections"] = max(0, usage["detections"] - 1)
 
             if params.get("charged"):
-                await _update_ai_usage(job, refund)
+                await update_ai_usage(job, refund)
         if ai is not None:
             found, source = ai, "ai"
         elif warning is not None:
@@ -267,7 +267,7 @@ async def _detect(job: Job, params: dict) -> None:
         "source": source,
         **found,
     }
-    await _store_result(job, params, {"anchors": anchors}, [])
+    await store_result(job, params, {"anchors": anchors}, [])
 
 
 def anchors_are_current(creation: Creation) -> bool:

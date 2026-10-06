@@ -10,13 +10,13 @@ from app.core.errors import AppError, Conflict409, Validation422
 from app.db import get_session_factory
 from app.models import Avatar
 from app.services.creations.detect import source_on_backdrop
-from app.services.creations.ingest import _stored_analysis
+from app.services.creations.ingest import stored_analysis
 from app.services.creations.records import (
-    _ai_disabled_error,
-    _ai_switched_off,
-    _load,
-    _store_result,
-    _update_ai_usage,
+    ai_disabled_error,
+    ai_switched_off_now,
+    load_creation,
+    store_result,
+    update_ai_usage,
 )
 from app.services.creations.rules import step_key
 from app.services.creations.steps import step_check
@@ -29,7 +29,7 @@ from app.services.storage import get_storage
 logger = logging.getLogger("liveface.creations")
 
 
-async def _generate(job: Job, params: dict) -> None:
+async def run_generate(job: Job, params: dict) -> None:
     """Make the creation's original with the image model, from a text
     description (and optionally one of the org's avatars as the source),
     then analyse it like an upload. The wizard carries on from there: the
@@ -39,7 +39,7 @@ async def _generate(job: Job, params: dict) -> None:
     from app.services.photo_io import STORED_MAX_EDGE, ingest_photo
     from app.services.usage import check_image_limit, record_generation
 
-    creation = await _load(job)
+    creation = await load_creation(job)
     if creation is None:
         return
     storage = get_storage()
@@ -62,8 +62,8 @@ async def _generate(job: Job, params: dict) -> None:
             raise Conflict409("The source avatar's photo is gone", code="source_gone")
         source = await storage.get_bytes(key)
 
-    if await _ai_switched_off(job.org_id):
-        raise _ai_disabled_error()
+    if await ai_switched_off_now(job.org_id):
+        raise ai_disabled_error()
     async with get_session_factory()() as db:
         await check_image_limit(db, job.org_id)
     job.report(0.1, "generating")
@@ -136,7 +136,7 @@ async def _generate(job: Job, params: dict) -> None:
             }
         },
     }
-    values: dict = {"steps": steps, "analysis": _stored_analysis(analysis)}
+    values: dict = {"steps": steps, "analysis": stored_analysis(analysis)}
     new_keys = [key]
     if plan and source is None:
         from app.services import wizard
@@ -158,5 +158,5 @@ async def _generate(job: Job, params: dict) -> None:
         def remember(usage: dict) -> None:
             usage["last_prepare"] = record
 
-        await _update_ai_usage(job, remember)
-    await _store_result(job, params, values, new_keys)
+        await update_ai_usage(job, remember)
+    await store_result(job, params, values, new_keys)

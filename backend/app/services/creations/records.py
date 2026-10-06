@@ -69,7 +69,7 @@ def job_record(
     return record
 
 
-async def _write_job(job: Job, state: str, params: dict, error: dict | None = None) -> None:
+async def write_job(job: Job, state: str, params: dict, error: dict | None = None) -> None:
     """A state transition. Never touches the revision: a job must not
     invalidate its own result by reporting that it runs."""
     async with get_session_factory()() as db:
@@ -86,7 +86,7 @@ SUPERSEDED = error_record(
 )
 
 
-async def _store_result(job: Job, params: dict, values: dict, new_keys: list[str]) -> bool:
+async def store_result(job: Job, params: dict, values: dict, new_keys: list[str]) -> bool:
     """Store a job's result if the creation is still the one it started
     from; otherwise delete what the job wrote and say so. See the module
     docstring for why the revision decides."""
@@ -108,7 +108,7 @@ async def _store_result(job: Job, params: dict, values: dict, new_keys: list[str
     storage = get_storage()
     for key in new_keys:
         await storage.delete(key)
-    await _write_job(job, FAILED, params, SUPERSEDED)
+    await write_job(job, FAILED, params, SUPERSEDED)
     logger.info("job %s (%s) discarded: creation %s changed", job.id, job.step, job.subject_id)
     return False
 
@@ -127,7 +127,7 @@ def ai_usage_of(creation: Creation) -> dict:
     return usage
 
 
-async def _update_ai_usage(job: Job, change: Callable[[dict], None]) -> None:
+async def update_ai_usage(job: Job, change: Callable[[dict], None]) -> None:
     """Apply `change` to the stored AI usage, outside the revision rule.
 
     The budget and the cache record money already spent, which stays spent
@@ -156,7 +156,7 @@ async def _update_ai_usage(job: Job, change: Callable[[dict], None]) -> None:
         await db.commit()
 
 
-async def _ai_switched_off(org_id: str) -> bool:
+async def ai_switched_off_now(org_id: str) -> bool:
     """Has the organization turned third-party AI off since the job was
     admitted?
 
@@ -171,7 +171,7 @@ async def _ai_switched_off(org_id: str) -> bool:
     return await ai_switched_off(org_id)
 
 
-def _ai_disabled_error() -> AppError:
+def ai_disabled_error() -> AppError:
     from app.core.errors import Forbidden403
 
     return Forbidden403(
@@ -180,7 +180,7 @@ def _ai_disabled_error() -> AppError:
     )
 
 
-async def _load(job: Job) -> Creation | None:
+async def load_creation(job: Job) -> Creation | None:
     async with get_session_factory()() as db:
         return (
             await db.execute(

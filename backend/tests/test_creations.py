@@ -251,7 +251,7 @@ async def test_uploads_that_cannot_succeed_are_refused_before_any_job(client, mo
     assert bad_type.status_code == 422 and bad_type.json()["code"] == "unsupported_image_type"
     unreadable = await _upload(client, headers, org_id, data=b"not a photo at all")
     assert unreadable.status_code == 422 and unreadable.json()["code"] == "unreadable_image"
-    monkeypatch.setattr(svc, "MAX_UPLOAD_BYTES", 100)
+    monkeypatch.setattr(svc.rules, "MAX_UPLOAD_BYTES", 100)
     too_big = await _upload(client, headers, org_id)
     assert too_big.status_code == 422 and too_big.json()["code"] == "image_too_large"
     assert (await _get(client, headers, f"/orgs/{org_id}/creations")) == []
@@ -1037,14 +1037,15 @@ class _Unreachable:
         from app.services import publishing
 
         self.undo_failures = undo_failures
-        self.real_undo = svc._undo_finish
+        from app.services.creations import finish
+
+        self.real_undo = finish.undo_finish
         self.real_publish = publishing.publish
         self._monkeypatch = monkeypatch
-        from app.services.creations import finish
 
         monkeypatch.setattr(finish, "UNDO_FINISH_BACKOFF_SECONDS", (0.0, 0.0))
         monkeypatch.setattr(publishing, "publish", self.publish)
-        monkeypatch.setattr(finish, "_undo_finish", self.undo)
+        monkeypatch.setattr(finish, "undo_finish", self.undo)
 
     async def publish(self, avatar, storage):
         raise RuntimeError("database is locked")

@@ -20,8 +20,8 @@ from app.services.creations.detect import anchors_are_current, fit_from_anchors
 from app.services.creations.mouth import (
     PUBLISH_LABEL,
     PUBLISH_STANDARD_LABEL,
-    _animal_character_mouth,
-    _own_mouth,
+    animal_character_mouth,
+    own_mouth,
 )
 from app.services.creations.records import job_record
 from app.services.creations.rules import avatar_prefix, creation_prefix, rules_for
@@ -41,7 +41,7 @@ from app.services.storage import get_storage
 logger = logging.getLogger("liveface.creations")
 
 
-async def _finish(job: Job, params: dict) -> None:
+async def run_finish(job: Job, params: dict) -> None:
     """Build the avatar from the confirmed marks, publish it, and let the
     creation go. Any failure puts the creation back to draft and removes
     the half-built avatar, so pressing Finish again starts clean.
@@ -78,7 +78,7 @@ async def _finish(job: Job, params: dict) -> None:
     try:
         if avatar is None:
             raise RuntimeError("the avatar being finished is gone")
-        await _build_avatar(job, creation, avatar, params, storage)
+        await build_avatar(job, creation, avatar, params, storage)
         async with get_session_factory()() as db:
             # The build's changes, flushed onto the avatar's row as an
             # UPDATE of what was read (autoflush, before the statement below).
@@ -99,7 +99,7 @@ async def _finish(job: Job, params: dict) -> None:
     except Exception:
         # Broad on purpose, and re-raised: whatever failed, the half-built
         # avatar goes and the creation is a draft again.
-        await _undo_finish_retrying(org_id, creation_id, avatar_id)
+        await undo_finish_retrying(org_id, creation_id, avatar_id)
         raise
     # The avatar has its own copies now. Deleted after the commit, so a crash
     # in between leaves files the retention sweep removes, never an avatar
@@ -118,7 +118,7 @@ async def _finish(job: Job, params: dict) -> None:
             logger.exception("could not record the kept generation of %s", creation_id)
 
 
-async def _build_avatar(
+async def build_avatar(
     job: Job, creation: Creation, avatar: Avatar, params: dict, storage
 ) -> None:
     from app.services.anchor_fit import fit_base_key, fit_base_record, write_fit_base
@@ -171,7 +171,7 @@ async def _build_avatar(
             # A touch-up of a cut-out: its new eyes and lips over the photo
             # it was cut from, so putting the background back keeps them.
             backdrop = await storage.get_bytes(items[behind]["key"])
-            opaque = await run_cpu(_over, image, backdrop)
+            opaque = await run_cpu(over_backdrop, image, backdrop)
             if opaque is not None:
                 key = f"{prefix}source-original-{stamp}.png"
                 await storage.put_bytes(key, opaque, "image/png")
@@ -198,8 +198,8 @@ async def _build_avatar(
         # working single-photo avatar.
         avatar.has_layers = await store_layers(avatar, storage, image, rig["face_box"])
 
-    mouth_made = await _own_mouth(job, creation, avatar, image, rig, storage)
-    _animal_character_mouth(creation, avatar)
+    mouth_made = await own_mouth(job, creation, avatar, image, rig, storage)
+    animal_character_mouth(creation, avatar)
 
     warnings = (anchors.get("validation") or {}).get("warnings") or []
     avatar.rig_key = rig_key
@@ -215,7 +215,7 @@ async def _build_avatar(
     await publish(avatar, storage)
 
 
-def _over(cut_out: bytes, backdrop: bytes) -> bytes | None:
+def over_backdrop(cut_out: bytes, backdrop: bytes) -> bytes | None:
     """`cut_out` composited over `backdrop` (same size), as an opaque PNG;
     None when their sizes differ. CPU work."""
     from PIL import Image
@@ -229,7 +229,7 @@ def _over(cut_out: bytes, backdrop: bytes) -> bytes | None:
         return png_bytes(merged.convert("RGB"))
 
 
-async def _undo_finish(org_id: str, creation_id: str, avatar_id: str | None) -> None:
+async def undo_finish(org_id: str, creation_id: str, avatar_id: str | None) -> None:
     """Back to a draft, without the avatar that was being built."""
     async with get_session_factory()() as db:
         if avatar_id:
@@ -256,8 +256,8 @@ async def _undo_finish(org_id: str, creation_id: str, avatar_id: str | None) -> 
 UNDO_FINISH_BACKOFF_SECONDS = (1.0, 3.0)
 
 
-async def _undo_finish_retrying(org_id: str, creation_id: str, avatar_id: str | None) -> None:
-    """_undo_finish, tried again a couple of times before giving up.
+async def undo_finish_retrying(org_id: str, creation_id: str, avatar_id: str | None) -> None:
+    """undo_finish, tried again a couple of times before giving up.
 
     Given up, the creation stays `finishing` with no task working on it, and
     nothing the owner can press moves it (Finish answers with the avatar,
@@ -267,7 +267,7 @@ async def _undo_finish_retrying(org_id: str, creation_id: str, avatar_id: str | 
     """
     for delay in (*UNDO_FINISH_BACKOFF_SECONDS, None):
         try:
-            await _undo_finish(org_id, creation_id, avatar_id)
+            await undo_finish(org_id, creation_id, avatar_id)
             return
         except Exception:
             # Broad on purpose: whatever failed the finish may fail its undo

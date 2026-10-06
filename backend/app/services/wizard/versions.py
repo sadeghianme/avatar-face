@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 
 from app.core.errors import Conflict409, Validation422
+from app.services.creations import steps as creation_steps
 from app.services.wizard.plan import (
     AI,
     CHANGE,
@@ -25,9 +26,7 @@ def version_of(steps: dict | None, step_id: str | None) -> str | None:
     """The version the image `step_id` belongs to: "original" for the
     upload, its framing and their cut-out; "adjusted:N" for an AI result
     and its cut-out."""
-    from app.services import creations as svc
-
-    source = svc._through_cutouts(steps, step_id)
+    source = creation_steps.through_cutouts(steps, step_id)
     return "original" if source == "framed" else source
 
 
