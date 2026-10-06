@@ -10,6 +10,15 @@ on:
     branches: [main]
   pull_request:
 
+# A newer push to the same branch (or pull request) supersedes the run in
+# progress: its result would describe a commit nobody will deploy, and
+# deploy/deploy.sh only ships a commit whose OWN run passed.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Every job below is a required check on main (docs/process.md, "Branch
+# protection"), named by its job id: rename one only together with that rule.
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -140,3 +149,69 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
+
+  deploy-script:
+    # The release gate itself: shellcheck on every deploy script, then
+    # deploy.sh's refusals (dirty tree, unpushed commit, CI not green) and
+    # its acceptance of a green pushed commit, in a scratch repository with
+    # a stub gh (deploy/test-deploy.sh). Nothing here contacts a server.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: ShellCheck (pinned)
+        run: >
+          docker run --rm -v "$PWD:/mnt:ro" -w /mnt
+          koalaman/shellcheck:v0.10.0@sha256:2097951f02e735b613f4a34de20c40f937a6c8f18ecb170612c88c34517221fb
+          deploy/*.sh
+      - name: deploy.sh gates
+        run: deploy/test-deploy.sh
+
+  images:
+    # The two production images, built from this commit exactly as the server
+    # builds them: every model download checked against its SHA-256, the
+    # dashboard's nginx config validated (nginx -t runs in the build). Then
+    # they are started behind a Caddy stand-in and must report this commit on
+    # /api/health and /version.json, and every page must load in headless
+    # Chrome with zero Content-Security-Policy violations, the Simulator's
+    # widget and the share page's speech included (deploy/smoke/).
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Build the API image
+        run: docker build -f backend/Dockerfile --build-arg LIVEFACE_VERSION=${{ github.sha }} -t liveface-api:ci .
+      - name: Build the dashboard image
+        run: docker build -f frontend/Dockerfile --build-arg LIVEFACE_VERSION=${{ github.sha }} -t liveface-web:ci .
+      - name: Start both behind a Caddy stand-in
+        run: |
+          docker run -d --name api -p 127.0.0.1:7092:7002 --tmpfs /data \
+            -e JWT_SECRET=ci-only-not-a-secret \
+            -e PUBLIC_BASE_URL=http://127.0.0.1:7090/api \
+            -e APP_BASE_URL=http://127.0.0.1:7090 \
+            -e CORS_ORIGINS=http://127.0.0.1:7090 \
+            -e DATABASE_URL=sqlite+aiosqlite:////data/liveface.sqlite3 \
+            -e LOCAL_STORAGE_DIR=/data/storage \
+            -e ENVIRONMENT=production \
+            liveface-api:ci
+          docker run -d --name web -p 127.0.0.1:7091:80 liveface-web:ci
+          nohup node deploy/smoke/proxy.mjs 7090 http://127.0.0.1:7091 http://127.0.0.1:7092 > proxy.log 2>&1 &
+          for attempt in $(seq 1 90); do
+            curl -sf http://127.0.0.1:7090/api/health && break
+            [ "$attempt" -lt 90 ] || { docker logs api; exit 1; }
+            sleep 2
+          done
+      - name: Both images report this commit
+        run: |
+          curl -sf http://127.0.0.1:7090/api/health | grep -F '"version":"${{ github.sha }}"'
+          curl -sf http://127.0.0.1:7090/version.json | grep -F '"version":"${{ github.sha }}"'
+      - name: Every page, zero CSP violations
+        run: node deploy/smoke/web-sweep.mjs http://127.0.0.1:7090
+      - name: Container logs
+        if: failure()
+        run: |
+          docker logs api 2>&1 | tail -100
+          docker logs web 2>&1 | tail -50
+          cat proxy.log
