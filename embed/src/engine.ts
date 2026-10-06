@@ -18,6 +18,8 @@
  *   engine/paint-classic-mouth.ts  the drawn mouth and its teeth
  *   engine/scene.ts                the scene, the backdrop of a cut-out
  *   engine/debug.ts                the debug mesh overlay
+ *   engine/seam.ts                 what the tests and the 3D bake pose and
+ *                                  read; in no bundle
  *
  * A `destroyed` flag makes mount -> unmount -> mount safe under React
  * StrictMode: the loop and every async callback bail once it is set.
