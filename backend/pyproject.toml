@@ -39,6 +39,9 @@ dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
     "ruff>=0.4",
+    # Pinned: a new pyright release can add diagnostics, and CI should not
+    # turn red on an upgrade nobody made. Bump it deliberately.
+    "pyright==1.1.414",
 ]
 
 [tool.pytest.ini_options]
@@ -48,6 +51,13 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+# `pyright` from backend/ (CI runs it). Standard mode, the application only;
+# the tests and scripts are not type-checked.
+[tool.pyright]
+include = ["app"]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
 
 [build-system]
 requires = ["hatchling"]
