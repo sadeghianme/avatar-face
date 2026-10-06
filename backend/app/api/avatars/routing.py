@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar
+from typing import Any
 
 from fastapi import APIRouter
 from fastapi.routing import APIRoute
@@ -57,17 +57,14 @@ class _SignedMouthRoute(APIRoute):
 
 
 # One router for the whole package: each module registers its routes on it,
-# so every route is wrapped once by the route class (an included router
-# would wrap them again).
+# so they are wrapped by the route class exactly as when they were one
+# module (sub-routers included here would wrap every route once more).
 router = APIRouter(
     prefix="/orgs/{org_id}/avatars", tags=["avatars"], route_class=_SignedMouthRoute
 )
 
 
-R = TypeVar("R")
-
-
-def one_edit_at_a_time(route: Callable[..., Awaitable[R]]) -> Callable[..., Awaitable[R]]:
+def one_edit_at_a_time[R](route: Callable[..., Awaitable[R]]) -> Callable[..., Awaitable[R]]:
     """Run a route that edits an avatar's draft with that avatar's edit lock
     held (services.edit_locks), taken before the route reads the row.
 

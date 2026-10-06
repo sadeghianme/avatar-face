@@ -3,20 +3,19 @@ the creation's original, and a background removal's cut-out."""
 
 from __future__ import annotations
 
-
 from sqlalchemy import func
 
 from app.core.errors import Conflict409, Validation422
 from app.models import Creation
+from app.services.creations.records import SUPERSEDED, _load, _store_result, _write_job
+from app.services.creations.rules import incoming_key, step_key
+from app.services.creations.steps import copied, cutout_id_for, step_check, step_items
 from app.services.jobs import (
     FAILED,
     Job,
     run_cpu,
 )
 from app.services.storage import get_storage
-from app.services.creations.records import SUPERSEDED, _load, _store_result, _write_job
-from app.services.creations.rules import incoming_key, step_key
-from app.services.creations.steps import copied, cutout_id_for, step_check, step_items
 
 
 async def _ingest(job: Job, params: dict) -> None:

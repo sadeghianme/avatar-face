@@ -114,7 +114,9 @@ async def reset_password(db: AsyncSession, token: str, password: str) -> User:
     try:
         user_id, token_fingerprint = verify_reset_token(settings.jwt_secret, token)
     except InvalidResetToken as exc:
-        raise Auth401(f"This reset link is not valid ({exc})", code="reset_token_invalid")
+        raise Auth401(
+            f"This reset link is not valid ({exc})", code="reset_token_invalid"
+        ) from exc
 
     user = await get_user(db, user_id)
     if user is None:

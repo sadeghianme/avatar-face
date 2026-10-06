@@ -1,6 +1,5 @@
 """Kokoro local TTS: registration, graceful absence, and cue alignment."""
 
-import pytest
 
 from app.services.tts.base import SynthesisResult
 from app.services.tts.kokoro import DEFAULT_VOICE, VOICES, KokoroTTSProvider

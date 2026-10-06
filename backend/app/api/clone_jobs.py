@@ -70,7 +70,7 @@ async def create_job(
     cleaned = [line.strip() for line in parsed if line.strip()]
     if not cleaned:
         raise Validation422("At least one line is required", code="bad_lines")
-    if len(cleaned) > MAX_LINES or any(len(l) > MAX_LINE_CHARS for l in cleaned):
+    if len(cleaned) > MAX_LINES or any(len(line) > MAX_LINE_CHARS for line in cleaned):
         raise Validation422(
             f"At most {MAX_LINES} lines of {MAX_LINE_CHARS} characters", code="bad_lines"
         )

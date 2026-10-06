@@ -12,12 +12,6 @@ from sqlalchemy import delete, or_, select, update
 from app.db import execute_dml, get_session_factory
 from app.models import Avatar, AvatarStatus, Creation, CreationStatus
 from app.models.base import utcnow
-from app.services.jobs import (
-    ACTIVE_STATES,
-    INTERRUPTED,
-    runner,
-)
-from app.services.storage import get_storage
 from app.services.creations.records import error_record
 from app.services.creations.rules import (
     ENDED_RETENTION,
@@ -25,6 +19,12 @@ from app.services.creations.rules import (
     avatar_prefix,
     creation_prefix,
 )
+from app.services.jobs import (
+    ACTIVE_STATES,
+    INTERRUPTED,
+    runner,
+)
+from app.services.storage import get_storage
 
 logger = logging.getLogger("liveface.creations")
 

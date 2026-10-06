@@ -24,12 +24,13 @@ from sqlalchemy import select, update
 
 from app.db import get_session_factory
 from app.models import Avatar, Creation, UsageEvent
-from app.services import face_template, imagegen, landmarks, photo_adjust as pa
+from app.services import face_template, imagegen, landmarks
+from app.services import photo_adjust as pa
 from app.services import vision_points as vp
 from app.services.consent import TEXT_VERSIONS
+from app.services.jobs import runner
 from app.services.usage import GENERATED_AVATAR_KIND, IMAGE_KIND, VISION_KIND
 from tests.conftest import create_org, register_and_login
-from app.services.jobs import runner
 from tests.test_creations import (  # noqa: F401  (segmenter and gate are fixtures)
     _create,
     _detect,

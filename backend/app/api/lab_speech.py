@@ -1,25 +1,25 @@
 """Isolated speech experiment; stable synthesis and its cache stay unchanged."""
 from __future__ import annotations
 
-import base64
 import asyncio
+import base64
 import json
 import logging
 import time
 from typing import Literal
 
 from fastapi import APIRouter
+from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from starlette.responses import StreamingResponse
-from pydantic import BaseModel, Field
 
 from app.api.deps import DB, OrgMember
 from app.core.errors import RateLimit429, Validation422
 from app.db import get_session_factory
 from app.schemas.tts import CueOut
 from app.services.tts import lab_timing
-from app.services.tts.stream import pcm_packet, phrase_batch_size, speech_phrases
 from app.services.tts.registry import synthesize_cached
+from app.services.tts.stream import pcm_packet, phrase_batch_size, speech_phrases
 from app.services.usage import check_usage_limit, record_synthesis
 
 router = APIRouter(prefix="/orgs/{org_id}/lab/lip-sync", tags=["lab"])

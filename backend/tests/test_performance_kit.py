@@ -26,7 +26,8 @@ import numpy as np
 import pytest
 from PIL import Image, ImageDraw
 
-from app.services import imagegen, performance_kit as pk, photo_adjust
+from app.services import imagegen, photo_adjust
+from app.services import performance_kit as pk
 
 REPO = Path(__file__).resolve().parents[2]
 REFERENCE_DIR = REPO / "frontend/public/lab/reference"
@@ -995,7 +996,7 @@ def test_the_frame_maps_base_pixels_to_manifest_units(scene):
 
 def test_a_bad_kit_id_or_a_missing_shape_is_refused(scene):
     entry = pk.PoseEntry(scene.base_points, pk.RETARGETED)
-    poses = {shape: entry for shape in pk.SHAPES}
+    poses = dict.fromkeys(pk.SHAPES, entry)
     for bad in ("", "a/b", "x" * 65, "with space"):
         with pytest.raises(ValueError):
             pk.build_manifest(scene.base_points, BASE_SIZE, poses, scene.reference,
@@ -1661,7 +1662,7 @@ def test_a_kit_id_is_ascii_as_the_embed_requires(scene, kit_id):
     AVATAR_CHARACTER takes [A-Za-z0-9_-] only."""
     assert kit_id.isalnum()
     entry = pk.PoseEntry(scene.base_points, pk.RETARGETED)
-    poses = {shape: entry for shape in pk.SHAPES}
+    poses = dict.fromkeys(pk.SHAPES, entry)
     with pytest.raises(ValueError):
         pk.build_manifest(scene.base_points, BASE_SIZE, poses, scene.reference,
                           kit_id=kit_id, jaw_range=0.85)

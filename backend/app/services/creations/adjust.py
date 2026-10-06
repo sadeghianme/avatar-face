@@ -6,16 +6,9 @@ from __future__ import annotations
 
 import logging
 
-
 from app.core.errors import AppError, Conflict409, Validation422
 from app.db import get_session_factory
 from app.models import Creation
-from app.services.jobs import (
-    FAILED,
-    Job,
-    run_cpu,
-)
-from app.services.storage import get_storage
 from app.services.creations.records import (
     SUPERSEDED,
     _ai_disabled_error,
@@ -40,6 +33,12 @@ from app.services.creations.steps import (
     step_check,
     step_items,
 )
+from app.services.jobs import (
+    FAILED,
+    Job,
+    run_cpu,
+)
+from app.services.storage import get_storage
 
 logger = logging.getLogger("liveface.creations")
 

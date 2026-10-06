@@ -252,15 +252,14 @@ async def follow_redetection(org_id: str, avatar_id: str, points) -> None:
 
     storage = get_storage()
     stale: list[str] = []
-    async with avatar_edits.hold(avatar_id):
-        async with get_session_factory()() as db:
-            avatar = await _load_avatar(db, org_id, avatar_id)
-            if avatar is None:
-                return
-            stale = await follow_points(avatar, storage, points)
-            if avatar.published_config:
-                mark_dirty(avatar)
-            await db.commit()
+    async with avatar_edits.hold(avatar_id), get_session_factory()() as db:
+        avatar = await _load_avatar(db, org_id, avatar_id)
+        if avatar is None:
+            return
+        stale = await follow_points(avatar, storage, points)
+        if avatar.published_config:
+            mark_dirty(avatar)
+        await db.commit()
     for key in stale:
         await storage.delete(key)
 

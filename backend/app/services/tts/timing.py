@@ -21,11 +21,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from app.services.tts.g2p import word_to_phonemes_stressed
-from app.services.tts.phonemes import UnknownPhone, plan
 from app.services.tts.espeak import supports as espeak_supports
 from app.services.tts.espeak import text_to_ipa
+from app.services.tts.g2p import word_to_phonemes_stressed
 from app.services.tts.ipa import collapse_repeats, ipa_to_visemes
+from app.services.tts.phonemes import UnknownPhone, plan
 from app.services.tts.visemes import char_to_viseme
 
 # Typical articulation duration per viseme class at conversational rate (ms).

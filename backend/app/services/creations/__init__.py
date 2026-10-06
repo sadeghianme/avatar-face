@@ -75,31 +75,108 @@ the request side is imported by module.
 
 from __future__ import annotations
 
+from app.services.creations.adjust import (
+    ADJUST_CALLS,
+    AUTO_ADJUST_REASON,
+    _adjust,
+    _refund_round,
+    auto_adjust_of,
+    mouth_warnings,
+    source_photo_key,
+)
+from app.services.creations.detect import (
+    VISION_CACHE_SIZE,
+    _ai_points,
+    _detect,
+    anchors_are_current,
+    detect_anchors,
+    fit_from_anchors,
+    source_on_backdrop,
+    vision_cache_hit,
+    wants_ai_points,
+)
+from app.services.creations.finish import (
+    UNDO_FINISH_BACKOFF_SECONDS,
+    _build_avatar,
+    _finish,
+    _over,
+    _undo_finish,
+    _undo_finish_retrying,
+)
+from app.services.creations.generate import (
+    _generate,
+)
+from app.services.creations.ingest import (
+    _background,
+    _ingest,
+    _stored_analysis,
+)
+from app.services.creations.mouth import (
+    PUBLISH_LABEL,
+    PUBLISH_STANDARD_LABEL,
+    TEETH_FAILED,
+    _ai_allowed,
+    _animal_character_mouth,
+    _own_mouth,
+    _record_finish_consent,
+    _single_teeth,
+    _teeth_consent,
+)
+from app.services.creations.records import (
+    NOT_RETRYABLE,
+    SUPERSEDED,
+    _ai_disabled_error,
+    _ai_switched_off,
+    _load,
+    _store_result,
+    _update_ai_usage,
+    _write_job,
+    ai_usage_of,
+    error_record,
+    job_record,
+    retryable,
+)
+from app.services.creations.recovery import (
+    INTERRUPTED_ERROR,
+    expire_idle,
+    recover_interrupted,
+    recover_stranded,
+)
 from app.services.creations.rules import (
     ADJUSTED_PREFIX,
     AI_DETECTIONS_PER_CREATION,
-    avatar_prefix,
     BEFORE_STYLISE,
     CHECK_KEYS,
-    creation_prefix,
     CUTOUT,
     CUTOUT_PREFIX,
     ENDED_RETENTION,
     FULL_FRAME,
     IDLE_EXPIRY,
-    incoming_key,
-    LineRules,
     LINES,
     MAX_DRAFTS_PER_ORG,
     MAX_ROLL_DEGREES,
     MAX_UPLOAD_BYTES,
     MIN_CROP_FRACTION,
+    STEP_ORDER,
+    LineRules,
+    avatar_prefix,
+    creation_prefix,
+    incoming_key,
     required_marks,
     rules_for,
     step_key,
-    STEP_ORDER,
+)
+from app.services.creations.runs import (
+    WORKS,
+    _prepare,
+    _run,
+    launch,
+    start_job,
 )
 from app.services.creations.steps import (
+    _detected_a_person,
+    _remove_steps,
+    _through_cutouts,
     adjusted_index,
     ai_edited_of,
     background_source,
@@ -107,7 +184,6 @@ from app.services.creations.steps import (
     copied,
     current_step,
     cutout_id_for,
-    _detected_a_person,
     drop_adjusted,
     drop_cutouts,
     frame_key,
@@ -116,87 +192,11 @@ from app.services.creations.steps import (
     lineage,
     ordered_step_ids,
     recommendation_of,
-    _remove_steps,
     round_source,
     statement_for,
     step_check,
     step_items,
     stylised,
-    _through_cutouts,
-)
-from app.services.creations.records import (
-    _ai_disabled_error,
-    _ai_switched_off,
-    ai_usage_of,
-    error_record,
-    job_record,
-    _load,
-    NOT_RETRYABLE,
-    retryable,
-    _store_result,
-    SUPERSEDED,
-    _update_ai_usage,
-    _write_job,
-)
-from app.services.creations.runs import (
-    launch,
-    _prepare,
-    _run,
-    start_job,
-    WORKS,
-)
-from app.services.creations.ingest import (
-    _background,
-    _ingest,
-    _stored_analysis,
-)
-from app.services.creations.detect import (
-    _ai_points,
-    anchors_are_current,
-    _detect,
-    detect_anchors,
-    fit_from_anchors,
-    source_on_backdrop,
-    vision_cache_hit,
-    VISION_CACHE_SIZE,
-    wants_ai_points,
-)
-from app.services.creations.adjust import (
-    _adjust,
-    ADJUST_CALLS,
-    auto_adjust_of,
-    AUTO_ADJUST_REASON,
-    mouth_warnings,
-    _refund_round,
-    source_photo_key,
-)
-from app.services.creations.generate import (
-    _generate,
-)
-from app.services.creations.finish import (
-    _build_avatar,
-    _finish,
-    _over,
-    _undo_finish,
-    UNDO_FINISH_BACKOFF_SECONDS,
-    _undo_finish_retrying,
-)
-from app.services.creations.mouth import (
-    _ai_allowed,
-    _animal_character_mouth,
-    _own_mouth,
-    PUBLISH_LABEL,
-    PUBLISH_STANDARD_LABEL,
-    _record_finish_consent,
-    _single_teeth,
-    _teeth_consent,
-    TEETH_FAILED,
-)
-from app.services.creations.recovery import (
-    expire_idle,
-    INTERRUPTED_ERROR,
-    recover_interrupted,
-    recover_stranded,
 )
 
 __all__ = [

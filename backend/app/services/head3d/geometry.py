@@ -365,10 +365,8 @@ def fit_skull(
     forehead = float(face[T.FOREHEAD, 1])
     face_h = frame.height * scale
     low, high = (forehead + k * face_h for k in CROWN_ABOVE_FOREHEAD)
-    if hair_top_y is None:
-        crown = forehead + 0.4 * face_h
-    else:
-        crown = (frame.ear_y - hair_top_y) * scale  # image y -> head y
+    # The hair's top, from image y to head y; without one, 0.4 face heights.
+    crown = forehead + 0.4 * face_h if hair_top_y is None else (frame.ear_y - hair_top_y) * scale
     b_top = float(np.clip(crown, low, high))
     b_bottom = float(max(-face[T.CHIN, 1], 0.3 * face_h))
     a_x = HEAD_BREADTH * half_width

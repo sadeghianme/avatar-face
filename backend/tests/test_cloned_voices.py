@@ -1,7 +1,6 @@
 """Cloned voices: uploaded audio served from the speech cache."""
 
 import io
-import json
 import wave
 
 import pytest
@@ -44,9 +43,9 @@ async def test_upload_without_consent_is_refused(client, org):
 async def test_an_uploaded_line_becomes_a_cache_hit(client, org):
     """The whole design: uploading IS seeding the cache, so playback uses
     the same path as any cached synthesis."""
+    from app.db import get_session_factory
     from app.services.tts.cloned import PROVIDER_NAME, scoped_voice_id
     from app.services.tts.registry import cache_key, synthesize_cached
-    from app.db import get_session_factory
 
     headers, org_id = org
     assert (await _upload(client, headers, org_id, "sarah", "Hello there")).status_code == 200

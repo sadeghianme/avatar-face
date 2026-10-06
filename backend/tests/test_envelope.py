@@ -5,7 +5,7 @@ import math
 import struct
 import wave
 
-from app.services.tts.envelope import NOISE_FLOOR, Envelope, measure
+from app.services.tts.envelope import NOISE_FLOOR, measure
 from app.services.tts.timing import (
     ENVELOPE_MAX_FACTOR,
     ENVELOPE_MIN_FACTOR,

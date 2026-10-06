@@ -25,9 +25,9 @@ from __future__ import annotations
 
 import asyncio
 import io
-import os
 import threading
 import wave
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from app.core.config import get_settings
@@ -63,14 +63,14 @@ _synth_semaphore: asyncio.Semaphore | None = None
 
 def _model_path(stem: str) -> str:
     directory = get_settings().piper_voices_dir or ""
-    return os.path.join(directory, f"{stem}.onnx")
+    return str(Path(directory) / f"{stem}.onnx")
 
 
 def _installed() -> list[str]:
     """Voice ids whose model file is actually on disk."""
     if not get_settings().piper_voices_dir:
         return []
-    return [vid for vid, (stem, _, _) in CATALOGUE.items() if os.path.isfile(_model_path(stem))]
+    return [vid for vid, (stem, _, _) in CATALOGUE.items() if Path(_model_path(stem)).is_file()]
 
 
 def _get_voice(stem: str):

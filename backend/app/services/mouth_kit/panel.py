@@ -170,12 +170,11 @@ async def _make_for_avatar(job: Job, params: dict) -> None:
         # The consent that lets the picture go is on the avatar as it goes:
         # a refusal or a rejected answer still sent a photo, and an audit
         # must find what allowed it. Not a change a visitor sees.
-        async with avatar_edits.hold(avatar_id):
-            async with get_session_factory()() as db:
-                row = await _load_avatar(db, org_id, avatar_id)
-                if row is not None:
-                    row.consent_ids = consent.with_consent(row.consent_ids, consent_id)
-                    await db.commit()
+        async with avatar_edits.hold(avatar_id), get_session_factory()() as db:
+            row = await _load_avatar(db, org_id, avatar_id)
+            if row is not None:
+                row.consent_ids = consent.with_consent(row.consent_ids, consent_id)
+                await db.commit()
 
     job.report(0.05, SHAPES_LABEL, count=(0, SHAPE_COUNT + (0 if own_teeth else 1)))
     try:
@@ -199,23 +198,22 @@ async def _make_for_avatar(job: Job, params: dict) -> None:
         raise _nothing_made(result)
 
     job.report(0.88, FIT_LABEL)
-    async with avatar_edits.hold(avatar_id):
-        async with get_session_factory()() as db:
-            avatar = await _load_avatar(db, org_id, avatar_id)
-            if avatar is None:
-                return
-            _require_mouth(avatar)
-            rig = json.loads(await storage.get_bytes(avatar.rig_key))
-            if rig.get("points") != points or rig.get("image_size") != manifest_size(result):
-                # Re-marked, re-detected or cropped meanwhile: the same face,
-                # and the kit follows it (follow_points).
-                result.manifest = await run_cpu(
-                    performance_kit.rebase_manifest, result.manifest, rig["points"], None,
-                    tuple(rig["image_size"]),
-                )
-            stale = await store(avatar, storage, result, source="mouth_panel")
-            mark_dirty(avatar)
-            await db.commit()
+    async with avatar_edits.hold(avatar_id), get_session_factory()() as db:
+        avatar = await _load_avatar(db, org_id, avatar_id)
+        if avatar is None:
+            return
+        _require_mouth(avatar)
+        rig = json.loads(await storage.get_bytes(avatar.rig_key))
+        if rig.get("points") != points or rig.get("image_size") != manifest_size(result):
+            # Re-marked, re-detected or cropped meanwhile: the same face,
+            # and the kit follows it (follow_points).
+            result.manifest = await run_cpu(
+                performance_kit.rebase_manifest, result.manifest, rig["points"], None,
+                tuple(rig["image_size"]),
+            )
+        stale = await store(avatar, storage, result, source="mouth_panel")
+        mark_dirty(avatar)
+        await db.commit()
     job.report(1.0, SAVE_LABEL)
     for key in stale:
         await storage.delete(key)
@@ -274,18 +272,17 @@ async def _teeth_alone(job: Job, org_id: str, avatar_id: str, picture: bytes, se
     except mouth_photo.TeethFailure as exc:
         raise AppError(exc.detail, code=exc.code) from exc
     job.report(0.9, SAVE_LABEL)
-    async with avatar_edits.hold(avatar_id):
-        async with get_session_factory()() as db:
-            avatar = await _load_avatar(db, org_id, avatar_id)
-            if avatar is None:
-                return
-            _require_mouth(avatar)
-            previous = await mouth_photo.store(
-                avatar, storage, made.photo, made.rig, mouth_photo.ai_teeth_record(made.model)
-            )
-            avatar.ai_edited = mouth_photo.with_ai_teeth(avatar.ai_edited, made.model)
-            mark_dirty(avatar)
-            await db.commit()
+    async with avatar_edits.hold(avatar_id), get_session_factory()() as db:
+        avatar = await _load_avatar(db, org_id, avatar_id)
+        if avatar is None:
+            return
+        _require_mouth(avatar)
+        previous = await mouth_photo.store(
+            avatar, storage, made.photo, made.rig, mouth_photo.ai_teeth_record(made.model)
+        )
+        avatar.ai_edited = mouth_photo.with_ai_teeth(avatar.ai_edited, made.model)
+        mark_dirty(avatar)
+        await db.commit()
     job.report(1.0, SAVE_LABEL)
     for key in previous:
         await storage.delete(key)

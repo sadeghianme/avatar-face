@@ -30,6 +30,8 @@ jobs:
         # that run in production, and a new release upstream cannot turn
         # this job red on its own.
         run: pip install -c constraints.txt -e ".[rig,dev]"
+      - name: Lint
+        run: ruff check .
       - name: Type check
         run: pyright
       - name: Fetch MediaPipe models (same URLs the Dockerfile uses)

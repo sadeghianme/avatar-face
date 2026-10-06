@@ -9,8 +9,6 @@ import logging
 import numpy as np
 from scipy.spatial import Delaunay
 
-from app.services.storage import STORAGE_ERRORS
-
 from app.services.anchor_fit.marks import FaceMarks, marks_to_dict
 from app.services.anchor_fit.scheme import (
     LINE_CORNERS,
@@ -26,6 +24,7 @@ from app.services.anchor_fit.warping import (
     pupil_pairs,
     warp,
 )
+from app.services.storage import STORAGE_ERRORS
 
 logger = logging.getLogger("liveface.anchor_fit")
 

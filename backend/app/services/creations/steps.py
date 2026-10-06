@@ -11,7 +11,6 @@ from __future__ import annotations
 import copy
 from typing import Literal
 
-
 from app.models import Creation
 from app.services.creations.rules import (
     ADJUSTED_PREFIX,
@@ -199,9 +198,10 @@ def statement_for(creation: Creation) -> Literal["depiction", "generated_face"] 
     if human_line or any(_detected_a_person(item) for item in photographed):
         return consent.DEPICTION
     # A draft made before checks were kept per step: the upload's analysis.
-    if all(item.get("check") is None for item in photographed):
-        if (creation.analysis or {}).get("suggested_face_type") == "human":
-            return consent.DEPICTION
+    if all(item.get("check") is None for item in photographed) and (
+        (creation.analysis or {}).get("suggested_face_type") == "human"
+    ):
+        return consent.DEPICTION
     return None
 
 

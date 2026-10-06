@@ -12,11 +12,11 @@ from sqlalchemy import select, update
 from app.core.errors import AppError
 from app.db import execute_dml, get_session_factory
 from app.models import Avatar, Creation
+from app.services.creations.records import error_record
 from app.services.jobs import (
     Job,
     runner,
 )
-from app.services.creations.records import error_record
 
 logger = logging.getLogger("liveface.creations")
 

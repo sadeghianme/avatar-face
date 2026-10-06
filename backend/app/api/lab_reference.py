@@ -12,7 +12,10 @@ from starlette.concurrency import run_in_threadpool
 from app.api.deps import OrgMember
 from app.core.config import get_settings
 from app.core.errors import Validation422
-from app.services.portrait_photo import MAX_BYTES, prepare_photo  # noqa: F401 (re-exported for tests)
+from app.services.portrait_photo import (  # noqa: F401 (re-exported for tests)
+    MAX_BYTES,
+    prepare_photo,
+)
 from app.services.storage import get_storage
 
 router = APIRouter(prefix="/orgs/{org_id}/lab/reference", tags=["reference-lab"])

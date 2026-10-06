@@ -31,7 +31,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.services.storage import STORAGE_ERRORS
 
@@ -180,7 +180,7 @@ async def publish(avatar, storage) -> dict:
             "ai_edited": ai_edited,
             "line": face_type,
         },
-        "published_at": datetime.now(timezone.utc).isoformat(),
+        "published_at": datetime.now(UTC).isoformat(),
     }
     previous = config_of(avatar)
     avatar.published_config = json.dumps(config)

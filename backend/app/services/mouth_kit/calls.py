@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.core.errors import AppError
 from app.services import imagegen, performance_kit
@@ -53,7 +53,7 @@ TEETH_REMOVED = {"code": "teeth_removed", "detail": "The teeth photo was removed
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _note(code: str, detail: str) -> dict:

@@ -14,6 +14,7 @@ everywhere in the creation tests.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import io
 import json
 from pathlib import Path
@@ -585,7 +586,7 @@ async def test_published_motion_copies_are_pruned_and_deleted_with_the_avatar(
     await ai_consent(client, headers, org_id)
     avatar_id, url, _ = await _finished(client, headers, org_id)
     prefix = f"orgs/{org_id}/avatars/{avatar_id}/"
-    for revision, teeth_y in ((1, 0.01), (2, 0.02)):
+    for _revision, teeth_y in ((1, 0.01), (2, 0.02)):
         await _later_edit(client, headers, url, teeth_y)
         assert (await client.post(f"{url}/publish", headers=headers)).status_code == 200
     files = _files(prefix)
@@ -1041,10 +1042,8 @@ async def test_the_guard_meters_what_was_billed_as_the_kit_counts_it(client, mon
 
     guard = mouth_kit.CallGuard(org_id, on_send)
     for _ in range(6):
-        try:
+        with contextlib.suppress(Exception, asyncio.CancelledError):
             await guard("p", b"x", "image/jpeg")
-        except (Exception, asyncio.CancelledError):
-            pass
     assert sent == [True], "the consent is recorded once, before the first call"
     assert guard.sent == 6 and guard.metered == 4
     assert await _usage(org_id, IMAGE_KIND) == [mouth_kit.SHAPES_CALL] * 4

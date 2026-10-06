@@ -7,16 +7,16 @@ retry loop can fire several times per press.
 import pytest
 
 from app.core.config import get_settings
+from app.core.errors import RateLimit429
+from app.db import get_session_factory
 from app.services.usage import (
-    check_image_limit,
     chars_used_this_month,
+    check_image_limit,
     images_used_this_month,
     record_generation,
     record_synthesis,
     usage_summary,
 )
-from app.core.errors import RateLimit429
-from app.db import get_session_factory
 from tests.conftest import create_org, register_and_login
 
 

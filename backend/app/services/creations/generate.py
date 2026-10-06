@@ -9,11 +9,6 @@ from sqlalchemy import select
 from app.core.errors import AppError, Conflict409, Validation422
 from app.db import get_session_factory
 from app.models import Avatar
-from app.services.jobs import (
-    Job,
-    run_cpu,
-)
-from app.services.storage import get_storage
 from app.services.creations.detect import source_on_backdrop
 from app.services.creations.ingest import _stored_analysis
 from app.services.creations.records import (
@@ -25,6 +20,11 @@ from app.services.creations.records import (
 )
 from app.services.creations.rules import step_key
 from app.services.creations.steps import step_check
+from app.services.jobs import (
+    Job,
+    run_cpu,
+)
+from app.services.storage import get_storage
 
 logger = logging.getLogger("liveface.creations")
 

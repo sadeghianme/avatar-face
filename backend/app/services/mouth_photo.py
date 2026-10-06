@@ -80,9 +80,8 @@ from __future__ import annotations
 import io
 import json
 import logging
-from dataclasses import dataclass
-
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -387,7 +386,8 @@ class Request:
 def face_request(data: bytes) -> Request:
     """The face crop a touch-up sends, of `data` (a cut-out on the neutral
     grey). TeethFailure when there is no frontal face to crop. CPU work."""
-    from app.services import landmarks, photo_adjust as pa
+    from app.services import landmarks
+    from app.services import photo_adjust as pa
 
     image = pa._rgb(data)
     try:
@@ -411,7 +411,8 @@ def face_request(data: bytes) -> Request:
 def fallback_request(data: bytes) -> Request | None:
     """The same photo as a head-and-shoulders crop, for one more try after
     a refusal; None when that crop would be the same picture. CPU work."""
-    from app.services import imagegen, photo_adjust as pa
+    from app.services import imagegen
+    from app.services import photo_adjust as pa
 
     image = pa._rgb(data)
     try:

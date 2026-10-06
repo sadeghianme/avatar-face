@@ -27,7 +27,6 @@ from app.services.storage import get_storage
 from tests.conftest import create_org, register_and_login
 from tests.test_photo_privacy import assert_clean_upright, assert_scrubbed, phone_jpeg
 
-
 # --- fixtures and helpers -------------------------------------------------------
 
 

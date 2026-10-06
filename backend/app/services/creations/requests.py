@@ -23,8 +23,8 @@ from app.schemas.creation import (
     AdjustRequest,
     DetectRequest,
     FinishRequest,
-    PreviewRigRequest,
     PrepareRequest,
+    PreviewRigRequest,
 )
 from app.services import wizard
 from app.services.creations.adjust import auto_adjust_of, source_photo_key

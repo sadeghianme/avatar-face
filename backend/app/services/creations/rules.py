@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from datetime import timedelta
 from uuid import uuid4
 
-
-
 # An org's unfinished creations. A resume list longer than this is a pile,
 # not work in progress, and each one holds a few MB of images.
 MAX_DRAFTS_PER_ORG = 10

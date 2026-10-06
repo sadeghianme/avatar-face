@@ -43,15 +43,14 @@ import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, TypeVar
+from datetime import UTC, datetime
+from typing import Any
 
 from app.core.errors import Conflict409, RateLimit429, ServiceUnavailable503
 from app.models.base import new_id
 
 logger = logging.getLogger("liveface.jobs")
 
-T = TypeVar("T")
 
 QUEUED = "queued"
 RUNNING = "running"
@@ -91,7 +90,7 @@ _executor = ThreadPoolExecutor(
 )
 
 
-async def run_cpu(fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> T:
+async def run_cpu[T](fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> T:
     """Run `fn(*args, **kwargs)` on the CPU thread and await its result.
 
     `fn` must be plain synchronous work: it runs on a thread with no event
@@ -103,7 +102,7 @@ async def run_cpu(fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> T:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 @dataclass

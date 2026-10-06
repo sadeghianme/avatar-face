@@ -75,9 +75,9 @@ IRIS = LEFT_IRIS + RIGHT_IRIS
 # Fixed, and the same on both sides; left to Qhull, the survivor differed
 # from layout to layout and side to side, and one corner of the mouth moved
 # on M/B/P while the other stayed.
-LINE_CORNERS = {i: LEFT_COMMISSURE[-1] for i in LEFT_COMMISSURE} | {
-    i: RIGHT_COMMISSURE[-1] for i in RIGHT_COMMISSURE
-}
+LINE_CORNERS = dict.fromkeys(LEFT_COMMISSURE, LEFT_COMMISSURE[-1]) | dict.fromkeys(
+    RIGHT_COMMISSURE, RIGHT_COMMISSURE[-1]
+)
 
 # How far the upper inner lip sits above the lower one on a marked mouth
 # line, as a fraction of the mouth width. Zero collapses the lip triangles

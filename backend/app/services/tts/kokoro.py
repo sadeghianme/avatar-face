@@ -167,14 +167,14 @@ class KokoroTTSProvider(TTSProvider):
 
 def _original_configured() -> bool:
     """Is kokoro-v1.0.onnx installed, with the voices?"""
-    import os
+    from pathlib import Path
 
     settings = get_settings()
     return bool(
         settings.kokoro_model_path
         and settings.kokoro_voices_path
-        and os.path.isfile(settings.kokoro_model_path)
-        and os.path.isfile(settings.kokoro_voices_path)
+        and Path(settings.kokoro_model_path).is_file()
+        and Path(settings.kokoro_voices_path).is_file()
     )
 
 

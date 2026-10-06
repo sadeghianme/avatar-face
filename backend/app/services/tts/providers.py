@@ -10,6 +10,7 @@ import io
 import json
 import time
 import wave
+from pathlib import Path
 
 import httpx
 
@@ -195,7 +196,7 @@ class GoogleTTSProvider(TTSProvider):
         raw = raw.strip()
         if raw.startswith("{"):
             return json.loads(raw)
-        with open(raw) as f:  # a file path was provided instead of inline JSON
+        with Path(raw).open() as f:  # a file path was provided instead of inline JSON
             return json.load(f)
 
     async def _access_token(self) -> str:

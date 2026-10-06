@@ -16,12 +16,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.errors import Conflict409, Validation422
 from app.db import execute_dml, get_session_factory
 from app.models import Avatar, AvatarStatus, Creation, CreationStatus
-from app.services.jobs import (
-    DONE,
-    Job,
-    run_cpu,
-)
-from app.services.storage import get_storage
 from app.services.creations.detect import anchors_are_current, fit_from_anchors
 from app.services.creations.mouth import (
     PUBLISH_LABEL,
@@ -37,6 +31,12 @@ from app.services.creations.steps import (
     is_cutout_id,
     step_items,
 )
+from app.services.jobs import (
+    DONE,
+    Job,
+    run_cpu,
+)
+from app.services.storage import get_storage
 
 logger = logging.getLogger("liveface.creations")
 

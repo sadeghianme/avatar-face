@@ -67,8 +67,9 @@ def test_viseme_blendshapes_distinguish_open_closed():
 
 
 def test_thumbnail_max_256():
-    from PIL import Image
     import io
+
+    from PIL import Image
 
     thumb, content_type = make_thumbnail(sample_png())
     img = Image.open(io.BytesIO(thumb))
@@ -79,8 +80,9 @@ def test_thumbnail_max_256():
 
 def test_thumbnail_of_a_cut_out_keeps_its_transparency():
     """JPEG cannot store alpha, so an opaque thumbnail would undo the removal."""
-    from PIL import Image
     import io
+
+    from PIL import Image
 
     cut_out = Image.new("RGBA", (400, 400), (255, 0, 0, 0))
     # An opaque subject on a fully transparent background.

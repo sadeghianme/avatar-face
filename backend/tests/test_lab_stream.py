@@ -15,7 +15,9 @@ from tests.conftest import create_org, register_and_login
 def wav_audio(samples=2400, channels=1):
     out = io.BytesIO()
     with wave.open(out, "wb") as wav:
-        wav.setnchannels(channels); wav.setsampwidth(2); wav.setframerate(24000)
+        wav.setnchannels(channels)
+        wav.setsampwidth(2)
+        wav.setframerate(24000)
         wav.writeframes(b"\0\0" * samples * channels)
     return out.getvalue()
 
@@ -113,7 +115,8 @@ async def test_partial_failure_is_terminal_and_slot_is_released(client, monkeypa
     path, headers, _, calls = await setup_stream(client, monkeypatch)
     original = lab_timing.synthesize_native
     async def fail_second(text, voice):
-        if calls: raise ValueError("private model details must not be exposed")
+        if calls:
+            raise ValueError("private model details must not be exposed")
         return await original(text, voice)
     monkeypatch.setattr(lab_timing, "synthesize_native", fail_second)
     response = await client.post(path, headers=headers, json={"text": "A long enough first sentence. " * 8})
@@ -134,17 +137,21 @@ async def test_fallback_is_explicit(client, monkeypatch):
 
 
 async def test_cancelling_inference_keeps_slot_until_worker_finishes(monkeypatch):
-    entered = threading.Event(); release = threading.Event()
+    entered = threading.Event()
+    release = threading.Event()
     calls = []
     def render(text, voice):
-        calls.append(text); entered.set(); release.wait(3)
+        calls.append(text)
+        entered.set()
+        release.wait(3)
         return text
     monkeypatch.setattr(lab_timing, "_render", render)
     monkeypatch.setattr(lab_timing, "_semaphore", asyncio.Semaphore(1))
     first = asyncio.create_task(lab_timing.synthesize_native("first", "voice"))
     assert await asyncio.to_thread(entered.wait, 2)
     first.cancel()
-    with pytest.raises(asyncio.CancelledError): await first
+    with pytest.raises(asyncio.CancelledError):
+        await first
     second = asyncio.create_task(lab_timing.synthesize_native("second", "voice"))
     await asyncio.sleep(.02)
     assert calls == ["first"]

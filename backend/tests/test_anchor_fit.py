@@ -19,6 +19,10 @@ import pytest
 
 from app.services import face_template
 from app.services.anchor_fit import (
+    FACE_OVAL,
+    HEAD_DIAGONALS,
+    HEAD_OUTLINE,
+    HEAD_OUTLINE_EDGES,
     INNER_LOWER,
     INNER_UPPER,
     IRIS,
@@ -27,10 +31,6 @@ from app.services.anchor_fit import (
     RIGHT_COMMISSURE,
     RIGHT_IRIS,
     SEAM_GAP,
-    FACE_OVAL,
-    HEAD_DIAGONALS,
-    HEAD_OUTLINE,
-    HEAD_OUTLINE_EDGES,
     FaceMarks,
     PupilMarks,
     RegionMarks,
@@ -660,7 +660,7 @@ def test_the_head_diagonals_are_the_oval_landmarks_nearest_the_box_diagonals():
     }
     for name, (dx, dy) in wanted.items():
         target = math.atan2(dy, dx)
-        off = lambda i: abs(math.remainder(angle(i) - target, math.tau))  # noqa: E731
+        off = lambda i, target=target: abs(math.remainder(angle(i) - target, math.tau))  # noqa: E731
         assert min(FACE_OVAL, key=off) == HEAD_DIAGONALS[name], name
 
 
@@ -764,14 +764,14 @@ def test_a_four_point_head_opens_with_eight_and_saves_untouched_as_it_was():
     for name, i in HEAD_DIAGONALS.items():
         assert getattr(opened.head, name) == pytest.approx(tuple(points[i]))
     assert opened == with_head_outline(saved, points)
-    untouched = replace(opened.head, **{d: None for d in HEAD_DIAGONALS})
+    untouched = replace(opened.head, **dict.fromkeys(HEAD_DIAGONALS))
     again, _ = fit_rig(rig, base, merge(saved, replace(opened, head=untouched)), "animal")
     assert again["points"] == first["points"]
 
 
 def test_a_head_sent_back_without_diagonals_keeps_the_saved_ones():
     older = outline_marks("dog wide muzzle")
-    edges_only = replace(older.head, **{d: None for d in HEAD_DIAGONALS})
+    edges_only = replace(older.head, **dict.fromkeys(HEAD_DIAGONALS))
     assert merge(older, FaceMarks(head=edges_only)).head == older.head
     # To the hundredth of a pixel, the precision marks are stored at.
     nudged = replace(edges_only, left=(older.head.left[0] + 0.005, older.head.left[1]))

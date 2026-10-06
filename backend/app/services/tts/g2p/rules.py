@@ -5,7 +5,7 @@ differently in "cat" and "city", "go" and "gem"."""
 from __future__ import annotations
 
 import re
-from typing import Callable, Sequence
+from collections.abc import Callable, Sequence
 
 from app.services.tts.g2p.lexicon import _VOICED_CONS
 

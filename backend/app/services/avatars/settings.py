@@ -65,7 +65,7 @@ async def update(db: AsyncSession, avatar: Avatar, body: AvatarUpdate) -> None:
             )
         except ValueError as exc:
             code = "scene_image_missing" if "uploaded" in str(exc) else "scene_invalid"
-            raise Validation422(str(exc), code=code)
+            raise Validation422(str(exc), code=code) from exc
         avatar.scene_config = scene
         # Kept in step for clients that read only the framing.
         avatar.framing = scene_service.framing_of(scene)

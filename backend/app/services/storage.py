@@ -15,6 +15,7 @@ import asyncio
 import hashlib
 import hmac
 import time
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
@@ -160,7 +161,6 @@ class LocalStorage(Storage):
         the same directory because a rename is only atomic within one
         filesystem.
         """
-        import os
         from uuid import uuid4
 
         path = self._path(key)
@@ -169,9 +169,9 @@ class LocalStorage(Storage):
         # replace the permissions every stored file has had until now.
         temp = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
         try:
-            with open(temp, "xb") as handle:
+            with temp.open("xb") as handle:
                 handle.write(data)
-            os.replace(temp, path)
+            temp.replace(path)
         except BaseException:
             temp.unlink(missing_ok=True)
             raise
@@ -234,13 +234,13 @@ class S3Storage(Storage):
         self.bucket = bucket
         self.expiry_seconds = expiry_seconds
         self._session = aioboto3.Session()
-        self._client_kwargs: dict[str, Any] = dict(
-            service_name="s3",
-            endpoint_url=endpoint,
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret,
-            region_name=region,
-        )
+        self._client_kwargs: dict[str, Any] = {
+            "service_name": "s3",
+            "endpoint_url": endpoint,
+            "aws_access_key_id": access_key,
+            "aws_secret_access_key": secret,
+            "region_name": region,
+        }
 
     def _client(self) -> Any:
         # Any: aioboto3 types Session.client as boto3's plain client, not
@@ -309,11 +309,11 @@ class S3Storage(Storage):
         return removed
 
     async def sweep(self, prefix: str, older_than_seconds: int, must_contain: str) -> int:
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         if not must_contain:
             raise ValueError("must_contain is required — see Storage.sweep")
-        cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
+        cutoff = datetime.now(UTC) - timedelta(seconds=older_than_seconds)
         removed = 0
         async with self._client() as s3:
             paginator = s3.get_paginator("list_objects_v2")

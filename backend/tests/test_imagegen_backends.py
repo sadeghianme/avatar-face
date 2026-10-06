@@ -3,7 +3,6 @@
 import io
 
 import numpy as np
-import pytest
 from PIL import Image
 
 from app.services.imagegen import IMAGE_BACKENDS, configured_backends

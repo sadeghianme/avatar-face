@@ -189,11 +189,9 @@ async def _ask_ai(
     from app.services.usage import check_image_limit, record_generation
 
     session = get_session_factory()
-    sends: list[tuple[bytes, str] | None]
-    if source is None:
-        sends = [None]
-    else:
-        sends = [await run_cpu(svc.source_on_backdrop, source)]
+    sends: list[tuple[bytes, str] | None] = (
+        [None] if source is None else [await run_cpu(svc.source_on_backdrop, source)]
+    )
     tried_crop = source is None
     refusal: imagegen.ImageGenRefused | None = None
     index = 0

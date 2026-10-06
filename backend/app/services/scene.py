@@ -78,8 +78,8 @@ def effective(avatar: Any) -> dict:
 def _number(value: Any, lo: float, hi: float, name: str) -> float:
     try:
         n = float(value)
-    except (TypeError, ValueError):
-        raise ValueError(f"{name} must be a number")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a number") from exc
     if n != n or n < lo or n > hi:
         raise ValueError(f"{name} must be between {lo} and {hi}")
     return round(n, 4)

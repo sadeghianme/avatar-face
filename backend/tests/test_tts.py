@@ -1,6 +1,6 @@
 import base64
-import wave
 import io
+import wave
 
 from tests.conftest import create_org, register_and_login
 

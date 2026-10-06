@@ -26,6 +26,7 @@ this worker only renders what was already attested.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import io
 import sys
 import time
@@ -59,8 +60,9 @@ def main() -> int:
     parser.add_argument("--once", action="store_true", help="drain the queue, then exit")
     args = parser.parse_args()
 
-    import requests
     import tempfile
+
+    import requests
 
     base = args.api.rstrip("/")
 
@@ -162,15 +164,14 @@ def main() -> int:
             detail = getattr(getattr(exc, "response", None), "text", "")[:200]
             message = f"{type(exc).__name__}: {exc} {detail}".strip()[:900]
             print(f"  FAILED: {message}", file=sys.stderr, flush=True)
-            try:
+            # Reporting the failure is best effort: the claim times out anyway.
+            with contextlib.suppress(Exception):
                 request(
                     "POST",
                     f"{base}/orgs/{args.org}/clone-jobs/{job_id}/fail",
                     json={"error": message},
                     timeout=30,
                 )
-            except Exception:
-                pass
 
 
 if __name__ == "__main__":

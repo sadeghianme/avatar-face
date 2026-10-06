@@ -66,7 +66,9 @@ async def import_model(
             response.raise_for_status()
             data = response.content
     except httpx.HTTPError as exc:
-        raise Validation422(f"Could not download model: {exc}", code="model_download_failed")
+        raise Validation422(
+            f"Could not download model: {exc}", code="model_download_failed"
+        ) from exc
     if len(data) > MAX_MODEL_BYTES:
         raise Validation422("Model exceeds 30MB", code="model_too_large")
 

@@ -70,7 +70,9 @@ def _simulator_key(token: str, request: Request) -> ApiKey:
         # One code for every failure: the Simulator re-mints and retries on
         # this, and distinguishing expired from forged would only help someone
         # probing.
-        raise Auth401(f"Simulator token rejected ({exc})", code="simulator_token_invalid")
+        raise Auth401(
+            f"Simulator token rejected ({exc})", code="simulator_token_invalid"
+        ) from exc
 
     key = ApiKey(org_id=org_id, name="Simulator", prefix="lfsim_", key_hash="", allowed_domains="")
     key.id = f"sim:{org_id}"  # stable, so simulator traffic shares a rate-limit bucket

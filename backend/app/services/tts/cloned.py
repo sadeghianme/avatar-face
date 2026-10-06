@@ -161,18 +161,16 @@ async def store_line(
     existing = (
         await db.execute(select(SpeechCache).where(SpeechCache.cache_key == key))
     ).scalar_one_or_none()
-    payload = dict(
-        provider=PROVIDER_NAME,
-        voice=voice,
-        locale=locale,
-        char_count=len(text),
-        audio_mime="audio/wav",
-        audio=audio,
-        cues_json=json.dumps(
-            cues_from_text(text, duration_ms, locale, audio=audio)
-        ),
-        duration_ms=duration_ms,
-    )
+    payload = {
+        "provider": PROVIDER_NAME,
+        "voice": voice,
+        "locale": locale,
+        "char_count": len(text),
+        "audio_mime": "audio/wav",
+        "audio": audio,
+        "cues_json": json.dumps(cues_from_text(text, duration_ms, locale, audio=audio)),
+        "duration_ms": duration_ms,
+    }
     if existing is not None:
         for field, value in payload.items():
             setattr(existing, field, value)

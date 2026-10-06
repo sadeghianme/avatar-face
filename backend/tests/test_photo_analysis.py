@@ -67,8 +67,8 @@ def test_a_detected_face_is_suggested_human_with_a_crop_and_a_level(tilted_face)
     framing = result["suggested_framing"]
     assert framing["roll"] == result["roll"]
     crop = framing["crop"]
-    assert 0 <= crop["x"] and crop["x"] + crop["w"] <= 1.0001
-    assert 0 <= crop["y"] and crop["y"] + crop["h"] <= 1.0001
+    assert crop["x"] >= 0 and crop["x"] + crop["w"] <= 1.0001
+    assert crop["y"] >= 0 and crop["y"] + crop["h"] <= 1.0001
     # The face is inside the suggested crop.
     x0, y0, x1, y1 = result["face_box"]
     assert crop["x"] * 400 <= x0 and x1 <= (crop["x"] + crop["w"]) * 400
