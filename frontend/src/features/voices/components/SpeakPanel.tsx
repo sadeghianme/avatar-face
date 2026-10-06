@@ -1,26 +1,26 @@
 import {
   BrowserTTS,
-  listen,
-  streamSpeech,
-  StreamingSpeechPlayer,
-  sttSupported,
   type CuePlayer,
+  listen,
   type SpeechPlayer,
   type StreamHandle,
+  StreamingSpeechPlayer,
+  streamSpeech,
+  sttSupported,
 } from "@liveface/embed";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Icon } from "@/components/ui/Icon";
-import { api, ApiError, fetchStream } from "@/lib/api";
 import {
   BROWSER_PROVIDER,
-  VoicePicker,
   defaultVoiceSelection,
   type SpeechLanguage,
+  VoicePicker,
   type VoiceSelection,
 } from "@/features/voices/components/VoicePicker";
+import { api, ApiError, fetchStream } from "@/lib/api";
 
 export function SpeakPanel({
   engine,
@@ -71,10 +71,7 @@ export function SpeakPanel({
   }, [sample, edited]);
 
   // Free local voices: speechSynthesis plays, the engine just gets cues.
-  const browserTts = useMemo(
-    () => (engine ? new BrowserTTS(engine as unknown as CuePlayer) : null),
-    [engine]
-  );
+  const browserTts = useMemo(() => (engine ? new BrowserTTS(engine as unknown as CuePlayer) : null), [engine]);
 
   // The phrase stream in flight, so Stop and unmount can abort it.
   const streamRef = useRef<StreamHandle | null>(null);
@@ -106,12 +103,13 @@ export function SpeakPanel({
         await player.unlock();
         const handle = streamSpeech(
           engine as unknown as Parameters<typeof streamSpeech>[0],
-          () => fetchStream(`/tts/orgs/${orgId}/stream`, {
-            text,
-            provider: s.provider,
-            voice: s.voice,
-            locale: s.locale,
-          }),
+          () =>
+            fetchStream(`/tts/orgs/${orgId}/stream`, {
+              text,
+              provider: s.provider,
+              voice: s.voice,
+              locale: s.locale,
+            }),
           { player }
         );
         streamRef.current = handle;

@@ -48,7 +48,10 @@ export function SiteNav() {
       }`}
     >
       <nav className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-5 sm:px-6" aria-label={t("navMain")}>
-        <Link to="/" className="flex shrink-0 items-center gap-2.5 coarse:min-h-11 text-[17px] font-semibold tracking-[-0.02em]">
+        <Link
+          to="/"
+          className="flex shrink-0 items-center gap-2.5 coarse:min-h-11 text-[17px] font-semibold tracking-[-0.02em]"
+        >
           <img src="/brand/liveface-mark-512.png" alt="" width={32} height={32} className="h-8 w-8 rounded-[10px]" />
           {t("appName")}
         </Link>

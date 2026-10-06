@@ -1,43 +1,43 @@
 import type { SpeechPlayer } from "@liveface/embed";
 import type { AvatarMouthConfig, ClassicMouthConfig } from "@liveface/embed/mouth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { CropStudio } from "@/features/avatars/components/CropStudio";
+import { Disclosure, DisclosureGroup } from "@/components/ui/Disclosure";
 import { Icon } from "@/components/ui/Icon";
-import { MarkFacePanel } from "@/features/avatars/components/MarkFacePanel";
+import { Spinner } from "@/components/ui/Spinner";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Avatar3DPreview } from "@/features/avatars/components/Avatar3DPreview";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
-import { Disclosure, DisclosureGroup } from "@/components/ui/Disclosure";
+import { CropStudio } from "@/features/avatars/components/CropStudio";
 import { EmbedSnippet } from "@/features/avatars/components/EmbedSnippet";
-import { FramingScenePanel } from "@/features/avatars/components/FramingScenePanel";
-import { engineScene, sceneOf, type SceneDraft } from "@/features/avatars/scene";
 import { FinishNotice } from "@/features/avatars/components/FinishNotice";
+import { FramingScenePanel } from "@/features/avatars/components/FramingScenePanel";
 import { InlineName } from "@/features/avatars/components/InlineName";
+import { MarkFacePanel } from "@/features/avatars/components/MarkFacePanel";
+import { MouthPanel } from "@/features/avatars/components/MouthPanel";
 import { PrepProgress } from "@/features/avatars/components/PrepProgress";
 import { PublishBar } from "@/features/avatars/components/PublishBar";
 import { SharePanel } from "@/features/avatars/components/SharePanel";
-import { SpeakPanel } from "@/features/voices";
-import { defaultVoiceSelection, type VoiceSelection } from "@/features/voices";
-import { Spinner } from "@/components/ui/Spinner";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { MouthPanel } from "@/features/avatars/components/MouthPanel";
 import { TuningPanel } from "@/features/avatars/components/TuningPanel";
+import { errorText } from "@/features/avatars/creation";
 import { useAvatarMouth } from "@/features/avatars/hooks/useAvatarMouth";
 import {
   draftMouthConfig,
+  type MotionChoice,
   previewMotion,
   savedMouthKey,
   urlIdentity,
-  type MotionChoice,
 } from "@/features/avatars/mouth-config";
+import { engineScene, type SceneDraft, sceneOf } from "@/features/avatars/scene";
 import { aiEditedLabels, aiEditedModels } from "@/features/avatars/teeth";
-import { errorText } from "@/features/avatars/creation";
+import { SpeakPanel } from "@/features/voices";
+import { defaultVoiceSelection, type VoiceSelection } from "@/features/voices";
 import { api, ApiError } from "@/lib/api";
-import { useOrg } from "@/providers/org";
 import type { Avatar } from "@/lib/types";
+import { useOrg } from "@/providers/org";
 
 /**
  * The settings column's folded sections. Framing opens by itself: it is
@@ -58,7 +58,9 @@ const OPEN_KEY = "liveface.avatarPage.open";
 function loadOpen(): Record<SectionId, boolean> {
   try {
     const raw = localStorage.getItem(OPEN_KEY);
-    return raw ? { ...OPEN_BY_DEFAULT, ...(JSON.parse(raw) as Partial<Record<SectionId, boolean>>) } : { ...OPEN_BY_DEFAULT };
+    return raw
+      ? { ...OPEN_BY_DEFAULT, ...(JSON.parse(raw) as Partial<Record<SectionId, boolean>>) }
+      : { ...OPEN_BY_DEFAULT };
   } catch {
     return { ...OPEN_BY_DEFAULT };
   }
@@ -100,7 +102,9 @@ export function AvatarDetailPage() {
   const [busyBg, setBusyBg] = useState(false);
   // The mouth being previewed: the panel's live state while the owner is
   // choosing or dragging, otherwise whatever the draft has saved.
-  const [mouthPreview, setMouthPreview] = useState<AvatarMouthConfig | ClassicMouthConfig | null | undefined>(undefined);
+  const [mouthPreview, setMouthPreview] = useState<AvatarMouthConfig | ClassicMouthConfig | null | undefined>(
+    undefined
+  );
   // Which mouth shapes the preview plays: the avatar's own, or the standard
   // ones to compare them with. The preview only; nothing is saved.
   const [motion, setMotion] = useState<MotionChoice>("own");
@@ -130,8 +134,7 @@ export function AvatarDetailPage() {
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
-    const onChange = () =>
-      setFullscreen(document.fullscreenElement === previewBoxRef.current);
+    const onChange = () => setFullscreen(document.fullscreenElement === previewBoxRef.current);
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
@@ -347,7 +350,11 @@ export function AvatarDetailPage() {
                 }
               >
                 <Icon name="sparkles" className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{aiEditedLabels(avatar.ai_edited).map((key) => t(key)).join(" · ")}</span>
+                <span className="truncate">
+                  {aiEditedLabels(avatar.ai_edited)
+                    .map((key) => t(key))
+                    .join(" · ")}
+                </span>
               </span>
             )}
           </div>
@@ -384,11 +391,7 @@ export function AvatarDetailPage() {
                   title={t("removeBgHint")}
                 >
                   <Icon name="eraser" className="h-4 w-4" />
-                  {busyBg
-                    ? t("loading")
-                    : avatar.original_image_key
-                      ? t("restoreBg")
-                      : t("removeBg")}
+                  {busyBg ? t("loading") : avatar.original_image_key ? t("restoreBg") : t("removeBg")}
                 </button>
               </>
             )}
@@ -576,9 +579,7 @@ export function AvatarDetailPage() {
                 {/* "It still works" is about a live avatar; before the first
                     publish the note itself says what to do. */}
                 {avatar.published && (
-                  <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">
-                    {t("qualityNoteHint")}
-                  </p>
+                  <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">{t("qualityNoteHint")}</p>
                 )}
                 {photo && !adjusting && (
                   <button

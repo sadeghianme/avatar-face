@@ -78,7 +78,7 @@ async function responseRequest(
   path: string,
   body?: unknown,
   retried = false,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<Response> {
   const headers: Record<string, string> = {};
   // FormData sets its own Content-Type, including the multipart boundary.
@@ -111,9 +111,7 @@ async function responseRequest(
     } catch {
       // non-JSON error body
     }
-    throw new ApiError(
-      response.status, code, detail, body, retryAfterSeconds(response.headers.get("Retry-After"))
-    );
+    throw new ApiError(response.status, code, detail, body, retryAfterSeconds(response.headers.get("Retry-After")));
   }
   return response;
 }
@@ -229,7 +227,6 @@ export function uploadWithProgress(
     xhr.send(file);
   });
 }
-
 
 /**
  * An authenticated request whose body is read as a stream (NDJSON speech).

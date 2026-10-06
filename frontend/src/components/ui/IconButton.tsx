@@ -1,7 +1,7 @@
-import { forwardRef, type ButtonHTMLAttributes } from "react";
+import { type ButtonHTMLAttributes, forwardRef } from "react";
 
 import { iconButtonClass, type IconButtonVariant } from "@/components/ui/button-styles";
-import { renderIcon, type IconLike } from "@/components/ui/Icon";
+import { type IconLike, renderIcon } from "@/components/ui/Icon";
 import { cx } from "@/lib/cx";
 
 export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-label" | "children"> {

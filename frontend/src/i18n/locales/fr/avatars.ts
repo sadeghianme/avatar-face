@@ -39,15 +39,18 @@ export const avatars = {
   avaturnImporting: "Importation de votre avatar…",
   model3dTitle: "Ou importez un avatar 3D",
   model3dUrl: "URL du modèle 3D (.glb)",
-  model3dHint: "Collez une URL GLB d'un hôte autorisé (ex. Avaturn), ou téléversez un .glb — tout modèle avec blendshapes ARKit ou morphs de visèmes obtient une synchronisation labiale sculptée.",
+  model3dHint:
+    "Collez une URL GLB d'un hôte autorisé (ex. Avaturn), ou téléversez un .glb — tout modèle avec blendshapes ARKit ou morphs de visèmes obtient une synchronisation labiale sculptée.",
   publish: "Publier",
   publishDiscard: "Annuler les modifications",
   publishDraftTitle: "Modifications non publiées",
-  publishDraftBody: "Vos sites et liens publics affichent encore la dernière version publiée. Publiez pour rendre ces changements visibles.",
+  publishDraftBody:
+    "Vos sites et liens publics affichent encore la dernière version publiée. Publiez pour rendre ces changements visibles.",
   publishLiveTitle: "Publié",
   publishLiveBody: "Partout où cet avatar est intégré, la version actuelle est affichée.",
   publishFirstTitle: "Pas encore en ligne",
-  publishFirstBody: "Vos sites et liens publics n'affichent rien tant que vous n'avez pas publié. Vérifiez d'abord les points avec « Marquer le visage », puis publiez.",
+  publishFirstBody:
+    "Vos sites et liens publics n'affichent rien tant que vous n'avez pas publié. Vérifiez d'abord les points avec « Marquer le visage », puis publiez.",
   notLive: "Non publié",
   avatarName: "Nom de l'avatar",
   retry: "Réessayer",
@@ -56,10 +59,14 @@ export const avatars = {
   fullscreen: "Plein écran",
   exitFullscreen: "Quitter le plein écran",
   markFace: "Marquer le visage",
-  markFaceHint: "Faites glisser les repères violets autour du contour du visage (front, tempes, côtés, angles de la mâchoire et menton, sans les cheveux ni les oreilles), les bleus sur les coins et les paupières de chaque œil, et sur les coins, le haut et le bas de la bouche ; le point du milieu de la bouche se place là où les lèvres se rejoignent. Les cercles ambrés sont les pupilles : le point central la place, le point du bord règle sa taille. La détection automatique suppose un visage humain : sur un dessin stylisé, elle se trompe. Rien n'est sauvegardé avant d'appuyer sur Enregistrer.",
-  markFaceHintAnimal: "Placez les repères violets autour du contour du visage (front, tempes, joues et mâchoire, sans les oreilles) et les bleus sur les coins et les paupières de chaque œil. La bouche est une ligne : mettez ses points d'extrémité aux coins de la bouche — chez un chien, là où la ligne des babines s'arrête sous chaque bajoue — et les trois points du milieu le long de la ligne où la lèvre du haut rejoint celle du bas : la ligne sombre qui descend de sous la truffe puis traverse, pas le contour du museau. Mettez le point orange sur le menton, au bas de la mâchoire inférieure. Rien n'est sauvegardé avant d'appuyer sur Enregistrer.",
-  markFaceHintCartoon: "Placez les repères violets autour du contour du visage (front, tempes, joues, angles de la mâchoire et menton, sans les cheveux ni les oreilles) et les bleus sur les coins et les paupières de chaque œil. La bouche est une ligne : ses points d'extrémité aux coins de la bouche, les trois points du milieu le long de la ligne où les lèvres se rejoignent (sur une bouche dessinée ouverte, en son milieu). Mettez le point orange sur le menton et les cercles ambrés sur les pupilles. Rien n'est sauvegardé avant d'appuyer sur Enregistrer.",
-  markFaceKeys: "Cliquez sur un repère, puis déplacez-le avec les flèches du clavier : un pixel à la fois, dix avec Maj. Un zoom dans le coin de la photo montre, trois fois plus grand, ce qui est sous le pointeur (sur un écran tactile, sous votre doigt) et le repère que vous placez. Là où des repères se superposent, cliquez à nouveau pour prendre le suivant.",
+  markFaceHint:
+    "Faites glisser les repères violets autour du contour du visage (front, tempes, côtés, angles de la mâchoire et menton, sans les cheveux ni les oreilles), les bleus sur les coins et les paupières de chaque œil, et sur les coins, le haut et le bas de la bouche ; le point du milieu de la bouche se place là où les lèvres se rejoignent. Les cercles ambrés sont les pupilles : le point central la place, le point du bord règle sa taille. La détection automatique suppose un visage humain : sur un dessin stylisé, elle se trompe. Rien n'est sauvegardé avant d'appuyer sur Enregistrer.",
+  markFaceHintAnimal:
+    "Placez les repères violets autour du contour du visage (front, tempes, joues et mâchoire, sans les oreilles) et les bleus sur les coins et les paupières de chaque œil. La bouche est une ligne : mettez ses points d'extrémité aux coins de la bouche — chez un chien, là où la ligne des babines s'arrête sous chaque bajoue — et les trois points du milieu le long de la ligne où la lèvre du haut rejoint celle du bas : la ligne sombre qui descend de sous la truffe puis traverse, pas le contour du museau. Mettez le point orange sur le menton, au bas de la mâchoire inférieure. Rien n'est sauvegardé avant d'appuyer sur Enregistrer.",
+  markFaceHintCartoon:
+    "Placez les repères violets autour du contour du visage (front, tempes, joues, angles de la mâchoire et menton, sans les cheveux ni les oreilles) et les bleus sur les coins et les paupières de chaque œil. La bouche est une ligne : ses points d'extrémité aux coins de la bouche, les trois points du milieu le long de la ligne où les lèvres se rejoignent (sur une bouche dessinée ouverte, en son milieu). Mettez le point orange sur le menton et les cercles ambrés sur les pupilles. Rien n'est sauvegardé avant d'appuyer sur Enregistrer.",
+  markFaceKeys:
+    "Cliquez sur un repère, puis déplacez-le avec les flèches du clavier : un pixel à la fois, dix avec Maj. Un zoom dans le coin de la photo montre, trois fois plus grand, ce qui est sous le pointeur (sur un écran tactile, sous votre doigt) et le repère que vous placez. Là où des repères se superposent, cliquez à nouveau pour prendre le suivant.",
   markPreviewUpdating: "mise à jour…",
   markHead: "Tête",
   markLeftEye: "Œil de gauche",
@@ -86,14 +93,18 @@ export const avatars = {
   markPupilCenter: "centre",
   markPupilRim: "bord",
   fitRefusedTitle: "Ces repères ne peuvent pas encore être enregistrés :",
-  fitFolded_one: "{{count}} triangle du visage se replierait sur lui-même. Déplacez les repères pour que les yeux, la bouche et la tête ne se croisent pas.",
-  fitFolded_other: "{{count}} triangles du visage se replieraient sur eux-mêmes. Déplacez les repères pour que les yeux, la bouche et la tête ne se croisent pas.",
+  fitFolded_one:
+    "{{count}} triangle du visage se replierait sur lui-même. Déplacez les repères pour que les yeux, la bouche et la tête ne se croisent pas.",
+  fitFolded_other:
+    "{{count}} triangles du visage se replieraient sur eux-mêmes. Déplacez les repères pour que les yeux, la bouche et la tête ne se croisent pas.",
   fitLidsInverted: "Le repère du haut d'un œil est sous son repère du bas.",
-  fitEyesOrder: "Les coins des yeux sont dans le désordre : le repère gauche de chaque œil doit être à gauche de son repère droit, et l'œil de gauche à gauche de l'œil de droite.",
+  fitEyesOrder:
+    "Les coins des yeux sont dans le désordre : le repère gauche de chaque œil doit être à gauche de son repère droit, et l'œil de gauche à gauche de l'œil de droite.",
   fitMouthReversed: "Le coin gauche de la bouche est à droite de son coin droit.",
   fitOutsideHead: "Les yeux et la bouche doivent être dans la tête.",
   fitOutlineCrossed: "Le contour de la tête se croise. Remettez ses repères violets dans l'ordre autour du visage.",
-  fitOutlineOrder: "Les repères du contour de la tête sont dans le désordre. Faites le tour du visage : haut, tempe, côté, angle de la mâchoire, menton, puis remontez de l'autre côté.",
+  fitOutlineOrder:
+    "Les repères du contour de la tête sont dans le désordre. Faites le tour du visage : haut, tempe, côté, angle de la mâchoire, menton, puis remontez de l'autre côté.",
   fitPupilOutsideEye: "Le centre de chaque pupille doit être dans son œil.",
   saving: "Enregistrement…",
   testBeforeSave: "Tester avant d'enregistrer",
@@ -126,7 +137,8 @@ export const avatars = {
   genScratchHint: "Aucune photo n'est envoyée. Le modèle invente une personne.",
   qualityNoteTitle: "Cet avatar peut ne pas être optimal :",
   qualityNoteFirstTitle: "À vérifier avant de publier :",
-  qualityNoteHint: "Il fonctionne quand même. Recadrez la photo, ou utilisez-en une où le visage est plus grand et de face.",
+  qualityNoteHint:
+    "Il fonctionne quand même. Recadrez la photo, ou utilisez-en une où le visage est plus grand et de face.",
   testInSimulator: "Tester",
   cropFree: "Libre",
   cropSquare: "1:1",
@@ -136,7 +148,8 @@ export const avatars = {
   embedSnippet: "Code d'intégration",
   shareTitle: "Lien public",
   shareOffBody: "Publiez une page que toute personne disposant du lien peut ouvrir. Aucun compte requis de leur côté.",
-  shareOnBody: "Toute personne ayant ce lien peut faire parler cet avatar, facturé sur votre usage. Désactivez pour le révoquer partout.",
+  shareOnBody:
+    "Toute personne ayant ce lien peut faire parler cet avatar, facturé sur votre usage. Désactivez pour le révoquer partout.",
   shareOpen: "Ouvrir",
   // La page de l'avatar : la carte Parler, les groupes de la colonne des
   // réglages et la ligne que montre chaque section repliée.
@@ -156,22 +169,26 @@ export const avatars = {
   debugMeshHint: "Dessine le maillage sur l'aperçu pour vérifier l'ajustement. Jamais publié.",
   deleteAsk: "Supprimer cet avatar ?",
   mouthTitle: "Bouche",
-  mouthHint: "Comment l'intérieur de la bouche est rendu quand cet avatar parle. Une modification de brouillon comme les autres : les visiteurs la voient après publication.",
+  mouthHint:
+    "Comment l'intérieur de la bouche est rendu quand cet avatar parle. Une modification de brouillon comme les autres : les visiteurs la voient après publication.",
   mouthClassic: "Classique",
   mouthClassicHint: "Dents dessinées. Fonctionne sur toute photo.",
   mouthContinuous: "Photographique",
   mouthContinuousHint: "Émail réel et mouvement des lèvres. Idéal sur une photo de face.",
-  mouthHumanOnly: "La bouche photographique dessine des dents humaines : elle n'est proposée que pour les visages humains.",
+  mouthHumanOnly:
+    "La bouche photographique dessine des dents humaines : elle n'est proposée que pour les visages humains.",
   mouthCharacterTitle: "Style de bouche",
   mouthCharacter: "Bouche de personnage",
   mouthCharacterHint: "Une bouche ouverte dessinée comme l'image, avec une langue et une mâchoire qui bouge.",
   mouthOriginal: "Bouche d'origine",
   mouthOriginalHint: "La bouche qu'avait cet avatar avant la bouche de personnage.",
-  mouthCharacterLegacy: "Cet avatar a été créé avant la bouche de personnage : il garde donc sa bouche d'origine. Choisissez la bouche de personnage pour l'essayer ; vous pouvez revenir en arrière, et les visiteurs ne voient le changement qu'après publication.",
+  mouthCharacterLegacy:
+    "Cet avatar a été créé avant la bouche de personnage : il garde donc sa bouche d'origine. Choisissez la bouche de personnage pour l'essayer ; vous pouvez revenir en arrière, et les visiteurs ne voient le changement qu'après publication.",
   mouthCharacterTeeth: "Montrer les dents du haut",
   mouthCharacterTongue: "Montrer la langue",
   mouthPhotoActive: "Les dents de votre photo sont utilisées",
-  mouthPhotoHint: "Ajoutez une seconde photo de la même personne disant « i » : de face, dents du haut bien visibles, lumière similaire. Sans elle, des dents standard sont utilisées.",
+  mouthPhotoHint:
+    "Ajoutez une seconde photo de la même personne disant « i » : de face, dents du haut bien visibles, lumière similaire. Sans elle, des dents standard sont utilisées.",
   mouthPhotoAdd: "Ajouter une photo de bouche",
   mouthPhotoReplace: "Remplacer la photo",
   mouthPhotoRemove: "Utiliser les dents standard",
@@ -180,14 +197,22 @@ export const avatars = {
   mouthTeethKind_upload: "Votre photo",
   mouthTeethKind_generic: "Standard",
   mouthTeethMade: "Les nouvelles dents sont dans l’aperçu. Les visiteurs les verront après publication.",
-  mouthErr_upload_mouth_teeth_unclear: "Cette photo ne montre pas assez nettement les dents du haut. Prenez-en une en disant « i », face à l’objectif, avec toute la rangée du haut visible.",
-  mouthErr_upload_reference_no_face: "Aucun visage net n’a été trouvé sur cette photo. Utilisez une photo de face où tout le visage est visible.",
-  mouthErr_upload_reference_mouth_closed: "La bouche n’est pas assez ouverte sur cette photo. Prenez-en une en disant « i », dents du haut visibles.",
-  mouthErr_upload_reference_face_small: "Le visage est trop petit sur cette photo. Recadrez plus près de la tête et des épaules.",
-  mouthErr_generate_mouth_teeth_unclear: "La photo de l’IA ne montrait pas assez nettement les dents du haut : elle n’a pas été utilisée. Réessayez.",
-  mouthErr_generate_reference_no_face: "Aucun visage n’a été trouvé sur la photo de l’IA : elle n’a pas été utilisée. Réessayez.",
-  mouthErr_generate_reference_mouth_closed: "La bouche n’était pas assez ouverte sur la photo de l’IA : elle n’a pas été utilisée. Réessayez.",
-  mouthErr_generate_reference_face_small: "Le visage était trop petit sur la photo de l’IA : elle n’a pas été utilisée. Réessayez.",
+  mouthErr_upload_mouth_teeth_unclear:
+    "Cette photo ne montre pas assez nettement les dents du haut. Prenez-en une en disant « i », face à l’objectif, avec toute la rangée du haut visible.",
+  mouthErr_upload_reference_no_face:
+    "Aucun visage net n’a été trouvé sur cette photo. Utilisez une photo de face où tout le visage est visible.",
+  mouthErr_upload_reference_mouth_closed:
+    "La bouche n’est pas assez ouverte sur cette photo. Prenez-en une en disant « i », dents du haut visibles.",
+  mouthErr_upload_reference_face_small:
+    "Le visage est trop petit sur cette photo. Recadrez plus près de la tête et des épaules.",
+  mouthErr_generate_mouth_teeth_unclear:
+    "La photo de l’IA ne montrait pas assez nettement les dents du haut : elle n’a pas été utilisée. Réessayez.",
+  mouthErr_generate_reference_no_face:
+    "Aucun visage n’a été trouvé sur la photo de l’IA : elle n’a pas été utilisée. Réessayez.",
+  mouthErr_generate_reference_mouth_closed:
+    "La bouche n’était pas assez ouverte sur la photo de l’IA : elle n’a pas été utilisée. Réessayez.",
+  mouthErr_generate_reference_face_small:
+    "Le visage était trop petit sur la photo de l’IA : elle n’a pas été utilisée. Réessayez.",
   mouthErr_third_party_ai_disabled: "Votre organisation a désactivé l’IA tierce : rien n’a été envoyé.",
   mouthErr_imagegen_unavailable: "L’édition par IA n’est pas configurée sur ce serveur.",
   mouthErr_image_limit_reached: "La limite mensuelle d’images IA est atteinte.",
@@ -195,7 +220,8 @@ export const avatars = {
   mouthErr_no_image: "L’IA a répondu sans image. Réessayez.",
   mouthErr_provider_error: "Le service d’IA n’a pas répondu. Réessayez dans un instant.",
   mouthErr_timeout: "L’IA a mis trop de temps à répondre. Réessayez.",
-  mouthErr_consent_not_recorded: "Votre accord pour l’envoi de photos n’a pas pu être enregistré, rien n’a donc été envoyé. Réessayez.",
+  mouthErr_consent_not_recorded:
+    "Votre accord pour l’envoi de photos n’a pas pu être enregistré, rien n’a donc été envoyé. Réessayez.",
   mouthErr_no_face_for_teeth: "Aucun visage n’a été trouvé sur l’image de cet avatar pour créer les dents.",
   mouthErr_face_turned: "La tête est trop tournée sur l’image de cet avatar pour créer ses dents.",
   mouthErr_landmarks_unavailable: "La détection de visage n’est pas disponible sur ce serveur.",
@@ -208,39 +234,59 @@ export const avatars = {
   mouthErr_consent_outdated: "Le texte de la déclaration IA a changé. Rechargez la page pour le lire.",
   mouthErr_too_many_jobs: "Votre équipe a déjà plusieurs traitements en cours.",
   mouthErr_job_queue_full: "Le serveur est occupé en ce moment.",
-  mouthTeethAiHint: "Créées par IA à partir de l’image de cet avatar : une photo de vous disant «\u00a0i\u00a0». Les visiteurs voient la mention «\u00a0Avatar IA\u00a0» après publication.",
+  mouthTeethAiHint:
+    "Créées par IA à partir de l’image de cet avatar : une photo de vous disant «\u00a0i\u00a0». Les visiteurs voient la mention «\u00a0Avatar IA\u00a0» après publication.",
   mouthTeethGeneric: "Des dents standard sont utilisées.",
-  mouthTeethNote_no_ai_consent: "Des dents standard sont utilisées : l’IA n’a pas été utilisée, car vous n’avez pas accepté la déclaration actuelle sur l’envoi de photos à Google.",
-  mouthTeethNote_third_party_ai_disabled: "Des dents standard sont utilisées : votre organisation a désactivé l’IA tierce.",
-  mouthTeethNote_imagegen_unavailable: "Des dents standard sont utilisées : l’édition par IA n’est pas configurée sur ce serveur.",
-  mouthTeethNote_image_limit_reached: "Des dents standard sont utilisées : la limite mensuelle d’images IA est atteinte.",
+  mouthTeethNote_no_ai_consent:
+    "Des dents standard sont utilisées : l’IA n’a pas été utilisée, car vous n’avez pas accepté la déclaration actuelle sur l’envoi de photos à Google.",
+  mouthTeethNote_third_party_ai_disabled:
+    "Des dents standard sont utilisées : votre organisation a désactivé l’IA tierce.",
+  mouthTeethNote_imagegen_unavailable:
+    "Des dents standard sont utilisées : l’édition par IA n’est pas configurée sur ce serveur.",
+  mouthTeethNote_image_limit_reached:
+    "Des dents standard sont utilisées : la limite mensuelle d’images IA est atteinte.",
   mouthTeethNote_safety_refused: "Des dents standard sont utilisées : l’IA a refusé de modifier cette photo.",
   mouthTeethNote_no_image: "Des dents standard sont utilisées : l’IA a répondu sans image.",
   mouthTeethNote_provider_error: "Des dents standard sont utilisées : le service d’IA n’a pas répondu. Réessayez.",
   mouthTeethNote_timeout: "Des dents standard sont utilisées : l’IA a mis trop de temps à répondre. Réessayez.",
-  mouthTeethNote_consent_not_recorded: "Des dents standard sont utilisées : votre accord pour l’envoi de photos n’a pas pu être enregistré, rien n’a donc été envoyé. Réessayez.",
-  mouthTeethNote_mouth_teeth_unclear: "Des dents standard sont utilisées : la photo de l’IA ne montrait pas assez nettement les dents du haut.",
-  mouthTeethNote_teeth_photo_rejected: "Des dents standard sont utilisées : la photo des dents faite par l’IA n’a pas passé les vérifications, elle n’a donc pas été utilisée.",
-  mouthTeethNote_teeth_photo_rejected_because: "Des dents standard sont utilisées : la photo des dents faite par l’IA n’a pas été utilisée ({{reason}}).",
-  mouthTeethNote_reference_no_face: "Des dents standard sont utilisées : aucun visage n’a été trouvé sur la photo de l’IA.",
-  mouthTeethNote_reference_mouth_closed: "Des dents standard sont utilisées : la bouche n’était pas assez ouverte sur la photo de l’IA.",
-  mouthTeethNote_reference_face_small: "Des dents standard sont utilisées : le visage était trop petit sur la photo de l’IA.",
-  mouthTeethNote_no_face_for_teeth: "Des dents standard sont utilisées : aucun visage n’a été trouvé pour créer les dents.",
+  mouthTeethNote_consent_not_recorded:
+    "Des dents standard sont utilisées : votre accord pour l’envoi de photos n’a pas pu être enregistré, rien n’a donc été envoyé. Réessayez.",
+  mouthTeethNote_mouth_teeth_unclear:
+    "Des dents standard sont utilisées : la photo de l’IA ne montrait pas assez nettement les dents du haut.",
+  mouthTeethNote_teeth_photo_rejected:
+    "Des dents standard sont utilisées : la photo des dents faite par l’IA n’a pas passé les vérifications, elle n’a donc pas été utilisée.",
+  mouthTeethNote_teeth_photo_rejected_because:
+    "Des dents standard sont utilisées : la photo des dents faite par l’IA n’a pas été utilisée ({{reason}}).",
+  mouthTeethNote_reference_no_face:
+    "Des dents standard sont utilisées : aucun visage n’a été trouvé sur la photo de l’IA.",
+  mouthTeethNote_reference_mouth_closed:
+    "Des dents standard sont utilisées : la bouche n’était pas assez ouverte sur la photo de l’IA.",
+  mouthTeethNote_reference_face_small:
+    "Des dents standard sont utilisées : le visage était trop petit sur la photo de l’IA.",
+  mouthTeethNote_no_face_for_teeth:
+    "Des dents standard sont utilisées : aucun visage n’a été trouvé pour créer les dents.",
   mouthTeethNote_face_turned: "Des dents standard sont utilisées : la tête est trop tournée pour créer ses dents.",
-  mouthTeethNote_landmarks_unavailable: "Des dents standard sont utilisées : la détection de visage n’est pas disponible sur ce serveur.",
+  mouthTeethNote_landmarks_unavailable:
+    "Des dents standard sont utilisées : la détection de visage n’est pas disponible sur ce serveur.",
   mouthTeethNote_teeth_failed: "Des dents standard sont utilisées : les dents n’ont pas pu être créées. Réessayez.",
-  mouthTeethNote_migrated_standard: "Dents standard. Cet avatar a quitté l’ancienne bouche dessinée ; créez ses propres dents et formes de bouche dans le panneau Bouche.",
+  mouthTeethNote_migrated_standard:
+    "Dents standard. Cet avatar a quitté l’ancienne bouche dessinée ; créez ses propres dents et formes de bouche dans le panneau Bouche.",
   mouthShapesInUse: "Formes de bouche :",
   mouthShapesKind_own: "Créées à partir de votre photo · {{generated}} sur {{total}}",
   mouthShapesKind_mixed: "{{generated}} sur {{total}} à partir de votre photo, {{standard}} standard",
   mouthShapesKind_standard: "Standard",
-  mouthShapesAiHint: "Créées par IA à partir de l’image de cet avatar, une pour chaque son de la parole. Les visiteurs voient la mention «\u00a0Avatar IA\u00a0» après publication.",
-  mouthShapesAiHintMixed: "Créées par IA à partir de l’image de cet avatar ; les autres sont les formes standard, ajustées à ce visage. Les visiteurs voient la mention «\u00a0Avatar IA\u00a0» après publication.",
+  mouthShapesAiHint:
+    "Créées par IA à partir de l’image de cet avatar, une pour chaque son de la parole. Les visiteurs voient la mention «\u00a0Avatar IA\u00a0» après publication.",
+  mouthShapesAiHintMixed:
+    "Créées par IA à partir de l’image de cet avatar ; les autres sont les formes standard, ajustées à ce visage. Les visiteurs voient la mention «\u00a0Avatar IA\u00a0» après publication.",
   mouthShapesStandardHint: "Les formes de bouche standard, ajustées à ce visage.",
   mouthShapesWhy: "Standard, et pourquoi :",
-  mouthShapesDropped_picture_changed: "Vos formes de bouche avaient été créées pour l’image précédente : les formes standard sont donc utilisées. Recréez-les pour cette image.",
-  mouthShapesDropped_rebase_failed: "Vos formes de bouche n’ont pas pu suivre les nouveaux points : les formes standard sont donc utilisées. Recréez-les.",
-  mouthShapesDropped_motion_missing: "Le fichier de vos formes de bouche est introuvable : les formes standard sont donc utilisées. Recréez-les.",
+  mouthShapesDropped_picture_changed:
+    "Vos formes de bouche avaient été créées pour l’image précédente : les formes standard sont donc utilisées. Recréez-les pour cette image.",
+  mouthShapesDropped_rebase_failed:
+    "Vos formes de bouche n’ont pas pu suivre les nouveaux points : les formes standard sont donc utilisées. Recréez-les.",
+  mouthShapesDropped_motion_missing:
+    "Le fichier de vos formes de bouche est introuvable : les formes standard sont donc utilisées. Recréez-les.",
   mouthShapesCount: "{{done}} sur {{total}}",
   mouthShape_aa: "A, comme dans «\u00a0papa\u00a0»",
   mouthShape_ee: "I, comme dans «\u00a0si\u00a0»",
@@ -256,7 +302,8 @@ export const avatars = {
   mouthReason_imagegen_unavailable: "l’édition par IA n’est pas configurée sur ce serveur",
   mouthReason_image_limit_reached: "la limite mensuelle d’images IA est atteinte",
   mouthReason_third_party_ai_disabled: "votre organisation a désactivé l’IA tierce",
-  mouthReason_consent_not_recorded: "votre accord pour l’envoi de photos n’a pas pu être enregistré, rien n’a donc été envoyé",
+  mouthReason_consent_not_recorded:
+    "votre accord pour l’envoi de photos n’a pas pu être enregistré, rien n’a donc été envoyé",
   mouthReason_aspect_changed: "l’IA a renvoyé une image d’un autre format",
   mouthReason_check_failed: "l’image de l’IA n’a pas pu être vérifiée",
   mouthReason_unreadable_result: "l’image de l’IA n’a pas pu être lue",
@@ -273,8 +320,10 @@ export const avatars = {
   mouthReason_teeth_photo_rejected: "elle n’a pas passé les vérifications",
   mouthKitMake: "Créer les formes de bouche et les dents à partir de cette photo",
   mouthKitMakeShapes: "Créer les formes de bouche à partir de cette photo",
-  mouthKitHint: "Envoie des recadrages du visage de cet avatar à Google (Gemini), un pour ses dents et un pour chaque son de la parole, pour créer ses propres dents et formes de bouche. Cela prend jusqu’à une minute environ, et vous voyez le résultat avant les visiteurs.",
-  mouthKitHintShapes: "Envoie des recadrages du visage de cet avatar à Google (Gemini), un pour chaque son de la parole, pour créer ses propres formes de bouche. Votre photo de dents est conservée. Cela prend jusqu’à une minute environ, et vous voyez le résultat avant les visiteurs.",
+  mouthKitHint:
+    "Envoie des recadrages du visage de cet avatar à Google (Gemini), un pour ses dents et un pour chaque son de la parole, pour créer ses propres dents et formes de bouche. Cela prend jusqu’à une minute environ, et vous voyez le résultat avant les visiteurs.",
+  mouthKitHintShapes:
+    "Envoie des recadrages du visage de cet avatar à Google (Gemini), un pour chaque son de la parole, pour créer ses propres formes de bouche. Votre photo de dents est conservée. Cela prend jusqu’à une minute environ, et vous voyez le résultat avant les visiteurs.",
   mouthKitWorking: "Création de la bouche à partir de cette photo…",
   mouthKitStage_shapes: "Création des formes de bouche…",
   mouthKitStage_shapesTeeth: "Création des dents et des formes de bouche…",
@@ -282,9 +331,11 @@ export const avatars = {
   mouthKitStage_teeth: "Création des dents…",
   mouthKitStage_save: "Enregistrement…",
   mouthKitMade: "Les nouvelles formes de bouche sont dans l’aperçu. Les visiteurs les verront après publication.",
-  mouthKitMadeTeeth: "Les nouvelles formes de bouche et les nouvelles dents sont dans l’aperçu. Les visiteurs les verront après publication.",
+  mouthKitMadeTeeth:
+    "Les nouvelles formes de bouche et les nouvelles dents sont dans l’aperçu. Les visiteurs les verront après publication.",
   mouthKitErr_none: "Aucune forme de bouche n’a pu être créée : {{reason}}.",
-  mouthKitErr_superseded: "L’image a changé pendant la création de la bouche : rien n’a été enregistré. Recréez-la pour cette image.",
+  mouthKitErr_superseded:
+    "L’image a changé pendant la création de la bouche : rien n’a été enregistré. Recréez-la pour cette image.",
   mouthKitErr_job_failed: "Un problème est survenu pendant la création de la bouche. Réessayez.",
   mouthKitErr_interrupted: "Le serveur a redémarré pendant la création de la bouche. Réessayez.",
   mouthKitTeeth_owner_photo: "Votre propre photo de dents est conservée : l’IA n’a créé que les formes de bouche.",
@@ -311,23 +362,32 @@ export const avatars = {
   createHeading_background: "Fond",
   createHeading_points: "Placer les points",
   createHeading_prepare: "Préparation de votre avatar",
-  createIntro_frame: "Un visage net et de face donne le meilleur résultat. Nous vérifions la photo, cadrons le visage et suggérons de quel type de visage il s’agit.",
-  createIntro_background: "Gardez la pièce derrière le visage, ou détourez-le pour que l’avatar s’intègre à votre page.",
-  createIntro_points: "Ces points indiquent au visage comment bouger. Vérifiez-les sur la photo et écoutez l’aperçu parler.",
-  createIntro_prepare: "Nous construisons votre avatar à partir des points que vous avez placés, puis nous le publions.",
-  createPrepareMouth: "À partir de votre photo, l’IA crée vos propres dents et vos formes de bouche, une pour chaque son de la parole, et la bouche est ajustée à votre visage. Elles sont signalées comme faites par IA.",
+  createIntro_frame:
+    "Un visage net et de face donne le meilleur résultat. Nous vérifions la photo, cadrons le visage et suggérons de quel type de visage il s’agit.",
+  createIntro_background:
+    "Gardez la pièce derrière le visage, ou détourez-le pour que l’avatar s’intègre à votre page.",
+  createIntro_points:
+    "Ces points indiquent au visage comment bouger. Vérifiez-les sur la photo et écoutez l’aperçu parler.",
+  createIntro_prepare:
+    "Nous construisons votre avatar à partir des points que vous avez placés, puis nous le publions.",
+  createPrepareMouth:
+    "À partir de votre photo, l’IA crée vos propres dents et vos formes de bouche, une pour chaque son de la parole, et la bouche est ajustée à votre visage. Elles sont signalées comme faites par IA.",
   createPrepareTeeth: "À partir de votre photo, l’IA crée vos propres dents. Elles sont signalées comme faites par IA.",
-  createPrepareStandard: "Vos propres dents et formes de bouche n’ont pas pu être créées cette fois : l’avatar reçoit les formes standard, et sa page en indique la raison.",
+  createPrepareStandard:
+    "Vos propres dents et formes de bouche n’ont pas pu être créées cette fois : l’avatar reçoit les formes standard, et sa page en indique la raison.",
   createPrepareAiPurpose: "Créer les dents et les formes de bouche de cette personne",
-  createFinishAsksAi: "Terminer vous demande une fois si cette photo peut être envoyée à Google (Gemini) pour créer les dents et les formes de bouche de la personne. Sans cela, l’avatar reçoit les formes standard.",
-  createDropHint: "JPEG, PNG ou WebP, jusqu’à 15 Mo. Les modèles 3D (.glb) s’importent dans « Autres façons de créer ».",
+  createFinishAsksAi:
+    "Terminer vous demande une fois si cette photo peut être envoyée à Google (Gemini) pour créer les dents et les formes de bouche de la personne. Sans cela, l’avatar reçoit les formes standard.",
+  createDropHint:
+    "JPEG, PNG ou WebP, jusqu’à 15 Mo. Les modèles 3D (.glb) s’importent dans « Autres façons de créer ».",
   createUploading: "Envoi…",
   createBack: "Retour",
   createContinue: "Continuer",
   createUseAnother: "Utiliser une autre photo",
   createChecksTitle: "À savoir sur cette photo :",
   photoCheck_face_small: "Le visage est petit sur la photo. Recadrez plus serré, ou prenez une photo de plus près.",
-  photoCheck_face_at_edge: "Le visage touche le bord de la photo. Choisissez-en une avec de l’espace autour de la tête.",
+  photoCheck_face_at_edge:
+    "Le visage touche le bord de la photo. Choisissez-en une avec de l’espace autour de la tête.",
   photoCheck_head_turned: "La tête est tournée. Un visage face à l’objectif s’anime mieux.",
   photoCheck_low_resolution: "Le visage a peu de pixels : la bouche sera floue. Une photo plus grande aide.",
   photoCheck_no_face: "Aucun visage humain n’a été trouvé.",
@@ -353,7 +413,8 @@ export const avatars = {
   cropAreaLabel: "Zone de recadrage",
   cropKeysHint: "Les flèches déplacent la zone de recadrage. Maj avec une flèche la redimensionne.",
   cropAreaRole: "cadre de recadrage",
-  cropAreaPosition: "{{left}} % depuis la gauche, {{top}} % depuis le haut, {{width}} % de large et {{height}} % de haut",
+  cropAreaPosition:
+    "{{left}} % depuis la gauche, {{top}} % depuis le haut, {{width}} % de large et {{height}} % de haut",
   createBgIntro: "Choisissez. Le détourage est conservé : vous pouvez revenir en arrière.",
   createBgKeep: "Garder l’original",
   createBgRemove: "Supprimer le fond",
@@ -361,13 +422,19 @@ export const avatars = {
   createBgBefore: "La photo avec son fond",
   createBgAfter: "La photo sans son fond",
   createBgNotYet: "Choisissez ceci pour détourer la personne.",
-  createBgUnavailable_not_for_face_type: "La suppression du fond ne reconnaît que les personnes pour l’instant : les animaux et les animations gardent leur fond. Continuez pour placer les points.",
-  createBgUnavailable_segmentation_unavailable: "La suppression du fond n’est pas disponible sur ce serveur pour l’instant : la photo garde son fond.",
+  createBgUnavailable_not_for_face_type:
+    "La suppression du fond ne reconnaît que les personnes pour l’instant : les animaux et les animations gardent leur fond. Continuez pour placer les points.",
+  createBgUnavailable_segmentation_unavailable:
+    "La suppression du fond n’est pas disponible sur ce serveur pour l’instant : la photo garde son fond.",
   createBgUnavailable_face_type_required: "Revenez à l’étape 1 et choisissez d’abord ce qu’il y a sur la photo.",
-  createGuide_human: "Chaque point se place sur un bord : le contour du visage (du front au menton, d’une joue à l’autre, sans les cheveux ni les oreilles), les coins et paupières de chaque œil, les coins, le haut et le bas de la bouche (le point central là où les lèvres se rejoignent). Les cercles ambre sont les pupilles : le point central en déplace une, le point du bord la dimensionne.",
-  createGuide_animal: "Rien ne détecte le visage d’un animal : ces points sont une première estimation, placez chacun sur votre animal. La bouche est une ligne : ses extrémités sur les coins de la bouche, les trois points du milieu le long de la jonction des lèvres.",
-  createGuide_cartoon: "Placez les points violets autour du contour du visage et les bleus sur les coins et paupières de chaque œil. La bouche est une ligne : extrémités sur ses coins, les trois du milieu le long de la jonction des lèvres. Le point orange est le menton, les cercles ambre les pupilles.",
-  createGuessChecklist: "Ces points sont une première estimation. Placez chaque élément sur le visage, ou cochez-le s’il est déjà bien placé :",
+  createGuide_human:
+    "Chaque point se place sur un bord : le contour du visage (du front au menton, d’une joue à l’autre, sans les cheveux ni les oreilles), les coins et paupières de chaque œil, les coins, le haut et le bas de la bouche (le point central là où les lèvres se rejoignent). Les cercles ambre sont les pupilles : le point central en déplace une, le point du bord la dimensionne.",
+  createGuide_animal:
+    "Rien ne détecte le visage d’un animal : ces points sont une première estimation, placez chacun sur votre animal. La bouche est une ligne : ses extrémités sur les coins de la bouche, les trois points du milieu le long de la jonction des lèvres.",
+  createGuide_cartoon:
+    "Placez les points violets autour du contour du visage et les bleus sur les coins et paupières de chaque œil. La bouche est une ligne : extrémités sur ses coins, les trois du milieu le long de la jonction des lèvres. Le point orange est le menton, les cercles ambre les pupilles.",
+  createGuessChecklist:
+    "Ces points sont une première estimation. Placez chaque élément sur le visage, ou cochez-le s’il est déjà bien placé :",
   createGuessPart_head: "Le contour du visage : haut, tempes, côtés, angles de la mâchoire et bas.",
   createGuessPart_left_eye: "Coins et paupières de l’œil de gauche.",
   createGuessPart_right_eye: "Coins et paupières de l’œil de droite.",
@@ -377,7 +444,8 @@ export const avatars = {
   createGuessPart_left_pupil: "La pupille de l’œil de gauche : point central dessus, point du bord sur son contour.",
   createGuessPart_right_pupil: "La pupille de l’œil de droite : point central dessus, point du bord sur son contour.",
   createPartPlaced: "placé",
-  createGuessUnplaced: "Pas encore placés : {{parts}}. Placez chacun sur le visage, ou cochez-le s’il est déjà bien placé.",
+  createGuessUnplaced:
+    "Pas encore placés : {{parts}}. Placez chacun sur le visage, ou cochez-le s’il est déjà bien placé.",
   createPlaceFirst: "Placez ou cochez d’abord chaque élément de la liste ci-dessus.",
   createReconnecting: "Impossible de joindre le serveur pour l’instant. Nouvel essai…",
   createDetectWarnings: "La détection automatique a remarqué :",
@@ -390,7 +458,8 @@ export const avatars = {
   createDepictionStatement_animal:
     "Cette photo montre un animal, pas une personne réelle — ou, si elle montre une personne, je suis cette personne ou j’ai son autorisation, et elle a 18 ans ou plus.",
   createDepictionFirst: "Cochez d'abord la déclaration ci-dessus.",
-  createGeneratedFaceStatement: "Ce visage a été créé par l’IA à partir d’une description. Ce n’est pas une personne réelle et identifiable, et je n’en ai pas demandé une.",
+  createGeneratedFaceStatement:
+    "Ce visage a été créé par l’IA à partir d’une description. Ce n’est pas une personne réelle et identifiable, et je n’en ai pas demandé une.",
   createSavePoints: "Enregistrer les points",
   createLooksRightHint: "Construit et publie votre avatar à partir de ces points.",
   createSaveHint: "Construit et publie votre avatar à partir des points tels que placés.",
@@ -399,9 +468,12 @@ export const avatars = {
   createRetryAfterPlace: "Placez ou cochez chaque élément de la liste ci-dessous, puis réessayez.",
   createRetryAfterStatement: "Cochez la déclaration ci-dessous, puis réessayez.",
   createRetryAfterName: "Donnez un nom à l’avatar ci-dessous, puis réessayez.",
-  createFinishingHint: "Cela prend quelques secondes. Vous pouvez quitter cette page : l’avatar est indiqué «\u00a0Traitement\u00a0» dans votre liste jusqu’à ce qu’il soit prêt.",
-  createFinishingHintMouth: "Cela peut prendre jusqu’à une minute environ, le temps que l’IA crée vos dents et vos formes de bouche. Vous pouvez quitter cette page : l’avatar est indiqué «\u00a0Traitement\u00a0» dans votre liste jusqu’à ce qu’il soit prêt.",
-  createFinishingHintTeeth: "Cela peut prendre jusqu’à une demi-minute, le temps que l’IA crée vos dents. Vous pouvez quitter cette page : l’avatar est indiqué «\u00a0Traitement\u00a0» dans votre liste jusqu’à ce qu’il soit prêt.",
+  createFinishingHint:
+    "Cela prend quelques secondes. Vous pouvez quitter cette page : l’avatar est indiqué «\u00a0Traitement\u00a0» dans votre liste jusqu’à ce qu’il soit prêt.",
+  createFinishingHintMouth:
+    "Cela peut prendre jusqu’à une minute environ, le temps que l’IA crée vos dents et vos formes de bouche. Vous pouvez quitter cette page : l’avatar est indiqué «\u00a0Traitement\u00a0» dans votre liste jusqu’à ce qu’il soit prêt.",
+  createFinishingHintTeeth:
+    "Cela peut prendre jusqu’à une demi-minute, le temps que l’IA crée vos dents. Vous pouvez quitter cette page : l’avatar est indiqué «\u00a0Traitement\u00a0» dans votre liste jusqu’à ce qu’il soit prêt.",
   createFinishStage_copy: "Copie de votre image…",
   createFinishStage_rig: "Ajustement du visage…",
   createFinishStage_layers: "Séparation des calques…",
@@ -414,7 +486,8 @@ export const avatars = {
   createFinishPhase_fit: "Ajustement de la bouche à votre visage",
   createFinishPhase_teeth: "Création de vos dents",
   createFinishPhase_publish: "Publication",
-  createFinishPhaseHint_shapes: "Créées par IA à partir de votre photo : vos dents, et une forme pour chaque son de la parole.",
+  createFinishPhaseHint_shapes:
+    "Créées par IA à partir de votre photo : vos dents, et une forme pour chaque son de la parole.",
   createFinishPhaseHint_teeth: "Créées par IA à partir de votre photo.",
   createFinishPhaseState_done: "fait",
   createFinishPhaseState_current: "en cours",
@@ -428,21 +501,30 @@ export const avatars = {
   finishNoticeToMouth: "Ouvrir le panneau Bouche",
   finishNoticeDismiss: "Compris",
   avatarPreparingTitle: "Préparation de cet avatar",
-  avatarPreparingHint: "Ses dents et ses formes de bouche sont créées à partir de la photo, puis il est publié. Il s’ouvre ici quand il est prêt.",
+  avatarPreparingHint:
+    "Ses dents et ses formes de bouche sont créées à partir de la photo, puis il est publié. Il s’ouvre ici quand il est prêt.",
   avatarPreparingFollow: "Suivre la préparation étape par étape",
   finishNoticeShapes_own: "Ses propres formes de bouche : toutes les {{total}}, créées par IA à partir de votre photo.",
-  finishNoticeShapes_mixed: "Ses propres formes de bouche : {{generated}} sur {{total}} créées par IA à partir de votre photo, les autres standard.",
+  finishNoticeShapes_mixed:
+    "Ses propres formes de bouche : {{generated}} sur {{total}} créées par IA à partir de votre photo, les autres standard.",
   finishNoticeShapes_none: "Formes de bouche standard : aucune n’a pu être créée à partir de votre photo ({{reason}}).",
   finishNoticeShapes_standard: "Des formes de bouche standard sont utilisées.",
   finishNoticeTeeth_ai: "Ses propres dents, créées par IA à partir de votre photo.",
   finishNoticeTeeth_upload: "Ses dents viennent de votre propre photo.",
-  finishNoticeStandard_no_ai_consent: "Des dents et des formes de bouche standard sont utilisées : l’IA n’a pas été utilisée, car vous n’avez pas accepté la déclaration actuelle sur l’envoi de photos à Google.",
-  finishNoticeStandard_third_party_ai_disabled: "Des dents et des formes de bouche standard sont utilisées : votre organisation a désactivé l’IA tierce.",
-  finishNoticeStandard_imagegen_unavailable: "Des dents et des formes de bouche standard sont utilisées : l’édition par IA n’est pas configurée sur ce serveur.",
-  finishNoticeStandard_image_limit_reached: "Des dents et des formes de bouche standard sont utilisées : la limite mensuelle d’images IA est atteinte.",
-  finishNoticeStandard_teeth_failed: "Des dents et des formes de bouche standard sont utilisées : elles n’ont pas pu être créées. Réessayez dans le panneau Bouche.",
-  finishWarning_mouth_open: "La bouche est ouverte sur cette image : l’avatar reste la bouche ouverte au repos. Une photo aux lèvres fermées rend mieux.",
-  finishWarning_teeth_showing: "Les lèvres sont entrouvertes sur cette image : ses propres dents restent peintes sur les lèvres quand l’avatar parle. Une retouche les ferme.",
+  finishNoticeStandard_no_ai_consent:
+    "Des dents et des formes de bouche standard sont utilisées : l’IA n’a pas été utilisée, car vous n’avez pas accepté la déclaration actuelle sur l’envoi de photos à Google.",
+  finishNoticeStandard_third_party_ai_disabled:
+    "Des dents et des formes de bouche standard sont utilisées : votre organisation a désactivé l’IA tierce.",
+  finishNoticeStandard_imagegen_unavailable:
+    "Des dents et des formes de bouche standard sont utilisées : l’édition par IA n’est pas configurée sur ce serveur.",
+  finishNoticeStandard_image_limit_reached:
+    "Des dents et des formes de bouche standard sont utilisées : la limite mensuelle d’images IA est atteinte.",
+  finishNoticeStandard_teeth_failed:
+    "Des dents et des formes de bouche standard sont utilisées : elles n’ont pas pu être créées. Réessayez dans le panneau Bouche.",
+  finishWarning_mouth_open:
+    "La bouche est ouverte sur cette image : l’avatar reste la bouche ouverte au repos. Une photo aux lèvres fermées rend mieux.",
+  finishWarning_teeth_showing:
+    "Les lèvres sont entrouvertes sur cette image : ses propres dents restent peintes sur les lèvres quand l’avatar parle. Une retouche les ferme.",
   createFinished: "Ouverture de votre avatar…",
   createDefaultName: "Mon avatar",
   createJobQueued: "En attente d’un processus libre…",
@@ -460,14 +542,17 @@ export const avatars = {
   createErr_unsupported_image_type: "Choisissez une photo JPEG, PNG ou WebP.",
   createErr_image_too_large: "La photo est trop grande : 15 Mo et 100 mégapixels au maximum.",
   createErr_unreadable_image: "Ce fichier n’a pas pu être lu comme une photo. Essayez-en une autre.",
-  createErr_too_many_drafts: "Vous avez 10 avatars inachevés. Terminez-en ou supprimez-en un depuis votre liste d’abord.",
+  createErr_too_many_drafts:
+    "Vous avez 10 avatars inachevés. Terminez-en ou supprimez-en un depuis votre liste d’abord.",
   createErr_too_many_jobs: "Votre équipe a déjà plusieurs traitements en cours.",
   createErr_job_queue_full: "Le serveur est occupé en ce moment.",
   createErr_creation_not_found: "Cet avatar inachevé n’existe plus.",
   createErr_creation_not_ready: "La photo est encore en préparation. Patientez un instant.",
   createErr_creation_not_draft: "Cet avatar est déjà en construction et ne peut plus changer.",
-  createErr_creation_changed: "Cet avatar a été modifié ailleurs (un autre onglet ?). Nous l’avons rechargé ; vérifiez et réessayez.",
-  createErr_creation_finishing: "L’avatar est en cours de construction à partir de ce brouillon ; patientez un instant.",
+  createErr_creation_changed:
+    "Cet avatar a été modifié ailleurs (un autre onglet ?). Nous l’avons rechargé ; vérifiez et réessayez.",
+  createErr_creation_finishing:
+    "L’avatar est en cours de construction à partir de ce brouillon ; patientez un instant.",
   createErr_crop_out_of_bounds: "Le recadrage dépasse de la photo.",
   createErr_crop_too_small: "Gardez au moins 15 % de la largeur et de la hauteur.",
   createErr_face_type_required: "Choisissez d’abord ce qu’il y a sur la photo.",
@@ -475,9 +560,11 @@ export const avatars = {
   createErr_segmentation_unavailable: "La suppression du fond n’est pas disponible sur ce serveur.",
   createErr_job_in_progress: "Un traitement est encore en cours pour cet avatar. Attendez qu’il se termine.",
   createErr_unknown_choice: "Cette image n’est plus disponible.",
-  createErr_anchors_stale: "La photo a changé depuis que ces points ont été placés. Ils ont été replacés ; vérifiez-les.",
+  createErr_anchors_stale:
+    "La photo a changé depuis que ces points ont été placés. Ils ont été replacés ; vérifiez-les.",
   createErr_mark_outside_image: "Chaque point doit être à l’intérieur de la photo.",
-  createErr_mouth_line_not_for_face_type: "Ces points ne correspondent pas à ce qu’il y a sur la photo. Rechargez la page.",
+  createErr_mouth_line_not_for_face_type:
+    "Ces points ne correspondent pas à ce qu’il y a sur la photo. Rechargez la page.",
   createErr_marks_required: "Placez chaque point avant d’enregistrer : ce n’était qu’une estimation.",
   createErr_fit_invalid: "Ces points déformeraient le visage. Corrigez ceux indiqués.",
   createErr_nothing_to_retry: "Il n’y a rien à relancer.",
@@ -488,7 +575,8 @@ export const avatars = {
   createStartNew: "Créer un nouvel avatar",
   createExpired: "Cet avatar inachevé a expiré après une semaine sans modification, et sa photo a été supprimée.",
   createOtherWays: "Autres façons de créer",
-  createOtherWaysHint: "Pas de photo, ou envie d’autre chose ? Générez un visage, partez d’un avatar prêt à l’emploi, ou importez un avatar 3D.",
+  createOtherWaysHint:
+    "Pas de photo, ou envie d’autre chose ? Générez un visage, partez d’un avatar prêt à l’emploi, ou importez un avatar 3D.",
   createOtherName: "Nom d’un avatar créé ci-dessous (facultatif)",
   createGlbUpload: "Importer un fichier .glb",
   createGlbProgress: "Envoi… {{percent}} %",
@@ -505,7 +593,8 @@ export const avatars = {
   // --- AI adjust, consent, disclosure (M4) ---
   createStep_adjust: "Retouche IA",
   createHeading_adjust: "Corriger avec l’IA (facultatif)",
-  createIntro_adjust: "Nous vérifions l’image : yeux fermés, bouche ouverte, tête tournée ou mauvaise lumière. Une correction n’est recommandée que si c’est utile.",
+  createIntro_adjust:
+    "Nous vérifions l’image : yeux fermés, bouche ouverte, tête tournée ou mauvaise lumière. Une correction n’est recommandée que si c’est utile.",
   createJob_generate: "Génération de votre image…",
   createJobDone_generate: "Image prête.",
   createJob_adjust: "L’IA prépare deux versions…",
@@ -527,7 +616,8 @@ export const avatars = {
   photoCheck_ai_no_face: "L’IA n’a trouvé aucun visage : les points partent d’une estimation.",
   photoCheck_ai_points_implausible: "Les points de l’IA n’étaient pas cohérents : ils partent d’une estimation.",
   photoCheck_safety_refused: "L’IA a refusé d’examiner cette image : les points partent d’une estimation.",
-  photoCheck_vision_limit_reached: "Votre organisation a atteint sa limite mensuelle de repérage par IA : les points partent d’une estimation.",
+  photoCheck_vision_limit_reached:
+    "Votre organisation a atteint sa limite mensuelle de repérage par IA : les points partent d’une estimation.",
   createChecksAiLater: "L’étape 3 peut corriger certains de ces points avec l’IA.",
   createStartAgain: "Recommencer",
   createGeneratedBadge: "Créée par IA",
@@ -537,12 +627,17 @@ export const avatars = {
   adjustMode_stylise: "Styliser",
   adjustMode_regenerate: "Régénérer dans la meilleure position",
   adjustModeStyled: "{{mode}} : {{style}}",
-  adjustModeHint_touchup: "Ouvre les yeux vers l’objectif et ferme doucement les lèvres. Rien d’autre ne change sur l’image.",
+  adjustModeHint_touchup:
+    "Ouvre les yeux vers l’objectif et ferme doucement les lèvres. Rien d’autre ne change sur l’image.",
   adjustModeHint_stylise: "Redessine la personne dans un autre style. L’avatar devient alors une animation.",
-  adjustModeHint_regenerate_human: "Redessine l’image de face, droite et bien éclairée, yeux ouverts et lèvres fermées. Vérifiez qu’elle ressemble toujours à la personne.",
-  adjustModeHint_regenerate_animal: "Redessine votre animal face à l’objectif, les deux yeux bien visibles et la gueule fermée.",
-  adjustModeHint_regenerate_cartoon: "Redessine le personnage face à l’objectif, pour que son visage soit trouvé et animé.",
-  adjustOff: "Les corrections par IA sont désactivées pour votre organisation : votre image est utilisée telle quelle. Un propriétaire ou un administrateur peut les activer dans les Paramètres.",
+  adjustModeHint_regenerate_human:
+    "Redessine l’image de face, droite et bien éclairée, yeux ouverts et lèvres fermées. Vérifiez qu’elle ressemble toujours à la personne.",
+  adjustModeHint_regenerate_animal:
+    "Redessine votre animal face à l’objectif, les deux yeux bien visibles et la gueule fermée.",
+  adjustModeHint_regenerate_cartoon:
+    "Redessine le personnage face à l’objectif, pour que son visage soit trouvé et animé.",
+  adjustOff:
+    "Les corrections par IA sont désactivées pour votre organisation : votre image est utilisée telle quelle. Un propriétaire ou un administrateur peut les activer dans les Paramètres.",
   adjustNoModes: "Aucune correction IA n’existe pour ce type d’image. Continuez avec l’image telle quelle.",
   adjustCurrentAlt: "L’image telle qu’elle est",
   adjustFindingsTitle: "À savoir sur cette image :",
@@ -551,13 +646,15 @@ export const avatars = {
   adjustReady: "Votre photo est prête — pas besoin d’IA.",
   adjustReadyAi: "Cette version est prête — plus besoin d’IA.",
   adjustNoCheck: "L’IA peut retoucher ou redessiner votre image si vous le souhaitez. C’est facultatif.",
-  adjustEyesClosedOther: "L’IA dessinera de nouveaux yeux, signalés comme générés par IA. Une photo aux yeux ouverts ressemble davantage à la personne.",
+  adjustEyesClosedOther:
+    "L’IA dessinera de nouveaux yeux, signalés comme générés par IA. Une photo aux yeux ouverts ressemble davantage à la personne.",
   adjustQuestion: "Que doit faire l’IA ?",
   adjustRecommended: "Recommandé",
   adjustRoundsLeft_one: "{{count}} essai IA restant pour cet avatar. Chaque essai produit deux versions.",
   adjustRoundsLeft_other: "{{count}} essais IA restants pour cet avatar. Chaque essai produit deux versions.",
   adjustNoRoundsLeft: "Plus d’essai IA pour cet avatar. Vous pouvez continuer avec n’importe quelle image affichée.",
-  adjustLimitReached: "Votre organisation a atteint sa limite mensuelle d’images IA : cet essai a produit moins de versions.",
+  adjustLimitReached:
+    "Votre organisation a atteint sa limite mensuelle d’images IA : cet essai a produit moins de versions.",
   adjustFix: "Corriger avec l’IA",
   adjustSkip: "Garder ma photo",
   adjustKeepMine: "Garder ma photo",
@@ -592,10 +689,14 @@ export const avatars = {
   adjustWhy_gaze_off_camera: "Vous ne regardez pas l’objectif",
   adjustWhy_mouth_open: "Votre bouche est ouverte",
   adjustWhy_teeth_showing: "Vos lèvres sont entrouvertes : vos dents peuvent se voir",
-  adjustAutoStarted: "Vos lèvres sont entrouvertes sur vos dents, qui resteraient peintes sur les lèvres quand l’avatar parle : une retouche qui les ferme a donc démarré. À vous de choisir : le résultat, ou votre photo telle quelle.",
-  adjustAutoReady: "La retouche qui ferme vos lèvres est prête ci-dessous. Utilisez-la, ou gardez votre photo telle quelle.",
-  adjustAutoStartedEyes: "Vos lèvres sont entrouvertes sur vos dents, qui resteraient peintes sur les lèvres quand l’avatar parle : une retouche a donc démarré. Elle les ferme, et corrige aussi les yeux que la vérification a relevés. À vous de choisir : le résultat, ou votre photo telle quelle.",
-  adjustAutoReadyEyes: "La retouche qui ferme vos lèvres et corrige vos yeux est prête ci-dessous. Utilisez-la, ou gardez votre photo telle quelle.",
+  adjustAutoStarted:
+    "Vos lèvres sont entrouvertes sur vos dents, qui resteraient peintes sur les lèvres quand l’avatar parle : une retouche qui les ferme a donc démarré. À vous de choisir : le résultat, ou votre photo telle quelle.",
+  adjustAutoReady:
+    "La retouche qui ferme vos lèvres est prête ci-dessous. Utilisez-la, ou gardez votre photo telle quelle.",
+  adjustAutoStartedEyes:
+    "Vos lèvres sont entrouvertes sur vos dents, qui resteraient peintes sur les lèvres quand l’avatar parle : une retouche a donc démarré. Elle les ferme, et corrige aussi les yeux que la vérification a relevés. À vous de choisir : le résultat, ou votre photo telle quelle.",
+  adjustAutoReadyEyes:
+    "La retouche qui ferme vos lèvres et corrige vos yeux est prête ci-dessous. Utilisez-la, ou gardez votre photo telle quelle.",
   adjustWhy_no_face: "Nous n’avons pas trouvé de visage",
   adjustWhy_head_turned: "Votre tête est tournée",
   adjustWhy_head_tilted: "Votre tête est penchée",
@@ -608,7 +709,8 @@ export const avatars = {
   adjustWhyDrawn_head_turned: "Le visage est tourné loin de l’objectif",
   adjustReason_safety_refused: "L’IA a refusé de produire cette version.",
   adjustReason_no_image: "L’IA a répondu sans image ; elle n’a pas été sollicitée une seconde fois.",
-  adjustReason_jaw_moved: "En fermant la bouche, la mâchoire a bougé : les nouvelles lèvres n’iraient pas sur votre photo. Essayez Régénérer.",
+  adjustReason_jaw_moved:
+    "En fermant la bouche, la mâchoire a bougé : les nouvelles lèvres n’iraient pas sur votre photo. Essayez Régénérer.",
   adjustReason_provider_error: "Le service d’IA n’a pas répondu.",
   adjustReason_unreadable_result: "L’IA a renvoyé une image illisible.",
   adjustReason_no_face_in_result: "Aucun visage n’a été trouvé dans cette version.",
@@ -618,25 +720,33 @@ export const avatars = {
   adjustReason_check_failed: "Elle n’a pas passé nos vérifications.",
   aiConsentTitle: "Accepter l’envoi d’images à {{providers}} ?",
   aiConsentFor: "Pour : {{purpose}}",
-  aiConsentCheck: "J’accepte que la photo que j’importe ou la description que je saisis, ainsi que des recadrages du visage de mon avatar, soient envoyés à {{providers}} pour créer et ajuster mon avatar, comme décrit ici.",
-  aiConsentSent: "Ce qui est envoyé au modèle d’images de {{providers}} : la photo que vous importez (ou la description que vous saisissez) pour créer l’image de votre avatar dans le style choisi, et de nouveau à chaque nouvel essai ou modification ; pour un animal ou un dessin, l’image une nouvelle fois pour que l’IA repère les yeux et la bouche ; et, pour une personne réaliste, des recadrages de l’image finale pour créer les dents et les formes de bouche propres à l’avatar (un recadrage pour les dents et un pour chacun des six sons, et un de plus pour chaque son que l’IA refuse), lorsque vous le publiez et lorsque vous les demandez dans son panneau Bouche. Rien d’autre sur vous ou sur cet avatar n’est envoyé.",
-  aiConsentKept: "Les résultats sont conservés avec votre avatar et publiés avec lui, présentés à ses visiteurs avec un label IA, jusqu’à la suppression de l’avatar. Un avatar inachevé et ses images sont supprimés une semaine après sa dernière modification. Nous n’utilisons jamais vos images pour entraîner une IA.",
+  aiConsentCheck:
+    "J’accepte que la photo que j’importe ou la description que je saisis, ainsi que des recadrages du visage de mon avatar, soient envoyés à {{providers}} pour créer et ajuster mon avatar, comme décrit ici.",
+  aiConsentSent:
+    "Ce qui est envoyé au modèle d’images de {{providers}} : la photo que vous importez (ou la description que vous saisissez) pour créer l’image de votre avatar dans le style choisi, et de nouveau à chaque nouvel essai ou modification ; pour un animal ou un dessin, l’image une nouvelle fois pour que l’IA repère les yeux et la bouche ; et, pour une personne réaliste, des recadrages de l’image finale pour créer les dents et les formes de bouche propres à l’avatar (un recadrage pour les dents et un pour chacun des six sons, et un de plus pour chaque son que l’IA refuse), lorsque vous le publiez et lorsque vous les demandez dans son panneau Bouche. Rien d’autre sur vous ou sur cet avatar n’est envoyé.",
+  aiConsentKept:
+    "Les résultats sont conservés avec votre avatar et publiés avec lui, présentés à ses visiteurs avec un label IA, jusqu’à la suppression de l’avatar. Un avatar inachevé et ses images sont supprimés une semaine après sa dernière modification. Nous n’utilisons jamais vos images pour entraîner une IA.",
   aiConsentRights: "N’envoyez qu’une image de vous, ou de quelqu’un qui l’a accepté.",
-  aiConsentOptional: "C’est facultatif pour une photo réaliste : sans IA, votre propre photo est utilisée, sans son arrière-plan. Votre réponse est mémorisée pour votre compte, et redemandée si ce texte change.",
+  aiConsentOptional:
+    "C’est facultatif pour une photo réaliste : sans IA, votre propre photo est utilisée, sans son arrière-plan. Votre réponse est mémorisée pour votre compte, et redemandée si ce texte change.",
   aiConsentRecorded: "Version du texte {{version}}. Votre accord est enregistré avec cette version.",
-  aiConsentReagree: "Nous avons mis à jour la façon dont nous décrivons ce qui est envoyé à l’IA. Veuillez accepter à nouveau pour continuer.",
+  aiConsentReagree:
+    "Nous avons mis à jour la façon dont nous décrivons ce qui est envoyé à l’IA. Veuillez accepter à nouveau pour continuer.",
   aiConsentDecline: "Pas maintenant",
   aiConsentAgree: "J’accepte",
   createAiPoints: "Trouver les points avec l’IA",
   createRetryAi: "Réessayer avec l’IA",
-  createAiPointsHint: "Envoie cette image à Google (Gemini) pour placer les points. Vous vérifiez toujours chaque partie.",
+  createAiPointsHint:
+    "Envoie cette image à Google (Gemini) pour placer les points. Vous vérifiez toujours chaque partie.",
   createAiPointsReplaces: "Remplace les points déjà placés par ceux de l’IA.",
   createAiPointsSpent: "L’IA a déjà cherché les points de cet avatar. Placez-les à la main.",
-  createAiPointsPlaced: "L’IA a placé ces points. Vérifiez chaque partie : déplacez-la si besoin, ou cochez-la si elle est bien placée.",
+  createAiPointsPlaced:
+    "L’IA a placé ces points. Vérifiez chaque partie : déplacez-la si besoin, ou cochez-la si elle est bien placée.",
   createAiEditedNote: "Cette image a été modifiée par IA, et l’avatar est signalé comme retouché par IA.",
   createAiMadeNote: "Cette image a été créée par IA, et l’avatar est signalé comme généré par IA.",
   createAiEyesNote: "Ses yeux ont été dessinés par l’IA.",
-  genAiOff: "La génération par IA est désactivée pour votre organisation. Un propriétaire ou un administrateur peut l’activer dans les Paramètres.",
+  genAiOff:
+    "La génération par IA est désactivée pour votre organisation. Un propriétaire ou un administrateur peut l’activer dans les Paramètres.",
   genLine: "Type de visage",
   genPrompt: "Décrivez-le (facultatif)",
   genPromptCount: "{{count}} / {{max}}",
@@ -656,29 +766,37 @@ export const avatars = {
   createErr_consent_outdated: "Le texte du consentement a changé. Rechargez la page pour le lire.",
   createErr_unknown_consent_version: "Le texte du consentement a changé. Rechargez la page pour le lire.",
   createErr_unknown_provider: "Ce fournisseur d’IA est inconnu. Rechargez la page.",
-  createErr_third_party_ai_disabled: "Votre organisation a désactivé l’IA tierce. Un propriétaire ou un administrateur peut l’activer dans les Paramètres.",
+  createErr_third_party_ai_disabled:
+    "Votre organisation a désactivé l’IA tierce. Un propriétaire ou un administrateur peut l’activer dans les Paramètres.",
   createErr_adjust_not_for_face_type: "Cette correction IA n’est pas disponible pour ce type d’image.",
   createErr_style_required: "Choisissez d’abord un style.",
   createErr_imagegen_unavailable: "La retouche d’images par IA n’est pas disponible sur ce serveur pour le moment.",
   createErr_budget_spent: "Cet avatar a utilisé tous ses essais IA. Continuez avec n’importe quelle image affichée.",
-  createErr_image_limit_reached: "Votre organisation a atteint sa limite mensuelle d’images IA. Elle est remise à zéro au début du mois prochain.",
+  createErr_image_limit_reached:
+    "Votre organisation a atteint sa limite mensuelle d’images IA. Elle est remise à zéro au début du mois prochain.",
   createErr_candidate_rejected: "Cette version n’a pas passé les vérifications et ne peut pas être utilisée.",
-  createErr_ai_points_not_for_face_type: "Les points d’une personne sont trouvés par le détecteur de visage, pas par l’IA.",
+  createErr_ai_points_not_for_face_type:
+    "Les points d’une personne sont trouvés par le détecteur de visage, pas par l’IA.",
   createErr_ai_points_unavailable: "Le repérage des points par IA n’est pas disponible sur ce serveur pour le moment.",
-  createErr_face_turned: "La tête est trop tournée pour une retouche. Essayez plutôt Régénérer ; cet essai n’a pas été compté.",
-  createErr_no_face_for_touchup: "Aucun visage à retoucher n’a été trouvé. Essayez plutôt Régénérer ; cet essai n’a pas été compté.",
-  createErr_landmarks_unavailable: "Le visage n’a pas pu être mesuré assez précisément pour une retouche. Essayez plutôt Régénérer ; cet essai n’a pas été compté.",
+  createErr_face_turned:
+    "La tête est trop tournée pour une retouche. Essayez plutôt Régénérer ; cet essai n’a pas été compté.",
+  createErr_no_face_for_touchup:
+    "Aucun visage à retoucher n’a été trouvé. Essayez plutôt Régénérer ; cet essai n’a pas été compté.",
+  createErr_landmarks_unavailable:
+    "Le visage n’a pas pu être mesuré assez précisément pour une retouche. Essayez plutôt Régénérer ; cet essai n’a pas été compté.",
   createErr_provider_error: "Le service d’IA n’a pas répondu. Cet essai n’a pas été compté ; réessayez.",
   createErr_safety_refused: "L’IA a refusé de produire cette image. Essayez une autre description ou une autre photo.",
   createErr_no_image: "L’IA a répondu sans image. Réessayez, ou changez la description.",
   createErr_source_gone: "L’avatar de départ n’existe plus.",
   createErr_avatar_not_found: "Cet avatar n’existe plus.",
   createErr_not_a_photo: "Cet avatar n’a pas de photo de départ. Choisissez un avatar photo.",
-  createErr_avatar_preparing: "Cet avatar est encore en préparation à partir de sa photo. Il s’ouvre de lui-même quand il est prêt.",
+  createErr_avatar_preparing:
+    "Cet avatar est encore en préparation à partir de sa photo. Il s’ouvre de lui-même quand il est prêt.",
   createErr_image_missing: "La photo de cet avatar n’a pas encore été envoyée.",
   // L’éditeur de cadrage et la scène (FramingScenePanel).
   sceneTitle: "Cadrage et scène",
-  sceneIntro: "Ce que voient les visiteurs : à quelle distance, où se place l’image, et ce qui apparaît derrière un détourage. Publié avec l’avatar.",
+  sceneIntro:
+    "Ce que voient les visiteurs : à quelle distance, où se place l’image, et ce qui apparaît derrière un détourage. Publié avec l’avatar.",
   sceneZoom: "Zoom",
   sceneZoomFace: "Visage",
   sceneZoomFull: "Image entière",
@@ -687,7 +805,8 @@ export const avatars = {
   sceneZoomFullValue: "Image entière",
   sceneZoomPercent: "{{percent}} % de la vue du visage",
   scenePan: "Position",
-  scenePanHint: "Faites glisser l’aperçu pour déplacer l’image, ou utilisez les flèches du clavier ici (Maj pour de plus grands pas).",
+  scenePanHint:
+    "Faites glisser l’aperçu pour déplacer l’image, ou utilisez les flèches du clavier ici (Maj pour de plus grands pas).",
   scenePanHintTouch: "Utilisez les flèches pour déplacer l’image.",
   scenePanUp: "Monter",
   scenePanDown: "Descendre",

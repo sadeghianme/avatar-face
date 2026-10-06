@@ -13,6 +13,7 @@
  * tested with `node --test`.
  */
 import type { AvatarMouthConfig, CharacterSettings, ClassicMouthConfig } from "@liveface/embed/mouth";
+
 import type { FaceType, MouthRenderer } from "@/lib/types";
 
 /** A presigned URL is re-signed on every fetch: what it names is its path. */
@@ -32,7 +33,8 @@ export function mouthLoadIdentity(config: AvatarMouthConfig | ClassicMouthConfig
 
 /** The config to load, from the freshest copy (current signatures). */
 export function mouthConfigToLoad(config: AvatarMouthConfig | null): AvatarMouthConfig {
-  const image = config?.oral?.image_url, rig = config?.oral?.rig_url;
+  const image = config?.oral?.image_url,
+    rig = config?.oral?.rig_url;
   return {
     renderer: "continuous",
     profile: config?.profile,

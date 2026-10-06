@@ -26,7 +26,8 @@ const SOFT: Record<BannerTone, string> = {
   success:
     "bg-emerald-50 text-emerald-800 ring-emerald-600/10 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20",
   brand: "bg-brand-50 text-brand-800 ring-brand-600/10 dark:bg-brand-500/10 dark:text-brand-300 dark:ring-brand-400/20",
-  warning: "bg-amber-50 text-amber-800 ring-amber-600/10 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-400/20",
+  warning:
+    "bg-amber-50 text-amber-800 ring-amber-600/10 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-400/20",
   danger: "bg-red-50 text-red-700 ring-red-600/10 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20",
 };
 
@@ -66,9 +67,7 @@ export function Banner({
   const body = title ? (
     <div className="min-w-0">
       <p className="text-sm font-medium">{title}</p>
-      {children && (
-        <div className="mt-0.5 text-xs leading-snug text-gray-500 dark:text-gray-400">{children}</div>
-      )}
+      {children && <div className="mt-0.5 text-xs leading-snug text-gray-500 dark:text-gray-400">{children}</div>}
     </div>
   ) : (
     <div className="min-w-0">{children}</div>
@@ -76,7 +75,10 @@ export function Banner({
 
   if (appearance === "soft") {
     return (
-      <div className={cx("flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-[14px] ring-1", SOFT[tone], className)} {...rest}>
+      <div
+        className={cx("flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-[14px] ring-1", SOFT[tone], className)}
+        {...rest}
+      >
         {icon && <Icon name={icon} className="mt-0.5 h-4 w-4 shrink-0" />}
         <div className="min-w-0 flex-1">
           {children}

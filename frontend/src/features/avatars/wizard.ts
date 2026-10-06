@@ -132,7 +132,11 @@ export function statementToAsk(
   made: FaceStatement | null
 ): FaceStatement | null {
   const needed =
-    creation.statement !== undefined ? creation.statement : (creation.face_type ?? "human") === "human" ? "depiction" : null;
+    creation.statement !== undefined
+      ? creation.statement
+      : (creation.face_type ?? "human") === "human"
+        ? "depiction"
+        : null;
   return needed && needed !== made ? needed : null;
 }
 
@@ -303,7 +307,12 @@ export function preparePhase(creation: Creation): PreparePhase {
   const job = creation.job;
   if (isBusyPreparing(creation)) return "working";
   if (preparedStep(creation)) return "done";
-  if (job && isPrepareJob(job) && (job.state === "failed" || job.state === "interrupted") && job.error?.code !== "superseded") {
+  if (
+    job &&
+    isPrepareJob(job) &&
+    (job.state === "failed" || job.state === "interrupted") &&
+    job.error?.code !== "superseded"
+  ) {
     return "failed";
   }
   return "waiting";
@@ -427,7 +436,7 @@ export function versionsOf(creation: WizardCreation): Version[] {
   const original = byId.get("original");
   if (original) {
     const upload = plan.source === "upload";
-    const framed = upload ? byId.get("framed") ?? null : null;
+    const framed = upload ? (byId.get("framed") ?? null) : null;
     const base = framed ?? original;
     const cut = cutOf(base.id);
     const last = (creation.ai?.last_prepare ?? null) as LastPrepare | null;
@@ -437,7 +446,7 @@ export function versionsOf(creation: WizardCreation): Version[] {
       number: 0,
       kind: upload ? "photo" : "generated",
       instruction: null,
-      shown: prepared ? cut ?? base : original,
+      shown: prepared ? (cut ?? base) : original,
       selectable: !upload || canUseOriginal(plan),
       needsPrepare: upload && canUseOriginal(plan) && !prepared,
     });
@@ -489,10 +498,7 @@ export interface FooterPlan {
   primary: "create" | "continue" | "publish" | null;
 }
 
-export function footerPlan(
-  screen: Screen,
-  state: { prepared?: boolean; building?: boolean } = {}
-): FooterPlan {
+export function footerPlan(screen: Screen, state: { prepared?: boolean; building?: boolean } = {}): FooterPlan {
   switch (screen) {
     case "model":
       return { back: "avatars", primary: null };

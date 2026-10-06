@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
-  JAW_LIMITS,
   characterSettings,
   characterUpdate,
+  JAW_LIMITS,
   mouthLook,
   styleChange,
 } from "@/features/avatars/character-mouth";
@@ -67,9 +67,7 @@ export function CharacterMouthSection({
           queryClient.invalidateQueries({ queryKey: ["avatars", orgId] }),
         ]);
       } else {
-        queryClient.setQueryData<Avatar>(["avatar", orgId, avatar.id], (old) =>
-          old ? { ...old, ...updated } : old
-        );
+        queryClient.setQueryData<Avatar>(["avatar", orgId, avatar.id], (old) => (old ? { ...old, ...updated } : old));
         void queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
       }
     } catch (err) {
@@ -122,9 +120,7 @@ export function CharacterMouthSection({
         })}
       </div>
 
-      {look === "original" && (
-        <p className="text-xs leading-relaxed text-gray-500">{t("mouthCharacterLegacy")}</p>
-      )}
+      {look === "original" && <p className="text-xs leading-relaxed text-gray-500">{t("mouthCharacterLegacy")}</p>}
 
       {look === "character" && (
         <div className="space-y-3 rounded-xl bg-black/[0.03] p-3 dark:bg-white/[0.04]">
@@ -169,7 +165,11 @@ export function CharacterMouthSection({
           </div>
         </div>
       )}
-      {error && <p className="field-error" role="alert">{error}</p>}
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

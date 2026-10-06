@@ -15,7 +15,10 @@ export function Faq() {
         <div>
           <SectionHeader align="start" eyebrow={t("faqEyebrow")} title={t("faqTitle")} subtitle={t("faqSubtitle")} />
           <Reveal delay={80}>
-            <Link to="/register" className="mt-8 inline-flex items-center gap-1.5 text-[15px] font-semibold text-brand-600 coarse:min-h-11 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300">
+            <Link
+              to="/register"
+              className="mt-8 inline-flex items-center gap-1.5 text-[15px] font-semibold text-brand-600 coarse:min-h-11 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
+            >
               {t("faqCta")}
               <Icon name="arrow" className="h-4 w-4 rtl:rotate-180" />
             </Link>
@@ -31,7 +34,9 @@ export function Faq() {
                     <Icon name="plus" className="h-4 w-4" />
                   </span>
                 </summary>
-                <p className="pb-5 pe-12 text-[15px] leading-relaxed text-gray-600 dark:text-gray-400">{t(`${key}A`)}</p>
+                <p className="pb-5 pe-12 text-[15px] leading-relaxed text-gray-600 dark:text-gray-400">
+                  {t(`${key}A`)}
+                </p>
               </details>
             ))}
           </div>

@@ -18,15 +18,26 @@ export const FACE_PATHS = [
 
 /** Mouth openness across "Hi, I'm a live avatar, made from a single photo." */
 export const OPENNESS = [
-  0.29, 0.29, 0.29, 0.0, 0.0, 0.88, 0.88, 0.05, 0.05, 0.24, 0.0, 0.14, 0.4, 0.16, 0.0, 0.16,
-  0.84, 0.84, 0.84, 0.3, 0.0, 0.0, 0.05, 0.43, 0.43, 0.28, 0.0, 0.18, 0.3, 0.68, 0.05, 0.0,
-  0.17, 0.28, 0.28, 0.44, 0.11, 0.18, 0.14, 0.18, 0.18, 0.93, 0.2, 0.2, 0.0, 0.0, 0.0, 0.0,
+  0.29, 0.29, 0.29, 0.0, 0.0, 0.88, 0.88, 0.05, 0.05, 0.24, 0.0, 0.14, 0.4, 0.16, 0.0, 0.16, 0.84, 0.84, 0.84, 0.3, 0.0,
+  0.0, 0.05, 0.43, 0.43, 0.28, 0.0, 0.18, 0.3, 0.68, 0.05, 0.0, 0.17, 0.28, 0.28, 0.44, 0.11, 0.18, 0.14, 0.18, 0.18,
+  0.93, 0.2, 0.2, 0.0, 0.0, 0.0, 0.0,
 ];
 
 /** Languages with built-in server voices, by native name. */
 export const LANGUAGES = [
-  "English", "Español", "Français", "Italiano", "Português", "Deutsch", "Nederlands",
-  "Polski", "Русский", "Türkçe", "العربية", "فارسی", "हिन्दी",
+  "English",
+  "Español",
+  "Français",
+  "Italiano",
+  "Português",
+  "Deutsch",
+  "Nederlands",
+  "Polski",
+  "Русский",
+  "Türkçe",
+  "العربية",
+  "فارسی",
+  "हिन्दी",
 ];
 
 export const API_ORIGIN = "https://avatar.mehdisadeghian.com/api";

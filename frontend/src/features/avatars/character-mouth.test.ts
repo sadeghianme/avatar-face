@@ -39,7 +39,10 @@ describe("the settings", () => {
     assert.equal(characterSettings({ jaw: 0 }).jaw, 0.5);
     assert.equal(characterSettings({ jaw: Number.NaN }).jaw, 1);
     assert.deepEqual(characterSettings({ teeth: "none", tongue: false, style: "classic" }), {
-      style: "classic", teeth: "none", tongue: false, jaw: 1,
+      style: "classic",
+      teeth: "none",
+      tongue: false,
+      jaw: 1,
     });
   });
 
@@ -51,11 +54,17 @@ describe("the settings", () => {
 });
 
 describe("the preview of an animation or an animal", () => {
-  const source = { face_type: "animal" as const, mouth: { renderer: "classic" as const, profile: {}, character: { teeth: "none" as const } } };
+  const source = {
+    face_type: "animal" as const,
+    mouth: { renderer: "classic" as const, profile: {}, character: { teeth: "none" as const } },
+  };
 
   it("is the classic renderer with the owner's settings, saved or being edited", () => {
     assert.deepEqual(draftMouthConfig(source), { renderer: "classic", character: { teeth: "none" } });
-    assert.deepEqual(draftMouthConfig(source, "classic", {}, { jaw: 1.4 }), { renderer: "classic", character: { jaw: 1.4 } });
+    assert.deepEqual(draftMouthConfig(source, "classic", {}, { jaw: 1.4 }), {
+      renderer: "classic",
+      character: { jaw: 1.4 },
+    });
   });
 
   it("is nothing before the owner has set anything, and never the photographic mouth", () => {
@@ -64,7 +73,10 @@ describe("the preview of an animation or an animal", () => {
   });
 
   it("leaves a person's preview as it was", () => {
-    const person = { face_type: "human" as const, mouth: { renderer: "continuous" as const, profile: { jawRange: 0.7 }, motion_url: "m" } };
+    const person = {
+      face_type: "human" as const,
+      mouth: { renderer: "continuous" as const, profile: { jawRange: 0.7 }, motion_url: "m" },
+    };
     assert.equal(draftMouthConfig(person)?.renderer, "continuous");
     assert.equal(draftMouthConfig({ face_type: "human", mouth: null }), null);
   });

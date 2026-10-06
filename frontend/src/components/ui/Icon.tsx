@@ -13,27 +13,18 @@ import type { ReactElement, ReactNode } from "react";
  * an icon never fights the palette.
  */
 export type Shape =
-  | { d: string }
-  | { circle: [number, number, number] }
-  | { rect: [number, number, number, number, number] };
+  { d: string } | { circle: [number, number, number] } | { rect: [number, number, number, number, number] };
 
 /** Exported so the set can be enumerated (dev icon sheet, tests). */
 export const ICONS = {
   // Avatars — a portrait in frame, which is literally what the product makes.
-  faces: [
-    { rect: [3, 3, 18, 18, 4] },
-    { circle: [12, 10, 3] },
-    { d: "M6.5 19.5a6 6 0 0 1 11 0" },
-  ],
+  faces: [{ rect: [3, 3, 18, 18, 4] }, { circle: [12, 10, 3] }, { d: "M6.5 19.5a6 6 0 0 1 11 0" }],
   users: [
     { circle: [9, 8, 3.2] },
     { d: "M2.5 20a6.5 6.5 0 0 1 13 0" },
     { d: "M16.5 5.3a3.2 3.2 0 0 1 0 5.6M18 14.4a6.5 6.5 0 0 1 3.5 5.6" },
   ],
-  key: [
-    { circle: [7.5, 15.5, 3.5] },
-    { d: "M10 13 20.5 2.5M18 5l2.5 2.5M15.5 7.5 18 10" },
-  ],
+  key: [{ circle: [7.5, 15.5, 3.5] }, { d: "M10 13 20.5 2.5M18 5l2.5 2.5M15.5 7.5 18 10" }],
   // Settings — sliders, not a gear. A gear at 18px is a smudge.
   settings: [
     { d: "M4 6h10M18 6h2M4 12h3M11 12h9M4 18h8M16 18h4" },
@@ -55,32 +46,18 @@ export const ICONS = {
   menu: [{ d: "M3.5 7h17M3.5 12h17M3.5 17h17" }],
   chevron: [{ d: "m9.5 6 6 6-6 6" }],
   arrow: [{ d: "M4 12h15M13 6l6 6-6 6" }],
-  trash: [
-    { d: "M4 6.5h16M9.5 6.5V4.5h5v2" },
-    { d: "M6.5 6.5 7.5 20a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1l1-13.5" },
-  ],
+  trash: [{ d: "M4 6.5h16M9.5 6.5V4.5h5v2" }, { d: "M6.5 6.5 7.5 20a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1l1-13.5" }],
   back: [{ d: "M20 12H5M11 6 5 12l6 6" }],
   // Language — a globe with meridians, the least culture-specific option.
-  globe: [
-    { circle: [12, 12, 9] },
-    { d: "M3 12h18" },
-    { d: "M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18Z" },
-  ],
+  globe: [{ circle: [12, 12, 9] }, { d: "M3 12h18" }, { d: "M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18Z" }],
   undo: [{ d: "M3.5 8.5h11a5.5 5.5 0 0 1 0 11H8" }, { d: "M7 4 3.5 8.5 7 13" }],
   // Mark the face — a reticle, which is what the tool actually is.
   target: [{ circle: [12, 12, 8] }, { circle: [12, 12, 2.2] }, { d: "M12 2v3M12 19v3M2 12h3M19 12h3" }],
   // Generate 3D — a cube, not a sparkle. The output is geometry.
-  cube: [
-    { d: "M12 2.6 20.5 7v10L12 21.4 3.5 17V7z" },
-    { d: "M3.5 7 12 11.6 20.5 7M12 11.6V21.4" },
-  ],
+  cube: [{ d: "M12 2.6 20.5 7v10L12 21.4 3.5 17V7z" }, { d: "M3.5 7 12 11.6 20.5 7M12 11.6V21.4" }],
   crop: [{ d: "M6.5 2v15.5H22" }, { d: "M2 6.5h15.5V22" }],
   // Remove background — an eraser taken to a corner.
-  eraser: [
-    { d: "M8.5 21H21" },
-    { d: "M15.5 3.5 21 9 10.5 19.5H5L2.6 17.1z" },
-    { d: "M10.5 8.5 16 14" },
-  ],
+  eraser: [{ d: "M8.5 21H21" }, { d: "M15.5 3.5 21 9 10.5 19.5H5L2.6 17.1z" }, { d: "M10.5 8.5 16 14" }],
   speaker: [{ d: "M11 5 6.5 9H3v6h3.5L11 19z" }, { d: "M15.5 9.2a4 4 0 0 1 0 5.6M18.4 6.4a8 8 0 0 1 0 11.2" }],
   stop: [{ rect: [6, 6, 12, 12, 2] }],
   mic: [
@@ -101,16 +78,8 @@ export const ICONS = {
     { d: "M14 10.5a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2" },
   ],
   // Fullscreen — corners pointing out, and its inverse pointing in.
-  expand: [
-    { d: "M14.5 3.5H20.5V9.5" },
-    { d: "M9.5 20.5H3.5V14.5" },
-    { d: "M20.5 3.5 14 10M3.5 20.5 10 14" },
-  ],
-  compress: [
-    { d: "M20.5 9.5H14.5V3.5" },
-    { d: "M3.5 14.5H9.5V20.5" },
-    { d: "M14.5 9.5 21 3M9.5 14.5 3 21" },
-  ],
+  expand: [{ d: "M14.5 3.5H20.5V9.5" }, { d: "M9.5 20.5H3.5V14.5" }, { d: "M20.5 3.5 14 10M3.5 20.5 10 14" }],
+  compress: [{ d: "M20.5 9.5H14.5V3.5" }, { d: "M3.5 14.5H9.5V20.5" }, { d: "M14.5 9.5 21 3M9.5 14.5 3 21" }],
   grid: [
     { rect: [3, 3, 8, 8, 2] },
     { rect: [13, 3, 8, 8, 2] },
@@ -138,7 +107,11 @@ export const ICONS = {
   layers: [{ d: "M12 3.5 21 8l-9 4.5L3 8z" }, { d: "m3 12 9 4.5 9-4.5" }, { d: "m3 16 9 4.5 9-4.5" }],
   wave: [{ d: "M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" }],
   mute: [{ d: "M11 5 6.5 9H3v6h3.5L11 19z" }, { d: "m16 9.5 5 5M21 9.5l-5 5" }],
-  message: [{ d: "M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 19 17h-8.5l-4.5 3.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5Z" }],
+  message: [
+    {
+      d: "M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 19 17h-8.5l-4.5 3.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5Z",
+    },
+  ],
   bolt: [{ d: "M13 3 5 13.5h6L10 21l9-11.5h-6z" }],
   image: [{ rect: [3, 4.5, 18, 15, 2.5] }, { circle: [9, 10, 1.8] }, { d: "m3.5 17.5 5.5-5 4 4 2.5-2.5 5 4.5" }],
   headset: [
@@ -149,12 +122,21 @@ export const ICONS = {
   ],
   trending: [{ d: "m3 17 6-6 4 4 8-8" }, { d: "M15 7h6v6" }],
   school: [{ d: "M2.5 9 12 4.5 21.5 9 12 13.5z" }, { d: "M6.5 11v4.5c0 1.4 2.5 3 5.5 3s5.5-1.6 5.5-3V11" }],
-  upload: [{ d: "M12 15.5V4.5M7.5 9 12 4.5 16.5 9" }, { d: "M4.5 15.5v3a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-3" }],
+  upload: [
+    { d: "M12 15.5V4.5M7.5 9 12 4.5 16.5 9" },
+    { d: "M4.5 15.5v3a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-3" },
+  ],
   playTriangle: [{ d: "M7.5 4.8v14.4a.8.8 0 0 0 1.2.7l11.3-7.2a.8.8 0 0 0 0-1.4L8.7 4.1a.8.8 0 0 0-1.2.7Z" }],
   alert: [{ circle: [12, 12, 9] }, { d: "M12 7.5v5.5M12 16.2v.3" }],
-  refresh: [{ d: "M19.5 10.5A7.7 7.7 0 0 0 5.6 7.4M4.5 4v4h4" }, { d: "M4.5 13.5a7.7 7.7 0 0 0 13.9 3.1M19.5 20v-4h-4" }],
+  refresh: [
+    { d: "M19.5 10.5A7.7 7.7 0 0 0 5.6 7.4M4.5 4v4h4" },
+    { d: "M4.5 13.5a7.7 7.7 0 0 0 13.9 3.1M19.5 20v-4h-4" },
+  ],
   pencil: [{ d: "M4.5 19.5h4l10-10a2.1 2.1 0 0 0-4-4l-10 10z" }, { d: "m13.5 6.5 4 4" }],
-  copyIcon: [{ rect: [8.5, 8.5, 12, 12, 2.5] }, { d: "M15.5 8.5V6A2.5 2.5 0 0 0 13 3.5H6A2.5 2.5 0 0 0 3.5 6v7A2.5 2.5 0 0 0 6 15.5h2.5" }],
+  copyIcon: [
+    { rect: [8.5, 8.5, 12, 12, 2.5] },
+    { d: "M15.5 8.5V6A2.5 2.5 0 0 0 13 3.5H6A2.5 2.5 0 0 0 3.5 6v7A2.5 2.5 0 0 0 6 15.5h2.5" },
+  ],
   capsLock: [{ d: "m12 4 7.5 8H15v4H9v-4H4.5z" }, { d: "M9 20h6" }],
 } satisfies Record<string, Shape[]>;
 

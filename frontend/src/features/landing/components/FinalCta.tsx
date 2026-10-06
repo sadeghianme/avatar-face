@@ -19,8 +19,17 @@ export function FinalCta() {
             className="absolute inset-0 -z-10 bg-[linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_60%_70%_at_50%_40%,black,transparent)]"
           />
           <div className="relative mx-auto h-20 w-20">
-            <span className="absolute inset-0 rounded-full bg-white/30 motion-safe:animate-ping" style={{ animationDuration: "2.4s" }} />
-            <img src={DEMO_PORTRAIT} alt="" loading="lazy" decoding="async" className="relative h-20 w-20 rounded-full object-cover ring-4 ring-white/40" />
+            <span
+              className="absolute inset-0 rounded-full bg-white/30 motion-safe:animate-ping"
+              style={{ animationDuration: "2.4s" }}
+            />
+            <img
+              src={DEMO_PORTRAIT}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="relative h-20 w-20 rounded-full object-cover ring-4 ring-white/40"
+            />
           </div>
           <h2 className="mx-auto mt-8 max-w-2xl text-balance text-[34px] font-semibold leading-[1.08] tracking-[-0.03em] sm:text-[48px]">
             {t("ctaTitle")}
@@ -35,7 +44,10 @@ export function FinalCta() {
               <Icon name="arrow" className="h-4 w-4 transition-transform group-hover:translate-x-0.5 rtl:rotate-180" />
             </Link>
             {!user && (
-              <Link to="/login" className="btn rounded-full px-6 py-3.5 text-[15px] font-semibold text-white ring-1 ring-white/40 hover:bg-white/10">
+              <Link
+                to="/login"
+                className="btn rounded-full px-6 py-3.5 text-[15px] font-semibold text-white ring-1 ring-white/40 hover:bg-white/10"
+              >
                 {t("login")}
               </Link>
             )}

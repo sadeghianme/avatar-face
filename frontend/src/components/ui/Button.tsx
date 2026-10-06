@@ -1,7 +1,7 @@
-import { forwardRef, type ButtonHTMLAttributes } from "react";
+import { type ButtonHTMLAttributes, forwardRef } from "react";
 
-import { buttonClass, pressState, type ButtonLook } from "@/components/ui/button-styles";
-import { renderIcon, type IconLike } from "@/components/ui/Icon";
+import { buttonClass, type ButtonLook, pressState } from "@/components/ui/button-styles";
+import { type IconLike, renderIcon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { cx } from "@/lib/cx";
 

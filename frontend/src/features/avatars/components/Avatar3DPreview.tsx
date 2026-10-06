@@ -57,9 +57,7 @@ export function Avatar3DPreview({
   return (
     <div className={`relative ${fit === "box" ? "h-full w-full" : ""}`}>
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-          Loading 3D model…
-        </div>
+        <div className="absolute inset-0 flex items-center justify-center text-gray-400">Loading 3D model…</div>
       )}
       <canvas
         ref={canvasRef}

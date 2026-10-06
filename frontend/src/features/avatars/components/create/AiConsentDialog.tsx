@@ -1,8 +1,8 @@
 import { useTranslation } from "react-i18next";
 
-import { CONSENT_TEXT_VERSIONS, providerLabel } from "@/features/avatars/consent";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
+import { CONSENT_TEXT_VERSIONS, providerLabel } from "@/features/avatars/consent";
 
 /**
  * The third-party AI statement: what is sent, to whom, what is kept, and

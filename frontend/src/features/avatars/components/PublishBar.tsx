@@ -1,4 +1,4 @@
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -65,12 +65,7 @@ export function PublishBar({ avatar, orgId }: { avatar: Avatar; orgId: string })
   // the right. It sits at the top of the avatar page's settings column,
   // beside the preview, so it never pushes the page down.
   return (
-    <div
-      role="status"
-      className={`card px-4 py-3 ${
-        dirty ? "border-amber-300/70 dark:border-amber-500/40" : ""
-      }`}
-    >
+    <div role="status" className={`card px-4 py-3 ${dirty ? "border-amber-300/70 dark:border-amber-500/40" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-1 basis-56 items-start gap-2.5">
           <Icon
@@ -81,18 +76,10 @@ export function PublishBar({ avatar, orgId }: { avatar: Avatar; orgId: string })
           />
           <div className="min-w-0">
             <p className="text-sm font-medium">
-              {neverPublished
-                ? t("publishFirstTitle")
-                : dirty
-                  ? t("publishDraftTitle")
-                  : t("publishLiveTitle")}
+              {neverPublished ? t("publishFirstTitle") : dirty ? t("publishDraftTitle") : t("publishLiveTitle")}
             </p>
             <p className="mt-0.5 text-xs leading-snug text-gray-500 dark:text-gray-400">
-              {neverPublished
-                ? t("publishFirstBody")
-                : dirty
-                  ? t("publishDraftBody")
-                  : t("publishLiveBody")}
+              {neverPublished ? t("publishFirstBody") : dirty ? t("publishDraftBody") : t("publishLiveBody")}
             </p>
           </div>
         </div>
@@ -100,19 +87,11 @@ export function PublishBar({ avatar, orgId }: { avatar: Avatar; orgId: string })
         {dirty && (
           <div className="flex shrink-0 gap-2">
             {!neverPublished && (
-              <button
-                className="btn-secondary min-h-11"
-                onClick={() => void run("discard")}
-                disabled={busy !== null}
-              >
+              <button className="btn-secondary min-h-11" onClick={() => void run("discard")} disabled={busy !== null}>
                 {busy === "discard" ? <Spinner className="h-4 w-4" /> : t("publishDiscard")}
               </button>
             )}
-            <button
-              className="btn-primary min-h-11"
-              onClick={() => void run("publish")}
-              disabled={busy !== null}
-            >
+            <button className="btn-primary min-h-11" onClick={() => void run("publish")} disabled={busy !== null}>
               {busy === "publish" ? <Spinner className="h-4 w-4" /> : t("publish")}
             </button>
           </div>

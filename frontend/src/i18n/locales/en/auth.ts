@@ -7,7 +7,8 @@ export const auth = {
   hide: "Hide",
   backToSite: "Back to site",
   authPanelTitle: "One photo. A face that speaks.",
-  authPanelBody: "Liveface turns a portrait into a real-time talking avatar you can drop on any page with a single script tag.",
+  authPanelBody:
+    "Liveface turns a portrait into a real-time talking avatar you can drop on any page with a single script tag.",
   authPoint1: "Phoneme-accurate lip-sync",
   authPoint2: "13 languages",
   authPoint3: "One script tag",

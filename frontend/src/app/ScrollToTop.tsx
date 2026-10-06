@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from "react";
 import { useLocation, useNavigationType } from "react-router-dom";
 
-import { scrollsToTop, type Place } from "@/app/scroll";
+import { type Place, scrollsToTop } from "@/app/scroll";
 
 /**
  * Every new route starts at the top of the window (app/scroll.ts has the

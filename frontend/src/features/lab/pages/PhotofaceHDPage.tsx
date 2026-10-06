@@ -8,8 +8,8 @@ import { AvatarPreview } from "@/features/avatars";
 import { PhotoFaceHDPreview } from "@/features/lab/components/PhotoFaceHDPreview";
 import { SpeakPanel } from "@/features/voices";
 import { api } from "@/lib/api";
-import { useOrg } from "@/providers/org";
 import type { Avatar } from "@/lib/types";
+import { useOrg } from "@/providers/org";
 
 type HDEngine = SpeechPlayer & CuePlayer & { destroy(): void };
 
@@ -19,7 +19,10 @@ type HDEngine = SpeechPlayer & CuePlayer & { destroy(): void };
  * remembering one run while watching another. The HD engine owns the audio
  * (two players would echo); the stable engine mirrors the cue track.
  */
-function fanout(primary: HDEngine, mirror: { playCues(cues: unknown[]): void; syncCueTime(ms: number): void; stopSpeech(): void }): HDEngine {
+function fanout(
+  primary: HDEngine,
+  mirror: { playCues(cues: unknown[]): void; syncCueTime(ms: number): void; stopSpeech(): void }
+): HDEngine {
   return {
     playAudio: (audio, mime, cues, onEnd) => {
       mirror.playCues(cues as unknown[]);
@@ -46,7 +49,11 @@ export function PhotofaceHDPage() {
   const { current } = useOrg();
   const [selectedId, setSelectedId] = useState("");
   const [hdEngine, setHdEngine] = useState<HDEngine | null>(null);
-  const [stableEngine, setStableEngine] = useState<{ playCues(cues: unknown[]): void; syncCueTime(ms: number): void; stopSpeech(): void } | null>(null);
+  const [stableEngine, setStableEngine] = useState<{
+    playCues(cues: unknown[]): void;
+    syncCueTime(ms: number): void;
+    stopSpeech(): void;
+  } | null>(null);
   const handleEngine = useCallback((next: HDEngine | null) => setHdEngine(next), []);
   // Speak drives both when both exist; the HD engine alone until then.
   const engine = hdEngine && stableEngine ? fanout(hdEngine, stableEngine) : hdEngine;
@@ -56,12 +63,8 @@ export function PhotofaceHDPage() {
     queryFn: () => api.get<Avatar[]>(`/orgs/${current!.id}/avatars`),
     enabled: Boolean(current),
   });
-  const eligible = avatars.filter(
-    (avatar) => avatar.kind === "photo" && avatar.status === "ready"
-  );
-  const activeId = eligible.some((avatar) => avatar.id === selectedId)
-    ? selectedId
-    : eligible[0]?.id ?? "";
+  const eligible = avatars.filter((avatar) => avatar.kind === "photo" && avatar.status === "ready");
+  const activeId = eligible.some((avatar) => avatar.id === selectedId) ? selectedId : (eligible[0]?.id ?? "");
 
   const { data: avatar, isFetching } = useQuery({
     queryKey: ["avatar", current?.id, activeId],
@@ -75,9 +78,7 @@ export function PhotofaceHDPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-[32px] font-semibold tracking-[-0.03em] sm:text-[38px]">
-              {t("photofaceHD")}
-            </h1>
+            <h1 className="text-[32px] font-semibold tracking-[-0.03em] sm:text-[38px]">{t("photofaceHD")}</h1>
             <span className="rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.12em] text-brand-700 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300">
               {t("photofaceHDAlpha")}
             </span>
@@ -149,9 +150,7 @@ export function PhotofaceHDPage() {
                 </option>
               ))}
             </select>
-            <p className="mt-2 text-xs leading-relaxed text-gray-400">
-              {t("photofaceHDChooseHint")}
-            </p>
+            <p className="mt-2 text-xs leading-relaxed text-gray-400">{t("photofaceHDChooseHint")}</p>
           </div>
 
           {current ? <SpeakPanel engine={engine} orgId={current.id} /> : null}

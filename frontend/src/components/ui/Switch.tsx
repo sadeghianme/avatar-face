@@ -1,4 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes } from "react";
+import { type ButtonHTMLAttributes, forwardRef } from "react";
 
 import { switchClasses, type SwitchSize } from "@/components/ui/switch-styles";
 import { cx } from "@/lib/cx";

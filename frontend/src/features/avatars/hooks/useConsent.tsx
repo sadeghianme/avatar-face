@@ -6,25 +6,23 @@ import {
   AI_PROVIDERS,
   consentBody,
   consentProblem,
-  mineFromRecord,
-  needsReagree,
-  rememberedConsent,
-  termsOutdated,
   type ConsentRecord,
   type ConsentScope,
   type ConsentTerms,
+  mineFromRecord,
   type MyConsent,
+  needsReagree,
+  rememberedConsent,
+  termsOutdated,
 } from "@/features/avatars/consent";
 import { api, ApiError } from "@/lib/api";
 
 export const consentTermsKey = (orgId: string | undefined) => ["consent-terms", orgId] as const;
-export const myConsentKey = (orgId: string | undefined, scope: ConsentScope) =>
-  ["consent-mine", orgId, scope] as const;
+export const myConsentKey = (orgId: string | undefined, scope: ConsentScope) => ["consent-mine", orgId, scope] as const;
 
 /** The page is older than the words in force: an ApiError, so the wizard's
  * error handling shows it like any refusal. */
-const outdated = () =>
-  new ApiError(409, "consent_outdated", "The consent text changed; reload the page to read it");
+const outdated = () => new ApiError(409, "consent_outdated", "The consent text changed; reload the page to read it");
 
 /**
  * Consents for one organization, as the signed-in member gives them.
@@ -97,7 +95,8 @@ export function useConsent(orgId: string) {
   }, [queryClient, orgId]);
 
   const remembered = useCallback(
-    () => rememberedConsent(queryClient.getQueryData<MyConsent>(myConsentKey(orgId, "third_party_ai")), "third_party_ai"),
+    () =>
+      rememberedConsent(queryClient.getQueryData<MyConsent>(myConsentKey(orgId, "third_party_ai")), "third_party_ai"),
     [queryClient, orgId]
   );
 
@@ -160,7 +159,10 @@ export function useConsent(orgId: string) {
 
   const providers = terms.data?.third_party_ai.providers ?? AI_PROVIDERS;
   const dialog = (
-    <AiConsentDialog open={asking !== null} purpose={asking?.purpose ?? ""} providers={providers}
+    <AiConsentDialog
+      open={asking !== null}
+      purpose={asking?.purpose ?? ""}
+      providers={providers}
       reagree={needsReagree(mine.data, "third_party_ai")}
       onAnswer={answer}
     />

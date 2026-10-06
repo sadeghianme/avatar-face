@@ -1,4 +1,4 @@
-import { useId, type InputHTMLAttributes, type ReactNode } from "react";
+import { type InputHTMLAttributes, type ReactNode, useId } from "react";
 
 import { RangeInput } from "@/components/ui/RangeInput";
 import { cx } from "@/lib/cx";

@@ -99,7 +99,11 @@ export function InlineName({ name, onSave }: { name: string; onSave: (next: stri
             }}
           />
         </div>
-        <p id={`${ids}-hint`} className={`mt-1 text-xs ${failed ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-400"}`} role={failed ? "alert" : undefined}>
+        <p
+          id={`${ids}-hint`}
+          className={`mt-1 text-xs ${failed ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-400"}`}
+          role={failed ? "alert" : undefined}
+        >
           {failed ? t("wzRenameFailed") : t("wzRenameHint")}
         </p>
       </div>
@@ -117,7 +121,10 @@ export function InlineName({ name, onSave }: { name: string; onSave: (next: stri
         title={t("wzRename")}
       >
         <h1 className="truncate text-2xl font-semibold">{name}</h1>
-        <Icon name="pencil" className="h-4 w-4 shrink-0 text-gray-400 opacity-60 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+        <Icon
+          name="pencil"
+          className="h-4 w-4 shrink-0 text-gray-400 opacity-60 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+        />
       </button>
       <span role="status" className="text-xs text-emerald-600 dark:text-emerald-400">
         {saved ? t("wzRenameSaved") : ""}

@@ -1,10 +1,10 @@
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { CHECKER_STYLE, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
-import { versionLabel, type Version } from "@/features/avatars/wizard";
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
+import { CHECKER_STYLE, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
+import { type Version, versionLabel } from "@/features/avatars/wizard";
 
 /**
  * Every picture step 3 made: the upload first, then each AI result in the
@@ -49,7 +49,10 @@ export function VersionStrip({
 
   const move = (from: string, step: number) => {
     if (usable.length === 0) return;
-    const at = Math.max(0, usable.findIndex((v) => v.id === from));
+    const at = Math.max(
+      0,
+      usable.findIndex((v) => v.id === from)
+    );
     const next = usable[(at + step + usable.length) % usable.length];
     setFocus(next.id);
     buttons.current.get(next.id)?.focus();
@@ -154,7 +157,10 @@ export function VersionStrip({
                   </span>
                 )}
                 {pending === v.id && (
-                  <span className="absolute inset-0 grid place-items-center bg-white/60 dark:bg-black/50" aria-hidden="true">
+                  <span
+                    className="absolute inset-0 grid place-items-center bg-white/60 dark:bg-black/50"
+                    aria-hidden="true"
+                  >
                     <Spinner className="h-5 w-5 text-brand-600" />
                   </span>
                 )}
@@ -162,13 +168,18 @@ export function VersionStrip({
               {/* Under the thumbnail on a phone, one line: "Using this" or
                   the words. Beside it from a laptop up: the words, up to two
                   lines, and "Using this" under them. */}
-              <span aria-hidden="true" className="mt-1.5 block min-w-0 text-xs text-gray-600 dark:text-gray-300 lg:mt-0 lg:flex-1">
+              <span
+                aria-hidden="true"
+                className="mt-1.5 block min-w-0 text-xs text-gray-600 dark:text-gray-300 lg:mt-0 lg:flex-1"
+              >
                 {on && (
                   <span className="block truncate font-semibold text-brand-700 dark:text-brand-300 lg:hidden">
                     {t("wzVersionUsing")}
                   </span>
                 )}
-                <span className={`${on ? "hidden lg:block lg:text-gray-900 dark:lg:text-white" : "block"} truncate lg:line-clamp-2 lg:whitespace-normal`}>
+                <span
+                  className={`${on ? "hidden lg:block lg:text-gray-900 dark:lg:text-white" : "block"} truncate lg:line-clamp-2 lg:whitespace-normal`}
+                >
                   {caption}
                 </span>
                 {on && (

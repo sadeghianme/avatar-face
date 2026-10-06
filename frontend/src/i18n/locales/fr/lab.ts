@@ -6,54 +6,68 @@ export const lab = {
   speechBuffering: "Attente de la phrase suivante · lèvres au repos",
   speechPaused: "Lecture en pause",
   speechBuffered: "Cette voix attend l’enregistrement complet",
-  speechStreamHint: "Kokoro diffuse les phrases synchronisées dès leur génération. Les autres voix attendent l’enregistrement complet. Arrêter annule la requête ; Rejouer réutilise le même audio.",
+  speechStreamHint:
+    "Kokoro diffuse les phrases synchronisées dès leur génération. Les autres voix attendent l’enregistrement complet. Arrêter annule la requête ; Rejouer réutilise le même audio.",
   speechFirstAudio: "Premier audio : {{seconds}} s · {{count}} phrases reçues",
   speechBufferGaps: "Pauses de chargement : {{count}}",
   referenceChangePhoto: "Changer de photo",
   referencePhotoActive: "{{name}} est sélectionné dans les deux aperçus",
-  referencePhotoNext: "Votre visage est prêt. Ouvrez le test vocal, choisissez une voix, puis Parler et comparer. L’import ne génère aucune parole et ne publie aucun avatar.",
+  referencePhotoNext:
+    "Votre visage est prêt. Ouvrez le test vocal, choisissez une voix, puis Parler et comparer. L’import ne génère aucune parole et ne publie aucun avatar.",
   referenceTestPhoto: "Tester cette photo →",
   referenceUseSample: "Utiliser le portrait exemple",
   referenceUploadTimeout: "La préparation a pris trop de temps. Réessayez avec un portrait plus petit.",
   referenceLab: "Avatar de référence",
   referenceRecord: "Enregistrer la comparaison",
   referenceRecording: "Enregistrement en cours…",
-  referenceRecordHint: "Enregistrez les deux aperçus avec le même son en 720p. La vidéo reste dans votre navigateur jusqu’au téléchargement. Aucune nouvelle synthèse vocale.",
+  referenceRecordHint:
+    "Enregistrez les deux aperçus avec le même son en 720p. La vidéo reste dans votre navigateur jusqu’au téléchargement. Aucune nouvelle synthèse vocale.",
   referenceDownloadVideo: "Télécharger la vidéo",
   referenceRecordedComparison: "Comparaison des avatars enregistrée",
   referenceRecordError: "La comparaison n’a pas pu être enregistrée.",
   referencePhotographic: "Animation photo continue",
   referenceGeometry: "Prototype précédent",
   referencePhotographicHint: "Une texture de visage · intérieur de bouche stable",
-  referencePhotographicFit: "Commencez par I : ajustez taille, position et teinte des dents. Vérifiez ensuite A, OU et F/V. Les dents supérieures restent ancrées derrière les lèvres mobiles.",
+  referencePhotographicFit:
+    "Commencez par I : ajustez taille, position et teinte des dents. Vérifiez ensuite A, OU et F/V. Les dents supérieures restent ancrées derrière les lèvres mobiles.",
   referencePerformanceLoading: "Préparation du mouvement continu…",
-  referenceTeethPhotoError: "Cette photo montre trop peu les dents supérieures. Essayez un sourire ouvert « i », net et bien éclairé, montrant les dents de devant en entier, pas seulement leur bord, ou choisissez « Utiliser la bouche ajustable ».",
-  referencePerformanceError: "Le personnage n’a pas pu charger. Rechargez la page ou choisissez le prototype précédent.",
-  referencePhotographicLimit: "Tous les portraits utilisent une géométrie continue, sans fondu entre photos de bouche. Votre portrait utilise un intérieur ajustable sauf si vous ajoutez une photo bouche ouverte. Cet aperçu frontal nécessite un ajustement visuel ; ce n’est pas une reconstruction 3D.",
+  referenceTeethPhotoError:
+    "Cette photo montre trop peu les dents supérieures. Essayez un sourire ouvert « i », net et bien éclairé, montrant les dents de devant en entier, pas seulement leur bord, ou choisissez « Utiliser la bouche ajustable ».",
+  referencePerformanceError:
+    "Le personnage n’a pas pu charger. Rechargez la page ou choisissez le prototype précédent.",
+  referencePhotographicLimit:
+    "Tous les portraits utilisent une géométrie continue, sans fondu entre photos de bouche. Votre portrait utilise un intérieur ajustable sauf si vous ajoutez une photo bouche ouverte. Cet aperçu frontal nécessite un ajustement visuel ; ce n’est pas une reconstruction 3D.",
   referenceUploadTitle: "Essayez votre photo",
-  referenceUploadHint: "Déposez un portrait de face, lèvres détendues et fermées. Éclairage uniforme, un seul visage net. JPEG, PNG ou WebP · 15 Mo maximum.",
+  referenceUploadHint:
+    "Déposez un portrait de face, lèvres détendues et fermées. Éclairage uniforme, un seul visage net. JPEG, PNG ou WebP · 15 Mo maximum.",
   referenceUploadButton: "Importer une photo",
   referenceUploadBusy: "Préparation…",
   referenceUploadProcessing: "Détection du visage et préparation de ses mouvements…",
-  referenceUploadPrivacy: "Traitement sur le serveur de cette application. Aucun service externe d’image IA. Rien n’est publié.",
+  referenceUploadPrivacy:
+    "Traitement sur le serveur de cette application. Aucun service externe d’image IA. Rien n’est publié.",
   referenceUploadType: "Choisissez une photo JPEG, PNG ou WebP.",
   referenceUploadSize: "Choisissez une photo de moins de 15 Mo.",
   referenceYourPhoto: "Votre photo",
   referenceUploadPreview: "Aperçu de la photo sélectionnée",
-  referenceTemporary: "Photo de test temporaire — absente de votre bibliothèque. Gardez cette page ouverte ; les fichiers seront supprimés après {{hours}} heures environ.",
+  referenceTemporary:
+    "Photo de test temporaire — absente de votre bibliothèque. Gardez cette page ouverte ; les fichiers seront supprimés après {{hours}} heures environ.",
   referenceMouthUploadTitle: "Facultatif : votre détail buccal",
-  referenceMouthUploadHint: "Ajoutez la même personne avec un sourire ouvert « i ». Montrez les dents supérieures de devant en entier, pas seulement leur bord, avec un espace entre les deux rangées. Conservez angle et éclairage. Cette photo fournit la bouche, pas un nouveau visage.",
+  referenceMouthUploadHint:
+    "Ajoutez la même personne avec un sourire ouvert « i ». Montrez les dents supérieures de devant en entier, pas seulement leur bord, avec un espace entre les deux rangées. Conservez angle et éclairage. Cette photo fournit la bouche, pas un nouveau visage.",
   referenceMouthUploadButton: "Ajouter une photo de bouche",
   referenceOwnMouthActive: "Votre détail buccal est actif. Vérifiez AA, I et OU avant la parole.",
-  referenceFittedMouthActive: "Dents et ombrage ajustables actifs. Ajoutez une photo bouche ouverte pour vos propres détails dentaires.",
+  referenceFittedMouthActive:
+    "Dents et ombrage ajustables actifs. Ajoutez une photo bouche ouverte pour vos propres détails dentaires.",
   referenceRemoveMouth: "Utiliser la bouche ajustable",
   referencePortraitView: "Portrait entier",
   referenceMouthView: "Gros plan bouche",
   referenceSample: "Portrait de référence fictif · exemple du labo",
-  referenceSubtitle: "Importez un portrait, vérifiez les formes de bouche et comparez la parole. Le nouvel aperçu utilise un mouvement continu sans fondu entre photos de bouche. Vos avatars publiés restent inchangés.",
+  referenceSubtitle:
+    "Importez un portrait, vérifiez les formes de bouche et comparez la parole. Le nouvel aperçu utilise un mouvement continu sans fondu entre photos de bouche. Vos avatars publiés restent inchangés.",
   referencePrototype: "Prototype de rendu · qualité non validée",
   referencePoseTitle: "1. Inspecter les formes de bouche",
-  referencePoseHint: "Figez une pose sur les deux visages. AA, I et OU doivent être distincts ; P/B/M doivent fermer les lèvres. Ces tests sont silencieux et ne consomment aucun crédit vocal.",
+  referencePoseHint:
+    "Figez une pose sur les deux visages. AA, I et OU doivent être distincts ; P/B/M doivent fermer les lèvres. Ces tests sont silencieux et ne consomment aucun crédit vocal.",
   referenceRest: "Repos",
   referenceClosed: "P / B / M",
   referenceAA: "AA",
@@ -68,7 +82,8 @@ export const lab = {
   referenceCandidate: "Prototype de bouche en relief",
   referenceCandidateHint: "Géométrie buccale projetée sous les lèvres photographiques",
   referenceFit: "2. Ajuster ce personnage",
-  referenceFitHint: "Ces contrôles ne modifient que l’aperçu droit. Commencez par I pour les dents, puis vérifiez chaque pose.",
+  referenceFitHint:
+    "Ces contrôles ne modifient que l’aperçu droit. Commencez par I pour les dents, puis vérifiez chaque pose.",
   referenceTeethSize: "Taille des dents",
   referenceTeethPosition: "Position verticale des dents",
   referenceWarmth: "Teinte chaude de l’émail",
@@ -76,46 +91,63 @@ export const lab = {
   referenceJaw: "Amplitude de la bouche",
   referenceSave: "Enregistrer localement",
   referenceReset: "Réinitialiser",
-  referenceLocalOnly: "Les brouillons restent dans ce navigateur, par espace et avatar. Rien n’est publié. La réinitialisation change les contrôles ; enregistrez pour remplacer le brouillon.",
+  referenceLocalOnly:
+    "Les brouillons restent dans ce navigateur, par espace et avatar. Rien n’est publié. La réinitialisation change les contrôles ; enregistrez pour remplacer le brouillon.",
   referenceSaved: "Brouillon enregistré dans ce navigateur pour cet avatar. Il n’est pas publié.",
-  referenceSaveFailed: "Ce navigateur ne peut pas enregistrer le brouillon. Les réglages fonctionnent mais risquent d’être perdus au rechargement.",
+  referenceSaveFailed:
+    "Ce navigateur ne peut pas enregistrer le brouillon. Les réglages fonctionnent mais risquent d’être perdus au rechargement.",
   referenceSpeech: "3. Comparer la parole",
-  referenceSameTiming: "Les deux aperçus utilisent exactement le même son, les mêmes phonèmes et la même horloge audio. Ce test isole le rendu de bouche, pas le minutage.",
+  referenceSameTiming:
+    "Les deux aperçus utilisent exactement le même son, les mêmes phonèmes et la même horloge audio. Ce test isole le rendu de bouche, pas le minutage.",
   referenceNative: "Le minutage natif des phonèmes est actif sur les deux aperçus.",
-  referenceFallback: "Les deux aperçus utilisent les repères existants du fournisseur. L’alignement natif n’est pas disponible pour cet enregistrement.",
+  referenceFallback:
+    "Les deux aperçus utilisent les repères existants du fournisseur. L’alignement natif n’est pas disponible pour cet enregistrement.",
   referenceAcceptance: "Critères avant intégration",
   referenceCheckClosure: "Lèvres fermées sur P/B/M et les pauses ; formes AA/I/OU distinctes ; contact F/V crédible.",
-  referenceCheckTeeth: "Les dents gardent leur taille, restent derrière les lèvres et ne flottent ni ne scintillent pendant les transitions.",
-  referenceCheckIdentity: "Peau et lèvres conservent la même identité, sans déchirure ni étirement excessif, à taille normale et en gros plan.",
-  referenceLimit: "Prototype frontal à géométrie buccale générique, pas une reconstruction ni une note de 8/10 validée. Des éléments propres au personnage, des ajustements et des tests vidéo restent nécessaires. Utilisez un portrait net, de face, uniformément éclairé, lèvres fermées.",
+  referenceCheckTeeth:
+    "Les dents gardent leur taille, restent derrière les lèvres et ne flottent ni ne scintillent pendant les transitions.",
+  referenceCheckIdentity:
+    "Peau et lèvres conservent la même identité, sans déchirure ni étirement excessif, à taille normale et en gros plan.",
+  referenceLimit:
+    "Prototype frontal à géométrie buccale générique, pas une reconstruction ni une note de 8/10 validée. Des éléments propres au personnage, des ajustements et des tests vidéo restent nécessaires. Utilisez un portrait net, de face, uniformément éclairé, lèvres fermées.",
   lipSyncLab: "Labo de synchronisation",
-  lipSyncSubtitle: "Comparez la synchronisation sur le même avatar avec un seul enregistrement. Testez l’horloge audio et le minutage des phonèmes sans modifier vos avatars publiés.",
+  lipSyncSubtitle:
+    "Comparez la synchronisation sur le même avatar avec un seul enregistrement. Testez l’horloge audio et le minutage des phonèmes sans modifier vos avatars publiés.",
   lipSyncComparison: "Comparaison de synchronisation labiale",
   lipSyncBaseline: "Minutage actuel",
   lipSyncImproved: "Minutage lié à l’audio",
   lipSyncPreviewError: "L’aperçu ne peut pas se charger. Vérifiez l’image et le maillage, puis rechargez la page.",
-  lipSyncSample: "Papa prépare un beau bouquet. Vous voyez cinq fleurs magnifiques. Nous suivons deux petits bateaux. Une pause. Puis dites : ou, i, a.",
+  lipSyncSample:
+    "Papa prépare un beau bouquet. Vous voyez cinq fleurs magnifiques. Nous suivons deux petits bateaux. Une pause. Puis dites : ou, i, a.",
   lipSyncOneAudio: "Un enregistrement · deux aperçus",
   lipSyncProgress: "Progression de la parole",
   lipSyncReplay: "Réécouter",
   lipSyncPause: "Pause",
   lipSyncResume: "Reprendre",
-  lipSyncReplayHint: "La lecture reprend le dernier enregistrement et sa voix, même si vous modifiez le texte. Aucune nouvelle synthèse ni facturation.",
+  lipSyncReplayHint:
+    "La lecture reprend le dernier enregistrement et sa voix, même si vous modifiez le texte. Aucune nouvelle synthèse ni facturation.",
   lipSyncNativeTitle: "Minutage natif des phonèmes actif",
   lipSyncClockTitle: "Comparaison de l’horloge audio",
-  lipSyncBeforeTest: "Générez un enregistrement pour connaître la source du minutage. Kokoro utilise ses phonèmes natifs si le modèle du labo est installé.",
-  lipSyncNativeBody: "À droite, les instants des sons viennent du modèle vocal. À gauche, les durées sont estimées pour ce même enregistrement. Le rendu et les éléments du visage sont identiques.",
-  lipSyncFallbackBody: "Les deux aperçus utilisent les repères existants du fournisseur. Seul celui de droite suit l’horloge audio en continu. Le minutage natif n’est pas actif pour cet enregistrement ; Kokoro nécessite le modèle horodaté du labo.",
+  lipSyncBeforeTest:
+    "Générez un enregistrement pour connaître la source du minutage. Kokoro utilise ses phonèmes natifs si le modèle du labo est installé.",
+  lipSyncNativeBody:
+    "À droite, les instants des sons viennent du modèle vocal. À gauche, les durées sont estimées pour ce même enregistrement. Le rendu et les éléments du visage sont identiques.",
+  lipSyncFallbackBody:
+    "Les deux aperçus utilisent les repères existants du fournisseur. Seul celui de droite suit l’horloge audio en continu. Le minutage natif n’est pas actif pour cet enregistrement ; Kokoro nécessite le modèle horodaté du labo.",
   lipSyncTestTitle: "Tester la parole",
-  lipSyncServerOnly: "Choisissez une voix serveur. Les voix du navigateur et les voix clonées ne sont pas encore prises en charge dans ce labo.",
+  lipSyncServerOnly:
+    "Choisissez une voix serveur. Les voix du navigateur et les voix clonées ne sont pas encore prises en charge dans ce labo.",
   lipSyncScript: "Texte",
   lipSyncGenerate: "Parler et comparer",
   lipSyncPreparing: "Préparation de la parole…",
   lipSyncLead: "Avance visuelle",
-  lipSyncLeadHint: "Une valeur positive avance les lèvres ; une valeur négative les retarde. Commencez à zéro, puis ajustez selon votre système. C’est un réglage manuel, pas une note de précision.",
-  lipSyncUnchanged: "Les réglages du labo sont temporaires. La page d’avatar, les maillages enregistrés et les widgets publiés restent inchangés.",
+  lipSyncLeadHint:
+    "Une valeur positive avance les lèvres ; une valeur négative les retarde. Commencez à zéro, puis ajustez selon votre système. C’est un réglage manuel, pas une note de précision.",
+  lipSyncUnchanged:
+    "Les réglages du labo sont temporaires. La page d’avatar, les maillages enregistrés et les widgets publiés restent inchangés.",
   photofaceHDAlpha: "Labo",
-  photofaceHDSubtitle: "Un moteur séparé avec profondeur, construit à partir de votre photo, de son rig et du timing vocal existants. Les pages actuelles restent inchangées.",
+  photofaceHDSubtitle:
+    "Un moteur séparé avec profondeur, construit à partir de votre photo, de son rig et du timing vocal existants. Les pages actuelles restent inchangées.",
   photofaceHDPreview: "Aperçu Photoface HD",
   photofaceHDLoading: "Création de l’aperçu avec profondeur…",
   photofaceHDError: "Impossible de démarrer l’aperçu HD",
@@ -127,7 +159,8 @@ export const lab = {
   photofaceHDStableLabel: "Moteur actuel",
   photofaceHDLabLabel: "Photoface HD",
   photofaceHDInside: "Ce qui change",
-  photofaceHDDepth: "Relief du visage mesuré à partir des repères de votre photo ; une approximation en dôme seulement si la détection échoue.",
+  photofaceHDDepth:
+    "Relief du visage mesuré à partir des repères de votre photo ; une approximation en dôme seulement si la détection échoue.",
   photofaceHDLayers: "Le fond, le corps et la tête bougent séparément pour un mouvement plus propre.",
   photofaceHDReuse: "Les mêmes voix, phonèmes et files de lecture pilotent le nouveau moteur.",
   photofaceHDIsolation: "Module expérimental : le moteur 2D et le widget actuels restent intacts.",

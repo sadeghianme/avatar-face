@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { type KeyboardEvent, useState } from "react";
 
 import { Button, type ButtonProps } from "@/components/ui/Button";
 import type { IconLike } from "@/components/ui/Icon";
@@ -52,10 +52,7 @@ export function ConfirmButton({
         size={size}
         icon={icon}
         disabled={disabled}
-        className={cx(
-          "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10",
-          triggerClassName
-        )}
+        className={cx("text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10", triggerClassName)}
         onClick={() => setAsking(true)}
       >
         {label}

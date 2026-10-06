@@ -30,15 +30,17 @@ import {
   FINISH_PHASES,
   FINISH_POLL_MAX_MS,
   FINISH_STAGES,
+  finishMouthStandard,
+  finishNeedsAiConsent,
   finishNoticeFor,
   finishNoticeKey,
   finishRows,
   finishStage,
   forgetDraftMarks,
   forgetFinishNotice,
+  frameOf,
   framingChanged,
   FULL_FRAME,
-  frameOf,
   inferStep,
   initialFraming,
   inUse,
@@ -51,17 +53,15 @@ import {
   loadDraftMarks,
   marksAreGuessed,
   MAX_UPLOAD_BYTES,
-  movedParts,
   mouthExpected,
-  finishNeedsAiConsent,
-  finishMouthStandard,
-  PUBLISH_STANDARD_LABEL,
+  movedParts,
   nameFromFile,
   normalizeCrop,
-  pickMarks,
   PHOTO_CHECKS,
+  pickMarks,
   pollDelay,
   preselectedMode,
+  PUBLISH_STANDARD_LABEL,
   recommendationOf,
   REGENERATE_REASONS,
   rememberFinishNotice,
@@ -69,9 +69,9 @@ import {
   roundResults,
   roundSource,
   saveDraftMarks,
+  stabilizeUrls,
   stageCount,
   statementNeeded,
-  stabilizeUrls,
   TOUCHUP_REASONS,
   URL_REUSE_MS,
   WIZARD_STEPS,
@@ -93,7 +93,11 @@ const adjustedStep = (n, extra = {}) =>
   step(`adjusted:${n}`, {
     from: "original",
     adjust: {
-      mode: "touchup", style: null, model: "gemini-3.1-flash-image", generated_eyes: false, rejected: null,
+      mode: "touchup",
+      style: null,
+      model: "gemini-3.1-flash-image",
+      generated_eyes: false,
+      rejected: null,
       checks: { detected: true, fit_ok: true, skin_delta_e: 1.2 },
     },
     ...extra,
@@ -158,10 +162,7 @@ describe("checkFile", () => {
   it("refuses other types, and anything over 15 MB", () => {
     assert.equal(checkFile({ name: "a.gif", type: "image/gif", size: 10 }), "unsupported_image_type");
     assert.equal(checkFile({ name: "a.heic", type: "", size: 10 }), "unsupported_image_type");
-    assert.equal(
-      checkFile({ name: "a.jpg", type: "image/jpeg", size: MAX_UPLOAD_BYTES + 1 }),
-      "image_too_large"
-    );
+    assert.equal(checkFile({ name: "a.jpg", type: "image/jpeg", size: MAX_UPLOAD_BYTES + 1 }), "image_too_large");
     assert.equal(checkFile({ name: "a.jpg", type: "image/jpeg", size: MAX_UPLOAD_BYTES }), null);
   });
   it("sends a 3D model to its own importer, whatever its type says", () => {
@@ -302,7 +303,10 @@ describe("marks in progress", () => {
     const store = memoryStore([
       [draftMarksKey("c", "bad-json"), "{"],
       [draftMarksKey("c", "no-marks"), JSON.stringify({ ticked: [] })],
-      [draftMarksKey("c", "stray"), JSON.stringify({ marks: { chin: { x: 1, y: 1 }, nose: 1 }, ticked: ["head", "nose"] })],
+      [
+        draftMarksKey("c", "stray"),
+        JSON.stringify({ marks: { chin: { x: 1, y: 1 }, nose: 1 }, ticked: ["head", "nose"] }),
+      ],
     ]);
     assert.equal(loadDraftMarks(store, "c", "bad-json"), null);
     assert.equal(loadDraftMarks(store, "c", "no-marks"), null);
@@ -356,7 +360,10 @@ describe("which step opens", () => {
   it("resumes on step 3 once the background is answered or AI was asked", () => {
     assert.equal(inferStep(creation({ background: "keep" })), "background");
     const round = {
-      mode: "touchup", style: null, source: "original", limit_reached: false,
+      mode: "touchup",
+      style: null,
+      source: "original",
+      limit_reached: false,
       candidates: [{ step: "adjusted:0", ok: true, reason: null, generated_eyes: false }],
     };
     assert.equal(
@@ -388,7 +395,11 @@ describe("which step opens", () => {
     assert.equal(resolveStep(creation({ status: "finished" }), null), "prepare");
   });
   it("opens step 5 for a creation being built, a reloaded tab included", () => {
-    const building = creation({ status: "finishing", anchors: anchors(), job: job({ step: "finish", state: "running" }) });
+    const building = creation({
+      status: "finishing",
+      anchors: anchors(),
+      job: job({ step: "finish", state: "running" }),
+    });
     assert.equal(inferStep(building), "prepare");
     assert.equal(resolveStep(building, "prepare"), "prepare");
     assert.equal(inferStep(creation({ status: "finished" })), "prepare");
@@ -415,8 +426,14 @@ describe("framing", () => {
   const analysed = (extra = {}) =>
     creation({
       analysis: {
-        image_size: [800, 1000], detector: "mediapipe", detected: true, face_box: null, roll: 4.2,
-        suggested_face_type: "human", suggested_framing: suggested, checks: [],
+        image_size: [800, 1000],
+        detector: "mediapipe",
+        detected: true,
+        face_box: null,
+        roll: 4.2,
+        suggested_face_type: "human",
+        suggested_framing: suggested,
+        checks: [],
       },
       ...extra,
     });
@@ -464,7 +481,9 @@ describe("stabilizeUrls", () => {
     const held = new Map();
     const first = creation();
     assert.equal(stabilizeUrls(first, held, 0), first);
-    const repoll = creation({ steps: [step("original", { url: first.steps[0].url.replace("signature=s", "signature=t") })] });
+    const repoll = creation({
+      steps: [step("original", { url: first.steps[0].url.replace("signature=s", "signature=t") })],
+    });
     const stable = stabilizeUrls(repoll, held, 1000);
     assert.equal(stable.steps[0].url, first.steps[0].url);
   });
@@ -492,10 +511,7 @@ describe("errorText", () => {
     assert.equal(errorText(t, "something_new", ""), "error");
   });
   it("says how long to wait when the server did", () => {
-    assert.equal(
-      errorText(t, "job_queue_full", "", 30),
-      'createErr_job_queue_full createRetryAfter({"count":30})'
-    );
+    assert.equal(errorText(t, "job_queue_full", "", 30), 'createErr_job_queue_full createRetryAfter({"count":30})');
   });
 });
 
@@ -505,7 +521,10 @@ describe("lines", () => {
     assert.equal(LINES.cartoon.label, "faceType_cartoon");
   });
   it("matches the server's rules: people only for background removal, never one-click animals", () => {
-    assert.deepEqual(LINE_ORDER.filter((id) => LINES[id].backgroundRemoval), ["human"]);
+    assert.deepEqual(
+      LINE_ORDER.filter((id) => LINES[id].backgroundRemoval),
+      ["human"]
+    );
     assert.equal(LINES.animal.oneClick, false);
     // services.creations.LINES["animal"].marks
     assert.deepEqual([...LINES.animal.marks], ["head", "left_eye", "right_eye", "mouth_line", "chin"]);
@@ -519,8 +538,11 @@ describe("strings", () => {
   // this feature, which the structure check forbids.
   const keysOf = (lang) =>
     new Set(
-      [...readFileSync(new URL(`../../i18n/locales/${lang}/avatars.ts`, import.meta.url), "utf8")
-        .matchAll(/^\s{2}([A-Za-z0-9_]+):\s/gm)].map((m) => m[1])
+      [
+        ...readFileSync(new URL(`../../i18n/locales/${lang}/avatars.ts`, import.meta.url), "utf8").matchAll(
+          /^\s{2}([A-Za-z0-9_]+):\s/gm
+        ),
+      ].map((m) => m[1])
     );
   for (const lang of ["en", "fr"]) {
     it(`has ${lang} words for every error code, job and step the wizard names`, () => {
@@ -543,7 +565,9 @@ describe("strings", () => {
         ...["touchup", "stylise", "regenerate", "generate", "teeth"].map((mode) => `aiEdited_${mode}`),
         ...LINE_ORDER.flatMap((id) => [LINES[id].summary, LINES[id].guide]),
         ...LINE_ORDER.flatMap((id) => LINES[id].marks.map((part) => `createGuessPart_${part}`)),
-        ...["not_for_face_type", "segmentation_unavailable", "face_type_required"].map((r) => `createBgUnavailable_${r}`),
+        ...["not_for_face_type", "segmentation_unavailable", "face_type_required"].map(
+          (r) => `createBgUnavailable_${r}`
+        ),
         ...FINISH_STAGES.map((stage) => `createFinishStage_${stage}`),
         ...FINISH_PHASES.map((phase) => `createFinishPhase_${phase}`),
         ...["shapes", "teeth"].map((phase) => `createFinishPhaseHint_${phase}`),
@@ -556,7 +580,10 @@ describe("strings", () => {
         ...["Fix", "Place", "Statement", "Name"].map((what) => `createRetryAfter${what}`),
         ...["createFixFirst", "createPlaceFirst", "createDepictionFirst", "createLooksRightHint", "createSaveHint"],
       ];
-      assert.deepEqual(needed.filter((key) => !keys.has(key)), []);
+      assert.deepEqual(
+        needed.filter((key) => !keys.has(key)),
+        []
+      );
     });
   }
 });
@@ -573,7 +600,10 @@ describe("the touch-up started without a press", () => {
     assert.equal(autoAdjustToStart(offered(), undefined, new Set()), null);
   });
   it("waits for a running job, and starts once per image in a tab", () => {
-    assert.equal(autoAdjustToStart(offered({ job: job({ step: "background", state: "running" }) }), "c", new Set()), null);
+    assert.equal(
+      autoAdjustToStart(offered({ job: job({ step: "background", state: "running" }) }), "c", new Set()),
+      null
+    );
     const started = new Set([autoAdjustKey(offered(), offer)]);
     assert.equal(autoAdjustToStart(offered(), "c", started), null);
     const other = { ...offer, image: "cutout" };
@@ -668,7 +698,10 @@ describe("AI adjust", () => {
     assert.equal(preselectedMode(analysed({ ai: ai({ suggested: ["touchup"], enabled: false }) })), null);
   });
   it("offers the line's modes in a fixed order, none with AI off", () => {
-    assert.deepEqual(adjustModes(creation({ ai: ai({ modes: ["regenerate", "touchup"] }) })), ["touchup", "regenerate"]);
+    assert.deepEqual(adjustModes(creation({ ai: ai({ modes: ["regenerate", "touchup"] }) })), [
+      "touchup",
+      "regenerate",
+    ]);
     assert.deepEqual(adjustModes(creation({ ai: ai({ enabled: false }) })), []);
   });
   it("lays out the last round, pictures and refusals alike", () => {
@@ -707,7 +740,10 @@ describe("AI adjust", () => {
     assert.deepEqual(aiEditOf(c), { mode: "touchup", model: "gemini-3.1-flash-image", generated_eyes: false });
     assert.equal(aiEditOf(analysed()), null);
     const generated = creation({
-      steps: [step("original", { generated: { model: "m", style: "anime", provider: "gemini" } }), step("framed", { from: "original" })],
+      steps: [
+        step("original", { generated: { model: "m", style: "anime", provider: "gemini" } }),
+        step("framed", { from: "original" }),
+      ],
       current: "framed",
     });
     assert.deepEqual(aiEditOf(generated), { mode: "generate", model: "m", generated_eyes: false });
@@ -716,7 +752,11 @@ describe("AI adjust", () => {
 
 describe("AI points", () => {
   const offer = (line, anchorsExtra = {}, aiExtra = {}) =>
-    aiPointsOffer(creation({ face_type: line, ai: ai(aiExtra) }), { detected: false, source: "template", ...anchorsExtra });
+    aiPointsOffer(creation({ face_type: line, ai: ai(aiExtra) }), {
+      detected: false,
+      source: "template",
+      ...anchorsExtra,
+    });
   it("is offered where the detector cannot see: animals, and animations it missed", () => {
     assert.equal(offer("animal"), "offer");
     assert.equal(offer("cartoon"), "offer");
@@ -789,8 +829,14 @@ describe("step 5, counted", () => {
     assert.equal(stageCount(counted(1.5)), null);
     assert.equal(stageCount(counted(3, 6, { state: "queued" })), null);
     assert.equal(stageCount(counted(3, 6, { state: "done", progress: null })), null);
-    assert.equal(stageCount(job({ step: "finish", state: "running", progress: { fraction: 0.4, label: "building layers" } })), null);
-    assert.equal(stageCount(job({ step: "finish", state: "running", progress: { fraction: 0.4, label: "x", count: null } })), null);
+    assert.equal(
+      stageCount(job({ step: "finish", state: "running", progress: { fraction: 0.4, label: "building layers" } })),
+      null
+    );
+    assert.equal(
+      stageCount(job({ step: "finish", state: "running", progress: { fraction: 0.4, label: "x", count: null } })),
+      null
+    );
     assert.equal(stageCount(null), null);
   });
 });
@@ -803,40 +849,66 @@ describe("step 5, listed", () => {
 
   it("lists a person's mouth ahead of time when it will be made", () => {
     assert.deepEqual(rows(finishRows(at("copying images"), true)), [
-      "build:current", "shapes:pending", "fit:pending", "publish:pending",
+      "build:current",
+      "shapes:pending",
+      "fit:pending",
+      "publish:pending",
     ]);
     assert.deepEqual(rows(finishRows(at("building the rig"), false)), ["build:current", "publish:pending"]);
   });
   it("counts the shapes on their own row, and on no other", () => {
     const list = finishRows(
-      at("making the mouth shapes", { progress: { fraction: 0.7, label: "making the mouth shapes", count: { done: 3, total: 6 } } }),
+      at("making the mouth shapes", {
+        progress: { fraction: 0.7, label: "making the mouth shapes", count: { done: 3, total: 6 } },
+      }),
       true
     );
     assert.deepEqual(rows(list), ["build:done", "shapes:current", "fit:pending", "publish:pending"]);
     assert.deepEqual(list[1].count, { done: 3, total: 6 });
-    assert.deepEqual(list.filter((row) => row.count).map((row) => row.phase), ["shapes"]);
+    assert.deepEqual(
+      list.filter((row) => row.count).map((row) => row.phase),
+      ["shapes"]
+    );
   });
   it("ticks the shapes once the mouth is being fitted, and everything before publishing", () => {
     assert.deepEqual(rows(finishRows(at("fitting the mouth"), true)), [
-      "build:done", "shapes:done", "fit:current", "publish:pending",
+      "build:done",
+      "shapes:done",
+      "fit:current",
+      "publish:pending",
     ]);
     assert.deepEqual(rows(finishRows(at("publishing"), true, seen("layers", "shapes"))), [
-      "build:done", "shapes:done", "fit:done", "publish:current",
+      "build:done",
+      "shapes:done",
+      "fit:done",
+      "publish:current",
     ]);
   });
   it("lists the mouth the server makes even when this page did not expect it", () => {
     assert.deepEqual(rows(finishRows(at("making the mouth shapes"), false)), [
-      "build:done", "shapes:current", "fit:pending", "publish:pending",
+      "build:done",
+      "shapes:current",
+      "fit:pending",
+      "publish:pending",
     ]);
   });
   it("puts the teeth alone in place of the shapes and their fitting", () => {
-    assert.deepEqual(rows(finishRows(at("making the teeth"), true)), ["build:done", "teeth:current", "publish:pending"]);
-    assert.deepEqual(rows(finishRows(at("publishing"), true, seen("teeth"))), ["build:done", "teeth:done", "publish:current"]);
+    assert.deepEqual(rows(finishRows(at("making the teeth"), true)), [
+      "build:done",
+      "teeth:current",
+      "publish:pending",
+    ]);
+    assert.deepEqual(rows(finishRows(at("publishing"), true, seen("teeth"))), [
+      "build:done",
+      "teeth:done",
+      "publish:current",
+    ]);
   });
   it("never ticks a mouth nobody saw being made", () => {
     // Nothing of the mouth seen, and none expected: no mouth rows.
     assert.deepEqual(rows(finishRows(at("publishing"), false, seen("copy", "rig", "layers"))), [
-      "build:done", "publish:current",
+      "build:done",
+      "publish:current",
     ]);
   });
   it("never ticks a mouth that was not made: the server says so as it publishes", () => {
@@ -845,23 +917,35 @@ describe("step 5, listed", () => {
     assert.equal(finishMouthStandard(at(PUBLISH_STANDARD_LABEL)), true);
     assert.equal(finishMouthStandard(at("publishing")), false);
     assert.deepEqual(rows(finishRows(at(PUBLISH_STANDARD_LABEL), true, seen("layers", "shapes"))), [
-      "build:done", "shapes:skipped", "fit:skipped", "publish:current",
+      "build:done",
+      "shapes:skipped",
+      "fit:skipped",
+      "publish:current",
     ]);
     // Expected, but no AI was allowed after all (the monthly limit): the
     // rows listed ahead are not left pending, nor ticked.
     assert.deepEqual(rows(finishRows(at(PUBLISH_STANDARD_LABEL), true, seen("layers"))), [
-      "build:done", "shapes:skipped", "fit:skipped", "publish:current",
+      "build:done",
+      "shapes:skipped",
+      "fit:skipped",
+      "publish:current",
     ]);
     assert.deepEqual(rows(finishRows(at(PUBLISH_STANDARD_LABEL), false, seen("layers"))), [
-      "build:done", "publish:current",
+      "build:done",
+      "publish:current",
     ]);
     assert.deepEqual(rows(finishRows(at(PUBLISH_STANDARD_LABEL), true, seen("teeth"))), [
-      "build:done", "teeth:skipped", "publish:current",
+      "build:done",
+      "teeth:skipped",
+      "publish:current",
     ]);
   });
   it("leaves every row pending while queued, or at a stage it does not know", () => {
     assert.deepEqual(rows(finishRows(job({ step: "finish", state: "queued" }), true)), [
-      "build:pending", "shapes:pending", "fit:pending", "publish:pending",
+      "build:pending",
+      "shapes:pending",
+      "fit:pending",
+      "publish:pending",
     ]);
     assert.deepEqual(rows(finishRows(at("polishing the chrome"), false)), ["build:pending", "publish:pending"]);
   });
@@ -951,7 +1035,10 @@ describe("the finish notice", () => {
     const store = memoryStore([
       [finishNoticeKey("bad"), "{"],
       [finishNoticeKey("none"), JSON.stringify({})],
-      [finishNoticeKey("mixed"), JSON.stringify({ warnings: [null, 3, { code: 1 }, { code: "mouth_open" }, ...warnings] })],
+      [
+        finishNoticeKey("mixed"),
+        JSON.stringify({ warnings: [null, 3, { code: 1 }, { code: "mouth_open" }, ...warnings] }),
+      ],
     ]);
     assert.equal(finishNoticeFor(store, "bad"), null);
     assert.equal(finishNoticeFor(store, "none"), null);

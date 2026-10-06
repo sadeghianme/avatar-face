@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import { SCREENS, type Screen } from "@/features/avatars/wizard";
+import { type Screen, SCREENS } from "@/features/avatars/wizard";
 
 /**
  * 1 Model · 2 Photo · 3 Prepare · 4 Publish: four slim bars, the ones

@@ -6,6 +6,7 @@ import {
   type ClassicMouthConfig,
 } from "@liveface/embed/mouth";
 import { useEffect, useRef, useState } from "react";
+
 import { mouthConfigToLoad, mouthLoadIdentity } from "@/features/avatars/mouth-config";
 
 /** The motion template, served by the API next to the widget bundles. The
@@ -61,7 +62,6 @@ export function useAvatarMouth(
     };
     // `profile` is applied by the effect below; listing it here would reload
     // the teeth photo on every slider tick.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine, active, identity]);
 
   const profileKey = JSON.stringify(profile ?? null);

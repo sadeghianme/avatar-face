@@ -1,11 +1,11 @@
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { CHECKER_STYLE, LookPicture, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
-import type { CreationStep } from "@/features/avatars/creation";
-import { checklistRow, type AvatarModel, type Look, type PrepareStage } from "@/features/avatars/wizard";
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
+import { CHECKER_STYLE, LookPicture, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
+import type { CreationStep } from "@/features/avatars/creation";
+import { type AvatarModel, checklistRow, type Look, type PrepareStage } from "@/features/avatars/wizard";
 
 /** The square every picture of step 3 sits in: the same size loading,
  * compared and done, so nothing jumps when the result arrives. */
@@ -48,7 +48,11 @@ export function Working({
             className="absolute inset-0 h-full w-full scale-105 object-contain opacity-70 blur-[2px] saturate-50"
           />
         ) : (
-          <LookPicture model={model} look={look} className="absolute inset-0 h-full w-full opacity-30 blur-[2px] motion-safe:animate-float-slow" />
+          <LookPicture
+            model={model}
+            look={look}
+            className="absolute inset-0 h-full w-full opacity-30 blur-[2px] motion-safe:animate-float-slow"
+          />
         )}
         {/* Shimmer and scan line: motion only for those who want it. */}
         <div
@@ -168,7 +172,12 @@ export function Result({
     <div className="absolute inset-0 overflow-hidden bg-white dark:bg-ink">
       <div className={`absolute inset-0 ${PICTURE_BACKDROP}`} />
       {transparent && <div className="absolute inset-0" style={CHECKER_STYLE} />}
-      <img src={after.url} alt={t("wzAfter")} className="absolute inset-0 h-full w-full object-contain" draggable={false} />
+      <img
+        src={after.url}
+        alt={t("wzAfter")}
+        className="absolute inset-0 h-full w-full object-contain"
+        draggable={false}
+      />
     </div>
   );
   return (
@@ -178,7 +187,12 @@ export function Result({
     >
       {before ? (
         <>
-          <img src={before.url} alt={t("wzBefore")} className="absolute inset-0 h-full w-full object-contain" draggable={false} />
+          <img
+            src={before.url}
+            alt={t("wzBefore")}
+            className="absolute inset-0 h-full w-full object-contain"
+            draggable={false}
+          />
           <div className="absolute inset-0" style={{ clipPath: `inset(0 0 0 ${split}%)` }}>
             {afterLayer}
           </div>

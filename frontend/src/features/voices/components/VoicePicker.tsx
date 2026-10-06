@@ -4,8 +4,8 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "@/lib/api";
-import { useOrg } from "@/providers/org";
 import type { Provider, Voice } from "@/lib/types";
+import { useOrg } from "@/providers/org";
 
 export const BROWSER_PROVIDER = "browser";
 export const SERVER_PROVIDER = "kokoro";
@@ -55,10 +55,7 @@ export function VoicePicker({
   // generic provider listing is unauthenticated and could not scope them.
   const { data: cloned = [] } = useQuery({
     queryKey: ["cloned-voices", orgId],
-    queryFn: () =>
-      api.get<{ voice: string; label: string; locale: string }[]>(
-        `/orgs/${orgId}/cloned-voices`
-      ),
+    queryFn: () => api.get<{ voice: string; label: string; locale: string }[]>(`/orgs/${orgId}/cloned-voices`),
     enabled: Boolean(orgId),
   });
 
@@ -139,9 +136,7 @@ export function VoicePicker({
 
   const activeLanguage =
     languages?.find((l) => l.locale === value.locale) ??
-    languages?.find(
-      (l) => l.locale.split("-")[0] === (value.locale || "").split("-")[0]
-    );
+    languages?.find((l) => l.locale.split("-")[0] === (value.locale || "").split("-")[0]);
 
   return (
     // 12rem a field: side by side in a wide column, one under the other in
@@ -150,7 +145,9 @@ export function VoicePicker({
     <div className="flex flex-wrap gap-3">
       {languages && languages.length > 1 && (
         <div className="min-w-48 flex-1">
-          <label className="label" htmlFor="speech-language">{t("speechLanguage")}</label>
+          <label className="label" htmlFor="speech-language">
+            {t("speechLanguage")}
+          </label>
           <select
             id="speech-language"
             className="input"
@@ -172,7 +169,9 @@ export function VoicePicker({
         </div>
       )}
       <div className="min-w-48 flex-1">
-        <label className="label" htmlFor="provider">{t("provider")}</label>
+        <label className="label" htmlFor="provider">
+          {t("provider")}
+        </label>
         <select
           id="provider"
           className="input"
@@ -187,7 +186,9 @@ export function VoicePicker({
         </select>
       </div>
       <div className="min-w-48 flex-1">
-        <label className="label" htmlFor="voice">{t("voice")}</label>
+        <label className="label" htmlFor="voice">
+          {t("voice")}
+        </label>
         <select
           id="voice"
           className="input"

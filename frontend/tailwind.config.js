@@ -38,12 +38,21 @@ export default {
         },
         caret: { "0%,49%": { opacity: "1" }, "50%,100%": { opacity: "0" } },
         marquee: { "0%": { transform: "translateX(0)" }, "100%": { transform: "translateX(-50%)" } },
-        scan: { "0%": { transform: "translateY(-10%)", opacity: "0" }, "12%": { opacity: "1" }, "88%": { opacity: "1" }, "100%": { transform: "translateY(110%)", opacity: "0" } },
+        scan: {
+          "0%": { transform: "translateY(-10%)", opacity: "0" },
+          "12%": { opacity: "1" },
+          "88%": { opacity: "1" },
+          "100%": { transform: "translateY(110%)", opacity: "0" },
+        },
         draw: { "0%": { strokeDashoffset: "1" }, "60%,100%": { strokeDashoffset: "0" } },
         glow: { "0%,100%": { opacity: "0.55" }, "50%": { opacity: "0.9" } },
         "tick-in": { "0%": { opacity: "0", transform: "scale(0.6)" }, "100%": { opacity: "1", transform: "scale(1)" } },
         // Two states sharing one slot: the second runs half a period behind.
-        swap: { "0%,42%": { opacity: "1", transform: "translateY(0)" }, "50%,92%": { opacity: "0", transform: "translateY(-6px)" }, "100%": { opacity: "1", transform: "translateY(0)" } },
+        swap: {
+          "0%,42%": { opacity: "1", transform: "translateY(0)" },
+          "50%,92%": { opacity: "0", transform: "translateY(-6px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
         playhead: { "0%": { left: "0%" }, "100%": { left: "100%" } },
         type: { "0%": { width: "0ch" }, "55%,100%": { width: "var(--type-width)" } },
         fill: { "0%": { transform: "scaleX(0.12)" }, "70%,100%": { transform: "scaleX(var(--fill, 0.62))" } },

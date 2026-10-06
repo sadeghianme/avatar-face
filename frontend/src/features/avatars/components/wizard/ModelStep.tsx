@@ -1,8 +1,8 @@
 import { useTranslation } from "react-i18next";
 
-import { LookPicture } from "@/features/avatars/components/wizard/Art";
-import { MODELS, type AvatarModel } from "@/features/avatars/wizard";
 import { Icon } from "@/components/ui/Icon";
+import { LookPicture } from "@/features/avatars/components/wizard/Art";
+import { type AvatarModel, MODELS } from "@/features/avatars/wizard";
 
 /**
  * Step 1: a human avatar or an animal avatar. Two big cards; choosing one
@@ -48,8 +48,13 @@ export function ModelStep({
             </span>
             <span className="flex flex-1 items-start justify-between gap-2 p-3 sm:p-6">
               <span className="min-w-0">
-                <span className="block text-base font-semibold tracking-[-0.01em] sm:text-xl">{t(`wzModel_${model}`)}</span>
-                <span id={`model-hint-${model}`} className="mt-1 block text-xs leading-snug text-gray-500 dark:text-gray-400 sm:text-[15px]">
+                <span className="block text-base font-semibold tracking-[-0.01em] sm:text-xl">
+                  {t(`wzModel_${model}`)}
+                </span>
+                <span
+                  id={`model-hint-${model}`}
+                  className="mt-1 block text-xs leading-snug text-gray-500 dark:text-gray-400 sm:text-[15px]"
+                >
                   {t(`wzModelHint_${model}`)}
                 </span>
               </span>

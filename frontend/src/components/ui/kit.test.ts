@@ -108,6 +108,9 @@ describe("radio group keyboard", () => {
   });
 
   it("goes nowhere when every option is disabled", () => {
-    assert.equal(rovingTarget(sizes, "s", { step: 1 }, () => true), undefined);
+    assert.equal(
+      rovingTarget(sizes, "s", { step: 1 }, () => true),
+      undefined
+    );
   });
 });

@@ -3,8 +3,8 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
-import { Avaturn3DPanel } from "@/features/avatars/components/Avaturn3DPanel";
 import { Icon } from "@/components/ui/Icon";
+import { Avaturn3DPanel } from "@/features/avatars/components/Avaturn3DPanel";
 import { api, ApiError, uploadWithProgress } from "@/lib/api";
 import type { Avatar, StockAvatar } from "@/lib/types";
 

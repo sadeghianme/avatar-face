@@ -4,24 +4,24 @@ import { useTranslation } from "react-i18next";
 import {
   clampToImage,
   closedCurvePath,
+  type FaceMarks,
   GROUP_COLOURS,
   GROUP_LABELS,
+  type Handle,
   handleAt,
   handlesFor,
   headOutline,
-  type FaceMarks,
-  type Handle,
   type Pt,
 } from "@/features/avatars/face-marks";
 import {
+  type Corner,
+  LOUPE_FRAME,
+  LOUPE_ZOOM,
   loupeCorner,
   loupeInner,
   loupeOrigin,
   loupeSize,
   loupeView,
-  LOUPE_FRAME,
-  LOUPE_ZOOM,
-  type Corner,
 } from "@/features/avatars/loupe";
 
 // Arrow keys nudge a handle this far, in IMAGE pixels, and ten times that
@@ -280,9 +280,12 @@ export function MarkCanvas({
   // Every render can move what the zoom shows (a nudge, a drag landing, a
   // resize): repaint after it, before the browser draws.
   useLayoutEffect(paint);
-  useEffect(() => () => {
-    if (frame.current !== null) cancelAnimationFrame(frame.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+    },
+    []
+  );
   // Scrolling moves the photo under a pointer that stays still: the zoom
   // follows on the scroll itself (a drag moves its handle along too).
   useEffect(() => {

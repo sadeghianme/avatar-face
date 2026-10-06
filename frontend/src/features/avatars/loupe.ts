@@ -50,10 +50,7 @@ const HYSTERESIS = 0.06;
  */
 export function loupeSize(canvas: Size): Size {
   const ratio = LOUPE_SIZE.height / LOUPE_SIZE.width;
-  const width = Math.max(
-    0,
-    Math.min(LOUPE_SIZE.width, canvas.width * MAX_SHARE, (canvas.height * MAX_SHARE) / ratio)
-  );
+  const width = Math.max(0, Math.min(LOUPE_SIZE.width, canvas.width * MAX_SHARE, (canvas.height * MAX_SHARE) / ratio));
   return { width, height: width * ratio };
 }
 

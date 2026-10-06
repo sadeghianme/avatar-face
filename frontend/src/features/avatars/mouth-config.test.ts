@@ -35,7 +35,8 @@ describe("the config the preview loads", () => {
 
   it("drops a teeth photo without its rig", () => {
     const loaded = mouthConfigToLoad({
-      renderer: "continuous", oral: { image_url: signed("/teeth.png", "a"), rig_url: "" },
+      renderer: "continuous",
+      oral: { image_url: signed("/teeth.png", "a"), rig_url: "" },
     });
     assert.equal(loaded.oral, null);
   });
@@ -57,7 +58,8 @@ describe("when the attached mouth reloads", () => {
   it("does not reload for a fresh signature or a profile change", () => {
     assert.equal(
       mouthLoadIdentity(config("/kit-1/motion.json", "a", 0.64)),
-      mouthLoadIdentity(config("/kit-1/motion.json", "b", 0.9)));
+      mouthLoadIdentity(config("/kit-1/motion.json", "b", 0.9))
+    );
   });
 
   it("is the classic mouth for anything else", () => {
@@ -96,7 +98,10 @@ describe("the owner's draft mouth", () => {
     const again = avatar(signed("/kit/motion.json", "b"));
     assert.equal(savedMouthKey(first), savedMouthKey(again));
     assert.notEqual(savedMouthKey(first), savedMouthKey(avatar(signed("/kit-2/motion.json", "a"))));
-    assert.notEqual(savedMouthKey(first), savedMouthKey({ ...first, mouth: { ...first.mouth, profile: { jawRange: 1 } } }));
+    assert.notEqual(
+      savedMouthKey(first),
+      savedMouthKey({ ...first, mouth: { ...first.mouth, profile: { jawRange: 1 } } })
+    );
   });
 });
 
@@ -125,7 +130,10 @@ describe("comparing the mouth shapes in the preview", () => {
     assert.notEqual(mine, standard);
     assert.equal(mine, mouthLoadIdentity(own));
     // A fresh signature on the same motion is still the same mouth.
-    assert.equal(mine, mouthLoadIdentity(previewMotion({ ...own, motion_url: signed("/kit/mouth-motion-1a2b.json", "b") }, "own")));
+    assert.equal(
+      mine,
+      mouthLoadIdentity(previewMotion({ ...own, motion_url: signed("/kit/mouth-motion-1a2b.json", "b") }, "own"))
+    );
   });
 
   it("changes nothing for its own shapes, or when there is nothing to swap", () => {
@@ -137,7 +145,11 @@ describe("comparing the mouth shapes in the preview", () => {
 
   it("composes with an unsaved slider preview", () => {
     const previewed = draftMouthConfig(
-      { face_type: "human", mouth_photo: oral(), mouth: { renderer: "continuous", profile, motion_url: own.motion_url } },
+      {
+        face_type: "human",
+        mouth_photo: oral(),
+        mouth: { renderer: "continuous", profile, motion_url: own.motion_url },
+      },
       "continuous",
       { jawRange: 1 }
     );

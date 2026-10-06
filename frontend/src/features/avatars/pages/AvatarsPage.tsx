@@ -3,13 +3,13 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
-import { DraftCreations } from "@/features/avatars/components/create/DraftCreations";
-import { FRESH_ENTRY } from "@/features/avatars/wizard";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { DraftCreations } from "@/features/avatars/components/create/DraftCreations";
+import { FRESH_ENTRY } from "@/features/avatars/wizard";
 import { api } from "@/lib/api";
-import { useOrg } from "@/providers/org";
 import type { Avatar, Usage } from "@/lib/types";
+import { useOrg } from "@/providers/org";
 
 type AvatarFilter = "all" | "ready" | "processing" | "failed";
 
@@ -84,11 +84,7 @@ export function AvatarsPage() {
     queryFn: () => api.get<Avatar[]>(`/orgs/${current!.id}/avatars`),
     enabled: Boolean(current),
     refetchInterval: (result) =>
-      result.state.data?.some(
-        (avatar) => avatar.status === "pending" || avatar.status === "processing"
-      )
-        ? 2000
-        : false,
+      result.state.data?.some((avatar) => avatar.status === "pending" || avatar.status === "processing") ? 2000 : false,
   });
 
   const { data: usage } = useQuery({
@@ -100,23 +96,16 @@ export function AvatarsPage() {
 
   const ready = avatars?.filter((avatar) => avatar.status === "ready").length ?? 0;
   const working =
-    avatars?.filter(
-      (avatar) => avatar.status === "pending" || avatar.status === "processing"
-    ).length ?? 0;
+    avatars?.filter((avatar) => avatar.status === "pending" || avatar.status === "processing").length ?? 0;
   const total = avatars?.length ?? 0;
-  const usedPct = usage?.char_limit
-    ? Math.min(100, (usage.chars_used / usage.char_limit) * 100)
-    : 0;
+  const usedPct = usage?.char_limit ? Math.min(100, (usage.chars_used / usage.char_limit) * 100) : 0;
 
   const filteredAvatars = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase(i18n.language);
     return (avatars ?? []).filter((avatar) => {
-      const matchesSearch =
-        !normalizedQuery || avatar.name.toLocaleLowerCase(i18n.language).includes(normalizedQuery);
+      const matchesSearch = !normalizedQuery || avatar.name.toLocaleLowerCase(i18n.language).includes(normalizedQuery);
       const matchesFilter =
-        filter === "all" ||
-        avatar.status === filter ||
-        (filter === "processing" && avatar.status === "pending");
+        filter === "all" || avatar.status === filter || (filter === "processing" && avatar.status === "pending");
       return matchesSearch && matchesFilter;
     });
   }, [avatars, filter, i18n.language, query]);
@@ -156,20 +145,8 @@ export function AvatarsPage() {
       </div>
 
       <section className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4" aria-label={t("overview")}>
-        <StatCard
-          label={t("statTotal")}
-          value={total}
-          hint={t("statTotalHint")}
-          icon="faces"
-          tone="neutral"
-        />
-        <StatCard
-          label={t("statReady")}
-          value={ready}
-          hint={t("statReadyHint")}
-          icon="check"
-          tone="success"
-        />
+        <StatCard label={t("statTotal")} value={total} hint={t("statTotalHint")} icon="faces" tone="neutral" />
+        <StatCard label={t("statReady")} value={ready} hint={t("statReadyHint")} icon="check" tone="success" />
         <StatCard
           label={t("statProcessing")}
           value={working}
@@ -245,7 +222,7 @@ export function AvatarsPage() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={t("searchAvatars")}
-                  className="input min-h-11 ps-9 text-base sm:text-sm"
+                className="input min-h-11 ps-9 text-base sm:text-sm"
               />
             </label>
           </div>
@@ -264,11 +241,7 @@ export function AvatarsPage() {
                 }`}
               >
                 {item.label}
-                <span
-                  className={
-                    filter === item.value ? "text-white/70 dark:text-gray-500" : "text-gray-400"
-                  }
-                >
+                <span className={filter === item.value ? "text-white/70 dark:text-gray-500" : "text-gray-400"}>
                   {item.count}
                 </span>
               </button>
@@ -286,12 +259,7 @@ export function AvatarsPage() {
           ) : avatars && avatars.length > 0 && filteredAvatars.length > 0 ? (
             <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {filteredAvatars.map((avatar) => (
-                <AvatarCard
-                  key={avatar.id}
-                  avatar={avatar}
-                  orgId={current.id}
-                  locale={i18n.language}
-                />
+                <AvatarCard key={avatar.id} avatar={avatar} orgId={current.id} locale={i18n.language} />
               ))}
               {filter === "all" && !query ? <CreateAvatarCard /> : null}
             </div>
@@ -311,15 +279,7 @@ export function AvatarsPage() {
   );
 }
 
-function AvatarCard({
-  avatar,
-  orgId,
-  locale,
-}: {
-  avatar: Avatar;
-  orgId: string;
-  locale: string;
-}) {
+function AvatarCard({ avatar, orgId, locale }: { avatar: Avatar; orgId: string; locale: string }) {
   const { t } = useTranslation();
   const createdAt = new Intl.DateTimeFormat(locale, {
     year: "numeric",
@@ -337,9 +297,7 @@ function AvatarCard({
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="truncate text-[15px] font-semibold text-gray-950 dark:text-white">
-              {avatar.name}
-            </h3>
+            <h3 className="truncate text-[15px] font-semibold text-gray-950 dark:text-white">{avatar.name}</h3>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {avatar.kind === "model3d" ? t("avatarKind3D") : t("avatarKindPhoto")} ·{" "}
               {t("createdOn", { date: createdAt })}
@@ -391,11 +349,7 @@ function AvatarThumb({ avatar, orgId }: { avatar: Avatar; orgId: string }) {
       ) : (
         <div className="text-center text-gray-400 dark:text-gray-500">
           <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white/80 shadow-sm dark:bg-white/[0.06] dark:shadow-none">
-            <Icon
-              name={avatar.kind === "model3d" ? "cube" : "faces"}
-              className="h-6 w-6"
-              strokeWidth={1.4}
-            />
+            <Icon name={avatar.kind === "model3d" ? "cube" : "faces"} className="h-6 w-6" strokeWidth={1.4} />
           </span>
           <span className="mt-3 block text-xs font-medium">
             {avatar.status === "ready" ? t("loadingPreview") : t(`status.${avatar.status}`)}
@@ -451,9 +405,7 @@ function EmptyState() {
         <Icon name="faces" className="h-7 w-7" strokeWidth={1.4} />
       </span>
       <h3 className="mt-5 text-lg font-semibold tracking-[-0.02em]">{t("emptyTitle")}</h3>
-      <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-        {t("emptyBody")}
-      </p>
+      <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-gray-500 dark:text-gray-400">{t("emptyBody")}</p>
       <Link to="/avatars/new" state={FRESH_ENTRY} className="btn-primary mt-6 min-h-11 px-5">
         <Icon name="plus" className="h-4 w-4" strokeWidth={2} />
         {t("newAvatar")}

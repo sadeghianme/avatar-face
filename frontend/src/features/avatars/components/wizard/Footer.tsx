@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
@@ -35,7 +35,9 @@ export function StepFooter({
       <div className="flex shrink-0 items-center">{back}</div>
       <div className="ms-auto flex min-w-0 items-center justify-end gap-2 sm:gap-3">
         {note && (
-          <div className="hidden min-w-0 max-w-sm text-end text-xs leading-snug text-gray-500 dark:text-gray-400 md:block">{note}</div>
+          <div className="hidden min-w-0 max-w-sm text-end text-xs leading-snug text-gray-500 dark:text-gray-400 md:block">
+            {note}
+          </div>
         )}
         {children}
       </div>
@@ -46,7 +48,15 @@ export function StepFooter({
 
 /** Back, as every screen has it on the left of the bar. `compact`: its
  * arrow alone on a phone, where the bar also holds secondary actions. */
-export function BackButton({ onClick, disabled, compact }: { onClick: () => void; disabled?: boolean; compact?: boolean }) {
+export function BackButton({
+  onClick,
+  disabled,
+  compact,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  compact?: boolean;
+}) {
   const { t } = useTranslation();
   return (
     <button

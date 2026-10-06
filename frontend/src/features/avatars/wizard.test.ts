@@ -14,17 +14,21 @@ import {
   avatarName,
   beforeStep,
   canUseOriginal,
-  faceFound,
   checklistRow,
+  clearBody,
+  faceFound,
+  footerPlan,
   forgetChoices,
+  forgetLastChoices,
+  freeClearsLeft,
+  FRESH_ENTRY,
   heldStage,
   intentFor,
+  isFreshEntry,
   lineFor,
   needsPrepare,
   photoBlocker,
   plainBody,
-  clearBody,
-  freeClearsLeft,
   planOf,
   preparedStep,
   prepareStage,
@@ -32,15 +36,11 @@ import {
   rememberChoices,
   retryBody,
   screenFor,
+  selectedVersion,
+  startFresh,
   statementFor,
   statementKey,
   statementToAsk,
-  footerPlan,
-  forgetLastChoices,
-  FRESH_ENTRY,
-  isFreshEntry,
-  selectedVersion,
-  startFresh,
   versionLabel,
   versionOfStep,
   versionsOf,
@@ -59,7 +59,16 @@ function memoryStore() {
   };
 }
 
-const step = (id, extra = {}) => ({ id, url: `https://x/${id}.png?sig`, width: 600, height: 750, from: null, crop: null, roll: null, ...extra });
+const step = (id, extra = {}) => ({
+  id,
+  url: `https://x/${id}.png?sig`,
+  width: 600,
+  height: 750,
+  from: null,
+  crop: null,
+  roll: null,
+  ...extra,
+});
 
 function creation(overrides = {}) {
   return {
@@ -75,7 +84,16 @@ function creation(overrides = {}) {
     avatar_id: null,
     background_removal: { available: true, reason: null },
     background: null,
-    ai: { enabled: true, modes: [], suggested: [], adjust_rounds_left: 2, ai_detections_left: 1, last_round: null, prepare_rounds_left: 6, last_prepare: null },
+    ai: {
+      enabled: true,
+      modes: [],
+      suggested: [],
+      adjust_rounds_left: 2,
+      ai_detections_left: 1,
+      last_round: null,
+      prepare_rounds_left: 6,
+      last_prepare: null,
+    },
     plan: { model: "human", look: "realistic", source: "upload", description: null },
     created_at: "2026-09-28T00:00:00Z",
     updated_at: "2026-09-28T00:00:00Z",
@@ -97,7 +115,11 @@ const anchors = (image, extra = {}) => ({
 const prepared = (overrides = {}) =>
   creation({
     current: "cutout:0",
-    steps: [step("original"), step("adjusted:0", { from: "original" }), step("cutout:0", { from: "adjusted:0", cutout: true })],
+    steps: [
+      step("original"),
+      step("adjusted:0", { from: "original" }),
+      step("cutout:0", { from: "adjusted:0", cutout: true }),
+    ],
     anchors: anchors("adjusted:0"),
     ...overrides,
   });
@@ -114,18 +136,30 @@ describe("model × look → line", () => {
 
   it("reads an old draft's plan off its line", () => {
     assert.deepEqual(planOf(creation({ plan: null, face_type: "cartoon" })), {
-      model: "human", look: "cartoon", source: "upload", description: null,
+      model: "human",
+      look: "cartoon",
+      source: "upload",
+      description: null,
     });
     assert.equal(planOf(creation({ plan: undefined, face_type: "animal" })).model, "animal");
-    const generated = creation({ plan: null, steps: [step("original", { generated: { model: "g", style: "photoreal", provider: "gemini" } })] });
+    const generated = creation({
+      plan: null,
+      steps: [step("original", { generated: { model: "g", style: "photoreal", provider: "gemini" } })],
+    });
     assert.equal(planOf(generated).source, "generate");
   });
 });
 
 describe("step 2", () => {
   const form = {
-    model: "human", source: "upload", look: "realistic", description: "", hasFile: true,
-    aiAgreed: true, statementAgreed: true, aiEnabled: true,
+    model: "human",
+    source: "upload",
+    look: "realistic",
+    description: "",
+    hasFile: true,
+    aiAgreed: true,
+    statementAgreed: true,
+    aiEnabled: true,
   };
 
   it("asks for the AI except where the photo can be used as it is", () => {
@@ -189,15 +223,68 @@ describe("step 3", () => {
   it("starts by itself only when nothing is made, running or failed", () => {
     assert.equal(needsPrepare(creation()), true);
     assert.equal(needsPrepare(prepared()), false);
-    assert.equal(needsPrepare(creation({ job: { id: "j", step: "ingest", state: "running", error: null, started_at: "", progress: null, retryable: false } })), false);
-    assert.equal(needsPrepare(creation({ job: { id: "j", step: "prepare", state: "failed", error: { code: "provider_error", detail: "" }, started_at: "", progress: null, retryable: true } })), false);
-    assert.equal(needsPrepare(creation({ job: { id: "j", step: "prepare", state: "failed", error: { code: "superseded", detail: "" }, started_at: "", progress: null, retryable: false } })), true);
+    assert.equal(
+      needsPrepare(
+        creation({
+          job: {
+            id: "j",
+            step: "ingest",
+            state: "running",
+            error: null,
+            started_at: "",
+            progress: null,
+            retryable: false,
+          },
+        })
+      ),
+      false
+    );
+    assert.equal(
+      needsPrepare(
+        creation({
+          job: {
+            id: "j",
+            step: "prepare",
+            state: "failed",
+            error: { code: "provider_error", detail: "" },
+            started_at: "",
+            progress: null,
+            retryable: true,
+          },
+        })
+      ),
+      false
+    );
+    assert.equal(
+      needsPrepare(
+        creation({
+          job: {
+            id: "j",
+            step: "prepare",
+            state: "failed",
+            error: { code: "superseded", detail: "" },
+            started_at: "",
+            progress: null,
+            retryable: false,
+          },
+        })
+      ),
+      true
+    );
     assert.equal(needsPrepare(creation({ steps: [] })), false);
     assert.equal(needsPrepare(creation({ status: "finishing" })), false);
   });
 
   it("says where the work is, and nothing for a label it does not know", () => {
-    const job = (step, state, label) => ({ id: "j", step, state, error: null, started_at: "", progress: label === undefined ? null : { fraction: 0.5, label }, retryable: false });
+    const job = (step, state, label) => ({
+      id: "j",
+      step,
+      state,
+      error: null,
+      started_at: "",
+      progress: label === undefined ? null : { fraction: 0.5, label },
+      retryable: false,
+    });
     assert.equal(prepareStage(job("prepare", "queued")), "queued");
     assert.equal(prepareStage(job("prepare", "running", "creating your avatar")), "create");
     assert.equal(prepareStage(job("prepare", "running", "removing the background")), "background");
@@ -216,7 +303,10 @@ describe("step 3", () => {
 
   it("shows a before only for an upload", () => {
     assert.equal(beforeStep(prepared())?.id, "original");
-    assert.equal(beforeStep(prepared({ plan: { model: "human", look: "cartoon", source: "generate", description: "x" } })), null);
+    assert.equal(
+      beforeStep(prepared({ plan: { model: "human", look: "cartoon", source: "generate", description: "x" } })),
+      null
+    );
   });
 });
 
@@ -226,7 +316,17 @@ describe("step 4", () => {
     assert.equal(screenFor(prepared(), null), "prepare");
     assert.equal(screenFor(creation(), "publish"), "prepare");
     assert.equal(screenFor(creation({ status: "finishing" }), null), "publish");
-    const running = prepared({ job: { id: "j", step: "prepare", state: "running", error: null, started_at: "", progress: null, retryable: false } });
+    const running = prepared({
+      job: {
+        id: "j",
+        step: "prepare",
+        state: "running",
+        error: null,
+        started_at: "",
+        progress: null,
+        retryable: false,
+      },
+    });
     assert.equal(screenFor(running, "publish"), "prepare");
   });
 
@@ -234,7 +334,12 @@ describe("step 4", () => {
     assert.equal(faceFound(anchors("x")), true);
     assert.equal(faceFound(anchors("x", { detected: false, source: "ai" })), true);
     assert.equal(faceFound(anchors("x", { detected: false, source: "template" })), false);
-    assert.equal(faceFound(anchors("x", { validation: { ok: false, reasons: [], warnings: [], detected: true, one_click: false } })), false);
+    assert.equal(
+      faceFound(
+        anchors("x", { validation: { ok: false, reasons: [], warnings: [], detected: true, one_click: false } })
+      ),
+      false
+    );
     assert.equal(faceFound(null), false);
   });
 });
@@ -245,11 +350,41 @@ describe("the stage shown", () => {
     // a poll of the older state: the words stay on the furthest stage.
     let shown = null;
     const seen = [];
-    for (const next of ["queued", "upload", "queued", "upload", "create", "upload", "queued", "check", "create", "background", "face", "save", null, "background"]) {
+    for (const next of [
+      "queued",
+      "upload",
+      "queued",
+      "upload",
+      "create",
+      "upload",
+      "queued",
+      "check",
+      "create",
+      "background",
+      "face",
+      "save",
+      null,
+      "background",
+    ]) {
       shown = heldStage(shown, next);
       seen.push(shown);
     }
-    assert.deepEqual(seen, ["queued", "upload", "upload", "upload", "create", "create", "create", "check", "check", "background", "face", "save", "save", "save"]);
+    assert.deepEqual(seen, [
+      "queued",
+      "upload",
+      "upload",
+      "upload",
+      "create",
+      "create",
+      "create",
+      "check",
+      "check",
+      "background",
+      "face",
+      "save",
+      "save",
+      "save",
+    ]);
     assert.equal(heldStage(null, null), null);
   });
 
@@ -342,7 +477,8 @@ describe("the statement's words", () => {
 
 describe("the keyboard", () => {
   it("names the keys that apply a change for the platform", () => {
-    for (const apple of ["MacIntel", "macOS", "iPhone", "iPad", "iPod"]) assert.equal(applyKeys(apple), "⌘ Enter", apple);
+    for (const apple of ["MacIntel", "macOS", "iPhone", "iPad", "iPod"])
+      assert.equal(applyKeys(apple), "⌘ Enter", apple);
     for (const other of ["Win32", "Windows", "Linux x86_64", "Android", "Chrome OS", "", null, undefined]) {
       assert.equal(applyKeys(other), "Ctrl+Enter", String(other));
     }
@@ -352,7 +488,14 @@ describe("the keyboard", () => {
 describe("this tab's memory", () => {
   it("keeps the choices for a creation and as the last ones, and survives junk", () => {
     const store = memoryStore();
-    const choices = { model: "animal", source: "generate", look: "cartoon", description: "a fox", intent: "ai", statement: null };
+    const choices = {
+      model: "animal",
+      source: "generate",
+      look: "cartoon",
+      description: "a fox",
+      intent: "ai",
+      statement: null,
+    };
     rememberChoices(store, "c9", choices);
     assert.deepEqual(recallChoices(store, "c9"), choices);
     assert.deepEqual(recallChoices(store, null), choices);
@@ -369,7 +512,14 @@ describe("this tab's memory", () => {
 
   it("a fresh entry forgets the last choices and keeps a creation's own", () => {
     const store = memoryStore();
-    const choices = { model: "human", source: "upload", look: "animation", description: "", intent: "ai", statement: "depiction" };
+    const choices = {
+      model: "human",
+      source: "upload",
+      look: "animation",
+      description: "",
+      intent: "ai",
+      statement: "depiction",
+    };
     rememberChoices(store, "c1", choices);
     // Back from step 3 (no state) and a plain reload: nothing is forgotten.
     assert.equal(isFreshEntry(null), false);
@@ -413,11 +563,23 @@ describe("versions", () => {
 
   it("lists the upload first, then each AI result in the order made, newest last", () => {
     const list = versionsOf(many);
-    assert.deepEqual(list.map((v) => v.id), ["original", "adjusted:0", "adjusted:1", "adjusted:2", "adjusted:10"]);
-    assert.deepEqual(list.map((v) => v.number), [1, 2, 3, 4, 5]);
-    assert.deepEqual(list.map((v) => v.kind), ["photo", "ai", "change", "ai", "ai"]);
+    assert.deepEqual(
+      list.map((v) => v.id),
+      ["original", "adjusted:0", "adjusted:1", "adjusted:2", "adjusted:10"]
+    );
+    assert.deepEqual(
+      list.map((v) => v.number),
+      [1, 2, 3, 4, 5]
+    );
+    assert.deepEqual(
+      list.map((v) => v.kind),
+      ["photo", "ai", "change", "ai", "ai"]
+    );
     // Each shows its cut-out when it has one; the photo as it was prepared.
-    assert.deepEqual(list.map((v) => v.shown.id), ["cutout", "cutout:0", "cutout:1", "adjusted:2", "cutout:10"]);
+    assert.deepEqual(
+      list.map((v) => v.shown.id),
+      ["cutout", "cutout:0", "cutout:1", "adjusted:2", "cutout:10"]
+    );
     assert.equal(list[2].instruction, "shorter hair");
   });
 
@@ -458,15 +620,24 @@ describe("versions", () => {
       ],
     });
     const list = versionsOf(words);
-    assert.deepEqual(list.map((v) => v.kind), ["generated", "ai", "generated", "change"]);
+    assert.deepEqual(
+      list.map((v) => v.kind),
+      ["generated", "ai", "generated", "change"]
+    );
     assert.ok(list.every((v) => v.selectable && !v.needsPrepare));
   });
 
   it("leaves out a result that failed its checks", () => {
     const refused = creation({
-      steps: [step("original"), step("adjusted:0", { from: "original", adjust: { mode: "regenerate", rejected: { code: "x", detail: "" } } })],
+      steps: [
+        step("original"),
+        step("adjusted:0", { from: "original", adjust: { mode: "regenerate", rejected: { code: "x", detail: "" } } }),
+      ],
     });
-    assert.deepEqual(versionsOf(refused).map((v) => v.id), ["original"]);
+    assert.deepEqual(
+      versionsOf(refused).map((v) => v.id),
+      ["original"]
+    );
   });
 
   it("names each version for its alt text", () => {

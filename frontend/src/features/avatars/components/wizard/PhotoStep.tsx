@@ -1,35 +1,29 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Icon } from "@/components/ui/Icon";
+import { Spinner } from "@/components/ui/Spinner";
+import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import { AiConsentReagreeNote } from "@/features/avatars/components/create/AiConsentDialog";
 import { LookPicture, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
 import { BackButton, PhoneNote, StepFooter } from "@/features/avatars/components/wizard/Footer";
-import { useRadioGroup } from "@/components/ui/useRadioGroup";
-import {
-  ACCEPTED_TYPES,
-  checkFile,
-  errorText,
-  type Creation,
-  type DraftStore,
-} from "@/features/avatars/creation";
-import { CONSENT_TEXT_VERSIONS, consentProblem, providerLabel, type FaceStatement } from "@/features/avatars/consent";
+import { CONSENT_TEXT_VERSIONS, consentProblem, type FaceStatement, providerLabel } from "@/features/avatars/consent";
+import { ACCEPTED_TYPES, checkFile, type Creation, type DraftStore, errorText } from "@/features/avatars/creation";
 import type { ConsentApi } from "@/features/avatars/hooks/useConsent";
 import {
   aiRequired,
+  type AvatarModel,
+  type Choices,
   intentFor,
+  type Look,
   LOOKS,
   MAX_WORDS,
   photoBlocker,
+  type PhotoSource,
   rememberChoices,
   SOURCES,
   statementFor,
-  type AvatarModel,
-  type Choices,
-  type Look,
-  type PhotoSource,
 } from "@/features/avatars/wizard";
-import { Icon } from "@/components/ui/Icon";
-import { Spinner } from "@/components/ui/Spinner";
 import { api, ApiError, postFormWithProgress } from "@/lib/api";
 
 const EXAMPLES = [1, 2, 3, 4] as const;
@@ -95,9 +89,12 @@ export function PhotoStep({
   }, [remembered]);
 
   // The object URL is a real allocation: dropped when replaced.
-  useEffect(() => () => {
-    if (preview) URL.revokeObjectURL(preview);
-  }, [preview]);
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview);
+    },
+    [preview]
+  );
 
   // Without the AI, a character cannot be generated.
   useEffect(() => {
@@ -234,10 +231,16 @@ export function PhotoStep({
                     <span
                       aria-hidden="true"
                       className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
-                        on ? "bg-brand-600 text-white" : "bg-white text-gray-500 dark:bg-white/[0.06] dark:text-gray-400"
+                        on
+                          ? "bg-brand-600 text-white"
+                          : "bg-white text-gray-500 dark:bg-white/[0.06] dark:text-gray-400"
                       }`}
                     >
-                      <Icon name={s === "generate" ? "sparkles" : "upload"} className="h-[18px] w-[18px]" strokeWidth={1.9} />
+                      <Icon
+                        name={s === "generate" ? "sparkles" : "upload"}
+                        className="h-[18px] w-[18px]"
+                        strokeWidth={1.9}
+                      />
                     </span>
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold leading-tight">{t(`wzSource_${s}`)}</span>
@@ -390,7 +393,10 @@ export function PhotoStep({
                     </p>
                     <details className="group">
                       <summary className="inline-flex cursor-pointer list-none items-center gap-1 font-medium text-brand-700 hover:underline coarse:min-h-11 dark:text-brand-300">
-                        <Icon name="chevron" className="h-3.5 w-3.5 transition-transform group-open:rotate-90 rtl:-scale-x-100" />
+                        <Icon
+                          name="chevron"
+                          className="h-3.5 w-3.5 transition-transform group-open:rotate-90 rtl:-scale-x-100"
+                        />
                         {t("wzConsentDetails")}
                       </summary>
                       <div className="mt-2 space-y-2 leading-relaxed">
@@ -414,7 +420,9 @@ export function PhotoStep({
                     disabled={busy}
                     onChange={(e) => setStatementAgreed(e.target.checked)}
                   />
-                  <span>{t(statement === "depiction" ? "createDepictionStatement" : "createGeneratedFaceStatement")}</span>
+                  <span>
+                    {t(statement === "depiction" ? "createDepictionStatement" : "createGeneratedFaceStatement")}
+                  </span>
                 </label>
               )}
             </div>
@@ -423,17 +431,17 @@ export function PhotoStep({
       </div>
 
       {error && (
-        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
+        <p
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
+        >
           {error}
         </p>
       )}
 
       {blocker && !busy && <PhoneNote id={`${ids}-hold`}>{t(blocker)}</PhoneNote>}
 
-      <StepFooter
-        back={<BackButton onClick={onBack} disabled={busy} />}
-        note={blocker && !busy ? t(blocker) : null}
-      >
+      <StepFooter back={<BackButton onClick={onBack} disabled={busy} />} note={blocker && !busy ? t(blocker) : null}>
         <button
           type="button"
           className="btn-primary min-h-12 px-5 text-[15px] shadow-sm shadow-brand-600/20 sm:px-6"

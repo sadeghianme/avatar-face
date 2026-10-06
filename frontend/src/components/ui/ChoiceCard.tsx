@@ -1,4 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes } from "react";
+import { type ButtonHTMLAttributes, forwardRef } from "react";
 
 import { cx } from "@/lib/cx";
 
@@ -27,7 +27,11 @@ export const ChoiceCard = forwardRef<HTMLButtonElement, ChoiceCardProps>(functio
     <button
       ref={ref}
       type={type}
-      className={cx(look === "tile" && "choice-tile", look === "tile" && (selected ? "choice-tile-on" : "choice-tile-off"), className)}
+      className={cx(
+        look === "tile" && "choice-tile",
+        look === "tile" && (selected ? "choice-tile-on" : "choice-tile-off"),
+        className
+      )}
       {...rest}
     />
   );

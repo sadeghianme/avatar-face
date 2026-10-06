@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 
 import { focusableIn, nextFocusIndex, returnFocus } from "@/lib/focus";
 

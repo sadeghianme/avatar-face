@@ -1,18 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  createContext,
-  ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
 import { needsPersonalOrg, settingUpWorkspace } from "@/lib/orgSetup";
-import { useAuth } from "@/providers/auth";
 import type { Org } from "@/lib/types";
+import { useAuth } from "@/providers/auth";
 
 interface OrgState {
   orgs: Org[];
@@ -33,9 +25,7 @@ const LAST_ORG_KEY = "liveface.lastOrg";
 export function OrgProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [currentId, setCurrentId] = useState<string | null>(
-    localStorage.getItem(LAST_ORG_KEY)
-  );
+  const [currentId, setCurrentId] = useState<string | null>(localStorage.getItem(LAST_ORG_KEY));
 
   const { data: orgs = [], isLoading } = useQuery({
     queryKey: ["orgs"],
@@ -55,7 +45,12 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    const state = { userId: user?.id ?? null, loaded: !isLoading, orgCount: orgs.length, requestedFor: settingUp.current };
+    const state = {
+      userId: user?.id ?? null,
+      loaded: !isLoading,
+      orgCount: orgs.length,
+      requestedFor: settingUp.current,
+    };
     if (!user || !needsPersonalOrg(state)) return;
     settingUp.current = user.id;
     setPending(true);
@@ -103,7 +98,13 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         current,
         setCurrent,
         createOrg,
-        loading: settingUpWorkspace({ userId: user?.id ?? null, loaded: !isLoading, orgCount: orgs.length, failed: setupFailed }) || pending,
+        loading:
+          settingUpWorkspace({
+            userId: user?.id ?? null,
+            loaded: !isLoading,
+            orgCount: orgs.length,
+            failed: setupFailed,
+          }) || pending,
         setupFailed,
         retrySetup,
       }}

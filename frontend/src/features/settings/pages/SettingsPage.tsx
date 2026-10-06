@@ -3,11 +3,10 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Icon } from "@/components/ui/Icon";
-
 import { api, ApiError } from "@/lib/api";
+import type { Integration, Org, Usage } from "@/lib/types";
 import { useOrg } from "@/providers/org";
 import { useTheme } from "@/providers/theme";
-import type { Integration, Org, Usage } from "@/lib/types";
 
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -48,11 +47,7 @@ export function SettingsPage() {
             onChange={(e) => setOrgName(e.target.value)}
             disabled={!isOwner && current?.role !== "admin"}
           />
-          <button
-            className="btn-primary"
-            disabled={orgName === null}
-            onClick={() => void renameOrg()}
-          >
+          <button className="btn-primary" disabled={orgName === null} onClick={() => void renameOrg()}>
             {t("save")}
           </button>
         </div>
@@ -64,10 +59,7 @@ export function SettingsPage() {
       <section className="card">
         <h2 className="mb-3 font-medium">{t("usage")}</h2>
         <div className="mb-2 h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-          <div
-            className={`h-full ${pct > 90 ? "bg-red-500" : "bg-brand-600"}`}
-            style={{ width: `${pct}%` }}
-          />
+          <div className={`h-full ${pct > 90 ? "bg-red-500" : "bg-brand-600"}`} style={{ width: `${pct}%` }} />
         </div>
         <p className="text-sm text-gray-500">
           {t("charsUsed", {
@@ -182,71 +174,55 @@ function ProvidersCard({ orgId, kind }: { orgId: string; kind: "voice" | "image"
 
   return (
     <section className="card">
-      <h2 className="mb-1 font-medium">
-        {t(`${kind}Providers`)}
-      </h2>
-      <p className="mb-4 text-[13px] max-lg:text-sm text-gray-500 dark:text-gray-400">
-        {t(`${kind}ProvidersHint`)}
-      </p>
+      <h2 className="mb-1 font-medium">{t(`${kind}Providers`)}</h2>
+      <p className="mb-4 text-[13px] max-lg:text-sm text-gray-500 dark:text-gray-400">{t(`${kind}ProvidersHint`)}</p>
       {error && <p className="field-error mb-3">{error}</p>}
       <div className="flex flex-col gap-5">
-        {integrations?.filter((i) => i.kind === kind).map((integration) => (
-          <div
-            key={integration.provider}
-            className="rounded-lg border border-gray-200 p-4 dark:border-line"
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <span className="font-medium capitalize">{integration.provider}</span>
-              <span
-                className={`text-xs ${integration.configured ? "text-emerald-600" : "text-gray-400"}`}
-              >
-                {integration.configured ? "configured" : "not configured"}
-              </span>
-            </div>
-            <div className="flex flex-col gap-2">
-              {integration.fields.map((field) => (
-                <div key={field.name} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                  <label className="text-xs text-gray-500 sm:w-44 sm:shrink-0" htmlFor={field.name}>
-                    {FIELD_LABELS[field.name] ?? field.name}
-                    {field.source !== "unset" && (
-                      <span className="ms-1 text-gray-400">({field.source})</span>
-                    )}
-                  </label>
-                  <input
-                    id={field.name}
-                    className="input sm:flex-1"
-                    type="password"
-                    autoComplete="off"
-                    placeholder={field.masked || "—"}
-                    value={drafts[field.name] ?? ""}
-                    onChange={(e) =>
-                      setDrafts((d) => ({ ...d, [field.name]: e.target.value }))
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                className="btn-primary px-3 py-1 text-xs"
-                onClick={() => void saveProvider(integration)}
-              >
-                {t("save")}
-              </button>
-              <button
-                className="btn-secondary px-3 py-1 text-xs"
-                onClick={() => void testProvider(integration.provider)}
-              >
-                {t("test")}
-              </button>
-              {testResult[integration.provider] && (
-                <span className="text-xs text-gray-500">
-                  {testResult[integration.provider]}
+        {integrations
+          ?.filter((i) => i.kind === kind)
+          .map((integration) => (
+            <div key={integration.provider} className="rounded-lg border border-gray-200 p-4 dark:border-line">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="font-medium capitalize">{integration.provider}</span>
+                <span className={`text-xs ${integration.configured ? "text-emerald-600" : "text-gray-400"}`}>
+                  {integration.configured ? "configured" : "not configured"}
                 </span>
-              )}
+              </div>
+              <div className="flex flex-col gap-2">
+                {integration.fields.map((field) => (
+                  <div key={field.name} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                    <label className="text-xs text-gray-500 sm:w-44 sm:shrink-0" htmlFor={field.name}>
+                      {FIELD_LABELS[field.name] ?? field.name}
+                      {field.source !== "unset" && <span className="ms-1 text-gray-400">({field.source})</span>}
+                    </label>
+                    <input
+                      id={field.name}
+                      className="input sm:flex-1"
+                      type="password"
+                      autoComplete="off"
+                      placeholder={field.masked || "—"}
+                      value={drafts[field.name] ?? ""}
+                      onChange={(e) => setDrafts((d) => ({ ...d, [field.name]: e.target.value }))}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button className="btn-primary px-3 py-1 text-xs" onClick={() => void saveProvider(integration)}>
+                  {t("save")}
+                </button>
+                <button
+                  className="btn-secondary px-3 py-1 text-xs"
+                  onClick={() => void testProvider(integration.provider)}
+                >
+                  {t("test")}
+                </button>
+                {testResult[integration.provider] && (
+                  <span className="text-xs text-gray-500">{testResult[integration.provider]}</span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
       </div>
     </section>
   );

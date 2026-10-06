@@ -295,7 +295,10 @@ export function checkFile(file: { name: string; type: string; size: number }): F
 
 /** "holiday-2024.final.jpg" → "holiday-2024.final": a starting name only. */
 export function nameFromFile(filename: string): string {
-  return filename.replace(/\.[^.]+$/, "").trim().slice(0, 128);
+  return filename
+    .replace(/\.[^.]+$/, "")
+    .trim()
+    .slice(0, 128);
 }
 
 // --- Steps and jobs ----------------------------------------------------------------
@@ -384,7 +387,7 @@ export function finishMouthStandard(job: CreationJob | null | undefined): boolea
 export function finishStage(job: CreationJob | null | undefined): FinishStage | null {
   if (!job || job.step !== "finish" || job.state !== "running") return null;
   const label = job.progress?.label;
-  return label ? FINISH_STAGE_LABELS[label] ?? null : null;
+  return label ? (FINISH_STAGE_LABELS[label] ?? null) : null;
 }
 
 /** How far a job's counted stage is ("3 of 6"), or null: only while it
@@ -559,10 +562,11 @@ export function finishNoticeFor(store: DraftStore | null, avatarId: string): Fin
     const parsed: unknown = JSON.parse(raw);
     const list = (parsed as { warnings?: unknown } | null)?.warnings;
     if (!Array.isArray(list)) return null;
-    const warnings = list.filter(
-      (w): w is FinishWarning =>
-        Boolean(w) && typeof w.code === "string" && typeof (w.detail ?? "") === "string"
-    ).map((w) => ({ code: w.code, detail: w.detail ?? "" }));
+    const warnings = list
+      .filter(
+        (w): w is FinishWarning => Boolean(w) && typeof w.code === "string" && typeof (w.detail ?? "") === "string"
+      )
+      .map((w) => ({ code: w.code, detail: w.detail ?? "" }));
     return { warnings };
   } catch {
     return null;
@@ -714,10 +718,26 @@ export function resolveStep(creation: Creation, requested: string | null): Wizar
 /** Check codes with our own words (photoCheck_<code>); others show the
  * server's sentence. */
 export const PHOTO_CHECKS: ReadonlySet<string> = new Set([
-  "face_small", "face_at_edge", "head_turned", "low_resolution", "no_face", "blurry", "too_dark", "too_bright",
-  "eyes_closed", "mouth_open", "eyes_half_closed", "gaze_off_camera", "teeth_showing", "head_tilted",
+  "face_small",
+  "face_at_edge",
+  "head_turned",
+  "low_resolution",
+  "no_face",
+  "blurry",
+  "too_dark",
+  "too_bright",
+  "eyes_closed",
+  "mouth_open",
+  "eyes_half_closed",
+  "gaze_off_camera",
+  "teeth_showing",
+  "head_tilted",
   // Warnings of an AI point search that fell back to the template.
-  "ai_points_failed", "ai_no_face", "ai_points_implausible", "safety_refused", "vision_limit_reached",
+  "ai_points_failed",
+  "ai_no_face",
+  "ai_points_implausible",
+  "safety_refused",
+  "vision_limit_reached",
 ]);
 
 /** Checks that are not news on the line chosen: "no human face" on a dog
@@ -747,13 +767,23 @@ export const ADJUST_MODES: readonly AdjustMode[] = ["touchup", "stylise", "regen
 /** What a touch-up fixes: the eyes and parted lips, nothing else.
  * services.photo_analysis.TOUCHUP_REASONS. */
 export const TOUCHUP_REASONS: readonly string[] = [
-  "eyes_closed", "eyes_half_closed", "gaze_off_camera", "teeth_showing",
+  "eyes_closed",
+  "eyes_half_closed",
+  "gaze_off_camera",
+  "teeth_showing",
 ];
 /** What only a regenerated picture fixes (pose, light, size, sharpness, and
  * an open mouth: closing it moves the jaw, which pasted lips cannot follow).
  * services.photo_analysis.REGENERATE_REASONS. */
 export const REGENERATE_REASONS: readonly string[] = [
-  "no_face", "head_turned", "head_tilted", "face_small", "low_resolution", "too_dark", "too_bright", "blurry",
+  "no_face",
+  "head_turned",
+  "head_tilted",
+  "face_small",
+  "low_resolution",
+  "too_dark",
+  "too_bright",
+  "blurry",
   "mouth_open",
 ];
 /** The reasons an animal or an animation is judged on: a face to find,
@@ -962,10 +992,7 @@ const ROLL_EPSILON = 0.05;
 
 export function framingChanged(a: Framing, b: Framing): boolean {
   const keys: (keyof CropRect)[] = ["x", "y", "w", "h"];
-  return (
-    keys.some((k) => Math.abs(a.crop[k] - b.crop[k]) > CROP_EPSILON) ||
-    Math.abs(a.roll - b.roll) > ROLL_EPSILON
-  );
+  return keys.some((k) => Math.abs(a.crop[k] - b.crop[k]) > CROP_EPSILON) || Math.abs(a.roll - b.roll) > ROLL_EPSILON;
 }
 
 /**
@@ -1117,7 +1144,14 @@ export type DraftStore = Pick<Storage, "getItem" | "setItem" | "removeItem" | "k
 
 const DRAFT_MARKS_PREFIX = "liveface.creationMarks.";
 const MARK_PARTS: ReadonlySet<string> = new Set([
-  "head", "left_eye", "right_eye", "mouth", "mouth_line", "chin", "left_pupil", "right_pupil",
+  "head",
+  "left_eye",
+  "right_eye",
+  "mouth",
+  "mouth_line",
+  "chin",
+  "left_pupil",
+  "right_pupil",
 ]);
 
 export function draftMarksKey(creationId: string, anchorsId: string): string {
@@ -1253,12 +1287,7 @@ export type Translate = (key: string, options?: Record<string, unknown>) => stri
  * the server's otherwise, and when the server said how long to wait
  * (Retry-After on a busy queue), that too.
  */
-export function errorText(
-  t: Translate,
-  code: string,
-  detail: string,
-  retryAfter: number | null = null
-): string {
+export function errorText(t: Translate, code: string, detail: string, retryAfter: number | null = null): string {
   const text = KNOWN_ERRORS.has(code) ? t(`createErr_${code}`) : detail || t("error");
   return retryAfter ? `${text} ${t("createRetryAfter", { count: retryAfter })}` : text;
 }

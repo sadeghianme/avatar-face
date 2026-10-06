@@ -6,7 +6,10 @@ import { Icon } from "@/components/ui/Icon";
 function Fallback() {
   const { t } = useTranslation();
   return (
-    <div role="alert" className="flex min-h-screen flex-col items-center justify-center gap-5 bg-white px-6 text-center dark:bg-ink">
+    <div
+      role="alert"
+      className="flex min-h-screen flex-col items-center justify-center gap-5 bg-white px-6 text-center dark:bg-ink"
+    >
       <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-500/10 text-brand-600 dark:text-brand-400">
         <Icon name="alert" className="h-6 w-6" />
       </span>

@@ -70,8 +70,7 @@ for (const name of readdirSync(featuresDir)) {
 // Locales agree with each other and never define a key twice.
 const localesDir = join(ROOT, "i18n", "locales");
 const langs = readdirSync(localesDir);
-const keysOf = (file) =>
-  [...readFileSync(file, "utf8").matchAll(/^\s{2}([A-Za-z0-9_]+):\s/gm)].map((m) => m[1]);
+const keysOf = (file) => [...readFileSync(file, "utf8").matchAll(/^\s{2}([A-Za-z0-9_]+):\s/gm)].map((m) => m[1]);
 const perLang = {};
 for (const lang of langs) {
   const seen = new Map();

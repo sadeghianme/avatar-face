@@ -7,7 +7,8 @@ export const auth = {
   hide: "Masquer",
   backToSite: "Retour au site",
   authPanelTitle: "Une photo. Un visage qui parle.",
-  authPanelBody: "Liveface transforme un portrait en avatar parlant en temps réel, intégrable avec une seule balise script.",
+  authPanelBody:
+    "Liveface transforme un portrait en avatar parlant en temps réel, intégrable avec une seule balise script.",
   authPoint1: "Synchronisation labiale fidèle",
   authPoint2: "13 langues",
   authPoint3: "Une balise script",

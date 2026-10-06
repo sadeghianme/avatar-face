@@ -3,9 +3,9 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { AuthShell } from "@/features/auth/components/AuthShell";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/providers/auth";
-import { AuthShell } from "@/features/auth/components/AuthShell";
 
 interface InviteInfo {
   org_name: string;

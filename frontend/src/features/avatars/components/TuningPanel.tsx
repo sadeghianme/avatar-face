@@ -106,9 +106,7 @@ export function TuningPanel({
                 <label htmlFor={`tune-${slider.key}`} className="text-gray-600 dark:text-gray-300">
                   {t(slider.labelKey)}
                 </label>
-                <span className="tabular-nums text-gray-400">
-                  {values[slider.key].toFixed(2)}
-                </span>
+                <span className="tabular-nums text-gray-400">{values[slider.key].toFixed(2)}</span>
               </div>
               <input
                 id={`tune-${slider.key}`}

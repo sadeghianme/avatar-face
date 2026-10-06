@@ -30,10 +30,10 @@ export function ResetPasswordPage() {
     setBusy(true);
     setError(null);
     try {
-      const tokens = await api.post<{ access_token: string; refresh_token: string }>(
-        "/auth/reset-password",
-        { token, password }
-      );
+      const tokens = await api.post<{ access_token: string; refresh_token: string }>("/auth/reset-password", {
+        token,
+        password,
+      });
       // Straight in. Someone who has just proved control of the mailbox and
       // chosen a password should not be asked to type it again. Through the
       // auth context, not setTokens: writing storage alone leaves the context
@@ -50,10 +50,7 @@ export function ResetPasswordPage() {
   if (!token) {
     return (
       <AuthShell title={t("resetInvalidTitle")} subtitle={t("resetInvalidBody")}>
-        <Link
-          to="/forgot-password"
-          className="font-medium text-brand-600 hover:underline dark:text-brand-400"
-        >
+        <Link to="/forgot-password" className="font-medium text-brand-600 hover:underline dark:text-brand-400">
           {t("sendResetLink")}
         </Link>
       </AuthShell>

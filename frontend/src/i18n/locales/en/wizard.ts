@@ -74,8 +74,10 @@ export const wizard = {
   wzHoldDescription: "Describe your avatar to continue.",
   wzHoldAi: "Tick the AI agreement to continue.",
   wzHoldStatement: "Confirm the statement to continue.",
-  wzHoldAiOff: "AI is turned off for your organization, so this style isn't available. Choose Realistic, or ask an owner or admin to turn AI on in Settings.",
-  wzAiOffGenerate: "AI is turned off for your organization, so it can't create a character. Upload a photo instead, or ask an owner or admin to turn AI on in Settings.",
+  wzHoldAiOff:
+    "AI is turned off for your organization, so this style isn't available. Choose Realistic, or ask an owner or admin to turn AI on in Settings.",
+  wzAiOffGenerate:
+    "AI is turned off for your organization, so it can't create a character. Upload a photo instead, or ask an owner or admin to turn AI on in Settings.",
   wzAiOffBadge: "AI off",
 
   // 3 Prepare
@@ -153,7 +155,8 @@ export const wizard = {
   wzFound_eyes: "Eyes",
   wzFound_lips: "Lips",
   wzFound_head: "Head",
-  wzNotFound: "We couldn't find the face on our own. Drag the points onto the eyes, the mouth and the edge of the face.",
+  wzNotFound:
+    "We couldn't find the face on our own. Drag the points onto the eyes, the mouth and the edge of the face.",
   wzResetPoints: "Reset points",
   wzPointsHint: "The points are placed for you. Drag one only if it's off.",
   wzKeysTitle: "Using the keyboard",
@@ -170,7 +173,8 @@ export const wizard = {
   wzHoldStatement2: "Confirm the statement to publish.",
   wzPreviewLoading: "Loading the preview…",
   wzPreviewFailed: "The preview couldn't load. You can still publish, or retry.",
-  wzMouthKitNote: "We're also making its own teeth and mouth shapes, so it speaks naturally. This can take up to a minute.",
+  wzMouthKitNote:
+    "We're also making its own teeth and mouth shapes, so it speaks naturally. This can take up to a minute.",
   wzFitProblems: "These points would stretch the face:",
 
   // Default names

@@ -41,8 +41,7 @@ import {
 import { mouthErrorKey, teethNoteKey, teethView } from "./teeth.ts";
 
 // A translator that shows what it was asked: the key, and its options.
-const t = (key: string, options?: Record<string, unknown>) =>
-  options ? `${key}${JSON.stringify(options)}` : key;
+const t = (key: string, options?: Record<string, unknown>) => (options ? `${key}${JSON.stringify(options)}` : key);
 const generateKey = (code: string) => mouthErrorKey(code, "generate");
 
 const job = (extra = {}) => ({
@@ -210,17 +209,22 @@ describe("where the mouth shapes come from", () => {
 
   it("standard: none made, a kit with no shape of its own, or one dropped since", () => {
     assert.deepEqual(shapesView(mouth({ kit: null, motion_url: null })), {
-      kind: "standard", kit: "none", standard: [], dropped: null,
+      kind: "standard",
+      kit: "none",
+      standard: [],
+      dropped: null,
     });
     const refused = Object.fromEntries(KIT_SHAPES.map((shape) => [shape, "safety_refused"]));
     const none = shapesView(mouth({ kit: kit(refused) }));
     assert.equal(none?.kind, "standard");
     assert.equal(none?.kind === "standard" && none.kit, "made");
     assert.equal(none?.kind === "standard" && none.standard.length, 6);
-    const dropped = shapesView(mouth({
-      motion_url: null,
-      kit: kit({}, { state: "dropped", dropped: reason("picture_changed") }),
-    }));
+    const dropped = shapesView(
+      mouth({
+        motion_url: null,
+        kit: kit({}, { state: "dropped", dropped: reason("picture_changed") }),
+      })
+    );
     assert.deepEqual(dropped, { kind: "standard", kit: "dropped", standard: [], dropped: reason("picture_changed") });
     assert.equal(shapesLabel(t, dropped!), "mouthShapesKind_standard");
     assert.equal(droppedText(t, dropped!), "mouthShapesDropped_picture_changed");
@@ -284,13 +288,9 @@ describe("the kit's teeth", () => {
       teethNoteText(t, failed, teethNoteKey),
       'mouthTeethNote_teeth_photo_rejected_because{"reason":"mouthReason_head_moved"}'
     );
-    assert.equal(
-      kitTeethText(t, failed),
-      'mouthKitTeethNotUsed{"reason":"mouthReason_head_moved"}'
-    );
+    assert.equal(kitTeethText(t, failed), 'mouthKitTeethNotUsed{"reason":"mouthReason_head_moved"}');
     // Without a check it knows, the note's own words.
-    assert.equal(teethNoteText(t, reason("teeth_photo_rejected"), teethNoteKey),
-                 "mouthTeethNote_teeth_photo_rejected");
+    assert.equal(teethNoteText(t, reason("teeth_photo_rejected"), teethNoteKey), "mouthTeethNote_teeth_photo_rejected");
     assert.equal(
       teethNoteText(t, { ...reason("teeth_photo_rejected"), reason: reason("brand_new") }, teethNoteKey),
       "mouthTeethNote_teeth_photo_rejected"
@@ -298,8 +298,7 @@ describe("the kit's teeth", () => {
     assert.equal(teethNoteText(t, reason("no_ai_consent"), teethNoteKey), "mouthTeethNote_no_ai_consent");
     assert.equal(teethNoteText(t, reason("brand_new", "As sent"), teethNoteKey), "mouthTeethGeneric As sent");
     // A consent that could not be recorded sent nothing, and says so.
-    assert.equal(teethNoteText(t, reason("consent_not_recorded"), teethNoteKey),
-                 "mouthTeethNote_consent_not_recorded");
+    assert.equal(teethNoteText(t, reason("consent_not_recorded"), teethNoteKey), "mouthTeethNote_consent_not_recorded");
   });
 
   it("leaves it to the teeth note, and says nothing when the ee is the teeth", () => {
@@ -310,7 +309,9 @@ describe("the kit's teeth", () => {
     });
     assert.equal(kitTeethReason(noted, teethView(noted)), null);
     assert.equal(kitTeethReason(mouth(), teethView(mouth())), null);
-    const dropped = mouth({ kit: kit({}, { state: "dropped", teeth: { used: false, reason: reason("owner_photo") } }) });
+    const dropped = mouth({
+      kit: kit({}, { state: "dropped", teeth: { used: false, reason: reason("owner_photo") } }),
+    });
     assert.equal(kitTeethReason(dropped, teethView(dropped)), null);
     assert.equal(kitTeethReason(mouth({ kit: null }), null), null);
   });
@@ -347,7 +348,8 @@ describe("reasons and failures, in words", () => {
   });
 
   it("words the job's own failures, and the rest as the mouth routes do", () => {
-    for (const code of KIT_FAILURE_CODES) assert.equal(kitFailureText(t, reason(code), generateKey), `mouthKitErr_${code}`);
+    for (const code of KIT_FAILURE_CODES)
+      assert.equal(kitFailureText(t, reason(code), generateKey), `mouthKitErr_${code}`);
     assert.equal(kitFailureText(t, reason("landmarks_unavailable"), generateKey), "mouthErr_landmarks_unavailable");
     assert.equal(kitFailureText(t, reason("source_gone"), generateKey), "mouthErr_source_gone");
     assert.equal(kitFailureText(t, reason("brand_new", "A new failure"), generateKey), "A new failure");
@@ -360,10 +362,10 @@ describe("what step 5 gave the avatar", () => {
 
   it("its own shapes and teeth: a summary, nothing to fix", () => {
     const list = facts(mouth());
-    assert.deepEqual(list.map((fact) => factText(t, fact, teethNoteKey)), [
-      'finishNoticeShapes_own{"total":6}',
-      "finishNoticeTeeth_ai",
-    ]);
+    assert.deepEqual(
+      list.map((fact) => factText(t, fact, teethNoteKey)),
+      ['finishNoticeShapes_own{"total":6}', "finishNoticeTeeth_ai"]
+    );
     assert.equal(list.some(factNeedsAttention), false);
     assert.equal(list.some(factWantsMore), false);
   });
@@ -377,23 +379,30 @@ describe("what step 5 gave the avatar", () => {
 
   it("no shape made: standard, and why", () => {
     const refused = Object.fromEntries(KIT_SHAPES.map((shape) => [shape, "safety_refused"]));
-    const list = facts(mouth({
-      has_oral_photo: false,
-      teeth: { source: null, note: reason("safety_refused") },
-      kit: kit(refused, { teeth: { used: false, reason: reason("safety_refused") } }),
-    }));
-    assert.deepEqual(list.map((fact) => factText(t, fact, teethNoteKey)), [
-      'finishNoticeShapes_none{"reason":"mouthReason_safety_refused"}',
-      "mouthTeethNote_safety_refused",
-    ]);
+    const list = facts(
+      mouth({
+        has_oral_photo: false,
+        teeth: { source: null, note: reason("safety_refused") },
+        kit: kit(refused, { teeth: { used: false, reason: reason("safety_refused") } }),
+      })
+    );
+    assert.deepEqual(
+      list.map((fact) => factText(t, fact, teethNoteKey)),
+      ['finishNoticeShapes_none{"reason":"mouthReason_safety_refused"}', "mouthTeethNote_safety_refused"]
+    );
     assert.equal(list.every(factNeedsAttention), true);
   });
 
   it("nothing made because no AI was allowed: one sentence for both", () => {
     for (const code of WHOLE_MOUTH_CODES) {
-      const list = facts(mouth({
-        has_oral_photo: false, motion_url: null, kit: null, teeth: { source: null, note: reason(code) },
-      }));
+      const list = facts(
+        mouth({
+          has_oral_photo: false,
+          motion_url: null,
+          kit: null,
+          teeth: { source: null, note: reason(code) },
+        })
+      );
       assert.deepEqual(list, [{ kind: "both_standard", reason: reason(code) }]);
       assert.equal(factText(t, list[0], teethNoteKey), `finishNoticeStandard_${code}`);
       assert.equal(factNeedsAttention(list[0]), true);
@@ -403,28 +412,40 @@ describe("what step 5 gave the avatar", () => {
 
   it("teeth alone where the shapes cannot be made: each said on its own", () => {
     const list = facts(mouth({ kit: null, motion_url: null }));
-    assert.deepEqual(list.map((fact) => factText(t, fact, teethNoteKey)), [
-      "finishNoticeShapes_standard",
-      "finishNoticeTeeth_ai",
-    ]);
-    const failed = facts(mouth({
-      kit: null, motion_url: null, has_oral_photo: false, teeth: { source: null, note: reason("face_turned") },
-    }));
-    assert.deepEqual(failed.map((fact) => factText(t, fact, teethNoteKey)), [
-      "finishNoticeShapes_standard",
-      "mouthTeethNote_face_turned",
-    ]);
+    assert.deepEqual(
+      list.map((fact) => factText(t, fact, teethNoteKey)),
+      ["finishNoticeShapes_standard", "finishNoticeTeeth_ai"]
+    );
+    const failed = facts(
+      mouth({
+        kit: null,
+        motion_url: null,
+        has_oral_photo: false,
+        teeth: { source: null, note: reason("face_turned") },
+      })
+    );
+    assert.deepEqual(
+      failed.map((fact) => factText(t, fact, teethNoteKey)),
+      ["finishNoticeShapes_standard", "mouthTeethNote_face_turned"]
+    );
   });
 
   it("the teeth note as the server said it when nothing here words it", () => {
-    const list = facts(mouth({
-      kit: null, motion_url: null, has_oral_photo: false, teeth: { source: null, note: reason("new_code", "Why.") },
-    }));
+    const list = facts(
+      mouth({
+        kit: null,
+        motion_url: null,
+        has_oral_photo: false,
+        teeth: { source: null, note: reason("new_code", "Why.") },
+      })
+    );
     assert.equal(factText(t, list[1], teethNoteKey), "mouthTeethGeneric Why.");
   });
 
   it("a kit dropped since says why", () => {
-    const list = facts(mouth({ motion_url: null, kit: kit({}, { state: "dropped", dropped: reason("picture_changed") }) }));
+    const list = facts(
+      mouth({ motion_url: null, kit: kit({}, { state: "dropped", dropped: reason("picture_changed") }) })
+    );
     assert.equal(factText(t, list[0], teethNoteKey), "mouthShapesDropped_picture_changed");
   });
 
@@ -443,8 +464,11 @@ describe("what step 5 gave the avatar", () => {
 describe("the words exist", () => {
   const keysOf = (lang: string) =>
     new Set(
-      [...readFileSync(new URL(`../../i18n/locales/${lang}/avatars.ts`, import.meta.url), "utf8")
-        .matchAll(/^\s{2}([A-Za-z0-9_]+):\s/gm)].map((m) => m[1])
+      [
+        ...readFileSync(new URL(`../../i18n/locales/${lang}/avatars.ts`, import.meta.url), "utf8").matchAll(
+          /^\s{2}([A-Za-z0-9_]+):\s/gm
+        ),
+      ].map((m) => m[1])
     );
   for (const lang of ["en", "fr"]) {
     it(`in ${lang}, for every shape, stage, reason and failure the kit names`, () => {
@@ -486,7 +510,10 @@ describe("the words exist", () => {
         "createPrepareMouth",
         "createPrepareTeeth",
       ];
-      assert.deepEqual(needed.filter((key) => !keys.has(key)), []);
+      assert.deepEqual(
+        needed.filter((key) => !keys.has(key)),
+        []
+      );
     });
   }
 

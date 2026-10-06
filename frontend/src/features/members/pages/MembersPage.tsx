@@ -4,8 +4,8 @@ import { useTranslation } from "react-i18next";
 
 import { ROW_ACTION, STACK } from "@/components/ui/stackTable";
 import { api, ApiError } from "@/lib/api";
-import { useOrg } from "@/providers/org";
 import type { Invitation, Member, Role } from "@/lib/types";
+import { useOrg } from "@/providers/org";
 
 export function MembersPage() {
   const { t } = useTranslation();
@@ -77,7 +77,9 @@ export function MembersPage() {
           }}
         >
           <div className="min-w-48 flex-1">
-            <label className="label" htmlFor="invite-email">{t("inviteMember")}</label>
+            <label className="label" htmlFor="invite-email">
+              {t("inviteMember")}
+            </label>
             <input
               id="invite-email"
               type="email"
@@ -89,13 +91,10 @@ export function MembersPage() {
             />
           </div>
           <div>
-            <label className="label" htmlFor="invite-role">{t("role")}</label>
-            <select
-              id="invite-role"
-              className="input"
-              value={role}
-              onChange={(e) => setRole(e.target.value as Role)}
-            >
+            <label className="label" htmlFor="invite-role">
+              {t("role")}
+            </label>
+            <select id="invite-role" className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
               <option value="member">{t("roles.member")}</option>
               <option value="admin">{t("roles.admin")}</option>
               {current?.role === "owner" && <option value="owner">{t("roles.owner")}</option>}
@@ -157,7 +156,7 @@ export function MembersPage() {
           <h2 className="mb-3 mt-8 text-lg font-medium">{t("pendingInvitations")}</h2>
           <div className="card p-0">
             <table className={STACK.table}>
-          <tbody className={STACK.body}>
+              <tbody className={STACK.body}>
                 {invitations
                   .filter((i) => !i.accepted_at && !i.revoked_at)
                   .map((invitation) => (
@@ -174,9 +173,7 @@ export function MembersPage() {
                         <button
                           className={`ms-2 text-brand-600 hover:underline ${ROW_ACTION}`}
                           onClick={() =>
-                            void navigator.clipboard.writeText(
-                              `${window.location.origin}/invite/${invitation.token}`
-                            )
+                            void navigator.clipboard.writeText(`${window.location.origin}/invite/${invitation.token}`)
                           }
                         >
                           {t("copy")}

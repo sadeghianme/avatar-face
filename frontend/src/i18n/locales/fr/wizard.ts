@@ -66,7 +66,8 @@ export const wizard = {
   wzConsentAi_upload: "J’accepte d’envoyer cette photo à l’IA pour créer mon avatar.",
   wzConsentAiProvider: "L’IA utilisée est {{providers}}.",
   wzConsentDetails: "Ce qui est envoyé, et ce qui est conservé",
-  wzConsentOptional: "Facultatif pour une photo réaliste : sans cela, votre propre photo est utilisée, sans son arrière-plan.",
+  wzConsentOptional:
+    "Facultatif pour une photo réaliste : sans cela, votre propre photo est utilisée, sans son arrière-plan.",
   wzCreate: "Créer mon avatar",
   wzUploading: "Envoi de votre photo… {{percent}} %",
   wzStarting: "Démarrage…",
@@ -74,8 +75,10 @@ export const wizard = {
   wzHoldDescription: "Décrivez votre avatar pour continuer.",
   wzHoldAi: "Cochez l’accord pour l’IA pour continuer.",
   wzHoldStatement: "Confirmez la déclaration pour continuer.",
-  wzHoldAiOff: "L’IA est désactivée pour votre organisation : ce style n’est donc pas disponible. Choisissez Réaliste, ou demandez à un propriétaire ou un administrateur de l’activer dans les Paramètres.",
-  wzAiOffGenerate: "L’IA est désactivée pour votre organisation : elle ne peut pas créer de personnage. Importez plutôt une photo, ou demandez à un propriétaire ou un administrateur de l’activer dans les Paramètres.",
+  wzHoldAiOff:
+    "L’IA est désactivée pour votre organisation : ce style n’est donc pas disponible. Choisissez Réaliste, ou demandez à un propriétaire ou un administrateur de l’activer dans les Paramètres.",
+  wzAiOffGenerate:
+    "L’IA est désactivée pour votre organisation : elle ne peut pas créer de personnage. Importez plutôt une photo, ou demandez à un propriétaire ou un administrateur de l’activer dans les Paramètres.",
   wzAiOffBadge: "IA désactivée",
 
   // 3 Préparation
@@ -122,7 +125,8 @@ export const wizard = {
   wzVersionAlt_generated: "Version {{n}} : d’après votre description",
   wzTriesLeft_one: "{{count}} essai d’IA restant",
   wzTriesLeft_other: "{{count}} essais d’IA restants",
-  wzNoTries: "Vous avez utilisé tous les essais d’IA de cet avatar. Continuez avec cette image, ou recommencez avec Retour.",
+  wzNoTries:
+    "Vous avez utilisé tous les essais d’IA de cet avatar. Continuez avec cette image, ou recommencez avec Retour.",
   wzKeptBackground: "L’arrière-plan n’a pas pu être retiré proprement : il a été conservé.",
   wzOriginalNote: "C’est votre propre photo, sans son arrière-plan. Aucune IA n’a été utilisée.",
   wzAiMadeNote: "Créé par l’IA. Votre avatar sera signalé comme créé par l’IA.",
@@ -153,7 +157,8 @@ export const wizard = {
   wzFound_eyes: "Yeux",
   wzFound_lips: "Lèvres",
   wzFound_head: "Tête",
-  wzNotFound: "Nous n’avons pas trouvé le visage tout seuls. Faites glisser les points sur les yeux, la bouche et le contour du visage.",
+  wzNotFound:
+    "Nous n’avons pas trouvé le visage tout seuls. Faites glisser les points sur les yeux, la bouche et le contour du visage.",
   wzResetPoints: "Réinitialiser les points",
   wzPointsHint: "Les points sont placés pour vous. N’en déplacez un que s’il est mal placé.",
   wzKeysTitle: "Au clavier",
@@ -170,7 +175,8 @@ export const wizard = {
   wzHoldStatement2: "Confirmez la déclaration pour publier.",
   wzPreviewLoading: "Chargement de l’aperçu…",
   wzPreviewFailed: "L’aperçu n’a pas pu se charger. Vous pouvez tout de même publier, ou réessayer.",
-  wzMouthKitNote: "Nous créons aussi ses propres dents et formes de bouche, pour qu’il parle naturellement. Cela peut prendre jusqu’à une minute.",
+  wzMouthKitNote:
+    "Nous créons aussi ses propres dents et formes de bouche, pour qu’il parle naturellement. Cela peut prendre jusqu’à une minute.",
   wzFitProblems: "Ces points déformeraient le visage :",
 
   // Noms par défaut

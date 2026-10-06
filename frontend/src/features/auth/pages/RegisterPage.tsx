@@ -4,13 +4,17 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { z } from "zod";
 
+import { AuthShell } from "@/features/auth/components/AuthShell";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/providers/auth";
-import { AuthShell } from "@/features/auth/components/AuthShell";
 
 const schema = z.object({
   email: z.string().email(),
-  username: z.string().min(3).max(64).regex(/^[a-zA-Z0-9_.-]+$/),
+  username: z
+    .string()
+    .min(3)
+    .max(64)
+    .regex(/^[a-zA-Z0-9_.-]+$/),
   password: z.string().min(8).max(128),
   display_name: z.string().max(128).optional(),
 });
@@ -40,23 +44,36 @@ export function RegisterPage() {
     <AuthShell title={t("register")}>
       <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)}>
         <div>
-          <label className="label" htmlFor="email">{t("email")}</label>
+          <label className="label" htmlFor="email">
+            {t("email")}
+          </label>
           <input id="email" type="email" className="input" {...register("email")} />
           {errors.email && <p className="field-error">{errors.email.message}</p>}
         </div>
         <div>
-          <label className="label" htmlFor="username">{t("username")}</label>
+          <label className="label" htmlFor="username">
+            {t("username")}
+          </label>
           <input id="username" className="input" {...register("username")} />
           {errors.username && <p className="field-error">{errors.username.message}</p>}
         </div>
         <div>
-          <label className="label" htmlFor="password">{t("password")}</label>
-          <input id="password" type="password" className="input" autoComplete="new-password"
-            {...register("password")} />
+          <label className="label" htmlFor="password">
+            {t("password")}
+          </label>
+          <input
+            id="password"
+            type="password"
+            className="input"
+            autoComplete="new-password"
+            {...register("password")}
+          />
           {errors.password && <p className="field-error">{errors.password.message}</p>}
         </div>
         <div>
-          <label className="label" htmlFor="display_name">{t("displayName")}</label>
+          <label className="label" htmlFor="display_name">
+            {t("displayName")}
+          </label>
           <input id="display_name" className="input" {...register("display_name")} />
         </div>
         {errors.root && <p className="field-error">{errors.root.message}</p>}

@@ -1,20 +1,14 @@
+import type { AvatarEngine } from "@liveface/embed";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { api, ApiError } from "@/lib/api";
-import type { Avatar } from "@/lib/types";
-import type { AvatarEngine } from "@liveface/embed";
-
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
-import {
-  FIT_REASON_LABELS,
-  marksToSend,
-  type FaceMarks,
-  type FitReason,
-} from "@/features/avatars/face-marks";
+import { type FaceMarks, FIT_REASON_LABELS, type FitReason, marksToSend } from "@/features/avatars/face-marks";
 import { SpeakPanel } from "@/features/voices";
+import { api, ApiError } from "@/lib/api";
+import type { Avatar } from "@/lib/types";
 
 interface AnchorsResponse {
   anchors: FaceMarks;
@@ -54,15 +48,7 @@ function guideKey(faceType: Avatar["face_type"]): string {
  * eyes the wrong way round) is listed under the preview, and Save refuses it
  * too.
  */
-export function MarkFacePanel({
-  avatar,
-  orgId,
-  onClose,
-}: {
-  avatar: Avatar;
-  orgId: string;
-  onClose: () => void;
-}) {
+export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgId: string; onClose: () => void }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [marks, setMarks] = useState<FaceMarks | null>(null);
@@ -80,8 +66,7 @@ export function MarkFacePanel({
 
   const { data } = useQuery({
     queryKey: ["rig-anchors", avatar.id, avatar.rig_url],
-    queryFn: () =>
-      api.get<AnchorsResponse>(`/orgs/${orgId}/avatars/${avatar.id}/rig-anchors`),
+    queryFn: () => api.get<AnchorsResponse>(`/orgs/${orgId}/avatars/${avatar.id}/rig-anchors`),
     enabled: Boolean(avatar.rig_url),
     staleTime: 0,
   });
@@ -92,7 +77,12 @@ export function MarkFacePanel({
 
   // Blob URLs are a real allocation; drop the previous one on every replace
   // and on unmount, or a few previews leak the whole rig each time.
-  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+  useEffect(
+    () => () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    },
+    [previewUrl]
+  );
 
   const fitFailed = (err: unknown) => {
     if (err instanceof ApiError && err.code === "fit_invalid" && Array.isArray(err.body.reasons)) {
@@ -105,28 +95,31 @@ export function MarkFacePanel({
   useEffect(() => {
     if (!live || !marks || marks === previewed) return;
     const request = ++latest.current;
-    const timer = window.setTimeout(async () => {
-      setPreviewing(true);
-      setError(null);
-      try {
-        const result = await api.post<FitResponse>(
-          `/orgs/${orgId}/avatars/${avatar.id}/rig-fit`,
-          { ...(data ? marksToSend(marks, data.anchors) : marks), persist: false }
-        );
-        if (request !== latest.current) return;
-        const blob = new Blob([JSON.stringify(result.rig)], { type: "application/json" });
-        setPreviewUrl(URL.createObjectURL(blob));
-        setReasons(result.reasons);
-        setPreviewed(marks);
-      } catch (err) {
-        if (request === latest.current) {
-          fitFailed(err);
-          setLive(false);
+    const timer = window.setTimeout(
+      async () => {
+        setPreviewing(true);
+        setError(null);
+        try {
+          const result = await api.post<FitResponse>(`/orgs/${orgId}/avatars/${avatar.id}/rig-fit`, {
+            ...(data ? marksToSend(marks, data.anchors) : marks),
+            persist: false,
+          });
+          if (request !== latest.current) return;
+          const blob = new Blob([JSON.stringify(result.rig)], { type: "application/json" });
+          setPreviewUrl(URL.createObjectURL(blob));
+          setReasons(result.reasons);
+          setPreviewed(marks);
+        } catch (err) {
+          if (request === latest.current) {
+            fitFailed(err);
+            setLive(false);
+          }
+        } finally {
+          if (request === latest.current) setPreviewing(false);
         }
-      } finally {
-        if (request === latest.current) setPreviewing(false);
-      }
-    }, previewed ? LIVE_PREVIEW_DELAY_MS : 0);
+      },
+      previewed ? LIVE_PREVIEW_DELAY_MS : 0
+    );
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, marks, previewed, orgId, avatar.id]);
@@ -202,19 +195,16 @@ export function MarkFacePanel({
           </p>
           {previewUrl ? (
             <>
-              <AvatarPreview
-                rigUrl={previewUrl}
-                textureUrl={avatar.image_url}
-                size={280}
-                onEngine={setEngine}
-              />
+              <AvatarPreview rigUrl={previewUrl} textureUrl={avatar.image_url} size={280} onEngine={setEngine} />
               <div className="mt-3">
                 <SpeakPanel engine={engine} orgId={orgId} />
               </div>
             </>
           ) : (
-            <div className="flex h-[280px] items-center justify-center rounded-xl border border-dashed
-              border-gray-300 text-center text-xs text-gray-500 dark:border-line">
+            <div
+              className="flex h-[280px] items-center justify-center rounded-xl border border-dashed
+              border-gray-300 text-center text-xs text-gray-500 dark:border-line"
+            >
               {t("testHint")}
             </div>
           )}
@@ -222,8 +212,11 @@ export function MarkFacePanel({
       </div>
 
       {reasons.length > 0 && (
-        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900
-          dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200" role="alert">
+        <div
+          className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900
+          dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+          role="alert"
+        >
           <p className="font-medium">{t("fitRefusedTitle")}</p>
           <ul className="mt-1 list-disc pl-5">
             {reasons.map((reason) => (

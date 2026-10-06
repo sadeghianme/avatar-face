@@ -6,9 +6,9 @@ import { useParams } from "react-router-dom";
 
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
+import { useAvatarMouth } from "@/features/avatars";
 import { loadImage } from "@/lib/image";
 import { useMediaQuery } from "@/lib/useMediaQuery";
-import { useAvatarMouth } from "@/features/avatars";
 
 interface PublicAvatar {
   name: string;
@@ -161,12 +161,7 @@ export function SharePage() {
       if (served.ok) {
         const payload = await served.json();
         await new Promise<void>((resolve) => {
-          engineRef.current!.playAudio(
-            payload.audio_b64,
-            payload.audio_mime,
-            payload.cues,
-            resolve
-          );
+          engineRef.current!.playAudio(payload.audio_b64, payload.audio_mime, payload.cues, resolve);
         });
         return;
       }
@@ -279,4 +274,3 @@ export function SharePage() {
     </div>
   );
 }
-

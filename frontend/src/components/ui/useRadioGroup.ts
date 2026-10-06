@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent } from "react";
+import { type KeyboardEvent, useRef } from "react";
 
 import { rovingMove, rovingTarget } from "@/components/ui/roving";
 

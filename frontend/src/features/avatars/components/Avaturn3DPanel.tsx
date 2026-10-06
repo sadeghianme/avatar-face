@@ -29,10 +29,7 @@ export function Avaturn3DPanel({ orgId }: { orgId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const session = await api.post<{ url: string }>(
-        `/orgs/${orgId}/avatars/avaturn-session`,
-        {}
-      );
+      const session = await api.post<{ url: string }>(`/orgs/${orgId}/avatars/avaturn-session`, {});
       setSessionUrl(session.url);
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));

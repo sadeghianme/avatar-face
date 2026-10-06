@@ -209,7 +209,15 @@ export function DemoAvatar({
  * mouth openness. Written to the DOM directly — sixty React renders a second
  * for a decoration would cost more than the avatar itself.
  */
-export function VoiceMeter({ director, bars = 7, className = "" }: { director: DemoDirector; bars?: number; className?: string }) {
+export function VoiceMeter({
+  director,
+  bars = 7,
+  className = "",
+}: {
+  director: DemoDirector;
+  bars?: number;
+  className?: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
   useEffect(() => {
@@ -233,7 +241,11 @@ export function VoiceMeter({ director, bars = 7, className = "" }: { director: D
   return (
     <div ref={ref} className={`flex h-5 items-center gap-[3px] ${className}`} aria-hidden="true">
       {Array.from({ length: bars }, (_, i) => (
-        <span key={i} className="h-full w-[3px] origin-center rounded-full bg-brand-500" style={{ transform: "scaleY(0.14)" }} />
+        <span
+          key={i}
+          className="h-full w-[3px] origin-center rounded-full bg-brand-500"
+          style={{ transform: "scaleY(0.14)" }}
+        />
       ))}
     </div>
   );

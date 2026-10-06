@@ -1,7 +1,7 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef } from "react";
 
-import { focusableIn, nextFocusIndex } from "@/lib/focus";
 import { cx } from "@/lib/cx";
+import { focusableIn, nextFocusIndex } from "@/lib/focus";
 
 /**
  * A panel that slides over the page from the start side, as a modal

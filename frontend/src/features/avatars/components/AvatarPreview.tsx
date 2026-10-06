@@ -1,5 +1,6 @@
 import { AvatarEngine, type Rig, type Scene } from "@liveface/embed";
 import { useEffect, useRef, useState } from "react";
+
 import { loadImage } from "@/lib/image";
 
 /**
@@ -62,10 +63,7 @@ export function AvatarPreview({
     let cancelled = false;
 
     const boot = async () => {
-      const [rigResponse, texture] = await Promise.all([
-        fetch(rigUrl),
-        loadImage(textureUrl),
-      ]);
+      const [rigResponse, texture] = await Promise.all([fetch(rigUrl), loadImage(textureUrl)]);
       if (!rigResponse.ok) throw new Error(`rig fetch: ${rigResponse.status}`);
       const rig = (await rigResponse.json()) as Rig;
       if (cancelled || !canvasRef.current) return;
@@ -76,7 +74,6 @@ export function AvatarPreview({
       // clean import.meta.env.DEV gate.
       (window as unknown as Record<string, unknown>).__lfEngine = engine;
       onEngine?.(engine);
-
 
       if (layerUrls?.body && layerUrls.head) {
         const held = engine;
@@ -128,4 +125,3 @@ export function AvatarPreview({
     />
   );
 }
-

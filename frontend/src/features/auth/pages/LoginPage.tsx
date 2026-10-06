@@ -7,9 +7,9 @@ import { z } from "zod";
 
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
+import { AuthShell } from "@/features/auth/components/AuthShell";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/providers/auth";
-import { AuthShell } from "@/features/auth/components/AuthShell";
 
 // Messages are i18n keys, translated where they are shown.
 const schema = z.object({
@@ -127,7 +127,11 @@ export function LoginPage() {
             </p>
           )}
           {capsLock && (
-            <p id="caps-lock" role="status" className="mt-1.5 flex items-center gap-1.5 text-[12.5px] font-medium text-amber-700 dark:text-amber-400">
+            <p
+              id="caps-lock"
+              role="status"
+              className="mt-1.5 flex items-center gap-1.5 text-[12.5px] font-medium text-amber-700 dark:text-amber-400"
+            >
               <Icon name="capsLock" className="h-3.5 w-3.5" />
               {t("capsLockOn")}
             </p>

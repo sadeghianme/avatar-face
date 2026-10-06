@@ -1,17 +1,17 @@
 import {
   BrowserTTS,
-  streamSpeech,
-  StreamingSpeechPlayer,
   type CuePlayer,
   type SpeechPlayer,
   type StreamHandle,
+  StreamingSpeechPlayer,
+  streamSpeech,
 } from "@liveface/embed";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Icon } from "@/components/ui/Icon";
-import { fetchStream } from "@/lib/api";
 import { SERVER_PROVIDER, type VoiceSelection } from "@/features/voices/components/VoicePicker";
+import { fetchStream } from "@/lib/api";
 
 /** The built-in voice a sample is read in, by the dashboard's language. */
 export function sampleVoice(language: string): VoiceSelection {

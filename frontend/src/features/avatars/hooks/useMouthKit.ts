@@ -6,12 +6,12 @@ import {
   heldKitJob,
   isKitActive,
   KIT_POLL_MS,
-  kitOutcome,
-  kitStage,
-  rememberKitJob,
   type KitJobAnswer,
   type KitOutcome,
+  kitOutcome,
   type KitStage,
+  kitStage,
+  rememberKitJob,
 } from "@/features/avatars/mouth-kit";
 import { api, ApiError } from "@/lib/api";
 
@@ -45,12 +45,7 @@ export type KitEnding = Exclude<KitOutcome, { kind: "running" }> & { lastStage: 
  * `start(consentId)` resolves once the job is started or found running;
  * any other refusal is thrown for the caller to word.
  */
-export function useMouthKit(
-  orgId: string,
-  avatarId: string,
-  enabled: boolean,
-  onEnded: (ending: KitEnding) => void
-) {
+export function useMouthKit(orgId: string, avatarId: string, enabled: boolean, onEnded: (ending: KitEnding) => void) {
   const queryClient = useQueryClient();
   const key = mouthKitKey(orgId, avatarId);
   const base = `/orgs/${orgId}/avatars/${avatarId}/mouth-kit`;

@@ -24,8 +24,12 @@ export function UseCases() {
                 <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-[0_10px_25px_-10px_rgba(234,106,12,0.8)]">
                   <Icon name={item.icon} className="h-5 w-5" />
                 </span>
-                <h3 className="mt-6 text-[18px] font-semibold tracking-[-0.02em] text-gray-950 dark:text-white">{t(`${item.key}Title`)}</h3>
-                <p className="mt-2 text-[14.5px] leading-relaxed text-gray-600 dark:text-gray-400">{t(`${item.key}Body`)}</p>
+                <h3 className="mt-6 text-[18px] font-semibold tracking-[-0.02em] text-gray-950 dark:text-white">
+                  {t(`${item.key}Title`)}
+                </h3>
+                <p className="mt-2 text-[14.5px] leading-relaxed text-gray-600 dark:text-gray-400">
+                  {t(`${item.key}Body`)}
+                </p>
               </div>
             </Reveal>
           ))}

@@ -3,17 +3,17 @@ import { useTranslation } from "react-i18next";
 
 import { Icon } from "@/components/ui/Icon";
 import {
-  finishNoticeFor,
-  forgetFinishNotice,
   type DraftStore,
   type FinishNotice as Notice,
+  finishNoticeFor,
+  forgetFinishNotice,
 } from "@/features/avatars/creation";
 import {
   factNeedsAttention,
   factText,
   factWantsMore,
-  preparedFacts,
   type PreparedFact,
+  preparedFacts,
 } from "@/features/avatars/mouth-kit";
 import { teethNoteKey, teethView } from "@/features/avatars/teeth";
 import type { Avatar } from "@/lib/types";

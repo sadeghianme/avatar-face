@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
+import { Icon } from "@/components/ui/Icon";
+import { Spinner } from "@/components/ui/Spinner";
 import { ActionErrorNote } from "@/features/avatars/components/create/JobProgress";
 import { FooterSlot, StepFooter } from "@/features/avatars/components/wizard/Footer";
 import { ModelStep } from "@/features/avatars/components/wizard/ModelStep";
@@ -11,23 +13,19 @@ import { PrepareScreen } from "@/features/avatars/components/wizard/PrepareScree
 import { ProgressHeader } from "@/features/avatars/components/wizard/ProgressHeader";
 import { PublishScreen } from "@/features/avatars/components/wizard/PublishScreen";
 import {
+  type Creation,
+  type DraftStore,
   errorText,
   finishStage,
   forgetDraftMarks,
   isJobActive,
   jobFailure,
   stageCount,
-  type Creation,
-  type DraftStore,
 } from "@/features/avatars/creation";
-import {
-  creationKey,
-  draftsKey,
-  useCreation,
-  useCreationActions,
-} from "@/features/avatars/hooks/useCreation";
 import { useConsent } from "@/features/avatars/hooks/useConsent";
+import { creationKey, draftsKey, useCreation, useCreationActions } from "@/features/avatars/hooks/useCreation";
 import {
+  type AvatarModel,
   forgetChoices,
   forgetLastChoices,
   FRESH_ENTRY,
@@ -38,14 +36,11 @@ import {
   preparePhase,
   prepareStage,
   recallChoices,
+  type Screen,
   screenFor,
   startFresh,
-  type AvatarModel,
-  type Screen,
   type WizardCreation,
 } from "@/features/avatars/wizard";
-import { Icon } from "@/components/ui/Icon";
-import { Spinner } from "@/components/ui/Spinner";
 import { api, ApiError } from "@/lib/api";
 
 function tabStore(): DraftStore | null {
@@ -113,7 +108,13 @@ export function NewWizard({
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const model = parseModel(params.get("model"));
 
-  const screen: Screen = !creationId ? (model ? "photo" : "model") : creation ? screenFor(creation, params.get("step")) : "prepare";
+  const screen: Screen = !creationId
+    ? model
+      ? "photo"
+      : "model"
+    : creation
+      ? screenFor(creation, params.get("step"))
+      : "prepare";
 
   // --- Focus follows the screen -------------------------------------------------------
   const heading = useRef<HTMLHeadingElement>(null);
@@ -251,7 +252,9 @@ export function NewWizard({
     );
   } else if (screen === "prepare") {
     const phase = preparePhase(creation);
-    title = t(phase === "done" ? "wzHeading_prepared" : phase === "failed" ? "wzHeading_prepareFailed" : "wzHeading_prepare");
+    title = t(
+      phase === "done" ? "wzHeading_prepared" : phase === "failed" ? "wzHeading_prepareFailed" : "wzHeading_prepare"
+    );
     intro = t(phase === "done" ? "wzIntro_prepared" : phase === "failed" ? "wzIntro_prepareFailed" : "wzIntro_prepare");
     body = (
       <PrepareScreen
@@ -265,7 +268,8 @@ export function NewWizard({
       />
     );
   } else {
-    const building = creation.status === "finishing" || creation.status === "finished" || (job?.step === "finish" && isJobActive(job));
+    const building =
+      creation.status === "finishing" || creation.status === "finished" || (job?.step === "finish" && isJobActive(job));
     title = t(building ? "wzHeading_publishing" : fixing ? "wzHeading_fix" : "wzHeading_publish");
     intro = t(building ? "wzIntro_publishing" : fixing ? "wzIntro_fix" : "wzIntro_publish");
     body = (
@@ -296,10 +300,7 @@ export function NewWizard({
 
       {/* The step scrolls between the bars; its foot is padded past the
           fixed action bar (and the iPhone's home indicator under it). */}
-      <section
-        aria-labelledby="wizard-heading"
-        className="pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-6 sm:pt-8"
-      >
+      <section aria-labelledby="wizard-heading" className="pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-6 sm:pt-8">
         <header className="mb-6 sm:mb-7">
           <p className="mb-1 text-sm font-medium text-gray-500 dark:text-gray-400">{t("wzTitle")}</p>
           {/* Focused on every change of screen, for screen readers: no

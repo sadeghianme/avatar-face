@@ -38,8 +38,7 @@ interface Rect {
 type Handle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
 type Drag =
-  | { kind: "move"; grabX: number; grabY: number; start: Rect }
-  | { kind: "resize"; handle: Handle; start: Rect };
+  { kind: "move"; grabX: number; grabY: number; start: Rect } | { kind: "resize"; handle: Handle; start: Rect };
 
 /** Matches the server, which refuses to leave a face with nothing on it. */
 const MIN_SIDE = 0.15;
@@ -61,7 +60,6 @@ const ASPECTS: { key: string; ratio: number | null }[] = [
   { key: "cropPortrait", ratio: 4 / 5 },
   { key: "cropWide", ratio: 16 / 9 },
 ];
-
 
 export interface CropRect {
   x: number;
@@ -224,9 +222,7 @@ export function CropBox({
   };
 
   const tooSmall = rect.w < MIN_SIDE || rect.h < MIN_SIDE;
-  const outPx = natural
-    ? `${Math.round(rect.w * natural.w)} × ${Math.round(rect.h * natural.h)}`
-    : "";
+  const outPx = natural ? `${Math.round(rect.w * natural.w)} × ${Math.round(rect.h * natural.h)}` : "";
 
   const pct = (v: number) => `${v * 100}%`;
   const edge = "absolute bg-white/90";
@@ -302,9 +298,7 @@ export function CropBox({
           onPointerMove={move}
           onPointerUp={() => end()}
         >
-          <div
-            className={`absolute inset-0 ring-1 ${tooSmall ? "ring-red-400" : "ring-white/70"}`}
-          />
+          <div className={`absolute inset-0 ring-1 ${tooSmall ? "ring-red-400" : "ring-white/70"}`} />
           {/* Thirds, shown only while dragging — permanent guides turn into
               clutter the moment you stop needing them. */}
           {dragging && (
@@ -388,10 +382,16 @@ export function CropBox({
         )}
       </div>
 
-      <p id={keysHintId} className="sr-only">{t("cropKeysHint")}</p>
-      <p id={positionId} className="sr-only">{describe(rect)}</p>
+      <p id={keysHintId} className="sr-only">
+        {t("cropKeysHint")}
+      </p>
+      <p id={positionId} className="sr-only">
+        {describe(rect)}
+      </p>
       {/* Always mounted, so each change is read out. */}
-      <p className="sr-only" aria-live="polite" role="status">{spoken}</p>
+      <p className="sr-only" aria-live="polite" role="status">
+        {spoken}
+      </p>
       {tooSmall && <p className="field-error mt-2">{t("cropTooSmall")}</p>}
       {error && <p className="field-error mt-2">{error}</p>}
     </div>

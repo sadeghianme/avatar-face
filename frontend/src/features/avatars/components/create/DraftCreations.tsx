@@ -3,18 +3,11 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
-import {
-  currentStep,
-  errorText,
-  isJobActive,
-  jobFailure,
-  stepById,
-  type Creation,
-} from "@/features/avatars/creation";
-import { draftsKey } from "@/features/avatars/hooks/useCreation";
-import { LINES } from "@/features/avatars/lines";
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
+import { type Creation, currentStep, errorText, isJobActive, jobFailure, stepById } from "@/features/avatars/creation";
+import { draftsKey } from "@/features/avatars/hooks/useCreation";
+import { LINES } from "@/features/avatars/lines";
 import { api, ApiError } from "@/lib/api";
 
 /**
@@ -55,8 +48,12 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
   const [error, setError] = useState<string | null>(null);
   const image = currentStep(draft) ?? stepById(draft, "original");
   const line = draft.face_type ? t(LINES[draft.face_type].label) : t("createLineUnknown");
-  const when = new Intl.DateTimeFormat(i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
-    .format(new Date(draft.updated_at));
+  const when = new Intl.DateTimeFormat(i18n.language, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(draft.updated_at));
   const state = isJobActive(draft.job)
     ? t("createDraftWorking")
     : jobFailure(draft.job)

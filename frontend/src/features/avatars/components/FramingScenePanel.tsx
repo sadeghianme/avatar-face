@@ -1,16 +1,31 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
+import {
+  type BackgroundKind,
+  clampScene,
+  DEFAULT_COLOR,
+  isCutOut,
+  panned,
+  panStepped,
+  sameScene,
+  type SceneDraft,
+  sceneErrorKey,
+  sceneOf,
+  SWATCHES,
+  ZOOM_FACE,
+  ZOOM_FULL,
+  ZOOM_MAX,
+  ZOOM_STEP,
+  zoomPreset,
+  zoomText,
+} from "@/features/avatars/scene";
 import { api, ApiError } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
 import { TOUCH_ONE_COLUMN, useMediaQuery } from "@/lib/useMediaQuery";
-import {
-  clampScene, DEFAULT_COLOR, isCutOut, panned, panStepped, sameScene, sceneErrorKey, sceneOf, SWATCHES,
-  ZOOM_FACE, ZOOM_FULL, ZOOM_MAX, ZOOM_STEP, zoomPreset, zoomText, type BackgroundKind, type SceneDraft,
-} from "@/features/avatars/scene";
 
 /** How long after the last change a save goes out: a drag or a slider
  *  sends many changes a second, the server needs the last one. */
@@ -104,9 +119,10 @@ export function FramingScenePanel({
         scene: {
           zoom: scene.zoom,
           pan: scene.pan,
-          background: scene.background.kind === "color"
-            ? { kind: "color", color: scene.background.color ?? DEFAULT_COLOR }
-            : { kind: scene.background.kind },
+          background:
+            scene.background.kind === "color"
+              ? { kind: "color", color: scene.background.color ?? DEFAULT_COLOR }
+              : { kind: scene.background.kind },
         },
       });
       queryClient.setQueryData<Avatar>(["avatar", orgId, avatar.id], (old) => (old ? { ...old, ...updated } : old));
@@ -130,7 +146,12 @@ export function FramingScenePanel({
       void save(draftRef.current);
     }, SAVE_AFTER_MS);
   };
-  useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+    },
+    []
+  );
 
   // Dragging the preview pans. Pointer events, captured, so a drag that
   // leaves the box still ends cleanly; a frame at a time, so a fast drag
@@ -161,7 +182,11 @@ export function FramingScenePanel({
     const up = (e: PointerEvent) => {
       if (!drag) return;
       drag = null;
-      try { el.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+      try {
+        el.releasePointerCapture(e.pointerId);
+      } catch {
+        /* already released */
+      }
     };
     el.style.cursor = "grab";
     el.style.touchAction = "none";
@@ -200,7 +225,10 @@ export function FramingScenePanel({
       fileRef.current?.click();
       return;
     }
-    change({ ...draft, background: kind === "color" ? { kind, color: draft.background.color ?? DEFAULT_COLOR } : { kind } });
+    change({
+      ...draft,
+      background: kind === "color" ? { kind, color: draft.background.color ?? DEFAULT_COLOR } : { kind },
+    });
   };
   const chooseColor = (color: string) => change({ ...draft, background: { kind: "color", color } });
 
@@ -255,9 +283,15 @@ export function FramingScenePanel({
   ];
 
   return (
-    <section className={embedded ? "" : "card"} aria-labelledby={embedded ? undefined : "scene-title"} aria-label={embedded ? t("sceneTitle") : undefined}>
+    <section
+      className={embedded ? "" : "card"}
+      aria-labelledby={embedded ? undefined : "scene-title"}
+      aria-label={embedded ? t("sceneTitle") : undefined}
+    >
       {!embedded && (
-        <h2 id="scene-title" className="mb-1 text-base font-semibold">{t("sceneTitle")}</h2>
+        <h2 id="scene-title" className="mb-1 text-base font-semibold">
+          {t("sceneTitle")}
+        </h2>
       )}
       <p className="mb-4 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t("sceneIntro")}</p>
 
@@ -278,13 +312,28 @@ export function FramingScenePanel({
           onChange={(event) => setZoom(Number(event.target.value))}
         />
         <div className="mt-2 flex flex-wrap gap-2">
-          <button type="button" className="btn-secondary min-h-11" aria-pressed={preset === "face"} onClick={() => setZoom(ZOOM_FACE)}>
+          <button
+            type="button"
+            className="btn-secondary min-h-11"
+            aria-pressed={preset === "face"}
+            onClick={() => setZoom(ZOOM_FACE)}
+          >
             {t("sceneZoomFace")}
           </button>
-          <button type="button" className="btn-secondary min-h-11" aria-pressed={preset === "full"} onClick={() => setZoom(ZOOM_FULL)}>
+          <button
+            type="button"
+            className="btn-secondary min-h-11"
+            aria-pressed={preset === "full"}
+            onClick={() => setZoom(ZOOM_FULL)}
+          >
             {t("sceneZoomFull")}
           </button>
-          <button type="button" className="btn-secondary min-h-11" onClick={reset} disabled={!dirty && preset === "face" && draft.pan.x === 0 && draft.pan.y === 0}>
+          <button
+            type="button"
+            className="btn-secondary min-h-11"
+            onClick={reset}
+            disabled={!dirty && preset === "face" && draft.pan.x === 0 && draft.pan.y === 0}
+          >
             <Icon name="undo" className="me-1.5 inline h-4 w-4" />
             {t("sceneReset")}
           </button>
@@ -292,8 +341,12 @@ export function FramingScenePanel({
       </div>
 
       <div className="mb-4">
-        <p className="label" id="scene-pan-label">{t("scenePan")}</p>
-        <p className="mb-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t(dragPans ? "scenePanHint" : "scenePanHintTouch")}</p>
+        <p className="label" id="scene-pan-label">
+          {t("scenePan")}
+        </p>
+        <p className="mb-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+          {t(dragPans ? "scenePanHint" : "scenePanHintTouch")}
+        </p>
         <div
           role="group"
           aria-labelledby="scene-pan-label"
@@ -303,21 +356,54 @@ export function FramingScenePanel({
           className="inline-grid grid-cols-3 gap-1 rounded-xl border border-gray-200 p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-line"
         >
           <span />
-          <button type="button" className="btn-secondary min-h-11 min-w-11 px-0" aria-label={t("scenePanUp")} onClick={() => nudge("ArrowUp")}>↑</button>
+          <button
+            type="button"
+            className="btn-secondary min-h-11 min-w-11 px-0"
+            aria-label={t("scenePanUp")}
+            onClick={() => nudge("ArrowUp")}
+          >
+            ↑
+          </button>
           <span />
-          <button type="button" className="btn-secondary min-h-11 min-w-11 px-0" aria-label={t("scenePanLeft")} onClick={() => nudge("ArrowLeft")}>←</button>
-          <span id="scene-pan-value" className="grid place-items-center font-mono text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
+          <button
+            type="button"
+            className="btn-secondary min-h-11 min-w-11 px-0"
+            aria-label={t("scenePanLeft")}
+            onClick={() => nudge("ArrowLeft")}
+          >
+            ←
+          </button>
+          <span
+            id="scene-pan-value"
+            className="grid place-items-center font-mono text-[11px] tabular-nums text-gray-500 dark:text-gray-400"
+          >
             {draft.pan.x.toFixed(2)}, {draft.pan.y.toFixed(2)}
           </span>
-          <button type="button" className="btn-secondary min-h-11 min-w-11 px-0" aria-label={t("scenePanRight")} onClick={() => nudge("ArrowRight")}>→</button>
+          <button
+            type="button"
+            className="btn-secondary min-h-11 min-w-11 px-0"
+            aria-label={t("scenePanRight")}
+            onClick={() => nudge("ArrowRight")}
+          >
+            →
+          </button>
           <span />
-          <button type="button" className="btn-secondary min-h-11 min-w-11 px-0" aria-label={t("scenePanDown")} onClick={() => nudge("ArrowDown")}>↓</button>
+          <button
+            type="button"
+            className="btn-secondary min-h-11 min-w-11 px-0"
+            aria-label={t("scenePanDown")}
+            onClick={() => nudge("ArrowDown")}
+          >
+            ↓
+          </button>
           <span />
         </div>
       </div>
 
       <div>
-        <p className="label" id="scene-bg-label">{t("sceneBackground")}</p>
+        <p className="label" id="scene-bg-label">
+          {t("sceneBackground")}
+        </p>
         <div role="radiogroup" aria-labelledby="scene-bg-label" className="flex flex-wrap gap-2">
           {kinds.map(({ kind, key }) => (
             <button
@@ -340,9 +426,20 @@ export function FramingScenePanel({
           <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300/70 p-2.5 dark:border-amber-500/40">
             {/* A basis, so a narrow column puts the button under the words
                 rather than the words in a column beside the button. */}
-            <p className="min-w-0 flex-1 basis-52 text-xs leading-relaxed text-gray-700 dark:text-gray-200">{t("sceneOpaqueHint")}</p>
-            <button type="button" className="btn-secondary min-h-11" disabled={busyBackground} onClick={() => void onRemoveBackground()}>
-              {busyBackground ? <Spinner className="h-4 w-4" /> : <Icon name="eraser" className="me-1.5 inline h-4 w-4" />}
+            <p className="min-w-0 flex-1 basis-52 text-xs leading-relaxed text-gray-700 dark:text-gray-200">
+              {t("sceneOpaqueHint")}
+            </p>
+            <button
+              type="button"
+              className="btn-secondary min-h-11"
+              disabled={busyBackground}
+              onClick={() => void onRemoveBackground()}
+            >
+              {busyBackground ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <Icon name="eraser" className="me-1.5 inline h-4 w-4" />
+              )}
               {t("sceneOpaqueAction")}
             </button>
           </div>
@@ -356,7 +453,9 @@ export function FramingScenePanel({
                 aria-label={t(swatch.nameKey)}
                 aria-pressed={draft.background.color === swatch.hex}
                 className={`h-9 w-9 rounded-full border-2 ${
-                  draft.background.color === swatch.hex ? "border-brand-600 ring-2 ring-brand-300" : "border-gray-300 dark:border-line"
+                  draft.background.color === swatch.hex
+                    ? "border-brand-600 ring-2 ring-brand-300"
+                    : "border-gray-300 dark:border-line"
                 }`}
                 style={{ backgroundColor: swatch.hex }}
                 onClick={() => chooseColor(swatch.hex)}
@@ -392,12 +491,22 @@ export function FramingScenePanel({
                 className="h-14 w-20 rounded-lg border border-gray-200 object-cover dark:border-line"
               />
             )}
-            <button type="button" className="btn-secondary min-h-11" disabled={busyImage} onClick={() => fileRef.current?.click()}>
+            <button
+              type="button"
+              className="btn-secondary min-h-11"
+              disabled={busyImage}
+              onClick={() => fileRef.current?.click()}
+            >
               {busyImage ? <Spinner className="h-4 w-4" /> : null}
               {t(hasImage ? "sceneBgReplace" : "sceneBgUpload")}
             </button>
             {hasImage && (
-              <button type="button" className="btn-secondary min-h-11" disabled={busyImage} onClick={() => void removeImage()}>
+              <button
+                type="button"
+                className="btn-secondary min-h-11"
+                disabled={busyImage}
+                onClick={() => void removeImage()}
+              >
                 {t("sceneBgRemove")}
               </button>
             )}
@@ -406,7 +515,9 @@ export function FramingScenePanel({
       </div>
 
       {error && (
-        <p className="field-error mt-3 text-xs leading-relaxed" role="alert">{error}</p>
+        <p className="field-error mt-3 text-xs leading-relaxed" role="alert">
+          {error}
+        </p>
       )}
       <p className="sr-only" role="status" aria-live="polite">
         {status === "saved" ? t("sceneSaved") : status === "saving" ? t("sceneSaving") : ""}

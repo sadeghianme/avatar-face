@@ -4,8 +4,8 @@ import { useTranslation } from "react-i18next";
 
 import { ROW_ACTION, STACK } from "@/components/ui/stackTable";
 import { api, ApiError } from "@/lib/api";
-import { useOrg } from "@/providers/org";
 import type { ApiKeyInfo } from "@/lib/types";
+import { useOrg } from "@/providers/org";
 
 interface Created {
   api_key: ApiKeyInfo;
@@ -49,7 +49,11 @@ export function ApiKeysPage() {
   };
 
   if (!canManage) {
-    return <p className="text-gray-500">{t("apiKeys")}: {t(`roles.${current?.role ?? "member"}`)} ⛔</p>;
+    return (
+      <p className="text-gray-500">
+        {t("apiKeys")}: {t(`roles.${current?.role ?? "member"}`)} ⛔
+      </p>
+    );
   }
 
   return (
@@ -64,7 +68,9 @@ export function ApiKeysPage() {
         }}
       >
         <div className="min-w-40 flex-1">
-          <label className="label" htmlFor="key-name">{t("keyName")}</label>
+          <label className="label" htmlFor="key-name">
+            {t("keyName")}
+          </label>
           <input
             id="key-name"
             className="input"
@@ -74,7 +80,9 @@ export function ApiKeysPage() {
           />
         </div>
         <div className="min-w-56 flex-[2]">
-          <label className="label" htmlFor="key-domains">{t("allowedDomains")}</label>
+          <label className="label" htmlFor="key-domains">
+            {t("allowedDomains")}
+          </label>
           <input
             id="key-domains"
             className="input"
@@ -92,17 +100,12 @@ export function ApiKeysPage() {
       {revealed && (
         <div className="card mb-6 border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20">
           {/* Reveal-once: the plaintext only exists in this response. */}
-          <p className="mb-2 text-sm font-medium text-emerald-800 dark:text-emerald-200">
-            {t("keyCreatedOnce")}
-          </p>
+          <p className="mb-2 text-sm font-medium text-emerald-800 dark:text-emerald-200">{t("keyCreatedOnce")}</p>
           <div className="flex items-center gap-2">
             <code className="min-w-0 flex-1 overflow-x-auto rounded bg-white px-3 py-2 text-sm dark:bg-panel">
               {revealed.plaintext}
             </code>
-            <button
-              className="btn-secondary"
-              onClick={() => void navigator.clipboard.writeText(revealed.plaintext)}
-            >
+            <button className="btn-secondary" onClick={() => void navigator.clipboard.writeText(revealed.plaintext)}>
               {t("copy")}
             </button>
             <button className="btn-secondary" onClick={() => setRevealed(null)}>

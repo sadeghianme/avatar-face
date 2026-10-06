@@ -92,10 +92,7 @@ export function termsOutdated(terms: ConsentTerms | null | undefined, scope: Con
  * Null for any other refusal.
  */
 export type ConsentProblem =
-  | { kind: "required"; scope: ConsentScope }
-  | { kind: "outdated" }
-  | { kind: "disabled" }
-  | null;
+  { kind: "required"; scope: ConsentScope } | { kind: "outdated" } | { kind: "disabled" } | null;
 
 export function consentProblem(code: string, body: Record<string, unknown> = {}): ConsentProblem {
   if (code === "third_party_ai_disabled") return { kind: "disabled" };

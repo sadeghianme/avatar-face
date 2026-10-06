@@ -1,8 +1,8 @@
-import { forwardRef, type AnchorHTMLAttributes } from "react";
+import { type AnchorHTMLAttributes, forwardRef } from "react";
 import { Link, type LinkProps } from "react-router-dom";
 
 import { buttonClass, type ButtonLook } from "@/components/ui/button-styles";
-import { renderIcon, type IconLike } from "@/components/ui/Icon";
+import { type IconLike, renderIcon } from "@/components/ui/Icon";
 import { cx } from "@/lib/cx";
 
 interface Common extends ButtonLook {

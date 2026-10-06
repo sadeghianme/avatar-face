@@ -18,7 +18,8 @@ export const landing = {
   heroBadge: "Synchronisation labiale en temps réel, dans le navigateur",
   heroTitleA: "Une seule photo devient",
   heroTitleB: "un visage qui parle.",
-  heroSubtitle: "Liveface repère 478 points sur un portrait et lui donne vie — des lèvres qui suivent chaque son, des clignements et une respiration naturels, en 13 langues. Intégrez-le à n'importe quel site avec une seule balise script.",
+  heroSubtitle:
+    "Liveface repère 478 points sur un portrait et lui donne vie — des lèvres qui suivent chaque son, des clignements et une respiration naturels, en 13 langues. Intégrez-le à n'importe quel site avec une seule balise script.",
   heroCtaPrimary: "Créer votre avatar — gratuit",
   heroCtaSecondary: "Voir comment ça marche",
   heroPoint1: "Sans carte bancaire",
@@ -61,11 +62,14 @@ export const landing = {
   howSubtitle: "Ni tournage, ni studio, ni modélisation 3D. Un portrait suffit.",
   stepLabel: "Étape {{n}}",
   step1Title: "Téléversez un portrait",
-  step1Body: "Un maillage de 478 points est ajusté automatiquement. Photos, illustrations et rendus 3D fonctionnent tous.",
+  step1Body:
+    "Un maillage de 478 points est ajusté automatiquement. Photos, illustrations et rendus 3D fonctionnent tous.",
   step2Title: "Choisissez une voix et ajustez",
-  step2Body: "Choisissez une voix parmi 13 langues, écoutez-la, et réglez la bouche jusqu'à ce que le rendu soit parfait.",
+  step2Body:
+    "Choisissez une voix parmi 13 langues, écoutez-la, et réglez la bouche jusqu'à ce que le rendu soit parfait.",
   step3Title: "Intégrez et publiez",
-  step3Body: "Collez une balise script dans votre site et publiez. Faites-le ensuite parler de n'importe où avec Liveface.speak().",
+  step3Body:
+    "Collez une balise script dans votre site et publiez. Faites-le ensuite parler de n'importe où avec Liveface.speak().",
   stepVisualPublish: "Publier",
   stepVisualPublished: "Publié",
   stepVisualComment: "n'importe où dans votre page",
@@ -74,27 +78,34 @@ export const landing = {
   // Features
   featuresEyebrow: "Produit",
   featuresTitle: "Tout ce que fait un vrai visage — dans le navigateur",
-  featuresSubtitle: "La synchronisation labiale n'est que le début. Liveface respire, cligne des yeux et bouge en parlant : on voit une personne, pas une bouche collée sur une photo.",
+  featuresSubtitle:
+    "La synchronisation labiale n'est que le début. Liveface respire, cligne des yeux et bouge en parlant : on voit une personne, pas une bouche collée sur une photo.",
   featLipsyncTitle: "La prononciation, pas le volume",
-  featLipsyncBody: "Le texte est converti en phonèmes avant d'atteindre le visage, et chaque son reçoit sa propre forme de bouche, calée sur l'audio. « Knight » ne mime jamais un k dur.",
+  featLipsyncBody:
+    "Le texte est converti en phonèmes avant d'atteindre le visage, et chaque son reçoit sa propre forme de bouche, calée sur l'audio. « Knight » ne mime jamais un k dur.",
   lipsyncSample: "Hi, I'm a live avatar, made from a single photo.",
   featMotionTitle: "Vivant entre les mots",
-  featMotionBody: "Respiration, clignements et légers mouvements de tête gardent le visage naturel, qu'il parle ou qu'il attende.",
+  featMotionBody:
+    "Respiration, clignements et légers mouvements de tête gardent le visage naturel, qu'il parle ou qu'il attende.",
   motionBreath: "Souffle",
   motionBlink: "Cligne",
   motionNod: "Tête",
   featVoicesTitle: "Des voix naturelles en 13 langues",
-  featVoicesBody: "Des voix neuronales sont incluses. Branchez votre propre fournisseur de synthèse, ou clonez une voix avec le consentement de la personne.",
+  featVoicesBody:
+    "Des voix neuronales sont incluses. Branchez votre propre fournisseur de synthèse, ou clonez une voix avec le consentement de la personne.",
   featMouthTitle: "Une vraie bouche à l'intérieur",
-  featMouthBody: "Dents, langue et lèvres proviennent d'une bouche photographique ajustée au visage et éclairée comme lui — jamais un trou noir.",
+  featMouthBody:
+    "Dents, langue et lèvres proviennent d'une bouche photographique ajustée au visage et éclairée comme lui — jamais un trou noir.",
   featMouthAlt: "Gros plan sur la bouche d'un avatar, avec dents et lèvres rendues",
   featPublishTitle: "Brouillon, aperçu, publication",
-  featPublishBody: "Modifiez la voix ou la bouche en privé. Votre site garde la version publiée jusqu'à ce que vous en décidiez autrement.",
+  featPublishBody:
+    "Modifiez la voix ou la bouche en privé. Votre site garde la version publiée jusqu'à ce que vous en décidiez autrement.",
   mockUnpublished: "Modifications non publiées",
   mockPublish: "Publier",
   mockPublishedLive: "Publié · en ligne",
   featStylesTitle: "Tous les visages, tous les styles",
-  featStylesBody: "Photos, illustrations, anime et rendus 3D. Si la détection automatique rate un visage stylisé, placez les points à la main et testez avant d'enregistrer.",
+  featStylesBody:
+    "Photos, illustrations, anime et rendus 3D. Si la détection automatique rate un visage stylisé, placez les points à la main et testez avant d'enregistrer.",
   stylePhoto: "Photo",
   styleIllustrated: "Illustration",
   styleAnime: "Anime",
@@ -105,13 +116,17 @@ export const landing = {
   platformTitle: "Un seul tableau de bord pour toute l'équipe",
   platformSubtitle: "Tout ce qu'il y a derrière l'avatar — voix, clés, partage et consommation — géré au même endroit.",
   platformTeamTitle: "Organisations et rôles",
-  platformTeamBody: "Invitez vos collègues avec le bon rôle. Avatars, voix et clés appartiennent à l'organisation, pas à une seule personne.",
+  platformTeamBody:
+    "Invitez vos collègues avec le bon rôle. Avatars, voix et clés appartiennent à l'organisation, pas à une seule personne.",
   platformKeysTitle: "Une clé par site",
-  platformKeysBody: "Chaque clé a sa propre liste de domaines autorisés et sa limite d'usage : un extrait copié ne fonctionnera pas ailleurs.",
+  platformKeysBody:
+    "Chaque clé a sa propre liste de domaines autorisés et sa limite d'usage : un extrait copié ne fonctionnera pas ailleurs.",
   platformShareTitle: "Liens de partage",
-  platformShareBody: "Envoyez un lien public où chacun peut écrire un texte et entendre votre avatar. Désactivez-le quand vous voulez.",
+  platformShareBody:
+    "Envoyez un lien public où chacun peut écrire un texte et entendre votre avatar. Désactivez-le quand vous voulez.",
   platformUsageTitle: "La consommation d'un coup d'œil",
-  platformUsageBody: "Voyez combien de parole chaque clé consomme, et fixez des limites avant qu'une semaine chargée ne devienne une surprise.",
+  platformUsageBody:
+    "Voyez combien de parole chaque clé consomme, et fixez des limites avant qu'une semaine chargée ne devienne une surprise.",
   mockLabel: "Aperçu du tableau de bord Liveface",
   mockAvatars: "Avatars",
   mockAvatarName: "Assistant support",
@@ -126,9 +141,11 @@ export const landing = {
   useEyebrow: "Cas d'usage",
   useTitle: "Un visage pour chaque conversation",
   useSupportTitle: "Service client",
-  useSupportBody: "Lisez les articles d'aide à voix haute, guidez vos visiteurs dans un formulaire, et accueillez-les avec un visage souriant.",
+  useSupportBody:
+    "Lisez les articles d'aide à voix haute, guidez vos visiteurs dans un formulaire, et accueillez-les avec un visage souriant.",
   useSalesTitle: "Ventes et prise en main",
-  useSalesBody: "Présentez votre produit aux nouveaux visiteurs avec des mots simples, à toute heure, sans prendre rendez-vous.",
+  useSalesBody:
+    "Présentez votre produit aux nouveaux visiteurs avec des mots simples, à toute heure, sans prendre rendez-vous.",
   useEduTitle: "Éducation et formation",
   useEduBody: "Transformez vos cours et supports en un tuteur qui les explique à voix haute.",
   useGlobalTitle: "Publics internationaux",
@@ -137,26 +154,33 @@ export const landing = {
   // Developers
   devEyebrow: "Pour les développeurs",
   devTitle: "Une balise script. Une API simple et honnête.",
-  devBody: "Le widget est du JavaScript simple et l'API du REST simple. Ni framework, ni étape de build, ni client particulier.",
+  devBody:
+    "Le widget est du JavaScript simple et l'API du REST simple. Ni framework, ni étape de build, ni client particulier.",
   devTabsLabel: "Exemples de code",
   devTabEmbed: "HTML",
   devTabJs: "JavaScript",
   devTabRest: "API REST",
-  devPoint1: "Collez la balise et l'avatar apparaît. Appelez Liveface.speak() depuis une réponse de chat, un bouton ou au chargement de la page.",
-  devPoint2: "Vous préférez votre propre moteur de rendu ? L'API REST renvoie l'audio avec des visèmes horodatés, et un point d'entrée dédié fournit le timing de chaque mot.",
+  devPoint1:
+    "Collez la balise et l'avatar apparaît. Appelez Liveface.speak() depuis une réponse de chat, un bouton ou au chargement de la page.",
+  devPoint2:
+    "Vous préférez votre propre moteur de rendu ? L'API REST renvoie l'audio avec des visèmes horodatés, et un point d'entrée dédié fournit le timing de chaque mot.",
   devPoint3: "Les clés sont limitées à vos domaines, avec une limite d'usage pour chacune.",
 
   // Trust
   trustEyebrow: "Confidentialité et contrôle",
   trustTitle: "Votre visage, votre voix, vos règles",
   trustKeysTitle: "Des clés qui restent sur vos domaines",
-  trustKeysBody: "Chaque clé a sa propre liste de domaines autorisés et sa limite d'usage. Révoquez-en une sans toucher aux autres.",
+  trustKeysBody:
+    "Chaque clé a sa propre liste de domaines autorisés et sa limite d'usage. Révoquez-en une sans toucher aux autres.",
   trustOrgTitle: "De vraies frontières entre équipes",
-  trustOrgBody: "Avatars, voix et scripts appartiennent à une organisation. Les autres organisations ne peuvent ni les voir ni les modifier.",
+  trustOrgBody:
+    "Avatars, voix et scripts appartiennent à une organisation. Les autres organisations ne peuvent ni les voir ni les modifier.",
   trustPublishTitle: "Rien ne part en ligne par accident",
-  trustPublishBody: "Les modifications restent en brouillon. Vos visiteurs voient la version publiée jusqu'à ce que vous publiiez.",
+  trustPublishBody:
+    "Les modifications restent en brouillon. Vos visiteurs voient la version publiée jusqu'à ce que vous publiiez.",
   trustConsentTitle: "Le consentement intégré",
-  trustConsentBody: "Cloner une voix exige de confirmer le consentement de la personne, et la parole clonée est tatouée numériquement.",
+  trustConsentBody:
+    "Cloner une voix exige de confirmer le consentement de la personne, et la parole clonée est tatouée numériquement.",
 
   // FAQ
   faqEyebrow: "FAQ",
@@ -164,25 +188,33 @@ export const landing = {
   faqSubtitle: "Le plus simple pour vous faire une idée : essayez avec votre propre photo.",
   faqCta: "Essayer avec votre photo",
   faqPhotoQ: "Quel type de photo fonctionne le mieux ?",
-  faqPhotoA: "Un portrait net, de face, bien éclairé, bouche fermée ou légèrement ouverte. Photos, illustrations, anime et rendus 3D fonctionnent tous. Si la détection rate un visage stylisé, vous pouvez placer les points à la main.",
+  faqPhotoA:
+    "Un portrait net, de face, bien éclairé, bouche fermée ou légèrement ouverte. Photos, illustrations, anime et rendus 3D fonctionnent tous. Si la détection rate un visage stylisé, vous pouvez placer les points à la main.",
   faqCodeQ: "Faut-il savoir coder ?",
-  faqCodeA: "Non. Collez une balise script et l'avatar apparaît sur votre page. Pour le faire parler depuis votre propre logique — une réponse de chat, un bouton, le chargement de la page — appelez Liveface.speak() avec n'importe quel texte.",
+  faqCodeA:
+    "Non. Collez une balise script et l'avatar apparaît sur votre page. Pour le faire parler depuis votre propre logique — une réponse de chat, un bouton, le chargement de la page — appelez Liveface.speak() avec n'importe quel texte.",
   faqLanguagesQ: "Quelles langues et quelles voix sont disponibles ?",
-  faqLanguagesA: "Les voix neuronales incluses couvrent 13 langues, dont l'anglais, l'espagnol, le français, l'allemand, l'arabe, le persan et l'hindi. Vous pouvez aussi brancher votre propre fournisseur de synthèse, ou cloner une voix avec le consentement de la personne.",
+  faqLanguagesA:
+    "Les voix neuronales incluses couvrent 13 langues, dont l'anglais, l'espagnol, le français, l'allemand, l'arabe, le persan et l'hindi. Vous pouvez aussi brancher votre propre fournisseur de synthèse, ou cloner une voix avec le consentement de la personne.",
   faqChatQ: "Peut-il répondre aux questions comme un chatbot ?",
-  faqChatA: "Liveface est le visage et la voix, pas le cerveau. Envoyez les réponses de votre assistant — chatbot, modèle de langage ou outil de support — à Liveface.speak(), et l'avatar les prononce avec une synchronisation labiale fidèle.",
+  faqChatA:
+    "Liveface est le visage et la voix, pas le cerveau. Envoyez les réponses de votre assistant — chatbot, modèle de langage ou outil de support — à Liveface.speak(), et l'avatar les prononce avec une synchronisation labiale fidèle.",
   faqMobileQ: "Est-ce que ça marche sur mobile ?",
-  faqMobileA: "Oui. Il fonctionne dans tout navigateur moderne, sur téléphone et tablette comme sur ordinateur, sans rien installer.",
+  faqMobileA:
+    "Oui. Il fonctionne dans tout navigateur moderne, sur téléphone et tablette comme sur ordinateur, sans rien installer.",
   faqEditQ: "Puis-je modifier un avatar déjà en ligne ?",
-  faqEditA: "Oui. Les changements de voix ou de bouche sont enregistrés en brouillon, que vous pouvez prévisualiser en privé. Votre site garde la version publiée jusqu'à ce que vous publiiez.",
+  faqEditA:
+    "Oui. Les changements de voix ou de bouche sont enregistrés en brouillon, que vous pouvez prévisualiser en privé. Votre site garde la version publiée jusqu'à ce que vous publiiez.",
   faqPrivacyQ: "Que deviennent les photos et les voix que je téléverse ?",
-  faqPrivacyA: "Elles restent dans votre organisation et ne servent qu’à créer et faire fonctionner vos avatars. La seule exception est l’IA, à laquelle vous consentez d’abord : la photo que vous importez ou la description que vous saisissez est alors envoyée à Google (Gemini) pour créer et ajuster l’image de votre avatar dans le style choisi, et repérer les points du visage d’un animal ; et lorsque vous publiez l’avatar d’une personne réaliste, des recadrages de son visage sont envoyés pour créer ses dents et ses formes de bouche, publiés avec l’avatar et signalés comme créés par l’IA. Nous n’utilisons jamais vos images pour entraîner une IA. Les propriétaires et administrateurs de votre organisation peuvent désactiver entièrement l’IA. Publier le visage d’une personne exige de confirmer que vous êtes cette personne ou que vous avez son autorisation. Le clonage d’une voix exige de confirmer le consentement du locuteur, la parole clonée est filigranée, et vous pouvez supprimer une voix à tout moment.",
+  faqPrivacyA:
+    "Elles restent dans votre organisation et ne servent qu’à créer et faire fonctionner vos avatars. La seule exception est l’IA, à laquelle vous consentez d’abord : la photo que vous importez ou la description que vous saisissez est alors envoyée à Google (Gemini) pour créer et ajuster l’image de votre avatar dans le style choisi, et repérer les points du visage d’un animal ; et lorsque vous publiez l’avatar d’une personne réaliste, des recadrages de son visage sont envoyés pour créer ses dents et ses formes de bouche, publiés avec l’avatar et signalés comme créés par l’IA. Nous n’utilisons jamais vos images pour entraîner une IA. Les propriétaires et administrateurs de votre organisation peuvent désactiver entièrement l’IA. Publier le visage d’une personne exige de confirmer que vous êtes cette personne ou que vous avez son autorisation. Le clonage d’une voix exige de confirmer le consentement du locuteur, la parole clonée est filigranée, et vous pouvez supprimer une voix à tout moment.",
   faqFreeQ: "Combien coûte le démarrage ?",
   faqFreeA: "Rien. Créer un compte et vos premiers avatars est gratuit, sans carte bancaire.",
 
   // Final call to action
   ctaTitle: "Donnez un visage à votre site",
-  ctaBody: "Téléversez une photo, choisissez une voix et écoutez-la parler. Ni carte, ni studio, ni code pour commencer.",
+  ctaBody:
+    "Téléversez une photo, choisissez une voix et écoutez-la parler. Ni carte, ni studio, ni code pour commencer.",
 
   // Footer
   footerTagline: "Des avatars parlants en temps réel à partir d'une seule photo, pour n'importe quel site.",

@@ -1,11 +1,4 @@
-import {
-  createContext,
-  ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-} from "react";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from "react";
 
 import { api, getTokens, setTokens } from "@/lib/api";
 import type { User } from "@/lib/types";
@@ -39,10 +32,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (usernameOrEmail: string, password: string) => {
-    const tokens = await api.post<{ access_token: string; refresh_token: string }>(
-      "/auth/login",
-      { username_or_email: usernameOrEmail, password }
-    );
+    const tokens = await api.post<{ access_token: string; refresh_token: string }>("/auth/login", {
+      username_or_email: usernameOrEmail,
+      password,
+    });
     setTokens(tokens);
     setUser(await api.get<User>("/auth/me"));
   }, []);
@@ -54,13 +47,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * nobody is signed in, so the next Protected route bounces to /login — the
    * exact detour the flow exists to avoid.
    */
-  const adoptSession = useCallback(
-    async (tokens: { access_token: string; refresh_token: string }) => {
-      setTokens(tokens);
-      setUser(await api.get<User>("/auth/me"));
-    },
-    []
-  );
+  const adoptSession = useCallback(async (tokens: { access_token: string; refresh_token: string }) => {
+    setTokens(tokens);
+    setUser(await api.get<User>("/auth/me"));
+  }, []);
 
   const register = useCallback(
     async (email: string, username: string, password: string, displayName?: string) => {

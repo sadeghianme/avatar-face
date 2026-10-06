@@ -58,7 +58,7 @@ export function isKitActive(job: KitJob | null | undefined): boolean {
 export function kitStage(job: KitJob | null | undefined): KitStage | null {
   if (!job || job.step !== "mouth_kit" || job.state !== "running") return null;
   const label = job.progress?.label;
-  return label ? KIT_STAGE_LABELS[label] ?? null : null;
+  return label ? (KIT_STAGE_LABELS[label] ?? null) : null;
 }
 
 /**
@@ -291,10 +291,21 @@ export function reasonText(t: Translate, reason: Reason | null): string {
 // What the teeth alone can be refused for: worded as the teeth, since no
 // shape was asked for (mouthErr_generate_<code>, mouthErr_<code>).
 const TEETH_ALONE: ReadonlySet<string> = new Set([
-  "safety_refused", "no_image", "provider_error", "timeout", "mouth_teeth_unclear",
-  "reference_no_face", "reference_mouth_closed", "reference_face_small", "no_face_for_teeth",
-  "face_turned", "landmarks_unavailable", "imagegen_unavailable", "image_limit_reached",
-  "third_party_ai_disabled", "consent_not_recorded",
+  "safety_refused",
+  "no_image",
+  "provider_error",
+  "timeout",
+  "mouth_teeth_unclear",
+  "reference_no_face",
+  "reference_mouth_closed",
+  "reference_face_small",
+  "no_face_for_teeth",
+  "face_turned",
+  "landmarks_unavailable",
+  "imagegen_unavailable",
+  "image_limit_reached",
+  "third_party_ai_disabled",
+  "consent_not_recorded",
 ]);
 
 /** A failed kit job's codes with a sentence of their own
@@ -348,9 +359,7 @@ const WHOLE_MOUTH: ReadonlySet<string> = new Set(WHOLE_MOUTH_CODES);
  * the classic mouth, which step 5 does not make.
  */
 export type PreparedFact =
-  | { kind: "both_standard"; reason: Reason }
-  | { kind: "shapes"; view: ShapesView }
-  | { kind: "teeth"; view: TeethView };
+  { kind: "both_standard"; reason: Reason } | { kind: "shapes"; view: ShapesView } | { kind: "teeth"; view: TeethView };
 
 export function preparedFacts(mouth: Avatar["mouth"], teeth: TeethView | null): PreparedFact[] {
   const shapes = shapesView(mouth);

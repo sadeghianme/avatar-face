@@ -1,18 +1,18 @@
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 
-import {
-  errorText,
-  finishStage,
-  isJobActive,
-  jobFailure,
-  type CreationJob,
-  type FinishRow,
-  type FinishStage,
-  type JobCount,
-} from "@/features/avatars/creation";
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
+import {
+  type CreationJob,
+  errorText,
+  type FinishRow,
+  type FinishStage,
+  finishStage,
+  isJobActive,
+  type JobCount,
+  jobFailure,
+} from "@/features/avatars/creation";
 
 /**
  * A creation job, drawn: what is happening and how far along, or why it

@@ -2,8 +2,8 @@ import { ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Icon } from "@/components/ui/Icon";
-
 import { SNIPPETS } from "@/features/landing/data";
+
 import { Reveal, SectionHeader } from "./Reveal";
 
 type Tab = keyof typeof SNIPPETS;
@@ -26,15 +26,16 @@ function highlight(code: string): ReactNode[] {
     const token = match[0];
     const at = match.index ?? 0;
     if (at > last) out.push(code.slice(last, at));
-    const className = token.startsWith("//") || token.startsWith("#")
-      ? "text-gray-500"
-      : token.startsWith('"') || token.startsWith("'")
-        ? "text-emerald-300"
-        : token.startsWith("<")
-          ? "text-brand-400"
-          : token === "Liveface"
-            ? "text-sky-300"
-            : "text-violet-300";
+    const className =
+      token.startsWith("//") || token.startsWith("#")
+        ? "text-gray-500"
+        : token.startsWith('"') || token.startsWith("'")
+          ? "text-emerald-300"
+          : token.startsWith("<")
+            ? "text-brand-400"
+            : token === "Liveface"
+              ? "text-sky-300"
+              : "text-violet-300";
     out.push(
       <span key={at} className={className}>
         {token}

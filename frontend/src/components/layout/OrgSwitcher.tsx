@@ -32,11 +32,7 @@ export function OrgSwitcher() {
           <button type="submit" className="btn-primary flex-1 py-1">
             {t("create")}
           </button>
-          <button
-            type="button"
-            className="btn-secondary flex-1 py-1"
-            onClick={() => setCreating(false)}
-          >
+          <button type="button" className="btn-secondary flex-1 py-1" onClick={() => setCreating(false)}>
             {t("cancel")}
           </button>
         </div>

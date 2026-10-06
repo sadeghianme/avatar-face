@@ -9,9 +9,9 @@
  */
 
 export interface Recording {
-  blob: Blob;        // audio/wav, 16-bit PCM mono
+  blob: Blob; // audio/wav, 16-bit PCM mono
   seconds: number;
-  url: string;       // object URL for local playback; caller revokes
+  url: string; // object URL for local playback; caller revokes
 }
 
 export class MicRecorder {

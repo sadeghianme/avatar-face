@@ -2,29 +2,31 @@ import type { AvatarEngine } from "@liveface/embed";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Icon } from "@/components/ui/Icon";
+import { Spinner } from "@/components/ui/Spinner";
+import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
-import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
 import { JobProgress, useSeenStages } from "@/features/avatars/components/create/JobProgress";
+import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
 import { PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
 import { BackButton, PhoneNote, StepFooter } from "@/features/avatars/components/wizard/Footer";
-import { useRadioGroup } from "@/components/ui/useRadioGroup";
+import { consentProblem, type FaceStatement } from "@/features/avatars/consent";
 import {
   anchorsCurrent,
+  type CreationAnchors,
   currentStep,
+  type DraftStore,
   errorText,
+  type FinishResult,
   finishRows,
   isJobActive,
   jobFailure,
   mouthExpected,
   pickMarks,
-  rememberFinishNotice,
-  type CreationAnchors,
-  type DraftStore,
-  type FinishResult,
   type PreviewRig,
+  rememberFinishNotice,
 } from "@/features/avatars/creation";
-import { consentProblem, type FaceStatement } from "@/features/avatars/consent";
-import { FIT_REASON_LABELS, type FaceMarks, type FitReason } from "@/features/avatars/face-marks";
+import { type FaceMarks, FIT_REASON_LABELS, type FitReason } from "@/features/avatars/face-marks";
 import type { ConsentApi } from "@/features/avatars/hooks/useConsent";
 import type { Run } from "@/features/avatars/hooks/useCreation";
 import { LINES } from "@/features/avatars/lines";
@@ -39,8 +41,6 @@ import {
   type WizardCreation,
 } from "@/features/avatars/wizard";
 import { SampleSpeech } from "@/features/voices";
-import { Icon } from "@/components/ui/Icon";
-import { Spinner } from "@/components/ui/Spinner";
 import { api, ApiError } from "@/lib/api";
 
 // The preview follows moved points this long after the last move.
@@ -157,9 +157,14 @@ function PublishingPicture({ creation }: { creation: WizardCreation }) {
   const image = currentStep(creation);
   if (!image) return null;
   return (
-    <div className={`relative mx-auto aspect-square w-48 overflow-hidden rounded-full border-4 border-white shadow-xl dark:border-raised ${PICTURE_BACKDROP}`}>
+    <div
+      className={`relative mx-auto aspect-square w-48 overflow-hidden rounded-full border-4 border-white shadow-xl dark:border-raised ${PICTURE_BACKDROP}`}
+    >
       <img src={image.url} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
-      <span aria-hidden="true" className="absolute inset-0 rounded-full ring-2 ring-brand-500/60 motion-safe:animate-glow" />
+      <span
+        aria-hidden="true"
+        className="absolute inset-0 rounded-full ring-2 ring-brand-500/60 motion-safe:animate-glow"
+      />
     </div>
   );
 }
@@ -223,33 +228,41 @@ function Editor({
   }, []);
 
   // Blob URLs are a real allocation: each is dropped when replaced.
-  useEffect(() => () => {
-    if (rigUrl) URL.revokeObjectURL(rigUrl);
-  }, [rigUrl]);
+  useEffect(
+    () => () => {
+      if (rigUrl) URL.revokeObjectURL(rigUrl);
+    },
+    [rigUrl]
+  );
 
   // The rig Publish would build, fitted without saving; only the newest
   // answer lands.
   useEffect(() => {
     const request = ++latest.current;
-    const timer = window.setTimeout(async () => {
-      try {
-        const result = await api.post<PreviewRig>(`${base}/preview-rig`, {
-          anchors_id: anchors.id,
-          ...(edited ? { marks } : {}),
-        });
-        if (request !== latest.current) return;
-        setRigUrl(URL.createObjectURL(new Blob([JSON.stringify(result.rig)], { type: "application/json" })));
-        setReasons(result.reasons);
-        setPreviewError(null);
-      } catch (err) {
-        if (request !== latest.current) return;
-        if (err instanceof ApiError && err.code === "anchors_stale") {
-          void refetch();
-          return;
+    const timer = window.setTimeout(
+      async () => {
+        try {
+          const result = await api.post<PreviewRig>(`${base}/preview-rig`, {
+            anchors_id: anchors.id,
+            ...(edited ? { marks } : {}),
+          });
+          if (request !== latest.current) return;
+          setRigUrl(URL.createObjectURL(new Blob([JSON.stringify(result.rig)], { type: "application/json" })));
+          setReasons(result.reasons);
+          setPreviewError(null);
+        } catch (err) {
+          if (request !== latest.current) return;
+          if (err instanceof ApiError && err.code === "anchors_stale") {
+            void refetch();
+            return;
+          }
+          setPreviewError(
+            err instanceof ApiError ? errorText(t, err.code, err.detail, err.retryAfter) : t("wzPreviewFailed")
+          );
         }
-        setPreviewError(err instanceof ApiError ? errorText(t, err.code, err.detail, err.retryAfter) : t("wzPreviewFailed"));
-      }
-    }, rigUrl ? PREVIEW_DELAY_MS : 0);
+      },
+      rigUrl ? PREVIEW_DELAY_MS : 0
+    );
     return () => window.clearTimeout(timer);
     // The preview follows the marks; rigUrl only picks the delay.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -426,7 +439,10 @@ function Editor({
             </button>
             <details className="group mt-1 hidden text-xs text-gray-500 dark:text-gray-400 sm:block">
               <summary className="inline-flex min-h-8 coarse:min-h-11 cursor-pointer list-none items-center gap-1 font-medium hover:text-gray-700 dark:hover:text-gray-200">
-                <Icon name="chevron" className="h-3.5 w-3.5 transition-transform group-open:rotate-90 rtl:-scale-x-100" />
+                <Icon
+                  name="chevron"
+                  className="h-3.5 w-3.5 transition-transform group-open:rotate-90 rtl:-scale-x-100"
+                />
                 {t("wzKeysTitle")}
               </summary>
               <p className="mt-1 leading-relaxed">{t("markFaceKeys")}</p>
@@ -446,7 +462,10 @@ function Editor({
           </div>
 
           {blocked && (
-            <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100">
+            <div
+              role="alert"
+              className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100"
+            >
               <p className="font-medium">{t("wzFitProblems")}</p>
               <ul className="mt-1 list-disc ps-5">
                 {reasons.map((reason) => (
@@ -494,7 +513,10 @@ function Editor({
         </div>
       </div>
 
-      <StepFooter back={footer.back && <BackButton onClick={onBack} disabled={busy !== null} />} note={hold ? t(hold) : null}>
+      <StepFooter
+        back={footer.back && <BackButton onClick={onBack} disabled={busy !== null} />}
+        note={hold ? t(hold) : null}
+      >
         {footer.primary === "publish" && (
           <button
             type="button"
@@ -503,7 +525,11 @@ function Editor({
             disabled={Boolean(hold) || busy !== null}
             aria-describedby={hold ? `${ids}-hold` : undefined}
           >
-            {busy === "finish" ? <Spinner className="h-4 w-4" /> : <Icon name="bolt" className="h-4 w-4" strokeWidth={1.9} />}
+            {busy === "finish" ? (
+              <Spinner className="h-4 w-4" />
+            ) : (
+              <Icon name="bolt" className="h-4 w-4" strokeWidth={1.9} />
+            )}
             {t("wzPublish")}
           </button>
         )}

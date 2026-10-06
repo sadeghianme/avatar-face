@@ -1,9 +1,13 @@
-import { DEFAULT_REFERENCE_PROFILE, PROFILE_LIMITS, normalizeProfile, type ReferenceProfile } from "@liveface/embed/mouth";
+import type { CharacterSettings } from "@liveface/embed/mouth";
+import {
+  DEFAULT_REFERENCE_PROFILE,
+  normalizeProfile,
+  PROFILE_LIMITS,
+  type ReferenceProfile,
+} from "@liveface/embed/mouth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-
-import type { CharacterSettings } from "@liveface/embed/mouth";
 
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
@@ -12,7 +16,7 @@ import { ProgressBar, ShapeTicks } from "@/features/avatars/components/create/Jo
 import { publishDraft } from "@/features/avatars/components/PublishBar";
 import { stageCount } from "@/features/avatars/creation";
 import { useConsent } from "@/features/avatars/hooks/useConsent";
-import { useMouthKit, type KitEnding } from "@/features/avatars/hooks/useMouthKit";
+import { type KitEnding, useMouthKit } from "@/features/avatars/hooks/useMouthKit";
 import type { MotionChoice } from "@/features/avatars/mouth-config";
 import {
   canCompareShapes,
@@ -25,7 +29,7 @@ import {
   standardShapeText,
   teethNoteText,
 } from "@/features/avatars/mouth-kit";
-import { mouthErrorKey, teethNoteKey, teethView, type MouthAction } from "@/features/avatars/teeth";
+import { type MouthAction, mouthErrorKey, teethNoteKey, teethView } from "@/features/avatars/teeth";
 import { api, ApiError } from "@/lib/api";
 import type { Avatar, MouthRenderer } from "@/lib/types";
 
@@ -36,8 +40,11 @@ const rendererChoices = (avatar: Avatar): MouthRenderer[] =>
 /** Lip projection belongs to the older geometric prototype only. */
 const SLIDERS: (keyof ReferenceProfile)[] = ["teethScale", "teethY", "warmth", "jawRange"];
 const LABELS: Record<keyof ReferenceProfile, string> = {
-  teethScale: "mouthTeethSize", teethY: "mouthTeethPosition", warmth: "mouthWarmth",
-  lipProjection: "mouthTeethSize", jawRange: "mouthJaw",
+  teethScale: "mouthTeethSize",
+  teethY: "mouthTeethPosition",
+  warmth: "mouthWarmth",
+  lipProjection: "mouthTeethSize",
+  jawRange: "mouthJaw",
 };
 
 const MOTION_CHOICES: readonly MotionChoice[] = ["own", "standard"];
@@ -93,8 +100,7 @@ export function MouthPanel({
   const fileRef = useRef<HTMLInputElement>(null);
   const saved = avatar.mouth ?? null;
   const choices = rendererChoices(avatar);
-  const savedRenderer: MouthRenderer =
-    saved && choices.includes(saved.renderer) ? saved.renderer : "classic";
+  const savedRenderer: MouthRenderer = saved && choices.includes(saved.renderer) ? saved.renderer : "classic";
   const [renderer, setRenderer] = useState<MouthRenderer>(savedRenderer);
   const [profile, setProfile] = useState<ReferenceProfile>(() => normalizeProfile(saved?.profile));
   const [busy, setBusy] = useState(false);
@@ -142,9 +148,7 @@ export function MouthPanel({
       return;
     }
     const failure = ending.kind === "interrupted" ? { code: "interrupted", detail: "" } : ending.error;
-    setTeethError(
-      kitFailureText(t, failure, (code) => mouthErrorKey(code, "generate"), ending.lastStage === "teeth")
-    );
+    setTeethError(kitFailureText(t, failure, (code) => mouthErrorKey(code, "generate"), ending.lastStage === "teeth"));
     // The switch was turned off meanwhile: the action gives way.
     if (failure.code === "third_party_ai_disabled") consent.refreshAiSwitch();
   };
@@ -182,9 +186,7 @@ export function MouthPanel({
       const updated = await api.patch<Avatar>(base, {
         mouth: { renderer: nextRenderer, profile: nextProfile },
       });
-      queryClient.setQueryData<Avatar>(["avatar", orgId, avatar.id], (old) =>
-        old ? { ...old, ...updated } : old
-      );
+      queryClient.setQueryData<Avatar>(["avatar", orgId, avatar.id], (old) => (old ? { ...old, ...updated } : old));
       void queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));
@@ -302,7 +304,9 @@ export function MouthPanel({
     >
       <div>
         {!embedded && <h3 className="font-semibold">{t("mouthTitle")}</h3>}
-        <p className={`text-xs leading-relaxed text-gray-500 dark:text-gray-400 ${embedded ? "" : "mt-1"}`}>{t("mouthHint")}</p>
+        <p className={`text-xs leading-relaxed text-gray-500 dark:text-gray-400 ${embedded ? "" : "mt-1"}`}>
+          {t("mouthHint")}
+        </p>
       </div>
 
       {!human && avatar.kind === "photo" && (
@@ -338,13 +342,14 @@ export function MouthPanel({
         ))}
       </div>
 
-      {choices.length === 1 && (
-        <p className="text-xs leading-relaxed text-gray-500">{t("mouthHumanOnly")}</p>
-      )}
+      {choices.length === 1 && <p className="text-xs leading-relaxed text-gray-500">{t("mouthHumanOnly")}</p>}
 
       {continuous && (
         <>
-          <div className="divide-y divide-black/[0.06] rounded-xl bg-black/[0.03] dark:divide-white/[0.06] dark:bg-white/[0.04]" id="mouth-teeth">
+          <div
+            className="divide-y divide-black/[0.06] rounded-xl bg-black/[0.03] dark:divide-white/[0.06] dark:bg-white/[0.04]"
+            id="mouth-teeth"
+          >
             {shapes && (
               <div className="p-3">
                 <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
@@ -574,7 +579,11 @@ export function MouthPanel({
           </button>
         </>
       )}
-      {error && <p className="field-error" role="alert">{error}</p>}
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
       {consent.dialog}
     </section>
   );

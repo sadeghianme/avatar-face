@@ -10,7 +10,10 @@ import { useAuth } from "@/providers/auth";
 import { Reveal } from "./Reveal";
 
 const LANGUAGE_NAMES: Record<string, string> = {
-  "en-US": "English", "es-ES": "Español", "fr-FR": "Français", "hi-IN": "हिन्दी",
+  "en-US": "English",
+  "es-ES": "Español",
+  "fr-FR": "Français",
+  "hi-IN": "हिन्दी",
 };
 
 export function Hero() {
@@ -55,7 +58,10 @@ export function Hero() {
                 className="btn-primary group rounded-full px-6 py-3.5 text-[15px] shadow-[0_10px_30px_-10px_rgba(234,106,12,0.7)]"
               >
                 {user ? t("openDashboard") : t("heroCtaPrimary")}
-                <Icon name="arrow" className="h-4 w-4 transition-transform group-hover:translate-x-0.5 rtl:rotate-180" />
+                <Icon
+                  name="arrow"
+                  className="h-4 w-4 transition-transform group-hover:translate-x-0.5 rtl:rotate-180"
+                />
               </Link>
               <a href="#how" className="btn-secondary rounded-full px-6 py-3.5 text-[15px]">
                 {t("heroCtaSecondary")}
@@ -156,7 +162,10 @@ function Caption({ demo, director }: { demo: DemoSnapshot; director: DemoDirecto
   // The engine could not load: the still portrait speaks for itself.
   if (demo.phase === "unavailable") return null;
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/40 to-transparent px-5 pb-5 pt-20" aria-live="off">
+    <div
+      className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/40 to-transparent px-5 pb-5 pt-20"
+      aria-live="off"
+    >
       <div className="flex items-center gap-2.5">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11.5px] font-medium text-white backdrop-blur-md">
           <Icon name="globe" className="h-3.5 w-3.5" />

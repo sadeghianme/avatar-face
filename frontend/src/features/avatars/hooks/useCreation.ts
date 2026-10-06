@@ -1,17 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 
-import {
-  isBusy,
-  pollDelay,
-  stabilizeUrls,
-  type Creation,
-  type HeldUrl,
-} from "@/features/avatars/creation";
+import { type Creation, type HeldUrl, isBusy, pollDelay, stabilizeUrls } from "@/features/avatars/creation";
 import { api, ApiError } from "@/lib/api";
 
-export const creationKey = (orgId: string | undefined, id: string | undefined) =>
-  ["creation", orgId, id] as const;
+export const creationKey = (orgId: string | undefined, id: string | undefined) => ["creation", orgId, id] as const;
 export const draftsKey = (orgId: string | undefined) => ["creations", orgId, "draft"] as const;
 
 /**
@@ -91,7 +84,12 @@ function toActionError(err: unknown): ActionError {
   if (err instanceof ApiError) {
     return { code: err.code, detail: err.detail, retryAfter: err.retryAfter, body: err.body };
   }
-  return { code: "network_error", detail: err instanceof Error ? err.message : String(err), retryAfter: null, body: {} };
+  return {
+    code: "network_error",
+    detail: err instanceof Error ? err.message : String(err),
+    retryAfter: null,
+    body: {},
+  };
 }
 
 // The server refused because what we showed is out of date: reload it, so
@@ -111,15 +109,12 @@ const STALE = new Set([
  * error (with its code, so a step can react to it), and the creation any
  * of them answered with applied to the cache.
  */
-export function useCreationActions(
-  apply: (creation: Creation) => Promise<void>,
-  refetch: () => unknown
-) {
+export function useCreationActions(apply: (creation: Creation) => Promise<void>, refetch: () => unknown) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<ActionError | null>(null);
 
   const run = useCallback(
-    async <T,>(label: string, request: () => Promise<T>, toCreation?: (result: T) => Creation) => {
+    async <T>(label: string, request: () => Promise<T>, toCreation?: (result: T) => Creation) => {
       setBusy(label);
       setError(null);
       try {

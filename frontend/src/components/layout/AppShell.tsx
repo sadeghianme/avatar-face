@@ -1,15 +1,15 @@
-import { ReactNode, useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, useLocation } from "react-router-dom";
 
-import { Icon, type IconName } from "@/components/ui/Icon";
 import { LanguageMenu } from "@/components/layout/LanguageMenu";
+import { OrgSwitcher } from "@/components/layout/OrgSwitcher";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { focusableIn, nextFocusIndex } from "@/lib/focus";
 import { useAuth } from "@/providers/auth";
 import { useOrg } from "@/providers/org";
 import { useTheme } from "@/providers/theme";
-import { OrgSwitcher } from "@/components/layout/OrgSwitcher";
 
 /**
  * One list, no section headers.
@@ -63,10 +63,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const sidebar = (
     <div className="flex min-h-full flex-col pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
-      <Link
-        to="/"
-        className="flex items-center gap-2.5 px-5 pb-6 pt-5 text-[15px] font-semibold tracking-[-0.01em]"
-      >
+      <Link to="/" className="flex items-center gap-2.5 px-5 pb-6 pt-5 text-[15px] font-semibold tracking-[-0.01em]">
         <img src="/brand/liveface-mark-512.png" alt="" className="h-7 w-7 rounded-[9px]" />
         {t("appName")}
       </Link>
@@ -104,9 +101,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {initial}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium">
-            {user?.display_name || user?.username}
-          </span>
+          <span className="block truncate text-[13px] font-medium">{user?.display_name || user?.username}</span>
           <span className="block truncate text-[11.5px] text-gray-400">{t("logout")}</span>
         </span>
       </button>
@@ -152,9 +147,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="lg:ms-[232px]">
         {/* 3.5rem under the status bar: the wizard's progress sticks just below it. */}
         <header className="sticky top-0 z-30 h-[calc(3.5rem+env(safe-area-inset-top))] border-b pt-[env(safe-area-inset-top)] border-black/[0.07] bg-white/80 backdrop-blur-xl dark:border-white/[0.07] dark:bg-ink/80">
-          <div
-            className="flex h-full items-center gap-3 px-4"
-          >
+          <div className="flex h-full items-center gap-3 px-4">
             <button
               ref={drawer.opener}
               type="button"

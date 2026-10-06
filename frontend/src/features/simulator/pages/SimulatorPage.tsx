@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 
-import { buildSnippet } from "@/features/avatars";
 import { Icon } from "@/components/ui/Icon";
+import { buildSnippet } from "@/features/avatars";
 import { api } from "@/lib/api";
 import { useOrg } from "@/providers/org";
 
@@ -29,9 +29,7 @@ interface Parsed {
 function parseSnippet(text: string): Parsed | null {
   if (!text.trim()) return null;
   const doc = new DOMParser().parseFromString(`<body>${text}</body>`, "text/html");
-  const tag = [...doc.querySelectorAll("script[src]")].find((s) =>
-    (s.getAttribute("src") ?? "").includes("liveface")
-  );
+  const tag = [...doc.querySelectorAll("script[src]")].find((s) => (s.getAttribute("src") ?? "").includes("liveface"));
   if (!tag) return null;
   return {
     src: tag.getAttribute("src") ?? undefined,
@@ -159,15 +157,10 @@ export function SimulatorPage() {
   const mintToken = async (): Promise<string | null> => {
     if (!current) return null;
     try {
-      const r = await api.post<{ token: string }>(
-        `/orgs/${current.id}/api-keys/simulator-token`
-      );
+      const r = await api.post<{ token: string }>(`/orgs/${current.id}/api-keys/simulator-token`);
       return r.token;
     } catch (e) {
-      setLog((prev) => [
-        ...prev,
-        { at: Date.now(), level: "error", message: `${t("simTokenFailed")} ${String(e)}` },
-      ]);
+      setLog((prev) => [...prev, { at: Date.now(), level: "error", message: `${t("simTokenFailed")} ${String(e)}` }]);
       return null;
     }
   };
@@ -197,9 +190,7 @@ export function SimulatorPage() {
   // Speak dying for no visible reason, which reads as a broken product.
   useEffect(() => {
     if (mode !== "token" || !running) return;
-    const stale = log.some(
-      (l) => l.level === "error" && /simulator_token_invalid|401/i.test(l.message)
-    );
+    const stale = log.some((l) => l.level === "error" && /simulator_token_invalid|401/i.test(l.message));
     if (!stale) return;
     let cancelled = false;
     void (async () => {
@@ -219,12 +210,8 @@ export function SimulatorPage() {
 
   return (
     <div>
-      <h1 className="text-[32px] font-semibold tracking-[-0.03em] sm:text-[38px]">
-        {t("simulator")}
-      </h1>
-      <p className="mt-1.5 max-w-2xl text-[15px] text-gray-500 dark:text-gray-400">
-        {t("simSubtitle")}
-      </p>
+      <h1 className="text-[32px] font-semibold tracking-[-0.03em] sm:text-[38px]">{t("simulator")}</h1>
+      <p className="mt-1.5 max-w-2xl text-[15px] text-gray-500 dark:text-gray-400">{t("simSubtitle")}</p>
 
       <div className="mt-9 grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
         {/* ---- input ---- */}
@@ -300,9 +287,7 @@ export function SimulatorPage() {
           </p>
 
           {placeholderKey && (
-            <p className="mt-2 text-[12.5px] text-amber-600 dark:text-amber-400">
-              {t("simPlaceholderKey")}
-            </p>
+            <p className="mt-2 text-[12.5px] text-amber-600 dark:text-amber-400">{t("simPlaceholderKey")}</p>
           )}
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -360,16 +345,10 @@ export function SimulatorPage() {
                 <div
                   key={i}
                   className={
-                    e.level === "error"
-                      ? "text-red-400"
-                      : e.level === "ok"
-                        ? "text-emerald-400"
-                        : "text-gray-400"
+                    e.level === "error" ? "text-red-400" : e.level === "ok" ? "text-emerald-400" : "text-gray-400"
                   }
                 >
-                  <span className="text-gray-600">
-                    {new Date(e.at).toLocaleTimeString()}{" "}
-                  </span>
+                  <span className="text-gray-600">{new Date(e.at).toLocaleTimeString()} </span>
                   {e.message}
                 </div>
               ))}

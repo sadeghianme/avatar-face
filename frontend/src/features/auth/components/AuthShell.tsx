@@ -15,15 +15,7 @@ import { useTheme } from "@/providers/theme";
  * through shows what the product does. It is hidden below `lg` rather than
  * stacked: on a phone the form is the only thing anyone came for.
  */
-export function AuthShell({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  children: ReactNode;
-}) {
+export function AuthShell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   const { t } = useTranslation();
   const { theme, toggle } = useTheme();
 
@@ -48,7 +40,10 @@ export function AuthShell({
           className="absolute left-1/2 top-[40%] -z-10 h-[460px] w-[460px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-500/25 blur-[110px] motion-safe:animate-glow"
         />
 
-        <Link to="/" className="flex w-fit items-center gap-2.5 coarse:min-h-11 text-[16px] font-semibold tracking-[-0.02em]">
+        <Link
+          to="/"
+          className="flex w-fit items-center gap-2.5 coarse:min-h-11 text-[16px] font-semibold tracking-[-0.02em]"
+        >
           <img src="/brand/liveface-mark-512.png" alt="" width={32} height={32} className="h-8 w-8 rounded-[10px]" />
           {t("appName")}
         </Link>
@@ -68,7 +63,10 @@ export function AuthShell({
             >
               <span className="text-sky-300">Liveface</span>.speak(
               <span className="text-emerald-300">&quot;{t("authSpeakLine")}&quot;</span>)
-              <span aria-hidden="true" className="ms-0.5 inline-block h-[1.05em] w-[2px] translate-y-[2px] bg-brand-400 motion-safe:animate-caret" />
+              <span
+                aria-hidden="true"
+                className="ms-0.5 inline-block h-[1.05em] w-[2px] translate-y-[2px] bg-brand-400 motion-safe:animate-caret"
+              />
             </p>
           </div>
 
@@ -104,7 +102,10 @@ export function AuthShell({
           className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(60%_100%_at_50%_0%,rgba(249,115,22,0.10),transparent)] lg:hidden"
         />
         <header className="relative flex items-center justify-between p-4">
-          <Link to="/" className="flex items-center gap-2.5 coarse:min-h-11 text-[16px] font-semibold tracking-[-0.02em] lg:invisible">
+          <Link
+            to="/"
+            className="flex items-center gap-2.5 coarse:min-h-11 text-[16px] font-semibold tracking-[-0.02em] lg:invisible"
+          >
             <img src="/brand/liveface-mark-512.png" alt="" width={32} height={32} className="h-8 w-8 rounded-[10px]" />
             {t("appName")}
           </Link>
@@ -127,7 +128,10 @@ export function AuthShell({
             {/* Phones get no brand panel; the face still says hello. */}
             <div className="mb-8 flex items-center gap-3 lg:hidden" aria-hidden="true">
               <span className="relative shrink-0">
-                <span className="absolute -inset-1 rounded-full bg-brand-500/25 motion-safe:animate-ping" style={{ animationDuration: "2.6s" }} />
+                <span
+                  className="absolute -inset-1 rounded-full bg-brand-500/25 motion-safe:animate-ping"
+                  style={{ animationDuration: "2.6s" }}
+                />
                 <img
                   src={DEMO_PORTRAIT}
                   alt=""
@@ -140,8 +144,12 @@ export function AuthShell({
                 {t("authSpeakLine")}
               </p>
             </div>
-            <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-gray-950 sm:text-[32px] dark:text-white">{title}</h1>
-            {subtitle && <p className="mt-2 text-[15px] leading-relaxed text-gray-500 dark:text-gray-400">{subtitle}</p>}
+            <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-gray-950 sm:text-[32px] dark:text-white">
+              {title}
+            </h1>
+            {subtitle && (
+              <p className="mt-2 text-[15px] leading-relaxed text-gray-500 dark:text-gray-400">{subtitle}</p>
+            )}
             <div className="mt-8">{children}</div>
           </div>
         </div>

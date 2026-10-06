@@ -2,8 +2,8 @@ import { useTranslation } from "react-i18next";
 
 import { DEMO_PORTRAIT } from "@/components/brand/DemoAvatar";
 import { Icon } from "@/components/ui/Icon";
-
 import { FACE_PATHS } from "@/features/landing/data";
+
 import { Reveal, SectionHeader } from "./Reveal";
 
 export function HowItWorks() {
@@ -31,7 +31,9 @@ export function HowItWorks() {
                   <h3 className="mt-2 text-[21px] font-semibold tracking-[-0.02em] text-gray-950 dark:text-white">
                     {t(`${step.key}Title`)}
                   </h3>
-                  <p className="mt-2.5 text-[15px] leading-relaxed text-gray-600 dark:text-gray-400">{t(`${step.key}Body`)}</p>
+                  <p className="mt-2.5 text-[15px] leading-relaxed text-gray-600 dark:text-gray-400">
+                    {t(`${step.key}Body`)}
+                  </p>
                 </div>
               </div>
             </Reveal>
@@ -46,7 +48,10 @@ export function HowItWorks() {
 function PhotoVisual() {
   return (
     <div className="absolute inset-0 grid place-items-center">
-      <div className="relative h-[82%] overflow-hidden rounded-2xl shadow-lg ring-1 ring-black/10" style={{ aspectRatio: "1 / 1" }}>
+      <div
+        className="relative h-[82%] overflow-hidden rounded-2xl shadow-lg ring-1 ring-black/10"
+        style={{ aspectRatio: "1 / 1" }}
+      >
         <img src={DEMO_PORTRAIT} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
         <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full" aria-hidden="true">
           {FACE_PATHS.map((d, i) => (

@@ -2,8 +2,8 @@ import { useTranslation } from "react-i18next";
 
 import smileUrl from "@/assets/demo/smile.webp";
 import { Icon, type IconName } from "@/components/ui/Icon";
-
 import { LANGUAGES, OPENNESS } from "@/features/landing/data";
+
 import { Reveal, SectionHeader } from "./Reveal";
 
 const card =
@@ -69,15 +69,21 @@ export function Features() {
               <CardHead icon="layers" title={t("featPublishTitle")} body={t("featPublishBody")} />
               <div className="relative mt-auto grid pt-7">
                 <div className="col-start-1 row-start-1 flex items-center justify-between rounded-2xl bg-amber-50 px-4 py-3 ring-1 ring-amber-200 motion-safe:animate-swap dark:bg-amber-500/10 dark:ring-amber-500/25">
-                  <span className="text-[13px] font-medium text-amber-800 dark:text-amber-300">{t("mockUnpublished")}</span>
-                  <span className="rounded-full bg-brand-600 px-3 py-1 text-[12px] font-semibold text-white">{t("mockPublish")}</span>
+                  <span className="text-[13px] font-medium text-amber-800 dark:text-amber-300">
+                    {t("mockUnpublished")}
+                  </span>
+                  <span className="rounded-full bg-brand-600 px-3 py-1 text-[12px] font-semibold text-white">
+                    {t("mockPublish")}
+                  </span>
                 </div>
                 <div
                   className="col-start-1 row-start-1 flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3 opacity-0 ring-1 ring-emerald-200 motion-safe:animate-swap dark:bg-emerald-500/10 dark:ring-emerald-500/25"
                   style={{ animationDelay: "-3s" }}
                 >
                   <Icon name="check" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" strokeWidth={2.4} />
-                  <span className="text-[13px] font-medium text-emerald-800 dark:text-emerald-300">{t("mockPublishedLive")}</span>
+                  <span className="text-[13px] font-medium text-emerald-800 dark:text-emerald-300">
+                    {t("mockPublishedLive")}
+                  </span>
                 </div>
               </div>
             </div>
@@ -158,7 +164,14 @@ function MotionVisual() {
         <div key={row.key} className="flex items-center gap-3">
           <span className="w-12 shrink-0 text-[12px] font-medium text-gray-500 dark:text-gray-400">{t(row.key)}</span>
           <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="h-6 flex-1" aria-hidden="true">
-            <path d={row.d} fill="none" stroke="currentColor" strokeWidth={1.6} vectorEffect="non-scaling-stroke" className="text-brand-500" />
+            <path
+              d={row.d}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.6}
+              vectorEffect="non-scaling-stroke"
+              className="text-brand-500"
+            />
           </svg>
         </div>
       ))}

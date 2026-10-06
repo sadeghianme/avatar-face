@@ -25,7 +25,12 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
 ) {
   return (
     <label className={cx("check-row", className)}>
-      <input ref={ref} type="checkbox" className={cx("checkbox", size === "md" && "h-5 w-5", inputClassName)} {...props} />
+      <input
+        ref={ref}
+        type="checkbox"
+        className={cx("checkbox", size === "md" && "h-5 w-5", inputClassName)}
+        {...props}
+      />
       {description ? (
         <span>
           {label}

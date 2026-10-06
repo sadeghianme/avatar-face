@@ -40,7 +40,10 @@ function CountUp({ to }: { to: number }) {
 export function ProofStrip() {
   const { t } = useTranslation();
   return (
-    <section aria-label={t("proofLabel")} className="border-y border-black/[0.06] bg-white/60 dark:border-white/[0.07] dark:bg-white/[0.015]">
+    <section
+      aria-label={t("proofLabel")}
+      className="border-y border-black/[0.06] bg-white/60 dark:border-white/[0.07] dark:bg-white/[0.015]"
+    >
       <dl className="mx-auto grid max-w-7xl grid-cols-2 px-5 sm:px-6 lg:grid-cols-4">
         {PROOF.map((item, i) => (
           <div
