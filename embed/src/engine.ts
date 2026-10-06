@@ -69,7 +69,7 @@ import { LANDMARK_COUNT } from "./engine/landmarks";
 import { MeshWarp, type WarpMode } from "./engine/mesh-warp";
 import { Motion } from "./engine/motion";
 import { ClassicMouth } from "./engine/paint-classic-mouth";
-import { drawGaze, drawLashes, drawPaintedLids } from "./engine/paint-eyes";
+import { drawGaze, drawLashes, drawPaintedLids, type EyeSource } from "./engine/paint-eyes";
 import { paintMouthSurface } from "./engine/paint-mouth";
 import { FacePicture } from "./engine/picture";
 import { composeFrame, motionTravel, type Layers } from "./engine/render2d";
@@ -488,7 +488,7 @@ export class AvatarEngine {
   private paintFeatures(pts: Point[]): void {
     const ctx = this.ctx;
     const { texture, mesh, samples } = this.picture;
-    const eyes = { texture, texPoints: mesh.texPoints };
+    const eyes: EyeSource = { texture, texPoints: mesh.texPoints };
     drawGaze(ctx, pts, eyes, this.face.gaze);
     if (this.profile.blink === "lid") drawPaintedLids(ctx, pts, eyes, this.face.blink, this.tuning.blink, samples);
     else drawLashes(ctx, pts, this.face.blink, samples.lashColour);

@@ -35,7 +35,7 @@ import { BrowserTTS } from "./browser-tts";
 import { aiLabel, renderAiLabel, type Disclosure } from "./widget/disclosure";
 import { AvatarEngine, type Scene } from "./engine";
 import type { Avatar3DEngine, Avatar3DOptions } from "./engine3d";
-import { SpeechPlayer, SpeechQueue } from "./speech";
+import { SpeechQueue } from "./speech";
 import { listen, sttSupported, ListenOptions } from "./stt";
 import type { ClassicMouthConfig } from "./engine/character-mouth";
 import type { AvatarMouthConfig } from "./mouth";
@@ -51,7 +51,9 @@ interface LivefaceApi {
   sttSupported(): boolean;
   /** Adjust animation live, e.g. Liveface.tune({ mouthOpen: 1.3 }). */
   tune(partial: Partial<EngineTuning>): void;
-  engine: SpeechPlayer | null;
+  /** The engine itself: a page may call any of its public members, so
+   *  they keep their names in liveface.js (scripts/mangle-names.mjs). */
+  engine: AvatarEngine | Avatar3DEngine | null;
 }
 
 declare global {
