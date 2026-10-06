@@ -1,52 +1,45 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { ROW_ACTION, STACK } from "@/components/ui/stackTable";
-import { api, ApiError } from "@/lib/api";
-import type { ApiKeyInfo } from "@/lib/types";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { StackCell, StackRow, StackTable, TableAction } from "@/components/ui/Table";
+import { type CreatedKey, useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/features/api-keys/api";
+import { errorMessage } from "@/lib/errorMessage";
 import { useOrg } from "@/providers/org";
-
-interface Created {
-  api_key: ApiKeyInfo;
-  plaintext: string;
-}
 
 export function ApiKeysPage() {
   const { t } = useTranslation();
   const { current } = useOrg();
-  const queryClient = useQueryClient();
   const orgId = current?.id;
   const [name, setName] = useState("");
   const [domains, setDomains] = useState("");
-  const [revealed, setRevealed] = useState<Created | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState<CreatedKey | null>(null);
   const canManage = current?.role === "owner" || current?.role === "admin";
+  const { data: keys } = useApiKeys(orgId, canManage);
+  const create = useCreateApiKey(orgId);
+  const revoke = useRevokeApiKey(orgId);
 
-  const { data: keys } = useQuery({
-    queryKey: ["api-keys", orgId],
-    queryFn: () => api.get<ApiKeyInfo[]>(`/orgs/${orgId}/api-keys`),
-    enabled: Boolean(orgId) && canManage,
-  });
-
-  const createKey = async () => {
-    setError(null);
-    try {
-      const created = await api.post<Created>(`/orgs/${orgId}/api-keys`, {
+  const createKey = () =>
+    create.mutate(
+      {
         name: name.trim() || "Widget key",
         allowed_domains: domains
           .split(",")
           .map((d) => d.trim())
           .filter(Boolean),
-      });
-      setRevealed(created);
-      setName("");
-      setDomains("");
-      await queryClient.invalidateQueries({ queryKey: ["api-keys", orgId] });
-    } catch (err) {
-      setError(err instanceof ApiError ? err.detail : t("error"));
-    }
-  };
+      },
+      {
+        onSuccess: (created) => {
+          setRevealed(created);
+          setName("");
+          setDomains("");
+        },
+      }
+    );
 
   if (!canManage) {
     return (
@@ -60,96 +53,62 @@ export function ApiKeysPage() {
     <div>
       <h1 className="mb-6 text-2xl font-semibold">{t("apiKeys")}</h1>
 
-      <form
-        className="card mb-6 flex flex-wrap items-end gap-3"
+      <Card
+        as="form"
+        className="mb-6 flex flex-wrap items-end gap-3"
         onSubmit={(e) => {
           e.preventDefault();
-          void createKey();
+          createKey();
         }}
       >
-        <div className="min-w-40 flex-1">
-          <label className="label" htmlFor="key-name">
-            {t("keyName")}
-          </label>
-          <input
-            id="key-name"
-            className="input"
-            placeholder="Production widget"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-        <div className="min-w-56 flex-[2]">
-          <label className="label" htmlFor="key-domains">
-            {t("allowedDomains")}
-          </label>
-          <input
-            id="key-domains"
-            className="input"
+        <Field id="key-name" label={t("keyName")} className="min-w-40 flex-1">
+          <Input placeholder="Production widget" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field id="key-domains" label={t("allowedDomains")} className="min-w-56 flex-[2]">
+          <Input
             placeholder="example.com, *.example.org"
             value={domains}
             onChange={(e) => setDomains(e.target.value)}
           />
-        </div>
-        <button type="submit" className="btn-primary">
-          {t("createApiKey")}
-        </button>
-      </form>
-      {error && <p className="field-error mb-4">{error}</p>}
+        </Field>
+        <Button type="submit">{t("createApiKey")}</Button>
+      </Card>
+      {create.error && <p className="field-error mb-4">{errorMessage(create.error, t("error"))}</p>}
 
       {revealed && (
-        <div className="card mb-6 border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20">
+        <Card tone="success" className="mb-6">
           {/* Reveal-once: the plaintext only exists in this response. */}
           <p className="mb-2 text-sm font-medium text-emerald-800 dark:text-emerald-200">{t("keyCreatedOnce")}</p>
           <div className="flex items-center gap-2">
             <code className="min-w-0 flex-1 overflow-x-auto rounded bg-white px-3 py-2 text-sm dark:bg-panel">
               {revealed.plaintext}
             </code>
-            <button className="btn-secondary" onClick={() => void navigator.clipboard.writeText(revealed.plaintext)}>
-              {t("copy")}
-            </button>
-            <button className="btn-secondary" onClick={() => setRevealed(null)}>
+            <CopyButton text={revealed.plaintext} label={t("copy")} copiedLabel={t("copied")} />
+            <Button variant="secondary" aria-label={t("close")} onClick={() => setRevealed(null)}>
               ✕
-            </button>
+            </Button>
           </div>
-        </div>
+        </Card>
       )}
 
-      <div className="card p-0">
-        <table className={STACK.table}>
-          <tbody className={STACK.body}>
-            {keys?.map((key) => (
-              <tr
-                key={key.id}
-                className={`${STACK.row} border-b border-gray-100 last:border-0 dark:border-line ${
-                  key.revoked_at ? "opacity-50" : ""
-                }`}
-              >
-                <td className={STACK.lead}>
-                  <div className="font-medium">{key.name}</div>
-                  <code className="text-xs text-gray-400">{key.prefix}…</code>
-                </td>
-                <td className={`${STACK.cell} break-words text-xs text-gray-500 max-sm:w-full`}>
-                  {key.allowed_domains || "any origin"}
-                </td>
-                <td className={STACK.end}>
-                  {!key.revoked_at && (
-                    <button
-                      className={`text-sm text-red-600 hover:underline ${ROW_ACTION}`}
-                      onClick={async () => {
-                        await api.delete(`/orgs/${orgId}/api-keys/${key.id}`);
-                        await queryClient.invalidateQueries({ queryKey: ["api-keys", orgId] });
-                      }}
-                    >
-                      {t("revoke")}
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Card padding="none">
+        <StackTable>
+          {keys?.map((key) => (
+            <StackRow key={key.id} className={key.revoked_at ? "opacity-50" : undefined}>
+              <StackCell kind="lead">
+                <div className="font-medium">{key.name}</div>
+                <code className="text-xs text-gray-400">{key.prefix}…</code>
+              </StackCell>
+              <StackCell className="break-words text-xs text-gray-500 max-sm:w-full">
+                {key.allowed_domains || "any origin"}
+              </StackCell>
+              <StackCell kind="end">
+                {!key.revoked_at && <TableAction onClick={() => revoke.mutate(key.id)}>{t("revoke")}</TableAction>}
+              </StackCell>
+            </StackRow>
+          ))}
+        </StackTable>
+      </Card>
     </div>
   );
 }
