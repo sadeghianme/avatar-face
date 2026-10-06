@@ -70,10 +70,9 @@ export class Motion {
   energy = 0;
   readonly blinks = new BlinkScheduler();
   readonly body = new BodyMotion();
-  // The head as a movable unit. The layer is the head REGION of the photo —
-  // hair, ears, skull — cut out once with feathered edges; the geometry is
-  // where it sits and how far it may travel. The first attempt moved face
-  // vertices instead, and the face slid around inside a stationary head.
+  /** The head's drift (headmotion.ts). It moves the head as one rigid unit
+   *  (render2d.ts), never the face's vertices: the first attempt moved face
+   *  vertices, and the face slid around inside a stationary head. */
   readonly head = new HeadMotion();
   /** Where the eyes are going: offsets in eye-widths. */
   gazeTarget: Point = { x: 0, y: 0 };

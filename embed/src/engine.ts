@@ -33,7 +33,7 @@ import { paintCharacter } from "./character-paint";
 import { buildLowerFaceRig, type LowerFaceRig } from "./jaw-rig";
 import { kindProfile, type KindProfile } from "./kind-profile";
 import type { MouthExtension, MouthPose } from "./mouth-extension";
-import { BlendWeights, Cue, DEFAULT_TUNING, EngineTuning, Rig, ZERO_WEIGHTS } from "./types";
+import { DEFAULT_TUNING, ZERO_WEIGHTS, type BlendWeights, type Cue, type EngineTuning, type Rig } from "./types";
 import { emphasisBeats, utteranceMs } from "./engine/cues";
 import { drawDebugMesh } from "./engine/debug";
 import { deformFace } from "./engine/deform";
