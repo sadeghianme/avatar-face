@@ -25,23 +25,21 @@ import base64
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-from app.api.deps import DB
-from app.core.errors import NotFound404, RateLimit429
+from app.api.deps import DB, client_address
+from app.core.errors import NotFound404
 from app.models import Avatar
 from app.schemas.tts import CueOut
 from app.services.avatars import repo as avatars
-from app.services.rate_limit import SlidingWindowRateLimiter
+from app.services.rate_limit import SHARE_PER_CLIENT, SHARE_PER_TOKEN, enforce
 from app.services.storage import get_storage
 from app.services.tts.registry import synthesize_cached
 from app.services.usage import check_usage_limit, record_synthesis
 
 router = APIRouter(prefix="/public/v1", tags=["share"])
 
-# A visitor on a shared link is a person pressing Play, not a program. These
-# are generous for the former and useless for the latter.
+# A visitor on a shared link is a person pressing Play, not a program: the
+# text is capped short, and speaking is rate limited (rate_limit.SHARE_*).
 MAX_SHARE_TEXT = 600
-_per_token = SlidingWindowRateLimiter(limit=30, window_seconds=60.0)
-_per_client = SlidingWindowRateLimiter(limit=12, window_seconds=60.0)
 
 
 async def _resolve(token: str, db: DB) -> Avatar:
@@ -103,13 +101,13 @@ async def public_speak(token: str, body: PublicSpeak, request: Request, db: DB) 
 
     Two limits, because they stop different things: per token bounds what one
     shared link can cost its owner in a minute; per client stops a single
-    visitor from being the one who spends it.
+    visitor from being the one who spends it. Either answers 429
+    `rate_limited` with Retry-After.
     """
     avatar = await _resolve(token, db)
 
-    client = request.client.host if request.client else "unknown"
-    if not _per_token.allow(token) or not _per_client.allow(f"{token}:{client}"):
-        raise RateLimit429("Too many requests — try again in a moment", code="rate_limited")
+    enforce(SHARE_PER_TOKEN, token)
+    enforce(SHARE_PER_CLIENT, f"{token}:{client_address(request)}")
 
     await check_usage_limit(db, avatar.org_id, len(body.text))
     result, cached = await synthesize_cached(

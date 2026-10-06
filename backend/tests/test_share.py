@@ -2,6 +2,8 @@
 
 import pytest
 
+from app.api import share
+from app.services.rate_limit import Limit
 from tests.conftest import create_org, create_ready_avatar, register_and_login
 
 
@@ -65,6 +67,18 @@ async def test_speak_text_is_capped(client, shared):
         f"/public/v1/avatars/{shared['token']}/speak", json={"text": "x" * 5000}
     )
     assert response.status_code == 422
+
+
+async def test_speaking_is_rate_limited_per_client_with_retry_after(client, shared, monkeypatch):
+    monkeypatch.setattr(share, "SHARE_PER_CLIENT", Limit("share-client-test", 2, 60))
+    url = f"/public/v1/avatars/{shared['token']}/speak"
+    body = {"text": "hello", "provider": "offline", "voice": "offline-warm"}
+    assert (await client.post(url, json=body)).status_code == 200
+    assert (await client.post(url, json=body)).status_code == 200
+    refused = await client.post(url, json=body)
+    assert refused.status_code == 429
+    assert refused.json()["code"] == "rate_limited"
+    assert 1 <= int(refused.headers["retry-after"]) <= 60
 
 
 async def test_speaking_through_a_dead_link_is_refused(client, shared):

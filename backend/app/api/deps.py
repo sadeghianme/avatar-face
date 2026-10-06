@@ -20,6 +20,16 @@ from app.services import accounts, orgs
 DB = Annotated[AsyncSession, Depends(get_db)]
 
 
+def client_address(request: Request) -> str:
+    """The caller's address, as the proxy saw it.
+
+    Behind Caddy, uvicorn reads it from X-Forwarded-For (FORWARDED_ALLOW_IPS,
+    deploy/docker-compose.prod.yml); "unknown" only for a transport that has
+    no peer at all.
+    """
+    return request.client.host if request.client else "unknown"
+
+
 async def get_current_user(request: Request, db: DB) -> User:
     auth = request.headers.get("authorization", "")
     if not auth.lower().startswith("bearer "):
