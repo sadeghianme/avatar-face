@@ -97,6 +97,36 @@ jobs:
           path: embed/dist/pixel-diffs/
           if-no-files-found: ignore
       - run: npm run build
+      # The browser tests (browser-tests/), in Chromium with WebGL on
+      # SwiftShader: the GPU warp most visitors get, against the 2D path and
+      # its goldens, and liveface.js with its names renamed against the same
+      # bundle without, pixel for pixel. Chromium is cached by Playwright's
+      # version (package-lock.json pins it); its system libraries are not
+      # in the cache, so they are installed either way.
+      - name: Playwright's version
+        id: playwright
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Chromium
+        id: chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: chromium-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Chromium
+        if: steps.chromium.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps --only-shell chromium
+      - name: Install Chromium's system libraries
+        if: steps.chromium.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - name: Browser tests
+        run: npm run test:browser
+      - name: Upload the frames that failed the browser goldens
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-diffs
+          path: embed/dist/browser-diffs/
+          if-no-files-found: ignore
 
   frontend:
     runs-on: ubuntu-latest
