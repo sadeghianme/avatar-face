@@ -23,12 +23,22 @@ export function ConfirmButton({
   busy = false,
   size = "lg",
   confirmSize = "md",
+  quiet = false,
+  triggerLabel,
   triggerClassName,
+  iconClassName,
   disabled,
 }: {
   /** The trigger's words. */
   label: string;
   icon?: IconLike;
+  iconClassName?: string;
+  /** The trigger in the ordinary secondary colours, not red (a row of
+   *  small actions where red would shout). */
+  quiet?: boolean;
+  /** The trigger's accessible name when its words need context
+   *  ("Delete the draft of 3 Oct"). */
+  triggerLabel?: string;
   /** The question, also the group's accessible name. */
   question: string;
   confirmLabel: string;
@@ -51,8 +61,13 @@ export function ConfirmButton({
         variant="secondary"
         size={size}
         icon={icon}
+        iconClassName={iconClassName}
         disabled={disabled}
-        className={cx("text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10", triggerClassName)}
+        aria-label={triggerLabel}
+        className={cx(
+          !quiet && "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10",
+          triggerClassName
+        )}
         onClick={() => setAsking(true)}
       >
         {label}

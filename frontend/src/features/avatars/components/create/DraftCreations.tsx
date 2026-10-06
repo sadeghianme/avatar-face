@@ -1,10 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
 
+import { ButtonLink } from "@/components/ui/ButtonLink";
+import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { Icon } from "@/components/ui/Icon";
-import { Spinner } from "@/components/ui/Spinner";
 import { type Creation, currentStep, errorText, isJobActive, jobFailure, stepById } from "@/features/avatars/creation";
 import { draftsKey } from "@/features/avatars/hooks/useCreation";
 import { LINES } from "@/features/avatars/lines";
@@ -43,7 +43,7 @@ export function DraftCreations({ orgId }: { orgId: string }) {
 function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
-  const [confirming, setConfirming] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const image = currentStep(draft) ?? stepById(draft, "original");
@@ -69,7 +69,7 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
     } catch (err) {
       setError(err instanceof ApiError ? errorText(t, err.code, err.detail) : t("error"));
       setDeleting(false);
-      setConfirming(false);
+      setAttempt((n) => n + 1);
     }
   };
 
@@ -92,47 +92,29 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
           </p>
         )}
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {confirming ? (
-            <>
-              <span className="text-xs text-gray-600 dark:text-gray-300">{t("createDraftDeleteConfirm")}</span>
-              <button
-                type="button"
-                className="btn-danger min-h-9 coarse:min-h-11 px-3 py-1 text-xs"
-                onClick={() => void remove()}
-                disabled={deleting}
-              >
-                {deleting ? <Spinner className="h-3.5 w-3.5" /> : null}
-                {t("delete")}
-              </button>
-              <button
-                type="button"
-                className="btn-secondary min-h-9 coarse:min-h-11 px-3 py-1 text-xs"
-                onClick={() => setConfirming(false)}
-                disabled={deleting}
-              >
-                {t("cancel")}
-              </button>
-            </>
-          ) : (
-            <>
-              <Link
-                to={`/avatars/new/${draft.id}`}
-                className="btn-primary min-h-9 coarse:min-h-11 px-3 py-1 text-xs"
-                aria-label={t("createDraftResumeNamed", { line, when })}
-              >
-                {t("createDraftResume")}
-              </Link>
-              <button
-                type="button"
-                className="btn-secondary min-h-9 coarse:min-h-11 px-3 py-1 text-xs"
-                onClick={() => setConfirming(true)}
-                aria-label={t("createDraftDeleteNamed", { line, when })}
-              >
-                <Icon name="trash" className="h-3.5 w-3.5" />
-                {t("delete")}
-              </button>
-            </>
-          )}
+          <ButtonLink
+            to={`/avatars/new/${draft.id}`}
+            size="sm"
+            aria-label={t("createDraftResumeNamed", { line, when })}
+          >
+            {t("createDraftResume")}
+          </ButtonLink>
+          {/* Remounted after a failed delete (attempt): the question closes. */}
+          <ConfirmButton
+            key={attempt}
+            quiet
+            size="sm"
+            confirmSize="sm"
+            icon="trash"
+            iconClassName="h-3.5 w-3.5"
+            label={t("delete")}
+            triggerLabel={t("createDraftDeleteNamed", { line, when })}
+            question={t("createDraftDeleteConfirm")}
+            confirmLabel={t("delete")}
+            cancelLabel={t("cancel")}
+            busy={deleting}
+            onConfirm={() => void remove()}
+          />
         </div>
       </div>
     </li>
