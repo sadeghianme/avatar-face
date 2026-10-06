@@ -14,7 +14,7 @@ import {
   translate,
   type Affine,
   type Point,
-} from "../warp-gl";
+} from "../engine/warp-gl";
 import type { Rig } from "../types";
 
 /**

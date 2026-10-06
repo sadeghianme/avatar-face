@@ -13,7 +13,7 @@ export { ContinuousMouth } from "./continuous-mouth";
 export type { OralPhotoSource } from "./continuous-mouth";
 export { DEFAULT_REFERENCE_PROFILE, PROFILE_LIMITS, normalizeProfile } from "./reference-mouth-model";
 export type { ReferenceProfile } from "./reference-mouth-model";
-export type { CharacterSettings, ClassicMouthConfig } from "../character-mouth";
+export type { CharacterSettings, ClassicMouthConfig } from "../engine/character-mouth";
 
 /** What the API serves for an avatar whose mouth is not the classic one. */
 export interface AvatarMouthConfig {

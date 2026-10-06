@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BLINK_MS } from "../../blink";
-import { BREATH_RISE, SWAY_TRAVEL } from "../../bodymotion";
+import { BLINK_MS } from "../blink";
+import { BREATH_RISE, SWAY_TRAVEL } from "../bodymotion";
 import type { Beat } from "../cues";
 import type { HeadGeom, Point } from "../geometry";
 import { Motion, type SpeechFrame } from "../motion";

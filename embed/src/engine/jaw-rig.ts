@@ -1,4 +1,4 @@
-import type { BlendWeights } from "./types";
+import type { BlendWeights } from "../types";
 
 /**
  * The lower face as one rig: the jaw, the chin and the cheeks, for every

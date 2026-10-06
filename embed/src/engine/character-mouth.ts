@@ -1,4 +1,4 @@
-import type { BlendWeights } from "./types";
+import type { BlendWeights } from "../types";
 import { INNER_LOWER, INNER_UPPER, LIP_CORNERS, LOWER_ROWS, UPPER_FACE, UPPER_ROWS, mouthFrame as lipFrame, type MouthFrame as LipFrame } from "./jaw-rig";
 
 export { INNER_LOWER, INNER_UPPER } from "./jaw-rig";

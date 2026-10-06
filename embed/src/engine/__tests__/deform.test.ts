@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { blinkEase } from "../../blink";
-import type { CharacterField } from "../../character-mouth";
-import { HUMAN_PROFILE, kindProfile } from "../../kind-profile";
+import { blinkEase } from "../blink";
+import type { CharacterField } from "../character-mouth";
+import { HUMAN_PROFILE, kindProfile } from "../kind-profile";
 import type { MouthExtension } from "../../mouth-extension";
 import { DEFAULT_TUNING, ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
 import { deformFace, type DeformInput } from "../deform";

@@ -1,6 +1,6 @@
 export { AvatarEngine, prepareCues } from "./engine";
 export type { EngineOptions, Scene, SceneBackground, WarpMode } from "./engine";
-export { ZOOM_MAX, PAN_MAX } from "./viewport";
+export { ZOOM_MAX, PAN_MAX } from "./engine/viewport";
 // NOTE: Avatar3DEngine is intentionally NOT re-exported here — importing it
 // pulls Three.js (~600KB) into the consumer bundle. Dashboard and widget
 // both load it on demand: import("@liveface/embed/engine3d") / liveface-3d.js.
@@ -14,4 +14,4 @@ export type { BlendWeights, Cue, EngineTuning, Rig, SynthesisPayload } from "./t
 export { DEFAULT_TUNING, ZERO_WEIGHTS, weightsFromLegacy } from "./types";
 export { streamSpeech, StreamingSpeechPlayer } from "./speech-stream";
 export type { StreamHandle, StreamOptions } from "./speech-stream";
-export type { CharacterSettings, ClassicMouthConfig } from "./character-mouth";
+export type { CharacterSettings, ClassicMouthConfig } from "./engine/character-mouth";

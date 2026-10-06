@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { blinkEase } from "../../blink";
+import { blinkEase } from "../../engine/blink";
 import { AvatarEngine } from "../../engine";
 import { engineSeam } from "../../engine/seam";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";

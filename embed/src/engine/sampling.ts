@@ -7,11 +7,11 @@
  * taints the canvas and getImageData throws): it keeps what it had, which
  * is the default until a readable texture has been seen.
  */
-import { eyeExtent, lidSamplePoints, medianColour, type LidTone } from "../blink-lid";
-import { DEFAULT_LOOK, INNER_UPPER, sampleLook, type CharacterLook, type Rgb } from "../character-mouth";
-import { FACE_OVAL, faceHighlight } from "../face-light";
-import { faceSharpness, lumaField, sharpnessBoxes } from "../face-sharpness";
-import type { KindProfile } from "../kind-profile";
+import { eyeExtent, lidSamplePoints, medianColour, type LidTone } from "./blink-lid";
+import { DEFAULT_LOOK, INNER_UPPER, sampleLook, type CharacterLook, type Rgb } from "./character-mouth";
+import { FACE_OVAL, faceHighlight } from "./face-light";
+import { faceSharpness, lumaField, sharpnessBoxes } from "./face-sharpness";
+import type { KindProfile } from "./kind-profile";
 import type { Rig } from "../types";
 import type { Point } from "./geometry";
 import { CHEEK_LANDMARKS, UPPER_LIDS, eyeShape } from "./landmarks";

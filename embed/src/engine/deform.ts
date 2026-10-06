@@ -8,10 +8,10 @@
  * transform (render2d.ts). Warping vertices for it is how the face ended
  * up sliding around inside a stationary head.
  */
-import { blinkEase } from "../blink";
-import type { CharacterField, CharacterTraits } from "../character-mouth";
-import { applyLowerFace, UPPER_FACE, type LowerFaceRig } from "../jaw-rig";
-import type { KindProfile } from "../kind-profile";
+import { blinkEase } from "./blink";
+import type { CharacterField, CharacterTraits } from "./character-mouth";
+import { applyLowerFace, UPPER_FACE, type LowerFaceRig } from "./jaw-rig";
+import type { KindProfile } from "./kind-profile";
 import type { MouthExtension } from "../mouth-extension";
 import type { BlendWeights, EngineTuning, Rig } from "../types";
 import type { FaceMesh, Point } from "./geometry";

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
 import { engineSeam } from "../engine/seam";
-import { HUMAN_PROFILE, kindProfile } from "../kind-profile";
+import { HUMAN_PROFILE, kindProfile } from "../engine/kind-profile";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
 
 /**

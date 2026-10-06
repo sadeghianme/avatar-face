@@ -5,9 +5,9 @@
  * (paint-classic-mouth.ts), which hands an extension that only draws the
  * interior its aperture.
  */
-import { characterOpening, openingPath, type CharacterTraits } from "../character-mouth";
-import { paintCharacter } from "../character-paint";
-import type { KindProfile } from "../kind-profile";
+import { characterOpening, openingPath, type CharacterTraits } from "./character-mouth";
+import { paintCharacter } from "./character-paint";
+import type { KindProfile } from "./kind-profile";
 import type { MouthExtension } from "../mouth-extension";
 import type { EngineTuning, Rig } from "../types";
 import { pixelScale, type Point } from "./geometry";

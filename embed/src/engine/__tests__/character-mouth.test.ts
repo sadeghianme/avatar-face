@@ -21,10 +21,10 @@ import {
 } from "../character-mouth";
 import { TONGUE_RAISE, teethHeight, teethShown, tongueColour } from "../character-paint";
 import { KNOWN_PROFILES, HUMAN_PROFILE, kindProfile } from "../kind-profile";
-import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
+import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
 
 const rig = JSON.parse(
-  readFileSync(new URL("./fixtures/fitted-animal-rig.json", import.meta.url), "utf8")
+  readFileSync(new URL("../../__tests__/fixtures/fitted-animal-rig.json", import.meta.url), "utf8")
 ) as Rig;
 const base: Pt[] = rig.points.map(([x, y]) => ({ x, y }));
 const W = (w: Partial<BlendWeights>): BlendWeights => ({ ...ZERO_WEIGHTS, ...w });

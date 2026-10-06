@@ -4,7 +4,7 @@ import {
   type EnamelSample, type FaceLook,
 } from "../enamel-match-model";
 import { cavityReveal, CAVITY_REVEAL, contactSeam, enamelReveal, ENAMEL_REVEAL, REVEAL_RISE_MS, RevealRamp } from "../lip-occlusion-model";
-import { faceHighlight, insidePolygon, lumaPercentile } from "../../face-light";
+import { faceHighlight, insidePolygon, lumaPercentile } from "../../engine/face-light";
 
 /** The standard teeth, as measured: a warm cream, bright crowns, soft edges
  *  from the photo's upscale to the extraction canvas. */

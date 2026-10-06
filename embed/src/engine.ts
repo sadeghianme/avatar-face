@@ -2,35 +2,61 @@
  * Liveface canvas engine: textured triangle-mesh warp + cue-driven lip-sync.
  *
  * AvatarEngine is the orchestrator: it owns the canvas, the rig and the
- * scene, and sequences the parts that do the work:
+ * scene, and sequences the parts that do the work, all under engine/. From
+ * outside it, engine/ imports only the contracts (types.ts,
+ * mouth-extension.ts) and the enamel model it shares with the continuous
+ * mouth (mouth/lip-occlusion-model.ts):
  *
+ * The picture
  *   engine/picture.ts              the picture laid on the canvas, and what is built on it
+ *   engine/viewport.ts             where it lies: the zoom and the pan
  *   engine/geometry.ts             the mesh laid on the canvas, refined
  *   engine/landmarks.ts            the MediaPipe landmark tables
+ *   engine/jaw-rig.ts              the lower face as one rig: jaw, chin, cheeks, neck band
+ *   engine/kind-profile.ts         what a line of faces (human, toon, animal) changes
  *   engine/sampling.ts             what the picture looks like
+ *   engine/face-light.ts           its brightest skin, the teeth's ceiling
+ *   engine/face-sharpness.ts       how sharp its edges are
+ * Time
  *   engine/cues.ts                 the cue track, read
  *   engine/voice.ts                the voice: cue track, clock, audio (the 3D engine's too)
+ *   engine/media-clock.ts          the audio element's own position, as the cue clock
  *   engine/speech.ts               the speech in flight, the articulation
- *   engine/motion.ts               blinks, gaze, the head and the body
+ *   engine/motion.ts               blinks, gaze, the head and the body, from
+ *   engine/blink.ts                  when to blink
+ *   engine/headmotion.ts             where the head is going
+ *   engine/bodymotion.ts             the sway and the breath
  *   engine/state.ts                the face state those write
+ *   engine/frame-loop.ts           the frame loop (the 3D engine's too)
+ * The frame
  *   engine/deform.ts               every vertex, this frame
  *   engine/render2d.ts             the frame composed: picture, body, head
- *   engine/mesh-warp.ts            the warped mesh, on the GPU or in 2D
- *   engine/paint-eyes.ts           gaze, lashes, painted lids
- *   engine/paint-mouth.ts          which mouth paints the mouth
- *   engine/paint-classic-mouth.ts  the drawn mouth and its teeth
+ *   engine/mesh-warp.ts            the warped mesh, on the GPU or in 2D, with
+ *   engine/warp-gl.ts                the GPU path
+ *   engine/seam-pad.ts               the overlap that hides the seams between triangles
+ *   engine/paint-eyes.ts           gaze, lashes, and
+ *   engine/blink-lid.ts              the painted lids
+ *   engine/paint-mouth.ts          which mouth paints the mouth:
+ *   engine/paint-classic-mouth.ts    the drawn mouth and its teeth, in
+ *   engine/mouth-aperture.ts         the aperture the lips part to
+ *   engine/character-mouth.ts        a character's or an animal's mouth, and
+ *   engine/character-paint.ts        its painting
  *   engine/scene.ts                the scene, the backdrop of a cut-out
- *   engine/frame-loop.ts           the frame loop (the 3D engine's too)
  *   engine/debug.ts                the debug mesh overlay
  *   engine/debug-handle.ts         the console handle, when a page asks for it
  *   engine/seam.ts                 what the tests and the 3D bake pose and
  *                                  read; in no bundle
  *
+ * src/ itself holds only the entry points (this, engine3d.ts, index.ts, the
+ * three widget bundles) and what several bundles or pages share: the
+ * contracts, speech.ts, browser-tts.ts, stt.ts. The widget's own parts are
+ * under widget/, the continuous mouth's under mouth/.
+ *
  * A `destroyed` flag makes mount -> unmount -> mount safe under React
  * StrictMode: the loop and every async callback bail once it is set.
  */
-import { mergeTraits, type CharacterTraits } from "./character-mouth";
-import { kindProfile, type KindProfile } from "./kind-profile";
+import { mergeTraits, type CharacterTraits } from "./engine/character-mouth";
+import { kindProfile, type KindProfile } from "./engine/kind-profile";
 import type { MouthExtension, MouthPose } from "./mouth-extension";
 import { DEFAULT_TUNING, ZERO_WEIGHTS, type BlendWeights, type Cue, type EngineTuning, type Rig } from "./types";
 import { emphasisBeats, utteranceMs } from "./engine/cues";

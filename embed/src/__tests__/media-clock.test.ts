@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
 import { engineSeam, type EngineSeam } from "../engine/seam";
-import { MAX_EXTRAPOLATION_MS, MediaClock } from "../media-clock";
+import { MAX_EXTRAPOLATION_MS, MediaClock } from "../engine/media-clock";
 import type { Cue, Rig } from "../types";
 import { FakeAudio, fakeCanvas, NoopPath } from "./browser-fakes";
 

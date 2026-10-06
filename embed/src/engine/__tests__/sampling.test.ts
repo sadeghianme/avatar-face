@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_LOOK } from "../../character-mouth";
-import { FACE_OVAL } from "../../face-light";
-import { HUMAN_PROFILE, kindProfile } from "../../kind-profile";
+import { DEFAULT_LOOK } from "../character-mouth";
+import { FACE_OVAL } from "../face-light";
+import { HUMAN_PROFILE, kindProfile } from "../kind-profile";
 import type { Rig } from "../../types";
 import { paintedImage, readingCanvas, type PaintedImage, type Pixel } from "../../__tests__/browser-fakes";
 import { CHEEK_LANDMARKS, UPPER_LIDS } from "../landmarks";

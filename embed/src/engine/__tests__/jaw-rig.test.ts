@@ -5,7 +5,7 @@ import {
   applyLowerFace, buildLowerFaceRig, buildNeckBand, CHEEK, CHIN_SHARE, chinTrust, JAW_ARC, LOWER_ROWS, mouthFrame,
   NECK_BAND, Role, UPPER_FACE, type Pt,
 } from "../jaw-rig";
-import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
+import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
 
 /**
  * The lower-face rig: the weight map an AI pose is applied through, the jaw
@@ -14,8 +14,8 @@ import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
  * Reference's own rest pose (the face the bundled motion is measured on).
  */
 
-const fixture = JSON.parse(readFileSync(new URL("./fixtures/human-rig.json", import.meta.url), "utf8")) as Rig;
-const motion = JSON.parse(readFileSync(new URL("../../assets/mouth-motion.json", import.meta.url), "utf8")) as {
+const fixture = JSON.parse(readFileSync(new URL("../../__tests__/fixtures/human-rig.json", import.meta.url), "utf8")) as Rig;
+const motion = JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8")) as {
   poses: { points: [number, number][] }[];
 };
 const human: Pt[] = fixture.points.map(([x, y]) => ({ x, y }));

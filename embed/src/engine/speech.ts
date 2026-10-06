@@ -7,7 +7,7 @@
  * through an analyser for the amplitude fallback. `articulate` is the
  * filter that moves the mouth toward the shape the track asks for.
  */
-import { TONGUE_RAISE } from "../character-paint";
+import { TONGUE_RAISE } from "./character-paint";
 import { ZERO_WEIGHTS, type BlendWeights, type Cue, type Rig } from "../types";
 import { articulationLead, blendCueWeights, prepareCues, visemeAt } from "./cues";
 import { Voice } from "./voice";

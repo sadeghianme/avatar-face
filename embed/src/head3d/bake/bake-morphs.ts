@@ -34,8 +34,8 @@
  */
 import { AvatarEngine } from "../../engine";
 import { engineSeam, type EngineSeam } from "../../engine/seam";
-import { blinkEase } from "../../blink";
-import { kindProfile } from "../../kind-profile";
+import { blinkEase } from "../../engine/blink";
+import { kindProfile } from "../../engine/kind-profile";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
 import { fakeCanvas, installNodeEnvironment } from "./node-env";
 

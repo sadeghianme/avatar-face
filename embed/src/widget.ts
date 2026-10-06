@@ -32,12 +32,12 @@
  * engine on globalThis.__liveface for the console (engine/debug-handle.ts).
  */
 import { BrowserTTS } from "./browser-tts";
-import { aiLabel, renderAiLabel, type Disclosure } from "./disclosure";
+import { aiLabel, renderAiLabel, type Disclosure } from "./widget/disclosure";
 import { AvatarEngine, type Scene } from "./engine";
 import type { Avatar3DEngine, Avatar3DOptions } from "./engine3d";
 import { SpeechPlayer, SpeechQueue } from "./speech";
 import { listen, sttSupported, ListenOptions } from "./stt";
-import type { ClassicMouthConfig } from "./character-mouth";
+import type { ClassicMouthConfig } from "./engine/character-mouth";
 import type { AvatarMouthConfig } from "./mouth";
 import { EngineTuning, Rig, SynthesisPayload } from "./types";
 import { showFailure } from "./widget/failure";
@@ -214,7 +214,7 @@ async function mount(
       fullPhoto: info.framing === "full",
       scene: info.scene ?? undefined,
       zoom,
-      // data-warp="2d" keeps the mesh on the Canvas 2D path (warp-gl.ts):
+      // data-warp="2d" keeps the mesh on the Canvas 2D path (engine/warp-gl.ts):
       // for a site that must not use WebGL, and for comparing the two.
       warp: script.dataset.warp === "2d" ? "2d" : undefined,
       debug,

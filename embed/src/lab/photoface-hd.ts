@@ -20,9 +20,9 @@
  */
 import * as THREE from "three";
 
-import { BodyMotion } from "../bodymotion";
+import { BodyMotion } from "../engine/bodymotion";
 import { prepareCues } from "../engine";
-import { HeadMotion } from "../headmotion";
+import { HeadMotion } from "../engine/headmotion";
 import type { SpeechPlayer } from "../speech";
 import type { BlendWeights, Cue, Rig } from "../types";
 import { ZERO_WEIGHTS } from "../types";

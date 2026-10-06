@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { EYE_LINE, eyeLine, faceViewport, fullViewport, MAX_UPSCALE, viewportFor, type ViewportInput } from "../viewport";
-import type { Rig } from "../types";
+import type { Rig } from "../../types";
 
 /**
  * The viewport: the whole picture laid on the canvas, "face" and "full"
@@ -11,7 +11,7 @@ import type { Rig } from "../types";
  * across the canvas shapes the product uses.
  */
 
-const rig = JSON.parse(readFileSync(new URL("./fixtures/human-rig.json", import.meta.url), "utf8")) as Rig;
+const rig = JSON.parse(readFileSync(new URL("../../__tests__/fixtures/human-rig.json", import.meta.url), "utf8")) as Rig;
 
 const square: Omit<ViewportInput, "canvasW" | "canvasH" | "zoom"> = {
   imageW: rig.image_size[0], imageH: rig.image_size[1], faceBox: rig.face_box, eyeY: eyeLine(rig.points, rig.face_box),

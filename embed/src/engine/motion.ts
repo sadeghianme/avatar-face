@@ -9,9 +9,9 @@
  * timing lives in blink.ts, the body's in bodymotion.ts, the head's drift
  * in headmotion.ts; this schedules them and turns them into transforms.
  */
-import { BlinkScheduler } from "../blink";
-import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "../bodymotion";
-import { HeadMotion } from "../headmotion";
+import { BlinkScheduler } from "./blink";
+import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
+import { HeadMotion } from "./headmotion";
 import type { Beat } from "./cues";
 import type { HeadGeom, Point } from "./geometry";
 import type { FaceState } from "./state";

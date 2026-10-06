@@ -9,8 +9,8 @@ import {
   type Pt,
   type Rgb,
 } from "./character-mouth";
-import { enamelReveal } from "./mouth/lip-occlusion-model";
-import type { BlendWeights } from "./types";
+import { enamelReveal } from "../mouth/lip-occlusion-model";
+import type { BlendWeights } from "../types";
 
 /**
  * Painting the character mouth: what is inside the opening.

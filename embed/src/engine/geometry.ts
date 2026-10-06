@@ -7,9 +7,9 @@
  * Texture coords map to the TEXTURE's own naturalWidth/naturalHeight (the
  * thumbnail may be scaled down), never to rig.image_size.
  */
-import { buildNeckBand } from "../jaw-rig";
+import { buildNeckBand } from "./jaw-rig";
 import type { Rig } from "../types";
-import { eyeLine, viewportFor } from "../viewport";
+import { eyeLine, viewportFor } from "./viewport";
 
 export interface Point {
   x: number;

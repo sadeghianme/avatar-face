@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_LOOK } from "../character-mouth";
+import { DEFAULT_LOOK } from "../engine/character-mouth";
 import { AvatarEngine } from "../engine";
 import { engineSeam, type EngineSeam } from "../engine/seam";
 import type { Rig } from "../types";

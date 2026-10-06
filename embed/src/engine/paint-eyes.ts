@@ -3,8 +3,8 @@
  * eye slid inside the lids), the lash line riding a mesh blink, and the
  * painted lid of a profile that blinks that way (blink-lid.ts).
  */
-import { blinkEase } from "../blink";
-import { lidAmount, paintLid, type Blit } from "../blink-lid";
+import { blinkEase } from "./blink";
+import { lidAmount, paintLid, type Blit } from "./blink-lid";
 import type { Point } from "./geometry";
 import { EYE_CORNERS, IRISES, LOWER_LIDS, UPPER_LIDS, eyeShape } from "./landmarks";
 import type { FaceSamples } from "./sampling";

@@ -9,7 +9,7 @@
  * Teeth are anatomically fixed-size and hang from the lips; jawOpen grows
  * the dark gap, NOT the teeth.
  */
-import type { KindProfile } from "../kind-profile";
+import type { KindProfile } from "./kind-profile";
 import { centralMouthAnchors, type MouthExtension } from "../mouth-extension";
 import { DEFAULT_TUNING, type BlendWeights } from "../types";
 import type { Point } from "./geometry";

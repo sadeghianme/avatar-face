@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { TONGUE_RAISE } from "../../character-paint";
+import { TONGUE_RAISE } from "../character-paint";
 import { ZERO_WEIGHTS, type BlendWeights, type Cue, type Rig } from "../../types";
 import { FakeAudio } from "../../__tests__/browser-fakes";
 import { articulationLead, blendCueWeights, prepareCues } from "../cues";

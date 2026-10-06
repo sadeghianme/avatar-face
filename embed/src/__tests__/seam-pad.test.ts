@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
 import { engineSeam } from "../engine/seam";
-import { MITRE_LIMIT, padTriangle } from "../seam-pad";
-import type { Pt } from "../jaw-rig";
+import { MITRE_LIMIT, padTriangle } from "../engine/seam-pad";
+import type { Pt } from "../engine/jaw-rig";
 import type { Rig } from "../types";
 
 /**

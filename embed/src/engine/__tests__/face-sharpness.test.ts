@@ -4,7 +4,7 @@ import {
   boxSharpness, EDGE_CONTRAST, edgeWidths, faceSharpness, lumaField, MIN_EDGES, profileReach, riseWidth, SHARPNESS_SHARE,
   sharpnessBoxes, type LumaField,
 } from "../face-sharpness";
-import { decodePng, rgbaOf } from "./png-fixture";
+import { decodePng, rgbaOf } from "../../__tests__/png-fixture";
 
 /**
  * The picture's sharpness: the width of its crispest strong edges. Checked

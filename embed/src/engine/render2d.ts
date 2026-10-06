@@ -3,7 +3,7 @@
  * the head as a rigid unit, the body's sway, and the layered path.
  */
 import type { EngineTuning, Rig } from "../types";
-import { IDENTITY, rotate, translate, type Affine } from "../warp-gl";
+import { IDENTITY, rotate, translate, type Affine } from "./warp-gl";
 import type { FaceMesh, HeadGeom, Rect } from "./geometry";
 import type { BodyLean, HeadOffset } from "./motion";
 

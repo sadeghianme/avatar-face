@@ -7,9 +7,9 @@
  * RULE; the naive derivation is degenerate and draws nothing. |det| < 1e-6
  * is skipped.
  */
-import type { LowerFaceRig } from "../jaw-rig";
-import { padTriangle } from "../seam-pad";
-import { WarpRenderer, buildWarpMesh, type Affine } from "../warp-gl";
+import type { LowerFaceRig } from "./jaw-rig";
+import { padTriangle } from "./seam-pad";
+import { WarpRenderer, buildWarpMesh, type Affine } from "./warp-gl";
 import type { FaceMesh, Point, Rect } from "./geometry";
 import { LANDMARK_COUNT } from "./landmarks";
 

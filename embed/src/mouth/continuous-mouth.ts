@@ -8,7 +8,7 @@ import { DentalOralSurface, type TeethOrigin } from "./dental-oral-surface";
 import { dentalLighting } from "./dental-lighting-model";
 import { ReferenceMouth } from "./reference-mouth";
 import { DEFAULT_REFERENCE_PROFILE, type ReferenceProfile } from "./reference-mouth-model";
-import { buildLowerFaceRig, type LowerFaceRig } from "../jaw-rig";
+import { buildLowerFaceRig, type LowerFaceRig } from "../engine/jaw-rig";
 import { apertureFeather, CORNER_REACH, edgeSoftness, FeatheredLayer } from "./aperture-feather";
 
 const smooth = (t: number) => {

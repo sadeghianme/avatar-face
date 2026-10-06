@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { sampleLook, type Pt, type Rgb } from "../character-mouth";
-import { decodePng } from "./png-fixture";
+import { decodePng } from "../../__tests__/png-fixture";
 
 /**
  * Is the picture cel art? Checked on crops (120 x 96, at the picture's own
