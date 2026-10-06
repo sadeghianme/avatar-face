@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
@@ -6,8 +5,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useAvatar } from "@/features/avatars/api";
 import { FRESH_ENTRY } from "@/features/avatars/wizard";
-import { api } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import type { Avatar } from "@/lib/types";
 
@@ -85,12 +84,8 @@ export function AvatarCard({ avatar, orgId, locale }: { avatar: Avatar; orgId: s
 
 function AvatarThumb({ avatar, orgId }: { avatar: Avatar; orgId: string }) {
   const { t } = useTranslation();
-  const { data } = useQuery({
-    queryKey: ["avatar", orgId, avatar.id],
-    queryFn: () => api.get<Avatar>(`/orgs/${orgId}/avatars/${avatar.id}`),
-    enabled: avatar.status === "ready",
-    staleTime: 60_000,
-  });
+  // The list carries no signed URLs: the thumbnail comes with the detail.
+  const { data } = useAvatar(orgId, avatar.id, { enabled: avatar.status === "ready", staleTime: 60_000 });
 
   return (
     <div className={cx("relative flex aspect-[4/3] items-center justify-center overflow-hidden", THUMB_BACKDROP)}>

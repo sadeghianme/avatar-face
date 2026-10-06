@@ -1,4 +1,3 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -10,14 +9,10 @@ import { Field } from "@/components/ui/Field";
 import { FileInput } from "@/components/ui/FileInput";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
+import { useImportAvatar, useStockAvatars } from "@/features/avatars/api";
 import { Avaturn3DPanel } from "@/features/avatars/components/Avaturn3DPanel";
-import { api, ApiError, uploadWithProgress } from "@/lib/api";
-import type { Avatar, StockAvatar } from "@/lib/types";
-
-interface Created {
-  avatar: Avatar;
-  upload_url: string;
-}
+import { ApiError } from "@/lib/api";
+import type { Avatar } from "@/lib/types";
 
 /**
  * The ways to add an avatar that are not the wizard's: the stock gallery,
@@ -28,7 +23,6 @@ interface Created {
 export function OtherWays({ orgId }: { orgId: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const glbInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [modelUrl, setModelUrl] = useState("");
@@ -36,30 +30,23 @@ export function OtherWays({ orgId }: { orgId: string }) {
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: stock } = useQuery({
-    queryKey: ["stock-avatars"],
-    queryFn: () => api.get<StockAvatar[]>("/stock-avatars"),
-  });
+  const { data: stock } = useStockAvatars();
+  const imports = useImportAvatar(orgId);
 
-  const created = async (avatar: Avatar) => {
-    await queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
-    navigate(`/avatars/${avatar.id}`);
-  };
+  // Each import resolves once the list knows the new avatar: its page next.
+  const created = (avatar: Avatar) => navigate(`/avatars/${avatar.id}`);
   const failed = (err: unknown) => setError(err instanceof ApiError ? err.detail : t("error"));
 
   const uploadModel = async (file: File) => {
     setError(null);
     try {
-      const made = await api.post<Created>(`/orgs/${orgId}/avatars`, {
-        name: name.trim() || file.name.replace(/\.\w+$/, ""),
-        content_type: "model/gltf-binary",
-      });
-      setProgress(0);
-      // .glb files often have an empty file.type; the presigned PUT signs
-      // the content type, so it is set explicitly.
-      await uploadWithProgress(made.upload_url, file, setProgress, "model/gltf-binary");
-      await api.post(`/orgs/${orgId}/avatars/${made.avatar.id}/uploaded`);
-      await created(made.avatar);
+      created(
+        await imports.fromFile.mutateAsync({
+          file,
+          name: name.trim() || file.name.replace(/\.\w+$/, ""),
+          onProgress: setProgress,
+        })
+      );
     } catch (err) {
       setProgress(null);
       failed(err);
@@ -71,9 +58,7 @@ export function OtherWays({ orgId }: { orgId: string }) {
     setError(null);
     setImporting(true);
     try {
-      await created(
-        await api.post<Avatar>(`/orgs/${orgId}/avatars/from-url`, { url: modelUrl.trim(), name: name.trim() })
-      );
+      created(await imports.fromUrl.mutateAsync({ url: modelUrl.trim(), name: name.trim() }));
     } catch (err) {
       failed(err);
     } finally {
@@ -84,9 +69,7 @@ export function OtherWays({ orgId }: { orgId: string }) {
   const fromStock = async (stockId: string) => {
     setError(null);
     try {
-      await created(
-        await api.post<Avatar>(`/orgs/${orgId}/avatars/from-stock`, { stock_id: stockId, name: name.trim() })
-      );
+      created(await imports.fromStock.mutateAsync({ stockId, name: name.trim() }));
     } catch (err) {
       failed(err);
     }

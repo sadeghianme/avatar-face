@@ -1,6 +1,5 @@
 import type { SpeechPlayer } from "@liveface/embed";
 import type { AvatarMouthConfig, ClassicMouthConfig } from "@liveface/embed/mouth";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -17,6 +16,14 @@ import { Icon } from "@/components/ui/Icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import {
+  useAvatar,
+  useAvatarBackground,
+  useDeleteAvatar,
+  useRetryAvatar,
+  useUndoAvatarEdit,
+  useUpdateAvatar,
+} from "@/features/avatars/api";
 import { Avatar3DPreview } from "@/features/avatars/components/Avatar3DPreview";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { CropStudio } from "@/features/avatars/components/CropStudio";
@@ -43,9 +50,8 @@ import { engineScene, type SceneDraft, sceneOf } from "@/features/avatars/scene"
 import { aiEditedLabels, aiEditedModels } from "@/features/avatars/teeth";
 import { SpeakPanel } from "@/features/voices";
 import { defaultVoiceSelection, type VoiceSelection } from "@/features/voices";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
-import type { Avatar } from "@/lib/types";
 import { useOrg } from "@/providers/org";
 
 /**
@@ -113,7 +119,6 @@ export function AvatarDetailPage() {
   const { avatarId } = useParams<{ avatarId: string }>();
   const { current } = useOrg();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [engine, setEngine] = useState<SpeechPlayer | null>(null);
   const [debugMesh, setDebugMesh] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
@@ -208,29 +213,27 @@ export function AvatarDetailPage() {
     if (!open[id]) toggleSection(id);
   };
 
+  // The page's server calls. The org and the id are known by the time any
+  // of them runs (the page renders nothing before the avatar is loaded).
+  const orgId = current?.id ?? "";
+  const id = avatarId ?? "";
+  const update = useUpdateAvatar(orgId, id);
+  const background = useAvatarBackground(orgId, id);
+  const retryJob = useRetryAvatar(orgId, id);
+  const undoEdit = useUndoAvatarEdit(orgId, id);
+  const deleteAvatar = useDeleteAvatar(orgId);
+
   const saveVoice = async (selection: VoiceSelection) => {
     setVoice(selection);
-    await api.patch(`/orgs/${current!.id}/avatars/${avatarId}`, {
-      voice: {
-        provider: selection.provider,
-        voice: selection.voice,
-        locale: selection.locale,
-      },
+    // The PATCH bumps the draft revision; refetched so the Publish bar appears.
+    await update.mutateAsync({
+      body: { voice: { provider: selection.provider, voice: selection.voice, locale: selection.locale } },
+      refetch: "detail",
     });
-    // The PATCH bumps the draft revision; refetch so the Publish bar appears.
-    await queryClient.invalidateQueries({ queryKey: ["avatar", current!.id, avatarId] });
   };
 
-  const { data: avatar, isError } = useQuery({
-    queryKey: ["avatar", current?.id, avatarId],
-    queryFn: () => api.get<Avatar>(`/orgs/${current!.id}/avatars/${avatarId}`),
-    enabled: Boolean(current && avatarId),
-    // Live status polling while the rig pipeline runs.
-    refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      return status === "pending" || status === "processing" ? 1500 : false;
-    },
-  });
+  // Polled while the rig pipeline runs.
+  const { data: avatar, isError } = useAvatar(current?.id, avatarId, { poll: true });
 
   // Seed once per avatar: reopening the page must show the saved voice, but
   // a refetch mid-edit must not clobber a selection being made.
@@ -278,21 +281,16 @@ export function AvatarDetailPage() {
 
   /** The name, edited in place in the title (InlineName). */
   const rename = async (name: string) => {
-    await api.patch(`/orgs/${current!.id}/avatars/${avatar!.id}`, { name });
-    await queryClient.invalidateQueries({ queryKey: ["avatar", current!.id, avatar!.id] });
-    await queryClient.invalidateQueries({ queryKey: ["avatars", current!.id] });
+    await update.mutateAsync({ body: { name }, refetch: "all" });
   };
 
   /** Cut the subject out, or put the original photo back. */
   const toggleBackground = async () => {
     setBusyBg(true);
     try {
-      await api.post(`/orgs/${current!.id}/avatars/${avatar!.id}/background`, {
-        remove: !avatar!.original_image_key,
-      });
-      // A fresh detail fetch re-signs the image URL, so the preview reloads
-      // with the new texture rather than the cached one.
-      await queryClient.invalidateQueries({ queryKey: ["avatar", current!.id, avatar!.id] });
+      // The detail fetched after it re-signs the image URL, so the preview
+      // reloads with the new texture rather than the cached one.
+      await background.mutateAsync(!avatar.original_image_key);
     } finally {
       setBusyBg(false);
     }
@@ -301,11 +299,10 @@ export function AvatarDetailPage() {
   const retry = async () => {
     setRetryError(null);
     try {
-      await api.post(`/orgs/${current.id}/avatars/${avatar.id}/retry`);
+      await retryJob.mutateAsync();
     } catch (err) {
       setRetryError(err instanceof ApiError ? errorText(t, err.code, err.detail, err.retryAfter) : t("error"));
     }
-    await queryClient.invalidateQueries({ queryKey: ["avatar", current.id, avatarId] });
   };
   // The wizard's step 5 is building it: followed there, where its stages
   // are, not here, where there is nothing of it yet to retry.
@@ -313,16 +310,13 @@ export function AvatarDetailPage() {
 
   /** Step back one edit — crop, background, whatever it was. */
   const undo = async () => {
-    await api.post(`/orgs/${current!.id}/avatars/${avatar!.id}/undo`);
-    await queryClient.invalidateQueries({ queryKey: ["avatar", current!.id, avatar!.id] });
-    await queryClient.invalidateQueries({ queryKey: ["avatars", current!.id] });
+    await undoEdit.mutateAsync();
   };
 
   const remove = async () => {
     setDeleting(true);
     try {
-      await api.delete(`/orgs/${current.id}/avatars/${avatar.id}`);
-      await queryClient.invalidateQueries({ queryKey: ["avatars", current.id] });
+      await deleteAvatar.mutateAsync(avatar.id);
       navigate("/app");
     } finally {
       setDeleting(false);
@@ -541,12 +535,7 @@ export function AvatarDetailPage() {
                 avatar={avatar}
                 orgId={current.id}
                 onCancel={() => setCropping(false)}
-                onDone={() => {
-                  setCropping(false);
-                  void queryClient.invalidateQueries({
-                    queryKey: ["avatar", current.id, avatar.id],
-                  });
-                }}
+                onDone={() => setCropping(false)}
               />
             ) : is3d && avatar.model_url ? (
               <Avatar3DPreview modelUrl={avatar.model_url} fit="box" onEngine={setEngine} />

@@ -1,14 +1,13 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { Icon } from "@/components/ui/Icon";
+import { useDeleteCreation, useDrafts } from "@/features/avatars/api";
 import { type Creation, currentStep, errorText, isJobActive, jobFailure, stepById } from "@/features/avatars/creation";
-import { draftsKey } from "@/features/avatars/hooks/useCreation";
 import { LINES } from "@/features/avatars/lines";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 
 /**
  * "Continue your avatar": the org's unfinished creations, newest first,
@@ -18,11 +17,7 @@ import { api, ApiError } from "@/lib/api";
  */
 export function DraftCreations({ orgId }: { orgId: string }) {
   const { t } = useTranslation();
-  const { data: drafts } = useQuery({
-    queryKey: draftsKey(orgId),
-    queryFn: () => api.get<Creation[]>(`/orgs/${orgId}/creations?status=draft`),
-    staleTime: 10_000,
-  });
+  const { data: drafts } = useDrafts(orgId);
 
   if (!drafts?.length) return null;
   return (
@@ -42,7 +37,7 @@ export function DraftCreations({ orgId }: { orgId: string }) {
 
 function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
   const { t, i18n } = useTranslation();
-  const queryClient = useQueryClient();
+  const deleteCreation = useDeleteCreation(orgId);
   const [attempt, setAttempt] = useState(0);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,8 +59,7 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
     setDeleting(true);
     setError(null);
     try {
-      await api.delete(`/orgs/${orgId}/creations/${draft.id}`);
-      await queryClient.invalidateQueries({ queryKey: draftsKey(orgId) });
+      await deleteCreation.mutateAsync(draft.id);
     } catch (err) {
       setError(err instanceof ApiError ? errorText(t, err.code, err.detail) : t("error"));
       setDeleting(false);

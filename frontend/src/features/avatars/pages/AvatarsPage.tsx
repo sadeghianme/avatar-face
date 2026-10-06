@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -11,13 +10,13 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Field } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
+import { useAvatars } from "@/features/avatars/api";
 import { DraftCreations } from "@/features/avatars/components/create/DraftCreations";
 import { AvatarCard, CreateAvatarCard, SkeletonCard } from "@/features/avatars/components/library/AvatarCards";
 import { StatCard } from "@/features/avatars/components/library/StatCard";
 import { FRESH_ENTRY } from "@/features/avatars/wizard";
-import { api } from "@/lib/api";
+import { useUsage } from "@/features/settings";
 import { cx } from "@/lib/cx";
-import type { Avatar, Usage } from "@/lib/types";
 import { useOrg } from "@/providers/org";
 
 type AvatarFilter = "all" | "ready" | "processing" | "failed";
@@ -37,20 +36,8 @@ export function AvatarsPage() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<AvatarFilter>("all");
 
-  const { data: avatars, isLoading } = useQuery({
-    queryKey: ["avatars", current?.id],
-    queryFn: () => api.get<Avatar[]>(`/orgs/${current!.id}/avatars`),
-    enabled: Boolean(current),
-    refetchInterval: (result) =>
-      result.state.data?.some((avatar) => avatar.status === "pending" || avatar.status === "processing") ? 2000 : false,
-  });
-
-  const { data: usage } = useQuery({
-    queryKey: ["usage", current?.id],
-    queryFn: () => api.get<Usage>(`/orgs/${current!.id}/usage`),
-    enabled: Boolean(current),
-    staleTime: 60_000,
-  });
+  const { data: avatars, isLoading } = useAvatars(current?.id, { poll: true });
+  const { data: usage } = useUsage(current?.id, { staleTime: 60_000 });
 
   const ready = avatars?.filter((avatar) => avatar.status === "ready").length ?? 0;
   const working =

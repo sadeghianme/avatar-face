@@ -13,6 +13,7 @@ import { Icon } from "@/components/ui/Icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { Textarea } from "@/components/ui/Textarea";
 import { useRadioGroup } from "@/components/ui/useRadioGroup";
+import { startCreation } from "@/features/avatars/api";
 import { AiConsentReagreeNote } from "@/features/avatars/components/create/AiConsentDialog";
 import { LookPicture, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
 import { BackButton, PhoneNote, StepFooter } from "@/features/avatars/components/wizard/Footer";
@@ -33,7 +34,7 @@ import {
   SOURCES,
   statementFor,
 } from "@/features/avatars/wizard";
-import { api, ApiError, postFormWithProgress } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
 
 const EXAMPLES = [1, 2, 3, 4] as const;
@@ -166,9 +167,9 @@ export function PhotoStep({
       form.append("model", model);
       form.append("look", look);
       setProgress(0);
-      return postFormWithProgress<Creation>(`/orgs/${orgId}/creations`, form, setProgress);
+      return startCreation.upload(orgId, form, setProgress);
     }
-    return api.post<Creation>(`/orgs/${orgId}/creations/generate`, {
+    return startCreation.generate(orgId, {
       model,
       look,
       prompt: description.trim(),

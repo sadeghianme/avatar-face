@@ -5,7 +5,6 @@ import {
   PROFILE_LIMITS,
   type ReferenceProfile,
 } from "@liveface/embed/mouth";
-import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -18,9 +17,15 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Slider } from "@/components/ui/Slider";
 import { Spinner } from "@/components/ui/Spinner";
 import { useRadioGroup } from "@/components/ui/useRadioGroup";
+import {
+  useAvatarCache,
+  usePublishAvatar,
+  useRemoveMouthPhoto,
+  useUpdateAvatar,
+  useUploadMouthPhoto,
+} from "@/features/avatars/api";
 import { CharacterMouthSection } from "@/features/avatars/components/CharacterMouthSection";
 import { JobProgressBar, ShapeTicks } from "@/features/avatars/components/create/JobProgress";
-import { publishDraft } from "@/features/avatars/components/PublishBar";
 import { stageCount } from "@/features/avatars/creation";
 import { useConsent } from "@/features/avatars/hooks/useConsent";
 import { type KitEnding, useMouthKit } from "@/features/avatars/hooks/useMouthKit";
@@ -37,7 +42,7 @@ import {
   teethNoteText,
 } from "@/features/avatars/mouth-kit";
 import { type MouthAction, mouthErrorKey, teethNoteKey, teethView } from "@/features/avatars/teeth";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import type { Avatar, MouthRenderer } from "@/lib/types";
 
@@ -101,7 +106,6 @@ export function MouthPanel({
   onMotion: (choice: MotionChoice) => void;
 }) {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const saved = avatar.mouth ?? null;
   const choices = rendererChoices(avatar);
@@ -118,7 +122,11 @@ export function MouthPanel({
   // the sliders: on a phone those are a screen apart.
   const [teethError, setTeethError] = useState<string | null>(null);
   const consent = useConsent(orgId);
-  const base = `/orgs/${orgId}/avatars/${avatar.id}`;
+  const cache = useAvatarCache(orgId, avatar.id);
+  const update = useUpdateAvatar(orgId, avatar.id);
+  const uploadPhoto = useUploadMouthPhoto(orgId, avatar.id);
+  const removePhoto = useRemoveMouthPhoto(orgId, avatar.id);
+  const publishAvatar = usePublishAvatar(orgId, avatar.id);
   const human = (avatar.face_type ?? "human") === "human";
 
   // Re-seed when the server's copy changes under us (publish, discard):
@@ -130,12 +138,6 @@ export function MouthPanel({
     setRenderer(seed.current.renderer);
     setProfile(normalizeProfile(seed.current.profile));
   }, [savedKey]);
-
-  const refresh = () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["avatar", orgId, avatar.id] }),
-      queryClient.invalidateQueries({ queryKey: ["avatars", orgId] }),
-    ]);
 
   /** A refused mouth request in words: the panel's own for what it knows,
    * the server's sentence otherwise, and how long to wait when it said. */
@@ -151,7 +153,7 @@ export function MouthPanel({
   const ended = (ending: KitEnding) => {
     if (ending.kind === "done") {
       setTeethError(null);
-      void refresh().then(() => setChanged("kit"));
+      void cache.refresh().then(() => setChanged("kit"));
       return;
     }
     const failure = ending.kind === "interrupted" ? { code: "interrupted", detail: "" } : ending.error;
@@ -162,15 +164,13 @@ export function MouthPanel({
   const kit = useMouthKit(orgId, avatar.id, avatar.kind === "photo" && human, ended);
   const running = kit.running;
 
-  /** One teeth photo request; resolves to its answer, or null when it
-   * failed (the error is shown). */
+  /** One teeth photo request (the avatar is fetched again after it);
+   * resolves to its answer, or null when it failed (the error is shown). */
   const run = async <T,>(work: () => Promise<T>, action: MouthAction): Promise<T | null> => {
     setBusy(true);
     setTeethError(null);
     try {
-      const result = await work();
-      await refresh();
-      return result;
+      return await work();
     } catch (err) {
       setTeethError(refusal(err, action));
       return null;
@@ -181,20 +181,14 @@ export function MouthPanel({
 
   /**
    * Settings saves merge the response into the cached avatar instead of
-   * refetching. A refetch re-signs every asset URL, and the preview rebuilds
-   * its engine when those change — which it must, because re-marking a face
-   * rewrites rig.json under an unchanged key. Rebuilding on every slider
-   * release would restart the face mid-sentence for a change that touched no
-   * asset at all.
+   * refetching (useUpdateAvatar): a refetch re-signs every asset URL and
+   * the preview would rebuild, restarting the face mid-sentence, on every
+   * slider release.
    */
   const save = async (nextRenderer: MouthRenderer, nextProfile: ReferenceProfile) => {
     setError(null);
     try {
-      const updated = await api.patch<Avatar>(base, {
-        mouth: { renderer: nextRenderer, profile: nextProfile },
-      });
-      queryClient.setQueryData<Avatar>(["avatar", orgId, avatar.id], (old) => (old ? { ...old, ...updated } : old));
-      void queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
+      await update.mutateAsync({ body: { mouth: { renderer: nextRenderer, profile: nextProfile } } });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));
     }
@@ -223,9 +217,7 @@ export function MouthPanel({
 
   const upload = (file: File | undefined) => {
     if (!file) return;
-    const form = new FormData();
-    form.append("file", file);
-    void run(() => api.postForm<Avatar>(`${base}/mouth-photo`, form), "upload").then((done) => {
+    void run(() => uploadPhoto.mutateAsync(file), "upload").then((done) => {
       if (done) setChanged("upload");
     });
   };
@@ -272,7 +264,7 @@ export function MouthPanel({
     setPublishing(true);
     setTeethError(null);
     try {
-      await publishDraft(queryClient, orgId, avatar.id);
+      await publishAvatar.mutateAsync();
       setChanged(null);
     } catch (err) {
       setTeethError(err instanceof ApiError ? err.detail : t("error"));
@@ -507,7 +499,7 @@ export function MouthPanel({
                     variant="secondary"
                     size="lg"
                     disabled={busy || working}
-                    onClick={() => void run(() => api.delete(`${base}/mouth-photo`), "upload")}
+                    onClick={() => void run(() => removePhoto.mutateAsync(), "upload")}
                   >
                     {t("mouthPhotoRemove")}
                   </Button>

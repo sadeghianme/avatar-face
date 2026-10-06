@@ -1,10 +1,10 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
+import { useCreationCache, useDeleteCreation } from "@/features/avatars/api";
 import { ActionErrorNote } from "@/features/avatars/components/create/JobProgress";
 import { FooterSlot, StepFooter } from "@/features/avatars/components/wizard/Footer";
 import { ModelStep } from "@/features/avatars/components/wizard/ModelStep";
@@ -23,7 +23,7 @@ import {
   stageCount,
 } from "@/features/avatars/creation";
 import { useConsent } from "@/features/avatars/hooks/useConsent";
-import { creationKey, draftsKey, useCreation, useCreationActions } from "@/features/avatars/hooks/useCreation";
+import { useCreation, useCreationActions } from "@/features/avatars/hooks/useCreation";
 import {
   type AvatarModel,
   forgetChoices,
@@ -41,7 +41,7 @@ import {
   startFresh,
   type WizardCreation,
 } from "@/features/avatars/wizard";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 
 function tabStore(): DraftStore | null {
   try {
@@ -81,7 +81,8 @@ export function NewWizard({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const queryClient = useQueryClient();
+  const creationCache = useCreationCache(orgId);
+  const deleteCreation = useDeleteCreation(orgId);
   const [params] = useSearchParams();
   const consent = useConsent(orgId);
 
@@ -135,25 +136,22 @@ export function NewWizard({
     forgetChoices(tabStore(), creation.id);
     // The next avatar starts from nothing, not from this one's choices.
     forgetLastChoices(tabStore());
-    void queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
-    void queryClient.invalidateQueries({ queryKey: draftsKey(orgId) });
+    creationCache.finished();
     navigate(`/avatars/${creation.avatar_id}`, { replace: true });
-  }, [creation?.status, creation?.avatar_id, creation?.id, orgId, navigate, queryClient]);
+  }, [creation?.status, creation?.avatar_id, creation?.id, navigate, creationCache]);
 
   // --- Moves ---------------------------------------------------------------------------
   const chooseModel = (next: AvatarModel) => navigate(`/avatars/new?model=${next}`);
   const created = (next: Creation) => {
-    queryClient.setQueryData(creationKey(orgId, next.id), next);
-    void queryClient.invalidateQueries({ queryKey: draftsKey(orgId) });
+    creationCache.created(next);
     navigate(`/avatars/new/${next.id}`);
   };
   const backToPhoto = async () => {
     const m = creation ? planOf(creation).model : "human";
     if (creationId && creation?.status === "draft") {
       // Abandoned for a new start: gone now rather than a week from now.
-      await api.delete(`/orgs/${orgId}/creations/${creationId}`).catch(() => undefined);
+      await deleteCreation.mutateAsync(creationId).catch(() => undefined);
       forgetDraftMarks(tabStore(), creationId);
-      void queryClient.invalidateQueries({ queryKey: draftsKey(orgId) });
     }
     navigate(`/avatars/new?model=${m}`);
   };

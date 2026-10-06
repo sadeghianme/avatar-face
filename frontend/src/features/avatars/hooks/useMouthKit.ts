@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { DraftStore } from "@/features/avatars/creation";
 import {
@@ -14,8 +14,7 @@ import {
   rememberKitJob,
 } from "@/features/avatars/mouth-kit";
 import { api, ApiError } from "@/lib/api";
-
-export const mouthKitKey = (orgId: string, avatarId: string) => ["mouth-kit", orgId, avatarId] as const;
+import { queryKeys } from "@/lib/queryKeys";
 
 function tabStore(): DraftStore | null {
   try {
@@ -47,7 +46,7 @@ export type KitEnding = Exclude<KitOutcome, { kind: "running" }> & { lastStage: 
  */
 export function useMouthKit(orgId: string, avatarId: string, enabled: boolean, onEnded: (ending: KitEnding) => void) {
   const queryClient = useQueryClient();
-  const key = mouthKitKey(orgId, avatarId);
+  const key = useMemo(() => queryKeys.mouthKit(orgId, avatarId), [orgId, avatarId]);
   const base = `/orgs/${orgId}/avatars/${avatarId}/mouth-kit`;
   const [held, setHeld] = useState<string | null>(() => heldKitJob(tabStore(), avatarId));
   const lastStage = useRef<KitStage | null>(null);
@@ -75,9 +74,10 @@ export function useMouthKit(orgId: string, avatarId: string, enabled: boolean, o
   );
 
   // Nothing is concluded before the server has answered once: a held id
-  // with no answer yet is not an interrupted job.
+  // with no answer yet is not an interrupted job. One object per answer
+  // and held id, so the effect below runs when either changes.
   const job = query.data?.job ?? null;
-  const outcome = query.data ? kitOutcome(job, held) : null;
+  const outcome = useMemo(() => (query.data ? kitOutcome(query.data.job, held) : null), [query.data, held]);
   const stage = kitStage(job);
   if (stage) lastStage.current = stage;
 
@@ -94,9 +94,7 @@ export function useMouthKit(orgId: string, avatarId: string, enabled: boolean, o
     }
     lastStage.current = null;
     hold(null);
-    // The outcome is derived from these; its object is new on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [outcome?.kind, job?.id, held, hold]);
+  }, [outcome, held, hold]);
 
   const start = useCallback(
     async (consentId: string): Promise<void> => {
@@ -118,9 +116,7 @@ export function useMouthKit(orgId: string, avatarId: string, enabled: boolean, o
         if (answer.job && isKitActive(answer.job)) hold(answer.job.id);
       }
     },
-    // `key` is derived from orgId and avatarId, both in `base`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [base, hold, queryClient]
+    [base, key, hold, queryClient]
   );
 
   return {

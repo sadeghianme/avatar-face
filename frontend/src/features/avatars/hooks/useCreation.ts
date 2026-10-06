@@ -3,9 +3,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 import { type Creation, type HeldUrl, isBusy, pollDelay, stabilizeUrls } from "@/features/avatars/creation";
 import { api, ApiError } from "@/lib/api";
-
-export const creationKey = (orgId: string | undefined, id: string | undefined) => ["creation", orgId, id] as const;
-export const draftsKey = (orgId: string | undefined) => ["creations", orgId, "draft"] as const;
+import { queryKeys } from "@/lib/queryKeys";
 
 /**
  * One creation, kept current while the server works on it.
@@ -23,7 +21,7 @@ export const draftsKey = (orgId: string | undefined) => ["creations", orgId, "dr
  */
 export function useCreation(orgId: string | undefined, id: string | undefined) {
   const queryClient = useQueryClient();
-  const key = creationKey(orgId, id);
+  const key = useMemo(() => queryKeys.creation(orgId, id), [orgId, id]);
   // The fetch count when the current job was first seen: the backoff
   // restarts for every job. refetchInterval runs on every render, not once
   // per fetch, so it must derive the attempt, never count it.
@@ -60,8 +58,7 @@ export function useCreation(orgId: string | undefined, id: string | undefined) {
       await queryClient.cancelQueries({ queryKey: key });
       queryClient.setQueryData(key, next);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [queryClient, orgId, id]
+    [queryClient, key]
   );
 
   return {

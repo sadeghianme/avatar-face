@@ -1,27 +1,16 @@
 import type { AvatarEngine } from "@liveface/embed";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { previewRigFit, useResetRig, useRigAnchors, useSaveRigFit } from "@/features/avatars/api";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
 import { type FaceMarks, FIT_REASON_LABELS, type FitReason, marksToSend } from "@/features/avatars/face-marks";
 import { SpeakPanel } from "@/features/voices";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
-
-interface AnchorsResponse {
-  anchors: FaceMarks;
-  image_size: [number, number];
-}
-
-interface FitResponse {
-  rig: unknown;
-  persisted: boolean;
-  reasons: FitReason[];
-}
 
 // Once the owner has asked for a preview, it follows their marks: this long
 // after the last drag or nudge, so holding an arrow key sends one request.
@@ -52,7 +41,6 @@ function guideKey(faceType: Avatar["face_type"]): string {
  */
 export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgId: string; onClose: () => void }) {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
   const [marks, setMarks] = useState<FaceMarks | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   // The marks the preview shows; the preview is live once there is one.
@@ -66,12 +54,9 @@ export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgI
   // Answers can arrive out of order; only the newest request may land.
   const latest = useRef(0);
 
-  const { data } = useQuery({
-    queryKey: ["rig-anchors", avatar.id, avatar.rig_url],
-    queryFn: () => api.get<AnchorsResponse>(`/orgs/${orgId}/avatars/${avatar.id}/rig-anchors`),
-    enabled: Boolean(avatar.rig_url),
-    staleTime: 0,
-  });
+  const { data } = useRigAnchors(orgId, avatar);
+  const saveFit = useSaveRigFit(orgId, avatar.id);
+  const resetRig = useResetRig(orgId, avatar.id);
 
   useEffect(() => {
     if (data && !marks) setMarks(data.anchors);
@@ -105,10 +90,7 @@ export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgI
         setPreviewing(true);
         setError(null);
         try {
-          const result = await api.post<FitResponse>(`/orgs/${orgId}/avatars/${avatar.id}/rig-fit`, {
-            ...(data ? marksToSend(marks, data.anchors) : marks),
-            persist: false,
-          });
+          const result = await previewRigFit(orgId, avatar.id, data ? marksToSend(marks, data.anchors) : marks);
           if (request !== latest.current) return;
           const blob = new Blob([JSON.stringify(result.rig)], { type: "application/json" });
           setPreviewUrl(URL.createObjectURL(blob));
@@ -134,13 +116,9 @@ export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgI
     setBusy("save");
     setError(null);
     try {
-      await api.post<FitResponse>(`/orgs/${orgId}/avatars/${avatar.id}/rig-fit`, {
-        // A head the owner did not touch goes without its outline diagonals,
-        // which the server then keeps as saved (see marksToSend).
-        ...marksToSend(marks, data.anchors),
-        persist: true,
-      });
-      await queryClient.invalidateQueries({ queryKey: ["avatar", orgId, avatar.id] });
+      // A head the owner did not touch goes without its outline diagonals,
+      // which the server then keeps as saved (see marksToSend).
+      await saveFit.mutateAsync(marksToSend(marks, data.anchors));
       onClose();
     } catch (err) {
       fitFailed(err);
@@ -155,8 +133,7 @@ export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgI
     setBusy("redetect");
     setError(null);
     try {
-      await api.post(`/orgs/${orgId}/avatars/${avatar.id}/rig-reset`, {});
-      await queryClient.invalidateQueries({ queryKey: ["avatar", orgId, avatar.id] });
+      await resetRig.mutateAsync();
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));

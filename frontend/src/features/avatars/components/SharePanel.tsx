@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -6,7 +5,8 @@ import { ButtonLink } from "@/components/ui/ButtonLink";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Input } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
-import { api, ApiError } from "@/lib/api";
+import { useAvatarSharing } from "@/features/avatars/api";
+import { ApiError } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
 
 /**
@@ -19,7 +19,7 @@ import type { Avatar } from "@/lib/types";
  */
 export function SharePanel({ avatar, orgId }: { avatar: Avatar; orgId: string }) {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
+  const sharing = useAvatarSharing(orgId, avatar.id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,10 +30,7 @@ export function SharePanel({ avatar, orgId }: { avatar: Avatar; orgId: string })
     setBusy(true);
     setError(null);
     try {
-      const path = `/orgs/${orgId}/avatars/${avatar.id}/share`;
-      if (token) await api.delete(path);
-      else await api.post(path, {});
-      await queryClient.invalidateQueries({ queryKey: ["avatar", orgId, avatar.id] });
+      await sharing.mutateAsync(!token);
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));
     } finally {

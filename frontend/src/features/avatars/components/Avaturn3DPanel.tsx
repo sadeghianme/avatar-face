@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -6,8 +5,8 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
-import { api, ApiError } from "@/lib/api";
-import type { Avatar } from "@/lib/types";
+import { useAvaturnSession, useImportAvatar } from "@/features/avatars/api";
+import { ApiError } from "@/lib/api";
 
 /**
  * Build a 3D avatar in Avaturn's editor, then import the GLB it hands back.
@@ -21,7 +20,8 @@ import type { Avatar } from "@/lib/types";
 export function Avaturn3DPanel({ orgId }: { orgId: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const session = useAvaturnSession(orgId);
+  const { mutateAsync: importFromUrl } = useImportAvatar(orgId).fromUrl;
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [sessionUrl, setSessionUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -31,8 +31,7 @@ export function Avaturn3DPanel({ orgId }: { orgId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const session = await api.post<{ url: string }>(`/orgs/${orgId}/avatars/avaturn-session`, {});
-      setSessionUrl(session.url);
+      setSessionUrl(await session.mutateAsync());
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));
     } finally {
@@ -46,11 +45,7 @@ export function Avaturn3DPanel({ orgId }: { orgId: string }) {
     const importFrom = async (url: string) => {
       setBusy(true);
       try {
-        const created = await api.post<Avatar>(`/orgs/${orgId}/avatars/from-url`, {
-          url,
-          name: "3D avatar",
-        });
-        await queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
+        const created = await importFromUrl({ url, name: "3D avatar" });
         navigate(`/avatars/${created.id}`);
       } catch (err) {
         setError(err instanceof ApiError ? err.detail : t("error"));
@@ -77,7 +72,7 @@ export function Avaturn3DPanel({ orgId }: { orgId: string }) {
 
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [sessionUrl, orgId, navigate, queryClient, t]);
+  }, [sessionUrl, importFromUrl, navigate, t]);
 
   if (sessionUrl) {
     return (

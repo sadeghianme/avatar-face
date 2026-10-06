@@ -1,5 +1,5 @@
 import type { AvatarEngine } from "@liveface/embed";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Icon } from "@/components/ui/Icon";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Spinner } from "@/components/ui/Spinner";
+import { creationRequests } from "@/features/avatars/api";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { JobProgress, useSeenStages } from "@/features/avatars/components/create/JobProgress";
 import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
@@ -19,13 +20,11 @@ import {
   currentStep,
   type DraftStore,
   errorText,
-  type FinishResult,
   finishRows,
   isJobActive,
   jobFailure,
   mouthExpected,
   pickMarks,
-  type PreviewRig,
   rememberFinishNotice,
 } from "@/features/avatars/creation";
 import { type FaceMarks, FIT_REASON_LABELS, type FitReason } from "@/features/avatars/face-marks";
@@ -43,7 +42,7 @@ import {
   type WizardCreation,
 } from "@/features/avatars/wizard";
 import { SampleSpeech } from "@/features/voices";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 
 // The preview follows moved points this long after the last move.
 const PREVIEW_DELAY_MS = 400;
@@ -196,7 +195,7 @@ function Editor({
 }) {
   const { t } = useTranslation();
   const ids = useId();
-  const base = `/orgs/${orgId}/creations/${creation.id}`;
+  const requests = useMemo(() => creationRequests(orgId, creation.id), [orgId, creation.id]);
   const plan = planOf(creation);
   const line = LINES[creation.face_type ?? "human"];
   const found = faceFound(anchors);
@@ -250,10 +249,7 @@ function Editor({
       async () => {
         const { edited, refetch, t } = previewInputs.current;
         try {
-          const result = await api.post<PreviewRig>(`${base}/preview-rig`, {
-            anchors_id: anchors.id,
-            ...(edited ? { marks } : {}),
-          });
+          const result = await requests.previewRig({ anchors_id: anchors.id, ...(edited ? { marks } : {}) });
           if (request !== latest.current) return;
           setRigUrl(URL.createObjectURL(new Blob([JSON.stringify(result.rig)], { type: "application/json" })));
           setReasons(result.reasons);
@@ -272,7 +268,7 @@ function Editor({
       previewInputs.current.shown ? PREVIEW_DELAY_MS : 0
     );
     return () => window.clearTimeout(timer);
-  }, [marks, anchors.id, base]);
+  }, [marks, anchors.id, requests]);
 
   const blocked = reasons.length > 0;
   const needsConfirm = !found;
@@ -297,7 +293,7 @@ function Editor({
       "finish",
       async () => {
         const consentId = statementScope ? (await consent.record(statementScope, creation.id)).id : undefined;
-        return api.post<FinishResult>(`${base}/finish`, {
+        return requests.finish({
           name,
           anchors_id: anchors.id,
           ...(consentId ? { consent_id: consentId } : {}),

@@ -1,5 +1,4 @@
 import type { CharacterSettings } from "@liveface/embed/mouth";
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -7,6 +6,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { Slider } from "@/components/ui/Slider";
 import { useRadioGroup } from "@/components/ui/useRadioGroup";
+import { useUpdateAvatar } from "@/features/avatars/api";
 import {
   characterSettings,
   characterUpdate,
@@ -14,7 +14,7 @@ import {
   mouthLook,
   styleChange,
 } from "@/features/avatars/character-mouth";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
 
 type Style = "character" | "classic";
@@ -42,13 +42,12 @@ export function CharacterMouthSection({
   onPreview: (settings: CharacterSettings | null) => void;
 }) {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
+  const update = useUpdateAvatar(orgId, avatar.id);
   const look = mouthLook(avatar);
   const savedKey = JSON.stringify(avatar.mouth?.character ?? null);
   const [settings, setSettings] = useState(() => characterSettings(avatar.mouth?.character));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const base = `/orgs/${orgId}/avatars/${avatar.id}`;
 
   // Re-seed when the server's copy changes under us (publish, discard):
   // keyed by its content, not by the object a refetch replaces.
@@ -73,18 +72,12 @@ export function CharacterMouthSection({
     setBusy(true);
     setError(null);
     try {
-      const updated = await api.patch<Avatar>(base, { character: characterUpdate(next, style) });
-      if (styleChange(look, style)) {
-        // The look is on the rig, rewritten under an unchanged key: fetched
-        // again, which also rebuilds the preview on the new rig.
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["avatar", orgId, avatar.id] }),
-          queryClient.invalidateQueries({ queryKey: ["avatars", orgId] }),
-        ]);
-      } else {
-        queryClient.setQueryData<Avatar>(["avatar", orgId, avatar.id], (old) => (old ? { ...old, ...updated } : old));
-        void queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
-      }
+      await update.mutateAsync({
+        body: { character: characterUpdate(next, style) },
+        // A new look is on the rig, rewritten under an unchanged key: the
+        // avatar fetched again, which also rebuilds the preview on it.
+        refetch: styleChange(look, style) ? "all" : undefined,
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));
     } finally {

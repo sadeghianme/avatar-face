@@ -6,11 +6,12 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
+import { creationRequests } from "@/features/avatars/api";
 import { BackButton, BarAction, StepFooter } from "@/features/avatars/components/wizard/Footer";
 import { Result, Working } from "@/features/avatars/components/wizard/Pictures";
 import { VersionStrip } from "@/features/avatars/components/wizard/Versions";
 import { consentProblem } from "@/features/avatars/consent";
-import { type Creation, type DraftStore, errorText, isJobActive, jobFailure } from "@/features/avatars/creation";
+import { type DraftStore, errorText, isJobActive, jobFailure } from "@/features/avatars/creation";
 import type { ConsentApi } from "@/features/avatars/hooks/useConsent";
 import type { Run } from "@/features/avatars/hooks/useCreation";
 import {
@@ -41,7 +42,7 @@ import {
   versionsOf,
   type WizardCreation,
 } from "@/features/avatars/wizard";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 
 /** The picture's width for its height to fit between the bars (the
  * header, the progress and the title above, the action bar below). */
@@ -98,7 +99,7 @@ export function PrepareScreen({
   onContinue: () => void;
 }) {
   const { t } = useTranslation();
-  const base = `/orgs/${orgId}/creations/${creation.id}`;
+  const requests = creationRequests(orgId, creation.id);
   const plan = planOf(creation);
   const choices = recallChoices(tabStore(), creation.id);
   const phase = preparePhase(creation);
@@ -123,7 +124,7 @@ export function PrepareScreen({
     run(body.mode === "change" ? "change" : "prepare", async () => {
       const id = agreed ?? (typeof consentId === "string" ? consentId : undefined);
       try {
-        return await api.post<Creation>(`${base}/prepare`, { ...body, ...(id ? { consent_id: id } : {}) });
+        return await requests.prepare(body, id);
       } catch (err) {
         const problem = err instanceof ApiError ? consentProblem(err.code, err.body) : null;
         if (problem?.kind === "required" && problem.scope === "third_party_ai") {
@@ -170,10 +171,7 @@ export function PrepareScreen({
   const retryJob = () =>
     void run("retry", async () => {
       try {
-        return await api.post<Creation>(
-          `${base}/retry`,
-          typeof consentId === "string" ? { consent_id: consentId } : {}
-        );
+        return await requests.retry(typeof consentId === "string" ? consentId : undefined);
       } catch (err) {
         const problem = err instanceof ApiError ? consentProblem(err.code, err.body) : null;
         if (problem?.kind === "required" && problem.scope === "third_party_ai") {
@@ -333,9 +331,7 @@ export function PrepareScreen({
       return;
     }
     setPending(version.id);
-    void run("version", () => api.post<Creation>(`${base}/version`, { version: version.id })).finally(() =>
-      setPending(null)
-    );
+    void run("version", () => requests.version(version.id)).finally(() => setPending(null));
   };
 
   return (

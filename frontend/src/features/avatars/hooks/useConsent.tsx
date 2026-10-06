@@ -16,9 +16,7 @@ import {
   termsOutdated,
 } from "@/features/avatars/consent";
 import { api, ApiError } from "@/lib/api";
-
-export const consentTermsKey = (orgId: string | undefined) => ["consent-terms", orgId] as const;
-export const myConsentKey = (orgId: string | undefined, scope: ConsentScope) => ["consent-mine", orgId, scope] as const;
+import { queryKeys } from "@/lib/queryKeys";
 
 /** The page is older than the words in force: an ApiError, so the wizard's
  * error handling shows it like any refusal. */
@@ -60,12 +58,12 @@ export function useConsent(orgId: string) {
   pending.current = asking;
 
   const terms = useQuery({
-    queryKey: consentTermsKey(orgId),
+    queryKey: queryKeys.consentTerms(orgId),
     queryFn: () => api.get<ConsentTerms>(`/orgs/${orgId}/consents/terms`),
     staleTime: 60_000,
   });
   const mine = useQuery({
-    queryKey: myConsentKey(orgId, "third_party_ai"),
+    queryKey: queryKeys.myConsent(orgId, "third_party_ai"),
     queryFn: () => api.get<MyConsent>(`/orgs/${orgId}/consents/mine?scope=third_party_ai`),
     staleTime: 60_000,
     // A failed lookup means "ask": asking again is the safe side.
@@ -90,18 +88,21 @@ export function useConsent(orgId: string) {
   };
 
   const refreshAiSwitch = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: consentTermsKey(orgId) });
-    void queryClient.invalidateQueries({ queryKey: ["orgs"] });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.consentTerms(orgId) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.orgs() });
   }, [queryClient, orgId]);
 
   const remembered = useCallback(
     () =>
-      rememberedConsent(queryClient.getQueryData<MyConsent>(myConsentKey(orgId, "third_party_ai")), "third_party_ai"),
+      rememberedConsent(
+        queryClient.getQueryData<MyConsent>(queryKeys.myConsent(orgId, "third_party_ai")),
+        "third_party_ai"
+      ),
     [queryClient, orgId]
   );
 
   const forgetAi = useCallback(() => {
-    const key = myConsentKey(orgId, "third_party_ai");
+    const key = queryKeys.myConsent(orgId, "third_party_ai");
     const known = queryClient.getQueryData<MyConsent>(key);
     if (known) queryClient.setQueryData<MyConsent>(key, { ...known, consent_id: null, created_at: null });
     void queryClient.invalidateQueries({ queryKey: key });
@@ -110,18 +111,19 @@ export function useConsent(orgId: string) {
   /** Record one statement under this page's words. */
   const record = useCallback(
     async (scope: ConsentScope, creationId?: string): Promise<ConsentRecord> => {
-      const known = queryClient.getQueryData<ConsentTerms>(consentTermsKey(orgId)) ?? terms.data;
+      const known = queryClient.getQueryData<ConsentTerms>(queryKeys.consentTerms(orgId)) ?? terms.data;
       if (termsOutdated(known, scope)) throw outdated();
       try {
         const made = await api.post<ConsentRecord>(`/orgs/${orgId}/consents`, consentBody(scope, creationId));
-        if (scope === "third_party_ai") queryClient.setQueryData(myConsentKey(orgId, scope), mineFromRecord(made));
+        if (scope === "third_party_ai")
+          queryClient.setQueryData(queryKeys.myConsent(orgId, scope), mineFromRecord(made));
         return made;
       } catch (err) {
         if (err instanceof ApiError) {
           const problem = consentProblem(err.code, err.body);
           if (problem?.kind === "disabled") refreshAiSwitch();
           if (problem?.kind === "outdated") {
-            void queryClient.invalidateQueries({ queryKey: consentTermsKey(orgId) });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.consentTerms(orgId) });
             throw outdated();
           }
         }

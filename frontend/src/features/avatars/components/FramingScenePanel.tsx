@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -8,6 +7,7 @@ import { ColorSwatch } from "@/components/ui/ColorSwatch";
 import { FileInput } from "@/components/ui/FileInput";
 import { type Segment, SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Slider } from "@/components/ui/Slider";
+import { useRemoveSceneImage, useUpdateAvatar, useUploadSceneImage } from "@/features/avatars/api";
 import { PanPad } from "@/features/avatars/components/PanPad";
 import {
   type BackgroundKind,
@@ -28,7 +28,7 @@ import {
   zoomPreset,
   zoomText,
 } from "@/features/avatars/scene";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
 import { TOUCH_ONE_COLUMN, useMediaQuery } from "@/lib/useMediaQuery";
 
@@ -72,8 +72,9 @@ export function FramingScenePanel({
   busyBackground?: boolean;
 }) {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const base = `/orgs/${orgId}/avatars/${avatar.id}`;
+  const update = useUpdateAvatar(orgId, avatar.id);
+  const uploadImage = useUploadSceneImage(orgId, avatar.id);
+  const deleteImage = useRemoveSceneImage(orgId, avatar.id);
   const saved = sceneOf(avatar);
   const savedKey = JSON.stringify([avatar.scene ?? null, avatar.framing ?? null]);
   const [draft, setDraft] = useState<SceneDraft>(saved);
@@ -123,18 +124,18 @@ export function FramingScenePanel({
     setStatus("saving");
     setError(null);
     try {
-      const updated = await api.patch<Avatar>(base, {
-        scene: {
-          zoom: scene.zoom,
-          pan: scene.pan,
-          background:
-            scene.background.kind === "color"
-              ? { kind: "color", color: scene.background.color ?? DEFAULT_COLOR }
-              : { kind: scene.background.kind },
+      await update.mutateAsync({
+        body: {
+          scene: {
+            zoom: scene.zoom,
+            pan: scene.pan,
+            background:
+              scene.background.kind === "color"
+                ? { kind: "color", color: scene.background.color ?? DEFAULT_COLOR }
+                : { kind: scene.background.kind },
+          },
         },
       });
-      queryClient.setQueryData<Avatar>(["avatar", orgId, avatar.id], (old) => (old ? { ...old, ...updated } : old));
-      void queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
       setStatus("saved");
     } catch (err) {
       setError(refusal(err));
@@ -245,23 +246,14 @@ export function FramingScenePanel({
   };
   const chooseColor = (color: string) => change({ ...draft, background: { kind: "color", color } });
 
-  /** The avatar fetched again after a picture changed: the detail carries
-   *  its presigned URL, which the preview draws from. */
-  const refresh = () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["avatar", orgId, avatar.id] }),
-      queryClient.invalidateQueries({ queryKey: ["avatars", orgId] }),
-    ]);
-
+  // A picture's change is followed by the avatar fetched again: the detail
+  // carries its presigned URL, which the preview draws from.
   const upload = async (file: File | undefined) => {
     if (!file) return;
-    const form = new FormData();
-    form.append("file", file);
     setBusyImage(true);
     setError(null);
     try {
-      await api.postForm<Avatar>(`${base}/scene-image`, form);
-      await refresh();
+      await uploadImage.mutateAsync(file);
       setStatus("saved");
     } catch (err) {
       setError(refusal(err));
@@ -274,8 +266,7 @@ export function FramingScenePanel({
     setBusyImage(true);
     setError(null);
     try {
-      await api.delete<Avatar>(`${base}/scene-image`);
-      await refresh();
+      await deleteImage.mutateAsync();
       setStatus("saved");
     } catch (err) {
       setError(refusal(err));
