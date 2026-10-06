@@ -1,81 +1,29 @@
 /**
  * The speech in flight and the mouth's articulation of it.
  *
- * SpeechTrack holds the utterance: its prepared cue track, the clock that
- * says where in the track the voice is, and the audio element playing it
- * (with an analyser for the amplitude fallback). `articulate` is the filter
- * that moves the mouth toward the shape the track asks for.
+ * SpeechTrack is the voice (voice.ts: the prepared cue track, its clock,
+ * the audio element) with what the 2D mouth reads of it: the shape the
+ * track asks for now, the sound being made, and the voice's loudness
+ * through an analyser for the amplitude fallback. `articulate` is the
+ * filter that moves the mouth toward the shape the track asks for.
  */
 import { TONGUE_RAISE } from "../character-paint";
-import { MediaClock } from "../media-clock";
 import { ZERO_WEIGHTS, type BlendWeights, type Cue, type Rig } from "../types";
 import { articulationLead, blendCueWeights, prepareCues, visemeAt } from "./cues";
+import { Voice } from "./voice";
 
-/** What the track tells the engine about its voice. */
-export interface SpeechHooks {
-  /** The voice started playing, or was sought: cue time is now `ms`. */
-  onSync(ms: number): void;
-  /** The voice ended, or failed to play. */
-  onEnded(): void;
-}
-
-export class SpeechTrack {
-  /** The utterance's cue track, prepared (cues.ts prepareCues). */
-  cues: Cue[] = [];
-  speaking = false;
-  /** Frame time at which cue time was 0, for the frame clock. */
-  private cueStart = 0;
-  private currentAudio: HTMLAudioElement | null = null;
-  /** Cue time of the audio playing now, when no external cueClock is given. */
-  private audioClock: MediaClock | null = null;
-  private onAudioEnd: (() => void) | null = null;
+export class SpeechTrack extends Voice {
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private analyserData: Uint8Array | null = null;
 
-  /** `cueClock`: the lab's opt-in clock, in audio milliseconds. */
-  constructor(
-    private readonly cueClock: (() => number) | undefined,
-    private readonly hooks: SpeechHooks
-  ) {}
-
-  // --- The clock -------------------------------------------------------------
-
-  /**
-   * Cue time at frame time `now`, ms: the lab's clock when it has one, else
-   * the audio element's own position (media-clock.ts), else the time since
-   * the track started.
-   */
-  cueTime(now: number): number {
-    const external = this.cueClock?.();
-    if (external !== undefined && Number.isFinite(external)) return Math.max(0, external);
-    if (this.audioClock) return this.audioClock.read(now);
-    return now - this.cueStart;
-  }
-
-  /** Start the frame clock at `now` (cues with no audio element). */
-  startClock(now: number): void {
-    this.cueStart = now;
-  }
-
-  /** Re-align the frame clock so that cue time is `ms` at `now`. */
-  seek(ms: number, now: number): void {
-    this.cueStart = now - ms;
-  }
-
-  /** The voice is paused mid-utterance (the page, the OS, a headset): the
-   *  mouth closes rather than freezing on whatever shape it was making. */
-  voicePaused(): boolean {
-    return this.audioClock?.paused ?? false;
-  }
+  // --- What the track says now --------------------------------------------
 
   /** The audio has been asked to play and is not heard yet (decoding, the
    *  output device waking): cue time holds at 0 meanwhile. */
   awaitingVoice(): boolean {
     return this.audioClock !== null && !this.audioClock.started;
   }
-
-  // --- What the track says now --------------------------------------------
 
   currentViseme(now: number): string {
     if (!this.speaking || !this.cues.length || this.voicePaused()) return "sil";
@@ -100,100 +48,22 @@ export class SpeechTrack {
 
   // --- The utterance -------------------------------------------------------
 
-  /** Take `cues` as the track in flight, and speak. */
-  begin(cues: Cue[]): void {
-    this.cues = prepareCues(cues);
-    this.speaking = true;
-  }
-
   /** Replace the track without restarting anything (streaming look-ahead). */
   replaceCues(cues: Cue[]): void {
     this.cues = prepareCues(cues);
   }
 
   /**
-   * An audio element for base64 audio, made the current voice: cue time is
-   * its position from now on (re-anchored on `playing` and `seeked`), unless
-   * the lab's clock is in charge. `onEnd` is called when it ends.
-   */
-  load(audioB64: string, mime: string, onEnd: (() => void) | null): HTMLAudioElement {
-    this.stopAudio();
-    const audio = new Audio(`data:${mime};base64,${audioB64}`);
-    this.currentAudio = audio;
-    const clock = this.cueClock ? null : new MediaClock(audio);
-    this.audioClock = clock;
-    if (clock) {
-      const sync = () => {
-        if (audio !== this.currentAudio) return;
-        this.hooks.onSync(clock.sync(performance.now()));
-      };
-      audio.addEventListener("playing", sync);
-      audio.addEventListener("seeked", sync);
-    }
-    this.onAudioEnd = onEnd;
-    return audio;
-  }
-
-  /**
    * Play the loaded `audio`. `sparse`: the cue track is too thin to drive
    * the mouth, so the voice goes through the analyser for its amplitude.
    */
-  play(audio: HTMLAudioElement, sparse: boolean): void {
+  override play(audio: HTMLAudioElement, sparse = false): void {
     // Only reroute through the analyser when the cue track is too sparse to
     // drive the mouth (amplitude fallback needed). Rerouting risks silent
     // playback (suspended AudioContext, Safari data:-URL taint), so rich cue
     // tracks — every Liveface provider — play natively.
     if (sparse) this.attachAnalyser(audio);
-
-    audio.addEventListener("ended", () => {
-      if (audio !== this.currentAudio) return;
-      this.hooks.onEnded();
-    });
-    audio.addEventListener("error", () => {
-      if (audio !== this.currentAudio) return;
-      this.hooks.onEnded();
-    });
-    // Undefined from browsers that predate play() returning a promise.
-    const playPromise = audio.play() as Promise<void> | undefined;
-    this.cueStart = performance.now();
-    if (playPromise) {
-      // An abort during stop() must NOT surface as an unhandled rejection.
-      playPromise.catch(() => {
-        if (audio === this.currentAudio) this.hooks.onEnded();
-      });
-    }
-  }
-
-  /** Stopped from outside: the voice cut, the track dropped. */
-  stop(): void {
-    this.stopAudio();
-    this.speaking = false;
-    this.cues = [];
-  }
-
-  /** Ended on its own: the track dropped and the audio let go of (it has
-   *  stopped already). Returns the caller's onEnd, for the engine to call. */
-  finish(): (() => void) | null {
-    this.speaking = false;
-    this.cues = [];
-    const done = this.onAudioEnd;
-    this.onAudioEnd = null;
-    this.currentAudio = null;
-    this.audioClock = null;
-    return done;
-  }
-
-  /** Silence the voice; cue time goes back to the frame clock (playCues,
-   *  the next playAudio). */
-  stopAudio(): void {
-    this.audioClock = null;
-    if (this.currentAudio) {
-      const audio = this.currentAudio;
-      this.currentAudio = null;
-      this.onAudioEnd = null;
-      audio.pause();
-      audio.src = "";
-    }
+    super.play(audio);
   }
 
   destroy(): void {
