@@ -4,8 +4,16 @@ import { Link } from "react-router-dom";
 
 import { DEMO_PORTRAIT, DemoAvatar } from "@/components/brand/DemoAvatar";
 import { LanguageMenu } from "@/components/layout/LanguageMenu";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { Icon } from "@/components/ui/Icon";
-import { useTheme } from "@/providers/theme";
+import { cx } from "@/lib/cx";
+
+/** The code line under the brand panel's avatar: a glass caption. */
+const SPEAK_CAPTION = cx(
+  "absolute -bottom-6 left-1/2 w-[calc(100%+2.5rem)] -translate-x-1/2",
+  "rounded-2xl bg-night-glass/85 px-4 py-3 shadow-xl ring-1 ring-white/10 backdrop-blur-md",
+  "font-mono text-[11.5px] leading-relaxed text-gray-300"
+);
 
 /**
  * Split auth layout: the product on one side, the form on the other.
@@ -17,7 +25,6 @@ import { useTheme } from "@/providers/theme";
  */
 export function AuthShell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   const { t } = useTranslation();
-  const { theme, toggle } = useTheme();
 
   useEffect(() => {
     const previous = document.title;
@@ -30,10 +37,10 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
   return (
     <div className="grid min-h-screen bg-white text-gray-900 antialiased lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] dark:bg-ink dark:text-gray-100">
       {/* ---- brand panel ---- */}
-      <aside className="relative isolate hidden overflow-hidden border-e border-white/[0.06] bg-[#0c0a09] p-10 text-white lg:flex lg:flex-col xl:p-12">
+      <aside className="relative isolate hidden overflow-hidden border-e border-white/[0.06] bg-night p-10 text-white lg:flex lg:flex-col xl:p-12">
         <div
           aria-hidden="true"
-          className="absolute inset-0 -z-10 bg-[linear-gradient(to_right,rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[size:44px_44px] [mask-image:radial-gradient(ellipse_75%_60%_at_50%_42%,black,transparent)]"
+          className="backdrop-grid absolute inset-0 -z-10 [mask-image:radial-gradient(ellipse_75%_60%_at_50%_42%,black,transparent)]"
         />
         <div
           aria-hidden="true"
@@ -57,10 +64,7 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
               label={t("authAvatarLabel")}
               className="rounded-[28px] bg-gray-900 shadow-[0_40px_120px_-30px_rgba(249,115,22,0.55)] ring-1 ring-white/15"
             />
-            <p
-              dir="ltr"
-              className="absolute -bottom-6 left-1/2 w-[calc(100%+2.5rem)] -translate-x-1/2 rounded-2xl bg-[#171412]/85 px-4 py-3 font-mono text-[11.5px] leading-relaxed text-gray-300 shadow-xl ring-1 ring-white/10 backdrop-blur-md"
-            >
+            <p dir="ltr" className={SPEAK_CAPTION}>
               <span className="text-sky-300">Liveface</span>.speak(
               <span className="text-emerald-300">&quot;{t("authSpeakLine")}&quot;</span>)
               <span
@@ -111,15 +115,7 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
           </Link>
           <div className="flex items-center gap-1">
             <LanguageMenu />
-            <button
-              type="button"
-              onClick={toggle}
-              aria-label={t("theme")}
-              title={t("theme")}
-              className="grid place-items-center rounded-lg p-2 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 coarse:h-11 coarse:w-11 dark:hover:bg-white/10 dark:hover:text-white"
-            >
-              <Icon name={theme === "dark" ? "sun" : "moon"} className="h-[18px] w-[18px]" />
-            </button>
+            <ThemeToggle tooltip />
           </div>
         </header>
 

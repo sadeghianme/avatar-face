@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
 import { AuthShell } from "@/features/auth/components/AuthShell";
 import { api } from "@/lib/api";
 import { useAuth } from "@/providers/auth";
@@ -60,53 +63,43 @@ export function ResetPasswordPage() {
   return (
     <AuthShell title={t("resetTitle")} subtitle={t("resetSubtitle")}>
       <form onSubmit={(e) => void submit(e)} className="space-y-4">
-        <div>
-          <label htmlFor="password" className="mb-1.5 block text-sm font-medium">
-            {t("newPassword")}
-          </label>
-          <div className="relative">
-            <input
-              id="password"
-              type={show ? "text" : "password"}
-              required
-              autoFocus
-              autoComplete="new-password"
-              className="input pe-16"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <button
-              type="button"
-              onClick={() => setShow((v) => !v)}
-              className="absolute end-3 top-1/2 -translate-y-1/2 text-[13px] text-gray-500 hover:text-gray-900 dark:hover:text-gray-200"
-            >
-              {show ? t("hide") : t("show")}
-            </button>
-          </div>
-          {tooShort && <p className="field-error mt-1.5">{t("passwordTooShort")}</p>}
-        </div>
+        <Field id="password" label={t("newPassword")} error={tooShort && t("passwordTooShort")}>
+          {/* One Show for both fields: the two are compared by eye. */}
+          <Input
+            type={show ? "text" : "password"}
+            required
+            autoFocus
+            autoComplete="new-password"
+            className="pe-16"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            end={
+              <Button
+                variant="text"
+                onClick={() => setShow((v) => !v)}
+                className="absolute end-3 top-1/2 -translate-y-1/2 text-[13px]"
+              >
+                {show ? t("hide") : t("show")}
+              </Button>
+            }
+          />
+        </Field>
 
-        <div>
-          <label htmlFor="confirm" className="mb-1.5 block text-sm font-medium">
-            {t("confirmPassword")}
-          </label>
-          <input
-            id="confirm"
+        <Field id="confirm" label={t("confirmPassword")} error={mismatch && t("passwordsDoNotMatch")}>
+          <Input
             type={show ? "text" : "password"}
             required
             autoComplete="new-password"
-            className="input"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
           />
-          {mismatch && <p className="field-error mt-1.5">{t("passwordsDoNotMatch")}</p>}
-        </div>
+        </Field>
 
         {error && <p className="field-error">{error}</p>}
 
-        <button className="btn-primary w-full" disabled={busy || !ready}>
+        <Button type="submit" fullWidth disabled={busy || !ready}>
           {busy ? t("loading") : t("setNewPassword")}
-        </button>
+        </Button>
       </form>
     </AuthShell>
   );

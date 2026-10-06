@@ -4,6 +4,9 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { z } from "zod";
 
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
 import { AuthShell } from "@/features/auth/components/AuthShell";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/providers/auth";
@@ -43,43 +46,22 @@ export function RegisterPage() {
   return (
     <AuthShell title={t("register")}>
       <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)}>
-        <div>
-          <label className="label" htmlFor="email">
-            {t("email")}
-          </label>
-          <input id="email" type="email" className="input" {...register("email")} />
-          {errors.email && <p className="field-error">{errors.email.message}</p>}
-        </div>
-        <div>
-          <label className="label" htmlFor="username">
-            {t("username")}
-          </label>
-          <input id="username" className="input" {...register("username")} />
-          {errors.username && <p className="field-error">{errors.username.message}</p>}
-        </div>
-        <div>
-          <label className="label" htmlFor="password">
-            {t("password")}
-          </label>
-          <input
-            id="password"
-            type="password"
-            className="input"
-            autoComplete="new-password"
-            {...register("password")}
-          />
-          {errors.password && <p className="field-error">{errors.password.message}</p>}
-        </div>
-        <div>
-          <label className="label" htmlFor="display_name">
-            {t("displayName")}
-          </label>
-          <input id="display_name" className="input" {...register("display_name")} />
-        </div>
+        <Field id="email" label={t("email")} error={errors.email?.message}>
+          <Input type="email" {...register("email")} />
+        </Field>
+        <Field id="username" label={t("username")} error={errors.username?.message}>
+          <Input {...register("username")} />
+        </Field>
+        <Field id="password" label={t("password")} error={errors.password?.message}>
+          <Input type="password" autoComplete="new-password" {...register("password")} />
+        </Field>
+        <Field id="display_name" label={t("displayName")}>
+          <Input {...register("display_name")} />
+        </Field>
         {errors.root && <p className="field-error">{errors.root.message}</p>}
-        <button type="submit" disabled={isSubmitting} className="btn-primary">
+        <Button type="submit" disabled={isSubmitting}>
           {t("register")}
-        </button>
+        </Button>
         <p className="text-center text-sm text-gray-500">
           {t("haveAccount")}{" "}
           <Link to="/login" className="text-brand-600 hover:underline">

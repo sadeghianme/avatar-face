@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { Button } from "@/components/ui/Button";
 import { AuthShell } from "@/features/auth/components/AuthShell";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/providers/auth";
@@ -48,9 +49,7 @@ export function AcceptInvitePage() {
           </p>
           {error && <p className="field-error">{error}</p>}
           {user ? (
-            <button className="btn-primary" onClick={() => void accept()}>
-              {t("accept")}
-            </button>
+            <Button onClick={() => void accept()}>{t("accept")}</Button>
           ) : (
             <p className="text-sm text-gray-500">
               <Link className="text-brand-600 hover:underline" to="/login">

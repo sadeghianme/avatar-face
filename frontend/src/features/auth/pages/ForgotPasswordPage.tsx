@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
 import { AuthShell } from "@/features/auth/components/AuthShell";
 import { api } from "@/lib/api";
 
@@ -42,25 +45,20 @@ export function ForgotPasswordPage() {
   return (
     <AuthShell title={t("forgotTitle")} subtitle={t("forgotSubtitle")}>
       <form onSubmit={(e) => void submit(e)} className="space-y-4">
-        <div>
-          <label htmlFor="email" className="mb-1.5 block text-sm font-medium">
-            {t("email")}
-          </label>
-          <input
-            id="email"
+        <Field id="email" label={t("email")}>
+          <Input
             type="email"
             required
             autoFocus
             autoComplete="email"
-            className="input"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
           />
-        </div>
-        <button className="btn-primary w-full" disabled={busy || !email.trim()}>
+        </Field>
+        <Button type="submit" fullWidth disabled={busy || !email.trim()}>
           {busy ? t("loading") : t("sendResetLink")}
-        </button>
+        </Button>
       </form>
       <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
         <Link
