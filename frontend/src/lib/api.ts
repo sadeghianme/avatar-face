@@ -6,18 +6,31 @@
 const BASE = "/api";
 
 export class ApiError extends Error {
+  status: number;
+  code: string;
+  detail: string;
+  /** The whole error payload, for the few errors that carry more than a
+   *  sentence (a refused fit lists its reasons). */
+  body: Record<string, unknown>;
+  /** Seconds the server asked us to wait (Retry-After on a 429 or 503),
+   *  so "busy, try again" can say when. Null when it did not say. */
+  retryAfter: number | null;
+
+  // Fields declared, not parameter properties: Node's type stripping (the
+  // node --test suite imports this file) cannot run those.
   constructor(
-    public status: number,
-    public code: string,
-    public detail: string,
-    /** The whole error payload, for the few errors that carry more than a
-     *  sentence (a refused fit lists its reasons). */
-    public body: Record<string, unknown> = {},
-    /** Seconds the server asked us to wait (Retry-After on a 429 or 503),
-     *  so "busy, try again" can say when. Null when it did not say. */
-    public retryAfter: number | null = null
+    status: number,
+    code: string,
+    detail: string,
+    body: Record<string, unknown> = {},
+    retryAfter: number | null = null
   ) {
     super(detail);
+    this.status = status;
+    this.code = code;
+    this.detail = detail;
+    this.body = body;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -35,9 +48,23 @@ interface Tokens {
 
 const STORAGE_KEY = "liveface.tokens";
 
+/**
+ * The session's tokens, kept in localStorage (docs/frontend-ui.md,
+ * "Security notes", says why). An entry that is not a pair of tokens (a
+ * corrupt write, an old format) is no session: dropped, rather than
+ * breaking every request with a parse error.
+ */
 export function getTokens(): Tokens | null {
   const raw = localStorage.getItem(STORAGE_KEY);
-  return raw ? (JSON.parse(raw) as Tokens) : null;
+  if (!raw) return null;
+  try {
+    const tokens = JSON.parse(raw) as Partial<Tokens> | null;
+    if (typeof tokens?.access_token === "string" && typeof tokens.refresh_token === "string") return tokens as Tokens;
+  } catch {
+    // not JSON: dropped below
+  }
+  localStorage.removeItem(STORAGE_KEY);
+  return null;
 }
 
 export function setTokens(tokens: Tokens | null): void {

@@ -36,7 +36,7 @@ function walk(dir) {
   return out;
 }
 
-const files = walk(ROOT).filter((f) => !relative(ROOT, f).startsWith("devtools"));
+const files = walk(ROOT);
 const IMPORT = /(?:from\s+|import\s*\(\s*|^import\s+)["']([^"']+)["']/gm;
 
 for (const file of files) {

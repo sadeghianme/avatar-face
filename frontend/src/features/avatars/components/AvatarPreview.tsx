@@ -85,10 +85,9 @@ export function AvatarPreview({
         scene: sceneRef.current,
       });
       engineRef.current = engine;
-      // Lets tooling drive poses (gaze, head) for visual checks; harmless in
-      // production, and this file's tsconfig lacks vite/client types for a
-      // clean import.meta.env.DEV gate.
-      (window as unknown as Record<string, unknown>).__lfEngine = engine;
+      // The dev server only: lets tooling drive poses (gaze, head) for
+      // visual checks. Not in a production build (import.meta.env.DEV).
+      if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__lfEngine = engine;
       onEngineRef.current?.(engine);
 
       if (layerUrls?.body && layerUrls.head) {

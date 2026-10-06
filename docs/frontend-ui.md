@@ -119,6 +119,32 @@ Formatting is Prettier (`printWidth` 120), applied once in its own commit;
 | `VoicesPage`, `ReferenceRecording` | `jsx-a11y/media-has-caption` disabled | a recording the member just made: there is no text to caption |
 | `features/share/api.ts` | `fetch` instead of the client | the public endpoints, with no account and no token |
 
+## Security notes
+
+- **The session's tokens are in `localStorage`** (`lib/api.ts`, key
+  `liveface.tokens`): the access token and the refresh token. Kept so on
+  purpose for now. An httpOnly cookie would keep them out of reach of a
+  script injected into the page, but it needs the API to set and read
+  the cookie, CSRF protection on every write, and a refresh that works
+  across the API's origin; that is a change to the auth contract, not to
+  this dashboard. What holds meanwhile: React escapes everything it
+  renders (no `dangerouslySetInnerHTML` in `src/`), nothing from a URL or
+  a server string is put into the page as HTML, the client sends the
+  token only to the API's own origin (`/api`), and a stored entry that is
+  not a pair of tokens is dropped rather than parsed into every request
+  (`getTokens`). What would help most next: a Content-Security-Policy on
+  the dashboard's nginx (`frontend/nginx.conf` sets none) and refresh
+  tokens the server can revoke (the backend's backlog). Revisit this
+  decision when either lands.
+- **No debug handles in a production build.** `window.__queryClient`
+  (main.tsx) and `window.__lfEngine` (AvatarPreview, for the visual
+  harnesses) are set only under `import.meta.env.DEV`, which Vite drops
+  from the build. The embed engine's own `__liveface` global is the embed
+  package's (it ships in the widget too).
+- **Retries**: a query is retried once after a network error or a 5xx,
+  never after a 4xx other than 408 and 429 (`lib/queryClient.ts`): a
+  refused request is not sent twice.
+
 ## Checks
 
 ```
