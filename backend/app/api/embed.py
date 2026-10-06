@@ -3,7 +3,8 @@
 Auth: X-Api-Key header (or ?key=). The key's org is the acting org — never a
 client-supplied org id. Browser calls are origin-checked against the key's
 allowed_domains, and each key (each organization's Simulator, for its
-tokens) is rate-limited per minute.
+tokens) is rate-limited per minute. The one unauthenticated route, /cues, is
+rate-limited per client address instead.
 
 CORS for /embed/* is handled by the path-scoped middleware in main.py, which
 reflects any Origin so the widget works from anywhere the key's domain list
@@ -17,18 +18,18 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-from app.api.deps import DB
+from app.api.deps import DB, client_address
 from app.core.config import get_settings
 from app.core.errors import Auth401, Forbidden403, NotFound404
 from app.models import ApiKey, AvatarStatus
 from app.schemas.tts import CueOut, SynthesizeRequest, SynthesizeResponse
 from app.services import api_keys
 from app.services.avatars import repo as avatars
-from app.services.rate_limit import embed_per_key, enforce
+from app.services.rate_limit import CUES_PER_CLIENT, embed_per_key, enforce
 from app.services.simulator_token import looks_like_one as looks_like_simulator_token
 from app.services.storage import get_storage
 from app.services.tts.registry import synthesize_cached
-from app.services.tts.timing import cues_from_segments, plan_utterance, total_duration_ms
+from app.services.tts.timing import cues_from_segments, plan_utterance_async, total_duration_ms
 from app.services.usage import check_usage_limit, record_synthesis
 
 router = APIRouter(prefix="/embed/v1", tags=["embed"])
@@ -180,7 +181,7 @@ class CueResponse(BaseModel):
 
 
 @router.post("/cues", response_model=CueResponse)
-async def embed_cues(body: CueRequest) -> CueResponse:
+async def embed_cues(body: CueRequest, request: Request) -> CueResponse:
     """Viseme cues for text WITHOUT synthesising audio.
 
     The browser-voice path plays audio through speechSynthesis, which never
@@ -190,11 +191,18 @@ async def embed_cues(body: CueRequest) -> CueResponse:
     model the server providers use, plus per-word offsets so the widget can
     resync exactly on each `onboundary` event.
 
-    Unauthenticated on purpose: it synthesises nothing, touches no org data,
-    and costs a text scan. Requiring a key would only add a failure mode to
-    a path whose whole point is working without server audio.
+    Unauthenticated on purpose: it synthesises nothing and touches no org
+    data. Requiring a key would only add a failure mode to a path whose whole
+    point is working without server audio. What it does cost — a text scan
+    and, outside English, one espeak-ng process for the whole text — runs on
+    a worker thread, never on the loop that serves every other widget.
+
+    Errors: 422 `validation_error` for text over 5,000 characters (or
+    empty); 429 `rate_limited`, with Retry-After, past
+    `rate_limit.CUES_PER_CLIENT` requests a minute from one address.
     """
-    segments, marks = plan_utterance(body.text, body.locale)
+    enforce(CUES_PER_CLIENT, client_address(request))
+    segments, marks = await plan_utterance_async(body.text, body.locale)
     return CueResponse(
         cues=[CueOut(**c) for c in cues_from_segments(segments)],
         duration_ms=total_duration_ms(segments),

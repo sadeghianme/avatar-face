@@ -18,11 +18,12 @@ audio and viseme cues share one clock by construction.
 """
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass
 
 from app.services.tts.espeak import supports as espeak_supports
-from app.services.tts.espeak import text_to_ipa
+from app.services.tts.espeak import words_to_ipa
 from app.services.tts.g2p import word_to_phonemes_stressed
 from app.services.tts.ipa import collapse_repeats, ipa_to_visemes
 from app.services.tts.phonemes import UnknownPhone, plan
@@ -301,14 +302,13 @@ def uses_phonemes(locale: str) -> bool:
     return espeak_supports(locale)
 
 
-def _ipa_segments(word: str, locale: str) -> list[Segment]:
-    """Segments for one word, via espeak-ng.
+def _ipa_segments(ipa: str | None) -> list[Segment]:
+    """Segments for one word from its IPA (espeak-ng's, see `plan_utterance`).
 
     Repeats are collapsed before timing: adjacent identical visemes are one
     mouth position held longer, not two movements, and emitting both makes a
     doubled consonant look like a stutter.
     """
-    ipa = text_to_ipa(word, locale)
     if not ipa:
         return []
     visemes = collapse_repeats(ipa_to_visemes(ipa))
@@ -324,6 +324,10 @@ def plan_utterance(text: str, locale: str = "en-US") -> tuple[list[Segment], lis
     character index (`onboundary`) and needs to convert that into a position
     on this clock. They are produced HERE, alongside the segments, so the two
     cannot drift apart.
+
+    Outside English this waits on espeak-ng (once for the whole text, see
+    services.tts.espeak), so it BLOCKS: on the event loop, await
+    `plan_utterance_async` instead.
     """
     segments: list[Segment] = []
     marks: list[dict] = []
@@ -346,13 +350,16 @@ def plan_utterance(text: str, locale: str = "en-US") -> tuple[list[Segment], lis
 
     english = is_english(locale)
     word_re = _WORD_RE if english else _ANY_WORD_RE
-    for match in word_re.finditer(text) if phonemic else []:
+    matches = list(word_re.finditer(text)) if phonemic else []
+    # Every word's IPA in one espeak call, not one call per word.
+    ipa = {} if english or not matches else words_to_ipa((m.group() for m in matches), locale)
+    for match in matches:
         gap(text[cursor : match.start()])
         marks.append({"char": match.start(), "t": elapsed})
         word = match.group()
         # English keeps its own rules — they encode this orthography's
         # irregularities better than a general phonemiser does.
-        segs = _phoneme_segments(word) if english else _ipa_segments(word, locale)
+        segs = _phoneme_segments(word) if english else _ipa_segments(ipa.get(word))
         emit(segs or _char_segments(word))
         cursor = match.end()
 
@@ -367,3 +374,15 @@ def plan_utterance(text: str, locale: str = "en-US") -> tuple[list[Segment], lis
         return segment_text(text), _char_word_marks(text)
     gap(text[cursor:])
     return segments, marks
+
+
+async def plan_utterance_async(
+    text: str, locale: str = "en-US"
+) -> tuple[list[Segment], list[dict]]:
+    """`plan_utterance` on a worker thread, for callers on the event loop.
+
+    A thread rather than the CPU thread (services.jobs.run_cpu): planning is
+    milliseconds of Python and a wait on espeak, and queueing a visitor's
+    sentence behind someone's photo upload would cost seconds of silence.
+    """
+    return await asyncio.to_thread(plan_utterance, text, locale)

@@ -1,7 +1,11 @@
+import threading
 from datetime import timedelta
 
+from app.api import embed
 from app.models import ApiKey, utcnow
 from app.services import api_keys
+from app.services.rate_limit import Limit
+from app.services.tts import timing
 from tests.conftest import create_org, create_ready_avatar, register_and_login
 
 
@@ -290,3 +294,38 @@ async def test_last_used_moves_once_it_is_stale():
     assert db.commits == 1
     await api_keys.mark_used(db, key)  # type: ignore[arg-type]
     assert db.commits == 1
+
+
+async def test_cues_text_is_capped(client) -> None:
+    response = await client.post("/embed/v1/cues", json={"text": "a" * 5001})
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+
+
+async def test_cues_are_rate_limited_per_client(client, monkeypatch) -> None:
+    """Unauthenticated, so the client address is what is counted."""
+    monkeypatch.setattr(embed, "CUES_PER_CLIENT", Limit("cues-test", 3, 60))
+    statuses = [
+        (await client.post("/embed/v1/cues", json={"text": "Hello."})).status_code
+        for _ in range(4)
+    ]
+    assert statuses == [200, 200, 200, 429]
+    refused = await client.post("/embed/v1/cues", json={"text": "Hello."})
+    assert refused.json()["code"] == "rate_limited"
+    assert 1 <= int(refused.headers["retry-after"]) <= 60
+
+
+async def test_cues_are_planned_off_the_event_loop(client, monkeypatch) -> None:
+    """Outside English, planning waits on espeak-ng: on the loop, that wait
+    stalls every other widget the process serves."""
+    real = timing.plan_utterance
+    threads = []
+
+    def spy(text, locale="en-US"):
+        threads.append(threading.current_thread())
+        return real(text, locale)
+
+    monkeypatch.setattr(timing, "plan_utterance", spy)
+    response = await client.post("/embed/v1/cues", json={"text": "Bonjour.", "locale": "fr-FR"})
+    assert response.status_code == 200
+    assert threads and threads[0] is not threading.main_thread()

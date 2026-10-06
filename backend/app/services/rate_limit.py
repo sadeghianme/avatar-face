@@ -115,6 +115,10 @@ class Limit:
 # that is an edge address many visitors share, so the per-address numbers
 # are generous on purpose: they stop a script, not a busy office.
 
+# /embed/v1/cues: unauthenticated, called once per sentence the browser
+# voice speaks. Two a second per address is far beyond a person listening.
+CUES_PER_CLIENT = Limit("cues-client", 120, 60)
+
 # A visitor on a shared link is a person pressing Play, not a program. These
 # are generous for the former and useless for the latter (api.share).
 SHARE_PER_TOKEN = Limit("share-token", 30, 60)
