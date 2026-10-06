@@ -1,8 +1,12 @@
 import type { CharacterSettings } from "@liveface/embed/mouth";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Checkbox } from "@/components/ui/Checkbox";
+import { ChoiceCard } from "@/components/ui/ChoiceCard";
+import { Slider } from "@/components/ui/Slider";
+import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import {
   characterSettings,
   characterUpdate,
@@ -46,11 +50,22 @@ export function CharacterMouthSection({
   const [error, setError] = useState<string | null>(null);
   const base = `/orgs/${orgId}/avatars/${avatar.id}`;
 
-  // Re-seed when the server's copy changes under us (publish, discard).
+  // Re-seed when the server's copy changes under us (publish, discard):
+  // keyed by its content, not by the object a refetch replaces.
+  const savedCharacter = useRef(avatar.mouth?.character);
+  savedCharacter.current = avatar.mouth?.character;
   useEffect(() => {
-    setSettings(characterSettings(avatar.mouth?.character));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setSettings(characterSettings(savedCharacter.current));
   }, [savedKey]);
+
+  const styles: readonly Style[] = ["character", "classic"];
+  const selectedStyle: Style = look === "character" ? "character" : "classic";
+  const styleRadio = useRadioGroup(
+    styles,
+    selectedStyle,
+    (style) => choose(style),
+    () => busy
+  );
 
   if (look === null) return null;
 
@@ -77,10 +92,10 @@ export function CharacterMouthSection({
     }
   };
 
-  const choose = (style: Style) => {
-    if (!styleChange(look, style) || busy) return;
+  function choose(style: Style) {
+    if (look === null || !styleChange(look, style) || busy) return;
     void save(settings, style);
-  };
+  }
 
   const change = (patch: Partial<Required<CharacterSettings>>, saveNow: boolean) => {
     const next = { ...settings, ...patch };
@@ -97,72 +112,47 @@ export function CharacterMouthSection({
   return (
     <div className="space-y-3" id="mouth-character">
       <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={t("mouthCharacterTitle")}>
-        {options.map((option) => {
-          const selected = (look === "character") === (option.style === "character");
-          return (
-            <button
-              key={option.style}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              disabled={busy}
-              onClick={() => choose(option.style)}
-              className={`rounded-xl border px-3 py-2.5 text-start text-sm transition-colors ${
-                selected
-                  ? "border-brand-500 bg-brand-500/10 font-medium"
-                  : "border-black/10 hover:border-black/25 dark:border-white/10 dark:hover:border-white/25"
-              }`}
-            >
-              {option.label}
-              <span className="mt-0.5 block text-xs font-normal text-gray-500">{option.hint}</span>
-            </button>
-          );
-        })}
+        {options.map((option) => (
+          <ChoiceCard
+            key={option.style}
+            selected={option.style === selectedStyle}
+            disabled={busy}
+            {...styleRadio(option.style)}
+          >
+            {option.label}
+            <span className="mt-0.5 block text-xs font-normal text-gray-500">{option.hint}</span>
+          </ChoiceCard>
+        ))}
       </div>
 
       {look === "original" && <p className="text-xs leading-relaxed text-gray-500">{t("mouthCharacterLegacy")}</p>}
 
       {look === "character" && (
         <div className="space-y-3 rounded-xl bg-black/[0.03] p-3 dark:bg-white/[0.04]">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="accent-orange-500"
-              checked={settings.teeth === "upper"}
-              disabled={busy}
-              onChange={(event) => change({ teeth: event.target.checked ? "upper" : "none" }, true)}
-            />
-            {t("mouthCharacterTeeth")}
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="accent-orange-500"
-              checked={settings.tongue}
-              disabled={busy}
-              onChange={(event) => change({ tongue: event.target.checked }, true)}
-            />
-            {t("mouthCharacterTongue")}
-          </label>
-          <div>
-            <label className="label flex justify-between gap-2" htmlFor="mouth-character-jaw">
-              <span>{t("mouthJaw")}</span>
-              <span className="font-mono tabular-nums">{settings.jaw.toFixed(2)}</span>
-            </label>
-            <input
-              id="mouth-character-jaw"
-              type="range"
-              className="w-full accent-orange-500"
-              min={JAW_LIMITS.min}
-              max={JAW_LIMITS.max}
-              step={JAW_LIMITS.step}
-              value={settings.jaw}
-              onChange={(event) => change({ jaw: Number(event.target.value) }, false)}
-              // Saved on release, not per tick: each save is a draft edit.
-              onPointerUp={() => void save(settings, "character")}
-              onKeyUp={() => void save(settings, "character")}
-            />
-          </div>
+          <Checkbox
+            label={t("mouthCharacterTeeth")}
+            checked={settings.teeth === "upper"}
+            disabled={busy}
+            onChange={(event) => change({ teeth: event.target.checked ? "upper" : "none" }, true)}
+          />
+          <Checkbox
+            label={t("mouthCharacterTongue")}
+            checked={settings.tongue}
+            disabled={busy}
+            onChange={(event) => change({ tongue: event.target.checked }, true)}
+          />
+          <Slider
+            id="mouth-character-jaw"
+            label={t("mouthJaw")}
+            min={JAW_LIMITS.min}
+            max={JAW_LIMITS.max}
+            step={JAW_LIMITS.step}
+            value={settings.jaw}
+            onChange={(jaw) => change({ jaw }, false)}
+            // Saved on release, not per tick: each save is a draft edit.
+            onPointerUp={() => void save(settings, "character")}
+            onKeyUp={() => void save(settings, "character")}
+          />
         </div>
       )}
       {error && (

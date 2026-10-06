@@ -31,7 +31,9 @@ const SOFT: Record<BannerTone, string> = {
   danger: "bg-red-50 text-red-700 ring-red-600/10 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20",
 };
 
-export interface BannerProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
+export interface BannerProps extends Omit<HTMLAttributes<HTMLElement>, "title"> {
+  /** A section when it is labelled by its own title (aria-labelledby). */
+  as?: "div" | "section";
   tone?: BannerTone;
   /**
    * card: a slim card strip with the state's border, beside other cards
@@ -54,6 +56,7 @@ export interface BannerProps extends Omit<HTMLAttributes<HTMLDivElement>, "title
  * error that answers an action.
  */
 export function Banner({
+  as: Element = "div",
   tone = "info",
   appearance = "card",
   icon,
@@ -75,7 +78,7 @@ export function Banner({
 
   if (appearance === "soft") {
     return (
-      <div
+      <Element
         className={cx("flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-[14px] ring-1", SOFT[tone], className)}
         {...rest}
       >
@@ -85,12 +88,12 @@ export function Banner({
           {actions && <div className="mt-2 flex flex-wrap gap-2">{actions}</div>}
           {footer}
         </div>
-      </div>
+      </Element>
     );
   }
 
   return (
-    <div className={cx("card px-4 py-3", CARD_BORDER[tone], className)} {...rest}>
+    <Element className={cx("card px-4 py-3", CARD_BORDER[tone], className)} {...rest}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-1 basis-56 items-start gap-2.5">
           {icon && <Icon name={icon} className={cx("mt-0.5 h-4 w-4 shrink-0", ICON_COLOUR[tone])} />}
@@ -99,6 +102,6 @@ export function Banner({
         {actions && <div className="flex shrink-0 gap-2">{actions}</div>}
       </div>
       {footer}
-    </div>
+    </Element>
   );
 }

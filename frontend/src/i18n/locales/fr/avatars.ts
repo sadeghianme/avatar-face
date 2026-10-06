@@ -141,6 +141,7 @@ export const avatars = {
     "Il fonctionne quand même. Recadrez la photo, ou utilisez-en une où le visage est plus grand et de face.",
   testInSimulator: "Tester",
   cropFree: "Libre",
+  cropRatio: "Format du recadrage",
   cropSquare: "1:1",
   cropPortrait: "4:5",
   cropWide: "16:9",

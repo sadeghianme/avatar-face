@@ -14,13 +14,16 @@ export function useRadioGroup<T extends string>(
   value: T,
   onChange: (next: T) => void,
   isDisabled: (option: T) => boolean = () => false,
-  role: "radio" | "tab" = "radio"
+  role: "radio" | "tab" = "radio",
+  /** false: the arrows move the focus only, Space or Enter chooses (for a
+   *  choice that does something heavy, like opening a file picker). */
+  selectOnMove = true
 ) {
   const refs = useRef(new Map<T, HTMLElement | null>());
 
   const go = (next: T | undefined) => {
     if (next === undefined) return;
-    onChange(next);
+    if (selectOnMove) onChange(next);
     refs.current.get(next)?.focus();
   };
 

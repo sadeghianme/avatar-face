@@ -140,6 +140,7 @@ export const avatars = {
   qualityNoteHint: "It still works. Crop the photo, or upload one where the face is larger and facing the camera.",
   testInSimulator: "Test",
   cropFree: "Free",
+  cropRatio: "Shape of the crop",
   cropSquare: "1:1",
   cropPortrait: "4:5",
   cropWide: "16:9",

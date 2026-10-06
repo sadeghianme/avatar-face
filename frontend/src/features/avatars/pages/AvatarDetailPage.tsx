@@ -5,8 +5,16 @@ import { type CSSProperties, useCallback, useEffect, useRef, useState } from "re
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { iconButtonClass } from "@/components/ui/button-styles";
+import { ButtonLink } from "@/components/ui/ButtonLink";
+import { Card } from "@/components/ui/Card";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { Disclosure, DisclosureGroup } from "@/components/ui/Disclosure";
 import { Icon } from "@/components/ui/Icon";
+import { IconButton } from "@/components/ui/IconButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Avatar3DPreview } from "@/features/avatars/components/Avatar3DPreview";
@@ -36,8 +44,29 @@ import { aiEditedLabels, aiEditedModels } from "@/features/avatars/teeth";
 import { SpeakPanel } from "@/features/voices";
 import { defaultVoiceSelection, type VoiceSelection } from "@/features/voices";
 import { api, ApiError } from "@/lib/api";
+import { cx } from "@/lib/cx";
 import type { Avatar } from "@/lib/types";
 import { useOrg } from "@/providers/org";
+
+/**
+ * The stage, a square. In one column (below lg) it is capped so Speak is
+ * not a screen away — 55% of an upright window, the window under the
+ * header on a phone on its side — and centred; beside the settings (lg)
+ * it sticks under the page head (--head-h), no taller than the window
+ * leaves.
+ */
+const STAGE_SQUARE = cx(
+  "aspect-square p-0",
+  "max-lg:mx-auto max-lg:portrait:max-h-[55dvh] max-lg:landscape:max-h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-2rem)]",
+  "lg:sticky lg:top-[calc(3.5rem+env(safe-area-inset-top)+var(--head-h))]",
+  "lg:max-h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-var(--head-h)-1rem)]"
+);
+
+/** An iPhone's "fullscreen": the stage covers the window, safe areas padded. */
+const STAGE_COVERING = cx(
+  "!fixed inset-0 z-[60] !m-0 !aspect-auto !max-h-none bg-white dark:bg-ink",
+  "pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]"
+);
 
 /**
  * The settings column's folded sections. Framing opens by itself: it is
@@ -89,8 +118,7 @@ export function AvatarDetailPage() {
   const [debugMesh, setDebugMesh] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
   const [cropping, setCropping] = useState(false);
-  // Delete asks once, in place; nothing destructive on one click.
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Delete asks once, in place (ConfirmButton); nothing destructive on one click.
   const [deleting, setDeleting] = useState(false);
   const [open, setOpen] = useState<Record<SectionId, boolean>>(loadOpen);
   // The avatar's DRAFT voice. Seeded from the saved value once loaded, and
@@ -213,9 +241,9 @@ export function AvatarDetailPage() {
     }
   }, [avatar]);
 
-  // Another avatar on this page is another page: nothing half-done carries over.
+  // Another avatar on this page is another page: nothing half-done carries
+  // over (the delete question, keyed by avatar, goes by itself).
   useEffect(() => {
-    setConfirmingDelete(false);
     setCropping(false);
     setAdjusting(false);
   }, [avatarId]);
@@ -331,7 +359,7 @@ export function AvatarDetailPage() {
               to="/app"
               aria-label={t("avatars")}
               title={t("avatars")}
-              className="-ms-2 grid h-11 w-11 shrink-0 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 dark:hover:bg-white/10 dark:hover:text-white"
+              className={cx(iconButtonClass(), "-ms-2 h-11 w-11")}
             >
               <Icon name="back" className="h-5 w-5 rtl:-scale-x-100" />
             </Link>
@@ -341,21 +369,22 @@ export function AvatarDetailPage() {
                 what the AI did to the picture, "AI teeth" when it made the
                 teeth photo too, "AI mouth shapes" when it made some of them. */}
             {avatar.ai_edited && (
-              <span
-                className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+              <Badge
+                tone="brand"
+                icon="sparkles"
+                className="min-w-0 max-w-full px-2.5"
                 title={
                   aiEditedModels(avatar.ai_edited).length > 0
                     ? t("aiEditedModel", { model: aiEditedModels(avatar.ai_edited).join(", ") })
                     : undefined
                 }
               >
-                <Icon name="sparkles" className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">
                   {aiEditedLabels(avatar.ai_edited)
                     .map((key) => t(key))
                     .join(" · ")}
                 </span>
-              </span>
+              </Badge>
             )}
           </div>
 
@@ -368,116 +397,92 @@ export function AvatarDetailPage() {
           <div className="-mx-4 flex min-w-0 max-w-[100vw] items-center gap-2 overflow-x-auto px-4 py-1 [scrollbar-width:none] lg:mx-0 lg:max-w-none lg:flex-wrap lg:overflow-visible lg:px-0 lg:py-0 [&>*]:shrink-0">
             {editable && (
               <>
-                <button
-                  className="btn-secondary min-h-11"
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  icon="target"
                   aria-pressed={adjusting}
                   onClick={() => setAdjusting((a) => !a)}
                 >
-                  <Icon name="target" className="h-4 w-4" />
                   {t("markFace")}
-                </button>
-                <button
-                  className="btn-secondary min-h-11"
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  icon="crop"
                   aria-pressed={cropping}
                   onClick={() => setCropping((c) => !c)}
                 >
-                  <Icon name="crop" className="h-4 w-4" />
                   {t("crop")}
-                </button>
-                <button
-                  className="btn-secondary min-h-11"
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  icon="eraser"
                   onClick={() => void toggleBackground()}
                   disabled={busyBg}
                   title={t("removeBgHint")}
                 >
-                  <Icon name="eraser" className="h-4 w-4" />
                   {busyBg ? t("loading") : avatar.original_image_key ? t("restoreBg") : t("removeBg")}
-                </button>
+                </Button>
               </>
             )}
             {avatar.undo_label && (
-              <button
-                className="btn-secondary min-h-11"
+              <Button
+                variant="secondary"
+                size="lg"
+                icon="undo"
                 onClick={() => void undo()}
                 title={t("undoWhat", { what: avatar.undo_label })}
               >
-                <Icon name="undo" className="h-4 w-4" />
                 {t("undoWhat", { what: avatar.undo_label })}
-              </button>
+              </Button>
             )}
             {editable && (
-              <Link className="btn-secondary min-h-11" to={`/simulator?avatar=${avatar.id}`}>
-                <Icon name="play" className="h-4 w-4" />
+              <ButtonLink variant="secondary" size="lg" icon="play" to={`/simulator?avatar=${avatar.id}`}>
                 {t("testInSimulator")}
-              </Link>
+              </ButtonLink>
             )}
-            {confirmingDelete ? (
-              <span
-                role="group"
-                aria-label={t("deleteAsk")}
-                className="flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 py-1 pe-1 ps-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") setConfirmingDelete(false);
-                }}
-              >
-                {t("deleteAsk")}
-                <button
-                  type="button"
-                  className="btn-secondary min-h-9 coarse:min-h-11"
-                  autoFocus
-                  onClick={() => setConfirmingDelete(false)}
-                  disabled={deleting}
-                >
-                  {t("cancel")}
-                </button>
-                <button
-                  type="button"
-                  className="btn-danger min-h-9 coarse:min-h-11"
-                  onClick={() => void remove()}
-                  disabled={deleting}
-                >
-                  {deleting ? <Spinner className="h-4 w-4" /> : t("delete")}
-                </button>
-              </span>
-            ) : (
-              <button
-                type="button"
-                className="btn-secondary min-h-11 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
-                onClick={() => setConfirmingDelete(true)}
-              >
-                <Icon name="trash" className="h-4 w-4" />
-                {t("delete")}
-              </button>
-            )}
+            {/* Asks once, in place; another avatar on this page drops the question (key). */}
+            <ConfirmButton
+              key={avatar.id}
+              icon="trash"
+              label={t("delete")}
+              question={t("deleteAsk")}
+              confirmLabel={t("delete")}
+              cancelLabel={t("cancel")}
+              busy={deleting}
+              onConfirm={() => void remove()}
+            />
           </div>
         </div>
       </div>
 
       {avatar.status === "failed" && (
-        <div className="card mb-4 border-red-200 dark:border-red-900">
+        <Card tone="danger" className="mb-4">
           <p className="field-error">{avatar.error}</p>
-          <button className="btn-secondary mt-3 min-h-11" onClick={() => void retry()}>
+          <Button variant="secondary" size="lg" className="mt-3" onClick={() => void retry()}>
             {t("retry")}
-          </button>
+          </Button>
           {retryError && (
             <p className="field-error mt-2 text-sm" role="alert">
               {retryError}
             </p>
           )}
-        </div>
+        </Card>
       )}
 
       {preparing && (
-        <section className="card mb-4" aria-labelledby="preparing-title">
+        <Card as="section" className="mb-4" aria-labelledby="preparing-title">
           <h2 id="preparing-title" className="flex items-center gap-2 font-semibold">
             <Spinner className="h-4 w-4 shrink-0 text-brand-600" />
             {t("avatarPreparingTitle")}
           </h2>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{t("avatarPreparingHint")}</p>
-          <Link className="btn-secondary mt-3 min-h-11" to={`/avatars/new/${preparing}`}>
+          <ButtonLink variant="secondary" size="lg" className="mt-3" to={`/avatars/new/${preparing}`}>
             {t("avatarPreparingFollow")}
-          </Link>
-        </section>
+          </ButtonLink>
+        </Card>
       )}
 
       {!preparing && (avatar.status === "pending" || avatar.status === "processing") && (
@@ -508,30 +513,28 @@ export function AvatarDetailPage() {
               header on a phone on its side; the square is then centred
               (max-height carries to the width through the aspect ratio).
               The crop studio takes the room it needs instead. */}
-          <div
+          <Card
             ref={previewBoxRef}
-            className={`card relative overflow-hidden lg:self-start ${
-              cropping
-                ? "p-3"
-                : "aspect-square p-0 max-lg:mx-auto max-lg:portrait:max-h-[55dvh] max-lg:landscape:max-h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-2rem)] lg:sticky lg:top-[calc(3.5rem+env(safe-area-inset-top)+var(--head-h))] lg:max-h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-var(--head-h)-1rem)]"
-            } ${expanded ? "preview-fullscreen" : ""} ${
-              covering
-                ? "!fixed inset-0 z-[60] !m-0 !aspect-auto !max-h-none bg-white pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] dark:bg-ink"
-                : ""
-            }`}
+            className={cx(
+              "relative overflow-hidden lg:self-start",
+              cropping ? "p-3" : STAGE_SQUARE,
+              expanded && "preview-fullscreen",
+              covering && STAGE_COVERING
+            )}
           >
             {!cropping && (
-              <button
-                type="button"
+              <IconButton
+                variant="overlay"
+                tooltip
+                label={t(expanded ? "exitFullscreen" : "fullscreen")}
+                icon={expanded ? "compress" : "expand"}
+                iconClassName="h-4 w-4"
                 onClick={toggleFullscreen}
-                aria-label={t(expanded ? "exitFullscreen" : "fullscreen")}
-                title={t(expanded ? "exitFullscreen" : "fullscreen")}
-                className={`absolute end-3 z-10 grid h-10 w-10 place-items-center rounded-lg bg-black/40 text-white/90 backdrop-blur transition-colors hover:bg-black/60 hover:text-white coarse:h-11 coarse:w-11 ${
+                className={cx(
+                  "absolute end-3 z-10 h-10 w-10",
                   covering ? "top-[calc(0.75rem+env(safe-area-inset-top))]" : "top-3"
-                }`}
-              >
-                <Icon name={expanded ? "compress" : "expand"} className="h-4 w-4" />
-              </button>
+                )}
+              />
             )}
             {cropping ? (
               <CropStudio
@@ -564,12 +567,12 @@ export function AvatarDetailPage() {
                 onEngine={setEngine}
               />
             )}
-          </div>
+          </Card>
 
           {/* The settings: the publish state, Speak, then the groups. */}
           <div className="flex min-w-0 flex-col gap-3">
             {avatar.quality_note && (
-              <div className="card border-amber-300/60 px-4 py-3 dark:border-amber-500/30">
+              <Card tone="warning" padding="sm">
                 <p className="text-[13.5px] text-amber-700 dark:text-amber-400">
                   <span className="font-medium">
                     {avatar.published ? t("qualityNoteTitle") : t("qualityNoteFirstTitle")}
@@ -582,15 +585,17 @@ export function AvatarDetailPage() {
                   <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">{t("qualityNoteHint")}</p>
                 )}
                 {photo && !adjusting && (
-                  <button
-                    className="btn-secondary mt-3 min-h-10 coarse:min-h-11 px-3 text-xs"
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon="target"
+                    className="mt-3"
                     onClick={() => setAdjusting(true)}
                   >
-                    <Icon name="target" className="h-4 w-4" />
                     {t("markFace")}
-                  </button>
+                  </Button>
                 )}
-              </div>
+              </Card>
             )}
 
             <PublishBar avatar={avatar} orgId={current.id} />
@@ -632,7 +637,6 @@ export function AvatarDetailPage() {
                       onPreview={setScenePreview}
                       onRemoveBackground={toggleBackground}
                       busyBackground={busyBg}
-                      embedded
                     />
                   </Disclosure>
                 )}
@@ -653,7 +657,6 @@ export function AvatarDetailPage() {
                     }
                     motion={motion}
                     onMotion={setMotion}
-                    embedded
                   />
                 </Disclosure>
               </DisclosureGroup>
@@ -668,7 +671,7 @@ export function AvatarDetailPage() {
                 open={open.share}
                 onToggle={() => toggleSection("share")}
               >
-                <SharePanel avatar={avatar} orgId={current.id} embedded />
+                <SharePanel avatar={avatar} orgId={current.id} />
               </Disclosure>
               <Disclosure
                 id="embed"
@@ -678,7 +681,7 @@ export function AvatarDetailPage() {
                 open={open.embed}
                 onToggle={() => toggleSection("embed")}
               >
-                <EmbedSnippet avatarId={avatar.id} voice={voice} embedded />
+                <EmbedSnippet avatarId={avatar.id} voice={voice} />
               </Disclosure>
             </DisclosureGroup>
 
@@ -691,20 +694,15 @@ export function AvatarDetailPage() {
                 open={open.tuning}
                 onToggle={() => toggleSection("tuning")}
               >
-                <TuningPanel engine={engine} avatarId={avatar.id} is3d={is3d} embedded />
+                <TuningPanel engine={engine} avatarId={avatar.id} is3d={is3d} />
                 {photo && (
-                  <label className="mt-4 flex min-h-11 cursor-pointer items-start gap-3 border-t border-gray-100 pt-4 text-sm dark:border-white/[0.07]">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-4 w-4 shrink-0 accent-brand-600"
-                      checked={debugMesh}
-                      onChange={(e) => setDebugMesh(e.target.checked)}
-                    />
-                    <span>
-                      {t("debugMesh")}
-                      <span className="block text-xs text-gray-500 dark:text-gray-400">{t("debugMeshHint")}</span>
-                    </span>
-                  </label>
+                  <Checkbox
+                    className="mt-4 min-h-11 border-t border-gray-100 pt-4 dark:border-white/[0.07]"
+                    label={t("debugMesh")}
+                    description={t("debugMeshHint")}
+                    checked={debugMesh}
+                    onChange={(e) => setDebugMesh(e.target.checked)}
+                  />
                 )}
               </Disclosure>
             </DisclosureGroup>

@@ -3,15 +3,22 @@ import type { HTMLAttributes } from "react";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { cx } from "@/lib/cx";
 
-export type BadgeTone = "neutral" | "success" | "warning" | "danger" | "brand";
+/**
+ * neutral, muted (standard, not made for this avatar), success, warning,
+ * danger, brand (what an AI made or changed: the disclosure every visitor
+ * gets too). Component classes (`.badge-*`), so a className can still
+ * change one.
+ */
+export type BadgeTone = "neutral" | "muted" | "success" | "warning" | "danger" | "brand";
 
+// Whole class names, so Tailwind finds them (it keeps a component class only where it sees it used).
 const TONE: Record<BadgeTone, string> = {
-  neutral: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
-  success: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-  warning: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  danger: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
-  // What an AI made or changed: the disclosure every visitor gets too.
-  brand: "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300",
+  neutral: "badge-neutral",
+  muted: "badge-muted",
+  success: "badge-success",
+  warning: "badge-warning",
+  danger: "badge-danger",
+  brand: "badge-brand",
 };
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {

@@ -172,6 +172,24 @@
   .badge {
     @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
   }
+  .badge-neutral {
+    @apply bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300;
+  }
+  .badge-muted {
+    @apply bg-gray-200 text-gray-700 dark:bg-white/10 dark:text-gray-200;
+  }
+  .badge-success {
+    @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300;
+  }
+  .badge-warning {
+    @apply bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300;
+  }
+  .badge-danger {
+    @apply bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300;
+  }
+  .badge-brand {
+    @apply bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300;
+  }
   .progress {
     @apply h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700;
   }
@@ -238,6 +256,10 @@
     .icon-btn-overlay {
       min-height: 2.75rem;
       min-width: 2.75rem;
+    }
+    /* A size already over 44px keeps its own. */
+    .btn-xl {
+      min-height: 3rem;
     }
   }
 }

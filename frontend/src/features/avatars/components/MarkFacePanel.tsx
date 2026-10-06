@@ -1,8 +1,10 @@
 import type { AvatarEngine } from "@liveface/embed";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
 import { type FaceMarks, FIT_REASON_LABELS, type FitReason, marksToSend } from "@/features/avatars/face-marks";
@@ -84,13 +86,16 @@ export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgI
     [previewUrl]
   );
 
-  const fitFailed = (err: unknown) => {
-    if (err instanceof ApiError && err.code === "fit_invalid" && Array.isArray(err.body.reasons)) {
-      setReasons(err.body.reasons as FitReason[]);
-    } else {
-      setError(err instanceof ApiError ? err.detail : t("error"));
-    }
-  };
+  const fitFailed = useCallback(
+    (err: unknown) => {
+      if (err instanceof ApiError && err.code === "fit_invalid" && Array.isArray(err.body.reasons)) {
+        setReasons(err.body.reasons as FitReason[]);
+      } else {
+        setError(err instanceof ApiError ? err.detail : t("error"));
+      }
+    },
+    [t]
+  );
 
   useEffect(() => {
     if (!live || !marks || marks === previewed) return;
@@ -121,8 +126,7 @@ export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgI
       previewed ? LIVE_PREVIEW_DELAY_MS : 0
     );
     return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live, marks, previewed, orgId, avatar.id]);
+  }, [live, marks, previewed, orgId, avatar.id, data, fitFailed]);
 
   if (!data || !marks || !avatar.image_url) return null;
 
@@ -167,12 +171,12 @@ export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgI
   };
 
   return (
-    <div className="card">
+    <Card>
       <div className="mb-3 flex items-center justify-between">
         <h3 className="font-medium">{t("markFace")}</h3>
-        <button className="btn-secondary px-3 py-1 text-xs" onClick={onClose} aria-label={t("close")}>
+        <Button variant="secondary" size="xs" onClick={onClose} aria-label={t("close")}>
           ✕
-        </button>
+        </Button>
       </div>
       <p className="mb-1 text-xs text-gray-500">{t(guideKey(avatar.face_type))}</p>
       <p className="mb-3 text-xs text-gray-500">{t("markFaceKeys")}</p>
@@ -228,8 +232,8 @@ export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgI
       {error && <p className="field-error mt-3">{error}</p>}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          className="btn-secondary"
+        <Button
+          variant="secondary"
           onClick={() => {
             setLive(true);
             setPreviewed(null);
@@ -237,20 +241,15 @@ export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgI
           disabled={busy !== null || previewing}
         >
           {previewing ? t("loading") : t("test")}
-        </button>
-        <button className="btn-primary" onClick={() => void save()} disabled={busy !== null}>
+        </Button>
+        <Button onClick={() => void save()} disabled={busy !== null}>
           {busy === "save" ? t("saving") : t("save")}
-        </button>
-        <button
-          className="btn-secondary"
-          onClick={() => void redetect()}
-          disabled={busy !== null}
-          title={t("redetectHint")}
-        >
+        </Button>
+        <Button variant="secondary" onClick={() => void redetect()} disabled={busy !== null} title={t("redetectHint")}>
           {busy === "redetect" ? t("loading") : t("redetect")}
-        </button>
-        <button
-          className="btn-secondary"
+        </Button>
+        <Button
+          variant="secondary"
           onClick={() => {
             setMarks(data.anchors);
             setReasons([]);
@@ -258,8 +257,8 @@ export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgI
           disabled={busy !== null}
         >
           {t("resetDetected")}
-        </button>
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 }

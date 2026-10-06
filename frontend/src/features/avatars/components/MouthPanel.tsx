@@ -6,13 +6,20 @@ import {
   type ReferenceProfile,
 } from "@liveface/embed/mouth";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { ChoiceCard } from "@/components/ui/ChoiceCard";
+import { FileInput } from "@/components/ui/FileInput";
 import { Icon } from "@/components/ui/Icon";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Slider } from "@/components/ui/Slider";
 import { Spinner } from "@/components/ui/Spinner";
+import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import { CharacterMouthSection } from "@/features/avatars/components/CharacterMouthSection";
-import { ProgressBar, ShapeTicks } from "@/features/avatars/components/create/JobProgress";
+import { JobProgressBar, ShapeTicks } from "@/features/avatars/components/create/JobProgress";
 import { publishDraft } from "@/features/avatars/components/PublishBar";
 import { stageCount } from "@/features/avatars/creation";
 import { useConsent } from "@/features/avatars/hooks/useConsent";
@@ -31,6 +38,7 @@ import {
 } from "@/features/avatars/mouth-kit";
 import { type MouthAction, mouthErrorKey, teethNoteKey, teethView } from "@/features/avatars/teeth";
 import { api, ApiError } from "@/lib/api";
+import { cx } from "@/lib/cx";
 import type { Avatar, MouthRenderer } from "@/lib/types";
 
 /** The photographic mouth paints human teeth; the server refuses it elsewhere. */
@@ -82,7 +90,6 @@ export function MouthPanel({
   onPreviewCharacter,
   motion,
   onMotion,
-  embedded = false,
 }: {
   avatar: Avatar;
   orgId: string;
@@ -92,8 +99,6 @@ export function MouthPanel({
   /** The mouth shapes the dashboard preview plays (the compare switch). */
   motion: MotionChoice;
   onMotion: (choice: MotionChoice) => void;
-  /** Inside a section that carries the title: no card, no heading of its own. */
-  embedded?: boolean;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -116,12 +121,14 @@ export function MouthPanel({
   const base = `/orgs/${orgId}/avatars/${avatar.id}`;
   const human = (avatar.face_type ?? "human") === "human";
 
-  // Re-seed when the server's copy changes under us (publish, discard).
+  // Re-seed when the server's copy changes under us (publish, discard):
+  // keyed by its content, not by the object a refetch replaces.
   const savedKey = JSON.stringify(saved);
+  const seed = useRef({ renderer: savedRenderer, profile: saved?.profile });
+  seed.current = { renderer: savedRenderer, profile: saved?.profile };
   useEffect(() => {
-    setRenderer(savedRenderer);
-    setProfile(normalizeProfile(saved?.profile));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setRenderer(seed.current.renderer);
+    setProfile(normalizeProfile(seed.current.profile));
   }, [savedKey]);
 
   const refresh = () =>
@@ -198,6 +205,15 @@ export function MouthPanel({
     onPreview(next, profile);
     void save(next, profile);
   };
+  // Classic or Photographic: one tab stop, the arrows choose.
+  const rendererRadio = useRadioGroup(
+    choices,
+    renderer,
+    (next) => {
+      if (next !== renderer) choose(next);
+    },
+    () => busy
+  );
 
   const slide = (key: keyof ReferenceProfile, value: number) => {
     const next = { ...profile, [key]: value };
@@ -295,18 +311,21 @@ export function MouthPanel({
 
   // Scrolled to from the finish notice: it stops below the sticky header
   // (and, from lg, the sticky page head) rather than under them.
+  // Scrolled to from the finish notice: it stops below the sticky header
+  // (and, from lg, the sticky page head) rather than under them.
   return (
     <section
       id="mouth-panel"
       tabIndex={-1}
-      className={`${embedded ? "" : "card"} space-y-4 outline-none scroll-mt-[calc(3.5rem+env(safe-area-inset-top)+1rem)] lg:scroll-mt-[calc(3.5rem+env(safe-area-inset-top)+var(--head-h,0px)+1rem)]`}
+      className={cx(
+        "space-y-4 outline-none",
+        "scroll-mt-[calc(3.5rem+env(safe-area-inset-top)+1rem)]",
+        "lg:scroll-mt-[calc(3.5rem+env(safe-area-inset-top)+var(--head-h,0px)+1rem)]"
+      )}
       aria-label={t("mouthTitle")}
     >
       <div>
-        {!embedded && <h3 className="font-semibold">{t("mouthTitle")}</h3>}
-        <p className={`text-xs leading-relaxed text-gray-500 dark:text-gray-400 ${embedded ? "" : "mt-1"}`}>
-          {t("mouthHint")}
-        </p>
+        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t("mouthHint")}</p>
       </div>
 
       {!human && avatar.kind === "photo" && (
@@ -314,31 +333,21 @@ export function MouthPanel({
       )}
 
       <div
-        className={`grid gap-2 ${choices.length === 1 ? "grid-cols-1" : "grid-cols-2"} ${
-          !human && avatar.kind === "photo" ? "hidden" : ""
-        }`}
+        className={cx(
+          "grid gap-2",
+          choices.length === 1 ? "grid-cols-1" : "grid-cols-2",
+          !human && avatar.kind === "photo" && "hidden"
+        )}
         role="radiogroup"
         aria-label={t("mouthTitle")}
       >
         {choices.map((option) => (
-          <button
-            key={option}
-            type="button"
-            role="radio"
-            aria-checked={renderer === option}
-            disabled={busy}
-            onClick={() => renderer !== option && choose(option)}
-            className={`rounded-xl border px-3 py-2.5 text-start text-sm transition-colors ${
-              renderer === option
-                ? "border-brand-500 bg-brand-500/10 font-medium"
-                : "border-black/10 hover:border-black/25 dark:border-white/10 dark:hover:border-white/25"
-            }`}
-          >
+          <ChoiceCard key={option} selected={renderer === option} disabled={busy} {...rendererRadio(option)}>
             {t(option === "classic" ? "mouthClassic" : "mouthContinuous")}
             <span className="mt-0.5 block text-xs font-normal text-gray-500">
               {t(option === "classic" ? "mouthClassicHint" : "mouthContinuousHint")}
             </span>
-          </button>
+          </ChoiceCard>
         ))}
       </div>
 
@@ -382,29 +391,17 @@ export function MouthPanel({
                       <span id="mouth-compare-label" className="text-xs font-medium text-gray-600 dark:text-gray-300">
                         {t("mouthCompare")}
                       </span>
-                      <div
-                        role="radiogroup"
-                        aria-labelledby="mouth-compare-label"
-                        aria-describedby="mouth-compare-hint"
-                        className="inline-flex rounded-lg border border-black/10 bg-white p-0.5 dark:border-white/10 dark:bg-panel"
-                      >
-                        {MOTION_CHOICES.map((choice) => (
-                          <button
-                            key={choice}
-                            type="button"
-                            role="radio"
-                            aria-checked={motion === choice}
-                            onClick={() => motion !== choice && onMotion(choice)}
-                            className={`min-h-11 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
-                              motion === choice
-                                ? "bg-brand-600 text-white"
-                                : "text-gray-600 hover:bg-black/[0.04] dark:text-gray-300 dark:hover:bg-white/[0.06]"
-                            }`}
-                          >
-                            {t(`mouthCompare_${choice}`)}
-                          </button>
-                        ))}
-                      </div>
+                      <SegmentedControl
+                        look="pill"
+                        labelledBy="mouth-compare-label"
+                        describedBy="mouth-compare-hint"
+                        options={MOTION_CHOICES.map((choice) => ({
+                          value: choice,
+                          label: t(`mouthCompare_${choice}`),
+                        }))}
+                        value={motion}
+                        onChange={(choice) => motion !== choice && onMotion(choice)}
+                      />
                     </div>
                     <p id="mouth-compare-hint" className="mt-1.5 text-xs leading-relaxed text-gray-500">
                       {t("mouthCompareHint")}
@@ -445,9 +442,17 @@ export function MouthPanel({
                       asked for and runs (up to a minute): a disabled button
                       drops the keyboard's focus to the page, and the next
                       Tab would start from the top. */}
-                  <button
-                    type="button"
-                    className="btn-secondary min-h-11 max-w-full text-start aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    className="max-w-full text-start aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+                    icon={
+                      starting || working ? (
+                        <Spinner className="h-4 w-4 shrink-0" />
+                      ) : (
+                        <Icon name="sparkles" className="h-4 w-4 shrink-0" />
+                      )
+                    }
                     disabled={busy}
                     aria-disabled={starting || working}
                     onClick={() => {
@@ -455,13 +460,8 @@ export function MouthPanel({
                     }}
                     aria-describedby="mouth-kit-hint"
                   >
-                    {starting || working ? (
-                      <Spinner className="h-4 w-4 shrink-0" />
-                    ) : (
-                      <Icon name="sparkles" className="h-4 w-4 shrink-0" />
-                    )}
                     {t(actionKey)}
-                  </button>
+                  </Button>
                   <p id="mouth-kit-hint" className="mt-1.5 text-xs leading-relaxed text-gray-500">
                     {t(ownTeeth ? "mouthKitHintShapes" : "mouthKitHint")}
                   </p>
@@ -481,38 +481,36 @@ export function MouthPanel({
                     )}
                   </p>
                   {count && <ShapeTicks count={count} />}
-                  <ProgressBar fraction={running.progress?.fraction ?? null} label={progressText} />
+                  <JobProgressBar fraction={running.progress?.fraction ?? null} label={progressText} />
                 </div>
               )}
-              <div className={`flex flex-wrap gap-2 ${canMakeKit || running ? "mt-2.5" : ""}`}>
-                <input
+              <div className={cx("flex flex-wrap gap-2", (canMakeKit || running) && "mt-2.5")}>
+                <FileInput
                   ref={fileRef}
-                  type="file"
                   accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
                   onChange={(event) => {
                     upload(event.target.files?.[0]);
                     event.target.value = "";
                   }}
                 />
-                <button
-                  type="button"
-                  className="btn-secondary min-h-11"
-                  disabled={busy || working}
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  loading={busy}
+                  disabled={working}
                   onClick={() => fileRef.current?.click()}
                 >
-                  {busy ? <Spinner className="h-4 w-4" /> : null}
                   {t(ownTeeth ? "mouthPhotoReplace" : "mouthPhotoAdd")}
-                </button>
+                </Button>
                 {hasPhoto && (
-                  <button
-                    type="button"
-                    className="btn-secondary min-h-11"
+                  <Button
+                    variant="secondary"
+                    size="lg"
                     disabled={busy || working}
                     onClick={() => void run(() => api.delete(`${base}/mouth-photo`), "upload")}
                   >
                     {t("mouthPhotoRemove")}
-                  </button>
+                  </Button>
                 )}
               </div>
               {teethError && (
@@ -523,15 +521,9 @@ export function MouthPanel({
               {promptPublish && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300/70 p-2.5 dark:border-amber-500/40">
                   <p className="min-w-0 flex-1 text-xs leading-relaxed text-gray-700 dark:text-gray-200">{madeText}</p>
-                  <button
-                    type="button"
-                    className="btn-primary min-h-11"
-                    disabled={publishing || busy || working}
-                    onClick={() => void publish()}
-                  >
-                    {publishing ? <Spinner className="h-4 w-4" /> : null}
+                  <Button size="lg" loading={publishing} disabled={busy || working} onClick={() => void publish()}>
                     {t("publish")}
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -543,30 +535,23 @@ export function MouthPanel({
           {SLIDERS.map((key) => {
             const [min, max, step] = PROFILE_LIMITS[key];
             return (
-              <div key={key}>
-                <label className="label flex justify-between gap-2" htmlFor={`mouth-${key}`}>
-                  <span>{t(LABELS[key])}</span>
-                  <span className="font-mono tabular-nums">{profile[key].toFixed(2)}</span>
-                </label>
-                <input
-                  id={`mouth-${key}`}
-                  type="range"
-                  className="w-full accent-orange-500"
-                  min={min}
-                  max={max}
-                  step={step}
-                  value={profile[key]}
-                  onChange={(event) => slide(key, Number(event.target.value))}
-                  // Saved on release, not per tick: each save is a draft edit.
-                  onPointerUp={() => void save(renderer, profile)}
-                  onKeyUp={() => void save(renderer, profile)}
-                />
-              </div>
+              <Slider
+                key={key}
+                id={`mouth-${key}`}
+                label={t(LABELS[key])}
+                min={min}
+                max={max}
+                step={step}
+                value={profile[key]}
+                onChange={(value) => slide(key, value)}
+                // Saved on release, not per tick: each save is a draft edit.
+                onPointerUp={() => void save(renderer, profile)}
+                onKeyUp={() => void save(renderer, profile)}
+              />
             );
           })}
-          <button
-            type="button"
-            className="btn-secondary"
+          <Button
+            variant="secondary"
             disabled={busy}
             onClick={() => {
               const reset = { ...DEFAULT_REFERENCE_PROFILE };
@@ -576,7 +561,7 @@ export function MouthPanel({
             }}
           >
             {t("mouthReset")}
-          </button>
+          </Button>
         </>
       )}
       {error && (
@@ -589,19 +574,12 @@ export function MouthPanel({
   );
 }
 
-/** Where a part of the mouth comes from, as a chip: this photo's (made by
+/** Where a part of the mouth comes from, as a badge: this photo's (made by
  * AI, with its mark; or the owner's own photo), or standard. */
-function SourceChip({ made, ai = made, children }: { made: boolean; ai?: boolean; children: React.ReactNode }) {
+function SourceChip({ made, ai = made, children }: { made: boolean; ai?: boolean; children: ReactNode }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-        made
-          ? "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-          : "bg-gray-200 text-gray-700 dark:bg-white/10 dark:text-gray-200"
-      }`}
-    >
-      {ai && <Icon name="sparkles" className="h-3.5 w-3.5" />}
+    <Badge tone={made ? "brand" : "muted"} icon={ai ? "sparkles" : undefined}>
       {children}
-    </span>
+    </Badge>
   );
 }

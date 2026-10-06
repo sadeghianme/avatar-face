@@ -64,10 +64,24 @@ export default tseslint.config(
     rules: { "no-restricted-syntax": "off" },
   },
   {
-    // Drawing surfaces: a point you drag on a face is a positioned
-    // <button>, not a kit button (docs/frontend-ui.md, "Exceptions").
+    // Drawing surfaces (docs/frontend-ui.md, "Exceptions"): a point you
+    // drag on a face is a positioned <button>, not a kit button.
     files: ["src/features/avatars/components/MarkCanvas.tsx"],
     rules: { "no-restricted-syntax": "off" },
+  },
+  {
+    // Keyboard surfaces: the crop frame, the face-marking canvas and the
+    // framing's position pad take the focus and the arrow keys themselves
+    // (role="application" / "group"), which jsx-a11y cannot know.
+    files: [
+      "src/features/avatars/components/MarkCanvas.tsx",
+      "src/features/avatars/components/CropBox.tsx",
+      "src/features/avatars/components/PanPad.tsx",
+    ],
+    rules: {
+      "jsx-a11y/no-noninteractive-element-interactions": "off",
+      "jsx-a11y/no-noninteractive-tabindex": "off",
+    },
   },
   {
     // Tests run under node --test, which strips their types; tsconfig

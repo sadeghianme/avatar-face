@@ -1,7 +1,8 @@
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Icon } from "@/components/ui/Icon";
+import { Button } from "@/components/ui/Button";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
 /**
  * The crop interaction: an image, a rectangle, handles, aspect presets.
@@ -351,33 +352,22 @@ export function CropBox({
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <div className="flex overflow-hidden rounded-lg border border-black/10 dark:border-white/15">
-          {ASPECTS.map((a) => (
-            <button
-              key={a.key}
-              type="button"
-              aria-pressed={ratio === a.ratio}
-              onClick={() => chooseRatio(a.ratio)}
-              className={`px-2.5 py-1.5 text-[12.5px] font-medium transition-colors ${
-                ratio === a.ratio
-                  ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                  : "text-gray-500 hover:bg-black/5 dark:hover:bg-white/10"
-              }`}
-            >
-              {t(a.key)}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          size="sm"
+          label={t("cropRatio")}
+          options={ASPECTS.map((a) => ({ value: a.key, label: t(a.key) }))}
+          value={ASPECTS.find((a) => a.ratio === ratio)?.key ?? "cropFree"}
+          onChange={(key) => chooseRatio(ASPECTS.find((a) => a.key === key)?.ratio ?? null)}
+        />
         <span className="font-mono text-[12px] text-gray-400">{outPx}</span>
         {onApply && onCancel && (
           <div className="ms-auto flex gap-2">
-            <button className="btn-secondary" onClick={onCancel} disabled={busy}>
+            <Button variant="secondary" onClick={onCancel} disabled={busy}>
               {t("cancel")}
-            </button>
-            <button className="btn-primary" disabled={busy || tooSmall} onClick={() => onApply(rect)}>
-              <Icon name="crop" className="me-1.5 inline h-4 w-4" />
+            </Button>
+            <Button icon="crop" disabled={busy || tooSmall} onClick={() => onApply(rect)}>
               {busy ? t("loading") : t("cropApply")}
-            </button>
+            </Button>
           </div>
         )}
       </div>
