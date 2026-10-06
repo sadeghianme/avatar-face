@@ -99,6 +99,17 @@
       linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
     background-size: var(--grid-size) var(--grid-size);
   }
+  /* The lab's Photoface HD stage: a warm light over a cool floor. */
+  .backdrop-hd {
+    background-image:
+      radial-gradient(circle at 50% 30%, theme(colors.brand.500 / 16%), transparent 58%),
+      linear-gradient(to bottom, theme(colors.slate.50), theme(colors.slate.200));
+  }
+  .dark .backdrop-hd {
+    background-image:
+      radial-gradient(circle at 50% 30%, theme(colors.brand.500 / 18%), transparent 58%),
+      linear-gradient(to bottom, theme(colors.neutral.800), theme(colors.gray.900));
+  }
 
   /* ---- The UI kit's looks (components/ui; docs/frontend-ui.md) ----------
      Classes, not utility strings in the components: a utility passed as a

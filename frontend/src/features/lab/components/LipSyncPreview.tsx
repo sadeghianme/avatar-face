@@ -96,7 +96,7 @@ export function LipSyncPreview({
       onEngine(null);
       engine?.destroy();
     };
-  }, [rigUrl, imageUrl, framing, background, body, head, clock, onEngine, mouthExtension, pose, still]);
+  }, [rigUrl, imageUrl, framing, background, body, head, clock, onEngine, mouthExtension, pose, still, resolution]);
 
   return (
     <div className="relative aspect-square overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-800">

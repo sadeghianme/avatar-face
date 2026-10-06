@@ -5,16 +5,25 @@ import { REFERENCE_POSES } from "@liveface/embed/mouth/reference-mouth-model";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Button, type ButtonProps } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import type { ReferenceUpload } from "@/features/lab/api";
 import { LipSyncPreview } from "@/features/lab/components/LipSyncPreview";
+import { PlaybackButtons, ScriptField } from "@/features/lab/components/PlaybackControls";
 import { ReferenceFitControls } from "@/features/lab/components/ReferenceFitControls";
-import { ReferencePhotoUpload, type ReferenceUpload } from "@/features/lab/components/ReferencePhotoUpload";
+import { ReferencePhotoUpload } from "@/features/lab/components/ReferencePhotoUpload";
 import { ReferenceRecording } from "@/features/lab/components/ReferenceRecording";
 import { SpeechStreamStatus } from "@/features/lab/components/SpeechStreamStatus";
 import { useLipSyncComparison } from "@/features/lab/hooks/useLipSyncComparison";
 import { useReferenceProfile } from "@/features/lab/hooks/useReferenceProfile";
-import { REFERENCE_AVATAR, REFERENCE_AVATAR_PROFILE } from "@/features/lab/reference-avatar";
+import { REFERENCE_AVATAR, REFERENCE_AVATAR_PROFILE, REFERENCE_SCRIPT_ID } from "@/features/lab/reference-avatar";
 import { defaultVoiceSelection, VoicePicker } from "@/features/voices";
 import type { Avatar } from "@/lib/types";
+
+/** One of a set of choices shown as buttons: the chosen one filled. */
+function Toggle({ on, ...props }: ButtonProps & { on: boolean }) {
+  return <Button variant={on ? "primary" : "secondary"} aria-pressed={on} {...props} />;
+}
 
 const POSE_LABELS: Record<string, string> = {
   rest: "referenceRest",
@@ -94,7 +103,7 @@ export function ReferenceAvatarWorkspace({ avatar, orgId }: { avatar: Avatar; or
   return (
     <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="space-y-5">
-        <section className="card space-y-4" aria-label={t("referencePoseTitle")}>
+        <Card as="section" className="space-y-4" aria-label={t("referencePoseTitle")}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="font-semibold">{t("referencePoseTitle")}</h3>
             <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 dark:bg-brand-950 dark:text-brand-300">
@@ -102,58 +111,42 @@ export function ReferenceAvatarWorkspace({ avatar, orgId }: { avatar: Avatar; or
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              className={photographic ? "btn-primary" : "btn-secondary"}
-              aria-pressed={photographic}
+            <Toggle
+              on={photographic}
               onClick={() => {
                 freeze("rest");
                 setPhotographic(true);
               }}
             >
               {t("referencePhotographic")}
-            </button>
-            <button
-              className={!photographic ? "btn-primary" : "btn-secondary"}
-              aria-pressed={!photographic}
+            </Toggle>
+            <Toggle
+              on={!photographic}
               onClick={() => {
                 freeze("rest");
                 setPhotographic(false);
               }}
             >
               {t("referenceGeometry")}
-            </button>
+            </Toggle>
           </div>
           <div className="flex flex-wrap gap-2">
             {Object.entries(POSE_LABELS).map(([key, label]) => (
-              <button
-                key={key}
-                disabled={!ready}
-                aria-pressed={pose === key}
-                className={pose === key ? "btn-primary" : "btn-secondary"}
-                onClick={() => freeze(key)}
-              >
+              <Toggle key={key} on={pose === key} disabled={!ready} onClick={() => freeze(key)}>
                 {t(label)}
-              </button>
+              </Toggle>
             ))}
           </div>
           <p className="text-xs leading-relaxed text-gray-500">{t("referencePoseHint")}</p>
           <div className="flex gap-2">
-            <button
-              className={mouthOnly ? "btn-secondary" : "btn-primary"}
-              aria-pressed={!mouthOnly}
-              onClick={() => setMouthOnly(false)}
-            >
+            <Toggle on={!mouthOnly} onClick={() => setMouthOnly(false)}>
               {t("referencePortraitView")}
-            </button>
-            <button
-              className={mouthOnly ? "btn-primary" : "btn-secondary"}
-              aria-pressed={mouthOnly}
-              onClick={() => setMouthOnly(true)}
-            >
+            </Toggle>
+            <Toggle on={mouthOnly} onClick={() => setMouthOnly(true)}>
               {t("referenceMouthView")}
-            </button>
+            </Toggle>
           </div>
-        </section>
+        </Card>
         <section ref={previews} className="grid gap-4 md:grid-cols-2" aria-label={t("referenceCompare")}>
           <figure className="card p-3">
             <figcaption className="mb-3 px-1">
@@ -205,7 +198,7 @@ export function ReferenceAvatarWorkspace({ avatar, orgId }: { avatar: Avatar; or
             )}
           </figure>
         </section>
-        <section className="card space-y-4">
+        <Card as="section" className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-semibold">{t("referenceSpeech")}</h3>
             <span className="font-mono text-xs text-gray-500">
@@ -219,29 +212,7 @@ export function ReferenceAvatarWorkspace({ avatar, orgId }: { avatar: Avatar; or
             max={comparison.duration || 1}
             value={comparison.position}
           />
-          <div className="flex flex-wrap gap-2">
-            <button
-              className="btn-secondary"
-              disabled={!comparison.payload || !ready || comparison.busy}
-              onClick={replay}
-            >
-              {t("lipSyncReplay")}
-            </button>
-            <button
-              className="btn-secondary"
-              disabled={!comparison.playing}
-              onClick={() => void comparison.togglePause()}
-            >
-              {t(comparison.paused ? "lipSyncResume" : "lipSyncPause")}
-            </button>
-            <button
-              className="btn-secondary"
-              disabled={!comparison.playing && !comparison.busy}
-              onClick={() => freeze("rest")}
-            >
-              {t("stop")}
-            </button>
-          </div>
+          <PlaybackButtons comparison={comparison} ready={ready} onReplay={replay} onStop={() => freeze("rest")} />
           <p role="status" className="text-xs leading-relaxed text-gray-500">
             {t(
               !comparison.payload
@@ -260,8 +231,8 @@ export function ReferenceAvatarWorkspace({ avatar, orgId }: { avatar: Avatar; or
             photographic={photographic}
             mouthOnly={mouthOnly}
           />
-        </section>
-        <section className="card space-y-3">
+        </Card>
+        <Card as="section" className="space-y-3">
           <h3 className="font-semibold">{t("referenceAcceptance")}</h3>
           <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed text-gray-500">
             <li>{t("referenceCheckClosure")}</li>
@@ -271,7 +242,7 @@ export function ReferenceAvatarWorkspace({ avatar, orgId }: { avatar: Avatar; or
           <p className="border-t border-black/10 pt-3 text-xs leading-relaxed text-gray-500 dark:border-white/10">
             {t(photographic ? "referencePhotographicLimit" : "referenceLimit")}
           </p>
-        </section>
+        </Card>
       </div>
       <aside className="space-y-5">
         {avatar.quality_note && (
@@ -299,22 +270,22 @@ export function ReferenceAvatarWorkspace({ avatar, orgId }: { avatar: Avatar; or
           </p>
         )}
         {oralPhoto && (
-          <button
-            className="btn-secondary"
+          <Button
+            variant="secondary"
             onClick={() => {
               freeze("rest");
               setOralPhoto(null);
             }}
           >
             {t("referenceRemoveMouth")}
-          </button>
+          </Button>
         )}
         <ReferenceFitControls
           {...draft}
           continuous={photographic}
           photographic={photographic && (authored || Boolean(oralPhoto))}
         />
-        <section id="reference-speech" className="card scroll-mt-6 space-y-4">
+        <Card as="section" id="reference-speech" className="scroll-mt-6 space-y-4">
           <h3 className="font-semibold">{t("lipSyncTestTitle")}</h3>
           <SpeechStreamStatus {...comparison} />
           <VoicePicker
@@ -325,32 +296,20 @@ export function ReferenceAvatarWorkspace({ avatar, orgId }: { avatar: Avatar; or
             }}
           />
           {!supported && <p className="text-sm text-amber-700 dark:text-amber-300">{t("lipSyncServerOnly")}</p>}
-          <div>
-            <label className="label" htmlFor="reference-script">
-              {t("lipSyncScript")}
-            </label>
-            <textarea
-              id="reference-script"
-              className="input min-h-40"
-              maxLength={600}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-            />
-            <p className="mt-1 text-right text-xs text-gray-500">{text.length} / 600</p>
-          </div>
-          <button
-            className="btn-primary w-full"
+          <ScriptField id={REFERENCE_SCRIPT_ID} text={text} onChange={setText} className="min-h-40" />
+          <Button
+            fullWidth
             disabled={!ready || !supported || !text.trim() || comparison.busy || comparison.playing}
             onClick={generate}
           >
             {t(comparison.busy ? "lipSyncPreparing" : "lipSyncGenerate")}
-          </button>
+          </Button>
           {comparison.error && (
             <p role="alert" className="field-error">
               {comparison.error}
             </p>
           )}
-        </section>
+        </Card>
       </aside>
     </div>
   );

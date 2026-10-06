@@ -5,6 +5,8 @@ import type { Avatar } from "@/lib/types";
 /** Initial fitting pass for the bundled portrait, still subject to review. */
 export const REFERENCE_AVATAR_PROFILE = { ...DEFAULT_REFERENCE_PROFILE, teethY: 0.016 };
 export const REFERENCE_RENDERER_VERSION = "lip-coverage-v1";
+/** The reference lab's script box: "Test this photo" jumps to it. */
+export const REFERENCE_SCRIPT_ID = "reference-script";
 
 /** Bundled fictional sample, not a saved customer avatar or database record. */
 export const REFERENCE_AVATAR: Avatar = {

@@ -1,6 +1,8 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/ButtonLink";
 import { ComparisonRecorder } from "@/features/lab/comparison-recorder";
 import { REFERENCE_RENDERER_VERSION } from "@/features/lab/reference-avatar";
 
@@ -80,20 +82,20 @@ export function ReferenceRecording({
     <div className="space-y-3 border-t border-black/10 pt-4 dark:border-white/10">
       <p className="text-xs leading-relaxed text-gray-500">{t("referenceRecordHint")}</p>
       <div className="flex flex-wrap gap-2">
-        <button className="btn-secondary" disabled={!enabled || recording} onClick={() => void capture()}>
+        <Button variant="secondary" disabled={!enabled || recording} onClick={() => void capture()}>
           {t(recording ? "referenceRecording" : "referenceRecord")}
-        </button>
+        </Button>
         {result && (
-          <a
-            className="btn-primary"
-            href={result.url}
-            download={`liveface-comparison-${result.version}.${result.extension}`}
-          >
+          <ButtonLink href={result.url} download={`liveface-comparison-${result.version}.${result.extension}`}>
             {t("referenceDownloadVideo")}
-          </a>
+          </ButtonLink>
         )}
       </div>
       {result && (
+        // A recording of the two previews made a moment ago, for the
+        // tester's own review: its speech is the script typed beside it,
+        // and there is no caption track to give it.
+        // eslint-disable-next-line jsx-a11y/media-has-caption
         <video
           controls
           playsInline

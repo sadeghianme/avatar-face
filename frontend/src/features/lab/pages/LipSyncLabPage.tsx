@@ -1,12 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Field } from "@/components/ui/Field";
+import { Select } from "@/components/ui/Select";
+import { useAvatar, useAvatars } from "@/features/avatars";
+import type { ReferenceUpload } from "@/features/lab/api";
 import { LipSyncWorkspace } from "@/features/lab/components/LipSyncWorkspace";
 import { ReferenceAvatarWorkspace } from "@/features/lab/components/ReferenceAvatarWorkspace";
-import { ReferencePhotoUpload, type ReferenceUpload } from "@/features/lab/components/ReferencePhotoUpload";
+import { ReferencePhotoUpload } from "@/features/lab/components/ReferencePhotoUpload";
 import { REFERENCE_AVATAR } from "@/features/lab/reference-avatar";
-import { api } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
 import { useOrg } from "@/providers/org";
 
@@ -27,11 +29,7 @@ export function LipSyncLabPage({ reference = false }: { reference?: boolean }) {
           quality_note: testPhoto.quality_note,
         }
       : null;
-  const avatars = useQuery({
-    queryKey: ["avatars", current?.id],
-    queryFn: () => api.get<Avatar[]>(`/orgs/${current!.id}/avatars`),
-    enabled: Boolean(current),
-  });
+  const avatars = useAvatars(current?.id);
   const saved = (avatars.data ?? []).filter((a) => a.kind === "photo" && a.status === "ready");
   const eligible = reference
     ? [...(uploaded ? [uploaded] : []), { ...REFERENCE_AVATAR, name: t("referenceSample") }, ...saved]
@@ -39,11 +37,7 @@ export function LipSyncLabPage({ reference = false }: { reference?: boolean }) {
   const activeId = eligible.some((a) => a.id === selected) ? selected : (eligible[0]?.id ?? "");
   const isSample = reference && activeId === REFERENCE_AVATAR.id;
   const isUpload = reference && activeId === uploaded?.id;
-  const detail = useQuery({
-    queryKey: ["avatar", current?.id, activeId],
-    queryFn: () => api.get<Avatar>(`/orgs/${current!.id}/avatars/${activeId}`),
-    enabled: Boolean(current && activeId && !isSample && !isUpload),
-  });
+  const detail = useAvatar(current?.id, activeId, { enabled: !isSample && !isUpload });
   const active = isSample ? { ...REFERENCE_AVATAR, name: t("referenceSample") } : isUpload ? uploaded : detail.data;
   return (
     <div className="space-y-6">
@@ -55,25 +49,16 @@ export function LipSyncLabPage({ reference = false }: { reference?: boolean }) {
             {t(reference ? "referenceSubtitle" : "lipSyncSubtitle")}
           </p>
         </div>
-        <div className="min-w-56">
-          <label className="label" htmlFor="lip-sync-avatar">
-            {t("photofaceHDChoose")}
-          </label>
-          <select
-            id="lip-sync-avatar"
-            className="input"
-            value={activeId}
-            onChange={(e) => setSelected(e.target.value)}
-            disabled={!eligible.length}
-          >
+        <Field id="lip-sync-avatar" label={t("photofaceHDChoose")} className="min-w-56">
+          <Select value={activeId} onChange={(e) => setSelected(e.target.value)} disabled={!eligible.length}>
             {!eligible.length && <option value="">{t("photofaceHDNoAvatars")}</option>}
             {eligible.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
-          </select>
-        </div>
+          </Select>
+        </Field>
       </header>
       {reference && current && (
         <ReferencePhotoUpload

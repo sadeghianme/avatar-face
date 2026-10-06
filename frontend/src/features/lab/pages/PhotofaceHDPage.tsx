@@ -1,17 +1,24 @@
 import type { CuePlayer, SpeechPlayer } from "@liveface/embed";
-import { useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Card } from "@/components/ui/Card";
+import { Field } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
-import { AvatarPreview } from "@/features/avatars";
+import { Select } from "@/components/ui/Select";
+import { AvatarPreview, useAvatar, useAvatars } from "@/features/avatars";
 import { PhotoFaceHDPreview } from "@/features/lab/components/PhotoFaceHDPreview";
 import { SpeakPanel } from "@/features/voices";
-import { api } from "@/lib/api";
-import type { Avatar } from "@/lib/types";
+import { cx } from "@/lib/cx";
 import { useOrg } from "@/providers/org";
 
 type HDEngine = SpeechPlayer & CuePlayer & { destroy(): void };
+
+/** "Alpha", beside the title. */
+const ALPHA_TAG = cx(
+  "rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.12em]",
+  "text-brand-700 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300"
+);
 
 /**
  * One Speak press drives BOTH renderers, or the comparison is worthless:
@@ -58,20 +65,11 @@ export function PhotofaceHDPage() {
   // Speak drives both when both exist; the HD engine alone until then.
   const engine = hdEngine && stableEngine ? fanout(hdEngine, stableEngine) : hdEngine;
 
-  const { data: avatars = [], isLoading } = useQuery({
-    queryKey: ["avatars", current?.id],
-    queryFn: () => api.get<Avatar[]>(`/orgs/${current!.id}/avatars`),
-    enabled: Boolean(current),
-  });
+  const { data: avatars = [], isLoading } = useAvatars(current?.id);
   const eligible = avatars.filter((avatar) => avatar.kind === "photo" && avatar.status === "ready");
   const activeId = eligible.some((avatar) => avatar.id === selectedId) ? selectedId : (eligible[0]?.id ?? "");
 
-  const { data: avatar, isFetching } = useQuery({
-    queryKey: ["avatar", current?.id, activeId],
-    queryFn: () => api.get<Avatar>(`/orgs/${current!.id}/avatars/${activeId}`),
-    enabled: Boolean(current && activeId),
-    staleTime: 60_000,
-  });
+  const { data: avatar, isFetching } = useAvatar(current?.id, activeId, { staleTime: 60_000 });
 
   return (
     <div>
@@ -79,9 +77,7 @@ export function PhotofaceHDPage() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-[32px] font-semibold tracking-[-0.03em] sm:text-[38px]">{t("photofaceHD")}</h1>
-            <span className="rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.12em] text-brand-700 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300">
-              {t("photofaceHDAlpha")}
-            </span>
+            <span className={ALPHA_TAG}>{t("photofaceHDAlpha")}</span>
           </div>
           <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-gray-500 dark:text-gray-400">
             {t("photofaceHDSubtitle")}
@@ -90,7 +86,7 @@ export function PhotofaceHDPage() {
       </div>
 
       <div className="mt-8 grid items-start gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.7fr)]">
-        <section className="card p-3 sm:p-4" aria-label={t("photofaceHDPreview")}>
+        <Card as="section" className="p-3 sm:p-4" aria-label={t("photofaceHDPreview")}>
           {avatar?.rig_url && avatar.image_url ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <figure>
@@ -125,37 +121,34 @@ export function PhotofaceHDPage() {
               </div>
             </div>
           )}
-        </section>
+        </Card>
 
         <aside className="space-y-5">
-          <div className="card">
-            <label className="label" htmlFor="photoface-avatar">
-              {t("photofaceHDChoose")}
-            </label>
-            <select
-              id="photoface-avatar"
-              className="input"
-              value={activeId}
-              disabled={!eligible.length}
-              onChange={(event) => {
-                setHdEngine(null);
-                setStableEngine(null);
-                setSelectedId(event.target.value);
-              }}
-            >
-              {!eligible.length ? <option value="">{t("photofaceHDNoAvatars")}</option> : null}
-              {eligible.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-            <p className="mt-2 text-xs leading-relaxed text-gray-400">{t("photofaceHDChooseHint")}</p>
-          </div>
+          <Card>
+            <Field id="photoface-avatar" label={t("photofaceHDChoose")}>
+              <Select
+                value={activeId}
+                disabled={!eligible.length}
+                onChange={(event) => {
+                  setHdEngine(null);
+                  setStableEngine(null);
+                  setSelectedId(event.target.value);
+                }}
+              >
+                {!eligible.length ? <option value="">{t("photofaceHDNoAvatars")}</option> : null}
+                {eligible.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-2 text-xs leading-relaxed text-gray-400">{t("photofaceHDChooseHint")}</p>
+            </Field>
+          </Card>
 
           {current ? <SpeakPanel engine={engine} orgId={current.id} /> : null}
 
-          <div className="card">
+          <Card>
             <h2 className="text-sm font-semibold">{t("photofaceHDInside")}</h2>
             <ul className="mt-4 space-y-3 text-[13px] text-gray-600 dark:text-gray-300">
               {["photofaceHDDepth", "photofaceHDLayers", "photofaceHDReuse"].map((key) => (
@@ -170,7 +163,7 @@ export function PhotofaceHDPage() {
             <p className="mt-4 border-t border-black/[0.07] pt-4 text-xs leading-relaxed text-gray-400 dark:border-white/[0.07]">
               {t("photofaceHDIsolation")}
             </p>
-          </div>
+          </Card>
         </aside>
       </div>
     </div>

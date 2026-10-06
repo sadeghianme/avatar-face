@@ -1,16 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { api } from "@/lib/api";
-
-export interface ReferenceUpload {
-  id: string;
-  image_url: string;
-  rig_url: string;
-  quality_note: string | null;
-  retention_hours: number;
-  name: string;
-}
+import { Button } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/ButtonLink";
+import { FileInput } from "@/components/ui/FileInput";
+import { type ReferenceUpload, uploadReferencePhoto } from "@/features/lab/api";
+import { REFERENCE_SCRIPT_ID } from "@/features/lab/reference-avatar";
+import { cx } from "@/lib/cx";
 
 /** A temporary lab upload, using existing signed storage and face rigging.
  * It cannot publish an avatar or send an image to an external AI provider. */
@@ -67,13 +63,7 @@ export function ReferencePhotoUpload({
     request.current = abort;
     const timeout = window.setTimeout(() => abort.abort(), 90_000);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const next = await api.postForm<ReferenceUpload>(
-        `/orgs/${orgId}/lab/reference/preview?purpose=${purpose}`,
-        form,
-        abort.signal
-      );
+      const next = await uploadReferencePhoto(orgId, purpose, file, abort.signal);
       if (alive.current)
         onUploaded({ ...next, name: file.name.replace(/\.[^.]+$/, "").slice(0, 128) || t("referenceYourPhoto") });
     } catch (reason) {
@@ -93,7 +83,10 @@ export function ReferencePhotoUpload({
   const thumbnail = busy ? preview : (selectedPhoto?.image_url ?? (purpose === "mouth" ? preview : null));
   return (
     <section
-      className={`rounded-xl border border-dashed p-4 ${dragging ? "border-brand-500 bg-brand-50 dark:bg-brand-950" : "border-gray-300 dark:border-gray-700"}`}
+      className={cx(
+        "rounded-xl border border-dashed p-4",
+        dragging ? "border-brand-500 bg-brand-50 dark:bg-brand-950" : "border-gray-300 dark:border-gray-700"
+      )}
       aria-label={t(purpose === "portrait" ? "referenceUploadTitle" : "referenceMouthUploadTitle")}
       onDragOver={(e) => {
         e.preventDefault();
@@ -118,7 +111,7 @@ export function ReferencePhotoUpload({
             {t(purpose === "portrait" ? "referenceUploadHint" : "referenceMouthUploadHint")}
           </p>
         </div>
-        <button type="button" className="btn-primary" disabled={busy} onClick={() => input.current?.click()}>
+        <Button disabled={busy} onClick={() => input.current?.click()}>
           {t(
             busy
               ? "referenceUploadBusy"
@@ -128,12 +121,10 @@ export function ReferencePhotoUpload({
                   : "referenceUploadButton"
                 : "referenceMouthUploadButton"
           )}
-        </button>
+        </Button>
       </div>
-      <input
+      <FileInput
         ref={input}
-        className="hidden"
-        type="file"
         accept="image/jpeg,image/png,image/webp"
         aria-label={t(purpose === "portrait" ? "referenceUploadButton" : "referenceMouthUploadButton")}
         disabled={busy}
@@ -155,17 +146,13 @@ export function ReferencePhotoUpload({
             <p className="text-xs text-amber-700 dark:text-amber-300">{selectedPhoto.quality_note}</p>
           )}
           <div className="flex flex-wrap gap-2">
-            <a
-              className="btn-primary"
-              href="#reference-speech"
-              onClick={() => document.getElementById("reference-script")?.focus()}
-            >
+            <ButtonLink href="#reference-speech" onClick={() => document.getElementById(REFERENCE_SCRIPT_ID)?.focus()}>
               {t("referenceTestPhoto")}
-            </a>
+            </ButtonLink>
             {onUseSample && (
-              <button type="button" className="btn-secondary" onClick={onUseSample}>
+              <Button variant="secondary" onClick={onUseSample}>
                 {t("referenceUseSample")}
-              </button>
+              </Button>
             )}
           </div>
         </div>

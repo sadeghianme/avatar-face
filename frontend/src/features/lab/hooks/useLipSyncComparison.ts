@@ -9,8 +9,8 @@ import {
 } from "@liveface/embed/speech-stream/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { streamLipSync, synthesizeLipSync } from "@/features/lab/api";
 import type { VoiceSelection } from "@/features/voices";
-import { api } from "@/lib/api";
 
 export function useLipSyncComparison(
   orgId: string,
@@ -39,18 +39,22 @@ export function useLipSyncComparison(
   const leadRef = useRef(lead);
   leadRef.current = lead;
   const clock = useCallback(() => stream.current?.readTime() ?? player.current?.readTime() ?? 0, []);
-  const stop = useCallback(() => {
+  /** Drop what is in flight: a later answer or packet of it plays nothing. */
+  const cancel = useCallback(() => {
     generation.current++;
     request.current?.abort();
     request.current = null;
     stream.current?.stop();
     stream.current = null;
+  }, []);
+  const stop = useCallback(() => {
+    cancel();
     player.current?.stop();
     setBusy(false);
     setPlaying(false);
     setPaused(false);
     setBuffering(false);
-  }, []);
+  }, [cancel]);
 
   useEffect(() => {
     setBusy(false);
@@ -62,15 +66,12 @@ export function useLipSyncComparison(
     next.leadMs = leadRef.current;
     player.current = next;
     return () => {
-      generation.current++;
-      request.current?.abort();
-      request.current = null;
-      stream.current?.stop();
-      stream.current = null;
+      cancel();
       next.destroy();
       if (player.current === next) player.current = null;
     };
-  }, [baseline, improved, orgId]);
+    // orgId: another organization's run must not finish into this one.
+  }, [baseline, improved, orgId, cancel]);
   useEffect(() => {
     if (player.current) player.current.leadMs = lead;
     if (stream.current) stream.current.leadMs = lead;
@@ -135,11 +136,7 @@ export function useLipSyncComparison(
       // Unsupported browsers/providers retain the tested full-recording path.
       if (voice.provider !== "kokoro" || typeof AudioContext === "undefined") {
         setMode("buffered_provider");
-        const next = await api.post<StreamedSpeech>(
-          `/orgs/${orgId}/lab/lip-sync/synthesize`,
-          { text, ...voice },
-          abort.signal
-        );
+        const next = await synthesizeLipSync(orgId, { text, ...voice }, abort.signal);
         if (token !== generation.current) return;
         window.clearTimeout(deadline);
         remember(next);
@@ -156,7 +153,7 @@ export function useLipSyncComparison(
       stream.current = transport;
       await transport.unlock();
       if (token !== generation.current) return;
-      const response = await api.stream(`/orgs/${orgId}/lab/lip-sync/stream`, { text, ...voice }, abort.signal);
+      const response = await streamLipSync(orgId, { text, ...voice }, abort.signal);
       if (!response.body || !response.headers.get("content-type")?.includes("application/x-ndjson"))
         throw new Error("Speech streaming is unavailable");
       const assembly = new SpeechAssembly();
