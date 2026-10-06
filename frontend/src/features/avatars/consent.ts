@@ -18,7 +18,7 @@
  * server remembers it (GET /consents/mine), and every step still checks
  * the id it is given, and the organization's switch.
  *
- * Framework-free with type-only imports, like creation.ts, so the rules are
+ * Framework-free, importing only types (as creation/ does), so the rules are
  * tested with `node --test`.
  */
 

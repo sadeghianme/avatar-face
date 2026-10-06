@@ -9,7 +9,7 @@
  * the AI made from the photo, why the others are the standard ones fitted
  * to the face, and whether its teeth photo became the avatar's.
  *
- * Framework-free with type-only imports, like creation.ts, so the rules are
+ * Framework-free, importing only types (as creation/ does), so the rules are
  * tested with `node --test`.
  */
 import type { CreationJob, DraftStore, Translate } from "@/features/avatars/creation";

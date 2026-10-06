@@ -3,7 +3,7 @@
  * language: `npm test` (node --test). A missing key renders as the key
  * itself ("adjustFix") and TypeScript cannot see it, since `t` takes any
  * string. Keys built at runtime (`adjustMode_${mode}`) are checked against
- * their code lists in creation.test.ts.
+ * their code lists in creation-strings.test.ts.
  *
  * Source and locales are read as text: importing a locale would climb out
  * of this feature, which the structure check forbids.

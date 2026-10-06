@@ -59,7 +59,7 @@ export interface LastPrepare {
   cut: boolean;
 }
 
-/** The creation fields this module reads beyond creation.ts's. */
+/** The creation fields this module reads beyond creation/types.ts's. */
 export type WizardCreation = Creation & {
   plan?: Plan | null;
   ai: Creation["ai"] & { prepare_rounds_left?: number; free_clears_left?: number; last_prepare?: LastPrepare | null };
