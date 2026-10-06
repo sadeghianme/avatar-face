@@ -22,6 +22,7 @@
  *   engine/scene.ts                the scene, the backdrop of a cut-out
  *   engine/frame-loop.ts           the frame loop (the 3D engine's too)
  *   engine/debug.ts                the debug mesh overlay
+ *   engine/debug-handle.ts         the console handle, when a page asks for it
  *   engine/seam.ts                 what the tests and the 3D bake pose and
  *                                  read; in no bundle
  *
@@ -34,6 +35,7 @@ import type { MouthExtension, MouthPose } from "./mouth-extension";
 import { DEFAULT_TUNING, ZERO_WEIGHTS, type BlendWeights, type Cue, type EngineTuning, type Rig } from "./types";
 import { emphasisBeats, utteranceMs } from "./engine/cues";
 import { drawDebugMesh } from "./engine/debug";
+import { NO_DEBUG_HANDLE, exposeDebugHandle } from "./engine/debug-handle";
 import { deformFace } from "./engine/deform";
 import { FrameLoop, FrameStep } from "./engine/frame-loop";
 import { validInnerRing, type Point } from "./engine/geometry";
@@ -57,6 +59,14 @@ export type { Scene, SceneBackground } from "./engine/scene";
 
 export interface EngineOptions {
   debugMesh?: boolean;
+  /**
+   * Put this engine on `globalThis.__liveface` for the console and for
+   * measurement scripts (the last engine made wins); `destroy()` takes it
+   * back. Off by default, so a customer's page gets no globals from the
+   * engine: the widget turns it on with `data-debug` on its script tag or
+   * `?liveface-debug` in the page's URL (engine/debug-handle.ts).
+   */
+  debug?: boolean;
   /** Optional mouth renderer (see mouth/). Omitted means the classic mouth. */
   mouthExtension?: MouthExtension;
   pose?: () => MouthPose | null;
@@ -93,6 +103,8 @@ export class AvatarEngine {
   /** StrictMode guard: async callbacks bail once destroyed. */
   private destroyed = false;
   private readonly frameStep = new FrameStep();
+  /** Takes the console handle back (EngineOptions.debug). */
+  private readonly releaseDebugHandle: () => void;
 
   debugMesh: boolean;
   /** Live animation parameters — mutate freely, applied next frame. */
@@ -177,8 +189,7 @@ export class AvatarEngine {
       this.tick(now);
       this.render();
     });
-    // Debug handle (last engine wins): lets a console force blinks/visemes.
-    (globalThis as { __liveface?: AvatarEngine }).__liveface = this;
+    this.releaseDebugHandle = opts.debug ? exposeDebugHandle("__liveface", this) : NO_DEBUG_HANDLE;
   }
 
   /**
@@ -265,6 +276,7 @@ export class AvatarEngine {
     this.frameLoop.stop();
     this.speech.destroy();
     this.meshWarp.destroy();
+    this.releaseDebugHandle();
   }
 
   /**

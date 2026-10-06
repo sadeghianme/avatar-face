@@ -8,19 +8,21 @@
  * The orchestrator: it owns the renderer, the scene and the model, runs the
  * frame loop, and sequences the parts that do the work:
  *
- *   engine/voice.ts       the speech in flight and its clock (the 2D engine's own)
- *   engine/frame-loop.ts  the frame loop and its step (the 2D engine's own)
- *   engine3d/visemes.ts   the viseme tables, the cue track's targets, the ARKit decomposition
- *   engine3d/life.ts      blinks, saccades, nods
- *   engine3d/model.ts     what the model offers, the camera's stand, the influences written
- *   engine3d/head.ts      the head and neck nodes' motion
- *   engine3d/seam.ts      what the tests pose and read; in no bundle
+ *   engine/voice.ts         the speech in flight and its clock (the 2D engine's own)
+ *   engine/frame-loop.ts    the frame loop and its step (the 2D engine's own)
+ *   engine/debug-handle.ts  the console handle, when a page asks for it (the 2D engine's own)
+ *   engine3d/visemes.ts     the viseme tables, the cue track's targets, the ARKit decomposition
+ *   engine3d/life.ts        blinks, saccades, nods
+ *   engine3d/model.ts       what the model offers, the camera's stand, the influences written
+ *   engine3d/head.ts        the head and neck nodes' motion
+ *   engine3d/seam.ts        what the tests pose and read; in no bundle
  */
 import * as THREE from "three";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
 
+import { NO_DEBUG_HANDLE, exposeDebugHandle } from "./engine/debug-handle";
 import { FrameLoop, FrameStep } from "./engine/frame-loop";
 import { Voice } from "./engine/voice";
 import { HeadBones, type HeadPoseDriver } from "./engine3d/head";
@@ -59,6 +61,9 @@ export interface Avatar3DOptions {
   frame?: FrameSpec;
   /** The head's idle motion. */
   headPose?: HeadPoseDriver;
+  /** Put the engine on `globalThis.__liveface3d` for the console, until
+   *  `destroy()`; off by default (engine/debug-handle.ts). */
+  debug?: boolean;
 }
 
 const DEFAULT_LIGHTS = { hemisphere: 1.4, key: 1.6, groundColor: 0x8888aa };
@@ -99,6 +104,8 @@ export class Avatar3DEngine {
   private readonly morphWeights = restingMorphs();
   /** Smoothed speech energy, 0..1: how much the head and brows move. */
   private energy = 0;
+  /** Takes the console handle back (Avatar3DOptions.debug). */
+  private readonly releaseDebugHandle: () => void;
 
   static async load(canvas: HTMLCanvasElement, modelUrl: string, options: Avatar3DOptions = {}): Promise<Avatar3DEngine> {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -146,7 +153,7 @@ export class Avatar3DEngine {
 
     this.life.start(performance.now());
     this.frameLoop = new FrameLoop((now) => this.step(now));
-    (globalThis as { __liveface3d?: Avatar3DEngine }).__liveface3d = this;
+    this.releaseDebugHandle = options.debug ? exposeDebugHandle("__liveface3d", this) : NO_DEBUG_HANDLE;
   }
 
   destroy(): void {
@@ -154,6 +161,7 @@ export class Avatar3DEngine {
     this.frameLoop.stop();
     this.speech.stopAudio();
     this.renderer.dispose();
+    this.releaseDebugHandle();
   }
 
   // --- Speech API (same shape as the 2D engine) ---
