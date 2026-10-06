@@ -1,3 +1,5 @@
+import type { ReactElement, ReactNode } from "react";
+
 /**
  * Line icons on a 24px grid.
  *
@@ -16,7 +18,7 @@ export type Shape =
   | { rect: [number, number, number, number, number] };
 
 /** Exported so the set can be enumerated (dev icon sheet, tests). */
-export const ICONS: Record<string, Shape[]> = {
+export const ICONS = {
   // Avatars — a portrait in frame, which is literally what the product makes.
   faces: [
     { rect: [3, 3, 18, 18, 4] },
@@ -154,7 +156,7 @@ export const ICONS: Record<string, Shape[]> = {
   pencil: [{ d: "M4.5 19.5h4l10-10a2.1 2.1 0 0 0-4-4l-10 10z" }, { d: "m13.5 6.5 4 4" }],
   copyIcon: [{ rect: [8.5, 8.5, 12, 12, 2.5] }, { d: "M15.5 8.5V6A2.5 2.5 0 0 0 13 3.5H6A2.5 2.5 0 0 0 3.5 6v7A2.5 2.5 0 0 0 6 15.5h2.5" }],
   capsLock: [{ d: "m12 4 7.5 8H15v4H9v-4H4.5z" }, { d: "M9 20h6" }],
-};
+} satisfies Record<string, Shape[]>;
 
 export type IconName = keyof typeof ICONS;
 
@@ -178,7 +180,7 @@ export function Icon({
       className={className}
       aria-hidden="true"
     >
-      {ICONS[name].map((shape, i) =>
+      {(ICONS[name] as readonly Shape[]).map((shape, i) =>
         "circle" in shape ? (
           <circle key={i} cx={shape.circle[0]} cy={shape.circle[1]} r={shape.circle[2]} />
         ) : "rect" in shape ? (
@@ -196,4 +198,13 @@ export function Icon({
       )}
     </svg>
   );
+}
+
+/** An icon by name, or an element (an icon drawn with its own stroke). */
+export type IconLike = IconName | ReactElement;
+
+/** An IconLike at `className`'s size; nothing for undefined. */
+export function renderIcon(icon: IconLike | undefined, className: string): ReactNode {
+  if (icon === undefined) return null;
+  return typeof icon === "string" ? <Icon name={icon} className={className} /> : icon;
 }

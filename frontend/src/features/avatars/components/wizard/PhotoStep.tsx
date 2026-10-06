@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { AiConsentReagreeNote } from "@/features/avatars/components/create/AiConsentDialog";
 import { LookPicture, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
 import { BackButton, PhoneNote, StepFooter } from "@/features/avatars/components/wizard/Footer";
-import { useRadioGroup } from "@/features/avatars/components/wizard/radio";
+import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import {
   ACCEPTED_TYPES,
   checkFile,

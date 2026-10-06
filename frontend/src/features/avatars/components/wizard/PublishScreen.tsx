@@ -7,7 +7,7 @@ import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
 import { JobProgress, useSeenStages } from "@/features/avatars/components/create/JobProgress";
 import { PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
 import { BackButton, PhoneNote, StepFooter } from "@/features/avatars/components/wizard/Footer";
-import { useRadioGroup } from "@/features/avatars/components/wizard/radio";
+import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import {
   anchorsCurrent,
   currentStep,

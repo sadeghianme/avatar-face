@@ -10,7 +10,7 @@ import { Icon } from "@/components/ui/Icon";
 import { MarkFacePanel } from "@/features/avatars/components/MarkFacePanel";
 import { Avatar3DPreview } from "@/features/avatars/components/Avatar3DPreview";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
-import { DetailSection, SectionGroup } from "@/features/avatars/components/DetailSection";
+import { Disclosure, DisclosureGroup } from "@/components/ui/Disclosure";
 import { EmbedSnippet } from "@/features/avatars/components/EmbedSnippet";
 import { FramingScenePanel } from "@/features/avatars/components/FramingScenePanel";
 import { engineScene, sceneOf, type SceneDraft } from "@/features/avatars/scene";
@@ -72,7 +72,7 @@ function loadOpen(): Record<SectionId, boolean> {
  * and kept in view (sticky under the page head) while the settings scroll
  * beside it; nothing sits under it. Two fifths is the settings column:
  * the publish state first, then Speak, then the settings in named groups
- * (DetailSection). The page head — back, the name, the status, what the
+ * (Disclosure). The page head — back, the name, the status, what the
  * AI did, and the actions on the picture — stays at the top of the window
  * too, so Mark the face, Test and Delete are one click away from anywhere
  * in the column. On a phone it is one column, the stage first.
@@ -613,9 +613,9 @@ export function AvatarDetailPage() {
             />
 
             {!is3d && (
-              <SectionGroup label={t("sectionLook")}>
+              <DisclosureGroup label={t("sectionLook")}>
                 {photo && (
-                  <DetailSection
+                  <Disclosure
                     id="scene"
                     icon="image"
                     title={t("sceneTitle")}
@@ -633,9 +633,9 @@ export function AvatarDetailPage() {
                       busyBackground={busyBg}
                       embedded
                     />
-                  </DetailSection>
+                  </Disclosure>
                 )}
-                <DetailSection
+                <Disclosure
                   id="mouth"
                   icon="faces"
                   title={t("mouthTitle")}
@@ -654,12 +654,12 @@ export function AvatarDetailPage() {
                     onMotion={setMotion}
                     embedded
                   />
-                </DetailSection>
-              </SectionGroup>
+                </Disclosure>
+              </DisclosureGroup>
             )}
 
-            <SectionGroup label={t("sectionPublish")}>
-              <DetailSection
+            <DisclosureGroup label={t("sectionPublish")}>
+              <Disclosure
                 id="share"
                 icon="link"
                 title={t("shareTitle")}
@@ -668,8 +668,8 @@ export function AvatarDetailPage() {
                 onToggle={() => toggleSection("share")}
               >
                 <SharePanel avatar={avatar} orgId={current.id} embedded />
-              </DetailSection>
-              <DetailSection
+              </Disclosure>
+              <Disclosure
                 id="embed"
                 icon="code"
                 title={t("embedSnippet")}
@@ -678,11 +678,11 @@ export function AvatarDetailPage() {
                 onToggle={() => toggleSection("embed")}
               >
                 <EmbedSnippet avatarId={avatar.id} voice={voice} embedded />
-              </DetailSection>
-            </SectionGroup>
+              </Disclosure>
+            </DisclosureGroup>
 
-            <SectionGroup label={t("sectionAdvanced")}>
-              <DetailSection
+            <DisclosureGroup label={t("sectionAdvanced")}>
+              <Disclosure
                 id="tuning"
                 icon="sliders"
                 title={t("tuning")}
@@ -705,8 +705,8 @@ export function AvatarDetailPage() {
                     </span>
                   </label>
                 )}
-              </DetailSection>
-            </SectionGroup>
+              </Disclosure>
+            </DisclosureGroup>
           </div>
         </div>
       )}
