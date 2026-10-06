@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
@@ -163,7 +163,9 @@ export function NewWizard({
   const pStage = prepareStage(job);
   const fStage = finishStage(job);
   const count = fStage === "shapes" ? stageCount(job) : null;
-  const announcement = useMemo(() => {
+  // Spoken when its words change, not on every poll: a live region says a
+  // change of its text, and a poll that moves nothing leaves the same words.
+  const announcement = (() => {
     if (!job) return "";
     if (isJobActive(job)) {
       if (isPrepareJob(job) && pStage) return t(`wzStage_${pStage}`);
@@ -175,9 +177,7 @@ export function NewWizard({
     const failure = jobFailure(job);
     if (failure) return errorText(t, failure.code, failure.detail);
     return job.state === "done" ? t(`createJobDone_${job.step}`) : "";
-    // Transitions, not every poll.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job?.id, job?.state, pStage, fStage, count?.done, t]);
+  })();
 
   // --- The screen ----------------------------------------------------------------------
   const gone = loadError instanceof ApiError && loadError.status === 404;

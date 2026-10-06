@@ -21,6 +21,9 @@ export function Avatar3DPreview({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // The latest callback: a parent's inline one must not reload the model.
+  const onEngineRef = useRef(onEngine);
+  onEngineRef.current = onEngine;
 
   useEffect(() => {
     let engine: { destroy(): void } | null = null;
@@ -36,7 +39,7 @@ export function Avatar3DPreview({
       }
       engine = instance;
       setLoading(false);
-      onEngine?.(instance);
+      onEngineRef.current?.(instance);
     };
     boot().catch((err: Error) => {
       if (!cancelled) {
@@ -47,10 +50,9 @@ export function Avatar3DPreview({
 
     return () => {
       cancelled = true;
-      onEngine?.(null);
+      onEngineRef.current?.(null);
       engine?.destroy();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelUrl]);
 
   if (error) return <p className="field-error">{error}</p>;

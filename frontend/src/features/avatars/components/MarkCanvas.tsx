@@ -287,15 +287,17 @@ export function MarkCanvas({
     []
   );
   // Scrolling moves the photo under a pointer that stays still: the zoom
-  // follows on the scroll itself (a drag moves its handle along too).
+  // follows on the scroll itself (a drag moves its handle along too). The
+  // listener stays for the canvas's life and calls this render's schedule.
+  const latestSchedule = useRef(schedule);
+  latestSchedule.current = schedule;
   useEffect(() => {
     const onScroll = () => {
-      if (lens.current.client) schedule();
+      if (lens.current.client) latestSchedule.current();
     };
     window.addEventListener("scroll", onScroll, { capture: true, passive: true });
     return () => window.removeEventListener("scroll", onScroll, { capture: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imgW, imgH]);
+  }, []);
 
   const place = (h: Handle, to: Pt) => onChange(h.move(marks, clampToImage(to, imgW, imgH)));
 

@@ -136,9 +136,14 @@ export function PrepareScreen({
     });
 
   // Start by itself, once per revision: the intent step 2 recorded, or
-  // what the plan and the member's remembered agreement allow.
+  // what the plan and the member's remembered agreement allow. Decided when
+  // the revision, the job's state, the agreement or the runner changes,
+  // with this render's view of the rest (`auto`).
   const asked = useRef(new Set<number>());
+  const auto = useRef({ creation, plan, choices, aiOn, prepare });
+  auto.current = { creation, plan, choices, aiOn, prepare };
   useEffect(() => {
+    const { creation, plan, choices, aiOn, prepare } = auto.current;
     if (!needsPrepare(creation) || busy !== null || askAi) return;
     if (consentId === undefined) return; // still loading: decide once known
     if (asked.current.has(creation.revision)) return;
@@ -155,7 +160,6 @@ export function PrepareScreen({
     } else {
       setAskAi(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creation.revision, creation.job?.state, consentId, busy, askAi]);
 
   const agreeAndPrepare = async () => {

@@ -57,6 +57,9 @@ export function AvatarPreview({
   // The scene the engine starts with; later ones are applied live below.
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
+  // The latest callback: a parent's inline one must not rebuild the engine.
+  const onEngineRef = useRef(onEngine);
+  onEngineRef.current = onEngine;
 
   useEffect(() => {
     let engine: AvatarEngine | null = null;
@@ -73,7 +76,7 @@ export function AvatarPreview({
       // production, and this file's tsconfig lacks vite/client types for a
       // clean import.meta.env.DEV gate.
       (window as unknown as Record<string, unknown>).__lfEngine = engine;
-      onEngine?.(engine);
+      onEngineRef.current?.(engine);
 
       if (layerUrls?.body && layerUrls.head) {
         const held = engine;
@@ -92,11 +95,10 @@ export function AvatarPreview({
 
     return () => {
       cancelled = true;
-      onEngine?.(null);
+      onEngineRef.current?.(null);
       engineRef.current = null;
       engine?.destroy();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rigUrl, textureUrl, debugMesh, fullPhoto, layerUrls]);
 
   // A changed scene moves the running engine; by value, so a parent that

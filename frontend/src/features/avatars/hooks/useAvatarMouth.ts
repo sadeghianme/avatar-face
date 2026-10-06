@@ -64,20 +64,22 @@ export function useAvatarMouth(
     // the teeth photo on every slider tick.
   }, [engine, active, identity]);
 
+  // Applied by value: a parent that builds the profile each render does not
+  // re-apply it for nothing (the latest one is read from `latest`).
   const profileKey = JSON.stringify(profile ?? null);
   useEffect(() => {
-    attached.current?.setProfile(profile);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    attached.current?.setProfile(latest.current?.profile);
   }, [profileKey]);
 
   // How the owner set an animation's or an animal's character mouth. Applied
   // live and cheaply (the engine reads it on its next frame); a classic or a
-  // photographic mouth ignores it.
+  // photographic mouth ignores it. By value too, the latest from the ref.
   const character = config?.renderer === "classic" ? (config.character ?? null) : null;
   const characterKey = JSON.stringify(character);
+  const latestCharacter = useRef(character);
+  latestCharacter.current = character;
   useEffect(() => {
-    engine?.setCharacterTraits?.(character);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    engine?.setCharacterTraits?.(latestCharacter.current);
   }, [engine, characterKey]);
 
   return { failed };
