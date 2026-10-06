@@ -1,3 +1,6 @@
+from httpx import ASGITransport, AsyncClient
+
+from app.main import create_app
 from tests.conftest import register_and_login
 
 
@@ -5,6 +8,23 @@ async def test_health(client):
     response = await client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+async def test_health_reports_the_release_baked_into_the_image(monkeypatch):
+    """deploy.sh reads `version` back after a deploy: it must be the image's commit."""
+    monkeypatch.setenv("LIVEFACE_VERSION", "0123456789abcdef0123456789abcdef01234567")
+    transport = ASGITransport(app=create_app())
+    async with AsyncClient(transport=transport, base_url="http://testserver") as c:
+        body = (await c.get("/health")).json()
+    assert body["version"] == "0123456789abcdef0123456789abcdef01234567"
+
+
+async def test_health_says_dev_outside_an_image(monkeypatch):
+    monkeypatch.delenv("LIVEFACE_VERSION", raising=False)
+    transport = ASGITransport(app=create_app())
+    async with AsyncClient(transport=transport, base_url="http://testserver") as c:
+        body = (await c.get("/health")).json()
+    assert body["version"] == "dev"
 
 
 async def test_register_and_me(client):

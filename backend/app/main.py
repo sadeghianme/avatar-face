@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -268,9 +269,14 @@ def create_app() -> FastAPI:
     app.add_middleware(PublicCorsMiddleware)
     app.add_middleware(RequestIdMiddleware)
 
+    # The commit this process runs: deploy/deploy.sh bakes it into the image
+    # (build arg -> ENV LIVEFACE_VERSION) and reads it back here to prove the
+    # container answering is the release it just built. "dev" outside an image.
+    version = os.environ.get("LIVEFACE_VERSION") or "dev"
+
     @app.get("/health")
     async def health() -> dict:
-        return {"status": "ok", "app": settings.app_name}
+        return {"status": "ok", "app": settings.app_name, "version": version}
 
     def _serve_widget_bundle(
         filename: str, request: Request, media_type: str = "application/javascript"
