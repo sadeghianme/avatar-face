@@ -195,7 +195,7 @@ def shrink_source(data: bytes) -> tuple[bytes, str]:
     try:
         image = Image.open(io.BytesIO(data)).convert("RGB")
         if max(image.size) > SOURCE_MAX_EDGE:
-            image.thumbnail((SOURCE_MAX_EDGE, SOURCE_MAX_EDGE), Image.LANCZOS)
+            image.thumbnail((SOURCE_MAX_EDGE, SOURCE_MAX_EDGE), Image.Resampling.LANCZOS)
         out = io.BytesIO()
         image.save(out, format="JPEG", quality=SOURCE_QUALITY, optimize=True)
         return out.getvalue(), "image/jpeg"

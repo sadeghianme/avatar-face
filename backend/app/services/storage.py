@@ -15,6 +15,7 @@ import hashlib
 import hmac
 import time
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote, urlencode
 
 import aioboto3
@@ -215,7 +216,7 @@ class S3Storage(Storage):
         self.bucket = bucket
         self.expiry_seconds = expiry_seconds
         self._session = aioboto3.Session()
-        self._client_kwargs = dict(
+        self._client_kwargs: dict[str, Any] = dict(
             service_name="s3",
             endpoint_url=endpoint,
             aws_access_key_id=access_key,
@@ -223,7 +224,9 @@ class S3Storage(Storage):
             region_name=region,
         )
 
-    def _client(self):
+    def _client(self) -> Any:
+        # Any: aioboto3 types Session.client as boto3's plain client, not
+        # the async context manager it returns.
         return self._session.client(**self._client_kwargs)
 
     async def presign_put(self, key: str, content_type: str) -> str:

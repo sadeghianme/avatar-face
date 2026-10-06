@@ -69,6 +69,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Protocol, cast
 
 import httpx
 import numpy as np
@@ -883,7 +884,8 @@ def _profile_defaults() -> tuple[dict, dict[str, tuple[float, float]]]:
     for name, info in MouthProfile.model_fields.items():
         low = next(m.ge for m in info.metadata if isinstance(m, Ge))
         high = next(m.le for m in info.metadata if isinstance(m, Le))
-        limits[name] = (float(low), float(high))
+        # annotated_types types a bound as anything comparable; these are numbers.
+        limits[name] = (float(cast(float, low)), float(cast(float, high)))
     return MouthProfile().model_dump(), limits
 
 
@@ -996,7 +998,9 @@ def fit_profile(
     if teeth is not None:
         acceptance = dental_photo.accept_teeth_photo(teeth.image, teeth.points, INNER_LIP_RING)
         fit.measurements["teeth_photo"] = acceptance.as_dict()
-    if acceptance is not None and acceptance.accepted:
+    if teeth is not None and acceptance is not None and acceptance.accepted:
+        # Measured whenever the photo is accepted (it has an upper arch).
+        assert acceptance.upper_edge is not None
         width = _mouth_width(base_points)
         down_photo, photo_px = _down(teeth.targets)
         # The arch's end in the photo's mouth frame (origin 13, corner line
@@ -1014,7 +1018,7 @@ def fit_profile(
             teeth_scale_as_drawn=round(photo_width, 4),
         )
         return fit
-    if teeth is None:
+    if teeth is None or acceptance is None:
         why = why_no_teeth or _reason("no_teeth_photo", "No teeth photo of this face")
     elif acceptance.arch_pixels == 0:
         why = _reason("no_teeth_visible", "The teeth photo shows no upper teeth")
@@ -1260,7 +1264,8 @@ def rebase_manifest(
     points = _checked_points(base_points)
     if not is_kit_manifest(manifest):
         raise ValueError("not a performance kit manifest")
-    size = tuple(int(v) for v in (image_size or manifest["frame"]["image_size"]))
+    width, height = (int(v) for v in (image_size or manifest["frame"]["image_size"]))
+    size = (width, height)
     to_base = manifest_to_base(manifest)
     poses = {pose["id"]: pose for pose in manifest["poses"]}
     rest = to_base(poses["rest"]["points"])
@@ -1343,7 +1348,14 @@ class KitResult:
     teeth_report: dict | None = None
 
 
-EditImage = Callable[[str, bytes, str], Awaitable[object]]
+class EditedImage(Protocol):
+    """What an edit answers with: imagegen.Generated, or a test's fake (whose
+    `model`, read with getattr, is optional)."""
+
+    image: bytes
+
+
+EditImage = Callable[[str, bytes, str], Awaitable[EditedImage]]
 # on_progress(fraction, message, done, total): `done` of the `total`
 # requests (the six shapes, and the teeth photo when asked for) are
 # settled: made, or given up on (a shape is then retargeted).
@@ -1406,6 +1418,7 @@ def _teeth_source(registration: PoseRegistration) -> TeethSource:
     from app.services.rig import build_rig
 
     points, image = registration.answer_points, registration.answer_image
+    assert points is not None and image is not None  # a registered answer has both
     return TeethSource(_png(image), build_rig(points, image.size))
 
 
@@ -1431,8 +1444,11 @@ def _finish(
 ) -> _Finished:
     """Everything after the provider calls: the person's shapes at the
     kit's size, the teeth fit, the fallbacks, the manifest. CPU work."""
-    generated = {shape: registrations[shape].targets for shape in SHAPES
-                 if shape in registrations and registrations[shape].ok}
+    generated: dict[str, np.ndarray] = {}
+    for shape in SHAPES:
+        registration = registrations.get(shape)
+        if registration is not None and registration.ok and registration.targets is not None:
+            generated[shape] = registration.targets
     amplitude = normalize_amplitude(base_points, generated, reference)
     # The teeth that will be drawn: the teeth photo when the embed would
     # draw it, the standard teeth otherwise (and why), either seated and
@@ -1440,11 +1456,14 @@ def _finish(
     answer = registrations.get(TEETH)
     photo = None
     if answer is not None and answer.ok:
-        photo = TeethPhoto(answer.answer_image, answer.answer_points, answer.targets)
+        image, points, targets = answer.answer_image, answer.answer_points, answer.targets
+        assert image is not None and points is not None and targets is not None  # ok
+        photo = TeethPhoto(image, points, targets)
     fit = fit_profile(base_points, photo, why_no_teeth)
     fit.measurements.update(amplitude.measurements)
     fit.reasons.extend(amplitude.reasons)
-    teeth = _teeth_source(answer) if fit.teeth_photo else None
+    # fit.teeth_photo is only ever set for the answer's photo.
+    teeth = _teeth_source(answer) if fit.teeth_photo and answer is not None else None
     teeth_refused = None
     if photo is not None and teeth is None:
         teeth_refused = next({k: v for k, v in r.items() if k != "field"}
@@ -1573,9 +1592,8 @@ async def build_kit(
         if on_progress is None:
             return
         done = state["done"]
-        if fraction is None:
-            fraction = 0.95 * done / len(asked)
-        outcome = on_progress(fraction, message, done, len(asked))
+        settled = 0.95 * done / len(asked) if fraction is None else fraction
+        outcome = on_progress(settled, message, done, len(asked))
         if inspect.isawaitable(outcome):
             await outcome
 

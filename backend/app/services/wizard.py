@@ -53,6 +53,7 @@ import hashlib
 import io
 import logging
 import re
+from typing import Literal
 from uuid import uuid4
 
 from PIL import Image
@@ -94,7 +95,7 @@ KEPT_ANCHORS = "anchors"
 KEPT_RECORD = "prepare"
 
 
-def line_for(model: str, look: str) -> str:
+def line_for(model: str, look: str) -> Literal["human", "animal", "cartoon"]:
     """The line (face_type) a plan is rigged and rendered on."""
     if look == "realistic":
         return "animal" if model == "animal" else "human"
@@ -665,7 +666,8 @@ async def prepare_job(job: Job, params: dict) -> None:
                 # Retry of the last change: from what that try started from,
                 # so the change is not applied on top of its own result.
                 last = (svc.ai_usage_of(creation).get("last_prepare") or {}).get("step")
-                base_id = (items.get(last) or {}).get("from") or base_id
+                tried = items.get(last) if last is not None else None
+                base_id = (tried or {}).get("from") or base_id
             if base_id is None or base_id not in items:
                 base_id = "original"
             source = await storage.get_bytes(items[base_id]["key"])

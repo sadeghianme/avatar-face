@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Form, Response, UploadFile
 from sqlalchemy import func, select, update
@@ -37,6 +37,7 @@ from sqlalchemy import func, select, update
 from app.api.deps import DB, OrgMember
 from app.core.config import get_settings
 from app.core.errors import Conflict409, NotFound404, Validation422
+from app.db import execute_dml
 from app.models import Avatar, AvatarKind, AvatarStatus, Creation, CreationStatus, Organization
 from app.models.base import new_id
 from app.schemas.avatar import FaceType, FitReason
@@ -61,6 +62,8 @@ from app.schemas.creation import (
     AvatarModel,
     GenerateCreationRequest,
     JobOut,
+    JobProgress,
+    PlanOut,
     PrepareRequest,
     PreviewRigOut,
     PreviewRigRequest,
@@ -123,7 +126,8 @@ def _require_face_type(creation: Creation) -> str:
 async def _update(db: DB, creation: Creation, **values) -> None:
     """A content change: bumps the revision, and applies only to the state
     the caller read. A concurrent change wins; this one is refused."""
-    result = await db.execute(
+    written = await execute_dml(
+        db,
         update(Creation)
         .where(
             Creation.id == creation.id,
@@ -131,9 +135,9 @@ async def _update(db: DB, creation: Creation, **values) -> None:
             Creation.revision == creation.revision,
             Creation.status == CreationStatus.draft,
         )
-        .values(**values, revision=Creation.revision + 1)
+        .values(**values, revision=Creation.revision + 1),
     )
-    if result.rowcount != 1:
+    if written != 1:
         await db.rollback()
         raise Conflict409("The creation changed; reload it", code="creation_changed")
     await db.commit()
@@ -187,14 +191,15 @@ def _anchors_for(creation: Creation, anchors_id: str) -> dict:
 def _job_out(record: dict | None) -> JobOut | None:
     if not record:
         return None
-    live = runner.get(record.get("id"))
+    live = runner.get(record["id"])
+    progress = live.progress() if live and record["state"] in ACTIVE_STATES else None
     return JobOut(
         id=record["id"],
         step=record["step"],
         state=record["state"],
         error=record.get("error"),
         started_at=record["started_at"],
-        progress=live.progress() if live and record["state"] in ACTIVE_STATES else None,
+        progress=JobProgress.model_validate(progress) if progress is not None else None,
         retryable=record["state"] in (FAILED, INTERRUPTED)
         and (record.get("error") or {}).get("code") not in NOT_RETRYABLE,
     )
@@ -282,7 +287,7 @@ async def _out(db: DB, creation: Creation) -> CreationOut:
             url=await storage.presign_get(items[step_id]["key"]),
             width=items[step_id]["width"],
             height=items[step_id]["height"],
-            from_=items[step_id].get("from"),
+            **{"from": items[step_id].get("from")},
             crop=items[step_id].get("crop"),
             roll=items[step_id].get("roll"),
             adjust=items[step_id].get("adjust"),
@@ -307,9 +312,11 @@ async def _out(db: DB, creation: Creation) -> CreationOut:
             marks=creation.anchors.get("marks") or {},
             validation=creation.anchors["validation"],
         )
+    plan = wizard.plan_of(creation.steps)
     return CreationOut(
         id=creation.id,
-        face_type=creation.face_type,
+        # The column holds a line name: requests are checked against FaceType.
+        face_type=cast("FaceType | None", creation.face_type),
         status=creation.status.value,
         revision=creation.revision,
         current=svc.current_step(creation.steps),
@@ -324,7 +331,7 @@ async def _out(db: DB, creation: Creation) -> CreationOut:
         # session: this is an identity-map read, not a query.
         ai=_ai_out(creation, await db.get(Organization, creation.org_id), recommendation),
         statement=svc.statement_for(creation),
-        plan=wizard.plan_of(creation.steps),
+        plan=PlanOut.model_validate(plan) if plan is not None else None,
         name=wizard.name_of(creation.steps),
         created_at=creation.created_at,
         updated_at=creation.updated_at,
@@ -759,6 +766,7 @@ async def _start_background(db: DB, creation: Creation, mode: str) -> tuple[Crea
     face_type = _require_face_type(creation)
     items = svc.step_items(creation.steps)
     current = svc.current_step(creation.steps)
+    assert current is not None  # _require_image: an image exists, so one is current
     chosen = (creation.steps or {}).get("background")
     if mode == "keep":
         # Nothing to compute: the opaque image behind the current one is
@@ -820,7 +828,9 @@ async def _image_digest(creation: Creation) -> str:
     key. Hashed off the loop (a 2048 px PNG is several MB)."""
     import hashlib
 
-    key = svc.step_items(creation.steps)[svc.current_step(creation.steps)]["key"]
+    current = svc.current_step(creation.steps)
+    assert current is not None  # detection runs on a creation with an image
+    key = svc.step_items(creation.steps)[current]["key"]
     data = await get_storage().get_bytes(key)
     return await asyncio.to_thread(lambda: hashlib.sha256(data).hexdigest())
 

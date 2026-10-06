@@ -360,7 +360,9 @@ LEXICON: dict[str, tuple[str, ...]] = {k: tuple(v.split()) for k, v in LEXICON_R
 # rule table
 # --------------------------------------------------------------------------
 Out = Sequence[str] | Callable[[list], Sequence[str]]
-_RULES: dict[str, list] = {}
+# (text, left context, right context, phonemes or a function of those so far)
+Rule = tuple[str, re.Pattern[str] | None, re.Pattern[str] | None, Out]
+_RULES: dict[str, list[Rule]] = {}
 MAGIC = r"^([^aeiouy]l?e|(st|ng|th)e)$"  # ...Ce / ...Cle / waste, change, bathe
 CE = r"^([^aeiouyr]|$)"  # consonant (not r) or word end: <ar> in car, not carry
 CEO = r"^([^aeiour]|$)"  # same, but <y> allowed: story, glory

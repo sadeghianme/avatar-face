@@ -410,7 +410,9 @@ def with_ai_shapes(ai_edited: dict | None, model: str | None, generated: int) ->
     entry = {"model": model, "generated": generated}
     if not ai_edited:
         return {"mode": "mouth_shapes", "model": model, "mouth_shapes": entry}
-    return mouth_disclosure({**ai_edited, "mouth_shapes": entry})
+    disclosed = mouth_disclosure({**ai_edited, "mouth_shapes": entry})
+    assert disclosed is not None  # a shapes entry is always disclosed
+    return disclosed
 
 
 def without_ai_shapes(ai_edited: dict | None) -> dict | None:
@@ -537,7 +539,7 @@ def teeth_changed(avatar, reason: dict) -> None:
 
     config = mouth.load(avatar.mouth_config)
     kit = (config or {}).get("kit")
-    if not kit:
+    if not config or not kit:
         return
     profile = dict(config.get("profile") or {})
     target = MouthProfile().model_dump()
@@ -566,7 +568,7 @@ def drop(avatar, reason: dict) -> list[str]:
     do without one."""
     config = mouth.load(avatar.mouth_config)
     key = (config or {}).get("motion_key")
-    if not key:
+    if not config or not key:
         return []
     config.pop("motion_key")
     if config.get("kit"):
@@ -587,7 +589,7 @@ async def follow_points(avatar, storage, points, image_size=None) -> list[str]:
     points. Returns the keys replaced, to delete after the commit."""
     config = mouth.load(avatar.mouth_config)
     key = (config or {}).get("motion_key")
-    if not key:
+    if not config or not key:
         return []
     size = tuple(int(v) for v in image_size) if image_size is not None else None
     try:
@@ -882,7 +884,7 @@ def _nothing_made(result: performance_kit.KitResult) -> AppError:
     """The job's failure when the kit made none of the six shapes: why the
     calls stopped or were refused, else the first shape's reason (a check
     every answer failed)."""
-    reasons = [entry.get("reason") for entry in result.report.values() if entry.get("reason")]
+    reasons = [reason for entry in result.report.values() if (reason := entry.get("reason"))]
     stopped = next((r for r in reasons if r["code"] in _TEETH_NOTE_CODES), None)
     reason = stopped or (reasons[0] if reasons else _note(
         "provider_error", "The AI service did not return an image"))

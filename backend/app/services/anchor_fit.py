@@ -59,6 +59,7 @@ import json
 import logging
 import math
 from dataclasses import dataclass, fields, replace
+from typing import Any
 
 import numpy as np
 from scipy.interpolate import RBFInterpolator
@@ -270,11 +271,11 @@ def _region(value, diagonals: bool = False) -> RegionMarks | None:
     diagonals are there too."""
     if not isinstance(value, dict):
         return None
-    edges = [_point(value.get(edge)) for edge in ("left", "right", "top", "bottom")]
-    if any(edge is None for edge in edges):
+    left, right, top, bottom = (_point(value.get(e)) for e in ("left", "right", "top", "bottom"))
+    if left is None or right is None or top is None or bottom is None:
         return None
     extra = {d: _point(value.get(d)) for d in DIAGONALS} if diagonals else {}
-    return RegionMarks(*edges, center=_point(value.get("center")), **extra)
+    return RegionMarks(left, right, top, bottom, center=_point(value.get("center")), **extra)
 
 
 def _pupil(value) -> PupilMarks | None:
@@ -287,8 +288,13 @@ def _pupil(value) -> PupilMarks | None:
 def _line(value) -> tuple[Point, ...] | None:
     if not isinstance(value, list) or len(value) != MOUTH_LINE_POINTS:
         return None
-    points = [_point(p) for p in value]
-    return None if any(p is None for p in points) else tuple(points)
+    points: list[Point] = []
+    for raw in value:
+        point = _point(raw)
+        if point is None:
+            return None
+        points.append(point)
+    return tuple(points)
 
 
 def _line_from_region(mouth: RegionMarks) -> tuple[Point, ...]:
@@ -401,7 +407,7 @@ def merge(older: FaceMarks, newer: FaceMarks) -> FaceMarks:
     moved leaves the ones it does not send to the warp, as every head did
     before there were diagonals: an outline pinned where the old edges had
     it would pull the new ones out of shape."""
-    def pick(name: str) -> object:
+    def pick(name: str) -> Any:
         value = getattr(newer, name)
         return value if value is not None else getattr(older, name)
 
@@ -725,8 +731,10 @@ def _outline_pairs(base: np.ndarray, ring: np.ndarray) -> list[tuple[int, np.nda
         along = np.cumsum(lengths) / max(float(lengths.sum()), 1e-9)
         quad = [(s - 1) % k, s, (s + 1) % k, (s + 2) % k]
         for i, t in zip(chain[1:-1], along[:-1]):
-            on_base = catmull_rom(*base_ring[quad], float(t))
-            on_marks = catmull_rom(*ring[quad], float(t))
+            b0, b1, b2, b3 = base_ring[quad]
+            m0, m1, m2, m3 = ring[quad]
+            on_base = catmull_rom(b0, b1, b2, b3, float(t))
+            on_marks = catmull_rom(m0, m1, m2, m3, float(t))
             pairs.append((i, on_marks + (base[i] - on_base) * scale))
     return pairs
 
@@ -856,9 +864,9 @@ def flipped_triangles(
     """
     if triangles is None:
         triangles = Delaunay(base).simplices
-    triangles = triangles[~np.isin(triangles, IRIS).any(axis=1)]
-    before = _signed_areas(base, triangles)
-    after = _signed_areas(fitted, triangles)
+    skin: np.ndarray = triangles[~np.isin(triangles, IRIS).any(axis=1)]
+    before = _signed_areas(base, skin)
+    after = _signed_areas(fitted, skin)
     box = np.ptp(base, axis=0)
     eps = FLIP_EPSILON * float(box[0] * box[1]) * 2  # signed areas are doubled
     measurable = (np.abs(before) > eps) & (np.abs(after) > eps)
@@ -896,7 +904,7 @@ def _turns(ring: np.ndarray) -> np.ndarray:
     from the ring's centre, in (-pi, pi]."""
     centre = ring.mean(axis=0)
     angles = np.arctan2(ring[:, 1] - centre[1], ring[:, 0] - centre[0])
-    steps = np.diff(np.append(angles, angles[0]))
+    steps: np.ndarray = np.diff(np.append(angles, angles[0]))
     return (steps + np.pi) % (2 * np.pi) - np.pi
 
 

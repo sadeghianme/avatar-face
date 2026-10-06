@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import JSON, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -111,6 +112,14 @@ class Avatar(TimestampedBase):
     # before scenes existed, which renders by `framing` alone. Draft/
     # published like framing: changing it marks the draft dirty.
     scene_config: Mapped[dict | None] = mapped_column("scene", JSON, nullable=True)
+
+    if TYPE_CHECKING:
+        # Not columns: set on one instance by the owner API before it is
+        # serialized (api.avatars._sign_motion), read back with a default by
+        # `mouth` and `render_profile` below. Declared for the type checker
+        # only, so the mapper never sees them.
+        signed_motion_url: str | None
+        signed_render_profile: str | None
 
     @property
     def scene(self) -> dict | None:

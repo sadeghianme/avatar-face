@@ -146,7 +146,9 @@ def _get_engine():
         if _engine is None:
             from kokoro_onnx import Kokoro
             settings = get_settings()
-            engine = Kokoro(settings.kokoro_lipsync_model_path, settings.kokoro_voices_path)
+            model, voices = settings.kokoro_lipsync_model_path, settings.kokoro_voices_path
+            assert model and voices  # callers check is_configured() first
+            engine = Kokoro(model, voices)
             # The ONNX Community export calls the output "durations"; the
             # runtime checks the singular spelling. It consumes output #1,
             # so accept the plural only after validating the full order.

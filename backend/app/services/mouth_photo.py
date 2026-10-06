@@ -222,7 +222,9 @@ def with_ai_teeth(ai_edited: dict | None, model: str | None) -> dict:
     replaced, never mutated)."""
     if not ai_edited:
         return {"mode": "teeth", "model": model, "teeth": {"model": model}}
-    return mouth_disclosure({**ai_edited, "teeth": {"model": model}})
+    disclosed = mouth_disclosure({**ai_edited, "teeth": {"model": model}})
+    assert disclosed is not None  # a teeth entry is always disclosed
+    return disclosed
 
 
 def without_ai_teeth(ai_edited: dict | None) -> dict | None:

@@ -281,7 +281,7 @@ def synthetic_face_mesh(width: int, height: int) -> np.ndarray:
         ring_t = 0.15 + 0.78 * (i / max(n - 1, 1))
         angle = 2.399963 * i  # golden angle: even angular coverage
         radius_jitter = 1.0 + rng.uniform(-0.03, 0.03)
-        put(idx,
+        put(int(idx),
             cx + fw * ring_t * radius_jitter * math.cos(angle),
             cy + fh * ring_t * radius_jitter * math.sin(angle))
 

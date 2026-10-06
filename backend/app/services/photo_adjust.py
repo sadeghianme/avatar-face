@@ -77,6 +77,7 @@ import io
 import logging
 import math
 from dataclasses import dataclass, field
+from typing import cast
 
 import numpy as np
 from PIL import Image
@@ -428,8 +429,8 @@ def head_crop(image: Image.Image, points: np.ndarray) -> Image.Image | None:
     at most SOURCE_MAX_EDGE; None when it would be the whole picture.
     What a declined whole-photo edit, and a declined teeth photo
     (services.mouth_photo), is asked again with."""
-    box = head_crop_box(image.size, points)
-    crop = image.crop(tuple(int(round(v)) for v in box))
+    left, top, right, bottom = (int(round(v)) for v in head_crop_box(image.size, points))
+    crop = image.crop((left, top, right, bottom))
     if crop.size == image.size:
         # The crop box reaches every edge: it is the same picture, and asking
         # again would be the same request. Anything smaller is worth the one
@@ -555,7 +556,7 @@ def align(result_points: np.ndarray, source_points: np.ndarray) -> tuple[np.ndar
     return matrix, float(np.sqrt(np.mean(residual ** 2)))
 
 
-def _hull_mask(shape: tuple[int, int], polygons: list[np.ndarray]) -> np.ndarray:
+def _hull_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray:
     """Union of the convex hulls of `polygons` (pixel coords of the window)."""
     from scipy.spatial import ConvexHull, QhullError
 
@@ -568,7 +569,7 @@ def _hull_mask(shape: tuple[int, int], polygons: list[np.ndarray]) -> np.ndarray
     return _polygon_mask(shape, hulls)
 
 
-def _polygon_mask(shape: tuple[int, int], polygons: list[np.ndarray]) -> np.ndarray:
+def _polygon_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray:
     """Union of `polygons` as drawn, in their point order (a contour, not
     its hull)."""
     from PIL import ImageDraw
@@ -691,7 +692,9 @@ def _paste_region(
 
     offset = np.array([x0, y0])
     hull = _hull_mask(window, [region.source - offset, region.result - offset])
-    distance = distance_transform_edt(~hull)
+    # The distances alone (scipy's stub also allows the indices it returns
+    # only when asked for them); likewise below.
+    distance = cast(np.ndarray, distance_transform_edt(~hull))
     alpha = 1.0 - _smoothstep((distance - dilate) / feather)
     alpha *= np.clip((covered - 0.99) * 100.0, 0.0, 1.0)  # fully inside the answer only
     ring_mask = (distance > dilate + feather) & (distance <= dilate + feather + ring) & (
@@ -702,7 +705,7 @@ def _paste_region(
         # of the region's size, and the brow is not skin to measure.
         outside = _polygon_mask(window, [p - offset for p in region.keep_out])
         guard = max(BROW_GUARD * size, 1.0)
-        clear = distance_transform_edt(~outside)
+        clear = cast(np.ndarray, distance_transform_edt(~outside))
         alpha *= _smoothstep(clear / guard)
         ring_mask &= clear > guard
     for polygon in region.within:
@@ -919,6 +922,7 @@ def finish_candidate(
                 None, rejected=reason("no_face_in_result", "No face was found in the result")
             )
         alpha = _alpha(data)
+        assert prepared.source_points is not None  # a touch-up is prepared with them
         try:
             # Into the image's own pixels, not the grey composite the model
             # saw: outside the eyes and lips a cut-out stays bit-identical.
@@ -950,7 +954,7 @@ def finish_candidate(
     return _checked(result, mode, face_type, source, source_points, False)
 
 
-def generation_prompt(style: str, face_type: str, prompt: str, has_source: bool) -> str:
+def generation_prompt(style: str, face_type: str | None, prompt: str, has_source: bool) -> str:
     """The prompt for a creation made by generation (POST /creations/generate).
 
     A person keeps imagegen's portrait prompt, which states the rig's needs.

@@ -23,6 +23,7 @@ from sqlalchemy import delete, func, select
 
 from app.api.deps import DB, OrgMember
 from app.core.errors import Conflict409, NotFound404, Validation422
+from app.db import execute_dml
 from app.models import SpeechCache
 from app.services.tts.cloned import PROVIDER_NAME, scoped_voice_id
 from app.services.tts.registry import cache_key
@@ -146,13 +147,14 @@ async def delete_cloned_voice(name: str, ctx: OrgMember, db: DB) -> None:
     likeness is that the audio stops existing.
     """
     voice = scoped_voice_id(ctx.org.id, name)
-    result = await db.execute(
+    removed = await execute_dml(
+        db,
         delete(SpeechCache).where(
             SpeechCache.provider == PROVIDER_NAME, SpeechCache.voice == voice
-        )
+        ),
     )
     await db.commit()
-    if not result.rowcount:
+    if not removed:
         raise NotFound404("No such cloned voice", code="voice_not_found")
 
 

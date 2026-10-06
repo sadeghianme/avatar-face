@@ -102,7 +102,9 @@ def _get_engine():
             from kokoro_onnx import Kokoro
 
             settings = get_settings()
-            _engine = Kokoro(settings.kokoro_model_path, settings.kokoro_voices_path)
+            model, voices = settings.kokoro_model_path, settings.kokoro_voices_path
+            assert model and voices  # callers check is_configured() first
+            _engine = Kokoro(model, voices)
         return _engine
 
 

@@ -44,9 +44,13 @@ def capability() -> dict:
     with _probe_lock:
         if _probe_result is not None:
             return _probe_result
+        # torch and chatterbox are the [clone] extra: absent from the server
+        # image and from CI, so the type checker may not find them either.
         try:
-            import torch  # noqa: F401
-            from chatterbox.tts import ChatterboxTTS  # noqa: F401
+            import torch  # pyright: ignore[reportMissingImports]  # noqa: F401
+            from chatterbox.tts import (  # pyright: ignore[reportMissingImports]  # noqa: F401
+                ChatterboxTTS,
+            )
         except Exception as exc:
             _probe_result = {
                 "available": False,
@@ -54,7 +58,7 @@ def capability() -> dict:
                 "reason": f"chatterbox is not installed here ({type(exc).__name__})",
             }
             return _probe_result
-        import torch
+        import torch  # pyright: ignore[reportMissingImports]
 
         if torch.backends.mps.is_available():
             device = "mps"
@@ -75,7 +79,7 @@ def _get_engine():
     global _engine
     with _engine_lock:
         if _engine is None:
-            from chatterbox.tts import ChatterboxTTS
+            from chatterbox.tts import ChatterboxTTS  # pyright: ignore[reportMissingImports]
 
             logger.info("loading Chatterbox on %s", capability()["device"])
             _engine = ChatterboxTTS.from_pretrained(device=capability()["device"])

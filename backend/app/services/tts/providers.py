@@ -71,7 +71,8 @@ class AzureTTSProvider(TTSProvider):
     async def _synthesize_sdk(self, text: str, voice: str, locale: str) -> SynthesisResult:
         import asyncio
 
-        import azure.cognitiveservices.speech as speechsdk  # optional dependency
+        # An optional dependency, absent where the REST path is used instead.
+        import azure.cognitiveservices.speech as speechsdk  # pyright: ignore[reportMissingImports]
 
         def run() -> tuple[bytes, list[dict]]:
             config = speechsdk.SpeechConfig(

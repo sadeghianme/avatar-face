@@ -7,6 +7,7 @@ from typing import Any, TypeVar
 from urllib.parse import urlsplit
 
 import httpx
+import numpy as np
 from fastapi import APIRouter, BackgroundTasks, UploadFile
 from fastapi.routing import APIRoute
 from sqlalchemy import select
@@ -191,9 +192,10 @@ async def create_avatar(body: AvatarCreate, ctx: OrgMember, db: DB) -> AvatarCre
     db.add(avatar)
     await db.flush()
     ext = "glb" if is_model else body.content_type.split("/")[-1].replace("jpeg", "jpg")
-    avatar.image_key = f"orgs/{ctx.org.id}/avatars/{avatar.id}/source.{ext}"
+    image_key = f"orgs/{ctx.org.id}/avatars/{avatar.id}/source.{ext}"
+    avatar.image_key = image_key
     await db.commit()
-    upload_url = await get_storage().presign_put(avatar.image_key, body.content_type)
+    upload_url = await get_storage().presign_put(image_key, body.content_type)
     return AvatarCreated(avatar=AvatarOut.model_validate(avatar), upload_url=upload_url)
 
 
@@ -229,8 +231,9 @@ async def create_from_url(
     )
     db.add(avatar)
     await db.flush()
-    avatar.image_key = f"orgs/{ctx.org.id}/avatars/{avatar.id}/source.glb"
-    await get_storage().put_bytes(avatar.image_key, data, GLB_CONTENT_TYPE)
+    image_key = f"orgs/{ctx.org.id}/avatars/{avatar.id}/source.glb"
+    avatar.image_key = image_key
+    await get_storage().put_bytes(image_key, data, GLB_CONTENT_TYPE)
     await db.commit()
     background.add_task(process_avatar, avatar.id)
     return avatar
@@ -356,14 +359,15 @@ async def update_avatar(
     if body.scene is not None:
         current_scene = scene_service.effective(avatar)
         try:
-            avatar.scene_config = scene_service.clean(
+            scene = scene_service.clean(
                 body.scene.model_dump(), scene_service.image_key_of(current_scene)
             )
         except ValueError as exc:
             code = "scene_image_missing" if "uploaded" in str(exc) else "scene_invalid"
             raise Validation422(str(exc), code=code)
+        avatar.scene_config = scene
         # Kept in step for clients that read only the framing.
-        avatar.framing = scene_service.framing_of(avatar.scene_config)
+        avatar.framing = scene_service.framing_of(scene)
     if body.voice is not None:
         import json as _json
 
@@ -757,7 +761,8 @@ async def crop_avatar(
         origin = [0, 0] if first_crop else rig.get("crop_origin")
         base_key = fit_base_key(avatar.org_id, avatar.id)
         base = await read_fit_base(storage, base_key)
-        base_follows = fit_base_points(base, rig) is not None
+        if fit_base_points(base, rig) is None:
+            base = None  # not this rig's base: it does not follow the crop
         rig = _move_rig(rig, left, top, cropped.size)
         if origin is not None:
             rig["crop_origin"] = [origin[0] + left, origin[1] + top]
@@ -765,7 +770,7 @@ async def crop_avatar(
         # The fit base moves with its rig, so marks saved after the crop are
         # fitted from the same mesh as before it. One that already did not
         # match is left to be rebuilt when next needed.
-        if base_follows:
+        if base is not None:
             await write_fit_base(storage, base_key, move_fit_base(base, left, top, rig))
     await _rebuild_thumbnail(avatar, storage)
     await _rebuild_layers(avatar, storage)
@@ -843,7 +848,8 @@ async def _uncrop_rig(avatar: Avatar, storage, cropped_keys: list[str]) -> None:
     rig = _json.loads(await storage.get_bytes(avatar.rig_key))
     base_key = fit_base_key(avatar.org_id, avatar.id)
     base = await read_fit_base(storage, base_key)
-    base_follows = fit_base_points(base, rig) is not None
+    if fit_base_points(base, rig) is None:
+        base = None  # not this rig's base: it does not follow the reset
     precrop_bytes = await storage.get_bytes(avatar.image_key)
     precrop = Image.open(io.BytesIO(precrop_bytes))
 
@@ -861,7 +867,8 @@ async def _uncrop_rig(avatar: Avatar, storage, cropped_keys: list[str]) -> None:
     if origin is not None:
         restored = _move_rig(rig, -origin[0], -origin[1], precrop.size)
         restored.pop("crop_origin", None)
-        base = move_fit_base(base, -origin[0], -origin[1], restored) if base_follows else None
+        if base is not None:
+            base = move_fit_base(base, -origin[0], -origin[1], restored)
     else:
         redetected = _redetect_rig(avatar, precrop_bytes, rig)
         if redetected is None:
@@ -984,7 +991,7 @@ async def rig_anchors(avatar_id: str, ctx: OrgMember, db: DB) -> dict:
     }
 
 
-async def _fit_base(avatar: Avatar, storage, rig: dict):
+async def _fit_base(avatar: Avatar, storage, rig: dict) -> tuple[np.ndarray, bool]:
     """The mesh this rig's fits start from — the detection, else the
     template — and whether the rig's own points number their landmarks as
     it does (see anchor_fit.saved_marks): true of a detection, which the rig
@@ -1003,7 +1010,7 @@ async def _fit_base(avatar: Avatar, storage, rig: dict):
     key = fit_base_key(avatar.org_id, avatar.id)
     stored = await read_fit_base(storage, key)
     points = fit_base_points(stored, rig)
-    if points is not None:
+    if stored is not None and points is not None:
         return points, bool(stored.get("detected"))
 
     def detect(data: bytes):
@@ -1022,7 +1029,9 @@ async def _fit_base(avatar: Avatar, storage, rig: dict):
     await write_fit_base(storage, key, record)
     # As stored, not as computed: the next fit reads the stored copy, and the
     # same marks must give the same rig both times.
-    return fit_base_points(record, rig), detected
+    points = fit_base_points(record, rig)
+    assert points is not None  # a record just made for this rig's frame
+    return points, detected
 
 
 def _marks_outside(body: RigFit, width: float, height: float) -> bool:
@@ -1268,7 +1277,7 @@ async def upload_scene_image(avatar_id: str, file: UploadFile, ctx: OrgMember, d
     image = await run_in_threadpool(scene_service.prepare_image, data)
     storage = get_storage()
     previous = await scene_service.store_image(avatar, storage, image)
-    avatar.framing = scene_service.framing_of(avatar.scene_config)
+    avatar.framing = scene_service.framing_of(scene_service.effective(avatar))
     mark_dirty(avatar)
     await db.commit()
     for key in previous:

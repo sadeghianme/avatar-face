@@ -63,8 +63,9 @@ async def create_from_stock(
     )
     db.add(avatar)
     await db.flush()
-    avatar.image_key = f"orgs/{ctx.org.id}/avatars/{avatar.id}/source.png"
-    await get_storage().put_bytes(avatar.image_key, data, "image/png")
+    image_key = f"orgs/{ctx.org.id}/avatars/{avatar.id}/source.png"
+    avatar.image_key = image_key
+    await get_storage().put_bytes(image_key, data, "image/png")
     await db.commit()
     background.add_task(process_avatar, avatar.id)
     return avatar

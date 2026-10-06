@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -210,7 +211,8 @@ def extract_dental_layers(image: np.ndarray, upper_contour: np.ndarray,
     for index, layer in enumerate(data):
         # Isolated highlights: 4-connected components below the size limit.
         opaque = layer[..., 3] >= _ALPHA_SEED
-        labels, found = label(opaque)
+        # (labels, count): scipy's stub types the output= form's bare count.
+        labels, found = cast(tuple[np.ndarray, int], label(opaque))
         if found:
             sizes = np.bincount(labels.ravel())
             small = sizes < _MIN_COMPONENT[index]

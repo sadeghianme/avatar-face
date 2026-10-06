@@ -53,14 +53,14 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 import numpy as np
 from sqlalchemy import delete, func, or_, select, update
 
 from app.core.errors import AppError, Conflict409, Validation422
-from app.db import get_session_factory
+from app.db import execute_dml, get_session_factory
 from app.models import Avatar, AvatarStatus, Creation, CreationStatus
 from app.models.base import utcnow
 from app.services.jobs import (
@@ -234,9 +234,8 @@ def is_cut_out(items: dict, step_id: str | None) -> bool:
 def ordered_step_ids(items: dict) -> list[str]:
     """The steps in the wizard's order: original, framed, cut-out, then each
     AI result followed by its own cut-out."""
-    adjusted = sorted(
-        (i for i in items if adjusted_index(i) is not None), key=lambda i: adjusted_index(i)
-    )
+    indexed = {i: n for i in items if (n := adjusted_index(i)) is not None}
+    adjusted = sorted(indexed, key=indexed.__getitem__)
     ordered = [i for i in ("original", "framed", CUTOUT) if i in items]
     for step_id in adjusted:
         ordered.append(step_id)
@@ -327,7 +326,7 @@ def _detected_a_person(item: dict) -> bool:
     return bool(check.get("detected")) and check.get("detector") == "mediapipe"
 
 
-def statement_for(creation: Creation) -> str | None:
+def statement_for(creation: Creation) -> Literal["depiction", "generated_face"] | None:
     """The uploader's statement finishing needs (a consent scope), or None.
 
     Tied to where the pixels came from, not to the line the creation is on
@@ -452,7 +451,7 @@ def background_source(steps: dict | None) -> str | None:
     items = step_items(steps)
     step_id = current_step(steps)
     seen: set[str] = set()
-    while is_cut_out(items, step_id) and step_id not in seen:
+    while step_id is not None and is_cut_out(items, step_id) and step_id not in seen:
         seen.add(step_id)
         source = items[step_id].get("from")
         if source not in items:
@@ -531,7 +530,8 @@ async def _store_result(job: Job, params: dict, values: dict, new_keys: list[str
     from; otherwise delete what the job wrote and say so. See the module
     docstring for why the revision decides."""
     async with get_session_factory()() as db:
-        result = await db.execute(
+        stored = await execute_dml(
+            db,
             update(Creation)
             .where(
                 Creation.id == job.subject_id,
@@ -539,10 +539,10 @@ async def _store_result(job: Job, params: dict, values: dict, new_keys: list[str
                 Creation.revision == job.revision,
                 Creation.status == CreationStatus.draft,
             )
-            .values(**values, revision=Creation.revision + 1, job=job_record(job, DONE))
+            .values(**values, revision=Creation.revision + 1, job=job_record(job, DONE)),
         )
         await db.commit()
-    if result.rowcount == 1:
+    if stored == 1:
         return True
     storage = get_storage()
     for key in new_keys:
@@ -658,7 +658,8 @@ async def start_job(
     job = runner.reserve(creation.org_id, creation.id, step, revision)
     extra = {"revision": Creation.revision + 1} if bump else {}
     try:
-        result = await db.execute(
+        written = await execute_dml(
+            db,
             update(Creation)
             .where(
                 Creation.id == creation.id,
@@ -666,9 +667,9 @@ async def start_job(
                 Creation.revision == creation.revision,
                 Creation.status == CreationStatus.draft,
             )
-            .values(job=job_record(job, QUEUED, params), **(values or {}), **extra)
+            .values(job=job_record(job, QUEUED, params), **(values or {}), **extra),
         )
-        if result.rowcount != 1:
+        if written != 1:
             await db.rollback()
             raise Conflict409("The creation changed; reload it", code="creation_changed")
         await db.commit()
@@ -904,7 +905,7 @@ def fit_from_anchors(anchors: dict, sent: dict | None, face_type: str):
 VISION_CACHE_SIZE = 2
 
 
-def vision_cache_hit(usage: dict, digest: str, face_type: str) -> dict | None:
+def vision_cache_hit(usage: dict, digest: str | None, face_type: str) -> dict | None:
     """Cached point-finder answer for these pixels, this line, this model."""
     from app.services.vision_points import MODEL
 
@@ -1012,7 +1013,7 @@ async def _detect(job: Job, params: dict) -> None:
     if creation is None:
         return
     current = current_step(creation.steps)
-    image = step_items(creation.steps).get(current)
+    image = step_items(creation.steps).get(current) if current is not None else None
     if image is None or creation.face_type is None:
         await _write_job(job, FAILED, params, SUPERSEDED)
         return
@@ -1474,8 +1475,8 @@ async def _generate(job: Job, params: dict) -> None:
 
         steps["plan"] = plan
         # The name the wizard proposed from the description, given with the plan.
-        if (creation.steps or {}).get("name"):
-            steps["name"] = creation.steps["name"]
+        if name := (creation.steps or {}).get("name"):
+            steps["name"] = name
         values["anchors"], cut = await wizard.settle(
             job, creation, steps, "original", clean, params.get("consent_id"), new_keys
         )
@@ -1538,16 +1539,17 @@ async def _finish(job: Job, params: dict) -> None:
             # The build's changes, flushed onto the avatar's row as an
             # UPDATE of what was read (autoflush, before the statement below).
             db.add(avatar)
-            result = await db.execute(
+            finished = await execute_dml(
+                db,
                 update(Creation)
                 .where(Creation.id == creation_id, Creation.status == CreationStatus.finishing)
                 .values(
                     status=CreationStatus.finished,
                     job=job_record(job, DONE),
                     consent_ids=creation.consent_ids,
-                )
+                ),
             )
-            if result.rowcount != 1:
+            if finished != 1:
                 raise RuntimeError("the creation left finishing while it was built")
             await db.commit()
     except Exception:
@@ -1584,10 +1586,16 @@ async def _build_avatar(
     anchors = creation.anchors
     # Re-checked here, not only at the request: a retry after a restart
     # runs on whatever the row holds now.
-    if not anchors_are_current(creation) or anchors.get("id") != params.get("anchors_id"):
+    if (
+        not anchors
+        or not anchors_are_current(creation)
+        or anchors.get("id") != params.get("anchors_id")
+    ):
         raise Conflict409(
             "The marks belong to another image; place them again", code="anchors_stale"
         )
+    # Current anchors were made on this line, on the current image.
+    assert face_type is not None and current is not None
     rig, problems = fit_from_anchors(anchors, params.get("marks"), face_type)
     if problems:
         raise Validation422(
@@ -1776,7 +1784,9 @@ async def _own_mouth(
         logger.exception("finish %s: storing the mouth kit failed", job.id)
         avatar.ai_edited = ai_edited
         return standard(TEETH_FAILED)
-    kit = json.loads(avatar.mouth_config)["kit"]
+    stored = avatar.mouth_config
+    assert stored is not None  # mouth_kit.store wrote it
+    kit = json.loads(stored)["kit"]
     return kit["generated"] > 0 or bool(kit["teeth"]["used"])
 
 
@@ -1797,12 +1807,13 @@ async def _record_finish_consent(creation: Creation, consent_id: str) -> None:
                 )
             )
         ).scalar_one_or_none()
-        result = await db.execute(
+        recorded = await execute_dml(
+            db,
             update(Creation)
             .where(Creation.id == creation.id, Creation.org_id == creation.org_id)
-            .values(consent_ids=consent.with_consent(stored, consent_id))
+            .values(consent_ids=consent.with_consent(stored, consent_id)),
         )
-        if result.rowcount != 1:
+        if recorded != 1:
             raise RuntimeError("the creation being finished is gone")
         await db.commit()
 
@@ -2019,8 +2030,7 @@ async def recover_interrupted(db, running: Callable[[str], bool] = lambda _id: F
         finishing = status == CreationStatus.finishing
         if finishing:
             values.update(status=CreationStatus.draft, avatar_id=None)
-        result = await db.execute(update(Creation).where(*where).values(**values))
-        if result.rowcount != 1:
+        if await execute_dml(db, update(Creation).where(*where).values(**values)) != 1:
             continue
         recovered += 1
         if finishing and avatar_id:
@@ -2073,16 +2083,17 @@ async def expire_idle() -> int:
         for creation_id, org_id, job in idle:
             if runner.active_for(creation_id) or (job or {}).get("state") in ACTIVE_STATES:
                 continue
-            result = await db.execute(
+            changed = await execute_dml(
+                db,
                 update(Creation)
                 .where(
                     Creation.id == creation_id,
                     Creation.status == CreationStatus.draft,
                     Creation.updated_at < now - IDLE_EXPIRY,
                 )
-                .values(status=CreationStatus.expired, steps=None, anchors=None)
+                .values(status=CreationStatus.expired, steps=None, anchors=None),
             )
-            if result.rowcount == 1:
+            if changed == 1:
                 expired.append(creation_prefix(org_id, creation_id))
         ended = (
             await db.execute(

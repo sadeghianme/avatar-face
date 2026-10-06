@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import io
 import math
+from typing import cast
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -134,7 +135,8 @@ def lip_colour(array: np.ndarray, points: np.ndarray) -> tuple[float, float, flo
     """The lips' own colour (0..1 RGB): the median over the outer lip ring."""
     p = np.asarray(points)[T.OUTER_LIP_RING]
     rgb = sample(array, p[:, 0], p[:, 1])[:, :3]
-    return tuple(float(v) for v in np.median(rgb, axis=0))
+    r, g, b = (float(v) for v in np.median(rgb, axis=0))
+    return r, g, b
 
 
 def is_flat_art(array: np.ndarray, frame: G.FaceFrame) -> bool:
@@ -314,13 +316,15 @@ def _feather(box_w: int, box_h: int) -> np.ndarray:
     return fy[:, None] * fx[None, :]
 
 
-def _oval_hole(shape: tuple[int, int], oval_px: np.ndarray, feather: float, dilate: float = 0.0) -> np.ndarray:
+def _oval_hole(shape: tuple[int, ...], oval_px: np.ndarray, feather: float, dilate: float = 0.0) -> np.ndarray:
     """0 inside the oval (grown by `dilate` px), rising to 1 over `feather`
     px outside it."""
     mask = Image.new("L", (shape[1], shape[0]), 0)
     ImageDraw.Draw(mask).polygon([(float(x), float(y)) for x, y in oval_px], fill=255)
     inside = np.asarray(mask) > 0
-    outside_distance = distance_transform_edt(~inside)
+    # The distances alone: scipy's stub also allows the indices it returns
+    # only when asked for them.
+    outside_distance = cast(np.ndarray, distance_transform_edt(~inside))
     return np.asarray(G.smoothstep((outside_distance - dilate) / max(feather, 1e-6)), dtype=np.float32)
 
 
@@ -371,7 +375,8 @@ def cavity_texture(lip: tuple[float, float, float], shades: tuple[float, float, 
 
 def tongue_colour(lip: tuple[float, float, float]) -> tuple[float, float, float]:
     red = np.asarray(TONGUE_RED) / 255.0
-    return tuple(float(v) for v in (np.asarray(lip) * 0.5 + red * 0.5))
+    r, g, b = (float(v) for v in (np.asarray(lip) * 0.5 + red * 0.5))
+    return r, g, b
 
 
 def _row_y(points: np.ndarray, row: list[int], x: np.ndarray) -> np.ndarray:

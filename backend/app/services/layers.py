@@ -68,6 +68,8 @@ def build_layers(image_bytes: bytes, face_box: list[float]) -> dict[str, bytes]:
     # head — which is exactly what showed up on a photo with a lit ceiling
     # behind it. Only pixels the SEGMENTER calls person get repainted.
     fill_alpha = None
+    # The opaque photo's own pixels, before un-mixing; a cut-out has none.
+    raw: np.ndarray | None = None
 
     if had_alpha:
         rgba = np.asarray(source.convert("RGBA")).astype(np.float32)
@@ -132,8 +134,8 @@ def build_layers(image_bytes: bytes, face_box: list[float]) -> dict[str, bytes]:
 
     # A cut-out has nothing behind it — no background layer at all, and the
     # renderer treats its absence as "transparent", same as today. Only an
-    # opaque photo gets a fill.
-    if not had_alpha:
+    # opaque photo gets a fill (`raw` is set exactly for one).
+    if raw is not None:
         repaint = fill_alpha if fill_alpha is not None else alpha
         # Diffuse from the RAW photo: the un-mixed colour is only meaningful
         # under the subject, and seeding the backdrop fill with it drags the

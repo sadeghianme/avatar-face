@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from typing import Final
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,9 +66,9 @@ from app.core.errors import Forbidden403, Validation422
 from app.models import Consent, Organization
 from app.services.ai_models import PROVIDER as GOOGLE
 
-THIRD_PARTY_AI = "third_party_ai"
-DEPICTION = "depiction"
-GENERATED_FACE = "generated_face"
+THIRD_PARTY_AI: Final = "third_party_ai"
+DEPICTION: Final = "depiction"
+GENERATED_FACE: Final = "generated_face"
 SCOPES = (THIRD_PARTY_AI, DEPICTION, GENERATED_FACE)
 # Statements about the face in one creation: bound to it (`subject_id`).
 SUBJECT_SCOPES = frozenset({DEPICTION, GENERATED_FACE})

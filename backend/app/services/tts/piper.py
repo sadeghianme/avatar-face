@@ -28,10 +28,14 @@ import io
 import os
 import threading
 import wave
+from typing import TYPE_CHECKING
 
 from app.core.config import get_settings
 from app.services.tts.base import SynthesisResult, TTSProvider, Voice
 from app.services.tts.visemes import cues_from_text
+
+if TYPE_CHECKING:
+    from piper import PiperVoice
 
 # id -> (filename stem, display name, locale). Deliberately small: one or two
 # voices per language beats a list nobody can choose from.
@@ -52,7 +56,7 @@ CATALOGUE: dict[str, tuple[str, str, str]] = {
     "pl_darkman": ("pl_PL-darkman-medium", "Darkman · Polish male", "pl-PL"),
 }
 
-_voices: dict[str, object] = {}
+_voices: dict[str, PiperVoice] = {}
 _load_lock = threading.Lock()
 _synth_semaphore: asyncio.Semaphore | None = None
 
