@@ -29,7 +29,7 @@ def _capture_mail(monkeypatch):
         sent.append({"to": to, "subject": subject, "html": html, "text": text})
         return True
 
-    monkeypatch.setattr("app.api.auth.send_email", fake_send)
+    monkeypatch.setattr("app.services.accounts.send_email", fake_send)
     return sent
 
 

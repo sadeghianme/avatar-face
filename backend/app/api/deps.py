@@ -9,13 +9,13 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import Depends, Path, Request
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import Auth401, Forbidden403, NotFound404
 from app.core.security import decode_token
 from app.db import get_db
 from app.models import ROLE_RANK, Membership, Organization, Role, User
+from app.services import accounts, orgs
 
 DB = Annotated[AsyncSession, Depends(get_db)]
 
@@ -25,10 +25,7 @@ async def get_current_user(request: Request, db: DB) -> User:
     if not auth.lower().startswith("bearer "):
         raise Auth401("Missing bearer token", code="missing_token")
     user_id = decode_token(auth[7:], "access")
-    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
-    if user is None:
-        raise Auth401("User no longer exists", code="unknown_user")
-    return user
+    return await accounts.require_user(db, user_id)
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
@@ -50,18 +47,10 @@ def require_org(min_role: Role = Role.member):
         user: CurrentUser,
         db: DB,
     ) -> OrgContext:
-        org = (
-            await db.execute(select(Organization).where(Organization.id == org_id))
-        ).scalar_one_or_none()
+        org = await orgs.get_org(db, org_id)
         if org is None:
             raise NotFound404("Organization not found", code="org_not_found")
-        membership = (
-            await db.execute(
-                select(Membership).where(
-                    Membership.org_id == org_id, Membership.user_id == user.id
-                )
-            )
-        ).scalar_one_or_none()
+        membership = await orgs.membership_of(db, org_id, user.id)
         if membership is None:
             # Non-members get 404, not 403: don't leak org existence.
             raise NotFound404("Organization not found", code="org_not_found")
