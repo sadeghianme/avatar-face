@@ -4,7 +4,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Avatar3DEngine } from "../../engine3d";
-import { stubCanvas, stubRenderer } from "../../engine3d/__tests__/three-fakes";
+import { stubCanvas, stubImageDecoding, stubRenderer } from "../../engine3d/__tests__/three-fakes";
 import { readHead3DExtras } from "../extras";
 import { optionsFor } from "../load";
 
@@ -17,20 +17,6 @@ import { optionsFor } from "../load";
 
 const glb = readFileSync(new URL("./fixtures/synthetic-head.glb", import.meta.url));
 
-/** Images decode in a browser; here an element that says it loaded. */
-class FakeImage {
-  width = 4;
-  height = 4;
-  private listeners = new Map<string, (() => void)[]>();
-  addEventListener(type: string, fn: () => void) {
-    this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]);
-  }
-  removeEventListener() {}
-  set src(_url: string) {
-    queueMicrotask(() => (this.listeners.get("load") ?? []).forEach((fn) => fn()));
-  }
-}
-
 async function loadFixture(): Promise<THREE.Group> {
   const loader = new GLTFLoader();
   const buffer = glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength);
@@ -40,8 +26,7 @@ async function loadFixture(): Promise<THREE.Group> {
 
 describe("a head3d GLB in three.js", () => {
   beforeEach(() => {
-    vi.stubGlobal("document", { createElementNS: () => new FakeImage() });
-    vi.stubGlobal("self", globalThis);
+    stubImageDecoding();
     vi.stubGlobal("requestAnimationFrame", () => 1);
     vi.stubGlobal("cancelAnimationFrame", () => undefined);
     vi.stubGlobal("window", { devicePixelRatio: 1 });

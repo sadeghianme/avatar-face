@@ -123,6 +123,45 @@ describe("baking the 2D deformers", () => {
     expect(bake.fidelity.oh.max).toBeLessThan(0.1); // under a tenth of a mouth width
   });
 
+  it("bakes the same face the same way, whatever the picture's size or where in it the face sits", () => {
+    // A synthetic subject: the fixture's face scaled 1.5x and moved into a
+    // larger picture. The deltas are the engine's, in image pixels, so they
+    // scale with the face and do not care where it is.
+    const s = 1.5;
+    const [dx, dy] = [140, 90];
+    const moved: Rig = {
+      ...rig,
+      image_size: [Math.round(rig.image_size[0] * s + 2 * dx), Math.round(rig.image_size[1] * s + 2 * dy)],
+      points: rig.points.map(([x, y]) => [x * s + dx, y * s + dy]),
+      face_box: [rig.face_box[0] * s + dx, rig.face_box[1] * s + dy, rig.face_box[2] * s + dx, rig.face_box[3] * s + dy],
+    };
+    const other = bakeMorphTargets(moved);
+    const mouthWidth = Math.hypot(rig.points[291][0] - rig.points[61][0], rig.points[291][1] - rig.points[61][1]);
+    let worst = 0;
+    for (const [name, baked] of [...Object.entries(bake.targets), ...Object.entries(bake.visemes)]) {
+      const theirs = other.targets[name] ?? other.visemes[name];
+      expect(theirs.at).toBe(baked.at);
+      for (let i = 0; i < 478; i++) {
+        worst = Math.max(worst, Math.hypot(theirs.dx[i] - baked.dx[i] * s, theirs.dy[i] - baked.dy[i] * s) / (mouthWidth * s));
+      }
+    }
+    expect(worst).toBeLessThan(1e-9); // the same to rounding (measured: 4e-15)
+    for (const viseme of Object.keys(bake.fidelity)) {
+      expect(other.fidelity[viseme].max).toBeCloseTo(bake.fidelity[viseme].max, 9);
+    }
+  });
+
+  it("moves nothing at rest and only what each shape touches", () => {
+    const rest = bake.visemes.sil;
+    // Silence is a closed mouth: the upper face never moves for a mouth shape.
+    for (const shape of [...Object.values(bake.visemes), ...SYMMETRIC_WEIGHTS.map((k) => bake.targets[k])]) {
+      for (const i of [10, 151, 9, 8, 168, 6, 197]) { // the forehead and the bridge of the nose
+        expect(Math.abs(shape.dx[i]) + Math.abs(shape.dy[i])).toBeLessThan(1e-6);
+      }
+    }
+    expect(Math.max(...rest.dy.map(Math.abs))).toBeLessThan(Math.max(...bake.visemes.aa.dy.map(Math.abs)));
+  });
+
   it("bakes a painted-lid profile's blink from the mesh blink", () => {
     const toon = bakeMorphTargets({ ...rig, render_profile: "toon@1" });
     expect(toon.profile).toBe("toon@1");

@@ -24,6 +24,28 @@ export function stubCanvas(width = 256, height = 256): HTMLCanvasElement {
   return { width, height, dataset: {} } as unknown as HTMLCanvasElement;
 }
 
+/** An image element as GLTFLoader makes one (document.createElementNS):
+ *  images decode in a browser; this one only says it loaded. */
+export class FakeImage {
+  width = 4;
+  height = 4;
+  private listeners = new Map<string, (() => void)[]>();
+  addEventListener(type: string, fn: () => void) {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]);
+  }
+  removeEventListener() {}
+  set src(_url: string) {
+    queueMicrotask(() => (this.listeners.get("load") ?? []).forEach((fn) => fn()));
+  }
+}
+
+/** What GLTFLoader needs of the page to parse a GLB with images in Node;
+ *  undo with vi.unstubAllGlobals(). */
+export function stubImageDecoding(): void {
+  vi.stubGlobal("document", { createElementNS: () => new FakeImage() });
+  vi.stubGlobal("self", globalThis);
+}
+
 /** A triangle with morph targets named `morphs`, under a Head node unless
  *  `head` is false; `influence(name)` reads what the engine wrote. */
 export function morphModel(morphs: readonly string[], head = true) {
