@@ -205,9 +205,7 @@ export class BodyMotion {
       this.spare = null;
       return value;
     }
-    let u = 0;
-    let v = 0;
-    let s = 0;
+    let u: number, v: number, s: number;
     do {
       u = this.random() * 2 - 1;
       v = this.random() * 2 - 1;

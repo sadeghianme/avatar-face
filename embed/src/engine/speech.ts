@@ -153,7 +153,8 @@ export class SpeechTrack {
       if (audio !== this.currentAudio) return;
       this.hooks.onEnded();
     });
-    const playPromise = audio.play();
+    // Undefined from browsers that predate play() returning a promise.
+    const playPromise = audio.play() as Promise<void> | undefined;
     this.cueStart = performance.now();
     if (playPromise) {
       // An abort during stop() must NOT surface as an unhandled rejection.
