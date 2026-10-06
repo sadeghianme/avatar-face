@@ -5,11 +5,12 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
+import { useForgotPassword } from "@/features/auth/api";
 import { AuthShell } from "@/features/auth/components/AuthShell";
-import { api } from "@/lib/api";
 
 export function ForgotPasswordPage() {
   const { t } = useTranslation();
+  const forgot = useForgotPassword();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -18,7 +19,7 @@ export function ForgotPasswordPage() {
     e.preventDefault();
     setBusy(true);
     try {
-      await api.post("/auth/forgot-password", { email });
+      await forgot.mutateAsync(email);
     } catch {
       // Deliberately ignored. The server answers the same way whether or not
       // the address exists, and showing an error here would put back exactly

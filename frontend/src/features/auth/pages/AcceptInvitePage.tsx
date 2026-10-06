@@ -1,18 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
+import { useAcceptInvite, useInvite } from "@/features/auth/api";
 import { AuthShell } from "@/features/auth/components/AuthShell";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { useAuth } from "@/providers/auth";
-
-interface InviteInfo {
-  org_name: string;
-  email: string;
-  role: string;
-}
 
 export function AcceptInvitePage() {
   const { t } = useTranslation();
@@ -21,15 +15,12 @@ export function AcceptInvitePage() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
 
-  const { data: invite, isLoading } = useQuery({
-    queryKey: ["invite", token],
-    queryFn: () => api.get<InviteInfo>(`/invitations/${token}`),
-    retry: false,
-  });
+  const { data: invite, isLoading } = useInvite(token);
+  const acceptInvite = useAcceptInvite(token);
 
   const accept = async () => {
     try {
-      await api.post(`/invitations/${token}/accept`);
+      await acceptInvite.mutateAsync();
       navigate("/app", { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));

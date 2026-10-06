@@ -5,8 +5,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
+import { useResetPassword } from "@/features/auth/api";
 import { AuthShell } from "@/features/auth/components/AuthShell";
-import { api } from "@/lib/api";
 import { useAuth } from "@/providers/auth";
 
 const MIN_LENGTH = 8;
@@ -18,6 +18,7 @@ export function ResetPasswordPage() {
   const { adoptSession } = useAuth();
   const token = params.get("token") ?? "";
 
+  const reset = useResetPassword();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [show, setShow] = useState(false);
@@ -33,10 +34,7 @@ export function ResetPasswordPage() {
     setBusy(true);
     setError(null);
     try {
-      const tokens = await api.post<{ access_token: string; refresh_token: string }>("/auth/reset-password", {
-        token,
-        password,
-      });
+      const tokens = await reset.mutateAsync({ token, password });
       // Straight in. Someone who has just proved control of the mailbox and
       // chosen a password should not be asked to type it again. Through the
       // auth context, not setTokens: writing storage alone leaves the context

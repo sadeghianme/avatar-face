@@ -3,6 +3,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, u
 
 import { api } from "@/lib/api";
 import { needsPersonalOrg, settingUpWorkspace } from "@/lib/orgSetup";
+import { queryKeys } from "@/lib/queryKeys";
 import type { Org } from "@/lib/types";
 import { useAuth } from "@/providers/auth";
 
@@ -28,7 +29,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const [currentId, setCurrentId] = useState<string | null>(localStorage.getItem(LAST_ORG_KEY));
 
   const { data: orgs = [], isLoading } = useQuery({
-    queryKey: ["orgs"],
+    queryKey: queryKeys.orgs(),
     queryFn: () => api.get<Org[]>("/orgs"),
     enabled: Boolean(user),
   });
@@ -58,7 +59,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     api
       .post<Org>("/orgs", { name: `${user.display_name || user.username}'s space`, personal: true })
       .then(async () => {
-        await queryClient.invalidateQueries({ queryKey: ["orgs"] });
+        await queryClient.invalidateQueries({ queryKey: queryKeys.orgs() });
         // Made but not listed (a failed refetch): say so, rather than wait forever.
         if (!queryClient.getQueryData<Org[]>(["orgs"])?.length) throw new Error("not listed");
       })
@@ -84,7 +85,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const createOrg = useCallback(
     async (name: string) => {
       const org = await api.post<Org>("/orgs", { name });
-      await queryClient.invalidateQueries({ queryKey: ["orgs"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orgs() });
       setCurrent(org);
       return org;
     },
