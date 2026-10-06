@@ -6,7 +6,7 @@ import { CHEEK_LANDMARKS } from "../engine/landmarks";
 import { engineSeam } from "../engine/seam";
 import type { MouthExtension, MouthSurfaceFrame } from "../mouth-extension";
 import type { Rig } from "../types";
-import { NoopPath } from "./browser-fakes";
+import { NoopPath, paintedImage, readingCanvas, type PaintedImage, type Pixel } from "./browser-fakes";
 
 /**
  * The widget's texture upgrade (setTexture): it boots on the 256 px
@@ -20,10 +20,6 @@ import { NoopPath } from "./browser-fakes";
 
 const rig = JSON.parse(readFileSync(new URL("./fixtures/human-rig.json", import.meta.url), "utf8")) as Rig;
 const [RIG_W, RIG_H] = rig.image_size;
-
-type Pixel = [number, number, number, number];
-/** A fake picture: its size, and its colour at each of its own pixels. */
-type Picture = HTMLImageElement & { paint(x: number, y: number): Pixel };
 
 const THUMB_LIP: Pixel = [180, 60, 72, 255];
 const FULL_LIP: Pixel = [196, 48, 66, 255];
@@ -52,57 +48,17 @@ const regions = (() => {
  * at the wrong place reads something else). The thumbnail's lips are a
  * shade off the full picture's, as a small JPEG's are.
  */
-function picture(width: number, lip: Pixel): Picture {
+function picture(width: number, lip: Pixel): PaintedImage {
   const height = Math.round((width * RIG_H) / RIG_W);
   const k = RIG_W / width;
-  return {
-    naturalWidth: width, naturalHeight: height, width, height,
-    paint(x: number, y: number): Pixel {
-      const rx = Math.min(RIG_W - 1, Math.max(0, Math.floor((x + 0.5) * k)));
-      const ry = Math.min(RIG_H - 1, Math.max(0, Math.floor((y + 0.5) * k)));
-      const region = regions[ry * RIG_W + rx];
-      if (region === 1) return lip;
-      if (region === 2) return SKIN;
-      return [(rx * 3 + ry) % 256, (rx + ry * 5) % 256, (rx * 7 + ry * 11) % 256, 255];
-    },
-  } as Picture;
-}
-
-/**
- * A canvas whose 2D context reads back what was drawn into it: the last
- * drawImage's picture, through that call's source and destination boxes.
- */
-function readingCanvas(size = 256): HTMLCanvasElement {
-  let drawn: { image: Picture; sx: number; sy: number; sw: number; sh: number; dx: number; dy: number; dw: number; dh: number } | null = null;
-  const target: Record<string, unknown> = {
-    drawImage: (image: Picture, ...a: number[]) => {
-      if (typeof image.paint !== "function") return;
-      const [w, h] = [image.naturalWidth, image.naturalHeight];
-      if (a.length === 2) drawn = { image, sx: 0, sy: 0, sw: w, sh: h, dx: a[0], dy: a[1], dw: w, dh: h };
-      else if (a.length === 4) drawn = { image, sx: 0, sy: 0, sw: w, sh: h, dx: a[0], dy: a[1], dw: a[2], dh: a[3] };
-      else drawn = { image, sx: a[0], sy: a[1], sw: a[2], sh: a[3], dx: a[4], dy: a[5], dw: a[6], dh: a[7] };
-    },
-    getImageData: (x: number, y: number, w: number, h: number) => {
-      const data = new Uint8ClampedArray(Math.max(1, w * h) * 4);
-      for (let n = 0; n < w * h; n++) {
-        const px = x + (n % w), py = y + Math.floor(n / w);
-        const d = drawn;
-        if (!d) continue;
-        const sx = Math.floor(d.sx + ((px + 0.5 - d.dx) * d.sw) / d.dw);
-        const sy = Math.floor(d.sy + ((py + 0.5 - d.dy) * d.sh) / d.dh);
-        data.set(d.image.paint(sx, sy), n * 4);
-      }
-      return { data, width: w, height: h };
-    },
-    createLinearGradient: () => ({ addColorStop: () => undefined }),
-    createRadialGradient: () => ({ addColorStop: () => undefined }),
-    measureText: () => ({ width: 0 }),
-  };
-  const ctx = new Proxy(target, {
-    get: (obj, key: string) => (key in obj ? obj[key] : () => undefined),
-    set: (obj, key: string, value: unknown) => ((obj[key] = value), true),
+  return paintedImage(width, height, (x, y) => {
+    const rx = Math.min(RIG_W - 1, Math.max(0, Math.floor((x + 0.5) * k)));
+    const ry = Math.min(RIG_H - 1, Math.max(0, Math.floor((y + 0.5) * k)));
+    const region = regions[ry * RIG_W + rx];
+    if (region === 1) return lip;
+    if (region === 2) return SKIN;
+    return [(rx * 3 + ry) % 256, (rx + ry * 5) % 256, (rx * 7 + ry * 11) % 256, 255];
   });
-  return { width: size, height: size, getContext: () => ctx } as unknown as HTMLCanvasElement;
 }
 
 /** A mouth renderer that only records what the engine hands it to paint with. */
@@ -141,7 +97,7 @@ describe("the texture upgrade", () => {
 
   const thumbnail = picture(256, THUMB_LIP);
   const full = picture(RIG_W, FULL_LIP);
-  const engineOn = (texture: Picture) => new AvatarEngine(readingCanvas(512), rig, texture, { fullPhoto: false });
+  const engineOn = (texture: PaintedImage) => new AvatarEngine(readingCanvas(512), rig, texture, { fullPhoto: false });
 
   it("reads the full picture's lips and cheeks from where they are in it", () => {
     const engine = engineOn(thumbnail);
