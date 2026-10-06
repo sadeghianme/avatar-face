@@ -13,6 +13,8 @@ from pydantic import BaseModel
 from app.api.deps import DB, OrgOwner
 from app.core.credentials import CREDENTIAL_FIELDS, PROVIDER_KIND, credentials
 from app.core.errors import Validation422
+from app.services.imagegen import verify_key
+from app.services.tts.registry import get_provider
 
 logger = logging.getLogger("liveface.integrations")
 router = APIRouter(prefix="/orgs/{org_id}/integrations", tags=["integrations"])
@@ -85,11 +87,8 @@ async def test_provider(provider: str, ctx: OrgOwner) -> dict:
     if PROVIDER_KIND.get(provider) == "image":
         # Checks the key without generating: a real generation costs money and
         # ten seconds, which is a lot to spend on "is this key right".
-        from app.services.imagegen import verify_key
 
         return await verify_key()
-
-    from app.services.tts.registry import get_provider
 
     tts = get_provider(provider)  # raises 422 if not configured
     try:

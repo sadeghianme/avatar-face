@@ -14,13 +14,16 @@ from app.core.errors import Conflict409, NotFound404, Validation422
 from app.models import Avatar, AvatarKind, Creation, CreationStatus, Organization
 from app.models.base import new_id
 from app.schemas.creation import GenerateCreationRequest
-from app.services import wizard
+from app.services import consent, imagegen, wizard
+from app.services.ai_models import PROVIDER
 from app.services.creations.records import job_record
 from app.services.creations.repo import check_draft_limit
 from app.services.creations.rules import incoming_key
 from app.services.creations.runs import launch
 from app.services.jobs import QUEUED, runner
+from app.services.photo_io import probe_photo
 from app.services.storage import get_storage
+from app.services.usage import check_image_limit
 
 
 def upload_plan(
@@ -53,8 +56,6 @@ async def _probe(data: bytes) -> None:
     thread rather than run_cpu: the probe is what decides whether a job is
     worth queueing, so it must not wait behind the jobs already queued.
     """
-    from app.services.photo_io import probe_photo
-
     await asyncio.to_thread(probe_photo, data)
 
 
@@ -112,10 +113,6 @@ async def create_generated(
     needs (403), a source that is not one of the org's photo avatars (404,
     409), no image model (409), the draft limit (409), the image limit
     (429), and the job admission."""
-    from app.services import consent, imagegen
-    from app.services.ai_models import PROVIDER
-    from app.services.usage import check_image_limit
-
     consent.require_ai_enabled(org)
     plan = None
     steps = None

@@ -212,7 +212,7 @@ async def test_jobs_cut_short_by_a_restart_become_retryable(client, setup):
     avatar is failed with a message that says to retry — and retrying
     works. The published version stays live throughout."""
     from app.db import get_session_factory
-    from app.services.rig import INTERRUPTED_ERROR, fail_interrupted
+    from app.services.avatars.build import INTERRUPTED_ERROR, fail_interrupted
 
     headers, org_id, avatar_id, key = setup
     base = f"/orgs/{org_id}/avatars/{avatar_id}"
@@ -232,7 +232,7 @@ async def test_jobs_cut_short_by_a_restart_become_retryable(client, setup):
 
 async def test_recovery_leaves_settled_avatars_alone(client, setup):
     from app.db import get_session_factory
-    from app.services.rig import fail_interrupted
+    from app.services.avatars.build import fail_interrupted
 
     headers, org_id, avatar_id, key = setup
     async with get_session_factory()() as db:

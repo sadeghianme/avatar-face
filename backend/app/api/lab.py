@@ -16,15 +16,18 @@ judged and deleted freely.
 
 from __future__ import annotations
 
+import io
 import logging
 
 from fastapi import APIRouter
+from PIL import Image
 
 from app.api.deps import DB, OrgMember
 from app.core.errors import Conflict409
 from app.models import AvatarKind, AvatarStatus
 from app.services.avatars import repo as avatars
 from app.services.jobs import run_cpu
+from app.services.landmarks import detect
 from app.services.storage import get_storage
 
 logger = logging.getLogger("liveface.lab")
@@ -63,12 +66,6 @@ def _landmark_z(image_bytes: bytes) -> list[float]:
     second one: the stable function's return shape stays untouched, and the
     lab does not pay a model load per request.
     """
-    import io
-
-    from PIL import Image
-
-    from app.services.landmarks import detect
-
     found = detect(Image.open(io.BytesIO(image_bytes)))
     if found is None:
         raise RuntimeError("no face detected")

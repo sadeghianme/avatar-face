@@ -14,6 +14,8 @@ import logging
 
 from app.models import Avatar, AvatarKind
 from app.services.jobs import run_cpu
+from app.services.layers import store_layers
+from app.services.rig import make_thumbnail, write_thumbnail_key
 
 logger = logging.getLogger("liveface.avatars")
 
@@ -26,8 +28,6 @@ async def rebuild_layers(avatar: Avatar, storage) -> None:
     otherwise be composited over the new ones. Likewise never fatal; the
     embed falls back to the single-photo path when has_layers is False.
     """
-    from app.services.layers import store_layers
-
     avatar.has_layers = False
     if avatar.kind != AvatarKind.photo or not avatar.rig_key or not avatar.image_key:
         return
@@ -45,8 +45,6 @@ async def rebuild_layers(avatar: Avatar, storage) -> None:
 
 async def rebuild_thumbnail(avatar: Avatar, storage) -> None:
     """Regenerate the thumbnail from whatever image_key now points at."""
-    from app.services.rig import make_thumbnail, write_thumbnail_key
-
     if not avatar.image_key:
         return
     try:

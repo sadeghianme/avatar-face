@@ -29,10 +29,15 @@ back by Discard, and swept with the draft's other orphans.
 from __future__ import annotations
 
 import io
+import logging
 import re
 from typing import Any
+from uuid import uuid4
+
+from PIL import Image, UnidentifiedImageError
 
 from app.core.errors import Validation422
+from app.services.storage import STORAGE_ERRORS
 
 ZOOM_MAX = 1.3
 KINDS = ("transparent", "color", "image")
@@ -187,8 +192,6 @@ def prepare_image(data: bytes) -> bytes:
     """`data` (an upload) as the WebP a background is stored as: decoded and
     checked, scaled to at most MAX_SIDE a side, alpha kept, metadata
     dropped. Validation422 for anything that is not a picture. CPU work."""
-    from PIL import Image, UnidentifiedImageError
-
     try:
         with Image.open(io.BytesIO(data)) as probe:
             probe.verify()
@@ -221,8 +224,6 @@ async def store_image(avatar: Any, storage, image: bytes) -> list[str]:
     """Make `image` the draft's background and show it (the caller commits
     and marks the draft dirty). Returns the keys it replaced, to delete
     after the commit: the published snapshot has its own copy."""
-    from uuid import uuid4
-
     scene = effective(avatar)
     previous = [k for k in (image_key_of(scene),) if k]
     key = image_key(avatar.org_id, avatar.id, uuid4().hex[:8])
@@ -250,10 +251,6 @@ async def sweep_files(avatar: Any, storage, scene: dict | None) -> None:
     process that died between replacing one and deleting the old one leaves
     it behind for good (publishing holds the edit lock, as every writer of
     these files does)."""
-    import logging
-
-    from app.services.storage import STORAGE_ERRORS
-
     logger = logging.getLogger("liveface.scene")
     root = f"orgs/{avatar.org_id}/avatars/{avatar.id}/"
     named = keys(scene)

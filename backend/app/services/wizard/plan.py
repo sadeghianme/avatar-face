@@ -6,6 +6,8 @@ from __future__ import annotations
 import re
 from typing import Literal
 
+from app.services.creations.steps import plan_of  # noqa: F401  (the plan of a creation's steps)
+
 MODELS = ("human", "animal")
 LOOKS = ("realistic", "animation", "cartoon")
 SOURCES = ("upload", "generate")
@@ -57,11 +59,6 @@ def make_plan(model: str, look: str, source: str, description: str = "") -> dict
         "source": source,
         "description": description.strip()[:MAX_WORDS] or None,
     }
-
-
-def plan_of(steps: dict | None) -> dict | None:
-    plan = (steps or {}).get(PLAN)
-    return dict(plan) if isinstance(plan, dict) else None
 
 
 def inferred_plan(face_type: str | None, generated: bool) -> dict:

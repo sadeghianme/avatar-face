@@ -143,7 +143,7 @@ async def test_a_missing_line_renders_on_demand_where_hardware_allows(monkeypatc
         assert reference == b"REFERENCE"
         return _wav(), 1000
 
-    monkeypatch.setattr(local_render, "render_text", fake_render)
+    monkeypatch.setattr(cloned_module, "render_text", fake_render)
     result = await ClonedTTSProvider().synthesize("brand new line", "org:sarah", "en-US")
     assert result.duration_ms == 1000
     assert result.cues and result.cues[-1]["viseme"] == "sil"

@@ -11,14 +11,17 @@ from __future__ import annotations
 
 import json
 import logging
+import time as _time
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, UploadFile
 from pydantic import BaseModel, Field
 
 from app.api.deps import DB, OrgMember
-from app.core.errors import NotFound404, Validation422
+from app.core.errors import Conflict409, NotFound404, Validation422
 from app.services import clonejobs
+from app.services.local_render import capability
 from app.services.storage import get_storage
+from app.services.tts.cloned import render_job
 
 logger = logging.getLogger("liveface.clonejobs")
 router = APIRouter(prefix="/orgs/{org_id}/clone-jobs", tags=["clone-jobs"])
@@ -93,8 +96,6 @@ async def render_capability(ctx: OrgMember) -> dict:
     True on an operator's laptop with Apple Silicon; false on the CPU-only
     server, where the UI shows the external-worker instructions instead.
     """
-    from app.services.local_render import capability
-
     return capability()
 
 
@@ -108,9 +109,6 @@ async def render_here(
     already polls — a blocking response would just hold a connection open
     for a minute to say what the poll says anyway.
     """
-    from app.core.errors import Conflict409
-    from app.services.local_render import capability, render_job
-
     check = capability()
     if not check["available"]:
         raise Conflict409(
@@ -126,7 +124,6 @@ async def render_here(
     # Claim synchronously so a double-click cannot start two renders.
     job["status"] = "processing"
     job["error"] = None
-    import time as _time
 
     job["claimed_at"] = _time.time()
     await clonejobs._write_job(storage, ctx.org.id, job)

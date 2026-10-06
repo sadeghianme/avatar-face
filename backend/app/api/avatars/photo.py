@@ -14,6 +14,7 @@ from app.models import Avatar
 from app.schemas.avatar import AvatarOut
 from app.services import scene as scene_service
 from app.services.avatars import history, photo, repo, settings
+from app.services.portrait_photo import MAX_BYTES
 
 
 class BackgroundRequest(BaseModel):
@@ -85,8 +86,6 @@ async def upload_scene_image(avatar_id: str, file: UploadFile, ctx: OrgMember, d
     edit like any other — visitors see it only after Publish. An opaque
     picture may have one too (the dashboard says it will not show until the
     background is removed)."""
-    from app.services.portrait_photo import MAX_BYTES
-
     avatar = await repo.require_in_org(db, ctx.org.id, avatar_id)
     settings.require_scene(avatar)
     if file.content_type not in get_settings().allowed_image_types:

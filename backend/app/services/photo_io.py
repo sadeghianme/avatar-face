@@ -19,6 +19,7 @@ transparent PNG we write, so a cut-out holds nothing but the cut-out.
 from __future__ import annotations
 
 import io
+import math
 
 import numpy as np
 from PIL import Image, ImageOps
@@ -153,8 +154,6 @@ def frame_photo(data: bytes, crop: dict[str, float], roll: float = 0.0) -> Image
     corner would be a new edge for the rig to tear on); a transparent one
     stays transparent there, which is what its edge already is.
     """
-    import math
-
     with Image.open(io.BytesIO(data)) as source:
         transparent = has_alpha(source)
         image = source.convert("RGBA" if transparent else "RGB")

@@ -23,6 +23,7 @@ from app.services.jobs import (
     Job,
     runner,
 )
+from app.services.wizard import prepare_job
 
 logger = logging.getLogger("liveface.creations")
 
@@ -98,8 +99,6 @@ async def run_job(job: Job, params: dict) -> None:
 
 async def run_prepare(job: Job, params: dict) -> None:
     """The four-step wizard's step 3 (services.wizard.prepare_job)."""
-    from app.services.wizard import prepare_job
-
     await prepare_job(job, params)
 
 

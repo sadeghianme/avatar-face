@@ -13,6 +13,7 @@ import io
 import json
 import logging
 
+import numpy as np
 from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +33,7 @@ from app.services.avatars.history import snapshot
 from app.services.jobs import run_cpu
 from app.services.photo_io import has_alpha, png_bytes, scrub_transparent
 from app.services.publishing import mark_dirty
+from app.services.rig import build_rig, fit_base_mesh, landmarks_from_image, starting_mesh
 from app.services.segment import SegmentationUnavailable, remove_background
 from app.services.storage import STORAGE_ERRORS, get_storage
 
@@ -319,8 +321,6 @@ def _locate_crop(outer, inner) -> tuple[int, int] | None:
     """Where `inner` sits in `outer` pixel for pixel, or None when it does
     not sit anywhere exactly once (not a crop of it, or a flat image where
     every position matches and the origin is unknowable)."""
-    import numpy as np
-
     # Compared as scrubbed RGBA: an older cut-out still holds colour under
     # alpha 0, and cropping it now blanks that colour.
     big = np.ascontiguousarray(np.asarray(scrub_transparent(outer))).view(np.uint32)[:, :, 0]
@@ -354,8 +354,6 @@ def _redetect_rig(
     they are in the cropped photo's coordinates and nothing says where that
     crop was.
     """
-    from app.services.rig import build_rig, fit_base_mesh, landmarks_from_image, starting_mesh
-
     try:
         points, blendshapes, size, detected = landmarks_from_image(image_bytes)
     except Exception:

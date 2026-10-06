@@ -32,7 +32,25 @@ import json
 import logging
 import re
 from datetime import UTC, datetime
+from uuid import uuid4
 
+from app.services import scene as scene_service
+from app.services.disclosure import (
+    with_ai_shapes,
+    with_ai_teeth,
+    without_ai_shapes,
+    without_ai_teeth,
+)
+from app.services.layers import layer_key
+from app.services.mouth import (
+    ai_teeth_record,
+    clean_character,
+    motion_url,
+    photo_urls,
+    renderer_allowed,
+    upload_teeth_record,
+)
+from app.services.mouth import load as load_mouth
 from app.services.storage import STORAGE_ERRORS
 
 logger = logging.getLogger("liveface.publishing")
@@ -114,8 +132,6 @@ async def publish(avatar, storage) -> dict:
 
     layer_keys: dict[str, str] = {}
     if getattr(avatar, "has_layers", False):
-        from app.services.layers import layer_key
-
         for name in LAYER_NAMES:
             copied = await copy(
                 layer_key(avatar.org_id, avatar.id, name),
@@ -124,10 +140,6 @@ async def publish(avatar, storage) -> dict:
             )
             if copied:
                 layer_keys[name] = copied
-
-    from app.services.mouth import load as load_mouth
-    from app.services.mouth_kit import without_ai_shapes
-    from app.services.mouth_photo import without_ai_teeth
 
     face_type = getattr(avatar, "face_type", "human")
     mouth = load_mouth(getattr(avatar, "mouth_config", None))
@@ -147,7 +159,6 @@ async def publish(avatar, storage) -> dict:
 
     # The scene (services.scene): by value, with its background picture
     # copied like the other files, only when it is shown.
-    from app.services import scene as scene_service
 
     scene = scene_service.load(avatar)
     scene_published = None
@@ -219,8 +230,6 @@ async def publish_mouth(mouth: dict | None, face_type: str, copy) -> dict | None
     A mouth this face type may not use publishes as the classic one (None),
     whatever route put it in the draft: the photographic mouth draws human
     teeth, and a visitor must never see them in a muzzle."""
-    from app.services.mouth import renderer_allowed
-
     if not mouth or not renderer_allowed(mouth["renderer"], face_type):
         return None
     published = {"renderer": mouth["renderer"], "profile": mouth.get("profile") or {}}
@@ -264,7 +273,6 @@ async def republish_mouth(avatar, storage) -> dict | None:
     config = config_of(avatar)
     if config is None:
         return None
-    from app.services.mouth import load as load_mouth
 
     prefix = published_prefix(avatar.org_id, avatar.id, config.get("revision", 0))
     face_type = config.get("face_type") or getattr(avatar, "face_type", "human")
@@ -370,11 +378,8 @@ async def discard_draft(avatar, storage) -> list[str] | None:
     config = config_of(avatar)
     if config is None:
         return None
-    from app.services.mouth import load as load_mouth
 
     discarded = _mouth_keys(load_mouth(getattr(avatar, "mouth_config", None)))
-
-    from uuid import uuid4
 
     stamp = uuid4().hex[:8]
     base = f"orgs/{avatar.org_id}/avatars/{avatar.id}"
@@ -399,7 +404,6 @@ async def discard_draft(avatar, storage) -> list[str] | None:
     # Layers live at a fixed path, so they are restored in place, and a layer
     # the published version does not have is deleted: going back to a
     # cut-out must not keep the edited draft's backdrop behind it.
-    from app.services.layers import layer_key
 
     layer_keys = config.get("layer_keys") or {}
     for name in LAYER_NAMES:
@@ -441,7 +445,6 @@ async def discard_draft(avatar, storage) -> list[str] | None:
     avatar.framing = config.get("framing", avatar.framing)
     # The scene goes back too, its picture into a fresh draft key; a
     # snapshot from before scenes existed puts the draft back to none.
-    from app.services import scene as scene_service
 
     discarded |= scene_service.keys(scene_service.load(avatar))
     published_scene = config.get("scene")
@@ -470,8 +473,6 @@ def _restored_teeth(published: dict | None, config: dict, has_photo: bool) -> di
     its disclosure says (AI teeth are always disclosed there; any other
     photo is the owner's). A record naming a photo that did not come back
     is dropped: it would describe teeth the draft does not have."""
-    from app.services.mouth_photo import ai_teeth_record, upload_teeth_record
-
     if published is not None:
         return None if published.get("source") and not has_photo else published
     if not has_photo:
@@ -507,9 +508,6 @@ def _restored_ai_edited(
     rather than copied because the published disclosure leaves them out
     while the classic mouth hides them, and the draft keeps them with the
     files."""
-    from app.services.mouth_kit import with_ai_shapes, without_ai_shapes
-    from app.services.mouth_photo import with_ai_teeth, without_ai_teeth
-
     disclosure = config.get("disclosure")
     if disclosure is not None:
         ai_edited = disclosure.get("ai_edited") or None
@@ -548,7 +546,6 @@ async def published_view(avatar, storage) -> dict | None:
     layer_urls = {
         name: await storage.presign_get(key) for name, key in layer_keys.items()
     }
-    from app.services import scene as scene_service
 
     return {
         "framing": config.get("framing", "face"),
@@ -585,7 +582,6 @@ async def _mouth_view(mouth: dict | None, storage) -> dict | None:
     allows (/storage/ is on main.PublicCorsMiddleware's public surface)."""
     if not mouth:
         return None
-    from app.services.mouth import clean_character, motion_url, photo_urls
 
     if mouth.get("renderer") != "continuous":
         # The classic renderer, with the owner's character settings if they

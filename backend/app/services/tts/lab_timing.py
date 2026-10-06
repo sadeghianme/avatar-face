@@ -16,12 +16,13 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 from app.core.config import get_settings
 from app.services.tts.envelope import measure
 from app.services.tts.ipa import ipa_to_visemes
-from app.services.tts.kokoro import _LANG_BY_PREFIX, DEFAULT_VOICE, VOICES
-from app.services.tts.timing import ENVELOPE_VISEMES
-from app.services.tts.visemes import cues_from_text
+from app.services.tts.kokoro_voices import DEFAULT_VOICE, LANG_BY_PREFIX, VOICES
+from app.services.tts.timing import ENVELOPE_VISEMES, cues_from_text
 
 
 @dataclass(frozen=True)
@@ -144,6 +145,7 @@ def _get_engine():
     global _engine
     with _lock:
         if _engine is None:
+            # The ONNX runtime and its model: heavy, loaded on first speech.
             from kokoro_onnx import Kokoro
             settings = get_settings()
             model, voices = settings.kokoro_lipsync_model_path, settings.kokoro_voices_path
@@ -165,8 +167,7 @@ def render_timed(text: str, voice_id: str, lang: str) -> tuple[bytes, int, list[
     """One synthesis with the timestamped model: 16-bit WAV, its length in
     ms, and the phoneme spans the model placed in it. Blocking CPU work,
     one inference at a time (the lab and the provider share the engine)."""
-    import numpy as np
-    import soundfile as sf
+    import soundfile as sf  # libsndfile: only where Kokoro speaks
 
     with _render_lock:
         samples, rate, timings = _get_engine().create_timed(
@@ -180,7 +181,7 @@ def render_timed(text: str, voice_id: str, lang: str) -> tuple[bytes, int, list[
 
 def _render(text: str, voice: str) -> tuple[bytes, int, list[dict], list[dict]]:
     chosen = next((v for v in VOICES if v.id == voice), next(v for v in VOICES if v.id == DEFAULT_VOICE))
-    audio, duration, spans = render_timed(text, chosen.id, _LANG_BY_PREFIX[chosen.id[0]])
+    audio, duration, spans = render_timed(text, chosen.id, LANG_BY_PREFIX[chosen.id[0]])
     cues = native_cues(spans, duration, audio)
     baseline = cues_from_text(text, duration, chosen.locale, audio=audio)
     return audio, duration, cues, baseline

@@ -23,7 +23,13 @@ uploads too: it is the same question.
 
 from __future__ import annotations
 
+import io
 from dataclasses import dataclass
+
+from PIL import Image
+
+from app.core.config import get_settings
+from app.services import landmarks
 
 # Face width as a fraction of the image's SHORTER side (the frame the avatar
 # shows is square-ish: a wide cut-out or a landscape picture must not be
@@ -141,12 +147,6 @@ def check_landmarks(points, image_size: tuple[int, int], detected: bool) -> RigC
 
 def check_image(data: bytes) -> RigCheck:
     """Run detection on raw image bytes and judge the result."""
-    import io
-
-    from PIL import Image
-
-    from app.core.config import get_settings
-
     try:
         image = Image.open(io.BytesIO(data)).convert("RGB")
     except Exception:
@@ -158,10 +158,8 @@ def check_image(data: bytes) -> RigCheck:
         # which passes everything. Better to admit we cannot tell.
         return RigCheck(False, "no landmark model configured")
 
-    from app.services.rig import _mediapipe_landmarks
-
     try:
-        points = _mediapipe_landmarks(image)
+        points = landmarks.detect_points(image)
     except (ValueError, RuntimeError):  # no face; no landmarker
         return RigCheck(False, "no face detected", detected=False, code="no_face")
 
@@ -181,12 +179,6 @@ def salvage_portrait(data: bytes) -> bytes | None:
     None when there is nothing to salvage: no face, unreadable image, or a
     face already so large that cropping cannot help.
     """
-    import io
-
-    from PIL import Image
-
-    from app.core.config import get_settings
-
     if not get_settings().rig_model_path:
         return None
     try:
@@ -195,10 +187,8 @@ def salvage_portrait(data: bytes) -> bytes | None:
         # Broad on purpose: Pillow raises many types on untrusted bytes.
         return None
 
-    from app.services.rig import _mediapipe_landmarks
-
     try:
-        points = _mediapipe_landmarks(image)
+        points = landmarks.detect_points(image)
     except (ValueError, RuntimeError):  # no face; no landmarker
         return None
 

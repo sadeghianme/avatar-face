@@ -24,6 +24,7 @@ from typing import cast
 
 import numpy as np
 from PIL import Image, ImageDraw
+from scipy.ndimage import label, map_coordinates
 
 MOUTH_LEFT, MOUTH_RIGHT, UPPER_INNER = 61, 291, 13
 
@@ -111,8 +112,6 @@ def extraction_canvas(image: Image.Image, points: np.ndarray, inner_ring: list[i
     bilinearly, and the clip's coverage is the ring's polygon drawn at
     _CLIP_SUPERSAMPLE times the resolution and averaged.
     """
-    from scipy.ndimage import map_coordinates
-
     axes = _mouth_axes(points)
     if axes is None:
         raise ValueError("the teeth photo's mouth has no width")
@@ -168,8 +167,6 @@ def extract_dental_layers(image: np.ndarray, upper_contour: np.ndarray,
     """dental-texture-model.ts extractDentalLayers, pass for pass.
 
     `image` is RGBA (H, W, 4) uint8; contours are (n, 2) canvas points."""
-    from scipy.ndimage import label
-
     height, width = image.shape[:2]
     upper = np.asarray(upper_contour, dtype=np.float64)
     lower = np.asarray(lower_contour, dtype=np.float64)

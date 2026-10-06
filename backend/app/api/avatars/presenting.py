@@ -19,6 +19,7 @@ from app.services import mouth as mouth_service
 from app.services import publishing
 from app.services import scene as scene_service
 from app.services.avatars.fitting import rig_profile
+from app.services.mouth_kit import public_kit
 from app.services.storage import get_storage
 
 
@@ -39,6 +40,33 @@ def undo_label(avatar: Avatar) -> str | None:
     return history[-1].get("label") if history else None
 
 
+def mouth_view(raw: str | None, motion_url: str | None = None) -> dict | None:
+    """What the dashboard is told (never the storage keys). `teeth` says
+    where the mouth photo came from, or why a new avatar has none
+    (services.mouth_photo): {source: "ai" | "upload" | null, note}.
+    `motion_url` is the draft motion's presigned URL, which the caller signs
+    (`signed_view`); `kit` the summary of the
+    mouth kit (services.mouth_kit.public_kit), or null."""
+    config = mouth_service.load(raw)
+    if config is None:
+        return None
+    teeth = config.get("teeth") or {}
+    has_photo = bool(config.get("oral_image_key") and config.get("oral_rig_key"))
+    return {
+        "renderer": config["renderer"],
+        "profile": config.get("profile") or {},
+        "character": mouth_service.clean_character(config.get("character")),
+        "has_oral_photo": has_photo,
+        "teeth": {
+            # An upload from before the record existed is still an upload.
+            "source": teeth.get("source") or ("upload" if has_photo else None),
+            "note": teeth.get("note"),
+        },
+        "motion_url": motion_url if config.get("motion_key") else None,
+        "kit": public_kit(config.get("kit")),
+    }
+
+
 def avatar_out[S: AvatarOut](
     avatar: Avatar,
     motion_url: str | None = None,
@@ -57,7 +85,7 @@ def avatar_out[S: AvatarOut](
         update={
             "undo_label": undo_label(avatar),
             "voice": avatar.voice,
-            "mouth": mouth_service.public_view(avatar.mouth_config, motion_url),
+            "mouth": mouth_view(avatar.mouth_config, motion_url),
             "render_profile": render_profile,
             "scene": scene_service.public_view(avatar.scene_config),
             # Draft ahead of the snapshot: the dashboard's Publish bar.

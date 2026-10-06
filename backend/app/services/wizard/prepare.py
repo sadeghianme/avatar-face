@@ -12,9 +12,16 @@ from uuid import uuid4
 from PIL import Image
 
 from app.core.errors import AppError, Conflict409, Validation422
+from app.db import get_session_factory
+from app.services import backdrop, imagegen, landmarks, photo_adjust, photo_io, segment
+from app.services import creations as svc
 from app.services.creations import detect, records
 from app.services.creations import steps as creation_steps
 from app.services.jobs import FAILED, Job, run_cpu, runner
+from app.services.photo_analysis import check_photo, check_png
+from app.services.photo_io import frame_photo, ingest_photo, on_backdrop, png_bytes
+from app.services.storage import get_storage
+from app.services.usage import check_image_limit, record_generation
 from app.services.wizard.plan import (
     CHANGE,
     GENERATE,
@@ -37,11 +44,7 @@ logger = logging.getLogger("liveface.wizard")
 def _png(data: bytes) -> tuple[bytes, int, int]:
     """An answer as the creation stores images: upright PNG, no metadata,
     long edge at most photo_io.STORED_MAX_EDGE."""
-    from PIL import Image
-
-    from app.services.photo_io import STORED_MAX_EDGE, ingest_photo
-
-    clean = ingest_photo(data, STORED_MAX_EDGE)
+    clean = ingest_photo(data, photo_io.STORED_MAX_EDGE)
     with Image.open(io.BytesIO(clean)) as image:
         return clean, image.width, image.height
 
@@ -51,8 +54,6 @@ def cut_out(png: bytes, face_type: str) -> bytes | None:
     cleanly (the picture is then kept as it is). A person goes through the
     person segmenter when this server has one; everything, and a person the
     segmenter cannot take, through the backdrop keyer. CPU work."""
-    from app.services import backdrop, segment
-
     if face_type == "human":
         try:
             return segment.remove_background(png)
@@ -85,9 +86,6 @@ async def settle(
     Returns (anchors, cut). `steps` is edited in place; every key written
     is added to `new_keys` (deleted if the result is discarded).
     """
-    from app.services import creations as svc
-    from app.services.storage import get_storage
-
     face_type = creation.face_type
     storage = get_storage()
     items = steps["items"]
@@ -155,9 +153,6 @@ def head_crop_source(data: bytes) -> tuple[bytes, str] | None:
     and the same face cropped to 2.2 face widths is edited under the same
     prompt. So a declined edit is asked once more on this: a different
     input, never the same request repeated (photo_adjust.head_crop)."""
-    from app.services import imagegen, landmarks, photo_adjust
-    from app.services.photo_io import on_backdrop
-
     image = on_backdrop(Image.open(io.BytesIO(data)))
     try:
         points = photo_adjust._detect(image)
@@ -185,11 +180,6 @@ async def _ask_ai(
     included, is metered, and the switch and the monthly limit are read
     again before the second. A character made from words has no picture to
     crop and is asked once."""
-    from app.db import get_session_factory
-    from app.services import creations as svc
-    from app.services import imagegen
-    from app.services.usage import check_image_limit, record_generation
-
     session = get_session_factory()
     sends: list[tuple[bytes, str] | None] = (
         [None] if source is None else [await run_cpu(svc.source_on_backdrop, source)]
@@ -259,9 +249,6 @@ async def _ask_ai(
 async def prepare_job(job: Job, params: dict) -> None:
     """Step 3: make the picture the avatar is built from (see the module
     docstring), cut it out and find its face, in one write."""
-    from app.services import creations as svc
-    from app.services.storage import get_storage
-
     creation = await records.load_creation(job)
     if creation is None:
         return
@@ -282,8 +269,6 @@ async def prepare_job(job: Job, params: dict) -> None:
     if mode == ORIGINAL:
         # The photo itself, framed on its face when the check found one,
         # cut out: no AI. Replaces an earlier framing and its cut-out.
-        from app.services.photo_analysis import check_photo
-        from app.services.photo_io import frame_photo, png_bytes
 
         job.report(0.1, "preparing the photo")
         # The photo's own framing and cut-out, from an earlier "use my
@@ -308,8 +293,6 @@ async def prepare_job(job: Job, params: dict) -> None:
             opaque_id = "framed"
         record = {"mode": ORIGINAL, "look": look, "instruction": None, "step": opaque_id}
     else:
-        from app.services.photo_analysis import check_png
-
         instruction = (params.get("instruction") or "").strip() or None
         if mode == GENERATE:
             source, prompt = None, character_prompt(model, look, plan.get("description"))

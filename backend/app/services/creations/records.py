@@ -10,9 +10,10 @@ from collections.abc import Callable
 
 from sqlalchemy import select, update
 
-from app.core.errors import AppError
+from app.core.errors import AppError, Forbidden403
 from app.db import execute_dml, get_session_factory
 from app.models import Creation, CreationStatus
+from app.services.consent import ai_switched_off
 from app.services.jobs import (
     DONE,
     FAILED,
@@ -166,14 +167,10 @@ async def ai_switched_off_now(org_id: str) -> bool:
     on, not from the next request. So it is read again before every
     provider call, next to the image limit.
     """
-    from app.services.consent import ai_switched_off
-
     return await ai_switched_off(org_id)
 
 
 def ai_disabled_error() -> AppError:
-    from app.core.errors import Forbidden403
-
     return Forbidden403(
         "Your organization turned off third-party AI, so nothing was sent",
         code="third_party_ai_disabled",

@@ -30,6 +30,7 @@ from app.core.errors import NotFound404
 from app.models import Avatar
 from app.schemas.tts import CueOut
 from app.services.avatars import repo as avatars
+from app.services.publishing import published_view
 from app.services.rate_limit import SHARE_PER_CLIENT, SHARE_PER_TOKEN, enforce
 from app.services.storage import get_storage
 from app.services.tts.registry import synthesize_cached
@@ -62,7 +63,6 @@ async def public_avatar(token: str, db: DB) -> dict:
     storage = get_storage()
     # Published, like the embed: a share link is a page other people open,
     # so a half-finished edit must not appear on it either.
-    from app.services.publishing import published_view
 
     view = await published_view(avatar, storage)
     if view is None:

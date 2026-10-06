@@ -11,12 +11,18 @@ from sqlalchemy import select, update
 
 from app.core.errors import AppError
 from app.db import execute_dml, get_session_factory
-from app.models import Avatar, Creation
+from app.models import Avatar, Creation, Organization
+from app.services import consent, disclosure, imagegen, mouth_kit, mouth_photo, performance_kit
+from app.services import mouth as mouth_config
+from app.services.ai_models import PROVIDER
 from app.services.creations.records import error_record
+from app.services.creations.steps import plan_of
 from app.services.jobs import (
     Job,
     runner,
 )
+from app.services.mouth_photo import TeethFailure
+from app.services.usage import check_image_limit
 
 logger = logging.getLogger("liveface.creations")
 
@@ -36,17 +42,15 @@ def animal_character_mouth(creation: Creation, avatar: Avatar) -> None:
     wizard's plan (the owner's first choice, "Animal") can. Human-style upper
     teeth on a dog look wrong, and the owner can turn them on in the Mouth
     panel. Only where the character mouth applies and nothing is set yet."""
-    from app.services import mouth, wizard
-
-    plan = wizard.plan_of(creation.steps)
-    if not plan or plan.get("model") != "animal" or not mouth.character_allowed(avatar.face_type):
+    plan = plan_of(creation.steps)
+    if not plan or plan.get("model") != "animal" or not mouth_config.character_allowed(avatar.face_type):
         return
     config = json.loads(avatar.mouth_config) if avatar.mouth_config else {}
     if config.get("character"):
         return
     config.setdefault("renderer", "classic")
     config.setdefault("profile", {})
-    config["character"] = mouth.clean_character({**mouth.DEFAULT_CHARACTER, "teeth": "none"})
+    config["character"] = mouth_config.clean_character({**mouth_config.DEFAULT_CHARACTER, "teeth": "none"})
     avatar.mouth_config = json.dumps(config)
 
 
@@ -85,8 +89,6 @@ async def own_mouth(
     wait outside the runner's slot (JobRunner.outside_slot), so a finish
     waiting on Google never holds another person's upload queued.
     """
-    from app.services import consent, mouth_kit, mouth_photo, performance_kit
-
     config = mouth_photo.default_config(avatar.face_type)
     if config is None:
         return None
@@ -95,7 +97,7 @@ async def own_mouth(
     def standard(note: dict) -> bool:
         # The standard teeth and the bundled motion, and why.
         avatar.mouth_config = json.dumps(
-            {**config, "teeth": mouth_photo.generic_teeth_record(note)}
+            {**config, "teeth": mouth_config.generic_teeth_record(note)}
         )
         return False
 
@@ -153,8 +155,6 @@ async def record_finish_consent(creation: Creation, consent_id: str) -> None:
     and puts the creation back to draft; a restart interrupts it). Raises
     when it cannot be recorded, and then nothing is sent
     (mouth_kit.CallGuard)."""
-    from app.services import consent
-
     async with get_session_factory()() as db:
         stored = (
             await db.execute(
@@ -179,15 +179,13 @@ async def single_teeth(job: Job, avatar: Avatar, image: bytes, storage, sending)
     `image`, admitted exactly like an uploaded mouth photo, when the kit
     cannot be made. Anything short of it publishes the standard teeth with
     the reason in the teeth note. True when the teeth were made."""
-    from app.services import mouth_photo
-
     config = mouth_photo.default_config(avatar.face_type) or {}
     job.report(0.65, "making the teeth")
     try:
         async with runner.outside_slot(job):
             made = await mouth_photo.make_teeth(avatar.org_id, image, on_send=sending)
         await mouth_photo.store(
-            avatar, storage, made.photo, made.rig, mouth_photo.ai_teeth_record(made.model)
+            avatar, storage, made.photo, made.rig, mouth_config.ai_teeth_record(made.model)
         )
     except mouth_photo.TeethFailure as exc:
         logger.info("finish %s: standard teeth (%s)", job.id, exc.code)
@@ -199,9 +197,9 @@ async def single_teeth(job: Job, avatar: Avatar, image: bytes, storage, sending)
         note = TEETH_FAILED
     else:
         # AI made part of what visitors see: the disclosure says so.
-        avatar.ai_edited = mouth_photo.with_ai_teeth(avatar.ai_edited, made.model)
+        avatar.ai_edited = disclosure.with_ai_teeth(avatar.ai_edited, made.model)
         return True
-    config["teeth"] = mouth_photo.generic_teeth_record(note)
+    config["teeth"] = mouth_config.generic_teeth_record(note)
     avatar.mouth_config = json.dumps(config)
     return False
 
@@ -212,10 +210,6 @@ async def ai_allowed(avatar: Avatar) -> str:
     member agreed, the server has its image model, and the monthly image
     limit is not reached (the switch and the limit are read again before
     every call). Else TeethFailure, whose code the teeth note shows."""
-    from app.services import imagegen
-    from app.services.mouth_photo import TeethFailure
-    from app.services.usage import check_image_limit
-
     consent_id = await teeth_consent(avatar)
     if not imagegen.configured():
         raise TeethFailure(
@@ -233,11 +227,6 @@ async def teeth_consent(avatar: Avatar) -> str:
     """The finishing member's current third_party_ai consent, in an
     organization that allows third-party AI; else TeethFailure (nothing is
     sent without both)."""
-    from app.models import Organization
-    from app.services import consent
-    from app.services.ai_models import PROVIDER
-    from app.services.mouth_photo import TeethFailure
-
     async with get_session_factory()() as db:
         org = await db.get(Organization, avatar.org_id)
         if org is None or not org.third_party_ai_enabled:

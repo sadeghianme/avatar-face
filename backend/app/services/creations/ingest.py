@@ -7,6 +7,7 @@ from sqlalchemy import func
 
 from app.core.errors import Conflict409, Validation422
 from app.models import Creation
+from app.services import photo_io, segment
 from app.services.creations.records import SUPERSEDED, load_creation, store_result, write_job
 from app.services.creations.rules import incoming_key, step_key
 from app.services.creations.steps import copied, cutout_id_for, step_check, step_items
@@ -15,19 +16,18 @@ from app.services.jobs import (
     Job,
     run_cpu,
 )
+from app.services.photo_analysis import analyse
+from app.services.photo_io import ingest_photo
 from app.services.storage import get_storage
 
 
 async def run_ingest(job: Job, params: dict) -> None:
-    from app.services.photo_analysis import analyse
-    from app.services.photo_io import STORED_MAX_EDGE, ingest_photo
-
     storage = get_storage()
     incoming = incoming_key(job.org_id, job.subject_id)
     raw = await storage.get_bytes(incoming)
     job.report(0.1, "reading")
     try:
-        clean = await run_cpu(ingest_photo, raw, STORED_MAX_EDGE)
+        clean = await run_cpu(ingest_photo, raw, photo_io.STORED_MAX_EDGE)
     except Validation422:
         # The file itself is the problem; retrying cannot help, and the raw
         # upload (EXIF and all) has no reason to stay.
@@ -84,8 +84,6 @@ async def run_background(job: Job, params: dict) -> None:
     """Cut the subject out of `params["source"]` and make the cut-out the
     current image. Also what choosing an AI result runs, chained, when the
     owner chose to remove the background: the new picture is opaque."""
-    from app.services import segment
-
     creation = await load_creation(job)
     if creation is None:
         return

@@ -11,7 +11,7 @@ from app.core.config import get_settings
 from app.core.errors import NotFound404
 from app.schemas.avatar import AvatarOut
 from app.services.avatars import repo as avatars
-from app.services.rig import process_avatar
+from app.services.avatars.build import process_avatar
 from app.services.stock import STOCK_STYLES, get_stock_image
 
 router = APIRouter(tags=["stock"])

@@ -6,6 +6,7 @@ and the always-on offline TTS provider.
 """
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -21,7 +22,6 @@ def _split_csv(value: str | list[str]) -> list[str]:
         return [item.strip() for item in value if item.strip()]
     value = value.strip()
     if value.startswith("["):  # JSON-style list still works alongside CSV
-        import json
 
         try:
             return [str(item).strip() for item in json.loads(value)]

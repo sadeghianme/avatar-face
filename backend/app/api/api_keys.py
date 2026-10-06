@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 from fastapi import APIRouter, Request
 
 from app.api.deps import DB, OrgAdmin, OrgMember
@@ -44,8 +46,6 @@ async def create_simulator_token(request: Request, ctx: OrgMember) -> dict:
     minutes, and only works from the origin that asked for it — see
     app.services.simulator_token for why a real key cannot be used here.
     """
-    from urllib.parse import urlsplit
-
     origin = request.headers.get("origin") or request.headers.get("referer")
     host = (urlsplit(origin).hostname or "").lower() if origin else ""
     if not host:

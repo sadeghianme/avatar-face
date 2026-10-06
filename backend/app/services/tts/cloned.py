@@ -22,15 +22,21 @@ deliberate refusal rather than an approximation.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import json
 import logging
 
 from sqlalchemy import Row, delete, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFound404
-from app.db import execute_dml
+from app.db import execute_dml, get_session_factory
 from app.models import SpeechCache
-from app.services.tts.base import SynthesisResult, TTSProvider, Voice
+from app.services import clonejobs
+from app.services.local_render import capability, render_lines, render_text
+from app.services.storage import STORAGE_ERRORS, get_storage
+from app.services.tts.base import SynthesisResult, TTSProvider, Voice, cache_key
+from app.services.tts.timing import cues_from_text
 
 logger = logging.getLogger("liveface.cloned")
 
@@ -71,8 +77,6 @@ class ClonedTTSProvider(TTSProvider):
         kind of thing nobody notices until a customer does; callers that can
         degrade gracefully catch this code and fall back deliberately.
         """
-        from app.services.local_render import capability, render_text
-
         if capability()["available"]:
             reference = await _reference_for(voice)
             if reference is not None:
@@ -111,8 +115,6 @@ async def voices_for_org(db: AsyncSession, org_id: str) -> list[Voice]:
 def _cues(
     text: str, duration_ms: int, locale: str, audio: bytes | None = None
 ) -> list[dict]:
-    from app.services.tts.visemes import cues_from_text
-
     return cues_from_text(text, duration_ms, locale, audio=audio)
 
 
@@ -126,8 +128,6 @@ async def _reference_for(voice: str) -> bytes | None:
     org_id, _, name = voice.partition(":")
     if not org_id or not name:
         return None
-    from app.services import clonejobs
-    from app.services.storage import STORAGE_ERRORS, get_storage
 
     storage = get_storage()
     for job in await clonejobs.list_jobs(storage, org_id):
@@ -150,13 +150,6 @@ async def store_line(
     (backend running on capable hardware) so the two paths cannot drift.
     Cues are computed here, from the same phoneme model every provider uses.
     """
-    import json
-
-    from sqlalchemy import select
-
-    from app.services.tts.registry import cache_key
-    from app.services.tts.visemes import cues_from_text
-
     voice = scoped_voice_id(org_id, name)
     key = cache_key(PROVIDER_NAME, voice, locale, text)
     existing = (
@@ -250,3 +243,42 @@ def scoped_voice_id(org_id: str, name: str) -> str:
     read each other's audio — and hear each other's scripts.
     """
     return f"{org_id}:{name}"
+
+
+async def render_job(org_id: str, job_id: str) -> None:
+    """Background task: render one claimed clone job here and store its
+    lines (where this backend's hardware allows: local_render.capability).
+
+    Opens its own database sessions — a BackgroundTask outlives the request
+    session that scheduled it. Every failure lands in the job's error field,
+    because the person watching is looking at the dashboard, not at logs.
+    """
+    storage = get_storage()
+    try:
+        job = await clonejobs.get_job(storage, org_id, job_id)
+        if job is None or job["status"] not in ("pending", "processing"):
+            return
+        reference = await storage.get_bytes(clonejobs.reference_key(org_id, job_id))
+        lines = list(job["lines"])
+        # Closed even when storing a line fails: the generator holds the
+        # one render slot until it is.
+        async with contextlib.aclosing(render_lines(reference, lines)) as rendered:
+            index = 0
+            async for audio, duration_ms in rendered:
+                text = lines[index]
+                index += 1
+                async with get_session_factory()() as db:
+                    await store_line(
+                        db, org_id, job["name"], job["locale"], text, audio, duration_ms
+                    )
+                    await db.commit()
+                await clonejobs.update_progress(storage, org_id, job_id, index)
+        await clonejobs.finish_job(storage, org_id, job_id)
+        logger.info("rendered clone job %s in-process", job_id)
+    except Exception as exc:
+        # Broad on purpose: the background job's boundary; the job records
+        # how it failed.
+        logger.exception("in-process render failed for job %s", job_id)
+        await clonejobs.finish_job(
+            storage, org_id, job_id, error=f"{type(exc).__name__}: {exc}"[:900]
+        )

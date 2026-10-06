@@ -10,7 +10,13 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
-from app.services import mouth, performance_kit
+from app.core.errors import Validation422
+from app.db import get_session_factory
+from app.models import Avatar
+from app.schemas.avatar import MouthProfile
+from app.services import disclosure, mouth, mouth_photo, performance_kit
+from app.services import mouth as mouth_config
+from app.services.edit_locks import avatar_edits
 from app.services.jobs import run_cpu
 from app.services.mouth_kit.calls import (
     FITTED_WITH_TEETH,
@@ -28,9 +34,9 @@ from app.services.mouth_kit.records import (
     _standard_teeth,
     kit_record,
     teeth_reason,
-    with_ai_shapes,
-    without_ai_shapes,
 )
+from app.services.publishing import mark_dirty
+from app.services.storage import get_storage
 
 logger = logging.getLogger("liveface.mouth_kit")
 
@@ -50,10 +56,6 @@ async def store(avatar, storage, result: performance_kit.KitResult, *, source: s
     as it was. The caller commits (and marks an edited draft dirty).
     Returns the keys replaced, to delete after the commit: the published
     snapshot has its own copies."""
-    from app.core.errors import Validation422
-    from app.schemas.avatar import MouthProfile
-    from app.services import mouth_photo
-
     config = mouth.load(avatar.mouth_config) or {"renderer": "continuous", "profile": {}}
     teeth_record = config.get("teeth") or {}
     has_photo = bool(config.get("oral_image_key") and config.get("oral_rig_key"))
@@ -87,14 +89,14 @@ async def store(avatar, storage, result: performance_kit.KitResult, *, source: s
     if new_photo is not None:
         previous += [k for k in (config.get("oral_image_key"), config.get("oral_rig_key")) if k]
         config.update(oral_image_key=new_photo[0], oral_rig_key=new_photo[1],
-                      teeth=mouth_photo.ai_teeth_record(model))
-        ai_edited = mouth_photo.with_ai_teeth(ai_edited, model)
+                      teeth=mouth_config.ai_teeth_record(model))
+        ai_edited = disclosure.with_ai_teeth(ai_edited, model)
         keys = FITTED_WITH_TEETH
     elif has_photo:
         # Teeth the kit does not replace keep their own fit.
         keys = FITTED_WITHOUT_TEETH
     else:
-        config["teeth"] = mouth_photo.generic_teeth_record(
+        config["teeth"] = mouth_config.generic_teeth_record(
             _standard_teeth(reason or _note("teeth_failed", "The teeth could not be made")))
         keys = FITTED_WITH_TEETH
     # The fitted values the kit decides; everything else the owner set (or
@@ -112,11 +114,11 @@ async def store(avatar, storage, result: performance_kit.KitResult, *, source: s
         if config.get("motion_key"):
             previous.append(config["motion_key"])
         config["motion_key"] = key
-        ai_edited = with_ai_shapes(ai_edited, model, generated)
+        ai_edited = disclosure.with_ai_shapes(ai_edited, model, generated)
     else:
         if config.get("motion_key"):
             previous.append(config.pop("motion_key"))
-        ai_edited = without_ai_shapes(ai_edited)
+        ai_edited = disclosure.without_ai_shapes(ai_edited)
     config["kit"] = kit_record(
         result, source=source, teeth={"used": new_photo is not None, "reason": reason},
         fitted={k: config["profile"][k] for k in keys},
@@ -141,8 +143,6 @@ def teeth_changed(avatar, reason: dict) -> None:
     and sizes the ones that are wrongly. The record says its teeth photo is
     no longer the avatar's, and why. The shapes and the jaw range are
     untouched."""
-    from app.schemas.avatar import MouthProfile
-
     config = mouth.load(avatar.mouth_config)
     kit = (config or {}).get("kit")
     if not config or not kit:
@@ -180,7 +180,7 @@ def drop(avatar, reason: dict) -> list[str]:
     if config.get("kit"):
         config["kit"] = {**config["kit"], "state": "dropped", "dropped": reason}
     avatar.mouth_config = json.dumps(config)
-    avatar.ai_edited = without_ai_shapes(avatar.ai_edited)
+    avatar.ai_edited = disclosure.without_ai_shapes(avatar.ai_edited)
     return [key]
 
 
@@ -235,7 +235,7 @@ async def follow_rig(avatar, storage, before: dict | None, after: dict | None) -
 
 async def follow_redetection(org_id: str, avatar_id: str, points) -> None:
     """follow_points for a job that rebuilt a rig of the same picture
-    without the avatar's edit lock (Re-detect, a retry: rig.process_avatar,
+    without the avatar's edit lock (Re-detect, a retry: avatars.build.process_avatar,
     a request's background task).
 
     Under the lock, on the row as it is NOW, in a short transaction of its
@@ -245,11 +245,6 @@ async def follow_redetection(org_id: str, avatar_id: str, points) -> None:
     it had read, its files deleted from under it. Whatever kit the row
     holds now follows the new points. The draft moved ahead of what is
     published (its rig changed), so it is marked so."""
-    from app.db import get_session_factory
-    from app.services.edit_locks import avatar_edits
-    from app.services.publishing import mark_dirty
-    from app.services.storage import get_storage
-
     storage = get_storage()
     stale: list[str] = []
     async with avatar_edits.hold(avatar_id), get_session_factory()() as db:
@@ -265,8 +260,6 @@ async def follow_redetection(org_id: str, avatar_id: str, points) -> None:
 
 
 async def _load_avatar(db, org_id: str, avatar_id: str):
-    from app.models import Avatar
-
     return (
         await db.execute(select(Avatar).where(Avatar.id == avatar_id, Avatar.org_id == org_id))
     ).scalar_one_or_none()

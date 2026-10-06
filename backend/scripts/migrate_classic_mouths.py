@@ -125,7 +125,7 @@ def today() -> str:
 async def plan_for(avatar, storage, day: str) -> Plan:
     """The migration of one selected avatar, computed on the object and
     rolled back by the caller: nothing here is committed."""
-    from app.services import mouth_photo
+    from app.services import mouth, mouth_photo
     from app.services.publishing import config_of, has_unpublished_changes, republish_mouth
 
     before = {
@@ -143,7 +143,7 @@ async def plan_for(avatar, storage, day: str) -> Plan:
     )
     config = mouth_photo.default_config("human")
     assert config is not None, "a human face is allowed the photographic mouth"
-    config["teeth"] = mouth_photo.migrated_teeth_record(day)
+    config["teeth"] = mouth.migrated_teeth_record(day)
     avatar.mouth_config = json.dumps(config)
     await republish_mouth(avatar, storage)
     plan.after = {

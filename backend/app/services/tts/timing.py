@@ -25,6 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
+from app.services.tts.envelope import measure
 from app.services.tts.espeak import supports as espeak_supports
 from app.services.tts.espeak import words_to_ipa
 from app.services.tts.g2p import word_to_phonemes_stressed
@@ -210,12 +211,25 @@ def cues_for_duration(
         return [{"t": 0, "viseme": "sil", "a": 1.0}]
     envelope = None
     if audio:
-        from app.services.tts.envelope import measure
-
         envelope = measure(audio)
     return cues_from_segments(
         segments, scale=duration_ms / modelled, envelope=envelope
     )
+
+
+def cues_from_text(
+    text: str, duration_ms: int, locale: str = "en-US", audio: bytes | None = None
+) -> list[dict]:
+    """Viseme cues for audio of a known duration.
+
+    Delegates to the phoneme-class timing model (vowels hold longer than
+    stops, punctuation buys silence, rounded shapes lead the sound) rather
+    than spreading characters evenly, which reads as off-beat.
+
+    Pass `audio` (the rendered WAV) to measure vowel openness from the
+    voice instead of predicting it from spelling stress.
+    """
+    return cues_for_duration(text, duration_ms, locale, audio=audio)
 
 
 def _char_word_marks(text: str) -> list[dict]:

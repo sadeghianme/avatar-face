@@ -10,8 +10,11 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 from app.core.errors import AppError
+from app.db import get_session_factory
 from app.services import imagegen, performance_kit
+from app.services.consent import ai_switched_off
 from app.services.jobs import Job, runner
+from app.services.usage import check_image_limit, record_generation
 
 logger = logging.getLogger("liveface.mouth_kit")
 
@@ -132,10 +135,6 @@ class CallGuard:
             await asyncio.shield(self._settle(error))
 
     async def _admit(self) -> None:
-        from app.db import get_session_factory
-        from app.services.consent import ai_switched_off
-        from app.services.usage import check_image_limit
-
         if await ai_switched_off(self.org_id):
             raise _Stopped(
                 "third_party_ai_disabled",
@@ -148,9 +147,6 @@ class CallGuard:
             raise _Stopped(exc.code, exc.detail) from exc
 
     async def _settle(self, error: BaseException | None) -> None:
-        from app.db import get_session_factory
-        from app.services.usage import record_generation
-
         billed = performance_kit.call_billing(error)
         async with self._lock:
             try:

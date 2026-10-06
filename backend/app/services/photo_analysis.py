@@ -32,7 +32,16 @@ import math
 import numpy as np
 from PIL import Image
 
+from app.services import landmarks
 from app.services.anchor_fit import LEFT_EYE, RIGHT_EYE
+from app.services.photo_io import on_backdrop
+from app.services.riggable import (
+    NOSE_TIP,
+    check_landmarks,
+    head_turned,
+    nose_offset_of,
+    portrait_crop,
+)
 
 # Photos are judged on the face at this width, so the sharpness threshold
 # means the same on a 400px upload and a 2048px one.
@@ -179,9 +188,6 @@ def face_state(points: np.ndarray) -> dict:
     """What the eyes, the mouth and the head do, with the measures behind
     each verdict. What a touch-up would fix (eyes, mouth), and whether the
     head is turned: what only a regenerated picture fixes."""
-    from app.services.photo_adjust import yaw_offset
-    from app.services.riggable import head_turned, nose_offset_of
-
     eyes = eye_aspect_ratios(points)
     closed = min(eyes) < EYE_CLOSED_EAR
     half_closed = not closed and min(eyes) < EYE_HALF_CLOSED_EAR
@@ -215,6 +221,27 @@ FACE_STATE_CHECKS = (
 )
 
 
+# The cheeks' outer edge points (MediaPipe canonical indices).
+FACE_LEFT, FACE_RIGHT = 234, 454
+
+# How far the nose tip may sit from the middle of the cheeks, as a fraction
+# of half the face width, for a touch-up (services.photo_adjust). Beyond it
+# one eye is foreshortened and partly hidden, the model redraws it frontal,
+# and no 2D paste can put a frontal eye into a turned face. Here, below the
+# touch-up, because the photo check recommends by it too.
+MAX_TOUCHUP_YAW = 0.3
+
+
+def yaw_offset(points: np.ndarray) -> float:
+    """How far the nose tip is from the middle of the cheeks: 0 frontal,
+    1 at a cheek's edge."""
+    left, right = points[FACE_LEFT][0], points[FACE_RIGHT][0]
+    half = abs(right - left) / 2
+    if half <= 0:
+        return 1.0
+    return float(abs(points[NOSE_TIP][0] - (left + right) / 2) / half)
+
+
 def recommend(check: dict, line: str) -> dict:
     """{mode, reasons}: what step 3 recommends for this image on `line`.
 
@@ -222,8 +249,6 @@ def recommend(check: dict, line: str) -> dict:
     fixed order. Nothing can be said without a detector (a server with no
     model): only the pixel checks then speak, for a person.
     """
-    from app.services.photo_adjust import MAX_TOUCHUP_YAW
-
     codes = {c["code"] for c in check.get("checks") or []}
     if line != "human":
         if check.get("detector") is None:
@@ -295,8 +320,6 @@ def suggested_crop(
     """The portrait crop around the face (riggable.portrait_crop, the same
     arithmetic that salvages generated portraits), as fractions of the image,
     grown about its centre to the smallest crop the wizard accepts."""
-    from app.services.riggable import portrait_crop
-
     box = portrait_crop(face_box, size)
     if box is None:
         return None
@@ -348,10 +371,6 @@ def check_photo(image: Image.Image) -> dict:
     A transparent image (a cut-out) is judged on the neutral backdrop an
     image model would see it on (photo_io.on_backdrop).
     """
-    from app.services import landmarks
-    from app.services.photo_io import on_backdrop
-    from app.services.riggable import check_landmarks
-
     rgb = on_backdrop(image)
     size = rgb.size
     try:

@@ -22,6 +22,7 @@ from app.db import get_session_factory
 from app.models import Avatar, Creation, CreationStatus
 from app.services import creations as svc
 from app.services import face_template, landmarks, segment
+from app.services.creations import finish, new
 from app.services.jobs import runner
 from app.services.storage import get_storage
 from tests.conftest import create_org, register_and_login
@@ -274,7 +275,7 @@ async def test_the_header_is_read_off_the_loop_and_only_once_admitted(client, mo
         probed_on.append(threading.get_ident())
         return real_probe(data)
 
-    monkeypatch.setattr(photo_io, "probe_photo", probe)
+    monkeypatch.setattr(new, "probe_photo", probe)
     headers, org_id = await _org(client, "prober")
     assert (await _upload(client, headers, org_id)).status_code == 202
     await runner.drain()
@@ -978,7 +979,7 @@ async def test_a_failed_finish_goes_back_to_draft_and_can_be_retried(client, fac
     async def broken(avatar, storage):
         raise RuntimeError("storage fell over")
 
-    monkeypatch.setattr(publishing, "publish", broken)
+    monkeypatch.setattr(finish, "publish", broken)
     response = await _finish(client, headers, base, anchors["id"])
     failed_avatar = response.json()["avatar_id"]
     await runner.drain()
@@ -988,7 +989,7 @@ async def test_a_failed_finish_goes_back_to_draft_and_can_be_retried(client, fac
     assert await _avatar_row(failed_avatar) is None
     assert _files(f"orgs/{org_id}/avatars/{failed_avatar}/") == []
 
-    monkeypatch.setattr(publishing, "publish", real_publish)
+    monkeypatch.setattr(finish, "publish", real_publish)
     retried = await _run(client, headers, "POST", f"{base}/retry")
     assert retried.status_code == 202, retried.text
     body = await _get(client, headers, base)
@@ -1044,7 +1045,7 @@ class _Unreachable:
         self._monkeypatch = monkeypatch
 
         monkeypatch.setattr(finish, "UNDO_FINISH_BACKOFF_SECONDS", (0.0, 0.0))
-        monkeypatch.setattr(publishing, "publish", self.publish)
+        monkeypatch.setattr(finish, "publish", self.publish)
         monkeypatch.setattr(finish, "undo_finish", self.undo)
 
     async def publish(self, avatar, storage):
@@ -1057,9 +1058,8 @@ class _Unreachable:
         await self.real_undo(*args)
 
     def heal(self) -> None:
-        from app.services import publishing
 
-        self._monkeypatch.setattr(publishing, "publish", self.real_publish)
+        self._monkeypatch.setattr(finish, "publish", self.real_publish)
 
 
 async def _failed_finish(client, headers, base) -> str:

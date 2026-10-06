@@ -103,7 +103,7 @@ def kit_record(
 
 
 def public_kit(record: dict | None) -> dict | None:
-    """The kit as AvatarOut.mouth.kit tells the owner (mouth.public_view):
+    """The kit as AvatarOut.mouth.kit tells the owner (api.avatars.presenting.mouth_view):
     {state: "made" | "dropped", made_at, model, generated, retargeted,
     shapes: [{shape, provenance, reason}] in the manifest's order, teeth:
     {used, reason}, dropped: {code, detail} | null}. None without a kit."""
@@ -128,30 +128,3 @@ def public_kit(record: dict | None) -> dict | None:
         "teeth": record.get("teeth"),
         "dropped": record.get("dropped"),
     }
-
-
-# --- Disclosure ---------------------------------------------------------------------
-
-
-def with_ai_shapes(ai_edited: dict | None, model: str | None, generated: int) -> dict:
-    """The disclosure once AI made `generated` of the mouth's shapes (a new
-    dict: JSON columns are replaced, never mutated)."""
-    from app.services.mouth_photo import mouth_disclosure
-
-    entry = {"model": model, "generated": generated}
-    if not ai_edited:
-        return {"mode": "mouth_shapes", "model": model, "mouth_shapes": entry}
-    disclosed = mouth_disclosure({**ai_edited, "mouth_shapes": entry})
-    assert disclosed is not None  # a shapes entry is always disclosed
-    return disclosed
-
-
-def without_ai_shapes(ai_edited: dict | None) -> dict | None:
-    """The disclosure once no AI-made shape is shown (the kit dropped, a
-    kit with none, the published mouth without its motion): whatever else
-    AI made stays disclosed."""
-    from app.services.mouth_photo import mouth_disclosure
-
-    if not ai_edited:
-        return None
-    return mouth_disclosure({k: v for k, v in ai_edited.items() if k != "mouth_shapes"})

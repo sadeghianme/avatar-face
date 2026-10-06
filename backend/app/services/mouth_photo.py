@@ -82,37 +82,27 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from uuid import uuid4
 
 import numpy as np
+from PIL import Image
 
 from app.core.errors import AppError, Validation422
+from app.db import get_session_factory
+from app.services import dental_photo, imagegen, landmarks, portrait_photo
+from app.services import photo_adjust as pa
+from app.services.consent import ai_switched_off
+from app.services.jobs import run_cpu
+from app.services.mouth import load, oral_keys, renderer_allowed
+from app.services.performance_kit import call_billing, for_standard_teeth
+from app.services.performance_kit.prompts import TEETH_PROMPT
+from app.services.photo_io import png_bytes
+from app.services.usage import check_image_limit, record_generation
 
 logger = logging.getLogger("liveface.mouth_photo")
 
 # What the teeth photo is recorded as in usage (usage.IMAGE_CALLS).
 TEETH_CALL = "teeth"
-
-# Modelled on photo_adjust.TOUCHUP_PROMPT (change one thing, keep every
-# other pixel) and on the oral-detail-v3 prompt of the Reference avatar
-# (docs/dental-rendering-repair-2026-09-07.md), whose teeth the renderer was
-# tuned on: whole upper crowns from the gum to the edge, one continuous
-# arch, a dark gap between the rows, soft light with no stripe across them.
-TEETH_PROMPT = (
-    "Edit this close-up portrait photograph. Make exactly one change: the person "
-    "says a long, broad \"ee\", lips drawn back and slightly apart, so that the "
-    "ENTIRE upper front teeth are clearly visible from the gumline to the biting "
-    "edge, with a thin band of gum above them, all the upper front teeth in one "
-    "continuous natural arch, a small dark gap between the upper and lower teeth, "
-    "and the top edge of the lower front teeth just visible. These are this "
-    "person's own natural teeth: natural shape, spacing and shade for them, with "
-    "no whitening, veneers or brightening beyond their natural tone. Change "
-    "NOTHING else: keep the same person, the same face shape, skin, skin texture, "
-    "pores, makeup, eyes, eye colour, eyebrows, hair, lighting, colours, framing, "
-    "head position, head angle and image size. Do not beautify, smooth, sharpen, "
-    "relight, restyle or crop. Soft, even light on the teeth with no dark stripe "
-    "across them. Photorealistic, indistinguishable from the original photo "
-    "except for the mouth."
-)
 
 # Every visitor of the avatar downloads the mouth photo before the
 # photographic mouth attaches (once per hour and browser: a published file's
@@ -154,85 +144,9 @@ def default_config(face_type: str) -> dict | None:
     own yet, so it has the standard teeth, and its profile seats and sizes
     them as the Reference draws them (performance_kit.for_standard_teeth);
     a kit made at Finish sets the teeth values it fits."""
-    from app.services.mouth import renderer_allowed
-    from app.services.performance_kit import for_standard_teeth
-
     if renderer_allowed("continuous", face_type):
         return {"renderer": "continuous", "profile": for_standard_teeth({})}
     return None
-
-
-def ai_teeth_record(model: str | None) -> dict:
-    return {"source": "ai", "model": model}
-
-
-def upload_teeth_record() -> dict:
-    return {"source": "upload"}
-
-
-def generic_teeth_record(note: dict | None) -> dict:
-    """The record of the standard teeth (no teeth photo of its own), and why."""
-    return {"source": None, "note": note}
-
-
-# The note code of an avatar that was not finished with the standard teeth
-# but moved onto them: it had the classic drawn mouth from before a new
-# person got the photographic one (scripts/migrate_classic_mouths.py).
-MIGRATED_STANDARD = "migrated_standard"
-
-
-def migrated_teeth_record(day: str) -> dict:
-    """The standard teeth's record for an existing avatar moved from the
-    classic mouth on `day` (an ISO date): `default_config`'s mouth is what
-    it gets, and this says why it has no teeth of its own."""
-    return generic_teeth_record({
-        "code": MIGRATED_STANDARD,
-        "detail": f"Standard teeth: moved from the classic mouth on {day}",
-    })
-
-
-# The disclosure's modes that say only the MOUTH was AI-made, the picture
-# itself not: its teeth photo (`teeth`), its mouth shapes (`mouth_shapes`,
-# services.mouth_kit). Every other mode is the picture's own (touchup,
-# stylise, regenerate, generate) and outranks them.
-MOUTH_MODES = ("teeth", "mouth_shapes")
-
-
-def mouth_disclosure(ai_edited: dict | None) -> dict | None:
-    """`ai_edited` with its mode re-derived when only the mouth was AI-made:
-    "teeth" while there is a teeth entry, else "mouth_shapes" while there is
-    a shapes entry, else nothing to disclose (None). The model is that
-    entry's. A picture's own mode is left as it is."""
-    if not ai_edited:
-        return None
-    if ai_edited.get("mode") not in MOUTH_MODES:
-        return ai_edited
-    teeth, shapes = ai_edited.get("teeth"), ai_edited.get("mouth_shapes")
-    if teeth:
-        derived = {"mode": "teeth", "model": teeth.get("model"), "teeth": teeth}
-        return {**derived, "mouth_shapes": shapes} if shapes else derived
-    if shapes:
-        return {"mode": "mouth_shapes", "model": shapes.get("model"), "mouth_shapes": shapes}
-    return None
-
-
-def with_ai_teeth(ai_edited: dict | None, model: str | None) -> dict:
-    """The disclosure once AI made the teeth (a new dict: JSON columns are
-    replaced, never mutated)."""
-    if not ai_edited:
-        return {"mode": "teeth", "model": model, "teeth": {"model": model}}
-    disclosed = mouth_disclosure({**ai_edited, "teeth": {"model": model}})
-    assert disclosed is not None  # a teeth entry is always disclosed
-    return disclosed
-
-
-def without_ai_teeth(ai_edited: dict | None) -> dict | None:
-    """The disclosure once AI-made teeth are gone (replaced or removed):
-    whatever else AI did, to the picture or to the mouth's shapes, stays
-    disclosed."""
-    if not ai_edited:
-        return None
-    return mouth_disclosure({k: v for k, v in ai_edited.items() if k != "teeth"})
 
 
 # --- Admission --------------------------------------------------------------------
@@ -242,10 +156,6 @@ def teeth_verdict(photo: bytes, rig: dict):
     """services.dental_photo.accept_teeth_photo of a prepared mouth photo:
     the embed's own test, so the performance kit's teeth and these pass the
     same way. CPU work."""
-    from PIL import Image
-
-    from app.services import dental_photo
-
     with Image.open(io.BytesIO(photo)) as image:
         image.load()
         return dental_photo.accept_teeth_photo(
@@ -257,8 +167,6 @@ def encode_for_visitors(photo: bytes) -> bytes:
     """`photo` (a clean PNG from ingest_photo) as the WebP visitors are
     served: the same pixel size, so the rig stays valid, and the same colour
     profile. CPU work."""
-    from PIL import Image
-
     with Image.open(io.BytesIO(photo)) as image:
         image.load()
         icc = image.info.get("icc_profile")
@@ -274,8 +182,6 @@ def prepare_mouth_photo(data: bytes) -> tuple[bytes, dict]:
     """(photo, rig) of a mouth photo fit to store, or Validation422 saying
     what is wrong with it. The one admission of every mouth photo, uploaded
     or AI-made: the portrait checks, then `admit_photo`. CPU work."""
-    from app.services import portrait_photo
-
     photo, rig, _note = portrait_photo.prepare_photo(data, "mouth")
     return admit_photo(photo, rig)
 
@@ -296,10 +202,6 @@ def crop_to_mouth(png: bytes, rig: dict) -> tuple[bytes, dict]:
     pixel they sample is the same pixel at the same place in the mouth's
     frame; the rig keeps what the renderer reads of it (the triangulation,
     visemes and the rest are the portrait's business). CPU work."""
-    from PIL import Image
-
-    from app.services.photo_io import png_bytes
-
     points = np.asarray(rig["points"], dtype=np.float64)
     lips = points[list(rig["outer_lip_ring"]) + list(rig["inner_lip_ring"])]
     width = float(np.linalg.norm(points[291] - points[61]))
@@ -349,8 +251,6 @@ async def store(avatar, storage, photo: bytes, rig: dict, teeth: dict) -> list[s
     """Make `photo` the draft's mouth photo (the caller commits and marks the
     draft dirty). Returns the keys of the photo it replaced, to delete
     after the commit: the published snapshot has its own copies."""
-    from app.services.mouth import load
-
     config = load(avatar.mouth_config) or {"renderer": "continuous", "profile": {}}
     previous = [k for k in (config.get("oral_image_key"), config.get("oral_rig_key")) if k]
     image_key, rig_key = await put_photo(avatar, storage, photo, rig)
@@ -364,10 +264,6 @@ async def put_photo(avatar, storage, photo: bytes, rig: dict) -> tuple[str, str]
     return them (image, rig); the config is the caller's to change. Fresh
     keys per photo: the published snapshot may still point at copies of
     the old ones, and browsers cache presigned URLs by path."""
-    from uuid import uuid4
-
-    from app.services.mouth import oral_keys
-
     image_key, rig_key = oral_keys(avatar.org_id, avatar.id, uuid4().hex[:8])
     await storage.put_bytes(image_key, photo, MOUTH_PHOTO_TYPE)
     await storage.put_bytes(rig_key, json.dumps(rig).encode(), "application/json")
@@ -386,9 +282,6 @@ class Request:
 def face_request(data: bytes) -> Request:
     """The face crop a touch-up sends, of `data` (a cut-out on the neutral
     grey). TeethFailure when there is no frontal face to crop. CPU work."""
-    from app.services import landmarks
-    from app.services import photo_adjust as pa
-
     image = pa._rgb(data)
     try:
         points = pa._detect(image)
@@ -411,9 +304,6 @@ def face_request(data: bytes) -> Request:
 def fallback_request(data: bytes) -> Request | None:
     """The same photo as a head-and-shoulders crop, for one more try after
     a refusal; None when that crop would be the same picture. CPU work."""
-    from app.services import imagegen
-    from app.services import photo_adjust as pa
-
     image = pa._rgb(data)
     try:
         points = pa._detect(image)
@@ -440,10 +330,6 @@ class AiTeeth:
 async def _may_call(org_id: str) -> None:
     """The organization's switch and the monthly image limit, read again
     right before a provider call (a queued finish can wait minutes)."""
-    from app.db import get_session_factory
-    from app.services.consent import ai_switched_off
-    from app.services.usage import check_image_limit
-
     if await ai_switched_off(org_id):
         raise TeethFailure(
             "third_party_ai_disabled",
@@ -458,9 +344,6 @@ async def _may_call(org_id: str) -> None:
 
 
 async def _meter(org_id: str) -> None:
-    from app.db import get_session_factory
-    from app.services.usage import record_generation
-
     async with get_session_factory()() as db:
         await record_generation(db, org_id, "gemini", TEETH_CALL)
 
@@ -476,9 +359,6 @@ async def make_teeth(
     the caller can record the consent that let it go whatever the answer
     (a refusal, an answer the teeth test rejects, an error), and not when
     nothing was sent at all (no face, the limit, AI switched off)."""
-    from app.services import imagegen
-    from app.services.jobs import run_cpu
-
     if not imagegen.configured():
         raise TeethFailure(
             "imagegen_unavailable", "AI editing is not configured on this server", 409
@@ -531,8 +411,6 @@ async def make_teeth(
             # timeout was sent and may have been billed, so it is metered;
             # a call that never reached the provider, or failed without an
             # answer, is not.
-            from app.services.performance_kit import call_billing
-
             if call_billing(exc) is None:
                 logger.warning("teeth: the provider did not answer in time (%r)", exc)
                 await _meter(org_id)

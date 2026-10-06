@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.services.tts.registry import all_providers
+
 
 @dataclass(frozen=True)
 class Language:
@@ -78,12 +80,10 @@ async def resolve(locale: str) -> tuple[str, str] | None:
     "de-AT" should reach the German voice rather than falling through to
     silence over a region tag.
     """
-    from app.services.tts.registry import _ALL_PROVIDERS
-
     wanted = locale.replace("_", "-").lower()
     language_only = wanted.split("-")[0]
 
-    by_name = {p.name: p for p in _ALL_PROVIDERS}
+    by_name = {p.name: p for p in all_providers()}
     for name in PROVIDER_ORDER:
         provider = by_name.get(name)
         if provider is None or not provider.is_configured():

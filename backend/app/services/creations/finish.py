@@ -10,12 +10,14 @@ import logging
 from uuid import uuid4
 
 import numpy as np
+from PIL import Image
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.errors import Conflict409, Validation422
 from app.db import execute_dml, get_session_factory
 from app.models import Avatar, AvatarStatus, Creation, CreationStatus
+from app.services.anchor_fit import fit_base_key, fit_base_record, write_fit_base
 from app.services.creations.detect import anchors_are_current, fit_from_anchors
 from app.services.creations.mouth import (
     PUBLISH_LABEL,
@@ -36,7 +38,12 @@ from app.services.jobs import (
     Job,
     run_cpu,
 )
+from app.services.layers import store_layers
+from app.services.photo_io import png_bytes
+from app.services.publishing import publish
+from app.services.rig import make_thumbnail, write_thumbnail_key
 from app.services.storage import get_storage
+from app.services.usage import record_generated_avatar
 
 logger = logging.getLogger("liveface.creations")
 
@@ -108,7 +115,6 @@ async def run_finish(job: Job, params: dict) -> None:
     if generated:
         # A generated picture someone kept: what the usage page counts as a
         # generated avatar (attempts are counted as they are made).
-        from app.services.usage import record_generated_avatar
 
         try:
             async with get_session_factory()() as db:
@@ -121,11 +127,6 @@ async def run_finish(job: Job, params: dict) -> None:
 async def build_avatar(
     job: Job, creation: Creation, avatar: Avatar, params: dict, storage
 ) -> None:
-    from app.services.anchor_fit import fit_base_key, fit_base_record, write_fit_base
-    from app.services.layers import store_layers
-    from app.services.publishing import publish
-    from app.services.rig import make_thumbnail, write_thumbnail_key
-
     face_type = creation.face_type
     steps = creation.steps
     items = step_items(steps)
@@ -218,10 +219,6 @@ async def build_avatar(
 def over_backdrop(cut_out: bytes, backdrop: bytes) -> bytes | None:
     """`cut_out` composited over `backdrop` (same size), as an opaque PNG;
     None when their sizes differ. CPU work."""
-    from PIL import Image
-
-    from app.services.photo_io import png_bytes
-
     with Image.open(io.BytesIO(cut_out)) as top, Image.open(io.BytesIO(backdrop)) as below:
         if top.size != below.size:
             return None

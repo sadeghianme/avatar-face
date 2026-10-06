@@ -22,6 +22,10 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from app.core.config import get_settings
+from app.services.creations import expire_idle, recover_stranded
+from app.services.storage import get_storage
+
 logger = logging.getLogger("liveface.sweeper")
 
 # Everything an org owns lives under this prefix — avatars included, which is
@@ -37,9 +41,6 @@ CANDIDATE_SEGMENT = "/candidates/"
 async def sweep_once() -> int:
     """One pass: staged images past their retention (when it is on), then
     idle creations. Returns the staged images removed."""
-    from app.core.config import get_settings
-    from app.services.storage import get_storage
-
     settings = get_settings()
     removed = 0
     if settings.candidate_retention_hours > 0:
@@ -64,8 +65,6 @@ async def expire_creations() -> int:
     Stranded creations are recovered first: a finish whose failure could not
     be written back is otherwise stuck until the next restart.
     """
-    from app.services.creations import expire_idle, recover_stranded
-
     # Broad on purpose, both: periodic housekeeping must never take the
     # API down, and the next tick tries again.
     try:

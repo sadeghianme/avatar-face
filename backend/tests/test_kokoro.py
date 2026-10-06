@@ -39,10 +39,10 @@ async def test_every_voice_maps_to_a_phonemizer_language():
     """Kokoro keys phonemization off the voice id's first letter. An id whose
     prefix is unmapped would be read as English — Spanish read as English is
     not an accent, it is gibberish."""
-    from app.services.tts.kokoro import _LANG_BY_PREFIX
+    from app.services.tts.kokoro_voices import LANG_BY_PREFIX
 
     for voice in VOICES:
-        assert voice.id[0] in _LANG_BY_PREFIX, voice.id
+        assert voice.id[0] in LANG_BY_PREFIX, voice.id
 
 
 async def test_an_unknown_voice_falls_back_rather_than_failing(monkeypatch):

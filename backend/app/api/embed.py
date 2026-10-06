@@ -25,8 +25,11 @@ from app.models import ApiKey, AvatarStatus
 from app.schemas.tts import CueOut, SynthesizeRequest, SynthesizeResponse
 from app.services import api_keys
 from app.services.avatars import repo as avatars
+from app.services.publishing import published_view
 from app.services.rate_limit import CUES_PER_CLIENT, embed_per_key, enforce
+from app.services.simulator_token import InvalidSimulatorToken
 from app.services.simulator_token import looks_like_one as looks_like_simulator_token
+from app.services.simulator_token import verify as verify_simulator_token
 from app.services.storage import get_storage
 from app.services.tts.registry import synthesize_cached
 from app.services.tts.timing import cue_track, on_planner_thread
@@ -61,9 +64,6 @@ def _simulator_key(token: str, request: Request) -> ApiKey:
     reads org_id, an id for rate limiting, and the domain list — usage is
     metered per organisation, not per key, so there is no row to reference.
     """
-    from app.services.simulator_token import InvalidSimulatorToken
-    from app.services.simulator_token import verify as verify_simulator_token
-
     try:
         org_id = verify_simulator_token(
             get_settings().jwt_secret, token, _origin_host(request)
@@ -129,7 +129,6 @@ async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
     # The PUBLISHED snapshot, never the draft. An owner mid-edit must not be
     # able to change what a visitor sees by accident; that only happens when
     # they press Publish.
-    from app.services.publishing import published_view
 
     view = await published_view(avatar, storage)
     if view is None:

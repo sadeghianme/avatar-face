@@ -9,6 +9,7 @@ import logging
 from app.core.errors import AppError, Conflict409, Validation422
 from app.db import get_session_factory
 from app.models import Creation
+from app.services import imagegen, photo_adjust
 from app.services.creations.records import (
     SUPERSEDED,
     ai_disabled_error,
@@ -38,7 +39,10 @@ from app.services.jobs import (
     Job,
     run_cpu,
 )
+from app.services.photo_adjust import ROUNDS_PER_CREATION, TOUCHUP
+from app.services.photo_analysis import check_png
 from app.services.storage import get_storage
+from app.services.usage import check_image_limit, record_generation
 
 logger = logging.getLogger("liveface.creations")
 
@@ -87,8 +91,6 @@ def auto_adjust_of(creation: Creation) -> dict | None:
     ran on), however it is re-cropped since. The organization's switch, the
     server's image model and the member's consent are the caller's to check.
     """
-    from app.services.photo_adjust import ROUNDS_PER_CREATION, TOUCHUP
-
     if creation.face_type != "human":
         return None
     steps = creation.steps
@@ -160,10 +162,6 @@ async def run_adjust(job: Job, params: dict) -> None:
     It is given back when no provider call was answered, so a photo that
     cannot be touched up, or a provider that is down, costs nothing.
     """
-    from app.services import imagegen, photo_adjust
-    from app.services.photo_analysis import check_png
-    from app.services.usage import check_image_limit, record_generation
-
     creation = await load_creation(job)
     if creation is None:
         return

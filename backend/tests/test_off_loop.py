@@ -14,8 +14,7 @@ from PIL import Image
 
 from app import main
 from app.api import lab, stock
-from app.services import rig as rig_module
-from app.services.avatars import fitting
+from app.services.avatars import derived, fitting
 from app.services.avatars import photo as avatar_photo
 from app.services.storage import get_storage
 from app.services.tts import offline, piper
@@ -82,7 +81,7 @@ async def test_background_removal_runs_on_the_cpu_thread(client, avatar, monkeyp
     headers, base, _, _ = avatar
     monkeypatch.setattr(avatar_photo, "remove_background", lambda raw: _transparent_png())
     cut = _spy(monkeypatch, avatar_photo, "remove_background")
-    thumbs = _spy(monkeypatch, rig_module, "make_thumbnail")
+    thumbs = _spy(monkeypatch, derived, "make_thumbnail")
     response = await client.post(f"{base}/background", json={"remove": True}, headers=headers)
     assert response.status_code == 200, response.text
     assert _on_cpu_thread(cut)

@@ -7,6 +7,7 @@ from __future__ import annotations
 from app.core.errors import Conflict409, Validation422
 from app.models import Creation, CreationStatus
 from app.schemas.creation import CreationMarks
+from app.services.anchor_fit import marks_mouth_as_line
 from app.services.creations.detect import anchors_are_current
 from app.services.creations.steps import step_items
 
@@ -36,8 +37,6 @@ def require_face_type(creation: Creation) -> str:
 def check_marks(marks: CreationMarks | None, face_type: str, size: list[int]) -> dict | None:
     """The marks as a dict, refused where the line or the image rules them
     out (the same refusals as the avatar rig-fit endpoint)."""
-    from app.services.anchor_fit import marks_mouth_as_line
-
     if marks is None:
         return None
     data = marks.model_dump(exclude_none=True)

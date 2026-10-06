@@ -19,7 +19,11 @@ from app.schemas.avatar import (
 )
 from app.services import scene as scene_service
 from app.services.avatars import lifecycle, repo, settings, sources
-from app.services.rig import process_avatar
+from app.services.avatars.build import process_avatar
+from app.services.avaturn import AvaturnUnavailable, new_session
+from app.services.layers import draft_layer_urls
+from app.services.mouth import load as load_mouth
+from app.services.mouth import photo_urls
 from app.services.storage import get_storage
 
 
@@ -50,8 +54,6 @@ async def avaturn_session(ctx: OrgMember) -> dict:
     The token never leaves the server; the browser only ever sees the
     session URL, which is scoped to one throwaway Avaturn user.
     """
-    from app.services.avaturn import AvaturnUnavailable, new_session
-
     try:
         return await new_session()
     except AvaturnUnavailable as exc:
@@ -124,10 +126,6 @@ async def rig_reset(
 
 @router.get("/{avatar_id}", response_model=AvatarDetail)
 async def get_avatar_detail(avatar_id: str, ctx: OrgMember, db: DB) -> AvatarDetail:
-    from app.services.layers import draft_layer_urls
-    from app.services.mouth import load as load_mouth
-    from app.services.mouth import photo_urls
-
     avatar = await repo.require_in_org(db, ctx.org.id, avatar_id)
     storage = get_storage()
     # Built here, not by the route class: the detail adds to the view.

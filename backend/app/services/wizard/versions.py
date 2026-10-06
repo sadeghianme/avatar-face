@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 
 from app.core.errors import Conflict409, Validation422
+from app.services import creations as svc
 from app.services.creations import steps as creation_steps
 from app.services.wizard.plan import (
     AI,
@@ -41,8 +42,6 @@ def use_version(steps: dict | None, version: str, plan: dict) -> tuple[dict, dic
     version_not_prepared (an upload never framed and cut out: "use my
     original photo" makes it).
     """
-    from app.services import creations as svc
-
     items = svc.step_items(steps)
     if version not in items or version_of(steps, version) != version:
         raise Validation422("There is no such version", code="unknown_version")

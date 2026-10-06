@@ -17,12 +17,16 @@ dependency for one POST.
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import io
 import logging
 from dataclasses import dataclass
 
 import httpx
+from PIL import Image
 
+from app.core.credentials import credentials
 from app.services import ai_models
 
 logger = logging.getLogger("liveface.imagegen")
@@ -152,8 +156,6 @@ def api_key() -> str | None:
     entered in Settings takes effect without a redeploy — which is the whole
     point of having that page.
     """
-    from app.core.credentials import credentials
-
     return credentials.get("gemini_api_key")
 
 
@@ -188,10 +190,6 @@ def shrink_source(data: bytes) -> tuple[bytes, str]:
     JPEG rather than PNG for the same reason — the source is a photograph and
     lossless is wasted on it.
     """
-    import io
-
-    from PIL import Image
-
     try:
         image = Image.open(io.BytesIO(data)).convert("RGB")
         if max(image.size) > SOURCE_MAX_EDGE:
@@ -365,8 +363,6 @@ IMAGE_BACKENDS = ("gemini", "openai", "qwen")
 
 
 def _backend_key(backend: str) -> str | None:
-    from app.core.credentials import credentials
-
     return credentials.get(
         {
             "gemini": "gemini_api_key",
@@ -478,8 +474,6 @@ async def _qwen_image(prompt: str, source: bytes | None, mime: str | None) -> Ge
                 raise RuntimeError("Qwen returned no task id")
             image_url = None
             for _ in range(30):
-                import asyncio
-
                 await asyncio.sleep(2)
                 status = await client.get(f"{DASHSCOPE_URL}/tasks/{task_id}", headers=headers)
                 output = status.json().get("output", {})

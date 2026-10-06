@@ -35,7 +35,14 @@ from app.services.anchor_fit import (
     with_head_outline,
     write_fit_base,
 )
+from app.services.mouth import character_style
 from app.services.publishing import mark_dirty
+from app.services.rig import (
+    VISEME_BLENDSHAPES,
+    VISEME_PROFILES,
+    fit_base_mesh,
+    landmarks_from_image,
+)
 from app.services.storage import STORAGE_ERRORS, get_storage
 
 logger = logging.getLogger("liveface.avatars")
@@ -47,8 +54,6 @@ logger = logging.getLogger("liveface.avatars")
 def honour_mouth_style(rig: dict, avatar: Avatar, face_type: str) -> None:
     """A fit names the line's current render profile; an avatar whose owner
     chose the classic mouth keeps the classic one through a re-fit."""
-    from app.services.mouth import character_style
-
     profile = render_profile_for(face_type, character_style(avatar.mouth_config))
     if profile:
         rig["render_profile"] = profile
@@ -74,9 +79,6 @@ async def reprofile_visemes(avatar: Avatar, visemes: bool = True) -> None:
     """Swap the stored rig's viseme table (unless `visemes` is False) and
     render profile to match the avatar's face type and the owner's mouth
     style. The draft only: visitors see it once published."""
-    from app.services.mouth import character_style
-    from app.services.rig import VISEME_BLENDSHAPES, VISEME_PROFILES
-
     if not avatar.rig_key or avatar.kind != AvatarKind.photo:
         return
     storage = get_storage()
@@ -112,8 +114,6 @@ async def fit_base(avatar: Avatar, storage, rig: dict) -> tuple[np.ndarray, bool
     draft put back an older rig) gets it rebuilt the way a first build makes
     it — detection, else the template — which is deterministic, and stored.
     """
-    from app.services.rig import fit_base_mesh, landmarks_from_image
-
     key = fit_base_key(avatar.org_id, avatar.id)
     stored = await read_fit_base(storage, key)
     points = fit_base_points(stored, rig)

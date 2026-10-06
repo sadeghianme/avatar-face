@@ -37,6 +37,8 @@ from app.services.creations.steps import (
     stylised,
 )
 from app.services.jobs import run_cpu
+from app.services.photo_analysis import check_photo
+from app.services.photo_io import frame_photo, png_bytes
 from app.services.storage import get_storage
 
 
@@ -67,9 +69,6 @@ async def frame_or_line(
     the cut-outs (made from the old frame, or by the old line's segmenter),
     the AI results (made from the old frame) and the marks.
     """
-    from app.services.photo_analysis import check_photo
-    from app.services.photo_io import frame_photo, png_bytes
-
     require_draft(creation)
     require_image(creation)
     steps = copied(creation.steps)

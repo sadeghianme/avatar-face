@@ -7,6 +7,7 @@ normalized to SynthesisResult with 15-viseme cue tracks.
 from __future__ import annotations
 
 import asyncio
+import base64
 import io
 import json
 import time
@@ -14,10 +15,12 @@ import wave
 from pathlib import Path
 
 import httpx
+from jose import jwt as jose_jwt
 
 from app.core.credentials import credentials
 from app.services.tts.base import SynthesisResult, TTSProvider, Voice
-from app.services.tts.visemes import char_to_viseme, cues_from_text
+from app.services.tts.timing import cues_from_text
+from app.services.tts.visemes import char_to_viseme
 
 HTTP_TIMEOUT = 30.0
 
@@ -151,7 +154,6 @@ class ElevenLabsTTSProvider(TTSProvider):
     async def synthesize(self, text: str, voice: str, locale: str) -> SynthesisResult:
         # with-timestamps returns base64 audio + per-character alignment,
         # which maps 1:1 onto viseme cues.
-        import base64
 
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice}/with-timestamps"
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -199,8 +201,6 @@ class GoogleTTSProvider(TTSProvider):
             return json.load(f)
 
     async def _access_token(self) -> str:
-        from jose import jwt as jose_jwt
-
         sa = self._service_account()
         now = int(time.time())
         assertion = jose_jwt.encode(
@@ -244,8 +244,6 @@ class GoogleTTSProvider(TTSProvider):
         ][:200]
 
     async def synthesize(self, text: str, voice: str, locale: str) -> SynthesisResult:
-        import base64
-
         token = await self._access_token()
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(

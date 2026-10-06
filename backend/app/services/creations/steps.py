@@ -12,12 +12,21 @@ import copy
 from typing import Literal
 
 from app.models import Creation
+from app.services import consent
 from app.services.creations.rules import (
     ADJUSTED_PREFIX,
     CHECK_KEYS,
     CUTOUT,
     CUTOUT_PREFIX,
 )
+from app.services.photo_analysis import recommend
+
+
+def plan_of(steps: dict | None) -> dict | None:
+    """The four-step wizard's plan (services.wizard.plan), or None for a
+    creation made without one."""
+    plan = (steps or {}).get("plan")
+    return dict(plan) if isinstance(plan, dict) else None
 
 
 def step_items(steps: dict | None) -> dict[str, dict]:
@@ -178,8 +187,6 @@ def statement_for(creation: Creation) -> Literal["depiction", "generated_face"] 
     - otherwise (an animal, a drawing the detector does not read as a
       face) nothing.
     """
-    from app.services import consent
-
     steps = creation.steps
     chain = lineage(steps, current_step(steps))
     human_line = creation.face_type == "human"
@@ -297,8 +304,6 @@ def recommendation_of(steps: dict | None, face_type: str | None) -> dict | None:
     """{image, mode, reasons}: what step 3 recommends for the CURRENT image
     on the creation's line (photo_analysis.recommend). None until the line
     is known, and for an image made before checks were kept per step."""
-    from app.services.photo_analysis import recommend
-
     current = current_step(steps)
     check = check_of(steps, current)
     if face_type is None or check is None:

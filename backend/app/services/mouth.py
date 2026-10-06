@@ -2,8 +2,9 @@
 optional photo of the person's own teeth, and the avatar's own motion.
 
 Stored as one JSON blob on the avatar (`mouth_config`). The storage keys in
-it are internal; `public_view` is what the owner's dashboard is told, and
-publishing's `_mouth_view` what a visitor's engine gets.
+it are internal; what the owner's dashboard is told is built by the owner
+API (api.avatars.presenting.mouth_view), and publishing's `_mouth_view` is
+what a visitor's engine gets.
 
 The keys, all fresh per file (the published snapshot may still point at
 copies of the old ones, and browsers cache presigned URLs by path):
@@ -78,35 +79,6 @@ def load(raw: str | None) -> dict | None:
     return value if isinstance(value, dict) and value.get("renderer") in RENDERERS else None
 
 
-def public_view(raw: str | None, motion_url: str | None = None) -> dict | None:
-    """What the dashboard is told (never the storage keys). `teeth` says
-    where the mouth photo came from, or why a new avatar has none
-    (services.mouth_photo): {source: "ai" | "upload" | null, note}.
-    `motion_url` is the draft motion's presigned URL, which the caller signs
-    (`motion_url` below: this is synchronous); `kit` the summary of the
-    mouth kit (services.mouth_kit.public_kit), or null."""
-    from app.services.mouth_kit import public_kit
-
-    config = load(raw)
-    if config is None:
-        return None
-    teeth = config.get("teeth") or {}
-    has_photo = bool(config.get("oral_image_key") and config.get("oral_rig_key"))
-    return {
-        "renderer": config["renderer"],
-        "profile": config.get("profile") or {},
-        "character": clean_character(config.get("character")),
-        "has_oral_photo": has_photo,
-        "teeth": {
-            # An upload from before the record existed is still an upload.
-            "source": teeth.get("source") or ("upload" if has_photo else None),
-            "note": teeth.get("note"),
-        },
-        "motion_url": motion_url if config.get("motion_key") else None,
-        "kit": public_kit(config.get("kit")),
-    }
-
-
 def oral_keys(org_id: str, avatar_id: str, stamp: str) -> tuple[str, str]:
     # WebP (services.mouth_photo.MOUTH_PHOTO_TYPE). Photos stored as PNG
     # before keep their keys; everything downstream reads the extension.
@@ -141,3 +113,35 @@ async def motion_url(config: dict | None, storage) -> str | None:
     if not key or not await storage.exists(key):
         return None
     return await storage.presign_get(key)
+
+
+# --- The teeth record (mouth_config["teeth"], services.mouth_photo) -----------
+
+
+def ai_teeth_record(model: str | None) -> dict:
+    return {"source": "ai", "model": model}
+
+
+def upload_teeth_record() -> dict:
+    return {"source": "upload"}
+
+
+def generic_teeth_record(note: dict | None) -> dict:
+    """The record of the standard teeth (no teeth photo of its own), and why."""
+    return {"source": None, "note": note}
+
+
+# The note code of an avatar that was not finished with the standard teeth
+# but moved onto them: it had the classic drawn mouth from before a new
+# person got the photographic one (scripts/migrate_classic_mouths.py).
+MIGRATED_STANDARD = "migrated_standard"
+
+
+def migrated_teeth_record(day: str) -> dict:
+    """The standard teeth's record for an existing avatar moved from the
+    classic mouth on `day` (an ISO date): `default_config`'s mouth is what
+    it gets, and this says why it has no teeth of its own."""
+    return generic_teeth_record({
+        "code": MIGRATED_STANDARD,
+        "detail": f"Standard teeth: moved from the classic mouth on {day}",
+    })

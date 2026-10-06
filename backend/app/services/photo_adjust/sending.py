@@ -11,14 +11,11 @@ from dataclasses import dataclass
 import numpy as np
 from PIL import Image
 
+from app.services import imagegen, landmarks
 from app.services.photo_adjust.scheme import (
     CROP_QUALITY,
     CROP_SCALE,
     CROP_SIZE,
-    FACE_LEFT,
-    FACE_RIGHT,
-    MAX_TOUCHUP_YAW,
-    NOSE_TIP,
     REGENERATE_PROMPTS,
     SOURCE_MAX_EDGE,
     STYLISE,
@@ -26,6 +23,13 @@ from app.services.photo_adjust.scheme import (
     TOUCHUP_PROMPT,
     AdjustSkipped,
 )
+from app.services.photo_analysis import (
+    EYE_CLOSED_EAR,
+    MAX_TOUCHUP_YAW,
+    eye_aspect_ratios,
+    yaw_offset,
+)
+from app.services.photo_io import on_backdrop
 
 
 @dataclass
@@ -48,8 +52,6 @@ def _rgb(data: bytes) -> Image.Image:
     """Decode to what the model and the detector are shown: opaque RGB, a
     cut-out on the neutral grey backdrop (photo_io.on_backdrop). Black,
     what is under alpha 0, would read as a dark room to the model."""
-    from app.services.photo_io import on_backdrop
-
     with Image.open(io.BytesIO(data)) as image:
         return on_backdrop(image)
 
@@ -115,28 +117,14 @@ def crop_face(
     )
 
 
-def yaw_offset(points: np.ndarray) -> float:
-    """How far the nose tip is from the middle of the cheeks: 0 frontal,
-    1 at a cheek's edge."""
-    left, right = points[FACE_LEFT][0], points[FACE_RIGHT][0]
-    half = abs(right - left) / 2
-    if half <= 0:
-        return 1.0
-    return float(abs(points[NOSE_TIP][0] - (left + right) / 2) / half)
-
-
 def eyes_closed(points: np.ndarray) -> bool:
     """Is either eye closed? The photo check's measure and threshold
     (photo_analysis.EYE_CLOSED_EAR), so the eyes a touch-up labels as
     generated are the ones the check called closed."""
-    from app.services.photo_analysis import EYE_CLOSED_EAR, eye_aspect_ratios
-
     return min(eye_aspect_ratios(points)) < EYE_CLOSED_EAR
 
 
 def _detect(image: Image.Image) -> np.ndarray | None:
-    from app.services import landmarks
-
     found = landmarks.detect(image)
     return None if found is None else found.points
 
@@ -148,8 +136,6 @@ def prepare(data: bytes, mode: str, face_type: str, style: str | None = None) ->
     face found, no detector on this server, head turned too far), before
     anything is sent or spent.
     """
-    from app.services import imagegen, landmarks
-
     image = _rgb(data)
     if mode == TOUCHUP:
         try:
@@ -239,8 +225,6 @@ def head_crop_fallback(
     """The same request on a head-and-shoulders crop, or None when there is
     no face to crop around (animals, a missing detector) or the mode already
     works on a crop (touch-up). CPU work."""
-    from app.services import imagegen, landmarks
-
     if mode == TOUCHUP:
         return None
     image = _rgb(data)

@@ -69,9 +69,10 @@ from app.schemas.creation import (
     VersionRequest,
 )
 from app.services import creations as svc
-from app.services import orgs, wizard
+from app.services import imagegen, orgs, wizard
 from app.services.creations import edits, new, repo, requests, rules
 from app.services.jobs import ACTIVE_STATES, runner
+from app.services.photo_adjust import MODES_BY_LINE, ROUNDS_PER_CREATION
 from app.services.storage import get_storage
 
 router = APIRouter(prefix="/orgs/{org_id}/creations", tags=["creations"])
@@ -103,8 +104,6 @@ def _background_offer(creation: Creation) -> BackgroundOffer:
 
 
 def _ai_out(creation: Creation, org: Organization | None, recommendation: dict | None) -> AiOut:
-    from app.services.photo_adjust import MODES_BY_LINE, ROUNDS_PER_CREATION
-
     usage = svc.ai_usage_of(creation)
     face_type = creation.face_type
     modes = list(MODES_BY_LINE.get(face_type, ())) if face_type else []
@@ -136,8 +135,6 @@ def _ai_out(creation: Creation, org: Organization | None, recommendation: dict |
 def _auto_adjust(creation: Creation) -> AutoAdjustOut | None:
     """services.creations.auto_adjust_of, while nothing else runs and the
     server can make it."""
-    from app.services import imagegen
-
     if (creation.job or {}).get("state") in ACTIVE_STATES or creation.status != CreationStatus.draft:
         return None
     offer = svc.auto_adjust_of(creation)

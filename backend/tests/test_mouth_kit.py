@@ -645,21 +645,22 @@ async def test_the_shapes_are_disclosed_only_while_visitors_see_them(client, fac
 
 
 def test_the_disclosure_algebra_keeps_mouth_modes_right():
-    from app.services.mouth_photo import with_ai_teeth, without_ai_teeth
+    from app.services import disclosure
+    from app.services.disclosure import with_ai_teeth, without_ai_teeth
 
-    shapes = mouth_kit.with_ai_shapes(None, "m", 4)
+    shapes = disclosure.with_ai_shapes(None, "m", 4)
     assert shapes == {"mode": "mouth_shapes", "model": "m",
                       "mouth_shapes": {"model": "m", "generated": 4}}
     both = with_ai_teeth(shapes, "t")
     assert both["mode"] == "teeth" and both["model"] == "t" and both["mouth_shapes"]["generated"] == 4
     assert without_ai_teeth(both) == shapes
-    assert mouth_kit.without_ai_shapes(both) == {"mode": "teeth", "model": "t",
+    assert disclosure.without_ai_shapes(both) == {"mode": "teeth", "model": "t",
                                                  "teeth": {"model": "t"}}
-    assert mouth_kit.without_ai_shapes(shapes) is None
+    assert disclosure.without_ai_shapes(shapes) is None
     touched = {"mode": "touchup", "model": "p"}
-    assert mouth_kit.with_ai_shapes(touched, "m", 6) == {**touched, "mouth_shapes": {
+    assert disclosure.with_ai_shapes(touched, "m", 6) == {**touched, "mouth_shapes": {
         "model": "m", "generated": 6}}
-    assert mouth_kit.without_ai_shapes(mouth_kit.with_ai_shapes(touched, "m", 6)) == touched
+    assert disclosure.without_ai_shapes(disclosure.with_ai_shapes(touched, "m", 6)) == touched
 
 
 # --- Later edits: re-marked points, a new picture -----------------------------------------
@@ -1112,7 +1113,7 @@ async def test_a_redetection_never_undoes_a_kit_stored_meanwhile(
     much later. A Mouth panel kit stored in between (six paid calls, new
     teeth) survives it, and follows the new points: the re-detection moves
     whatever kit the row holds by then, under the edit lock."""
-    from app.services import rig as rig_service
+    from app.services.avatars import build as rig_service
 
     headers, org_id = await _org(client, "race")
     consent_id = await ai_consent(client, headers, org_id)
@@ -1178,7 +1179,7 @@ async def test_a_finish_that_fails_after_sending_keeps_the_consent_that_allowed_
     """The kit's pictures went (and were metered); then publishing failed,
     the half-built avatar was deleted and the creation is a draft again.
     The consent that let the pictures go is on the creation for good."""
-    from app.services import publishing
+    from app.services.creations import finish
 
     headers, org_id = await _org(client, "finishhole")
     consent_id = await ai_consent(client, headers, org_id)
@@ -1188,7 +1189,7 @@ async def test_a_finish_that_fails_after_sending_keeps_the_consent_that_allowed_
     async def broken_publish(avatar, storage):
         raise RuntimeError("storage unavailable")
 
-    monkeypatch.setattr(publishing, "publish", broken_publish)
+    monkeypatch.setattr(finish, "publish", broken_publish)
     response = await client.post(f"{base}/finish", json=payload, headers=headers)
     assert response.status_code == 202, response.text
     await runner.drain()

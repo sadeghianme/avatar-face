@@ -33,6 +33,8 @@ import logging
 
 import httpx
 
+from app.core.credentials import credentials
+
 logger = logging.getLogger("liveface.avaturn")
 
 BASE_URL = "https://api.avaturn.me"
@@ -45,8 +47,6 @@ class AvaturnUnavailable(RuntimeError):
 
 def api_token() -> str | None:
     """Dashboard-managed token, falling back to the environment."""
-    from app.core.credentials import credentials
-
     return credentials.get("avaturn_api_token")
 
 

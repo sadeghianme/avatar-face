@@ -19,6 +19,8 @@ from app.models import Avatar, AvatarKind
 from app.schemas.avatar import AvatarUpdate
 from app.services import scene as scene_service
 from app.services.avatars.fitting import reprofile_visemes
+from app.services.mouth import character_allowed, clean_character, renderer_allowed
+from app.services.mouth import load as load_mouth
 from app.services.publishing import mark_dirty
 from app.services.storage import get_storage
 
@@ -26,15 +28,6 @@ from app.services.storage import get_storage
 async def update(db: AsyncSession, avatar: Avatar, body: AvatarUpdate) -> None:
     """Apply the owner-editable settings `body` names (None: unchanged).
     Committed."""
-    from app.services.mouth import (
-        character_allowed,
-        clean_character,
-        renderer_allowed,
-    )
-    from app.services.mouth import (
-        load as load_mouth,
-    )
-
     face_type = body.face_type or avatar.face_type
     if body.mouth is not None and not renderer_allowed(body.mouth.renderer, face_type):
         raise Validation422(

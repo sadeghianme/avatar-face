@@ -355,6 +355,7 @@ async def test_a_restart_after_ingest_leaves_an_avatar_retry_can_finish(client, 
 
     from app.db import get_session_factory
     from app.services import rig
+    from app.services.avatars import build
     from app.services.storage import get_storage
 
     headers, org_id = await _org(client, "restarted")
@@ -366,10 +367,10 @@ async def test_a_restart_after_ingest_leaves_an_avatar_retry_can_finish(client, 
 
     monkeypatch.setattr(rig, "landmarks_from_image", shutdown)
     with pytest.raises(asyncio.CancelledError):
-        await rig.process_avatar(avatar_id)
+        await build.process_avatar(avatar_id)
     monkeypatch.setattr(rig, "landmarks_from_image", detect)
     async with get_session_factory()() as db:
-        assert await rig.fail_interrupted(db) == 1
+        assert await build.fail_interrupted(db) == 1
 
     base = f"/orgs/{org_id}/avatars/{avatar_id}"
     retried = await client.post(f"{base}/retry", headers=headers)
