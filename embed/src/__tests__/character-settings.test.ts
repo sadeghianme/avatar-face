@@ -40,7 +40,7 @@ function fakeCanvas(size = 512) {
   return { width: size, height: size, getContext: () => ctx } as unknown as HTMLCanvasElement;
 }
 
-type Internals = { weights: BlendWeights; blink: number; deformedPoints(now: number): { x: number; y: number }[] };
+type Internals = { face: { weights: BlendWeights; blink: number }; deformedPoints(now: number): { x: number; y: number }[] };
 
 describe("character settings and blinks", () => {
   beforeEach(() => {
@@ -68,7 +68,7 @@ describe("character settings and blinks", () => {
   it("the owner's jaw setting opens the chin further, and is clamped", () => {
     const { engine, e } = make("toon@1");
     const rest = e.deformedPoints(0);
-    e.weights = { ...ZERO_WEIGHTS, jawOpen: 0.8 };
+    e.face.weights = { ...ZERO_WEIGHTS, jawOpen: 0.8 };
     const normal = e.deformedPoints(0)[152].y - rest[152].y;
     expect(normal).toBeGreaterThan(20);
     engine.setCharacterTraits({ jaw: 1.5 });
@@ -81,7 +81,7 @@ describe("character settings and blinks", () => {
 
   it("a classic mouth ignores the owner's character settings", () => {
     const { engine, e } = make(null);
-    e.weights = { ...ZERO_WEIGHTS, jawOpen: 0.8 };
+    e.face.weights = { ...ZERO_WEIGHTS, jawOpen: 0.8 };
     const before = e.deformedPoints(0)[152].y;
     engine.setCharacterTraits({ jaw: 1.6 });
     expect(e.deformedPoints(0)[152].y).toBe(before);
@@ -90,7 +90,7 @@ describe("character settings and blinks", () => {
   it("opens the muzzle further than the classic mouth did, chin included", () => {
     const classic = make("animal@1");
     const character = make("animal@2");
-    for (const m of [classic, character]) m.e.weights = { ...ZERO_WEIGHTS, jawOpen: 0.9 };
+    for (const m of [classic, character]) m.e.face.weights = { ...ZERO_WEIGHTS, jawOpen: 0.9 };
     const drop = (m: ReturnType<typeof make>, rest: { y: number }[]) => m.e.deformedPoints(0)[152].y - rest[152].y;
     const restC = make("animal@1").e.deformedPoints(0);
     expect(drop(character, restC)).toBeGreaterThan(drop(classic, restC) + 10);
@@ -99,11 +99,11 @@ describe("character settings and blinks", () => {
   it("the lid blink leaves the mesh still; the mesh blink moves it", () => {
     const lid = make("toon@1");
     const restLid = lid.e.deformedPoints(0)[159].y;
-    lid.e.blink = 0.35;
+    lid.e.face.blink = 0.35;
     expect(lid.e.deformedPoints(0)[159].y).toBe(restLid);
     const mesh = make("animal@1");
     const restMesh = mesh.e.deformedPoints(0)[159].y;
-    mesh.e.blink = 0.35;
+    mesh.e.face.blink = 0.35;
     expect(mesh.e.deformedPoints(0)[159].y).toBeGreaterThan(restMesh);
   });
 });

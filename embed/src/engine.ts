@@ -14,9 +14,8 @@
  * - A `destroyed` flag makes mount -> unmount -> mount safe under React
  *   StrictMode.
  */
-import { BlinkScheduler, blinkEase } from "./blink";
+import { blinkEase } from "./blink";
 import { lidAmount, paintLid, type Blit } from "./blink-lid";
-import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
 import {
   CharacterField,
   characterOpening,
@@ -24,25 +23,15 @@ import {
   openingPath,
   type CharacterTraits,
 } from "./character-mouth";
-import { TONGUE_RAISE, paintCharacter } from "./character-paint";
-import { HeadMotion } from "./headmotion";
+import { paintCharacter } from "./character-paint";
 import { applyLowerFace, buildLowerFaceRig, UPPER_FACE, type LowerFaceRig } from "./jaw-rig";
 import { kindProfile, type KindProfile } from "./kind-profile";
 import { padTriangle } from "./seam-pad";
 import { IDENTITY, WarpRenderer, buildWarpMesh, rotate, translate, type Affine } from "./warp-gl";
-import { MediaClock } from "./media-clock";
 import type { MouthExtension, MouthPose } from "./mouth-extension";
 import { centralMouthAnchors } from "./mouth-extension";
 import { BlendWeights, Cue, DEFAULT_TUNING, EngineTuning, Rig, ZERO_WEIGHTS } from "./types";
-import {
-  articulationLead,
-  blendCueWeights,
-  emphasisBeats,
-  prepareCues,
-  utteranceMs,
-  visemeAt,
-  type Beat,
-} from "./engine/cues";
+import { emphasisBeats, utteranceMs } from "./engine/cues";
 import {
   layOutFace,
   pixelScale,
@@ -54,17 +43,15 @@ import {
   type Point,
 } from "./engine/geometry";
 import { EYE_CORNERS, IRISES, LANDMARK_COUNT, LEFT_BROW, LOWER_LIDS, RIGHT_BROW, UPPER_LIDS, eyeShape } from "./engine/landmarks";
+import { Motion, type HeadOffset } from "./engine/motion";
 import { cutHeadLayer } from "./engine/render2d";
 import { FaceSamples, probeCutOut } from "./engine/sampling";
+import { SpeechTrack, articulate, easeTongue } from "./engine/speech";
+import { restingFace, type FaceState } from "./engine/state";
 
 export { articulationLead, emphasisBeats, prepareCues, type Beat } from "./engine/cues";
 export type { Point } from "./engine/geometry";
 export { luma, pickScleraColour, type Sample } from "./engine/sampling";
-
-// Durations for the involuntary motions, in real milliseconds. These used to
-// be per-frame increments, which made every one of them run at a speed that
-// depended on the frame rate — a blink took 440ms on a 30fps device.
-// The blink's own timing lives in blink.ts.
 
 /**
  * How far the upper lids lower when the gaze goes down, as a fraction of
@@ -73,30 +60,6 @@ export { luma, pickScleraColour, type Sample } from "./engine/sampling";
  * eye. Small: a glance down is a narrowing, not a half-blink.
  */
 const LID_FOLLOW = 0.35;
-
-/**
- * Per-shape inertia, as a multiple of the shared time constant.
- *
- * The jaw and the lips are not the same instrument. The jaw is a bone hung
- * on heavy muscle and it arrives at a vowel; the lips and their ring muscle
- * are light and they snap — which is exactly why /p/ /b/ /m/ read as
- * closures rather than as pauses. Driving both at one rate forced a choice
- * between a jaw that jitters through every consonant and lips too sluggish
- * to shut between two vowels.
- *
- * Kept close to 1 on purpose. The smoothing sits on top of a blend that
- * already reaches each shape in the middle of its own span, so slowing the
- * jaw much further costs peak opening on fast speech, which is a worse
- * fault than the one being fixed.
- */
-const INERTIA: Record<keyof BlendWeights, number> = {
-  jawOpen: 1.3,
-  mouthClose: 0.7,
-  mouthPucker: 0.85,
-  mouthFunnel: 0.85,
-  mouthStretch: 0.8,
-  mouthSmile: 0.9,
-};
 
 /**
  * Jaw drop at full jawOpen, as a fraction of resting mouth height, for
@@ -174,28 +137,10 @@ const UPPER_LIP = new Set([
 const LID_VERTEX_SWEEP = 1.0;
 
 
-/** Pivot depth for body sway, as a multiple of canvas height. Below the
- *  frame: a standing body turns about its feet, not its middle. */
-const BODY_PIVOT_DEPTH = 1.75;
-
-/** A head is wider than the face landmarks that sit inside it. Used only to
- *  express the sway target in the same units it was measured in. */
-const FACE_TO_HEAD_WIDTH = 1.4;
-
-/** Silence inside speech longer than this is a pause, and a pause gets a
- *  catch-breath. Shorter gaps are the space between words. */
-const PAUSE_BREATH_MS = 260;
-
 /** Sway is scaled down when the photo still has its background: moving the
  *  whole picture then reads as a wobbling camera rather than a moving person,
  *  and it drags the photo's own edge into frame. */
 const OPAQUE_BACKGROUND_SCALE = 0.3;
-const SACCADE_MS = 35;
-
-/** A beat gesture is quick — a dip and back, not a slow ambient nod. */
-const BEAT_NOD_MS = 420;
-/** Ambient nods, when a cue track carries no usable emphasis. */
-const AMBIENT_NOD_MS = 1050;
 
 /**
  * Smooth closed curve through an ordered loop of points (Catmull-Rom
@@ -288,7 +233,6 @@ export class AvatarEngine {
    *  from the rest mesh with the framing. */
   private lowerFace: LowerFaceRig | null = null;
   private traits: CharacterTraits;
-  private tongue = 0;
   private texture: HTMLImageElement;
   /** StrictMode guard: render loop and async callbacks bail once destroyed. */
   private destroyed = false;
@@ -300,60 +244,27 @@ export class AvatarEngine {
   private readonly innerRing: number[];
 
   // Animation state
-  private cues: Cue[] = [];
-  private cueStart = 0;
-  private readonly cueClock?: () => number;
+  /** What the face is doing this frame (state.ts): the tick writes it, the
+   *  deformation and the painters read it. */
+  private readonly face: FaceState = restingFace();
+  /** The speech in flight: cue track, clock, voice (speech.ts). */
+  private readonly speech: SpeechTrack;
+  /** Blinks, gaze, the head's drift and nods, the body's sway (motion.ts). */
+  private readonly motion = new Motion(this.face);
   private mouthExtension?: MouthExtension;
   private readonly pose?: () => MouthPose | null;
-  private speaking = false;
-  /** When the current run of silence inside speech began, for catch-breaths;
-   *  null while a viseme is active. */
-  private silenceSince: number | null = null;
-  private weights: BlendWeights = { ...ZERO_WEIGHTS };
-  private targetWeights: BlendWeights = { ...ZERO_WEIGHTS };
-  private energy = 0; // smoothed speech energy, drives head motion
-  private blink = 0;
-  private readonly blinks = new BlinkScheduler();
-  private nextNodAt = 0;
-  private nodPhase = 1; // 1 = finished
-  private nodMs = AMBIENT_NOD_MS;
-  private nodStrength = 1;
-  /** Emphasis beats for the utterance in flight, and how far through them
-   *  the cue clock has walked. */
-  private beats: Beat[] = [];
-  private nextBeat = 0;
-  private body = new BodyMotion();
-  // The head as a movable unit. The layer is the head REGION of the photo —
-  // hair, ears, skull — cut out once with feathered edges; the geometry is
-  // where it sits and how far it may travel. The first attempt moved face
-  // vertices instead, and the face slid around inside a stationary head.
-  private headDrive = new HeadMotion();
+  // The head as a movable unit (geometry.ts placeHead): where it sits and
+  // how far it may travel, and for a cut-out the head REGION of the photo —
+  // hair, ears, skull — cut out once with feathered edges (render2d.ts).
   private headLayer: HTMLCanvasElement | null = null;
   private headGeom: HeadGeom | null = null;
-  private bodyPivot = { x: 0, y: 0 };
-  private swayAngle = 0;   // radians at full deflection
-  private breathRise = 0;  // pixels at the top of an inhale
   /** Whether the photo is a cut-out. Decides how far the body may move. */
   private cutOut = false;
-  // Gaze: current and target offsets in eye-widths, plus saccade timing.
-  private gaze = { x: 0, y: 0 };
-  private gazeTarget = { x: 0, y: 0 };
-  private nextSaccadeAt = 0;
   /** What the picture looks like (sampling.ts), read again with every
    *  texture. */
   private readonly samples = new FaceSamples();
   private raf = 0;
-  private startTime = 0;
   private lastTickAt = 0;
-
-  // Audio
-  private audioCtx: AudioContext | null = null;
-  private analyser: AnalyserNode | null = null;
-  private analyserData: Uint8Array | null = null;
-  private currentAudio: HTMLAudioElement | null = null;
-  /** Cue time of the audio playing now, when no external cueClock is given. */
-  private audioClock: MediaClock | null = null;
-  private onAudioEnd: (() => void) | null = null;
 
   debugMesh: boolean;
   /** Live animation parameters — mutate freely, applied next frame. */
@@ -393,7 +304,10 @@ export class AvatarEngine {
     this.profile = kindProfile(rig);
     this.traits = this.profile.traits;
     this.texture = texture;
-    this.cueClock = opts.cueClock;
+    this.speech = new SpeechTrack(opts.cueClock, {
+      onSync: (ms) => this.motion.placeBeatWalker(ms),
+      onEnded: () => this.finishSpeech(),
+    });
     this.mouthExtension = opts.mouthExtension;
     this.pose = opts.pose;
     this.debugMesh = opts.debugMesh ?? false;
@@ -411,10 +325,7 @@ export class AvatarEngine {
     this.mesh = this.layOut();
     this.samples.sample(this.texture, this.mesh.texPoints, this.rig, this.profile);
     refineMesh(this.mesh, this.rig, this.texture);
-    this.startTime = performance.now();
-    this.blinks.reset(this.startTime);
-    this.nextNodAt = this.startTime + 2500;
-    this.nextSaccadeAt = this.startTime + 600 + Math.random() * 1200;
+    this.motion.start(performance.now());
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
     // Debug handle (last engine wins): lets a console force blinks/visemes.
@@ -573,9 +484,7 @@ export class AvatarEngine {
   destroy(): void {
     this.destroyed = true;
     cancelAnimationFrame(this.raf);
-    this.stopAudio();
-    if (this.audioCtx) void this.audioCtx.close().catch(() => undefined);
-    this.audioCtx = null;
+    this.speech.destroy();
     this.warp?.destroy();
     this.warp = null;
   }
@@ -615,7 +524,7 @@ export class AvatarEngine {
     const mesh = layOutFace(this.rig, this.texture, this.canvas, this.scene.zoom ?? 1, this.scene.pan);
     const cutOut = probeCutOut(this.texture);
     if (cutOut !== null) this.cutOut = cutOut;
-    this.measureBody(mesh.basePoints);
+    this.motion.measureBody(mesh.basePoints, this.canvas.height);
     // The head as a movable unit (geometry.ts placeHead); a cut-out also
     // gets it as its own feathered layer, which moves over transparency.
     this.headGeom = placeHead(mesh.basePoints, mesh.picture);
@@ -625,61 +534,14 @@ export class AvatarEngine {
     return mesh;
   }
 
-  /** Current head displacement in canvas px, plus the face's parallax share. */
-  private headOffsets(): { dx: number; dy: number; roll: number; fdx: number; fdy: number } {
-    const g = this.headGeom;
-    if (!g) return { dx: 0, dy: 0, roll: 0, fdx: 0, fdy: 0 };
+  /** Current head displacement in canvas px (motion.ts headOffset). */
+  private headOffsets(): HeadOffset {
     // Ghosting: a moved layer over an intact photo leaves a sliver of the
     // original behind it. A cut-out has its head punched out of the base, so
     // it can travel further.
     // Layered heads move at full strength: there is real content behind
     // them, so wider travel reveals pixels instead of tearing them.
-    const s = (this.layers || this.cutOut ? 1 : 0.5) * this.tuning.headMotion;
-    // sin² envelope, not sin: sin starts at its steepest, which read as the
-    // head being yanked downward at every nod onset. sin² starts and ends
-    // with zero velocity, so the dip eases in and out.
-    const p = this.nodPhase;
-    const nod = p < 1 ? Math.sin(p * Math.PI) ** 2 : 0;
-    const dx = this.headDrive.yaw * g.yawPx * s;
-    const dy =
-      (this.headDrive.pitch * g.pitchPx +
-        nod * this.nodStrength * this.energy * g.faceH * 0.013) *
-      s;
-    const roll = this.headDrive.roll * 0.02 * s;
-    // NO face parallax. The face mesh redrawn at its own offset over the
-    // head layer duplicates whatever crosses the mesh hull — bangs over a
-    // forehead become two sets of bangs a few px apart, which reads as cuts
-    // through the face. One rigid unit, one offset, nothing to mismatch.
-    return { dx, dy, roll, fdx: 0, fdy: 0 };
-  }
-
-  /**
-   * Where the body pivots, and how far it may travel.
-   *
-   * The pivot goes below the canvas, roughly where the feet would be. A small
-   * rotation about a distant point is very nearly a translation that grows
-   * with height — which is both what an inverted pendulum does and the reason
-   * the bottom of the frame stays put while the head moves.
-   */
-  private measureBody(basePoints: readonly Point[]): void {
-    const xs = basePoints.map((p) => p.x);
-    const ys = basePoints.map((p) => p.y);
-    const faceW = Math.max(1, Math.max(...xs) - Math.min(...xs));
-    const faceH = Math.max(1, Math.max(...ys) - Math.min(...ys));
-    const faceCentreY = (Math.min(...ys) + Math.max(...ys)) / 2;
-
-    this.bodyPivot = {
-      x: (Math.min(...xs) + Math.max(...xs)) / 2,
-      y: this.canvas.height * BODY_PIVOT_DEPTH,
-    };
-    // The measurement this is matched against was taken across a head, and
-    // the landmarks only span a face, so scale up to compare like with like.
-    const headW = faceW * FACE_TO_HEAD_WIDTH;
-    const reach = Math.max(1, this.bodyPivot.y - faceCentreY);
-    // Half the peak-to-peak travel, expressed as the angle that produces it
-    // at head height.
-    this.swayAngle = (headW * SWAY_TRAVEL) / 2 / reach;
-    this.breathRise = faceH * BREATH_RISE;
+    return this.motion.headOffset(this.headGeom, (this.layers || this.cutOut ? 1 : 0.5) * this.tuning.headMotion);
   }
 
   /**
@@ -714,8 +576,8 @@ export class AvatarEngine {
 
   /** The painted lid of a profile that blinks that way. */
   private drawLids(pts: Point[]): void {
-    if (this.profile.blink !== "lid" || this.blink <= 0 || this.tuning.blink <= 0) return;
-    const amount = lidAmount(blinkEase(this.blink));
+    if (this.profile.blink !== "lid" || this.face.blink <= 0 || this.tuning.blink <= 0) return;
+    const amount = lidAmount(blinkEase(this.face.blink));
     const flat = this.samples.look.flat;
     for (let e = 0; e < 2; e++) {
       const shape = eyeShape(pts, e);
@@ -740,62 +602,20 @@ export class AvatarEngine {
    * long the audio took to start, for the whole utterance.
    */
   playAudio(audioB64: string, mime: string, cues: Cue[], onEnd?: () => void): void {
-    this.stopAudio();
-    const audio = new Audio(`data:${mime};base64,${audioB64}`);
-    this.currentAudio = audio;
-    const clock = this.cueClock ? null : new MediaClock(audio);
-    this.audioClock = clock;
-    if (clock) {
-      const sync = () => {
-        if (audio !== this.currentAudio) return;
-        this.placeBeatWalker(clock.sync(performance.now()));
-      };
-      audio.addEventListener("playing", sync);
-      audio.addEventListener("seeked", sync);
-    }
-    this.onAudioEnd = onEnd ?? null;
-    this.cues = prepareCues(cues);
-    this.speaking = true;
-    this.body.beginSpeech(performance.now(), utteranceMs(cues));
-    this.beats = emphasisBeats(this.cues);
-    this.nextBeat = 0;
-    this.gazeTarget = { x: 0, y: 0 }; // look at the person you are talking to
-
-    // Only reroute through the analyser when the cue track is too sparse to
-    // drive the mouth (amplitude fallback needed). Rerouting risks silent
-    // playback (suspended AudioContext, Safari data:-URL taint), so rich cue
-    // tracks — every Liveface provider — play natively.
-    if (cues.length < 4) this.attachAnalyser(audio);
-
-    audio.addEventListener("ended", () => {
-      if (audio !== this.currentAudio) return;
-      this.finishSpeech();
-    });
-    audio.addEventListener("error", () => {
-      if (audio !== this.currentAudio) return;
-      this.finishSpeech();
-    });
-    const playPromise = audio.play();
-    this.cueStart = performance.now();
-    if (playPromise) {
-      // An abort during stop() must NOT surface as an unhandled rejection.
-      playPromise.catch(() => {
-        if (audio === this.currentAudio) this.finishSpeech();
-      });
-    }
+    const audio = this.speech.load(audioB64, mime, onEnd ?? null);
+    this.speech.begin(cues);
+    this.motion.beginSpeech(performance.now(), utteranceMs(cues), emphasisBeats(this.speech.cues));
+    this.speech.play(audio, cues.length < 4);
   }
 
   /** Drive lip-sync from an externally played voice (e.g. speechSynthesis):
    * cues only, no audio element. */
   playCues(cues: Cue[]): void {
-    this.stopAudio();
-    this.cues = prepareCues(cues);
-    this.speaking = true;
-    this.cueStart = performance.now();
-    this.body.beginSpeech(this.cueStart, utteranceMs(cues));
-    this.beats = emphasisBeats(this.cues);
-    this.nextBeat = 0;
-    this.gazeTarget = { x: 0, y: 0 };
+    this.speech.stopAudio();
+    this.speech.begin(cues);
+    const now = performance.now();
+    this.speech.startClock(now);
+    this.motion.beginSpeech(now, utteranceMs(cues), emphasisBeats(this.speech.cues));
   }
 
   /**
@@ -812,134 +632,41 @@ export class AvatarEngine {
   updateCueTrack(cues: Cue[]): void {
     // Opt-in streaming extension: append look-ahead without restarting body
     // motion, the articulation smoother, or the speech clock.
-    const time = this.cueTime(performance.now());
-    this.cues = prepareCues(cues);
-    this.beats = emphasisBeats(this.cues);
-    this.nextBeat = this.beats.findIndex(b => b.t > time);
-    if (this.nextBeat < 0) this.nextBeat = this.beats.length;
+    const time = this.speech.cueTime(performance.now());
+    this.speech.replaceCues(cues);
+    this.motion.setBeats(emphasisBeats(this.speech.cues), time);
   }
 
   /** Re-align the cue clock to a known position in the track (ms). */
   syncCueTime(ms: number): void {
-    this.cueStart = performance.now() - ms;
-    this.placeBeatWalker(ms);
-  }
-
-  /** Re-place the beat walker at `ms`: after a seek the beats behind the new
-   *  position are spent, not pending. */
-  private placeBeatWalker(ms: number): void {
-    this.nextBeat = this.beats.findIndex((b) => b.t > ms);
-    if (this.nextBeat < 0) this.nextBeat = this.beats.length;
+    this.speech.seek(ms, performance.now());
+    this.motion.placeBeatWalker(ms);
   }
 
   stopSpeech(): void {
-    this.stopAudio();
-    this.speaking = false;
-    this.cues = [];
-    this.targetWeights = { ...ZERO_WEIGHTS };
-    this.body.endSpeech();
-    this.blinks.onSpeechEnd(performance.now());
-    this.beats = [];
+    this.speech.stop();
+    this.face.targetWeights = { ...ZERO_WEIGHTS };
+    this.motion.endSpeech(performance.now());
   }
 
   isSpeaking(): boolean {
-    return this.speaking;
+    return this.speech.speaking;
   }
 
+  /** The voice ended on its own: as stopSpeech, then the caller's onEnd. */
   private finishSpeech(): void {
-    this.speaking = false;
-    this.cues = [];
-    this.targetWeights = { ...ZERO_WEIGHTS };
-    this.body.endSpeech();
-    this.blinks.onSpeechEnd(performance.now());
-    this.beats = [];
-    const cb = this.onAudioEnd;
-    this.onAudioEnd = null;
-    this.currentAudio = null;
-    this.audioClock = null;
-    if (cb && !this.destroyed) cb();
-  }
-
-  private stopAudio(): void {
-    // Cue time goes back to the frame clock (playCues, the next playAudio).
-    this.audioClock = null;
-    if (this.currentAudio) {
-      const audio = this.currentAudio;
-      this.currentAudio = null;
-      this.onAudioEnd = null;
-      audio.pause();
-      audio.src = "";
-    }
-  }
-
-  private attachAnalyser(audio: HTMLAudioElement): void {
-    try {
-      if (!this.audioCtx) {
-        const Ctor = window.AudioContext ?? (window as never as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        this.audioCtx = new Ctor();
-        this.analyser = this.audioCtx.createAnalyser();
-        this.analyser.fftSize = 256;
-        this.analyserData = new Uint8Array(this.analyser.frequencyBinCount);
-        this.analyser.connect(this.audioCtx.destination);
-      }
-      const ctx = this.audioCtx;
-      // createMediaElementSource REROUTES the element's output through the
-      // context — if the context is suspended (autoplay policy), playback
-      // goes silent. Only connect once the context is confirmed running;
-      // otherwise the element plays natively and we just lose the
-      // amplitude fallback.
-      void ctx
-        .resume()
-        .then(() => {
-          if (ctx.state !== "running" || audio !== this.currentAudio) return;
-          const source = ctx.createMediaElementSource(audio);
-          source.connect(this.analyser!);
-        })
-        .catch(() => undefined);
-    } catch {
-      // Analyser is an enhancement (amplitude fallback); audio still plays.
-    }
-  }
-
-  private amplitude(): number {
-    if (!this.analyser || !this.analyserData) return 0;
-    this.analyser.getByteFrequencyData(this.analyserData as Uint8Array<ArrayBuffer>);
-    let sum = 0;
-    for (let i = 0; i < this.analyserData.length; i++) sum += this.analyserData[i];
-    return sum / (this.analyserData.length * 255);
+    const onEnd = this.speech.finish();
+    this.face.targetWeights = { ...ZERO_WEIGHTS };
+    this.motion.endSpeech(performance.now());
+    if (onEnd && !this.destroyed) onEnd();
   }
 
   // --- Animation tick --------------------------------------------------------
 
-  private cueTime(now: number): number {
-    const external = this.cueClock?.();
-    if (external !== undefined && Number.isFinite(external)) return Math.max(0, external);
-    if (this.audioClock) return this.audioClock.read(now);
-    return now - this.cueStart;
-  }
-
-  /** The voice is paused mid-utterance (the page, the OS, a headset): the
-   *  mouth closes rather than freezing on whatever shape it was making. */
-  private voicePaused(): boolean {
-    return this.audioClock?.paused ?? false;
-  }
-
-  /** The audio has been asked to play and is not heard yet (decoding, the
-   *  output device waking): cue time holds at 0 meanwhile. */
-  private awaitingVoice(): boolean {
-    return this.audioClock !== null && !this.audioClock.started;
-  }
-
-  private currentViseme(now: number): string {
-    if (!this.speaking || !this.cues.length || this.voicePaused()) return "sil";
-    return visemeAt(this.cues, this.cueTime(now));
-  }
-
-  /** The cue track's co-articulated shape now (cues.ts blendCueWeights),
-   *  read ahead of the voice by the articulation's own delay. */
+  /** The cue track's co-articulated shape now, or rest when the voice is
+   *  paused (SpeechTrack.blendedWeights). */
   private blendedCueWeights(now: number): BlendWeights {
-    if (this.voicePaused()) return { ...ZERO_WEIGHTS };
-    return blendCueWeights(this.cues, this.rig.visemes, this.cueTime(now) + articulationLead(this.tuning.smoothness));
+    return this.speech.blendedWeights(now, this.rig.visemes, this.tuning.smoothness);
   }
 
   private loop(now: number): void {
@@ -950,161 +677,46 @@ export class AvatarEngine {
   }
 
   private tick(now: number): void {
+    const speech = this.speech;
+    const face = this.face;
     // Viseme targets: co-articulated blend across cues (+ amplitude
     // fallback when the track is silent but audio clearly isn't).
-    const visemeWeights = this.pose?.()?.weights ?? (this.speaking ? this.blendedCueWeights(now) : { ...ZERO_WEIGHTS });
-    const silent = this.speaking && this.currentViseme(now) === "sil";
+    const visemeWeights = this.pose?.()?.weights ?? (speech.speaking ? this.blendedCueWeights(now) : { ...ZERO_WEIGHTS });
+    const silent = speech.speaking && speech.currentViseme(now) === "sil";
     if (silent) {
-      const amp = this.amplitude();
+      const amp = speech.amplitude();
       if (amp > 0.06) visemeWeights.jawOpen = Math.min(0.5, amp * 1.2);
     }
     // Waiting for the voice to start is not a pause in it. Cue time holds at
     // 0 until the audio plays, which takes hundreds of ms on a phone, and a
     // greeting that opens on /h/ is silence at 0: counted as a pause, it
     // began with a breath, a blink and a glance away before the first word.
-    if (silent && !this.awaitingVoice()) {
-      // A pause that has lasted long enough to be a pause (not the gap
-      // between two words) gets a catch-breath. Once per run of silence.
-      if (this.silenceSince === null) this.silenceSince = now;
-      else if (now - this.silenceSince >= PAUSE_BREATH_MS) {
-        this.body.catchBreath(now);
-        this.blinks.onPause(now);
-        // Sometimes a pause is a thought: glance down or aside, and the
-        // next fixation (re-picked on resume) brings the eyes back.
-        if (Math.random() < 0.45) {
-          this.gazeTarget = { x: (Math.random() * 2 - 1) * 0.16, y: 0.18 + Math.random() * 0.12 };
-          this.nextSaccadeAt = now + 700 + Math.random() * 600;
-        }
-        this.silenceSince = Infinity; // spent for this run
-      }
-    } else {
-      if (this.silenceSince === Infinity) {
-        // Speech resumed after a real pause: come back to the listener.
-        this.gazeTarget = { x: 0, y: 0 };
-        this.nextSaccadeAt = now + 900 + Math.random() * 1400;
-      }
-      this.silenceSince = null;
-    }
-    this.targetWeights = visemeWeights;
+    this.motion.notePause(now, silent && !speech.awaitingVoice());
+    face.targetWeights = visemeWeights;
 
-    // Critically-damped-ish approach to targets. Slow on purpose: a
-    // newsreader's articulation is small and fluid, and the damping is the
-    // main thing standing between cue tracks and a flapping jaw.
-    // Frame-rate INDEPENDENT smoothing. A fixed fraction per frame makes the
-    // effective time constant depend on how fast frames happen to arrive, so
-    // any jitter in frame timing became jitter in the mouth. Convert to an
-    // exponential filter over real elapsed time: rate = 1 - exp(-dt / tau).
+    // The frame's step, clamped: a hidden tab or a stall resumes the motion
+    // where it was rather than lurching.
     const dt = Math.min(64, Math.max(4, now - (this.lastTickAt || now - 16.7)));
     this.lastTickAt = now;
-    const smoothing = Math.max(0.15, this.tuning.smoothness);
-    // Jaws CLOSE faster than they open (muscle + gravity). Closing slower
-    // than opening left the mouth hanging open through a whole sentence —
-    // measured only 1% closed frames before that was corrected.
-    // A second-order (critically damped) filter with the same mean delay
-    // was tried here (2026-10-06): it moves the weights with no corner at
-    // a target change, but with the bells already continuous it measured
-    // worse (the lip gap's acceleration up 7%, its jerk up 13%: the same
-    // travel in a steeper middle), so the first-order filter stays, with
-    // its delay given back by ARTICULATION_LEAD_MS instead.
-    const TAU_OPEN = 47 / smoothing; // ms; matches the old 0.30/frame @60fps
-    const TAU_CLOSE = 33 / smoothing; // ms; matches the old 0.40/frame @60fps
-    const keys = Object.keys(this.weights) as (keyof BlendWeights)[];
-    for (const key of keys) {
-      const target = this.targetWeights[key];
-      const tau =
-        (target > this.weights[key] ? TAU_OPEN : TAU_CLOSE) * INERTIA[key];
-      const rate = 1 - Math.exp(-dt / tau);
-      this.weights[key] += (target - this.weights[key]) * rate;
-    }
+    articulate(face.weights, face.targetWeights, dt, this.tuning.smoothness);
 
-    // The tongue follows the sound being made, eased: the sounds are
-    // discrete and the tongue is not.
-    if (this.field) {
-      const sound = this.pose?.()?.viseme ?? this.currentViseme(now);
-      const target = TONGUE_RAISE[sound] ?? 0;
-      this.tongue += (target - this.tongue) * (1 - Math.exp(-dt / 55));
-    }
+    if (this.field) face.tongue = easeTongue(face.tongue, this.pose?.()?.viseme ?? speech.currentViseme(now), dt);
 
-    // Speech energy (drives head pose amplitude).
-    const instant = this.speaking
-      ? Math.min(1, this.weights.jawOpen + this.weights.mouthStretch * 0.5 + this.amplitude())
-      : 0;
-    this.energy += (instant - this.energy) * (1 - Math.exp(-dt / 270));
-
-    // Blinks are placed by events (pauses, saccades, head turns, speech
-    // end) with a timer only as a fallback — see blink.ts. `silent` was
-    // computed above from the cue track.
-    this.blinks.update(dt, now, { speaking: this.speaking, wordActive: this.speaking && !silent });
-    this.blink = this.blinks.phase;
-
-    // Gentle nods on a loose cadence while speaking.
-    // Emphasis beats: the head marks the syllables the voice leaned on.
-    // Walked on the CUE clock, not wall time, so a beat stays on its
-    // syllable when playback is re-synced (syncCueTime).
-    if (this.speaking && this.beats.length) {
-      const cueTime = this.cueTime(now);
-      while (this.nextBeat < this.beats.length && this.beats[this.nextBeat].t <= cueTime) {
-        const beat = this.beats[this.nextBeat++];
-        // Only if the beat is still near: after a seek, skip the ones the
-        // clock jumped over rather than firing a burst of stale nods.
-        if (cueTime - beat.t < BEAT_NOD_MS) {
-          this.nodPhase = 0;
-          this.nodMs = BEAT_NOD_MS;
-          this.nodStrength = beat.strength;
-        }
-      }
-    } else if (this.speaking && now >= this.nextNodAt) {
-      // No usable emphasis in this track (a browser voice, or a cue track
-      // with flat amplitudes): the old loose cadence still reads better
-      // than a head that never moves while talking.
-      this.nextNodAt = now + 1800 + Math.random() * 2600;
-      this.nodPhase = 0;
-      this.nodMs = AMBIENT_NOD_MS;
-      this.nodStrength = 1;
-    }
-    if (this.nodPhase < 1) this.nodPhase = Math.min(1, this.nodPhase + dt / this.nodMs);
-
-    this.body.update(dt, now);
-    this.headDrive.update(dt, now, this.speaking);
-    if (this.headDrive.movedAt === now && this.headDrive.moveSize > 0.35) this.blinks.onHeadTurn(now);
-
-    // Saccades: eyes jump to a new fixation, then hold. While speaking the
-    // gaze returns near-center more often (engaged with the listener);
-    // idle gaze wanders further and rests longer.
-    if (now >= this.nextSaccadeAt) {
-      const speaking = this.speaking;
-      this.nextSaccadeAt = now + (speaking ? 900 : 1400) + Math.random() * (speaking ? 1600 : 2600);
-      // Most fixations return to the viewer; only some wander. A face that
-      // is usually looking somewhere else reads as distracted, not alive.
-      // Wanders split into sideways glances and the occasional glance DOWN —
-      // the recollecting-your-thoughts look — which never happens with a
-      // symmetric draw because y is halved and rarely lands low.
-      const spread = speaking ? 0.2 : 0.3;
-      const roll = Math.random();
-      if (roll < (speaking ? 0.5 : 0.35)) {
-        this.gazeTarget = { x: 0, y: 0 };
-      } else if (roll < (speaking ? 0.68 : 0.55)) {
-        this.gazeTarget = { x: (Math.random() * 2 - 1) * spread * 0.6, y: spread * (1.0 + Math.random() * 0.5) };
-      } else {
-        this.gazeTarget = { x: (Math.random() * 2 - 1) * spread, y: (Math.random() * 2 - 1) * spread * 0.5 };
-      }
-      // A big jump of the eyes carries a blink with it.
-      this.blinks.onSaccade(now, Math.hypot(this.gazeTarget.x - this.gaze.x, this.gazeTarget.y - this.gaze.y));
-    }
-    // Saccades are ballistic: fast jump, then a still fixation.
-    // A saccade is ballistic and fast — ~35ms to cross, whatever the frame rate.
-    const saccadeRate = 1 - Math.exp(-dt / SACCADE_MS);
-    this.gaze.x += (this.gazeTarget.x - this.gaze.x) * saccadeRate;
-    this.gaze.y += (this.gazeTarget.y - this.gaze.y) * saccadeRate;
-
-    // Brow pulses: idle micro-expressions + emphasis while speaking.
+    this.motion.update(dt, now, {
+      speaking: speech.speaking,
+      wordActive: speech.speaking && !silent,
+      energy: speech.speaking
+        ? Math.min(1, face.weights.jawOpen + face.weights.mouthStretch * 0.5 + speech.amplitude())
+        : 0,
+      cueTime: () => speech.cueTime(now),
+    });
   }
 
   // --- Deformation -----------------------------------------------------------
 
   private deformedPoints(_now: number): Point[] {
     const pts = this.mesh.basePoints.map((p) => ({ x: p.x, y: p.y }));
-    const w = this.weights;
+    const w = this.face.weights;
 
     // Mouth geometry in canvas space.
     const mouthIdx = this.rig.mouth_indices;
@@ -1205,10 +817,10 @@ export class AvatarEngine {
     // Corner points stay pinned, mid-lid points travel furthest.
     // Lids also follow a downward gaze a little (LID_FOLLOW), so the
     // deformation runs whenever either is non-zero.
-    const lidFollow = Math.max(0, Math.min(0.5, this.gaze.y)) * LID_FOLLOW;
-    if ((this.blink > 0 || lidFollow > 0) && this.profile.blink === "mesh") {
+    const lidFollow = Math.max(0, Math.min(0.5, this.face.gaze.y)) * LID_FOLLOW;
+    if ((this.face.blink > 0 || lidFollow > 0) && this.profile.blink === "mesh") {
       // Asymmetric ease: lids snap shut faster than they reopen — blink.ts.
-      const amount = Math.min(1, blinkEase(this.blink) + lidFollow);
+      const amount = Math.min(1, blinkEase(this.face.blink) + lidFollow);
       for (let e = 0; e < 2; e++) {
         const [c0, c1] = EYE_CORNERS[e];
         const ecx = (pts[c0].x + pts[c1].x) / 2;
@@ -1260,7 +872,7 @@ export class AvatarEngine {
     // then a blink. An involuntary motion that draws attention to itself is
     // worse than none.
     const browPulse = 0;
-    const browLift = browPulse * (this.speaking ? 0.45 + this.energy * 0.3 : 0.4);
+    const browLift = browPulse * (this.speech.speaking ? 0.45 + this.motion.energy * 0.3 : 0.4);
     for (const brow of [LEFT_BROW, RIGHT_BROW]) {
       for (let j = 0; j < brow.length; j++) {
         const innerness = 1 - j / (brow.length - 1); // inner moves most
@@ -1433,14 +1045,14 @@ export class AvatarEngine {
       this.ctx.save();
       try {
         painted = this.mouthExtension.paint(this.ctx, {
-          points: pts, neutral: this.mesh.basePoints, rig: this.rig, weights: this.weights,
+          points: pts, neutral: this.mesh.basePoints, rig: this.rig, weights: this.face.weights,
           lipColour: this.samples.lipColour,
           skinColour: this.samples.skinColour ?? undefined,
           faceHighlight: this.samples.faceHighlight ?? undefined,
           soft: this.samples.look.soft,
           sharpness: this.samples.faceSharpness ?? undefined,
           pixelScale: pixelScale(this.mesh, this.rig, this.texture),
-          viseme: this.pose?.()?.viseme ?? this.currentViseme(performance.now()),
+          viseme: this.pose?.()?.viseme ?? this.speech.currentViseme(performance.now()),
         });
       } finally { this.ctx.restore(); }
     }
@@ -1461,10 +1073,10 @@ export class AvatarEngine {
     paintCharacter(this.ctx, {
       opening,
       clip: openingPath(opening, () => new Path2D()),
-      weights: this.weights,
+      weights: this.face.weights,
       look: this.samples.look,
       traits: this.traits,
-      tongueRaise: this.tongue,
+      tongueRaise: this.face.tongue,
       cavityShade: this.profile.cavityShade,
     });
   }
@@ -1478,18 +1090,18 @@ export class AvatarEngine {
    * cut-out has no edge to expose, so it gets the full amount.
    */
   private applyBodyTransform(ctx: CanvasRenderingContext2D, layered = false): Affine {
-    const scale =
-      (layered || this.cutOut ? 1 : OPAQUE_BACKGROUND_SCALE) * this.tuning.bodyMotion;
-    if (scale <= 0) return IDENTITY;
-    const angle = this.body.sway * this.swayAngle * scale;
-    const rise = this.body.breath * this.breathRise * scale;
-    ctx.translate(this.bodyPivot.x, this.bodyPivot.y);
+    const lean = this.motion.bodyLean(
+      (layered || this.cutOut ? 1 : OPAQUE_BACKGROUND_SCALE) * this.tuning.bodyMotion
+    );
+    if (!lean) return IDENTITY;
+    const { pivot, angle, rise } = lean;
+    ctx.translate(pivot.x, pivot.y);
     ctx.rotate(angle);
-    ctx.translate(-this.bodyPivot.x, -this.bodyPivot.y - rise);
+    ctx.translate(-pivot.x, -pivot.y - rise);
     // The same three steps, as the affine the GPU warp is given.
-    let m = translate(IDENTITY, this.bodyPivot.x, this.bodyPivot.y);
+    let m = translate(IDENTITY, pivot.x, pivot.y);
     m = rotate(m, angle);
-    return translate(m, -this.bodyPivot.x, -this.bodyPivot.y - rise);
+    return translate(m, -pivot.x, -pivot.y - rise);
   }
 
   /**
@@ -1684,8 +1296,8 @@ export class AvatarEngine {
    * those looks pasted on.
    */
   private drawLashes(pts: Point[]): void {
-    if (this.blink <= 0 || this.profile.blink === "lid") return;
-    const phase = this.blink;
+    if (this.face.blink <= 0 || this.profile.blink === "lid") return;
+    const phase = this.face.blink;
     const amount =
       phase < 0.4
         ? Math.sin((phase / 0.4) * (Math.PI / 2))
@@ -1742,8 +1354,8 @@ export class AvatarEngine {
    * shift is capped well inside the circle so the iris never crosses it.
    */
   private drawEyes(pts: Point[]): void {
-    const gx = Math.max(-0.6, Math.min(0.6, this.gaze.x));
-    const gy = Math.max(-0.5, Math.min(0.5, this.gaze.y));
+    const gx = Math.max(-0.6, Math.min(0.6, this.face.gaze.x));
+    const gy = Math.max(-0.5, Math.min(0.5, this.face.gaze.y));
     if (Math.abs(gx) < 0.02 && Math.abs(gy) < 0.02) return;
 
     // Shift scale is capped against the interocular distance, not just the
@@ -1831,7 +1443,7 @@ export class AvatarEngine {
    */
   private drawLipContactLine(pts: Point[]): void {
     if (this.innerRing.length < 6) return;
-    const openness = Math.min(1, this.weights.jawOpen * 1.3 + this.weights.mouthFunnel * 0.25);
+    const openness = Math.min(1, this.face.weights.jawOpen * 1.3 + this.face.weights.mouthFunnel * 0.25);
     const alpha = 0.28 * Math.max(0, 1 - openness / 0.25);
     if (alpha < 0.02) return;
 
@@ -1921,7 +1533,7 @@ export class AvatarEngine {
       axisNormY = -axisNormY;
     }
 
-    const w = this.weights;
+    const w = this.face.weights;
     const rounding = Math.min(1, w.mouthPucker + w.mouthFunnel * 0.6);
     const openFrac =
       w.jawOpen * 0.23 + w.mouthFunnel * 0.07 + w.mouthStretch * 0.03 - w.mouthClose * 0.05;
@@ -2147,8 +1759,8 @@ export class AvatarEngine {
       ctx.save();
       try {
         this.mouthExtension.draw(ctx, {
-          weights: this.weights,
-          viseme: this.pose?.()?.viseme ?? this.currentViseme(performance.now()),
+          weights: this.face.weights,
+          viseme: this.pose?.()?.viseme ?? this.speech.currentViseme(performance.now()),
           upper: upperPts, lower: lowerPts, aperture,
           neutralLeft: anchorA.x <= anchorB.x ? anchorA : anchorB,
           neutralRight: anchorA.x <= anchorB.x ? anchorB : anchorA,

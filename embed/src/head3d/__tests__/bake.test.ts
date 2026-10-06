@@ -19,7 +19,7 @@ const rig = JSON.parse(
   readFileSync(new URL("../../__tests__/fixtures/human-rig.json", import.meta.url), "utf8")
 ) as Rig;
 
-type Internals = { weights: BlendWeights; blink: number; deformedPoints(now: number): { x: number; y: number }[] };
+type Internals = { face: { weights: BlendWeights; blink: number }; deformedPoints(now: number): { x: number; y: number }[] };
 
 /** The engine's deformed landmarks at `weights`, in image px. */
 function engineShape(source: Rig, weights: Partial<BlendWeights>): { x: number; y: number }[] {
@@ -28,8 +28,8 @@ function engineShape(source: Rig, weights: Partial<BlendWeights>): { x: number; 
   const image = { naturalWidth: w, naturalHeight: h, width: w, height: h } as HTMLImageElement;
   const engine = new AvatarEngine(fakeCanvas(2048), source, image, { fullPhoto: true });
   const e = engine as unknown as Internals;
-  e.weights = { ...ZERO_WEIGHTS, ...weights };
-  e.blink = 0;
+  e.face.weights = { ...ZERO_WEIGHTS, ...weights };
+  e.face.blink = 0;
   const base = engine.landmarks();
   const scale = (base[454].x - base[234].x) / (source.points[454][0] - source.points[234][0]);
   const pts = e.deformedPoints(0).slice(0, 478).map((p, i) => ({

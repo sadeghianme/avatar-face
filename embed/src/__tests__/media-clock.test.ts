@@ -99,12 +99,13 @@ const rig = JSON.parse(
 ) as Rig;
 
 type Internals = {
-  cueTime(now: number): number;
-  currentViseme(now: number): string;
+  speech: { cueTime(now: number): number; currentViseme(now: number): string };
   tick(now: number): void;
-  body: { catchBreath(now: number): void };
-  blinks: { onPause(now: number): void };
-  gazeTarget: { x: number; y: number };
+  motion: {
+    body: { catchBreath(now: number): void };
+    blinks: { onPause(now: number): void };
+    gazeTarget: { x: number; y: number };
+  };
 };
 
 const CUES: Cue[] = [
@@ -143,13 +144,13 @@ describe("speech played by the engine", () => {
     const audio = FakeAudio.last!;
     // 300 ms of decoding and device start-up: the old clock was at "aa" by now.
     now += 300;
-    expect(e.cueTime(now)).toBe(0);
-    expect(e.currentViseme(now)).toBe("sil");
+    expect(e.speech.cueTime(now)).toBe(0);
+    expect(e.speech.currentViseme(now)).toBe("sil");
     audio.fire("playing");
     now += 150;
     audio.currentTime = 0.15;
-    expect(e.cueTime(now)).toBe(150);
-    expect(e.currentViseme(now)).toBe("PP");
+    expect(e.speech.cueTime(now)).toBe(150);
+    expect(e.speech.currentViseme(now)).toBe("PP");
     engine.destroy();
   });
 
@@ -160,11 +161,11 @@ describe("speech played by the engine", () => {
     audio.fire("playing");
     now += 50;
     audio.currentTime = 0.05;
-    expect(e.cueTime(now)).toBe(50);
+    expect(e.speech.cueTime(now)).toBe(50);
     audio.currentTime = 0.6;
     audio.fire("seeked");
-    expect(e.cueTime(now)).toBe(600);
-    expect(e.currentViseme(now)).toBe("aa");
+    expect(e.speech.cueTime(now)).toBe(600);
+    expect(e.speech.currentViseme(now)).toBe("aa");
     engine.destroy();
   });
 
@@ -175,15 +176,15 @@ describe("speech played by the engine", () => {
     audio.fire("playing");
     audio.currentTime = 0.25;
     now += 250;
-    expect(e.currentViseme(now)).toBe("aa");
+    expect(e.speech.currentViseme(now)).toBe("aa");
     audio.fire("pause");
     now += 2000;
-    expect(e.currentViseme(now)).toBe("sil");
-    expect(e.cueTime(now)).toBe(250);
+    expect(e.speech.currentViseme(now)).toBe("sil");
+    expect(e.speech.cueTime(now)).toBe(250);
     expect(engine.isSpeaking()).toBe(true);
     audio.fire("playing");
     now += 16;
-    expect(e.currentViseme(now)).toBe("aa");
+    expect(e.speech.currentViseme(now)).toBe("aa");
     engine.destroy();
   });
 
@@ -201,8 +202,8 @@ describe("speech played by the engine", () => {
     audio.fire("playing");
     engine.playCues(CUES);
     now += 120;
-    expect(e.cueTime(now)).toBe(120);
-    expect(e.currentViseme(now)).toBe("PP");
+    expect(e.speech.cueTime(now)).toBe(120);
+    expect(e.speech.currentViseme(now)).toBe("PP");
     engine.destroy();
   });
 
@@ -221,10 +222,10 @@ describe("speech played by the engine", () => {
     let external = 700;
     const { engine, e } = engineWith({ cueClock: () => external });
     engine.playAudio("", "audio/wav", CUES);
-    expect(e.cueTime(now)).toBe(700);
+    expect(e.speech.cueTime(now)).toBe(700);
     FakeAudio.last!.fire("pause");
     external = 250;
-    expect(e.currentViseme(now)).toBe("aa");
+    expect(e.speech.currentViseme(now)).toBe("aa");
     engine.destroy();
   });
 
@@ -259,8 +260,8 @@ describe("speech played by the engine", () => {
       // sampler accepts: 0.1 and 0.5 would be redrawn forever.)
       vi.mocked(Math.random).mockReturnValue(0.3);
       const { engine, e } = engineWith();
-      const breath = vi.spyOn(e.body, "catchBreath");
-      const blink = vi.spyOn(e.blinks, "onPause");
+      const breath = vi.spyOn(e.motion.body, "catchBreath");
+      const blink = vi.spyOn(e.motion.blinks, "onPause");
       engine.playAudio("", "audio/wav", HELLO);
       return { engine, e, audio: FakeAudio.last!, breath, blink };
     };
@@ -270,17 +271,17 @@ describe("speech played by the engine", () => {
       // 600 ms of decoding and device start-up, as on a phone. The /h/ at
       // time 0 is all the cue track says meanwhile.
       run(e, audio, 600);
-      expect(e.currentViseme(now)).toBe("sil");
+      expect(e.speech.currentViseme(now)).toBe("sil");
       expect(breath).not.toHaveBeenCalled();
       expect(blink).not.toHaveBeenCalled();
-      expect(e.gazeTarget).toEqual({ x: 0, y: 0 });
+      expect(e.motion.gazeTarget).toEqual({ x: 0, y: 0 });
       // The voice starts: its /h/ runs into the vowel, with no pause between.
       audio.fire("playing");
       run(e, audio, 300);
-      expect(e.currentViseme(now)).toBe("oh");
+      expect(e.speech.currentViseme(now)).toBe("oh");
       expect(breath).not.toHaveBeenCalled();
       expect(blink).not.toHaveBeenCalled();
-      expect(e.gazeTarget).toEqual({ x: 0, y: 0 });
+      expect(e.motion.gazeTarget).toEqual({ x: 0, y: 0 });
       engine.destroy();
     });
 
@@ -290,14 +291,14 @@ describe("speech played by the engine", () => {
       audio.fire("playing");
       // Into the comma, past the length of a pause but not out of it.
       run(e, audio, 800);
-      expect(e.currentViseme(now)).toBe("sil");
+      expect(e.speech.currentViseme(now)).toBe("sil");
       expect(breath).toHaveBeenCalledTimes(1);
       expect(blink).toHaveBeenCalledTimes(1);
-      expect(e.gazeTarget).not.toEqual({ x: 0, y: 0 });
+      expect(e.motion.gazeTarget).not.toEqual({ x: 0, y: 0 });
       // Speech resumes: back to the listener.
       run(e, audio, 200);
-      expect(e.currentViseme(now)).not.toBe("sil");
-      expect(e.gazeTarget).toEqual({ x: 0, y: 0 });
+      expect(e.speech.currentViseme(now)).not.toBe("sil");
+      expect(e.motion.gazeTarget).toEqual({ x: 0, y: 0 });
       engine.destroy();
     });
 
