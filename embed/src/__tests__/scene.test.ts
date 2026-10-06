@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
+import { engineSeam } from "../engine/seam";
 import type { Rig } from "../types";
 
 /**
@@ -45,15 +46,13 @@ function fakeCanvas(log: string[], texture: Texture, size = 512): HTMLCanvasElem
   return { width: size, height: size, getContext: () => ctx } as unknown as HTMLCanvasElement;
 }
 
-type Internals = { render(): void; cutOut: boolean; mesh: { basePoints: { x: number; y: number }[] }; deformedPoints(now: number): unknown[]; backdrop: { image: unknown } };
-
 function engineWith(texture: Texture, scene: ConstructorParameters<typeof AvatarEngine>[3]["scene"]) {
   const log: string[] = [];
   vi.stubGlobal("document", { createElement: () => fakeCanvas([], texture, 64) });
   const image = { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement;
   const engine = new AvatarEngine(fakeCanvas(log, texture), rig, image, { fullPhoto: false, scene });
   log.length = 0;
-  return { engine, e: engine as unknown as Internals, log };
+  return { engine, e: engineSeam(engine), log };
 }
 
 describe("the scene's background", () => {
@@ -104,24 +103,24 @@ describe("the scene's background", () => {
 
   it("changes live: a new zoom moves every base point and keeps the mesh whole", () => {
     const { engine, e } = engineWith(cutOut, { zoom: 1 });
-    const before = e.mesh.basePoints.map((p) => ({ ...p }));
-    const vertices = e.deformedPoints(10_000).length;
+    const before = engine.landmarks().map((p) => ({ ...p }));
+    const vertices = e.deformedPoints().length;
     engine.setScene({ zoom: 0, pan: { x: 0, y: 0 }, background: { kind: "color", color: "#ffffff" } });
-    expect(e.mesh.basePoints[152].y).not.toBeCloseTo(before[152].y, 1);
-    expect(e.deformedPoints(10_000).length).toBe(vertices);
+    expect(engine.landmarks()[152].y).not.toBeCloseTo(before[152].y, 1);
+    expect(e.deformedPoints().length).toBe(vertices);
     // The same scene again moves nothing.
-    const after = e.mesh.basePoints.map((p) => ({ ...p }));
+    const after = engine.landmarks().map((p) => ({ ...p }));
     engine.setScene({ zoom: 0, pan: { x: 0, y: 0 }, background: { kind: "transparent" } });
-    expect(e.mesh.basePoints[152]).toEqual(after[152]);
+    expect(engine.landmarks()[152]).toEqual(after[152]);
     engine.destroy();
   });
 
   it("the zoom option wins over the scene's, which wins over the framing", () => {
     const framed = engineWith(cutOut, undefined);
     const byScene = engineWith(cutOut, { zoom: 0 });
-    const byOption = new AvatarEngine(fakeCanvas([], cutOut), rig, { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement, { fullPhoto: false, scene: { zoom: 0 }, zoom: 1 }) as unknown as Internals & { destroy(): void };
-    expect(byScene.e.mesh.basePoints[152].y).not.toBeCloseTo(framed.e.mesh.basePoints[152].y, 1);
-    expect(byOption.mesh.basePoints[152].y).toBeCloseTo(framed.e.mesh.basePoints[152].y, 6);
+    const byOption = new AvatarEngine(fakeCanvas([], cutOut), rig, { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement, { fullPhoto: false, scene: { zoom: 0 }, zoom: 1 });
+    expect(byScene.engine.landmarks()[152].y).not.toBeCloseTo(framed.engine.landmarks()[152].y, 1);
+    expect(byOption.landmarks()[152].y).toBeCloseTo(framed.engine.landmarks()[152].y, 6);
     framed.engine.destroy(); byScene.engine.destroy(); byOption.destroy();
   });
 });

@@ -102,17 +102,23 @@ describe("audio-locked comparison", () => {
 });
 
 describe("renderer clock opt-in", () => {
-  // The clock lookup is pure; do not need a DOM/canvas to exercise it.
-  const read = (SpeechTrack.prototype as unknown as { cueTime(now: number): number }).cueTime;
+  // The clock lookup needs no DOM or canvas: a SpeechTrack with no audio
+  // element reads the lab's clock when it has one, else the frame clock.
+  const hooks = { onSync: () => undefined, onEnded: () => undefined };
+  const trackFrom = (cueClock: (() => number) | undefined, startedAt: number) => {
+    const speech = new SpeechTrack(cueClock, hooks);
+    speech.startClock(startedAt);
+    return speech;
+  };
   it("retains the original wall clock without opting in", () => {
-    expect(read.call({ cueStart: 100 } as never, 700)).toBe(600);
+    expect(trackFrom(undefined, 100).cueTime(700)).toBe(600);
   });
   it("never advances an audio-locked clock while media is stalled", () => {
-    const state = { cueClock: () => 350, cueStart: 0 };
-    expect(read.call(state as never, 500)).toBe(350);
-    expect(read.call(state as never, 50000)).toBe(350);
+    const speech = trackFrom(() => 350, 0);
+    expect(speech.cueTime(500)).toBe(350);
+    expect(speech.cueTime(50000)).toBe(350);
   });
   it("falls back safely for invalid external timing", () => {
-    expect(read.call({ cueClock: () => NaN, cueStart: 100 } as never, 500)).toBe(400);
+    expect(trackFrom(() => NaN, 100).cueTime(500)).toBe(400);
   });
 });

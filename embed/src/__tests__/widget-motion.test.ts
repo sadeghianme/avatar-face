@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { AvatarEngine } from "../engine";
+import { engineSeam } from "../engine/seam";
 import { fakeCanvas, NoopPath, stubNetwork, type FakeNetwork, type Resource } from "./browser-fakes";
 
 /**
@@ -49,7 +51,7 @@ const published = (mouth: object) => ({
 });
 
 interface Attached {
-  engine: { tuning: { mouthOpen: number } };
+  engine: AvatarEngine;
   config: unknown;
   motionUrl: string;
   /** What attach returned: settles once the mouth has loaded, or not. */
@@ -104,15 +106,19 @@ async function embed(info: ReturnType<typeof published>, answers: Record<string,
   return { network, scripts, attached: await attached };
 }
 
+/** The continuous mouth's own state read here (mouth/continuous-mouth.ts). */
+type ContinuousParts = { template: { character: string }; oral?: object };
+const mouthIn = (engine: AvatarEngine) =>
+  engineSeam(engine).mouthExtension as unknown as ContinuousParts | undefined;
+
 /** The mouth the engine draws with now, and the motion it plays. */
-function mouthOf(engine: unknown): string | null {
-  const extension = (engine as { mouthExtension?: { template: { character: string } } }).mouthExtension;
-  return extension ? extension.template.character : null;
+function mouthOf(engine: AvatarEngine): string | null {
+  return mouthIn(engine)?.template.character ?? null;
 }
 
 /** Whether the engine's mouth draws its teeth from a photo. */
-function teethPhotoOf(engine: unknown): boolean {
-  return Boolean((engine as { mouthExtension?: { oral?: object } }).mouthExtension?.oral);
+function teethPhotoOf(engine: AvatarEngine): boolean {
+  return Boolean(mouthIn(engine)?.oral);
 }
 
 describe("the widget's continuous mouth", () => {

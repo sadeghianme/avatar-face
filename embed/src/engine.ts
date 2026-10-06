@@ -477,7 +477,7 @@ export class AvatarEngine {
   // --- Deformation -----------------------------------------------------------
 
   /** Every mesh vertex this frame (deform.ts). */
-  private deformedPoints(_now: number): Point[] {
+  private deformedPoints(): Point[] {
     return deformFace({
       rig: this.rig,
       mesh: this.mesh,
@@ -495,9 +495,8 @@ export class AvatarEngine {
   // --- Rendering ---------------------------------------------------------------
 
   private render(): void {
-    const now = performance.now();
     const ctx = this.ctx;
-    const pts = this.deformedPoints(now);
+    const pts = this.deformedPoints();
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     // The scene's background first, under everything and still.
     this.backdrop.draw(ctx, this.scene.background, this.cutOut, this.canvas);

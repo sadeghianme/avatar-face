@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
+import { engineSeam } from "../engine/seam";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
 
 /**
@@ -90,25 +91,19 @@ const random = () => {
   return (seed - 1) / 2147483646;
 };
 
-type Internals = {
-  face: { weights: BlendWeights; blink: number; gaze: { x: number; y: number }; tongue: number };
-  deformedPoints(now: number): { x: number; y: number }[];
-  render(): void;
-};
-
 function frame(profile: string, texture: Texture, weights: Partial<BlendWeights>, extra: { blink?: number; tongue?: number } = {}) {
   const log: string[] = [];
   vi.stubGlobal("document", { createElement: () => fakeCanvas([], texture, 64) });
   const image = { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement;
   const engine = new AvatarEngine(fakeCanvas(log, texture), { ...rig, render_profile: profile }, image, { fullPhoto: false });
   log.length = 0;
-  const e = engine as unknown as Internals;
-  const rest = e.deformedPoints(10_000);
+  const e = engineSeam(engine);
+  const rest = e.deformedPoints();
   e.face.weights = { ...ZERO_WEIGHTS, ...weights };
   e.face.blink = extra.blink ?? 0;
   e.face.gaze = { x: 0, y: 0 };
   e.face.tongue = extra.tongue ?? 0;
-  const pts = e.deformedPoints(10_000);
+  const pts = e.deformedPoints();
   e.render();
   engine.destroy();
   const digest = (t: string) => createHash("sha256").update(t).digest("hex").slice(0, 16);
@@ -176,7 +171,7 @@ describe("the character mouth is only for its profiles", () => {
     else delete r.render_profile;
     const engine = new AvatarEngine(fakeCanvas(log, flatSkin), r, image, { fullPhoto: false });
     log.length = 0;
-    const e = engine as unknown as Internals;
+    const e = engineSeam(engine);
     e.face.weights = { ...ZERO_WEIGHTS, ...weights };
     e.render();
     engine.destroy();

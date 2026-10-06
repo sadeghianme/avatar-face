@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_LOOK, type CharacterLook } from "../character-mouth";
+import { DEFAULT_LOOK } from "../character-mouth";
 import { AvatarEngine } from "../engine";
+import { engineSeam, type EngineSeam } from "../engine/seam";
 import type { Rig } from "../types";
 
 /**
@@ -65,8 +66,6 @@ const stripes = (ramp: number): Texture => (x) => {
 };
 const flat: Texture = () => grey(140);
 
-type Internals = { samples: { look: CharacterLook; faceSharpness: number | null }; mesh: { texPoints: { x: number; y: number }[] } };
-
 describe("the look's softness on the engine", () => {
   let texture: Texture = flat;
   beforeEach(() => {
@@ -84,12 +83,12 @@ describe("the look's softness on the engine", () => {
   });
 
   const image = (size: number) => ({ naturalWidth: size, naturalHeight: size, width: size, height: size }) as HTMLImageElement;
-  const mouthWidth = (e: Internals) => Math.hypot(e.mesh.texPoints[291].x - e.mesh.texPoints[61].x, e.mesh.texPoints[291].y - e.mesh.texPoints[61].y);
+  const mouthWidth = (e: EngineSeam) => Math.hypot(e.mesh.texPoints[291].x - e.mesh.texPoints[61].x, e.mesh.texPoints[291].y - e.mesh.texPoints[61].y);
 
   it("is the picture's sharpness over the mouth's width, and is rebuilt from the upgraded texture", () => {
     texture = stripes(0);
     const engine = new AvatarEngine(fakeCanvas(texture), { ...rig, render_profile: "toon@1" }, image(1024), { fullPhoto: false });
-    const e = engine as unknown as Internals;
+    const e = engineSeam(engine);
     const sharp = e.samples.faceSharpness;
     expect(sharp).not.toBeNull();
     expect(sharp!).toBeLessThan(1.3);
@@ -120,7 +119,7 @@ describe("the look's softness on the engine", () => {
     const seamY = (rig.points[13][1] * 1024) / rig.image_size[1];
     texture = (_x, y) => grey(y < seamY ? 170 : 140);
     const engine = new AvatarEngine(fakeCanvas(texture), { ...rig, render_profile: "toon@1" }, image(1024), { fullPhoto: false });
-    const e = engine as unknown as Internals;
+    const e = engineSeam(engine);
     expect(e.samples.faceSharpness).toBeNull();
     // A hard 30-level step: contrast over its steepest step is 1 px.
     expect(e.samples.look.soft).toBeCloseTo(1 / mouthWidth(e), 9);

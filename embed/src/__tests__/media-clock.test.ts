@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
+import { engineSeam, type EngineSeam } from "../engine/seam";
 import { MAX_EXTRAPOLATION_MS, MediaClock } from "../media-clock";
 import type { Cue, Rig } from "../types";
 import { FakeAudio, fakeCanvas, NoopPath } from "./browser-fakes";
@@ -98,16 +99,6 @@ const rig = JSON.parse(
   readFileSync(new URL("./fixtures/human-rig.json", import.meta.url), "utf8")
 ) as Rig;
 
-type Internals = {
-  speech: { cueTime(now: number): number; currentViseme(now: number): string };
-  tick(now: number): void;
-  motion: {
-    body: { catchBreath(now: number): void };
-    blinks: { onPause(now: number): void };
-    gazeTarget: { x: number; y: number };
-  };
-};
-
 const CUES: Cue[] = [
   { t: 0, viseme: "sil", a: 1 },
   { t: 100, viseme: "PP", a: 1 },
@@ -135,7 +126,7 @@ describe("speech played by the engine", () => {
   const engineWith = (options = {}) => {
     const image = { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement;
     const engine = new AvatarEngine(fakeCanvas(), rig, image, { fullPhoto: true, ...options });
-    return { engine, e: engine as unknown as Internals };
+    return { engine, e: engineSeam(engine) };
   };
 
   it("keeps the mouth still until the audio actually plays", () => {
@@ -245,7 +236,7 @@ describe("speech played by the engine", () => {
     ];
 
     /** Frame by frame for `ms`, the audio's position moving while it plays. */
-    const run = (e: Internals, audio: FakeAudio, ms: number) => {
+    const run = (e: EngineSeam, audio: FakeAudio, ms: number) => {
       for (let elapsed = 0; elapsed < ms; elapsed += 1000 / 60) {
         now += 1000 / 60;
         if (!audio.paused) audio.currentTime += 1 / 60;

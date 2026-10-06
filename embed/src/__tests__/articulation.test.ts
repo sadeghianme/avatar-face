@@ -2,10 +2,12 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { articulationLead, AvatarEngine } from "../engine";
+import { engineSeam, type EngineSeam } from "../engine/seam";
+import { SpeechTrack } from "../engine/speech";
 import { ContinuousMouth } from "../mouth/continuous-mouth";
 import { enamelReveal, RevealRamp, REVEAL_RISE_MS } from "../mouth/lip-occlusion-model";
 import { validatePerformanceManifest } from "../mouth/photographic-performance-model";
-import type { BlendWeights, Cue, Rig } from "../types";
+import { DEFAULT_TUNING, type Cue, type Rig } from "../types";
 import { fakeCanvas, NoopPath } from "./browser-fakes";
 
 /**
@@ -23,14 +25,6 @@ const rig = JSON.parse(readFileSync(new URL("./fixtures/human-rig.json", import.
 const track = JSON.parse(readFileSync(new URL("./fixtures/native-cues-hello.json", import.meta.url), "utf8")) as { cues: Cue[] };
 const manifest = validatePerformanceManifest(JSON.parse(
   readFileSync(new URL("../../../frontend/public/lab/reference/performance.json", import.meta.url), "utf8")));
-
-type Internals = {
-  tick(now: number): void;
-  face: { weights: BlendWeights; targetWeights: BlendWeights };
-  blendedCueWeights(now: number): BlendWeights;
-  speech: { cues: Cue[] };
-  tuning: { smoothness: number };
-};
 
 const FRAME = 1000 / 60;
 
@@ -56,11 +50,11 @@ describe("the articulation of a cue track", () => {
     const engine = new AvatarEngine(fakeCanvas(), rig, image, { fullPhoto: true });
     engine.tuning.headMotion = 0;
     engine.tuning.bodyMotion = 0;
-    return { engine, e: engine as unknown as Internals };
+    return { engine, e: engineSeam(engine) };
   };
 
   /** Settle, play, and tick at exactly 60 fps for `ms`, sampling each frame. */
-  const play = (e: Internals, engine: AvatarEngine, cues: Cue[], ms: number, sample: (t: number) => void) => {
+  const play = (e: EngineSeam, engine: AvatarEngine, cues: Cue[], ms: number, sample: (t: number) => void) => {
     for (let i = 0; i < 30; i++) { now += FRAME; e.tick(now); }
     engine.playCues(cues);
     const start = now;
@@ -100,7 +94,10 @@ describe("the articulation of a cue track", () => {
   });
 
   it("passes through a short silence inside a word, and closes on a pause", () => {
-    const { engine, e } = engineWith();
+    // The track as playCues hands it to the engine's SpeechTrack: prepared,
+    // on a frame clock started now, blended ahead of the voice by the
+    // articulation's lead at the default smoothness.
+    const speech = new SpeechTrack(undefined, { onSync: () => undefined, onEnded: () => undefined });
     // "...an-d a" with a 50 ms gap between the /n/ and the /d/ (the kind
     // native timing writes, kept by prepareCues beside transients), then a
     // 300 ms pause before the next word.
@@ -109,10 +106,12 @@ describe("the articulation of a cue track", () => {
       { t: 300, viseme: "sil", a: 1 }, { t: 350, viseme: "DD", a: 1 }, { t: 400, viseme: "aa", a: 1 },
       { t: 700, viseme: "sil", a: 1 }, { t: 1000, viseme: "aa", a: 1 }, { t: 1200, viseme: "sil", a: 1 }, { t: 1500, viseme: "sil", a: 1 },
     ];
-    engine.playCues(cues);
-    expect(e.speech.cues.map((c) => [c.t, c.viseme])).toContainEqual([300, "sil"]);
-    const lead = articulationLead(e.tuning.smoothness);
-    const blendAt = (t: number) => e.blendedCueWeights(now + t - lead);
+    speech.begin(cues);
+    speech.startClock(now);
+    expect(speech.cues.map((c) => [c.t, c.viseme])).toContainEqual([300, "sil"]);
+    const smoothness = DEFAULT_TUNING.smoothness;
+    const lead = articulationLead(smoothness);
+    const blendAt = (t: number) => speech.blendedWeights(now + t - lead, rig.visemes, smoothness);
     // The short silence pulls toward rest by 50/110 of its bell: the jaw
     // stays part-way open between the /n/ and the /d/ (whole, it fell to 0.11).
     expect(blendAt(325).jawOpen).toBeGreaterThan(0.13);
@@ -120,7 +119,7 @@ describe("the articulation of a cue track", () => {
     // tail of the vowel's own bell, 0.03).
     expect(blendAt(850).jawOpen).toBeLessThan(0.05);
     expect(blendAt(850).mouthClose).toBeCloseTo(rig.visemes.sil.mouthClose, 2);
-    engine.destroy();
+    speech.destroy();
   });
 
   it("moves the photographic mouth without steps on the production track, closing only where a mouth closes", () => {

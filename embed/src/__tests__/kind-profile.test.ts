@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
+import { engineSeam } from "../engine/seam";
 import { ClassicMouth } from "../engine/paint-classic-mouth";
 import { HUMAN_PROFILE, kindProfile } from "../kind-profile";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
@@ -62,11 +63,6 @@ class NoopPath {
   addPath() {}
 }
 
-type Internals = {
-  face: { weights: BlendWeights };
-  render(): void;
-};
-
 /** The classic mouth's parts, to count which ran. */
 type ClassicMouthParts = {
   drawTeethRow(...args: unknown[]): void;
@@ -83,7 +79,7 @@ function frame(rig: Rig, weights: Partial<BlendWeights>) {
   const contact = vi.spyOn(proto, "drawLipContactLine");
   const engine = new AvatarEngine(recordingCanvas(log), rig, image, { fullPhoto: true });
   log.length = 0;
-  const e = engine as unknown as Internals;
+  const e = engineSeam(engine);
   e.face.weights = { ...ZERO_WEIGHTS, ...weights };
   e.render();
   engine.destroy();
@@ -188,10 +184,10 @@ describe("a rig fitted from a mouth line", () => {
   it("moves both corners alike on closed-mouth shapes", () => {
     const image = { naturalWidth: 1000, naturalHeight: 1000, width: 1000, height: 1000 } as HTMLImageElement;
     const engine = new AvatarEngine(recordingCanvas([]), fitted, image, { fullPhoto: true });
-    const e = engine as unknown as Internals & { deformedPoints(now: number): { x: number; y: number }[] };
+    const e = engineSeam(engine);
     const pose = (weights: Partial<BlendWeights>) => {
       e.face.weights = { ...ZERO_WEIGHTS, ...weights };
-      return e.deformedPoints(10_000);
+      return e.deformedPoints();
     };
     const rest = pose({});
     for (const shape of ["PP", "FF"]) {

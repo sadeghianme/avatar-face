@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
+import { engineSeam } from "../engine/seam";
 import { MITRE_LIMIT, padTriangle } from "../seam-pad";
 import type { Pt } from "../jaw-rig";
 import type { Rig } from "../types";
@@ -99,19 +100,13 @@ function fakeCanvas(texture: Texture, size = 512): HTMLCanvasElement {
   return { width: size, height: size, getContext: () => ctx } as unknown as HTMLCanvasElement;
 }
 
-type Internals = {
-  mesh: { triangles: [number, number, number][] };
-  meshWarp: { trianglePads(): Float32Array | null };
-  samples: { look: { flat: boolean } };
-};
-
 function padsFor(texture: Texture, profile?: string): { tris: [number, number, number][]; pads: Float32Array; flat: boolean } {
   vi.stubGlobal("document", { createElement: () => fakeCanvas(texture, 64) });
   const image = { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement;
   const source = { ...rig } as Rig;
   if (profile) source.render_profile = profile;
   const engine = new AvatarEngine(fakeCanvas(texture), source, image, { fullPhoto: false });
-  const e = engine as unknown as Internals;
+  const e = engineSeam(engine);
   const pads = e.meshWarp.trianglePads()!;
   engine.destroy();
   return { tris: e.mesh.triangles, pads, flat: e.samples.look.flat };

@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
+import { engineSeam } from "../engine/seam";
 import {
   IDENTITY,
   MIN_SOURCE_DET,
-  WarpRenderer,
   apply,
   buildWarpMesh,
   clipMatrix,
@@ -110,7 +110,7 @@ describe("the mesh buffers", () => {
   it("match the engine's triangle list for a real rig, mouth subdivision and neck band included", () => {
     stubBrowser();
     const engine = makeEngine();
-    const e = engine as unknown as { mesh: { texPoints: Point[]; triangles: [number, number, number][] }; texture: HTMLImageElement };
+    const e = engineSeam(engine);
     const mesh = buildWarpMesh(e.mesh.texPoints, e.mesh.triangles, e.texture.naturalWidth, e.texture.naturalHeight);
     // The 2D path draws a triangle unless its source is degenerate; the
     // fixture's are all drawn, and the GL list is the same list.
@@ -243,8 +243,6 @@ function makeEngine(opts: { warp?: "auto" | "2d" } = {}, log: string[] = []) {
   return new AvatarEngine(canvas as unknown as HTMLCanvasElement, rig, image, { fullPhoto: false, ...opts });
 }
 
-type Internals = { render(): void; meshWarp: { renderer: WarpRenderer | null } };
-
 describe("which path the engine takes", () => {
   beforeEach(() => { FakeGL.instances = []; });
   afterEach(restoreBrowser);
@@ -255,9 +253,9 @@ describe("which path the engine takes", () => {
     const engine = makeEngine({}, log);
     expect(engine.warpPath()).toBe("2d");
     log.length = 0;
-    (engine as unknown as Internals).render();
+    engineSeam(engine).render();
     const clips = log.filter((l) => l.startsWith("clip(")).length;
-    const triangles = (engine as unknown as { mesh: { triangles: unknown[] } }).mesh.triangles.length;
+    const triangles = engineSeam(engine).mesh.triangles.length;
     expect(clips).toBe(triangles);
     expect(FakeGL.instances).toHaveLength(0);
     engine.destroy();
@@ -271,7 +269,7 @@ describe("which path the engine takes", () => {
     expect(FakeGL.instances).toHaveLength(1);
     const gl = FakeGL.instances[0];
     log.length = 0;
-    (engine as unknown as Internals).render();
+    engineSeam(engine).render();
     expect(log.filter((l) => l.startsWith("clip(")).length).toBe(0);
     // The GL canvas drawn under the identity, once; the picture once under it.
     expect(log.some((l) => l === "setTransform(1,0,0,1,0,0)")).toBe(true);
@@ -279,7 +277,7 @@ describe("which path the engine takes", () => {
     expect(gl.calls.filter((c) => c === "texImage2D")).toHaveLength(1);
     expect(gl.calls.filter((c) => c === "drawElements")).toHaveLength(1);
     // The next frame uploads nothing again.
-    (engine as unknown as Internals).render();
+    engineSeam(engine).render();
     expect(gl.calls.filter((c) => c === "texImage2D")).toHaveLength(1);
     expect(gl.calls.filter((c) => c === "drawElements")).toHaveLength(2);
     engine.destroy();
@@ -289,13 +287,13 @@ describe("which path the engine takes", () => {
     stubBrowser(true);
     const engine = makeEngine();
     const gl = FakeGL.instances[0];
-    (engine as unknown as Internals).render();
+    engineSeam(engine).render();
     const uploads = () => gl.calls.filter((c) => c === "texImage2D").length;
     const buffers = () => gl.calls.filter((c) => c === "bufferData").length;
     expect(uploads()).toBe(1);
     const before = buffers();
     engine.setTexture({ naturalWidth: 2048, naturalHeight: 2048, width: 2048, height: 2048 } as HTMLImageElement);
-    (engine as unknown as Internals).render();
+    engineSeam(engine).render();
     expect(uploads()).toBe(2);
     expect(buffers()).toBeGreaterThan(before + 1); // uv + indices again, plus the frame's positions
     engine.destroy();
@@ -305,7 +303,7 @@ describe("which path the engine takes", () => {
     stubBrowser(true);
     const log: string[] = [];
     const engine = makeEngine({}, log);
-    const e = engine as unknown as Internals;
+    const e = engineSeam(engine);
     const glCanvas = e.meshWarp.renderer!.canvas as unknown as { fire(type: string): void };
     e.render();
     expect(log.filter((l) => l.startsWith("clip(")).length).toBe(0);
@@ -339,7 +337,7 @@ describe("which path the engine takes", () => {
     engine.setWarp("2d");
     expect(engine.warpPath()).toBe("2d");
     log.length = 0;
-    (engine as unknown as Internals).render();
+    engineSeam(engine).render();
     expect(log.filter((l) => l.startsWith("clip(")).length).toBeGreaterThan(1000);
     engine.destroy();
   });
@@ -347,7 +345,7 @@ describe("which path the engine takes", () => {
   it("frees the renderer with the engine", () => {
     stubBrowser(true);
     const engine = makeEngine();
-    const e = engine as unknown as Internals;
+    const e = engineSeam(engine);
     const warp = e.meshWarp.renderer!;
     expect(warp.available).toBe(true);
     engine.destroy();

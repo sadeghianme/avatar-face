@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { blinkEase } from "../../blink";
 import { AvatarEngine } from "../../engine";
+import { engineSeam } from "../../engine/seam";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
 import { SYMMETRIC_WEIGHTS, bakeMorphTargets, closedBlinkPhase, tableMaxima } from "../bake/bake-morphs";
 import { fakeCanvas, installNodeEnvironment } from "../bake/node-env";
@@ -19,20 +20,18 @@ const rig = JSON.parse(
   readFileSync(new URL("../../__tests__/fixtures/human-rig.json", import.meta.url), "utf8")
 ) as Rig;
 
-type Internals = { face: { weights: BlendWeights; blink: number }; deformedPoints(now: number): { x: number; y: number }[] };
-
 /** The engine's deformed landmarks at `weights`, in image px. */
 function engineShape(source: Rig, weights: Partial<BlendWeights>): { x: number; y: number }[] {
   installNodeEnvironment();
   const [w, h] = source.image_size;
   const image = { naturalWidth: w, naturalHeight: h, width: w, height: h } as HTMLImageElement;
   const engine = new AvatarEngine(fakeCanvas(2048), source, image, { fullPhoto: true });
-  const e = engine as unknown as Internals;
+  const e = engineSeam(engine);
   e.face.weights = { ...ZERO_WEIGHTS, ...weights };
   e.face.blink = 0;
   const base = engine.landmarks();
   const scale = (base[454].x - base[234].x) / (source.points[454][0] - source.points[234][0]);
-  const pts = e.deformedPoints(0).slice(0, 478).map((p, i) => ({
+  const pts = e.deformedPoints().slice(0, 478).map((p, i) => ({
     x: source.points[i][0] + (p.x - base[i].x) / scale,
     y: source.points[i][1] + (p.y - base[i].y) / scale,
   }));

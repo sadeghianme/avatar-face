@@ -5,14 +5,15 @@
  * measurement. Driven from the page's query string (a look in a browser)
  * or by headless.mjs over the DevTools protocol (`window.__head3d.run`).
  *
- * A lab page: it reaches into both engines the way the golden tests do
- * (private state through a cast) to hold a still; the product never does.
+ * A lab page: it poses the 2D engine through its seam (engine/seam.ts), as
+ * the golden tests do, to hold a still; the product never does.
  */
 import * as THREE from "three";
 
 import { AvatarEngine } from "../../engine";
+import { engineSeam } from "../../engine/seam";
 import type { Avatar3DEngine } from "../../engine3d";
-import { ZERO_WEIGHTS, type BlendWeights, type Cue, type Rig } from "../../types";
+import { ZERO_WEIGHTS, type Cue, type Rig } from "../../types";
 import { expandVisemeTable, type Head3DExtras } from "../extras";
 import { FixedHeadPose } from "../head-pose";
 import { loadHead3D } from "../load";
@@ -100,8 +101,6 @@ async function load(url: string, size: number, fixed = true): Promise<Loaded> {
   return { engine, extras, pose, table, renderer };
 }
 
-type Engine2DInternals = { face: { weights: BlendWeights }; tick(now: number): void; render(): void };
-
 async function load2D(rigUrl: string, imageUrl: string, size: number): Promise<{ engine: AvatarEngine; canvas: HTMLCanvasElement; rig: Rig }> {
   const rig = (await (await fetch(rigUrl)).json()) as Rig;
   const image = new Image();
@@ -177,7 +176,7 @@ async function runCompare(spec: CompareSpec): Promise<string> {
   virtualNow = 10_000;
   const loaded = await load(spec.glb, cell);
   const flat = await load2D(spec.rig, spec.image, cell);
-  const e2 = flat.engine as unknown as Engine2DInternals;
+  const e2 = engineSeam(flat.engine);
   sheet.width = cell * visemes.length;
   sheet.height = cell * 2 + 24;
   const ctx = sheet.getContext("2d")!;
@@ -205,7 +204,7 @@ async function runPhrase(spec: PhraseSpec): Promise<string> {
   virtualNow = 10_000;
   const loaded = await load(spec.glb, cell, false);
   const flat = spec.rig && spec.image ? await load2D(spec.rig, spec.image, cell) : null;
-  const e2 = flat ? (flat.engine as unknown as Engine2DInternals) : null;
+  const e2 = flat ? engineSeam(flat.engine) : null;
   const duration = PHRASE_CUES[PHRASE_CUES.length - 1].t;
   const frames = Math.floor(duration / every) + 1;
   const rows = flat ? 2 : 1;
