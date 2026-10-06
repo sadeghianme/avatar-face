@@ -86,3 +86,26 @@ jobs:
       - run: npm ci
       - name: Typecheck and build
         run: npm run build
+
+  frontend-lint:
+    # The dashboard's lint (the UI kit and data-layer rules among them,
+    # docs/frontend-ui.md), its formatting and its unit tests. Node 22:
+    # node --test runs the .test.ts files by stripping their types.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # The type-aware rules resolve @liveface/embed from ../embed/src.
+      - name: Install embed deps
+        run: npm ci --prefix ../embed
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
