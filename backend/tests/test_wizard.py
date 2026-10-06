@@ -344,6 +344,26 @@ async def test_the_original_photo_is_cut_out_without_ai(client, faces, images, s
     assert refused.status_code == 422 and refused.json()["code"] == "original_not_for_look"
 
 
+async def test_the_original_photo_is_used_when_the_organization_has_ai_off(
+    client, faces, images, segmenter
+):
+    # The member agreed to AI earlier and the browser still sends that
+    # consent; the admin then switched the organization's AI off. "Use my
+    # original photo" needs no AI, so it is made, not refused with 403, and
+    # no vision model is asked for the points.
+    headers, org_id = await _org(client, "switchedoff")
+    base, _ = await _upload(client, headers, org_id)
+    consent_id = await ai_consent(client, headers, org_id)
+    off = await client.patch(f"/orgs/{org_id}", json={"third_party_ai_enabled": False}, headers=headers)
+    assert off.status_code == 200, off.text
+    response = await _prepare(client, headers, base, mode="original", consent_id=consent_id)
+    assert response.status_code == 202, response.text
+    body = await _get(client, headers, base)
+    assert body["job"]["state"] == "done", body["job"]
+    assert body["current"] == "cutout"
+    assert images.calls == []
+
+
 async def test_ai_tries_are_counted_and_given_back_when_nothing_answered(
     client, faces, images, monkeypatch
 ):

@@ -244,7 +244,10 @@ async def start_prepare(
             raise Validation422("There is no photo of yours to use", code="original_not_for_look")
         # No AI makes the picture; the consent, when the member gave one, lets
         # the vision model find the points of a face the detector misses.
-        if body.consent_id:
+        # With the organization's AI switched off that help is not used, and
+        # a consent the member's browser still remembers is not a reason to
+        # refuse a step that needs no AI.
+        if body.consent_id and org.third_party_ai_enabled:
             agreed = await consent.require(
                 db, body.consent_id, org, user_id, consent.THIRD_PARTY_AI, PROVIDER
             )
