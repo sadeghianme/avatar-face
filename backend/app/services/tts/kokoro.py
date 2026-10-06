@@ -102,7 +102,9 @@ def _get_engine():
             from kokoro_onnx import Kokoro
 
             settings = get_settings()
-            _engine = Kokoro(settings.kokoro_model_path, settings.kokoro_voices_path)
+            model, voices = settings.kokoro_model_path, settings.kokoro_voices_path
+            assert model and voices  # callers check is_configured() first
+            _engine = Kokoro(model, voices)
         return _engine
 
 
@@ -165,14 +167,14 @@ class KokoroTTSProvider(TTSProvider):
 
 def _original_configured() -> bool:
     """Is kokoro-v1.0.onnx installed, with the voices?"""
-    import os
+    from pathlib import Path
 
     settings = get_settings()
     return bool(
         settings.kokoro_model_path
         and settings.kokoro_voices_path
-        and os.path.isfile(settings.kokoro_model_path)
-        and os.path.isfile(settings.kokoro_voices_path)
+        and Path(settings.kokoro_model_path).is_file()
+        and Path(settings.kokoro_voices_path).is_file()
     )
 
 
@@ -219,6 +221,8 @@ async def _synthesize_native(
             lab_timing.render_timed, text, voice_id, lang
         )
     except Exception as exc:
+        # Broad on purpose: the ONNX runtime fails in its own types; text no
+        # model can speak is told apart, anything else falls back.
         refused = _unspeakable(exc)
         if refused is not None:
             raise refused from exc

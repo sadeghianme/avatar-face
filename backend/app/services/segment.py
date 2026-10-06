@@ -64,10 +64,9 @@ def person_matte(image_bytes: bytes, prior_mask=None):
     which subtracts the backdrop colour out of skin and leaves literal black.
     A confident prior keeps those pixels out of the edge band entirely.
     """
+    import mediapipe as mp
     import numpy as np
     from PIL import Image
-
-    import mediapipe as mp
 
     from app.services.matting import refine_matte
 

@@ -93,6 +93,8 @@ def probe_photo(data: bytes) -> tuple[int, int]:
         with Image.open(io.BytesIO(data)) as source:
             size = source.size
     except Exception as exc:
+        # Broad on purpose: Pillow raises many types on untrusted bytes, and
+        # every one of them means the file is not a readable photo.
         raise Validation422("That file is not a readable photo", code="unreadable_image") from exc
     if size[0] * size[1] > MAX_PIXELS:
         raise Validation422("Use a photo smaller than 100 megapixels", code="image_too_large")
@@ -133,6 +135,7 @@ def ingest_photo(data: bytes, max_edge: int | None = None) -> bytes:
     except Validation422:
         raise
     except Exception as exc:
+        # Broad on purpose: Pillow raises many types on untrusted bytes.
         raise Validation422("That file is not a readable photo", code="unreadable_image") from exc
 
 

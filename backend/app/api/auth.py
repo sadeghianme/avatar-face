@@ -1,31 +1,11 @@
 from __future__ import annotations
 
-import hmac
-import logging
-
 from fastapi import APIRouter
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import func, or_, select
 
 from app.api.deps import DB, CurrentUser
-from app.core.errors import Auth401, Conflict409
-from app.core.security import (
-    create_access_token,
-    create_refresh_token,
-    decode_token,
-    hash_password,
-    verify_password,
-)
-from app.core.config import get_settings
+from app.core.security import create_access_token, create_refresh_token, decode_token
 from app.models import User
-from app.services.email import reset_email
-from app.services.email import send as send_email
-from app.services.rate_limit import RESET_LIMIT, RESET_WINDOW_SECONDS, allow_persistent
-from app.services.reset_token import DEFAULT_TTL_SECONDS as RESET_TTL_SECONDS
-from app.services.reset_token import InvalidResetToken
-from app.services.reset_token import fingerprint as hash_fingerprint
-from app.services.reset_token import mint as mint_reset_token
-from app.services.reset_token import verify as verify_reset_token
 from app.schemas.auth import (
     LoginRequest,
     RefreshRequest,
@@ -33,61 +13,34 @@ from app.schemas.auth import (
     TokenPair,
     UserOut,
 )
+from app.services import accounts
 
-logger = logging.getLogger("liveface.auth")
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=UserOut, status_code=201)
-async def register(body: RegisterRequest, db: DB) -> User:
-    existing = (
-        await db.execute(
-            select(User).where(
-                or_(User.email == body.email.lower(), User.username == body.username)
-            )
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        raise Conflict409("Email or username already in use", code="user_exists")
-    user = User(
-        email=body.email.lower(),
-        username=body.username,
-        password_hash=hash_password(body.password),
-        display_name=body.display_name or body.username,
-    )
-    db.add(user)
-    await db.commit()
-    return user
-
-
-@router.post("/login", response_model=TokenPair)
-async def login(body: LoginRequest, db: DB) -> TokenPair:
-    identifier = body.username_or_email.strip()
-    user = (
-        await db.execute(
-            select(User).where(
-                or_(User.email == identifier.lower(), User.username == identifier)
-            )
-        )
-    ).scalar_one_or_none()
-    if user is None or not verify_password(body.password, user.password_hash):
-        raise Auth401("Invalid credentials", code="invalid_credentials")
+def _tokens(user: User) -> TokenPair:
     return TokenPair(
         access_token=create_access_token(user.id),
         refresh_token=create_refresh_token(user.id),
     )
+
+
+@router.post("/register", response_model=UserOut, status_code=201)
+async def register(body: RegisterRequest, db: DB) -> User:
+    return await accounts.register(
+        db, body.email, body.username, body.password, body.display_name
+    )
+
+
+@router.post("/login", response_model=TokenPair)
+async def login(body: LoginRequest, db: DB) -> TokenPair:
+    return _tokens(await accounts.login(db, body.username_or_email, body.password))
 
 
 @router.post("/refresh", response_model=TokenPair)
 async def refresh(body: RefreshRequest, db: DB) -> TokenPair:
     user_id = decode_token(body.refresh_token, "refresh")
-    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
-    if user is None:
-        raise Auth401("User no longer exists", code="unknown_user")
-    return TokenPair(
-        access_token=create_access_token(user.id),
-        refresh_token=create_refresh_token(user.id),
-    )
+    return _tokens(await accounts.require_user(db, user_id))
 
 
 @router.get("/me", response_model=UserOut)
@@ -117,34 +70,9 @@ async def forgot_password(body: ForgotPasswordRequest, db: DB) -> dict:
     Rate limited per address so it cannot be used to mail-bomb someone, and
     because Resend charges per message.
     """
-    settings = get_settings()
-    address = body.email.strip().lower()
-
-    allowed = await allow_persistent(
-        db, f"pwreset:{address}", limit=RESET_LIMIT, window_seconds=RESET_WINDOW_SECONDS
-    )
-    # get_db never commits on its own, and this endpoint otherwise writes
-    # nothing — without this the counted hit would evaporate per request and
-    # the limit would never engage.
-    await db.commit()
-    if not allowed:
-        # Same shape as success on purpose — a distinct 429 would leak that
-        # this address had already been asked for.
-        logger.info("password reset throttled for an address")
-        return {"status": "sent"}
-
-    user = (
-        await db.execute(select(User).where(func.lower(User.email) == address))
-    ).scalar_one_or_none()
-
-    if user is not None:
-        token, _ = mint_reset_token(settings.jwt_secret, user.id, user.password_hash)
-        link = f"{settings.app_base_url.rstrip('/')}/reset-password?token={token}"
-        subject, html, text = reset_email(
-            settings.app_name, link, RESET_TTL_SECONDS // 60
-        )
-        await send_email(user.email, subject, html, text)
-
+    await accounts.request_password_reset(db, body.email)
+    # The same answer when the address was throttled, on purpose: a distinct
+    # 429 would leak that this address had already been asked for.
     return {"status": "sent"}
 
 
@@ -156,25 +84,4 @@ async def reset_password(body: ResetPasswordRequest, db: DB) -> TokenPair:
     just proved control of the mailbox back to a login form to type the
     password they set four seconds ago.
     """
-    settings = get_settings()
-    try:
-        user_id, token_fingerprint = verify_reset_token(settings.jwt_secret, body.token)
-    except InvalidResetToken as exc:
-        raise Auth401(f"This reset link is not valid ({exc})", code="reset_token_invalid")
-
-    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
-    if user is None:
-        raise Auth401("This reset link is not valid", code="reset_token_invalid")
-
-    # The fingerprint is of the password hash the link was minted against, so
-    # this is what makes it single-use: once the password changes, the hash
-    # changes, and every outstanding link stops matching.
-    if not hmac.compare_digest(token_fingerprint, hash_fingerprint(user.password_hash)):
-        raise Auth401("This reset link has already been used", code="reset_token_used")
-
-    user.password_hash = hash_password(body.password)
-    await db.commit()
-    return TokenPair(
-        access_token=create_access_token(user.id),
-        refresh_token=create_refresh_token(user.id),
-    )
+    return _tokens(await accounts.reset_password(db, body.token, body.password))

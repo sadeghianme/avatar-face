@@ -10,6 +10,7 @@ import io
 import json
 import time
 import wave
+from pathlib import Path
 
 import httpx
 
@@ -71,7 +72,8 @@ class AzureTTSProvider(TTSProvider):
     async def _synthesize_sdk(self, text: str, voice: str, locale: str) -> SynthesisResult:
         import asyncio
 
-        import azure.cognitiveservices.speech as speechsdk  # optional dependency
+        # An optional dependency, absent where the REST path is used instead.
+        import azure.cognitiveservices.speech as speechsdk  # pyright: ignore[reportMissingImports]
 
         def run() -> tuple[bytes, list[dict]]:
             config = speechsdk.SpeechConfig(
@@ -194,7 +196,7 @@ class GoogleTTSProvider(TTSProvider):
         raw = raw.strip()
         if raw.startswith("{"):
             return json.loads(raw)
-        with open(raw) as f:  # a file path was provided instead of inline JSON
+        with Path(raw).open() as f:  # a file path was provided instead of inline JSON
             return json.load(f)
 
     async def _access_token(self) -> str:

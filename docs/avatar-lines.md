@@ -349,11 +349,11 @@ app/lines/  base.py (Line config + registry), human.py, animal.py, animation.py
 app/services/
   landmarks.py      MediaPipe, loaded once, lock-guarded, versioned model + sha256
   face_template.py  478-point template: MediaPipe's detection of a fictional portrait
-  anchor_fit.py     anchors → thin-plate-spline warp of the detected or template
+  anchor_fit/       anchors → thin-plate-spline warp of the detected or template
                     mesh → Delaunay again → validator (0 flipped triangles)
   vision_points.py  Gemini vision keypoints (named model, metered, consent-gated)
   photo_analysis.py blur, exposure, size, eyes/mouth state (landmarks + blendshapes)
-  photo_adjust.py   touch-up on a face crop with masked paste-back; stylise; regenerate
+  photo_adjust/     touch-up on a face crop with masked paste-back; stylise; regenerate
   background.py     segmenter per line; RGB zeroed under alpha 0
   consent.py        append-only consents table
 ```

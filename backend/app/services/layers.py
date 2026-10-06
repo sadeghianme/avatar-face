@@ -68,6 +68,8 @@ def build_layers(image_bytes: bytes, face_box: list[float]) -> dict[str, bytes]:
     # head — which is exactly what showed up on a photo with a lit ceiling
     # behind it. Only pixels the SEGMENTER calls person get repainted.
     fill_alpha = None
+    # The opaque photo's own pixels, before un-mixing; a cut-out has none.
+    raw: np.ndarray | None = None
 
     if had_alpha:
         rgba = np.asarray(source.convert("RGBA")).astype(np.float32)
@@ -132,8 +134,8 @@ def build_layers(image_bytes: bytes, face_box: list[float]) -> dict[str, bytes]:
 
     # A cut-out has nothing behind it — no background layer at all, and the
     # renderer treats its absence as "transparent", same as today. Only an
-    # opaque photo gets a fill.
-    if not had_alpha:
+    # opaque photo gets a fill (`raw` is set exactly for one).
+    if raw is not None:
         repaint = fill_alpha if fill_alpha is not None else alpha
         # Diffuse from the RAW photo: the un-mixed colour is only meaningful
         # under the subject, and seeding the backdrop fill with it drags the
@@ -199,6 +201,8 @@ async def store_layers(avatar, storage, image_bytes: bytes, face_box: list[float
         # the shared CPU thread rather than the event loop.
         built = await run_cpu(build_layers, image_bytes, face_box)
     except Exception:
+        # Broad on purpose: segmentation and matting are optional by
+        # contract; no layers is a working single-photo avatar.
         logger.exception("layer build failed for avatar %s", avatar.id)
         return False
     for name in LAYER_FILES:
@@ -213,3 +217,20 @@ async def store_layers(avatar, storage, image_bytes: bytes, face_box: list[float
         content_type = "image/jpeg" if data[:3] == b"\xff\xd8\xff" else "image/png"
         await storage.put_bytes(key, data, content_type)
     return True
+
+
+async def draft_layer_urls(avatar, storage) -> dict[str, str] | None:
+    """Presigned URLs of the background/body/head decomposition, if built.
+
+    The background is absent for cut-outs (nothing behind them); the widget
+    treats a missing entry as transparent.
+    """
+    if not getattr(avatar, "has_layers", False):
+        return None
+    urls: dict[str, str] = {}
+    for name in ("background", "body", "head"):
+        key = layer_key(avatar.org_id, avatar.id, name)
+        if name == "background" and not await storage.exists(key):
+            continue
+        urls[name] = await storage.presign_get(key)
+    return urls

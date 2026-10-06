@@ -15,13 +15,14 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 
 from app.api.deps import DB
 from app.core.config import get_settings
 from app.core.errors import Auth401, Forbidden403, NotFound404, RateLimit429
-from app.models import ApiKey, Avatar, AvatarStatus, hash_api_key, utcnow
+from app.models import ApiKey, AvatarStatus
 from app.schemas.tts import CueOut, SynthesizeRequest, SynthesizeResponse
+from app.services import api_keys
+from app.services.avatars import repo as avatars
 from app.services.rate_limit import get_embed_rate_limiter
 from app.services.simulator_token import looks_like_one as looks_like_simulator_token
 from app.services.storage import get_storage
@@ -69,7 +70,9 @@ def _simulator_key(token: str, request: Request) -> ApiKey:
         # One code for every failure: the Simulator re-mints and retries on
         # this, and distinguishing expired from forged would only help someone
         # probing.
-        raise Auth401(f"Simulator token rejected ({exc})", code="simulator_token_invalid")
+        raise Auth401(
+            f"Simulator token rejected ({exc})", code="simulator_token_invalid"
+        ) from exc
 
     key = ApiKey(org_id=org_id, name="Simulator", prefix="lfsim_", key_hash="", allowed_domains="")
     key.id = f"sim:{org_id}"  # stable, so simulator traffic shares a rate-limit bucket
@@ -85,9 +88,7 @@ async def _authenticate(request: Request, db: DB) -> ApiKey:
     if looks_like_simulator_token(plaintext):
         return _simulator_key(plaintext, request)
 
-    api_key = (
-        await db.execute(select(ApiKey).where(ApiKey.key_hash == hash_api_key(plaintext)))
-    ).scalar_one_or_none()
+    api_key = await api_keys.by_plaintext(db, plaintext)
     if api_key is None or not api_key.is_active:
         raise Auth401("Invalid API key", code="invalid_api_key")
 
@@ -98,21 +99,14 @@ async def _authenticate(request: Request, db: DB) -> ApiKey:
     if not get_embed_rate_limiter().allow(api_key.id):
         raise RateLimit429("Embed rate limit exceeded", code="rate_limited")
 
-    api_key.last_used_at = utcnow()
-    await db.commit()
+    await api_keys.mark_used(db, api_key)
     return api_key
 
 
 @router.get("/avatars/{avatar_id}")
 async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
     api_key = await _authenticate(request, db)
-    avatar = (
-        await db.execute(
-            select(Avatar).where(Avatar.id == avatar_id, Avatar.org_id == api_key.org_id)
-        )
-    ).scalar_one_or_none()
-    if avatar is None:
-        raise NotFound404("Avatar not found", code="avatar_not_found")
+    avatar = await avatars.require_in_org(db, api_key.org_id, avatar_id)
     # The draft's status says nothing about the published snapshot: a
     # re-detect or a retry puts the DRAFT through processing (or failure)
     # while the published copies sit untouched. Gating on it took customer
@@ -153,25 +147,6 @@ async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
         # and its visitors see exactly what they saw before.
         **({"disclosure": view["disclosure"]} if view.get("disclosure") else {}),
     }
-
-
-async def _layer_urls(avatar: Avatar, storage) -> dict[str, str] | None:
-    """Presigned URLs of the background/body/head decomposition, if built.
-
-    The background is absent for cut-outs (nothing behind them); the widget
-    treats a missing entry as transparent.
-    """
-    if not getattr(avatar, "has_layers", False):
-        return None
-    from app.services.layers import layer_key
-
-    urls: dict[str, str] = {}
-    for name in ("background", "body", "head"):
-        key = layer_key(avatar.org_id, avatar.id, name)
-        if name == "background" and not await storage.exists(key):
-            continue
-        urls[name] = await storage.presign_get(key)
-    return urls
 
 
 class CueRequest(BaseModel):

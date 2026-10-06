@@ -1,6 +1,5 @@
 """Language resolution: pick the language, get the best voice for it."""
 
-import pytest
 
 from app.services.tts.languages import BY_LOCALE, LANGUAGES, PROVIDER_ORDER, resolve
 

@@ -80,9 +80,8 @@ from __future__ import annotations
 import io
 import json
 import logging
-from dataclasses import dataclass
-
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -222,7 +221,9 @@ def with_ai_teeth(ai_edited: dict | None, model: str | None) -> dict:
     replaced, never mutated)."""
     if not ai_edited:
         return {"mode": "teeth", "model": model, "teeth": {"model": model}}
-    return mouth_disclosure({**ai_edited, "teeth": {"model": model}})
+    disclosed = mouth_disclosure({**ai_edited, "teeth": {"model": model}})
+    assert disclosed is not None  # a teeth entry is always disclosed
+    return disclosed
 
 
 def without_ai_teeth(ai_edited: dict | None) -> dict | None:
@@ -385,7 +386,8 @@ class Request:
 def face_request(data: bytes) -> Request:
     """The face crop a touch-up sends, of `data` (a cut-out on the neutral
     grey). TeethFailure when there is no frontal face to crop. CPU work."""
-    from app.services import landmarks, photo_adjust as pa
+    from app.services import landmarks
+    from app.services import photo_adjust as pa
 
     image = pa._rgb(data)
     try:
@@ -409,12 +411,16 @@ def face_request(data: bytes) -> Request:
 def fallback_request(data: bytes) -> Request | None:
     """The same photo as a head-and-shoulders crop, for one more try after
     a refusal; None when that crop would be the same picture. CPU work."""
-    from app.services import imagegen, photo_adjust as pa
+    from app.services import imagegen
+    from app.services import photo_adjust as pa
 
     image = pa._rgb(data)
     try:
         points = pa._detect(image)
     except Exception:
+        # Broad on purpose: the detector's runtime fails in its own types;
+        # then there is no fallback crop to try.
+        logger.exception("teeth fallback: the face could not be detected")
         return None
     if points is None:
         return None
@@ -485,7 +491,8 @@ async def make_teeth(
             try:
                 await on_send()
             except Exception as exc:
-                # Nothing leaves that nothing would say was allowed.
+                # Broad on purpose (the caller's callback). Nothing leaves
+                # that nothing would say was allowed.
                 logger.exception("teeth: the consent could not be recorded")
                 raise TeethFailure(
                     "consent_not_recorded",
@@ -518,6 +525,7 @@ async def make_teeth(
                 "imagegen_unavailable", "AI editing is not configured on this server", 409
             ) from exc
         except Exception as exc:
+            # Broad on purpose: the provider's call fails in many types.
             # Classified as the mouth kit classifies its calls
             # (performance_kit.call_billing, the one classification): a
             # timeout was sent and may have been billed, so it is metered;

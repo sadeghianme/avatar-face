@@ -25,7 +25,15 @@ jobs:
       - name: Install espeak-ng (multilingual phonemes)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends espeak-ng
       - name: Install backend
-        run: pip install -e ".[rig,dev]"
+        # With the production pins (constraints.txt, as the Dockerfile
+        # installs): the tests and the type check see the library versions
+        # that run in production, and a new release upstream cannot turn
+        # this job red on its own.
+        run: pip install -c constraints.txt -e ".[rig,dev]"
+      - name: Lint
+        run: ruff check .
+      - name: Type check
+        run: pyright
       - name: Fetch MediaPipe models (same URLs the Dockerfile uses)
         run: |
           mkdir -p models

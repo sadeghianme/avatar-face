@@ -34,8 +34,8 @@ settings = config.Settings(
 )
 config.get_settings = lambda: settings
 
-from PIL import Image  # noqa: E402
 import numpy as np  # noqa: E402
+from PIL import Image  # noqa: E402
 
 from app.services import rig as rig_service  # noqa: E402
 from app.services.head3d.bake import bake_rig  # noqa: E402
@@ -73,8 +73,8 @@ def main() -> None:
     if found is None:
         if not args.template:
             raise SystemExit("no face detected (pass --template to build from the face template)")
-        from app.services.rig import template_mesh
         from app.services.head3d.topology import canonical_shape
+        from app.services.rig import template_mesh
         points = template_mesh(image.size)
         # No measured depth: the canonical face's own relief, scaled to the template.
         z = -canonical_shape()[:, 2]

@@ -209,10 +209,11 @@ async def test_avatar_background_removal_and_its_derivatives(client, stub_segmen
 
 
 async def test_cropping_an_older_leaky_cutout_scrubs_it(client):
+    from sqlalchemy import select
+
     from app.db import get_session_factory
     from app.models import Avatar
     from app.services.storage import get_storage
-    from sqlalchemy import select
 
     headers, org_id = await _org(client, "oldcut")
     avatar_id = await create_ready_avatar(client, headers, org_id)
@@ -334,11 +335,12 @@ async def test_a_second_put_through_the_upload_url_cannot_replace_the_live_image
 
     published = await client.post(f"{base}/publish", headers=headers)
     assert published.status_code == 200, published.text
+    from sqlalchemy import select
+
     from app.db import get_session_factory
     from app.models import Avatar
     from app.services.publishing import config_of
     from app.services.storage import get_storage
-    from sqlalchemy import select
 
     async with get_session_factory()() as db:
         avatar = (await db.execute(select(Avatar).where(Avatar.id == avatar_id))).scalar_one()
@@ -382,12 +384,13 @@ async def test_a_restart_after_ingest_leaves_an_avatar_retry_can_finish(client, 
 async def test_removing_the_background_takes_the_backdrop_layer_with_it(client, stub_segmenter):
     """The opaque photo's background layer is the room with the person
     painted out. Behind a cut-out it is the removed background, back again."""
+    from sqlalchemy import select
+
     from app.db import get_session_factory
     from app.models import Avatar
     from app.services.layers import layer_key
     from app.services.publishing import config_of
     from app.services.storage import get_storage
-    from sqlalchemy import select
 
     headers, org_id = await _org(client, "backdrop")
     avatar_id = await create_ready_avatar(client, headers, org_id)

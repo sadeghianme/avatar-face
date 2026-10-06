@@ -13,7 +13,8 @@ import httpx
 import numpy as np
 import pytest
 
-from app.services import ai_models, face_template, vision_points as vp
+from app.services import ai_models, face_template
+from app.services import vision_points as vp
 from app.services.anchor_fit import HEAD, HEAD_DIAGONALS, LEFT_EYE, MOUTH, RIGHT_EYE
 
 SIZE = (600, 800)  # not square, so a transposed answer cannot pass by symmetry

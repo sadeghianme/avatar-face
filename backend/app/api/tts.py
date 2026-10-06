@@ -160,6 +160,8 @@ async def stream(body: SynthesizeRequest, ctx: OrgMember, db: DB):
         except asyncio.CancelledError:
             raise
         except Exception:
+            # Broad on purpose: the headers are sent, so any failure is said
+            # in the stream itself, where the client shows it.
             logger.exception("speech stream failed")
             yield line({"type": "error", "code": "speech_stream_failed",
                         "detail": "Speech preparation was interrupted. Please try again."})

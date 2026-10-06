@@ -21,16 +21,19 @@ deliberate refusal rather than an approximation.
 
 from __future__ import annotations
 
-from sqlalchemy import distinct, select
+import logging
+
+from sqlalchemy import Row, delete, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import NotFound404
+from app.db import execute_dml
 from app.models import SpeechCache
 from app.services.tts.base import SynthesisResult, TTSProvider, Voice
 
+logger = logging.getLogger("liveface.cloned")
+
 PROVIDER_NAME = "cloned"
-
-
-from app.core.errors import NotFound404
 
 
 class ClonedTTSProvider(TTSProvider):
@@ -123,14 +126,15 @@ async def _reference_for(voice: str) -> bytes | None:
     if not org_id or not name:
         return None
     from app.services import clonejobs
-    from app.services.storage import get_storage
+    from app.services.storage import STORAGE_ERRORS, get_storage
 
     storage = get_storage()
     for job in await clonejobs.list_jobs(storage, org_id):
         if job.get("name") == name:
             try:
                 return await storage.get_bytes(clonejobs.reference_key(org_id, job["id"]))
-            except Exception:
+            except STORAGE_ERRORS:
+                logger.warning("the reference of cloned voice %s is unreadable", voice)
                 return None
     return None
 
@@ -157,23 +161,81 @@ async def store_line(
     existing = (
         await db.execute(select(SpeechCache).where(SpeechCache.cache_key == key))
     ).scalar_one_or_none()
-    payload = dict(
-        provider=PROVIDER_NAME,
-        voice=voice,
-        locale=locale,
-        char_count=len(text),
-        audio_mime="audio/wav",
-        audio=audio,
-        cues_json=json.dumps(
-            cues_from_text(text, duration_ms, locale, audio=audio)
-        ),
-        duration_ms=duration_ms,
-    )
+    payload = {
+        "provider": PROVIDER_NAME,
+        "voice": voice,
+        "locale": locale,
+        "char_count": len(text),
+        "audio_mime": "audio/wav",
+        "audio": audio,
+        "cues_json": json.dumps(cues_from_text(text, duration_ms, locale, audio=audio)),
+        "duration_ms": duration_ms,
+    }
     if existing is not None:
         for field, value in payload.items():
             setattr(existing, field, value)
     else:
         db.add(SpeechCache(cache_key=key, **payload))
+
+
+async def upload_line(
+    db: AsyncSession, org_id: str, name: str, locale: str, text: str,
+    audio: bytes, duration_ms: int,
+) -> str:
+    """store_line for an upload, committed; the voice's scoped id."""
+    await store_line(db, org_id, name, locale, text, audio, duration_ms)
+    voice = scoped_voice_id(org_id, name)
+    await db.commit()
+    logger.info("cloned line stored for %s (%d ms)", voice, duration_ms)
+    return voice
+
+
+async def voice_summaries(db: AsyncSession, org_id: str) -> list[Row]:
+    """Per voice the org uploaded: (voice, lines, total_ms, locale)."""
+    rows = (
+        await db.execute(
+            select(
+                SpeechCache.voice,
+                func.count().label("lines"),
+                func.sum(SpeechCache.duration_ms).label("total_ms"),
+                func.min(SpeechCache.locale).label("locale"),
+            )
+            .where(
+                SpeechCache.provider == PROVIDER_NAME,
+                SpeechCache.voice.like(f"{org_id}:%"),
+            )
+            .group_by(SpeechCache.voice)
+        )
+    ).all()
+    return list(rows)
+
+
+async def voice_summary(db: AsyncSession, voice: str) -> Row:
+    """(lines, total_ms, locale) of one scoped voice."""
+    return (
+        await db.execute(
+            select(
+                func.count().label("lines"),
+                func.sum(SpeechCache.duration_ms).label("total_ms"),
+                func.min(SpeechCache.locale).label("locale"),
+            ).where(SpeechCache.provider == PROVIDER_NAME, SpeechCache.voice == voice)
+        )
+    ).one()
+
+
+async def delete_voice(db: AsyncSession, org_id: str, name: str) -> None:
+    """Delete every line of the org's voice `name` (404 voice_not_found when
+    there were none). A hard delete: a takedown means the audio is gone."""
+    voice = scoped_voice_id(org_id, name)
+    removed = await execute_dml(
+        db,
+        delete(SpeechCache).where(
+            SpeechCache.provider == PROVIDER_NAME, SpeechCache.voice == voice
+        ),
+    )
+    await db.commit()
+    if not removed:
+        raise NotFound404("No such cloned voice", code="voice_not_found")
 
 
 def scoped_voice_id(org_id: str, name: str) -> str:

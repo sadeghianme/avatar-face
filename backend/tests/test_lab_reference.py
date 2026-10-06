@@ -8,12 +8,12 @@ from urllib.parse import urlsplit
 
 import numpy as np
 import pytest
+from conftest import create_org, register_and_login, sample_png
 from PIL import Image
 
 from app.api import lab_reference
-from app.services import portrait_photo
 from app.core.errors import Validation422
-from conftest import create_org, register_and_login, sample_png
+from app.services import portrait_photo
 
 RIG_PATH = Path(__file__).resolve().parents[2] / "frontend/public/lab/reference/rig.json"
 

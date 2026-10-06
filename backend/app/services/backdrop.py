@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import io
 import logging
+from typing import cast
 
 import numpy as np
 from PIL import Image
@@ -80,7 +81,9 @@ def _connected(candidate: np.ndarray, edge: np.ndarray) -> np.ndarray:
     """The candidate pixels connected to the frame's edge band."""
     from scipy import ndimage
 
-    labels, _ = ndimage.label(candidate)
+    # scipy types label() as returning a count alone, which it does only
+    # when given an output array; without one it is (labels, count).
+    labels, _ = cast(tuple[np.ndarray, int], ndimage.label(candidate))
     touching = np.unique(labels[edge & candidate])
     touching = touching[touching != 0]
     return np.isin(labels, touching)
@@ -153,7 +156,8 @@ def backdrop_mask(rgb: np.ndarray) -> np.ndarray | None:
     pad = 3
     padded = np.pad(~backdrop, pad, mode="edge")
     subject = ndimage.binary_closing(padded, iterations=2)[pad:-pad, pad:-pad]
-    subject = ndimage.binary_fill_holes(subject)
+    # None only when an output array is passed in, which this does not.
+    subject = cast(np.ndarray, ndimage.binary_fill_holes(subject))
     share = float(subject.mean())
     if not MIN_SUBJECT <= share <= MAX_SUBJECT:
         logger.info("backdrop cut would leave %.2f of the frame", share)

@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.models.avatar import AvatarKind, AvatarStatus
 from app.schemas.job import JobOut
 
-
 FaceType = Literal["human", "animal", "cartoon"]
 
 

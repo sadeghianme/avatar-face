@@ -73,8 +73,8 @@ def test_every_detector_caller_goes_through_the_shared_landmarker(fake_mediapipe
     their own; the build count proves they now share one."""
     import io
 
-    from app.services.riggable import check_image
     from app.services.rig import landmarks_from_image
+    from app.services.riggable import check_image
 
     buffer = io.BytesIO()
     Image.new("RGB", (64, 64)).save(buffer, format="PNG")

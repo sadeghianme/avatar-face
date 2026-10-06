@@ -8,9 +8,9 @@ from app.core.config import get_settings
 from app.core.errors import NotFound404
 from app.models import Avatar
 from app.schemas.avatar import AvatarOut
+from app.services.avatars import repo as avatars
 from app.services.rig import process_avatar
 from app.services.stock import STOCK_STYLES, get_stock_image
-from app.services.storage import get_storage
 
 router = APIRouter(tags=["stock"])
 
@@ -55,16 +55,14 @@ async def create_from_stock(
     if data is None:
         raise NotFound404("Unknown stock avatar", code="stock_not_found")
     style = next(s for s in STOCK_STYLES if s.id == body.stock_id)
-    avatar = Avatar(
+    avatar, _ = await avatars.create_with_source(
+        db,
+        "png",
+        data,
         org_id=ctx.org.id,
         created_by_id=ctx.membership.user_id,
         name=body.name or style.name,
         content_type="image/png",
     )
-    db.add(avatar)
-    await db.flush()
-    avatar.image_key = f"orgs/{ctx.org.id}/avatars/{avatar.id}/source.png"
-    await get_storage().put_bytes(avatar.image_key, data, "image/png")
-    await db.commit()
     background.add_task(process_avatar, avatar.id)
     return avatar

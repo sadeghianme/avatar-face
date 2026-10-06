@@ -18,6 +18,7 @@ config.get_settings = lambda: settings
 
 from app.services.rig import build_rig, landmarks_from_image  # noqa: E402
 
+
 def main() -> None:
     assets = BACKEND.parent / "frontend/public/lab/reference"
     parser = argparse.ArgumentParser(description=__doc__)

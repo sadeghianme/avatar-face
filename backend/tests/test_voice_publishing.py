@@ -4,7 +4,6 @@ import pytest
 
 from tests.conftest import create_org, create_ready_avatar, register_and_login
 
-
 VOICE = {"provider": "piper", "voice": "fa_amir", "locale": "fa-IR"}
 
 

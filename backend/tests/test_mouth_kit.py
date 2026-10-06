@@ -14,6 +14,7 @@ everywhere in the creation tests.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import io
 import json
 from pathlib import Path
@@ -456,7 +457,7 @@ async def test_a_kit_that_breaks_never_fails_the_finish(client, faces, world, mo
     def broken(*args, **kwargs):
         raise RuntimeError("the fit broke")
 
-    monkeypatch.setattr(pk, "_finish", broken)
+    monkeypatch.setattr(pk.kit, "_finish", broken)
     headers, org_id = await _org(client, "broken")
     await ai_consent(client, headers, org_id)
     avatar_id, _, _ = await _finished(client, headers, org_id)
@@ -585,7 +586,7 @@ async def test_published_motion_copies_are_pruned_and_deleted_with_the_avatar(
     await ai_consent(client, headers, org_id)
     avatar_id, url, _ = await _finished(client, headers, org_id)
     prefix = f"orgs/{org_id}/avatars/{avatar_id}/"
-    for revision, teeth_y in ((1, 0.01), (2, 0.02)):
+    for _revision, teeth_y in ((1, 0.01), (2, 0.02)):
         await _later_edit(client, headers, url, teeth_y)
         assert (await client.post(f"{url}/publish", headers=headers)).status_code == 200
     files = _files(prefix)
@@ -1041,10 +1042,8 @@ async def test_the_guard_meters_what_was_billed_as_the_kit_counts_it(client, mon
 
     guard = mouth_kit.CallGuard(org_id, on_send)
     for _ in range(6):
-        try:
+        with contextlib.suppress(Exception, asyncio.CancelledError):
             await guard("p", b"x", "image/jpeg")
-        except (Exception, asyncio.CancelledError):
-            pass
     assert sent == [True], "the consent is recorded once, before the first call"
     assert guard.sent == 6 and guard.metered == 4
     assert await _usage(org_id, IMAGE_KIND) == [mouth_kit.SHAPES_CALL] * 4
@@ -1279,7 +1278,7 @@ async def test_the_panels_kit_sends_nothing_before_its_consent_is_recorded(
             raise OperationalError("SELECT avatars", {}, Exception("database is locked"))
         return await real(db, org, aid)
 
-    monkeypatch.setattr(mouth_kit, "_load_avatar", flaky)
+    monkeypatch.setattr(mouth_kit.panel, "_load_avatar", flaky)
     recorded_before_sending: list[bool] = []
 
     async def sent_after_the_record():
@@ -1325,7 +1324,7 @@ async def test_waiting_to_record_the_consent_is_not_the_providers_time(
         await asyncio.sleep(0.6)
         await real(creation, consent_id)
 
-    monkeypatch.setattr(creations, "_record_finish_consent", slow)
+    monkeypatch.setattr(creations.mouth, "_record_finish_consent", slow)
     avatar_id, _, _ = await _finished(client, headers, org_id)
     kit = (await _config(avatar_id))["kit"]
     assert kit["generated"] == 6
@@ -1375,7 +1374,7 @@ async def test_step_5_is_told_when_the_mouth_ended_standard(client, faces, world
     def broken(*args, **kwargs):
         raise RuntimeError("the fit broke")
 
-    monkeypatch.setattr(pk, "_finish", broken)
+    monkeypatch.setattr(pk.kit, "_finish", broken)
     labels.clear()
     await _finished(client, headers, org_id)
     assert labels[-1] == "publishing with the standard mouth"

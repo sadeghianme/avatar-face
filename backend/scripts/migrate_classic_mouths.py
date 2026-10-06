@@ -45,7 +45,7 @@ import json
 import logging
 import sys
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 logger = logging.getLogger("liveface.migrate_classic_mouths")
@@ -119,7 +119,7 @@ class Plan:
 
 
 def today() -> str:
-    return datetime.now(timezone.utc).date().isoformat()
+    return datetime.now(UTC).date().isoformat()
 
 
 async def plan_for(avatar, storage, day: str) -> Plan:
@@ -195,14 +195,14 @@ def write_backup(plans: list[Plan], backup_dir: Path) -> Path:
     """Every planned avatar's previous values (and the ones about to be
     written), as --revert reads them. Written before anything changes."""
     backup_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
     path = backup_dir / f"classic-mouths-{stamp}.json"
     if path.exists():
         raise FileExistsError(f"{path} exists; not overwriting a backup")
     payload = {
         "script": SCRIPT,
         "version": BACKUP_VERSION,
-        "written_at": datetime.now(timezone.utc).isoformat(),
+        "written_at": datetime.now(UTC).isoformat(),
         "avatars": [asdict(plan) for plan in plans],
     }
     path.write_text(json.dumps(payload, indent=2))

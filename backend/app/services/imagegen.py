@@ -195,11 +195,13 @@ def shrink_source(data: bytes) -> tuple[bytes, str]:
     try:
         image = Image.open(io.BytesIO(data)).convert("RGB")
         if max(image.size) > SOURCE_MAX_EDGE:
-            image.thumbnail((SOURCE_MAX_EDGE, SOURCE_MAX_EDGE), Image.LANCZOS)
+            image.thumbnail((SOURCE_MAX_EDGE, SOURCE_MAX_EDGE), Image.Resampling.LANCZOS)
         out = io.BytesIO()
         image.save(out, format="JPEG", quality=SOURCE_QUALITY, optimize=True)
         return out.getvalue(), "image/jpeg"
     except Exception:
+        # Broad on purpose: Pillow raises many types on a picture it cannot
+        # decode; the source is then sent as it is.
         logger.exception("could not shrink the source; sending it as-is")
         return data, "image/png"
 

@@ -3,7 +3,7 @@
 Status: wired, 2026-09-26 (Step 5, "Preparing your avatar"). Finishing a
 person makes their kit before the first publish; the Mouth panel makes it
 for an existing avatar; publishing serves it to the widget and the share
-page. `services/performance_kit.py` makes a kit; `services/mouth_kit.py` is
+page. `services/performance_kit/` makes a kit; `services/mouth_kit/` is
 everything around it (who may send, metering, storage, disclosure, later
 edits). See "Wired" below. Revised after review the same day: the teeth
 photo is a request of its own, every shape is held to the Reference's size,
@@ -14,7 +14,8 @@ talks well because it was built from a kit: a neutral portrait, six photos of
 the same face saying AA, EE, OO, OH, F/V and TH registered onto it, a motion
 manifest (`performance.json`), and a hand-tuned mouth profile. Every other
 continuous-mouth avatar borrows that kit and retargets it by mouth width.
-`backend/app/services/performance_kit.py` makes the same kit from an uploaded
+`backend/app/services/performance_kit/` (a package: prompts, requests, answers,
+profile, manifest, kit) makes the same kit from an uploaded
 photo once its owner has confirmed the points.
 
 ## Pieces
@@ -167,7 +168,7 @@ the bundled motion plays the same shape on the same face.
   the same for every avatar and not made from its picture: `ai_edited`
   does not list them.
 
-## Wired (services/mouth_kit.py)
+## Wired (services/mouth_kit/)
 
 **When.** At Finish, for a person (`services.creations._own_mouth`), and by the
 Mouth panel's one AI action (`POST /orgs/{org}/avatars/{id}/mouth-kit`). AI
@@ -248,7 +249,7 @@ a visitor coming back downloads neither the motion nor the teeth photo
 again; the draft's JSON stays `no-cache` (the draft rig is rewritten in
 place). An S3/R2 bucket needs the same CORS rule for JSON, and its presigned
 URLs stay per request. The owner API returns the DRAFT `mouth.motion_url` on
-every route that returns one avatar (`api.avatars._SignedMouthRoute`), so the
+every route that returns one avatar (`api.avatars.routing._SignedMouthRoute`), so the
 dashboard previews what visitors will get; the avatar list leaves it null
 (it shows no mouth, and signing each would cost a storage round trip per
 avatar).

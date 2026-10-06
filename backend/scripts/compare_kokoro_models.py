@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 
 import numpy as np
 
@@ -71,7 +72,7 @@ def main() -> int:
     original = os.environ.get("KOKORO_MODEL_PATH")
     timed = os.environ.get("KOKORO_LIPSYNC_MODEL_PATH")
     voices = os.environ.get("KOKORO_VOICES_PATH")
-    if not all(path and os.path.isfile(path) for path in (original, timed, voices)):
+    if not all(path and Path(path).is_file() for path in (original, timed, voices)):
         print("Set KOKORO_MODEL_PATH, KOKORO_LIPSYNC_MODEL_PATH and KOKORO_VOICES_PATH "
               "to existing files.", file=sys.stderr)
         return 2

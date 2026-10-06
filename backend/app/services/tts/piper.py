@@ -25,13 +25,17 @@ from __future__ import annotations
 
 import asyncio
 import io
-import os
 import threading
 import wave
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from app.core.config import get_settings
 from app.services.tts.base import SynthesisResult, TTSProvider, Voice
 from app.services.tts.visemes import cues_from_text
+
+if TYPE_CHECKING:
+    from piper import PiperVoice
 
 # id -> (filename stem, display name, locale). Deliberately small: one or two
 # voices per language beats a list nobody can choose from.
@@ -52,21 +56,21 @@ CATALOGUE: dict[str, tuple[str, str, str]] = {
     "pl_darkman": ("pl_PL-darkman-medium", "Darkman · Polish male", "pl-PL"),
 }
 
-_voices: dict[str, object] = {}
+_voices: dict[str, PiperVoice] = {}
 _load_lock = threading.Lock()
 _synth_semaphore: asyncio.Semaphore | None = None
 
 
 def _model_path(stem: str) -> str:
     directory = get_settings().piper_voices_dir or ""
-    return os.path.join(directory, f"{stem}.onnx")
+    return str(Path(directory) / f"{stem}.onnx")
 
 
 def _installed() -> list[str]:
     """Voice ids whose model file is actually on disk."""
     if not get_settings().piper_voices_dir:
         return []
-    return [vid for vid, (stem, _, _) in CATALOGUE.items() if os.path.isfile(_model_path(stem))]
+    return [vid for vid, (stem, _, _) in CATALOGUE.items() if Path(_model_path(stem)).is_file()]
 
 
 def _get_voice(stem: str):

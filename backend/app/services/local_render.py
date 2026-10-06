@@ -44,17 +44,25 @@ def capability() -> dict:
     with _probe_lock:
         if _probe_result is not None:
             return _probe_result
+        # torch and chatterbox are the [clone] extra: absent from the server
+        # image and from CI, so the type checker may not find them either.
         try:
-            import torch  # noqa: F401
-            from chatterbox.tts import ChatterboxTTS  # noqa: F401
+            import torch  # pyright: ignore[reportMissingImports]  # noqa: F401
+            from chatterbox.tts import (  # pyright: ignore[reportMissingImports]  # noqa: F401
+                ChatterboxTTS,
+            )
         except Exception as exc:
+            # Broad on purpose: importing torch can fail as ImportError,
+            # OSError (a missing library) or RuntimeError (the device), and
+            # every one of them means "not here".
+            logger.info("local rendering unavailable: %s", type(exc).__name__)
             _probe_result = {
                 "available": False,
                 "device": None,
                 "reason": f"chatterbox is not installed here ({type(exc).__name__})",
             }
             return _probe_result
-        import torch
+        import torch  # pyright: ignore[reportMissingImports]
 
         if torch.backends.mps.is_available():
             device = "mps"
@@ -75,7 +83,7 @@ def _get_engine():
     global _engine
     with _engine_lock:
         if _engine is None:
-            from chatterbox.tts import ChatterboxTTS
+            from chatterbox.tts import ChatterboxTTS  # pyright: ignore[reportMissingImports]
 
             logger.info("loading Chatterbox on %s", capability()["device"])
             _engine = ChatterboxTTS.from_pretrained(device=capability()["device"])
@@ -163,5 +171,7 @@ async def render_job(org_id: str, job_id: str) -> None:
             await clonejobs.finish_job(storage, org_id, job_id)
             logger.info("rendered clone job %s in-process", job_id)
     except Exception as exc:
+        # Broad on purpose: the background job's boundary; the job records
+        # how it failed.
         logger.exception("in-process render failed for job %s", job_id)
         await clonejobs.finish_job(storage, org_id, job_id, error=f"{type(exc).__name__}: {exc}"[:900])

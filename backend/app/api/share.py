@@ -24,12 +24,12 @@ import base64
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 
 from app.api.deps import DB
 from app.core.errors import NotFound404, RateLimit429
 from app.models import Avatar
 from app.schemas.tts import CueOut
+from app.services.avatars import repo as avatars
 from app.services.rate_limit import SlidingWindowRateLimiter
 from app.services.storage import get_storage
 from app.services.tts.registry import synthesize_cached
@@ -45,9 +45,7 @@ _per_client = SlidingWindowRateLimiter(limit=12, window_seconds=60.0)
 
 
 async def _resolve(token: str, db: DB) -> Avatar:
-    avatar = (
-        await db.execute(select(Avatar).where(Avatar.share_token == token))
-    ).scalar_one_or_none()
+    avatar = await avatars.by_share_token(db, token)
     # One message for "no such token" and "not published": a visitor can do
     # nothing with the difference, and it keeps token probing uninformative.
     # Published, not ready: the draft's status changes while the owner edits

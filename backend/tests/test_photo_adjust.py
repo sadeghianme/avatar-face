@@ -18,7 +18,8 @@ import numpy as np
 import pytest
 from PIL import Image, ImageDraw
 
-from app.services import face_template, landmarks, photo_adjust as pa
+from app.services import face_template, landmarks
+from app.services import photo_adjust as pa
 from app.services.photo_adjust import (
     CROP_SIZE,
     EYE_IMAGE_LEFT,

@@ -91,6 +91,7 @@ async def verify_at_startup() -> None:
     try:
         result = await verify_models()
     except Exception:
+        # Broad on purpose: a startup check logs, it never stops the server.
         logger.exception("could not verify the Gemini models")
         return
     for role, check in result["models"].items():

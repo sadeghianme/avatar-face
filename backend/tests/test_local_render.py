@@ -1,6 +1,5 @@
 """In-process rendering: the button appears only where the hardware is."""
 
-import pytest
 
 from tests.conftest import create_org, register_and_login
 
@@ -55,7 +54,9 @@ async def test_render_claims_synchronously_so_double_clicks_are_safe(client, mon
 
     buffer = io.BytesIO()
     with wave.open(buffer, "wb") as handle:
-        handle.setnchannels(1); handle.setsampwidth(2); handle.setframerate(16000)
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(16000)
         handle.writeframes(b"\x00\x00" * 16000 * 8)
 
     headers = await register_and_login(client, "capdouble")

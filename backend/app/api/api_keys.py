@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
-from sqlalchemy import select
 
 from app.api.deps import DB, OrgAdmin, OrgMember
 from app.core.config import get_settings
-from app.core.errors import NotFound404, Validation422
-from app.models import ApiKey, generate_api_key, utcnow
+from app.core.errors import Validation422
+from app.models import ApiKey
 from app.schemas.api_key import ApiKeyCreate, ApiKeyCreated, ApiKeyOut
+from app.services import api_keys
 from app.services.simulator_token import DEFAULT_TTL_SECONDS, mint
 
 router = APIRouter(prefix="/orgs/{org_id}/api-keys", tags=["api-keys"])
@@ -15,47 +15,21 @@ router = APIRouter(prefix="/orgs/{org_id}/api-keys", tags=["api-keys"])
 
 @router.post("", response_model=ApiKeyCreated, status_code=201)
 async def create_api_key(body: ApiKeyCreate, ctx: OrgAdmin, db: DB) -> ApiKeyCreated:
-    plaintext, prefix, key_hash = generate_api_key()
-    api_key = ApiKey(
-        org_id=ctx.org.id,
-        created_by_id=ctx.membership.user_id,
-        name=body.name,
-        prefix=prefix,
-        key_hash=key_hash,
-        allowed_domains=",".join(d.strip().lower() for d in body.allowed_domains if d.strip()),
+    api_key, plaintext = await api_keys.create(
+        db, ctx.org.id, ctx.membership.user_id, body.name, body.allowed_domains
     )
-    db.add(api_key)
-    await db.commit()
     # The plaintext key is returned exactly once; only the hash is stored.
     return ApiKeyCreated(api_key=ApiKeyOut.model_validate(api_key), plaintext=plaintext)
 
 
 @router.get("", response_model=list[ApiKeyOut])
 async def list_api_keys(ctx: OrgAdmin, db: DB) -> list[ApiKey]:
-    return list(
-        (
-            await db.execute(
-                select(ApiKey)
-                .where(ApiKey.org_id == ctx.org.id)
-                .order_by(ApiKey.created_at.desc())
-            )
-        )
-        .scalars()
-        .all()
-    )
+    return await api_keys.keys_of(db, ctx.org.id)
 
 
 @router.delete("/{key_id}", status_code=204)
 async def revoke_api_key(key_id: str, ctx: OrgAdmin, db: DB):
-    api_key = (
-        await db.execute(
-            select(ApiKey).where(ApiKey.id == key_id, ApiKey.org_id == ctx.org.id)
-        )
-    ).scalar_one_or_none()
-    if api_key is None:
-        raise NotFound404("API key not found", code="api_key_not_found")
-    api_key.revoked_at = utcnow()
-    await db.commit()
+    await api_keys.revoke(db, ctx.org.id, key_id)
 
 
 @router.post("/simulator-token")

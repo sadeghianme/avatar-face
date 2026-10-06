@@ -1,6 +1,5 @@
 """Piper: the languages Kokoro cannot speak, Persian first."""
 
-import pytest
 
 from app.services.tts.piper import CATALOGUE, PiperTTSProvider
 

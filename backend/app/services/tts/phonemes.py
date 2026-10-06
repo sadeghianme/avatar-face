@@ -254,7 +254,7 @@ def plan(phones, strict=True):
         i += 1
 
     # (7) Pre-voiced-coda and phrase-final lengthening.
-    for k, (b, r) in enumerate(out):
+    for k, (_b, r) in enumerate(out):
         if r["cls"] == "V":
             nb = out[k + 1][1] if k + 1 < len(out) else None
             if nb and nb["cls"] == "C" and nb["voiced"]:

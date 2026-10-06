@@ -40,7 +40,7 @@ class Organization(TimestampedBase):
         String(32), nullable=True, unique=True
     )
 
-    memberships: Mapped[list["Membership"]] = relationship(
+    memberships: Mapped[list[Membership]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
     )
 

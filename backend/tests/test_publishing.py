@@ -171,7 +171,7 @@ async def test_rebuilding_the_draft_keeps_the_published_avatar_live(client, setu
     async def stalled(_avatar_id):  # the job never gets to finish
         return None
 
-    import app.api.avatars as avatars_api
+    import app.api.avatars.core as avatars_api
 
     monkeypatch.setattr(avatars_api, "process_avatar", stalled)
     reset = await client.post(f"{base}/rig-reset", headers=headers)
@@ -247,9 +247,10 @@ async def test_published_assets_are_copies_not_pointers(client, setup):
     overwritten in place, so a snapshot that merely recorded live keys would
     silently change under published clients on the next rebuild."""
     headers, org_id, avatar_id, key = setup
+    from sqlalchemy import select
+
     from app.db import get_session_factory
     from app.models import Avatar
-    from sqlalchemy import select
 
     async with get_session_factory()() as db:
         avatar = (

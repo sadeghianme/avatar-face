@@ -12,14 +12,14 @@ from __future__ import annotations
 import asyncio
 import io
 import math
-import os
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 
 from app.core.config import get_settings
 from app.services.tts.envelope import measure
 from app.services.tts.ipa import ipa_to_visemes
-from app.services.tts.kokoro import DEFAULT_VOICE, VOICES, _LANG_BY_PREFIX
+from app.services.tts.kokoro import _LANG_BY_PREFIX, DEFAULT_VOICE, VOICES
 from app.services.tts.timing import ENVELOPE_VISEMES
 from app.services.tts.visemes import cues_from_text
 
@@ -135,9 +135,9 @@ def configured() -> bool:
     """Are the timestamped model and the voices installed?"""
     settings = get_settings()
     return bool(settings.kokoro_lipsync_model_path
-                and os.path.isfile(settings.kokoro_lipsync_model_path)
+                and Path(settings.kokoro_lipsync_model_path).is_file()
                 and settings.kokoro_voices_path
-                and os.path.isfile(settings.kokoro_voices_path))
+                and Path(settings.kokoro_voices_path).is_file())
 
 
 def _get_engine():
@@ -146,7 +146,9 @@ def _get_engine():
         if _engine is None:
             from kokoro_onnx import Kokoro
             settings = get_settings()
-            engine = Kokoro(settings.kokoro_lipsync_model_path, settings.kokoro_voices_path)
+            model, voices = settings.kokoro_lipsync_model_path, settings.kokoro_voices_path
+            assert model and voices  # callers check is_configured() first
+            engine = Kokoro(model, voices)
             # The ONNX Community export calls the output "durations"; the
             # runtime checks the singular spelling. It consumes output #1,
             # so accept the plural only after validating the full order.

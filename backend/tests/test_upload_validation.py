@@ -6,10 +6,9 @@ marked ready, with a mouth moving somewhere near the middle of the picture and
 nothing to explain it.
 """
 
-import pytest
 
 from app.models import AvatarStatus
-from app.services.rig import NoFaceDetected, process_avatar
+from app.services.rig import process_avatar
 from tests.conftest import create_org, register_and_login, sample_png
 
 

@@ -38,7 +38,10 @@ clone = ["chatterbox-tts>=0.1", "resemble-perth>=1.0", "setuptools<81"]
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
-    "ruff>=0.4",
+    # Both pinned: a new release of either can add diagnostics, and CI should
+    # not turn red on an upgrade nobody made. Bump them deliberately.
+    "ruff==0.15.16",
+    "pyright==1.1.414",
 ]
 
 [tool.pytest.ini_options]
@@ -48,6 +51,47 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Migrations are history: never rewritten, so never linted into a rewrite.
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+# Ruff's defaults (E4, E7, E9, F), and: bugbear, simplify, pyupgrade, isort,
+# flake8-return, pathlib, comprehensions.
+extend-select = ["B", "SIM", "UP", "I", "RET", "PTH", "C4"]
+ignore = [
+    # zip() without strict=: every zip here pairs sequences of one length by
+    # construction; strict=True would add a check per call, not catch a bug.
+    "B905",
+    # "AA AE AH ...".split(): the phoneme tables read as tables.
+    "SIM905",
+    # (str, Enum) -> StrEnum changes str() of every member, which rows,
+    # logs and error texts show.
+    "UP042",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests"]
+# The package, not the backend/alembic directory beside it.
+known-third-party = ["alembic"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's parameter declarations, not mutable defaults.
+extend-immutable-calls = [
+    "fastapi.Body", "fastapi.Depends", "fastapi.File", "fastapi.Form", "fastapi.Header",
+    "fastapi.Path", "fastapi.Query",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Fixtures imported from another test module are named as test parameters,
+# which pyflakes reads as redefining the import.
+"tests/**" = ["F811"]
+
+# `pyright` from backend/ (CI runs it). Standard mode, the application only;
+# the tests and scripts are not type-checked.
+[tool.pyright]
+include = ["app"]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
 
 [build-system]
 requires = ["hatchling"]

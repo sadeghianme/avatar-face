@@ -9,7 +9,6 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 
 from app.api import (
@@ -17,14 +16,14 @@ from app.api import (
     auth,
     avatars,
     clone_jobs,
+    cloned_voices,
     consents,
     creations,
-    cloned_voices,
     embed,
     integrations,
     lab,
-    lab_speech,
     lab_reference,
+    lab_speech,
     orgs,
     share,
     stock,
@@ -167,6 +166,7 @@ async def lifespan(app: FastAPI):
         try:
             await warm_native()
         except Exception:
+            # Broad on purpose: an optional warm-up must never stop the app.
             logger.exception("Optional lab speech warm-up failed")
 
     lab_warmup = asyncio.create_task(warm_lab())

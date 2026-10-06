@@ -83,7 +83,7 @@ def measure(audio: bytes, window_ms: float = WINDOW_MS) -> Envelope | None:
     """Loudness curve for WAV audio, or None if it cannot be measured."""
     try:
         import numpy as np
-    except Exception:  # pragma: no cover - numpy ships with the image
+    except ImportError:  # pragma: no cover - numpy ships with the image
         return None
 
     try:
@@ -92,7 +92,7 @@ def measure(audio: bytes, window_ms: float = WINDOW_MS) -> Envelope | None:
             width = handle.getsampwidth()
             rate = handle.getframerate()
             frames = handle.readframes(handle.getnframes())
-    except Exception:
+    except (wave.Error, EOFError):
         # Not a WAV (mp3 from a hosted provider, or a truncated file).
         return None
 

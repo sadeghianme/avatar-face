@@ -190,7 +190,7 @@ def build_request(face_type: str, payload: bytes, mime: str) -> dict:
     }
 
 
-def parse_answer(body: dict, face_type: str) -> dict[str, list[int]]:
+def parse_answer(body: dict, face_type: str) -> dict[str, list[float]]:
     """The named [y, x] points from a generateContent response. Raises
     VisionRefused on a safety refusal, VisionError on anything unusable."""
     from app.services.imagegen import refusal_reason
@@ -212,7 +212,7 @@ def parse_answer(body: dict, face_type: str) -> dict[str, list[int]]:
         raise VisionError("The AI's answer was not readable")
     if answer.get("face_found") is False:
         raise VisionError("The AI found no face in this picture", code="ai_no_face")
-    points: dict[str, list[int]] = {}
+    points: dict[str, list[float]] = {}
     for name in ANCHORS[face_type]:
         value = answer.get(name)
         if (

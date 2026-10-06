@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Any, cast
 
-from sqlalchemy import event
+from sqlalchemy import CursorResult, Executable, event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -51,6 +52,17 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 async def get_db() -> AsyncIterator[AsyncSession]:
     async with get_session_factory()() as session:
         yield session
+
+
+async def execute_dml(db: AsyncSession, statement: Executable) -> int:
+    """Run an UPDATE or DELETE and return how many rows it matched.
+
+    The count is what the conditional writes here are about (a revision or a
+    status as read: 0 means someone else got there first). AsyncSession
+    types execute() as a plain Result; for DML it is a CursorResult, which is
+    what carries the count."""
+    result = await db.execute(statement)
+    return cast("CursorResult[Any]", result).rowcount
 
 
 def reset_engine() -> None:

@@ -42,6 +42,7 @@ from scipy.spatial import Delaunay
 
 from app.core.config import get_settings
 from app.services.riggable import check_landmarks
+from app.services.storage import STORAGE_ERRORS
 
 logger = logging.getLogger("liveface.rig")
 
@@ -147,6 +148,8 @@ def landmarks_from_image(
         try:
             return _mediapipe_landmarks(image), None, (width, height), True
         except Exception:
+            # Broad on purpose: no face (ValueError) or the detector's own
+            # runtime failure; either way the synthetic mesh stands in.
             logger.exception("MediaPipe landmarking failed; using synthetic mesh")
 
     points = synthetic_face_mesh(width, height)
@@ -281,7 +284,7 @@ def synthetic_face_mesh(width: int, height: int) -> np.ndarray:
         ring_t = 0.15 + 0.78 * (i / max(n - 1, 1))
         angle = 2.399963 * i  # golden angle: even angular coverage
         radius_jitter = 1.0 + rng.uniform(-0.03, 0.03)
-        put(idx,
+        put(int(idx),
             cx + fw * ring_t * radius_jitter * math.cos(angle),
             cy + fh * ring_t * radius_jitter * math.sin(angle))
 
@@ -524,6 +527,8 @@ async def process_avatar(avatar_id: str) -> None:
                 try:
                     await publish_snapshot(avatar, storage)
                 except Exception:
+                    # Broad on purpose: the avatar is built either way; its
+                    # owner publishes it by hand when this failed.
                     logger.exception("first publish failed for avatar %s", avatar.id)
         except (NoFaceDetected, Validation422) as exc:
             # Expected, and the user can act on it — no stack trace.
@@ -531,6 +536,8 @@ async def process_avatar(avatar_id: str) -> None:
             avatar.status = AvatarStatus.failed
             avatar.error = str(exc)
         except Exception as exc:
+            # Broad on purpose: the background job's boundary; the avatar
+            # says it failed, and why.
             logger.exception("rig pipeline failed for avatar %s", avatar_id)
             avatar.status = AvatarStatus.failed
             avatar.error = str(exc)[:1000]
@@ -548,7 +555,7 @@ async def _carry_crop_origin(avatar, storage, rig: dict) -> None:
         return
     try:
         previous = json.loads(await storage.get_bytes(avatar.rig_key))
-    except Exception:
+    except STORAGE_ERRORS:
         return  # nothing readable to carry; crop reset falls back
     if previous.get("crop_origin"):
         rig["crop_origin"] = previous["crop_origin"]

@@ -1,6 +1,5 @@
 """Avaturn 3D: the session flow, and what happens without a token."""
 
-import pytest
 
 from tests.conftest import create_org, register_and_login
 

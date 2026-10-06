@@ -27,7 +27,6 @@ from app.services.storage import get_storage
 from tests.conftest import create_org, register_and_login
 from tests.test_photo_privacy import assert_clean_upright, assert_scrubbed, phone_jpeg
 
-
 # --- fixtures and helpers -------------------------------------------------------
 
 
@@ -72,17 +71,26 @@ def no_segmenter(monkeypatch):
 class Gate:
     """Holds every creation job at its next CPU section until opened."""
 
+    # The modules whose jobs run CPU sections (services.creations' works).
+    JOB_MODULES = ("adjust", "detect", "finish", "generate", "ingest")
+
     def __init__(self, monkeypatch):
+        from app.services.jobs import run_cpu
+
         self._monkeypatch = monkeypatch
         self._event = asyncio.Event()
-        self._real = svc.run_cpu
+        self._real = run_cpu
 
     def close(self) -> None:
+        import importlib
+
         async def held(fn, *args, **kwargs):
             await self._event.wait()
             return await self._real(fn, *args, **kwargs)
 
-        self._monkeypatch.setattr(svc, "run_cpu", held)
+        for name in self.JOB_MODULES:
+            module = importlib.import_module(f"app.services.creations.{name}")
+            self._monkeypatch.setattr(module, "run_cpu", held)
 
     def open(self) -> None:
         self._event.set()
@@ -279,7 +287,7 @@ async def test_the_header_is_read_off_the_loop_and_only_once_admitted(client, mo
     finally:
         for job in held:
             runner.release(job)
-    monkeypatch.setattr(svc, "MAX_DRAFTS_PER_ORG", 1)
+    monkeypatch.setattr(svc.rules, "MAX_DRAFTS_PER_ORG", 1)
     full = await _upload(client, headers, org_id)
     assert full.status_code == 409 and full.json()["code"] == "too_many_drafts"
     assert len(probed_on) == 1
@@ -315,7 +323,7 @@ async def test_a_photo_that_will_not_decode_fails_its_job_for_good(client):
 
 
 async def test_an_org_keeps_at_most_ten_drafts(client, monkeypatch):
-    monkeypatch.setattr(svc, "MAX_DRAFTS_PER_ORG", 2)
+    monkeypatch.setattr(svc.rules, "MAX_DRAFTS_PER_ORG", 2)
     headers, org_id = await _org(client, "hoarder")
     await _create(client, headers, org_id)
     await _create(client, headers, org_id)
@@ -1032,9 +1040,11 @@ class _Unreachable:
         self.real_undo = svc._undo_finish
         self.real_publish = publishing.publish
         self._monkeypatch = monkeypatch
-        monkeypatch.setattr(svc, "UNDO_FINISH_BACKOFF_SECONDS", (0.0, 0.0))
+        from app.services.creations import finish
+
+        monkeypatch.setattr(finish, "UNDO_FINISH_BACKOFF_SECONDS", (0.0, 0.0))
         monkeypatch.setattr(publishing, "publish", self.publish)
-        monkeypatch.setattr(svc, "_undo_finish", self.undo)
+        monkeypatch.setattr(finish, "_undo_finish", self.undo)
 
     async def publish(self, avatar, storage):
         raise RuntimeError("database is locked")
@@ -1234,7 +1244,7 @@ async def test_the_sweeper_expires_creations(client, face, monkeypatch):
 
 
 async def test_finished_rows_do_not_count_as_drafts(client, face, monkeypatch):
-    monkeypatch.setattr(svc, "MAX_DRAFTS_PER_ORG", 1)
+    monkeypatch.setattr(svc.rules, "MAX_DRAFTS_PER_ORG", 1)
     headers, org_id = await _org(client, "counted")
     base, _ = await _create(client, headers, org_id)
     anchors = await _detect(client, headers, base)
