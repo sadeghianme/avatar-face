@@ -1,0 +1,41 @@
+# Build context for every image (both compose services build from the repo
+# root). An allow-list: everything is left out, then only what a Dockerfile
+# COPYs is let back in. A new COPY of anything else fails the build with
+# "not found" -- loudly, instead of quietly shipping whatever sits in the
+# tree (deploy/.env, local databases, output/, node_modules, a .venv).
+*
+
+# backend/Dockerfile (and deploy/Dockerfile.speech-stream, which copies a
+# few files of backend/app)
+!backend/pyproject.toml
+!backend/constraints.txt
+!backend/app
+!backend/alembic
+!backend/alembic.ini
+!backend/scripts
+
+# The embed widget (built in both images) and the dashboard
+!embed
+!frontend
+
+# ...and, inside those, what no image needs at build or run time.
+**/node_modules
+**/dist
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/*.tsbuildinfo
+**/.DS_Store
+**/.env
+**/.env.*
+**/*.sqlite3
+**/*.sqlite3-*
+embed/src/**/__tests__
+embed/example
+frontend/src/**/*.test.ts
+frontend/src/**/*.test.tsx
+# Brand explorations the owner keeps uncommitted beside the real icons.
+frontend/public/brand/concepts
+frontend/public/brand/*-previous.png
