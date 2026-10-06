@@ -19,8 +19,11 @@ export const Switch = forwardRef<HTMLButtonElement, SwitchProps>(function Switch
   ref
 ) {
   const look = switchClasses(checked, size);
+  // The caller's props first: the role and the state are the switch's own,
+  // whatever is spread on it.
   return (
     <button
+      {...rest}
       ref={ref}
       type="button"
       role="switch"
@@ -30,7 +33,6 @@ export const Switch = forwardRef<HTMLButtonElement, SwitchProps>(function Switch
         if (!event.defaultPrevented) onChange(!checked);
       }}
       className={cx(look.track, className)}
-      {...rest}
     >
       <span aria-hidden="true" className={look.thumb} />
     </button>

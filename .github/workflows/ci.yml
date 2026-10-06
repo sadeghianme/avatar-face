@@ -182,6 +182,10 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
+      # The kit and the main screens mounted in jsdom (Vitest + Testing
+      # Library), against a mocked API: src/test/.
+      - name: Rendering tests
+        run: npm run test:ui
 
   deploy-script:
     # The release gate itself: shellcheck on every deploy script, then

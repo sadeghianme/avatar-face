@@ -114,12 +114,24 @@ export default tseslint.config(
     },
   },
   {
-    // Tests run under node --test, which strips their types; tsconfig
-    // leaves them out (Node's test types are not installed), so no
-    // type-aware rules there.
-    files: ["src/**/*.test.ts"],
-    extends: [tseslint.configs.disableTypeChecked],
-    languageOptions: { globals: globals.node },
+    // The tests: node --test (*.test.ts) and the rendering tests (*.test.tsx,
+    // src/test). Their own program (tsconfig.test.json, with Node's types),
+    // so the type-aware rules read them as tsc does. node:test's describe
+    // and it return promises the runner itself awaits.
+    files: ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**"],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+      parserOptions: { projectService: false, project: "./tsconfig.test.json", tsconfigRootDir: import.meta.dirname },
+    },
+    rules: {
+      "@typescript-eslint/no-floating-promises": [
+        "error",
+        { allowForKnownSafeCalls: [{ from: "package", package: "node:test", name: ["describe", "it", "test"] }] },
+      ],
+      // A test mounts its own fixtures: a raw <button> in an action slot is
+      // the caller's markup, not the app's.
+      "no-restricted-syntax": "off",
+    },
   },
   {
     // Build scripts; reference-proof.mjs also runs functions in a browser page.
