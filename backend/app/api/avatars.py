@@ -1242,9 +1242,9 @@ async def get_avatar_detail(avatar_id: str, ctx: OrgMember, db: DB) -> AvatarDet
         detail.rig_url = await storage.presign_get(avatar.rig_key)
     if avatar.thumbnail_key:
         detail.thumbnail_url = await storage.presign_get(avatar.thumbnail_key)
-    from app.api.embed import _layer_urls
+    from app.services.layers import draft_layer_urls
 
-    detail.layer_urls = await _layer_urls(avatar, storage)
+    detail.layer_urls = await draft_layer_urls(avatar, storage)
     from app.services.mouth import load as load_mouth, photo_urls
 
     detail.mouth_photo = await photo_urls(load_mouth(avatar.mouth_config), storage)

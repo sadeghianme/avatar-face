@@ -215,3 +215,20 @@ async def store_layers(avatar, storage, image_bytes: bytes, face_box: list[float
         content_type = "image/jpeg" if data[:3] == b"\xff\xd8\xff" else "image/png"
         await storage.put_bytes(key, data, content_type)
     return True
+
+
+async def draft_layer_urls(avatar, storage) -> dict[str, str] | None:
+    """Presigned URLs of the background/body/head decomposition, if built.
+
+    The background is absent for cut-outs (nothing behind them); the widget
+    treats a missing entry as transparent.
+    """
+    if not getattr(avatar, "has_layers", False):
+        return None
+    urls: dict[str, str] = {}
+    for name in ("background", "body", "head"):
+        key = layer_key(avatar.org_id, avatar.id, name)
+        if name == "background" and not await storage.exists(key):
+            continue
+        urls[name] = await storage.presign_get(key)
+    return urls

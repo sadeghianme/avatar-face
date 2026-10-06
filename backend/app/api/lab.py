@@ -21,8 +21,9 @@ import logging
 from fastapi import APIRouter
 
 from app.api.deps import DB, OrgMember
-from app.core.errors import Conflict409, NotFound404
-from app.models import Avatar, AvatarKind, AvatarStatus
+from app.core.errors import Conflict409
+from app.models import AvatarKind, AvatarStatus
+from app.services.avatars import repo as avatars
 from app.services.storage import get_storage
 
 logger = logging.getLogger("liveface.lab")
@@ -38,15 +39,7 @@ async def landmark_depth(avatar_id: str, ctx: OrgMember, db: DB) -> dict:
     lab falls back to its dome, exactly as it does for avatars whose photo
     the landmarker cannot read.
     """
-    from sqlalchemy import select
-
-    avatar = (
-        await db.execute(
-            select(Avatar).where(Avatar.id == avatar_id, Avatar.org_id == ctx.org.id)
-        )
-    ).scalar_one_or_none()
-    if avatar is None:
-        raise NotFound404("Avatar not found", code="avatar_not_found")
+    avatar = await avatars.require_in_org(db, ctx.org.id, avatar_id)
     if avatar.kind != AvatarKind.photo or avatar.status != AvatarStatus.ready or not avatar.image_key:
         raise Conflict409("Only ready photo avatars have depth", code="not_a_photo")
 
