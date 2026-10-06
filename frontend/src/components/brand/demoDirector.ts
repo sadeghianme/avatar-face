@@ -46,8 +46,21 @@ type Engine = Pick<AvatarEngine, "playCues" | "syncCueTime" | "stopSpeech">;
 
 /** How open the mouth is for each viseme, 0..1. Drives the level meters. */
 const OPENNESS: Record<string, number> = {
-  sil: 0, PP: 0.05, FF: 0.18, TH: 0.3, DD: 0.3, kk: 0.35, CH: 0.35, SS: 0.28,
-  nn: 0.25, RR: 0.35, aa: 1, E: 0.7, ih: 0.55, oh: 0.85, ou: 0.5,
+  sil: 0,
+  PP: 0.05,
+  FF: 0.18,
+  TH: 0.3,
+  DD: 0.3,
+  kk: 0.35,
+  CH: 0.35,
+  SS: 0.28,
+  nn: 0.25,
+  RR: 0.35,
+  aa: 1,
+  E: 0.7,
+  ih: 0.55,
+  oh: 0.85,
+  ou: 0.5,
 };
 
 const GAP_MS = 1300;
@@ -56,7 +69,13 @@ export class DemoDirector {
   /** Target mouth openness right now; meters smooth toward it per frame. */
   target = 0;
   private snapshot: DemoSnapshot = {
-    phase: "loading", lineIndex: -1, wordIndex: -1, viseme: "sil", soundOn: false, rigged: false, line: null,
+    phase: "loading",
+    lineIndex: -1,
+    wordIndex: -1,
+    viseme: "sil",
+    soundOn: false,
+    rigged: false,
+    line: null,
   };
   private listeners = new Set<() => void>();
   private engine: Engine | null = null;

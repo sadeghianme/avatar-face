@@ -93,13 +93,19 @@ describe("a remembered consent", () => {
 
 describe("a refusal about consent", () => {
   it("asks for the scope the server names", () => {
-    assert.deepEqual(consentProblem("consent_required", { scope: "depiction", text_version: CONSENT_TEXT_VERSIONS.depiction }), {
-      kind: "required",
-      scope: "depiction",
-    });
+    assert.deepEqual(
+      consentProblem("consent_required", { scope: "depiction", text_version: CONSENT_TEXT_VERSIONS.depiction }),
+      {
+        kind: "required",
+        scope: "depiction",
+      }
+    );
     assert.deepEqual(consentProblem("consent_required", {}), { kind: "required", scope: "third_party_ai" });
     assert.deepEqual(
-      consentProblem("consent_required", { scope: "generated_face", text_version: CONSENT_TEXT_VERSIONS.generated_face }),
+      consentProblem("consent_required", {
+        scope: "generated_face",
+        text_version: CONSENT_TEXT_VERSIONS.generated_face,
+      }),
       { kind: "required", scope: "generated_face" }
     );
   });
@@ -107,7 +113,9 @@ describe("a refusal about consent", () => {
     assert.deepEqual(consentProblem("consent_required", { scope: "third_party_ai", text_version: "2027-01-01" }), {
       kind: "outdated",
     });
-    assert.deepEqual(consentProblem("unknown_consent_version", { current_version: "2027-01-01" }), { kind: "outdated" });
+    assert.deepEqual(consentProblem("unknown_consent_version", { current_version: "2027-01-01" }), {
+      kind: "outdated",
+    });
   });
   it("hides the AI when the organization switched it off, and ignores the rest", () => {
     assert.deepEqual(consentProblem("third_party_ai_disabled"), { kind: "disabled" });
@@ -137,7 +145,11 @@ describe("telling a returning member the wording changed", () => {
   it("stays silent once the current words are agreed", () => {
     assert.equal(needsReagree(mine({ stale: true, consent_id: "c1" }), "third_party_ai"), false);
     const record = {
-      id: "c2", scope: "third_party_ai" as const, providers: ["google"], text_version: version, created_at: "now",
+      id: "c2",
+      scope: "third_party_ai" as const,
+      providers: ["google"],
+      text_version: version,
+      created_at: "now",
     };
     assert.equal(needsReagree(mineFromRecord(record), "third_party_ai"), false);
   });

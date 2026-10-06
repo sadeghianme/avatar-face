@@ -1,31 +1,16 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import type { AvatarEngine } from "@liveface/embed";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { api, ApiError } from "@/lib/api";
-import type { Avatar } from "@/lib/types";
-import type { AvatarEngine } from "@liveface/embed";
-
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { previewRigFit, useResetRig, useRigAnchors, useSaveRigFit } from "@/features/avatars/api";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
-import {
-  FIT_REASON_LABELS,
-  marksToSend,
-  type FaceMarks,
-  type FitReason,
-} from "@/features/avatars/face-marks";
+import { type FaceMarks, FIT_REASON_LABELS, type FitReason, marksToSend } from "@/features/avatars/face-marks";
 import { SpeakPanel } from "@/features/voices";
-
-interface AnchorsResponse {
-  anchors: FaceMarks;
-  image_size: [number, number];
-}
-
-interface FitResponse {
-  rig: unknown;
-  persisted: boolean;
-  reasons: FitReason[];
-}
+import { ApiError } from "@/lib/api";
+import type { Avatar } from "@/lib/types";
 
 // Once the owner has asked for a preview, it follows their marks: this long
 // after the last drag or nudge, so holding an arrow key sends one request.
@@ -54,17 +39,8 @@ function guideKey(faceType: Avatar["face_type"]): string {
  * eyes the wrong way round) is listed under the preview, and Save refuses it
  * too.
  */
-export function MarkFacePanel({
-  avatar,
-  orgId,
-  onClose,
-}: {
-  avatar: Avatar;
-  orgId: string;
-  onClose: () => void;
-}) {
+export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgId: string; onClose: () => void }) {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
   const [marks, setMarks] = useState<FaceMarks | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   // The marks the preview shows; the preview is live once there is one.
@@ -78,13 +54,9 @@ export function MarkFacePanel({
   // Answers can arrive out of order; only the newest request may land.
   const latest = useRef(0);
 
-  const { data } = useQuery({
-    queryKey: ["rig-anchors", avatar.id, avatar.rig_url],
-    queryFn: () =>
-      api.get<AnchorsResponse>(`/orgs/${orgId}/avatars/${avatar.id}/rig-anchors`),
-    enabled: Boolean(avatar.rig_url),
-    staleTime: 0,
-  });
+  const { data } = useRigAnchors(orgId, avatar);
+  const saveFit = useSaveRigFit(orgId, avatar.id);
+  const resetRig = useResetRig(orgId, avatar.id);
 
   useEffect(() => {
     if (data && !marks) setMarks(data.anchors);
@@ -92,44 +64,51 @@ export function MarkFacePanel({
 
   // Blob URLs are a real allocation; drop the previous one on every replace
   // and on unmount, or a few previews leak the whole rig each time.
-  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+  useEffect(
+    () => () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    },
+    [previewUrl]
+  );
 
-  const fitFailed = (err: unknown) => {
-    if (err instanceof ApiError && err.code === "fit_invalid" && Array.isArray(err.body.reasons)) {
-      setReasons(err.body.reasons as FitReason[]);
-    } else {
-      setError(err instanceof ApiError ? err.detail : t("error"));
-    }
-  };
+  const fitFailed = useCallback(
+    (err: unknown) => {
+      if (err instanceof ApiError && err.code === "fit_invalid" && Array.isArray(err.body.reasons)) {
+        setReasons(err.body.reasons as FitReason[]);
+      } else {
+        setError(err instanceof ApiError ? err.detail : t("error"));
+      }
+    },
+    [t]
+  );
 
   useEffect(() => {
     if (!live || !marks || marks === previewed) return;
     const request = ++latest.current;
-    const timer = window.setTimeout(async () => {
-      setPreviewing(true);
-      setError(null);
-      try {
-        const result = await api.post<FitResponse>(
-          `/orgs/${orgId}/avatars/${avatar.id}/rig-fit`,
-          { ...(data ? marksToSend(marks, data.anchors) : marks), persist: false }
-        );
-        if (request !== latest.current) return;
-        const blob = new Blob([JSON.stringify(result.rig)], { type: "application/json" });
-        setPreviewUrl(URL.createObjectURL(blob));
-        setReasons(result.reasons);
-        setPreviewed(marks);
-      } catch (err) {
-        if (request === latest.current) {
-          fitFailed(err);
-          setLive(false);
+    const timer = window.setTimeout(
+      async () => {
+        setPreviewing(true);
+        setError(null);
+        try {
+          const result = await previewRigFit(orgId, avatar.id, data ? marksToSend(marks, data.anchors) : marks);
+          if (request !== latest.current) return;
+          const blob = new Blob([JSON.stringify(result.rig)], { type: "application/json" });
+          setPreviewUrl(URL.createObjectURL(blob));
+          setReasons(result.reasons);
+          setPreviewed(marks);
+        } catch (err) {
+          if (request === latest.current) {
+            fitFailed(err);
+            setLive(false);
+          }
+        } finally {
+          if (request === latest.current) setPreviewing(false);
         }
-      } finally {
-        if (request === latest.current) setPreviewing(false);
-      }
-    }, previewed ? LIVE_PREVIEW_DELAY_MS : 0);
+      },
+      previewed ? LIVE_PREVIEW_DELAY_MS : 0
+    );
     return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live, marks, previewed, orgId, avatar.id]);
+  }, [live, marks, previewed, orgId, avatar.id, data, fitFailed]);
 
   if (!data || !marks || !avatar.image_url) return null;
 
@@ -137,13 +116,9 @@ export function MarkFacePanel({
     setBusy("save");
     setError(null);
     try {
-      await api.post<FitResponse>(`/orgs/${orgId}/avatars/${avatar.id}/rig-fit`, {
-        // A head the owner did not touch goes without its outline diagonals,
-        // which the server then keeps as saved (see marksToSend).
-        ...marksToSend(marks, data.anchors),
-        persist: true,
-      });
-      await queryClient.invalidateQueries({ queryKey: ["avatar", orgId, avatar.id] });
+      // A head the owner did not touch goes without its outline diagonals,
+      // which the server then keeps as saved (see marksToSend).
+      await saveFit.mutateAsync(marksToSend(marks, data.anchors));
       onClose();
     } catch (err) {
       fitFailed(err);
@@ -158,8 +133,7 @@ export function MarkFacePanel({
     setBusy("redetect");
     setError(null);
     try {
-      await api.post(`/orgs/${orgId}/avatars/${avatar.id}/rig-reset`, {});
-      await queryClient.invalidateQueries({ queryKey: ["avatar", orgId, avatar.id] });
+      await resetRig.mutateAsync();
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));
@@ -174,12 +148,12 @@ export function MarkFacePanel({
   };
 
   return (
-    <div className="card">
+    <Card>
       <div className="mb-3 flex items-center justify-between">
         <h3 className="font-medium">{t("markFace")}</h3>
-        <button className="btn-secondary px-3 py-1 text-xs" onClick={onClose} aria-label={t("close")}>
+        <Button variant="secondary" size="xs" onClick={onClose} aria-label={t("close")}>
           ✕
-        </button>
+        </Button>
       </div>
       <p className="mb-1 text-xs text-gray-500">{t(guideKey(avatar.face_type))}</p>
       <p className="mb-3 text-xs text-gray-500">{t("markFaceKeys")}</p>
@@ -202,19 +176,16 @@ export function MarkFacePanel({
           </p>
           {previewUrl ? (
             <>
-              <AvatarPreview
-                rigUrl={previewUrl}
-                textureUrl={avatar.image_url}
-                size={280}
-                onEngine={setEngine}
-              />
+              <AvatarPreview rigUrl={previewUrl} textureUrl={avatar.image_url} size={280} onEngine={setEngine} />
               <div className="mt-3">
                 <SpeakPanel engine={engine} orgId={orgId} />
               </div>
             </>
           ) : (
-            <div className="flex h-[280px] items-center justify-center rounded-xl border border-dashed
-              border-gray-300 text-center text-xs text-gray-500 dark:border-line">
+            <div
+              className="flex h-[280px] items-center justify-center rounded-xl border border-dashed
+              border-gray-300 text-center text-xs text-gray-500 dark:border-line"
+            >
               {t("testHint")}
             </div>
           )}
@@ -222,8 +193,11 @@ export function MarkFacePanel({
       </div>
 
       {reasons.length > 0 && (
-        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900
-          dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200" role="alert">
+        <div
+          className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900
+          dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+          role="alert"
+        >
           <p className="font-medium">{t("fitRefusedTitle")}</p>
           <ul className="mt-1 list-disc pl-5">
             {reasons.map((reason) => (
@@ -235,8 +209,8 @@ export function MarkFacePanel({
       {error && <p className="field-error mt-3">{error}</p>}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          className="btn-secondary"
+        <Button
+          variant="secondary"
           onClick={() => {
             setLive(true);
             setPreviewed(null);
@@ -244,20 +218,15 @@ export function MarkFacePanel({
           disabled={busy !== null || previewing}
         >
           {previewing ? t("loading") : t("test")}
-        </button>
-        <button className="btn-primary" onClick={() => void save()} disabled={busy !== null}>
+        </Button>
+        <Button onClick={() => void save()} disabled={busy !== null}>
           {busy === "save" ? t("saving") : t("save")}
-        </button>
-        <button
-          className="btn-secondary"
-          onClick={() => void redetect()}
-          disabled={busy !== null}
-          title={t("redetectHint")}
-        >
+        </Button>
+        <Button variant="secondary" onClick={() => void redetect()} disabled={busy !== null} title={t("redetectHint")}>
           {busy === "redetect" ? t("loading") : t("redetect")}
-        </button>
-        <button
-          className="btn-secondary"
+        </Button>
+        <Button
+          variant="secondary"
           onClick={() => {
             setMarks(data.anchors);
             setReasons([]);
@@ -265,8 +234,8 @@ export function MarkFacePanel({
           disabled={busy !== null}
         >
           {t("resetDetected")}
-        </button>
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 }

@@ -1,7 +1,9 @@
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Icon } from "@/components/ui/Icon";
+import { Button } from "@/components/ui/Button";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { cx } from "@/lib/cx";
 
 /**
  * The crop interaction: an image, a rectangle, handles, aspect presets.
@@ -38,8 +40,7 @@ interface Rect {
 type Handle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
 type Drag =
-  | { kind: "move"; grabX: number; grabY: number; start: Rect }
-  | { kind: "resize"; handle: Handle; start: Rect };
+  { kind: "move"; grabX: number; grabY: number; start: Rect } | { kind: "resize"; handle: Handle; start: Rect };
 
 /** Matches the server, which refuses to leave a face with nothing on it. */
 const MIN_SIDE = 0.15;
@@ -61,7 +62,6 @@ const ASPECTS: { key: string; ratio: number | null }[] = [
   { key: "cropPortrait", ratio: 4 / 5 },
   { key: "cropWide", ratio: 16 / 9 },
 ];
-
 
 export interface CropRect {
   x: number;
@@ -224,9 +224,7 @@ export function CropBox({
   };
 
   const tooSmall = rect.w < MIN_SIDE || rect.h < MIN_SIDE;
-  const outPx = natural
-    ? `${Math.round(rect.w * natural.w)} × ${Math.round(rect.h * natural.h)}`
-    : "";
+  const outPx = natural ? `${Math.round(rect.w * natural.w)} × ${Math.round(rect.h * natural.h)}` : "";
 
   const pct = (v: number) => `${v * 100}%`;
   const edge = "absolute bg-white/90";
@@ -302,9 +300,7 @@ export function CropBox({
           onPointerMove={move}
           onPointerUp={() => end()}
         >
-          <div
-            className={`absolute inset-0 ring-1 ${tooSmall ? "ring-red-400" : "ring-white/70"}`}
-          />
+          <div className={cx("absolute inset-0 ring-1", tooSmall ? "ring-red-400" : "ring-white/70")} />
           {/* Thirds, shown only while dragging — permanent guides turn into
               clutter the moment you stop needing them. */}
           {dragging && (
@@ -331,7 +327,7 @@ export function CropBox({
               onPointerDown={(e) => start(e, { kind: "resize", handle, start: rect })}
               onPointerMove={move}
               onPointerUp={() => end()}
-              className={`absolute h-6 w-6 border-white ${cls}`}
+              className={cx("absolute h-6 w-6 border-white", cls)}
             />
           ))}
 
@@ -357,41 +353,36 @@ export function CropBox({
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <div className="flex overflow-hidden rounded-lg border border-black/10 dark:border-white/15">
-          {ASPECTS.map((a) => (
-            <button
-              key={a.key}
-              type="button"
-              aria-pressed={ratio === a.ratio}
-              onClick={() => chooseRatio(a.ratio)}
-              className={`px-2.5 py-1.5 text-[12.5px] font-medium transition-colors ${
-                ratio === a.ratio
-                  ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                  : "text-gray-500 hover:bg-black/5 dark:hover:bg-white/10"
-              }`}
-            >
-              {t(a.key)}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          size="sm"
+          label={t("cropRatio")}
+          options={ASPECTS.map((a) => ({ value: a.key, label: t(a.key) }))}
+          value={ASPECTS.find((a) => a.ratio === ratio)?.key ?? "cropFree"}
+          onChange={(key) => chooseRatio(ASPECTS.find((a) => a.key === key)?.ratio ?? null)}
+        />
         <span className="font-mono text-[12px] text-gray-400">{outPx}</span>
         {onApply && onCancel && (
           <div className="ms-auto flex gap-2">
-            <button className="btn-secondary" onClick={onCancel} disabled={busy}>
+            <Button variant="secondary" onClick={onCancel} disabled={busy}>
               {t("cancel")}
-            </button>
-            <button className="btn-primary" disabled={busy || tooSmall} onClick={() => onApply(rect)}>
-              <Icon name="crop" className="me-1.5 inline h-4 w-4" />
+            </Button>
+            <Button icon="crop" disabled={busy || tooSmall} onClick={() => onApply(rect)}>
               {busy ? t("loading") : t("cropApply")}
-            </button>
+            </Button>
           </div>
         )}
       </div>
 
-      <p id={keysHintId} className="sr-only">{t("cropKeysHint")}</p>
-      <p id={positionId} className="sr-only">{describe(rect)}</p>
+      <p id={keysHintId} className="sr-only">
+        {t("cropKeysHint")}
+      </p>
+      <p id={positionId} className="sr-only">
+        {describe(rect)}
+      </p>
       {/* Always mounted, so each change is read out. */}
-      <p className="sr-only" aria-live="polite" role="status">{spoken}</p>
+      <p className="sr-only" aria-live="polite" role="status">
+        {spoken}
+      </p>
       {tooSmall && <p className="field-error mt-2">{t("cropTooSmall")}</p>}
       {error && <p className="field-error mt-2">{error}</p>}
     </div>

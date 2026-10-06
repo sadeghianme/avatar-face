@@ -18,7 +18,8 @@ export const landing = {
   heroBadge: "Real-time lip-sync, right in the browser",
   heroTitleA: "Turn one photo into",
   heroTitleB: "a face that talks.",
-  heroSubtitle: "Liveface maps 478 points on a portrait and brings it to life — lips that follow every sound, natural blinks and breathing, in 13 languages. Put it on any website with one script tag.",
+  heroSubtitle:
+    "Liveface maps 478 points on a portrait and brings it to life — lips that follow every sound, natural blinks and breathing, in 13 languages. Put it on any website with one script tag.",
   heroCtaPrimary: "Create your avatar — free",
   heroCtaSecondary: "See how it works",
   heroPoint1: "No credit card needed",
@@ -65,7 +66,8 @@ export const landing = {
   step2Title: "Pick a voice and fine-tune",
   step2Body: "Choose a voice in any of 13 languages, hear it speak, and adjust the mouth until it looks exactly right.",
   step3Title: "Embed and publish",
-  step3Body: "Paste one script tag into your site and press Publish. Then make it speak from anywhere with Liveface.speak().",
+  step3Body:
+    "Paste one script tag into your site and press Publish. Then make it speak from anywhere with Liveface.speak().",
   stepVisualPublish: "Publish",
   stepVisualPublished: "Published",
   stepVisualComment: "anywhere in your page",
@@ -74,27 +76,34 @@ export const landing = {
   // Features
   featuresEyebrow: "Product",
   featuresTitle: "Everything a real face does — in the browser",
-  featuresSubtitle: "Lip-sync is only the beginning. Liveface breathes, blinks and moves as it talks, so it reads as a person rather than a mouth pasted on a photo.",
+  featuresSubtitle:
+    "Lip-sync is only the beginning. Liveface breathes, blinks and moves as it talks, so it reads as a person rather than a mouth pasted on a photo.",
   featLipsyncTitle: "Lip-sync from pronunciation, not volume",
-  featLipsyncBody: "Text is turned into phonemes before it reaches the face, and each sound gets its own mouth shape, timed against the audio. “Knight” never mimes a hard k.",
+  featLipsyncBody:
+    "Text is turned into phonemes before it reaches the face, and each sound gets its own mouth shape, timed against the audio. “Knight” never mimes a hard k.",
   lipsyncSample: "Hi, I'm a live avatar, made from a single photo.",
   featMotionTitle: "Alive between the words",
-  featMotionBody: "Breathing, blinking and small head movements keep the face natural while it speaks and while it waits.",
+  featMotionBody:
+    "Breathing, blinking and small head movements keep the face natural while it speaks and while it waits.",
   motionBreath: "Breath",
   motionBlink: "Blink",
   motionNod: "Head",
   featVoicesTitle: "Natural voices in 13 languages",
-  featVoicesBody: "Neural voices are built in. Bring your own speech provider, or clone a voice with the speaker's consent.",
+  featVoicesBody:
+    "Neural voices are built in. Bring your own speech provider, or clone a voice with the speaker's consent.",
   featMouthTitle: "A real mouth inside",
-  featMouthBody: "Teeth, tongue and lips come from a photographic mouth fitted to the face and lit to match it — never a dark hole.",
+  featMouthBody:
+    "Teeth, tongue and lips come from a photographic mouth fitted to the face and lit to match it — never a dark hole.",
   featMouthAlt: "Close-up of an avatar's mouth, with rendered teeth and lips",
   featPublishTitle: "Draft, preview, publish",
-  featPublishBody: "Change the voice or the mouth in private. Your website keeps the published version until you say otherwise.",
+  featPublishBody:
+    "Change the voice or the mouth in private. Your website keeps the published version until you say otherwise.",
   mockUnpublished: "Unpublished changes",
   mockPublish: "Publish",
   mockPublishedLive: "Published · live",
   featStylesTitle: "Any face, any style",
-  featStylesBody: "Photographs, illustrations, anime and 3D renders. When automatic detection misses a stylized face, place the points by hand and test before you save.",
+  featStylesBody:
+    "Photographs, illustrations, anime and 3D renders. When automatic detection misses a stylized face, place the points by hand and test before you save.",
   stylePhoto: "Photo",
   styleIllustrated: "Illustration",
   styleAnime: "Anime",
@@ -105,11 +114,14 @@ export const landing = {
   platformTitle: "One dashboard for the whole team",
   platformSubtitle: "Everything behind the avatar — voices, keys, sharing and usage — managed in one place.",
   platformTeamTitle: "Organizations and roles",
-  platformTeamBody: "Invite teammates with the right role. Avatars, voices and keys belong to the organization, not to one person.",
+  platformTeamBody:
+    "Invite teammates with the right role. Avatars, voices and keys belong to the organization, not to one person.",
   platformKeysTitle: "A key for every site",
-  platformKeysBody: "Each embed key has its own domain allow-list and usage limit, so a copied snippet won't run anywhere else.",
+  platformKeysBody:
+    "Each embed key has its own domain allow-list and usage limit, so a copied snippet won't run anywhere else.",
   platformShareTitle: "Share links",
-  platformShareBody: "Send a public link where anyone can type and hear your avatar speak. Turn it off whenever you like.",
+  platformShareBody:
+    "Send a public link where anyone can type and hear your avatar speak. Turn it off whenever you like.",
   platformUsageTitle: "Usage at a glance",
   platformUsageBody: "See how much speech each key uses, and set limits before a busy week becomes a surprise.",
   mockLabel: "Preview of the Liveface dashboard",
@@ -126,7 +138,8 @@ export const landing = {
   useEyebrow: "Use cases",
   useTitle: "A face for every conversation",
   useSupportTitle: "Customer support",
-  useSupportBody: "Read help articles aloud, guide people through a form, and greet every visitor with a friendly face.",
+  useSupportBody:
+    "Read help articles aloud, guide people through a form, and greet every visitor with a friendly face.",
   useSalesTitle: "Sales and onboarding",
   useSalesBody: "Walk new visitors through your product in plain words, at any hour, without booking a call.",
   useEduTitle: "Education and training",
@@ -143,7 +156,8 @@ export const landing = {
   devTabJs: "JavaScript",
   devTabRest: "REST API",
   devPoint1: "Paste the tag and the avatar appears. Call Liveface.speak() from a chat reply, a button or a page load.",
-  devPoint2: "Prefer your own renderer? The REST API returns speech audio with timed viseme cues, and a cue endpoint adds per-word timing.",
+  devPoint2:
+    "Prefer your own renderer? The REST API returns speech audio with timed viseme cues, and a cue endpoint adds per-word timing.",
   devPoint3: "Keys are scoped to your domains, with a usage limit on each one.",
 
   // Trust
@@ -164,19 +178,25 @@ export const landing = {
   faqSubtitle: "The quickest way to know is to try it with your own photo.",
   faqCta: "Try it with your photo",
   faqPhotoQ: "What kind of photo works best?",
-  faqPhotoA: "A clear, front-facing portrait with the face evenly lit and the mouth closed or slightly open. Photographs, illustrations, anime and 3D renders all work. If detection misses a stylized face, you can place the points by hand.",
+  faqPhotoA:
+    "A clear, front-facing portrait with the face evenly lit and the mouth closed or slightly open. Photographs, illustrations, anime and 3D renders all work. If detection misses a stylized face, you can place the points by hand.",
   faqCodeQ: "Do I need to write code?",
-  faqCodeA: "No. Paste one script tag and the avatar appears on your page. To make it say something from your own logic — a chat reply, a button, a page load — call Liveface.speak() with any text.",
+  faqCodeA:
+    "No. Paste one script tag and the avatar appears on your page. To make it say something from your own logic — a chat reply, a button, a page load — call Liveface.speak() with any text.",
   faqLanguagesQ: "Which languages and voices can it speak?",
-  faqLanguagesA: "Built-in neural voices cover 13 languages, including English, Spanish, French, German, Arabic, Persian and Hindi. You can also connect your own speech provider, or clone a voice with the speaker's consent.",
+  faqLanguagesA:
+    "Built-in neural voices cover 13 languages, including English, Spanish, French, German, Arabic, Persian and Hindi. You can also connect your own speech provider, or clone a voice with the speaker's consent.",
   faqChatQ: "Can it answer questions like a chatbot?",
-  faqChatA: "Liveface is the face and the voice, not the brain. Send your assistant's replies — from any chatbot, language model or help-desk tool — to Liveface.speak(), and the avatar says them with matching lip-sync.",
+  faqChatA:
+    "Liveface is the face and the voice, not the brain. Send your assistant's replies — from any chatbot, language model or help-desk tool — to Liveface.speak(), and the avatar says them with matching lip-sync.",
   faqMobileQ: "Does it work on phones?",
   faqMobileA: "Yes. It runs in any modern browser, on phones and tablets as well as desktops, with nothing to install.",
   faqEditQ: "Can I change an avatar after it's live?",
-  faqEditA: "Yes. Changes to the voice or the mouth are saved as a draft that you can preview privately. Your website keeps the published version until you press Publish.",
+  faqEditA:
+    "Yes. Changes to the voice or the mouth are saved as a draft that you can preview privately. Your website keeps the published version until you press Publish.",
   faqPrivacyQ: "What happens to the photos and voices I upload?",
-  faqPrivacyA: "They stay in your organization and are used only to build and run your avatars. The one exception is AI, which you agree to first: the photo you upload or the description you type is then sent to Google (Gemini) to create and adjust your avatar’s picture in the style you choose, and to find the points on an animal’s face; and when you publish a realistic person’s avatar, crops of their face are sent to make their teeth and mouth shapes, which are published with the avatar and labelled as AI. We never use your pictures to train AI. Your organization’s owners and admins can turn AI off entirely. Publishing a person’s face requires confirming that you are that person or have their permission. Cloning a voice requires confirming the speaker’s consent, cloned speech is watermarked, and you can delete a voice at any time.",
+  faqPrivacyA:
+    "They stay in your organization and are used only to build and run your avatars. The one exception is AI, which you agree to first: the photo you upload or the description you type is then sent to Google (Gemini) to create and adjust your avatar’s picture in the style you choose, and to find the points on an animal’s face; and when you publish a realistic person’s avatar, crops of their face are sent to make their teeth and mouth shapes, which are published with the avatar and labelled as AI. We never use your pictures to train AI. Your organization’s owners and admins can turn AI off entirely. Publishing a person’s face requires confirming that you are that person or have their permission. Cloning a voice requires confirming the speaker’s consent, cloned speech is watermarked, and you can delete a voice at any time.",
   faqFreeQ: "How much does it cost to start?",
   faqFreeA: "Nothing. Creating an account and building your first avatars is free, and no credit card is needed.",
 

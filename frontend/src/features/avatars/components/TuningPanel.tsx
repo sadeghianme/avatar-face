@@ -2,7 +2,8 @@ import { DEFAULT_TUNING, type EngineTuning, type SpeechPlayer } from "@liveface/
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Icon } from "@/components/ui/Icon";
+import { Button } from "@/components/ui/Button";
+import { Slider } from "@/components/ui/Slider";
 
 interface SliderDef {
   key: keyof EngineTuning;
@@ -34,99 +35,59 @@ export function loadTuning(avatarId: string): EngineTuning {
 }
 
 /**
- * Live animation sliders. Mutates engine.tuning directly (applied on the
- * next frame — no re-render of the preview) and persists per avatar.
- *
- * On its own it is a collapsed card; `embedded`, the sliders alone, for a
- * page that gives it a section of its own (the avatar page's Advanced).
+ * Live animation sliders, the avatar page's Advanced section: they write
+ * engine.tuning (applied on the next frame — no re-render of the preview)
+ * and persist per avatar.
  */
 export function TuningPanel({
   engine,
   avatarId,
   is3d = false,
-  embedded = false,
 }: {
   engine: SpeechPlayer | null;
   avatarId: string;
   is3d?: boolean;
-  embedded?: boolean;
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState<EngineTuning>(() => loadTuning(avatarId));
-  const [open, setOpen] = useState(embedded);
 
-  // Apply persisted values whenever a (new) engine arrives.
+  // The engine follows the values: a new engine gets the persisted ones, a
+  // slider its new one (a handful of numbers, assigned again each time).
   useEffect(() => {
     if (engine && "tuning" in engine) {
       Object.assign((engine as unknown as { tuning: EngineTuning }).tuning, values);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine]);
+  }, [engine, values]);
 
   const update = (key: keyof EngineTuning, value: number) => {
     const next = { ...values, [key]: value };
     setValues(next);
     localStorage.setItem(storageKey(avatarId), JSON.stringify(next));
-    if (engine && "tuning" in engine) {
-      (engine as unknown as { tuning: EngineTuning }).tuning[key] = value;
-    }
   };
 
   const reset = () => {
     localStorage.removeItem(storageKey(avatarId));
     setValues({ ...DEFAULT_TUNING });
-    if (engine && "tuning" in engine) {
-      Object.assign((engine as unknown as { tuning: EngineTuning }).tuning, DEFAULT_TUNING);
-    }
   };
 
   return (
-    <div className={embedded ? "" : "card"}>
-      {!embedded && (
-        <button
-          className="flex w-full items-center justify-between font-medium"
-          aria-expanded={open}
-          onClick={() => setOpen((o) => !o)}
-        >
-          <span className="inline-flex items-center gap-2">
-            <Icon name="sliders" className="h-4 w-4" />
-            {t("tuning")}
-          </span>
-          <Icon
-            name="chevron"
-            className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-90" : ""} rtl:-scale-x-100`}
-          />
-        </button>
-      )}
-      {open && (
-        <div className={`flex flex-col gap-3 ${embedded ? "" : "mt-4"}`}>
-          {SLIDERS.filter((s) => !(is3d && s.photoOnly)).map((slider) => (
-            <div key={slider.key}>
-              <div className="mb-1 flex justify-between text-xs">
-                <label htmlFor={`tune-${slider.key}`} className="text-gray-600 dark:text-gray-300">
-                  {t(slider.labelKey)}
-                </label>
-                <span className="tabular-nums text-gray-400">
-                  {values[slider.key].toFixed(2)}
-                </span>
-              </div>
-              <input
-                id={`tune-${slider.key}`}
-                type="range"
-                className="w-full accent-brand-600"
-                min={slider.min}
-                max={slider.max}
-                step={slider.step}
-                value={values[slider.key]}
-                onChange={(e) => update(slider.key, Number(e.target.value))}
-              />
-            </div>
-          ))}
-          <button className="btn-secondary min-h-10 coarse:min-h-11 self-end px-3 text-xs" onClick={reset}>
-            {t("tuneReset")}
-          </button>
-        </div>
-      )}
+    <div className="flex flex-col gap-3">
+      {SLIDERS.filter((s) => !(is3d && s.photoOnly)).map((slider) => (
+        <Slider
+          key={slider.key}
+          look="compact"
+          id={`tune-${slider.key}`}
+          label={t(slider.labelKey)}
+          min={slider.min}
+          max={slider.max}
+          step={slider.step}
+          value={values[slider.key]}
+          onChange={(value) => update(slider.key, value)}
+        />
+      ))}
+      <Button variant="secondary" size="sm" className="self-end" onClick={reset}>
+        {t("tuneReset")}
+      </Button>
     </div>
   );
 }

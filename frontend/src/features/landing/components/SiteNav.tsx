@@ -3,9 +3,11 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import { LanguageMenu } from "@/components/layout/LanguageMenu";
-import { Icon } from "@/components/ui/Icon";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { ButtonLink } from "@/components/ui/ButtonLink";
+import { IconButton } from "@/components/ui/IconButton";
+import { cx } from "@/lib/cx";
 import { useAuth } from "@/providers/auth";
-import { useTheme } from "@/providers/theme";
 
 const LINKS = [
   { href: "#features", key: "navProduct" },
@@ -15,11 +17,28 @@ const LINKS = [
   { href: "#faq", key: "navFaq" },
 ] as const;
 
+/** A section link in the bar (wide screens). */
+const BAR_LINK = cx(
+  "rounded-lg px-3 py-2 text-[14px] text-gray-600 transition-colors hover:text-gray-950",
+  "coarse:inline-flex coarse:min-h-11 coarse:items-center dark:text-gray-400 dark:hover:text-white"
+);
+
+/** "Log in": words, not a button, beside the Get started button. */
+const LOGIN_LINK = cx(
+  "hidden rounded-full px-3.5 py-2 text-[14px] font-medium text-gray-700 transition-colors hover:text-gray-950",
+  "coarse:min-h-11 coarse:items-center sm:inline-flex dark:text-gray-300 dark:hover:text-white"
+);
+
+/** A section link in the open menu (narrow screens). */
+const MENU_LINK = cx(
+  "block rounded-lg px-2 py-3 text-[15px] font-medium text-gray-800 hover:bg-black/[0.03]",
+  "dark:text-gray-100 dark:hover:bg-white/[0.04]"
+);
+
 /** Sticky, transparent over the hero, solid once the page scrolls. */
 export function SiteNav() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { theme, toggle } = useTheme();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -41,14 +60,18 @@ export function SiteNav() {
 
   return (
     <header
-      className={`sticky top-0 z-50 pt-[env(safe-area-inset-top)] transition-[background-color,border-color,backdrop-filter] duration-300 ${
+      className={cx(
+        "sticky top-0 z-50 pt-[env(safe-area-inset-top)] transition-[background-color,border-color,backdrop-filter] duration-300",
         solid
           ? "border-b border-black/[0.06] bg-white/80 backdrop-blur-xl dark:border-white/[0.07] dark:bg-ink/80"
           : "border-b border-transparent"
-      }`}
+      )}
     >
       <nav className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-5 sm:px-6" aria-label={t("navMain")}>
-        <Link to="/" className="flex shrink-0 items-center gap-2.5 coarse:min-h-11 text-[17px] font-semibold tracking-[-0.02em]">
+        <Link
+          to="/"
+          className="flex shrink-0 items-center gap-2.5 text-[17px] font-semibold tracking-[-0.02em] coarse:min-h-11"
+        >
           <img src="/brand/liveface-mark-512.png" alt="" width={32} height={32} className="h-8 w-8 rounded-[10px]" />
           {t("appName")}
         </Link>
@@ -56,10 +79,7 @@ export function SiteNav() {
         <ul className="ms-6 hidden items-center gap-1 lg:flex">
           {LINKS.map((link) => (
             <li key={link.key}>
-              <a
-                href={link.href}
-                className="rounded-lg px-3 py-2 text-[14px] text-gray-600 coarse:inline-flex coarse:min-h-11 coarse:items-center transition-colors hover:text-gray-950 dark:text-gray-400 dark:hover:text-white"
-              >
+              <a href={link.href} className={BAR_LINK}>
                 {t(link.key)}
               </a>
             </li>
@@ -68,42 +88,30 @@ export function SiteNav() {
 
         <div className="ms-auto flex items-center gap-1.5">
           <LanguageMenu />
-          <button
-            type="button"
-            onClick={toggle}
-            aria-label={t("theme")}
-            title={t("theme")}
-            className="grid place-items-center rounded-lg p-2 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 coarse:h-11 coarse:w-11 dark:hover:bg-white/10 dark:hover:text-white"
-          >
-            <Icon name={theme === "dark" ? "sun" : "moon"} className="h-[18px] w-[18px]" />
-          </button>
+          <ThemeToggle tooltip />
           {user ? (
-            <Link to="/app" className="btn-primary ms-1 hidden rounded-full px-4 sm:inline-flex">
+            <ButtonLink to="/app" className="ms-1 hidden rounded-full px-4 sm:inline-flex">
               {t("openDashboard")}
-            </Link>
+            </ButtonLink>
           ) : (
             <>
-              <Link
-                to="/login"
-                className="hidden rounded-full px-3.5 py-2 coarse:min-h-11 coarse:items-center text-[14px] font-medium text-gray-700 transition-colors hover:text-gray-950 sm:inline-flex dark:text-gray-300 dark:hover:text-white"
-              >
+              <Link to="/login" className={LOGIN_LINK}>
                 {t("login")}
               </Link>
-              <Link to="/register" className="btn-primary ms-1 hidden rounded-full px-4 sm:inline-flex">
+              <ButtonLink to="/register" className="ms-1 hidden rounded-full px-4 sm:inline-flex">
                 {t("getStarted")}
-              </Link>
+              </ButtonLink>
             </>
           )}
-          <button
-            type="button"
-            className="grid place-items-center rounded-lg p-2 text-gray-700 hover:bg-black/5 coarse:h-11 coarse:w-11 lg:hidden dark:text-gray-200 dark:hover:bg-white/10"
-            aria-label={t("navMenu")}
+          <IconButton
+            label={t("navMenu")}
+            icon={open ? "close" : "menu"}
+            iconClassName="h-5 w-5"
+            className="text-gray-700 lg:hidden dark:text-gray-200"
             aria-expanded={open}
             aria-controls="mobile-nav"
             onClick={() => setOpen((v) => !v)}
-          >
-            <Icon name={open ? "close" : "menu"} className="h-5 w-5" />
-          </button>
+          />
         </div>
       </nav>
 
@@ -112,11 +120,7 @@ export function SiteNav() {
           <ul className="flex flex-col">
             {LINKS.map((link) => (
               <li key={link.key}>
-                <a
-                  href={link.href}
-                  onClick={() => setOpen(false)}
-                  className="block rounded-lg px-2 py-3 text-[15px] font-medium text-gray-800 hover:bg-black/[0.03] dark:text-gray-100 dark:hover:bg-white/[0.04]"
-                >
+                <a href={link.href} onClick={() => setOpen(false)} className={MENU_LINK}>
                   {t(link.key)}
                 </a>
               </li>
@@ -124,17 +128,17 @@ export function SiteNav() {
           </ul>
           <div className="mt-4 grid grid-cols-2 gap-2">
             {user ? (
-              <Link to="/app" className="btn-primary col-span-2 py-3">
+              <ButtonLink to="/app" className="col-span-2 py-3">
                 {t("openDashboard")}
-              </Link>
+              </ButtonLink>
             ) : (
               <>
-                <Link to="/login" className="btn-secondary py-3">
+                <ButtonLink to="/login" variant="secondary" className="py-3">
                   {t("login")}
-                </Link>
-                <Link to="/register" className="btn-primary py-3">
+                </ButtonLink>
+                <ButtonLink to="/register" className="py-3">
                   {t("getStarted")}
-                </Link>
+                </ButtonLink>
               </>
             )}
           </div>

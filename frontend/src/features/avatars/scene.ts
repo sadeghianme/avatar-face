@@ -51,7 +51,9 @@ const round3 = (v: number) => Math.round(v * 1000) / 1000;
 
 /** The scene an avatar renders by: its own, or, for one made before
  *  scenes existed, its framing (face is zoom 1, full 0, nothing behind). */
-export function sceneOf(avatar: { scene?: SavedScene | null; framing?: "face" | "full" } | null | undefined): SceneDraft {
+export function sceneOf(
+  avatar: { scene?: SavedScene | null; framing?: "face" | "full" } | null | undefined
+): SceneDraft {
   const saved = avatar?.scene;
   if (saved) {
     return clampScene({
@@ -60,7 +62,11 @@ export function sceneOf(avatar: { scene?: SavedScene | null; framing?: "face" | 
       background: { kind: saved.background?.kind ?? "transparent", color: saved.background?.color },
     });
   }
-  return { zoom: avatar?.framing === "full" ? ZOOM_FULL : ZOOM_FACE, pan: { x: 0, y: 0 }, background: { kind: "transparent" } };
+  return {
+    zoom: avatar?.framing === "full" ? ZOOM_FULL : ZOOM_FACE,
+    pan: { x: 0, y: 0 },
+    background: { kind: "transparent" },
+  };
 }
 
 /** Within the ranges the API accepts, rounded so a drag does not save a
@@ -70,7 +76,10 @@ export function clampScene(scene: SceneDraft): SceneDraft {
   if (background.kind === "color") background.color = normalizeHex(scene.background.color) ?? DEFAULT_COLOR;
   return {
     zoom: round3(clamp(scene.zoom, ZOOM_FULL, ZOOM_MAX)),
-    pan: { x: round3(clamp(scene.pan?.x ?? 0, -PAN_MAX, PAN_MAX)), y: round3(clamp(scene.pan?.y ?? 0, -PAN_MAX, PAN_MAX)) },
+    pan: {
+      x: round3(clamp(scene.pan?.x ?? 0, -PAN_MAX, PAN_MAX)),
+      y: round3(clamp(scene.pan?.y ?? 0, -PAN_MAX, PAN_MAX)),
+    },
     background,
   };
 }
@@ -83,15 +92,22 @@ export function normalizeHex(value: string | null | undefined): string | null {
 }
 
 export function sameScene(a: SceneDraft, b: SceneDraft): boolean {
-  return a.zoom === b.zoom && a.pan.x === b.pan.x && a.pan.y === b.pan.y &&
-    a.background.kind === b.background.kind && (a.background.color ?? null) === (b.background.color ?? null);
+  return (
+    a.zoom === b.zoom &&
+    a.pan.x === b.pan.x &&
+    a.pan.y === b.pan.y &&
+    a.background.kind === b.background.kind &&
+    (a.background.color ?? null) === (b.background.color ?? null)
+  );
 }
 
 /** The scene as the engine takes it: the background picture by its URL. */
 export function engineScene(draft: SceneDraft, imageUrl: string | null | undefined): EngineScene {
   const background: EngineScene["background"] =
     draft.background.kind === "image"
-      ? imageUrl ? { kind: "image", image_url: imageUrl } : { kind: "transparent" }
+      ? imageUrl
+        ? { kind: "image", image_url: imageUrl }
+        : { kind: "transparent" }
       : draft.background.kind === "color"
         ? { kind: "color", color: draft.background.color ?? DEFAULT_COLOR }
         : { kind: "transparent" };
@@ -107,7 +123,10 @@ export function zoomPreset(zoom: number): "face" | "full" | null {
 
 /** The zoom in words, for the slider's aria-valuetext and its readout: a
  *  percentage of the face view (the engine draws 1.3 at 160%). */
-export function zoomText(zoom: number): { key: "sceneZoomFaceValue" | "sceneZoomFullValue" | "sceneZoomPercent"; percent: number } {
+export function zoomText(zoom: number): {
+  key: "sceneZoomFaceValue" | "sceneZoomFullValue" | "sceneZoomPercent";
+  percent: number;
+} {
   const preset = zoomPreset(zoom);
   const percent = Math.round(zoom <= 1 ? zoom * 100 : 100 + (zoom - 1) * 200);
   if (preset === "face") return { key: "sceneZoomFaceValue", percent };
@@ -117,7 +136,13 @@ export function zoomText(zoom: number): { key: "sceneZoomFaceValue" | "sceneZoom
 
 /** The pan moved by a drag of (dx, dy) across a surface of (width, height)
  *  px: dragging the picture right moves the view left. */
-export function panned(pan: { x: number; y: number }, dx: number, dy: number, width: number, height: number): { x: number; y: number } {
+export function panned(
+  pan: { x: number; y: number },
+  dx: number,
+  dy: number,
+  width: number,
+  height: number
+): { x: number; y: number } {
   if (!(width > 0) || !(height > 0)) return pan;
   return {
     x: round3(clamp(pan.x - dx / width, -PAN_MAX, PAN_MAX)),
@@ -129,7 +154,10 @@ export function panned(pan: { x: number; y: number }, dx: number, dy: number, wi
 export function panStepped(pan: { x: number; y: number }, key: string, big: boolean): { x: number; y: number } | null {
   const step = big ? PAN_STEP * 4 : PAN_STEP;
   const moves: Record<string, [number, number]> = {
-    ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step],
+    ArrowLeft: [-step, 0],
+    ArrowRight: [step, 0],
+    ArrowUp: [0, -step],
+    ArrowDown: [0, step],
   };
   const move = moves[key];
   if (!move) return null;
@@ -144,11 +172,17 @@ export function isCutOut(avatar: { original_image_key?: string | null } | null |
 /** The panel's own words for a refused request, by the API's code. */
 export function sceneErrorKey(code: string | undefined): string | null {
   switch (code) {
-    case "unsupported_image_type": return "sceneErrImageType";
-    case "image_too_large": return "sceneErrImageLarge";
-    case "scene_image_invalid": return "sceneErrImageInvalid";
-    case "scene_image_missing": return "sceneErrImageMissing";
-    case "not_a_photo": return "sceneErrNotPhoto";
-    default: return null;
+    case "unsupported_image_type":
+      return "sceneErrImageType";
+    case "image_too_large":
+      return "sceneErrImageLarge";
+    case "scene_image_invalid":
+      return "sceneErrImageInvalid";
+    case "scene_image_missing":
+      return "sceneErrImageMissing";
+    case "not_a_photo":
+      return "sceneErrNotPhoto";
+    default:
+      return null;
   }
 }

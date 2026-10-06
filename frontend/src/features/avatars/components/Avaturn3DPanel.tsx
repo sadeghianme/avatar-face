@@ -1,11 +1,12 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
-import { api, ApiError } from "@/lib/api";
-import type { Avatar } from "@/lib/types";
+import { useAvaturnSession, useImportAvatar } from "@/features/avatars/api";
+import { ApiError } from "@/lib/api";
 
 /**
  * Build a 3D avatar in Avaturn's editor, then import the GLB it hands back.
@@ -19,7 +20,8 @@ import type { Avatar } from "@/lib/types";
 export function Avaturn3DPanel({ orgId }: { orgId: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const session = useAvaturnSession(orgId);
+  const { mutateAsync: importFromUrl } = useImportAvatar(orgId).fromUrl;
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [sessionUrl, setSessionUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -29,11 +31,7 @@ export function Avaturn3DPanel({ orgId }: { orgId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const session = await api.post<{ url: string }>(
-        `/orgs/${orgId}/avatars/avaturn-session`,
-        {}
-      );
-      setSessionUrl(session.url);
+      setSessionUrl(await session.mutateAsync());
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));
     } finally {
@@ -44,7 +42,18 @@ export function Avaturn3DPanel({ orgId }: { orgId: string }) {
   useEffect(() => {
     if (!sessionUrl) return;
 
-    const onMessage = async (event: MessageEvent) => {
+    const importFrom = async (url: string) => {
+      setBusy(true);
+      try {
+        const created = await importFromUrl({ url, name: "3D avatar" });
+        navigate(`/avatars/${created.id}`);
+      } catch (err) {
+        setError(err instanceof ApiError ? err.detail : t("error"));
+        setBusy(false);
+      }
+    };
+
+    const onMessage = (event: MessageEvent) => {
       // Only ever trust messages from the editor we opened. Without this
       // check any page in any tab could hand us a URL to import.
       if (new URL(sessionUrl).origin !== event.origin) return;
@@ -58,28 +67,16 @@ export function Avaturn3DPanel({ orgId }: { orgId: string }) {
       }
       const url: string | undefined = data?.url ?? data?.data?.url;
       if (!url || data?.eventName === undefined) return;
-
-      setBusy(true);
-      try {
-        const created = await api.post<Avatar>(`/orgs/${orgId}/avatars/from-url`, {
-          url,
-          name: "3D avatar",
-        });
-        await queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
-        navigate(`/avatars/${created.id}`);
-      } catch (err) {
-        setError(err instanceof ApiError ? err.detail : t("error"));
-        setBusy(false);
-      }
+      void importFrom(url);
     };
 
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [sessionUrl, orgId, navigate, queryClient, t]);
+  }, [sessionUrl, importFromUrl, navigate, t]);
 
   if (sessionUrl) {
     return (
-      <div className="card p-0">
+      <Card padding="none">
         <iframe
           ref={frameRef}
           src={sessionUrl}
@@ -94,18 +91,17 @@ export function Avaturn3DPanel({ orgId }: { orgId: string }) {
           </p>
         )}
         {error && <p className="field-error p-3">{error}</p>}
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className="card flex flex-wrap items-center justify-between gap-3">
+    <Card className="flex flex-wrap items-center justify-between gap-3">
       <p className="text-[13px] text-gray-500 dark:text-gray-400">{t("avaturnBody")}</p>
-      <button className="btn-primary shrink-0" onClick={() => void start()} disabled={busy}>
-        {busy && <Spinner className="h-4 w-4" />}
+      <Button className="shrink-0" onClick={() => void start()} loading={busy}>
         {t("avaturnStart")}
-      </button>
+      </Button>
       {error && <p className="field-error w-full">{error}</p>}
-    </div>
+    </Card>
   );
 }

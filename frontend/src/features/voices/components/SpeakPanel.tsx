@@ -1,26 +1,22 @@
 import {
   BrowserTTS,
-  listen,
-  streamSpeech,
-  StreamingSpeechPlayer,
-  sttSupported,
   type CuePlayer,
+  listen,
   type SpeechPlayer,
   type StreamHandle,
+  StreamingSpeechPlayer,
+  streamSpeech,
+  sttSupported,
 } from "@liveface/embed";
-import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Icon } from "@/components/ui/Icon";
-import { api, ApiError, fetchStream } from "@/lib/api";
-import {
-  BROWSER_PROVIDER,
-  VoicePicker,
-  defaultVoiceSelection,
-  type SpeechLanguage,
-  type VoiceSelection,
-} from "@/features/voices/components/VoicePicker";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Textarea } from "@/components/ui/Textarea";
+import { BROWSER_PROVIDER, speechStream, useSpeechLanguages } from "@/features/voices/api";
+import { defaultVoiceSelection, VoicePicker, type VoiceSelection } from "@/features/voices/components/VoicePicker";
+import { ApiError } from "@/lib/api";
 
 export function SpeakPanel({
   engine,
@@ -61,20 +57,14 @@ export function SpeakPanel({
   // Pressing Speak on Persian should demonstrate Persian, not an English
   // sentence read by a Persian voice — which is the one thing that makes a
   // language picker feel broken even when it works.
-  const { data: languages } = useQuery({
-    queryKey: ["tts-languages"],
-    queryFn: () => api.get<SpeechLanguage[]>("/tts/languages"),
-  });
+  const { data: languages } = useSpeechLanguages();
   const sample = languages?.find((l) => l.locale === selection.locale)?.sample;
   useEffect(() => {
     if (!edited && sample) setText(sample);
   }, [sample, edited]);
 
   // Free local voices: speechSynthesis plays, the engine just gets cues.
-  const browserTts = useMemo(
-    () => (engine ? new BrowserTTS(engine as unknown as CuePlayer) : null),
-    [engine]
-  );
+  const browserTts = useMemo(() => (engine ? new BrowserTTS(engine as unknown as CuePlayer) : null), [engine]);
 
   // The phrase stream in flight, so Stop and unmount can abort it.
   const streamRef = useRef<StreamHandle | null>(null);
@@ -106,12 +96,7 @@ export function SpeakPanel({
         await player.unlock();
         const handle = streamSpeech(
           engine as unknown as Parameters<typeof streamSpeech>[0],
-          () => fetchStream(`/tts/orgs/${orgId}/stream`, {
-            text,
-            provider: s.provider,
-            voice: s.voice,
-            locale: s.locale,
-          }),
+          () => speechStream(orgId, { text, provider: s.provider, voice: s.voice, locale: s.locale }),
           { player }
         );
         streamRef.current = handle;
@@ -142,7 +127,7 @@ export function SpeakPanel({
   };
 
   return (
-    <section className="card flex flex-col gap-4" aria-label={title}>
+    <Card as="section" className="flex flex-col gap-4" aria-label={title}>
       {title && (
         <div>
           <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h2>
@@ -150,8 +135,9 @@ export function SpeakPanel({
         </div>
       )}
       <VoicePicker value={selection} onChange={setSelection} />
-      <textarea
-        className="input min-h-24"
+      <Textarea
+        aria-label={t("speakPlaceholder")}
+        className="min-h-24"
         placeholder={t("speakPlaceholder")}
         value={text}
         onChange={(e) => {
@@ -161,16 +147,19 @@ export function SpeakPanel({
       />
       {error && <p className="field-error">{error}</p>}
       <div className="flex gap-2">
-        <button
-          className="btn-primary min-h-11 flex-1"
+        <Button
+          size="lg"
+          icon="speaker"
+          className="flex-1"
           disabled={!engine || !text.trim() || busy}
           onClick={() => void speak()}
         >
-          <Icon name="speaker" className="me-1.5 inline h-4 w-4" />
           {t("speak")}
-        </button>
-        <button
-          className="btn-secondary min-h-11"
+        </Button>
+        <Button
+          variant="secondary"
+          size="lg"
+          icon="stop"
           disabled={!engine}
           onClick={() => {
             browserTts?.stop();
@@ -178,21 +167,21 @@ export function SpeakPanel({
             setBusy(false);
           }}
         >
-          <Icon name="stop" className="me-1.5 inline h-4 w-4" />
           {t("stop")}
-        </button>
+        </Button>
         {sttSupported() && (
-          <button
-            className="btn-secondary min-h-11 min-w-11"
+          <Button
+            variant="secondary"
+            size="lg"
+            className="min-w-11"
+            icon={listening ? "ear" : "mic"}
             disabled={listening}
             onClick={() => void dictate()}
             title={t("dictate")}
             aria-label={t("dictate")}
-          >
-            <Icon name={listening ? "ear" : "mic"} className="h-4 w-4" />
-          </button>
+          />
         )}
       </div>
-    </section>
+    </Card>
   );
 }

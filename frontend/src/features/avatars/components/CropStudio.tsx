@@ -1,7 +1,7 @@
 import { useState } from "react";
 
+import { useCropAvatar } from "@/features/avatars/api";
 import { CropBox, type CropRect } from "@/features/avatars/components/CropBox";
-import { api } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
 
 /**
@@ -22,6 +22,7 @@ export function CropStudio({
   onDone: () => void;
   onCancel: () => void;
 }) {
+  const crop = useCropAvatar(orgId, avatar.id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,12 +30,8 @@ export function CropStudio({
     setBusy(true);
     setError(null);
     try {
-      await api.post(`/orgs/${orgId}/avatars/${avatar.id}/crop`, {
-        x: rect.x,
-        y: rect.y,
-        width: rect.w,
-        height: rect.h,
-      });
+      // Resolves once the avatar is fetched again, on its new picture.
+      await crop.mutateAsync({ x: rect.x, y: rect.y, width: rect.w, height: rect.h });
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

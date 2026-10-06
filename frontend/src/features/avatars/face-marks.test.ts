@@ -12,8 +12,8 @@ import {
   FIT_REASON_LABELS,
   handleAt,
   handlesFor,
-  headOutline,
   HEAD_OUTLINE,
+  headOutline,
   marksToSend,
 } from "./face-marks.ts";
 
@@ -95,9 +95,19 @@ describe("the head's outline", () => {
 
   it("goes round the face clockwise from the top, as the server checks it", () => {
     assert.deepEqual(HEAD_OUTLINE, [
-      "top", "upper_right", "right", "lower_right", "bottom", "lower_left", "left", "upper_left",
+      "top",
+      "upper_right",
+      "right",
+      "lower_right",
+      "bottom",
+      "lower_left",
+      "left",
+      "upper_left",
     ]);
-    assert.deepEqual(headOutline(HEAD8), HEAD_OUTLINE.map((edge) => HEAD8[edge]));
+    assert.deepEqual(
+      headOutline(HEAD8),
+      HEAD_OUTLINE.map((edge) => HEAD8[edge])
+    );
   });
 
   it("runs through a chin marked below the head's bottom edge, as the fit does", () => {
@@ -128,8 +138,14 @@ describe("the head's outline", () => {
 
 describe("the handles", () => {
   it("give the head eight, in order round the face, and a four-point head four", () => {
-    const ids = (marks) => handlesFor(marks).filter((h) => h.group === "head").map((h) => h.id);
-    assert.deepEqual(ids(marksWith(HEAD8)), HEAD_OUTLINE.map((edge) => `head.${edge}`));
+    const ids = (marks) =>
+      handlesFor(marks)
+        .filter((h) => h.group === "head")
+        .map((h) => h.id);
+    assert.deepEqual(
+      ids(marksWith(HEAD8)),
+      HEAD_OUTLINE.map((edge) => `head.${edge}`)
+    );
     assert.deepEqual(ids(marksWith(HEAD4)), ["head.top", "head.right", "head.bottom", "head.left"]);
     const temple = handlesFor(marksWith(HEAD8)).find((h) => h.id === "head.upper_left");
     assert.equal(temple.label, "markEdgeUpperLeft");

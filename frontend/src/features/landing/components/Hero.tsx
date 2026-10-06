@@ -1,16 +1,50 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
 
 import { DemoAvatar, useDemo, VoiceMeter } from "@/components/brand/DemoAvatar";
 import { DemoDirector, type DemoSnapshot } from "@/components/brand/demoDirector";
+import { Button } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Icon } from "@/components/ui/Icon";
+import { cx } from "@/lib/cx";
 import { useAuth } from "@/providers/auth";
 
 import { Reveal } from "./Reveal";
 
+/** A faint grid fading out below the headline (`.backdrop-grid`). */
+const GRID = cx(
+  "backdrop-grid absolute inset-0 [--grid-line:rgba(0,0,0,0.045)] [--grid-size:48px] dark:[--grid-line:rgba(255,255,255,0.05)]",
+  "[mask-image:radial-gradient(ellipse_75%_65%_at_50%_20%,black,transparent)]"
+);
+
+const LAYOUT = cx(
+  "mx-auto grid max-w-7xl grid-cols-1 items-center gap-14 px-5 pb-20 pt-10 sm:px-6",
+  "lg:grid-cols-[1.02fr_1fr] lg:gap-10 lg:pb-28 lg:pt-16"
+);
+
+/** The pulsing line above the headline. */
+const BADGE = cx(
+  "inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white/70 px-3 py-1 backdrop-blur",
+  "text-[12.5px] font-medium text-brand-700 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300"
+);
+
+/** The demo's frame, with its warm shadow. */
+const STAGE = cx(
+  "relative overflow-hidden rounded-[30px] border border-black/[0.06] bg-gray-100 dark:border-white/[0.08] dark:bg-panel",
+  "shadow-[0_50px_120px_-40px_rgba(234,106,12,0.55),0_20px_50px_-30px_rgba(0,0,0,0.35)]"
+);
+
+/** A floating card around the stage (wide screens only). */
+const CHIP = cx(
+  "pointer-events-none absolute hidden rounded-2xl border border-black/[0.06] bg-white/90 px-3.5 py-2.5 backdrop-blur-xl",
+  "shadow-[0_18px_40px_-18px_rgba(0,0,0,0.35)] lg:block dark:border-white/[0.08] dark:bg-raised/90"
+);
+
 const LANGUAGE_NAMES: Record<string, string> = {
-  "en-US": "English", "es-ES": "Español", "fr-FR": "Français", "hi-IN": "हिन्दी",
+  "en-US": "English",
+  "es-ES": "Español",
+  "fr-FR": "Français",
+  "hi-IN": "हिन्दी",
 };
 
 export function Hero() {
@@ -20,14 +54,14 @@ export function Hero() {
   return (
     <section className="relative isolate overflow-hidden">
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(0,0,0,0.045)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.045)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_75%_65%_at_50%_20%,black,transparent)] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)]" />
+        <div className={GRID} />
         <div className="absolute -top-48 left-1/2 h-[560px] w-[1000px] -translate-x-1/2 rounded-full bg-brand-500/[0.18] blur-[130px] dark:bg-brand-500/[0.14]" />
       </div>
 
-      <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-14 px-5 pb-20 pt-10 sm:px-6 lg:grid-cols-[1.02fr_1fr] lg:gap-10 lg:pb-28 lg:pt-16">
+      <div className={LAYOUT}>
         <div className="max-w-xl">
           <Reveal>
-            <span className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white/70 px-3 py-1 text-[12.5px] font-medium text-brand-700 backdrop-blur dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300">
+            <span className={BADGE}>
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full rounded-full bg-brand-500 opacity-75 motion-safe:animate-ping" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-500" />
@@ -36,7 +70,12 @@ export function Hero() {
             </span>
           </Reveal>
           <Reveal delay={60}>
-            <h1 className="mt-6 text-balance text-[44px] font-semibold leading-[1.02] tracking-[-0.04em] text-gray-950 sm:text-[60px] lg:text-[68px] dark:text-white">
+            <h1
+              className={cx(
+                "mt-6 text-balance text-[44px] font-semibold leading-[1.02] tracking-[-0.04em] text-gray-950",
+                "sm:text-[60px] lg:text-[68px] dark:text-white"
+              )}
+            >
               {t("heroTitleA")}{" "}
               <span className="bg-gradient-to-br from-brand-400 via-brand-500 to-brand-700 bg-clip-text text-transparent">
                 {t("heroTitleB")}
@@ -50,16 +89,17 @@ export function Hero() {
           </Reveal>
           <Reveal delay={180}>
             <div className="mt-9 flex flex-wrap gap-3">
-              <Link
+              <ButtonLink
                 to={user ? "/app" : "/register"}
-                className="btn-primary group rounded-full px-6 py-3.5 text-[15px] shadow-[0_10px_30px_-10px_rgba(234,106,12,0.7)]"
+                className="group rounded-full px-6 py-3.5 text-[15px] shadow-[0_10px_30px_-10px_rgba(234,106,12,0.7)]"
+                iconEnd="arrow"
+                iconClassName="h-4 w-4 transition-transform group-hover:translate-x-0.5 rtl:rotate-180"
               >
                 {user ? t("openDashboard") : t("heroCtaPrimary")}
-                <Icon name="arrow" className="h-4 w-4 transition-transform group-hover:translate-x-0.5 rtl:rotate-180" />
-              </Link>
-              <a href="#how" className="btn-secondary rounded-full px-6 py-3.5 text-[15px]">
+              </ButtonLink>
+              <ButtonLink href="#how" variant="secondary" className="rounded-full px-6 py-3.5 text-[15px]">
                 {t("heroCtaSecondary")}
-              </a>
+              </ButtonLink>
             </div>
           </Reveal>
           <Reveal delay={240}>
@@ -101,7 +141,7 @@ function HeroStage() {
         aria-hidden="true"
         className="absolute -inset-10 -z-10 rounded-[3rem] bg-gradient-to-br from-brand-400/35 via-brand-500/15 to-transparent blur-3xl motion-safe:animate-glow"
       />
-      <div className="relative overflow-hidden rounded-[30px] border border-black/[0.06] bg-gray-100 shadow-[0_50px_120px_-40px_rgba(234,106,12,0.55),0_20px_50px_-30px_rgba(0,0,0,0.35)] dark:border-white/[0.08] dark:bg-panel">
+      <div className={STAGE}>
         <DemoAvatar
           mode="showcase"
           director={director}
@@ -112,7 +152,12 @@ function HeroStage() {
 
         {demo.phase !== "unavailable" && (
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-4">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-black/45 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-white backdrop-blur-md">
+            <span
+              className={cx(
+                "inline-flex items-center gap-1.5 rounded-full bg-black/45 px-2.5 py-1 backdrop-blur-md",
+                "text-[11px] font-semibold uppercase tracking-[0.08em] text-white"
+              )}
+            >
               <span className="relative flex h-1.5 w-1.5">
                 <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 motion-safe:animate-ping" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
@@ -134,17 +179,17 @@ function HeroStage() {
 function SoundToggle({ director, soundOn }: { director: DemoDirector; soundOn: boolean }) {
   const { t } = useTranslation();
   return (
-    <button
-      type="button"
+    <Button
+      variant="overlay"
       onClick={() => director.setSound(!soundOn)}
       aria-pressed={soundOn}
       aria-label={soundOn ? t("soundOff") : t("soundOn")}
       title={soundOn ? t("soundOff") : t("soundOn")}
-      className="pointer-events-auto inline-flex h-9 min-w-9 items-center justify-center gap-1.5 rounded-full coarse:h-11 coarse:min-w-11 bg-black/45 px-3 text-[12px] font-medium text-white backdrop-blur-md transition hover:bg-black/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+      icon={soundOn ? "speaker" : "mute"}
+      className="pointer-events-auto h-9 min-w-9 gap-1.5 px-3 text-[12px] coarse:h-11 coarse:min-w-11"
     >
-      <Icon name={soundOn ? "speaker" : "mute"} className="h-4 w-4" />
       <span className="hidden sm:inline">{soundOn ? t("soundOnState") : t("soundOffState")}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -156,9 +201,17 @@ function Caption({ demo, director }: { demo: DemoSnapshot; director: DemoDirecto
   // The engine could not load: the still portrait speaks for itself.
   if (demo.phase === "unavailable") return null;
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/40 to-transparent px-5 pb-5 pt-20" aria-live="off">
+    <div
+      className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/40 to-transparent px-5 pb-5 pt-20"
+      aria-live="off"
+    >
       <div className="flex items-center gap-2.5">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11.5px] font-medium text-white backdrop-blur-md">
+        <span
+          className={cx(
+            "inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 backdrop-blur-md",
+            "text-[11.5px] font-medium text-white"
+          )}
+        >
           <Icon name="globe" className="h-3.5 w-3.5" />
           {line ? `${LANGUAGE_NAMES[line.locale] ?? line.locale} · ${line.voiceName}` : t("stageVoiceIdle")}
         </span>
@@ -173,7 +226,7 @@ function Caption({ demo, director }: { demo: DemoSnapshot; director: DemoDirecto
           ? line.words.map((word, i) => (
               <span
                 key={i}
-                className={`transition-colors duration-150 ${i <= demo.wordIndex ? "text-white" : "text-white/40"}`}
+                className={cx("transition-colors duration-150", i <= demo.wordIndex ? "text-white" : "text-white/40")}
               >
                 {word.w}{" "}
               </span>
@@ -190,12 +243,10 @@ function Caption({ demo, director }: { demo: DemoSnapshot; director: DemoDirecto
 /** The platform around the face: each chip is a real step of the pipeline. */
 function StageChips({ demo }: { demo: DemoSnapshot }) {
   const { t } = useTranslation();
-  const chip =
-    "pointer-events-none absolute hidden rounded-2xl border border-black/[0.06] bg-white/90 px-3.5 py-2.5 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.35)] backdrop-blur-xl lg:block dark:border-white/[0.08] dark:bg-raised/90";
   return (
     <>
       {demo.rigged && (
-        <div className={`${chip} -start-6 top-16 xl:-start-14 motion-safe:animate-tick-in`}>
+        <div className={cx(CHIP, "-start-6 top-16 xl:-start-14 motion-safe:animate-tick-in")}>
           <div className="flex items-center gap-2.5 motion-safe:animate-float">
             <span className="grid h-8 w-8 place-items-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400">
               <Icon name="target" className="h-4 w-4" />
@@ -208,7 +259,7 @@ function StageChips({ demo }: { demo: DemoSnapshot }) {
         </div>
       )}
 
-      <div className={`${chip} -end-4 top-[36%] xl:-end-10`}>
+      <div className={cx(CHIP, "-end-4 top-[36%] xl:-end-10")}>
         <div className="motion-safe:animate-float-slow">
           <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-gray-400">{t("chipVisemeTitle")}</p>
           <p className="mt-0.5 font-mono text-[22px] font-semibold leading-none text-brand-600 dark:text-brand-400">
@@ -218,7 +269,7 @@ function StageChips({ demo }: { demo: DemoSnapshot }) {
         </div>
       </div>
 
-      <div className={`${chip} -bottom-12 -start-6 xl:-start-12`}>
+      <div className={cx(CHIP, "-bottom-12 -start-6 xl:-start-12")}>
         <div className="motion-safe:animate-float" style={{ animationDelay: "1.2s" }}>
           <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-gray-400">{t("chipEmbedTitle")}</p>
           <p className="mt-1 font-mono text-[12px] text-gray-800 dark:text-gray-200">
@@ -229,7 +280,7 @@ function StageChips({ demo }: { demo: DemoSnapshot }) {
         </div>
       </div>
 
-      <div className={`${chip} -end-3 -top-4 !rounded-full !px-3 !py-1.5 xl:-end-6`}>
+      <div className={cx(CHIP, "-end-3 -top-4 !rounded-full !px-3 !py-1.5 xl:-end-6")}>
         <p className="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700 dark:text-emerald-400">
           <Icon name="check" className="h-3.5 w-3.5" strokeWidth={2.4} />
           {t("chipPublished")}

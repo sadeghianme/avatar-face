@@ -1,15 +1,18 @@
-import { ReactNode, useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, useLocation } from "react-router-dom";
 
-import { Icon, type IconName } from "@/components/ui/Icon";
 import { LanguageMenu } from "@/components/layout/LanguageMenu";
+import { OrgSwitcher } from "@/components/layout/OrgSwitcher";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { Button } from "@/components/ui/Button";
+import { Drawer } from "@/components/ui/Drawer";
+import { Icon, type IconName } from "@/components/ui/Icon";
+import { IconButton } from "@/components/ui/IconButton";
 import { Spinner } from "@/components/ui/Spinner";
-import { focusableIn, nextFocusIndex } from "@/lib/focus";
+import { cx } from "@/lib/cx";
 import { useAuth } from "@/providers/auth";
 import { useOrg } from "@/providers/org";
-import { useTheme } from "@/providers/theme";
-import { OrgSwitcher } from "@/components/layout/OrgSwitcher";
 
 /**
  * One list, no section headers.
@@ -18,6 +21,12 @@ import { OrgSwitcher } from "@/components/layout/OrgSwitcher";
  * the labels took more vertical space than the links they organised, which is
  * exactly the kind of structure that makes a small app feel like paperwork.
  */
+/** The bar over every page: 3.5rem under the status bar, frosted. */
+const TOP_BAR = cx(
+  "sticky top-0 z-30 h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)]",
+  "border-b border-black/[0.07] bg-white/80 backdrop-blur-xl dark:border-white/[0.07] dark:bg-ink/80"
+);
+
 const NAV: { to: string; key: string; icon: IconName }[] = [
   { to: "/app", key: "avatars", icon: "faces" },
   { to: "/photoface-hd", key: "photofaceHD", icon: "cube" },
@@ -50,23 +59,21 @@ function useCrumb(): string {
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
-  const { theme, toggle } = useTheme();
   const [open, setOpen] = useState(false);
   const crumb = useCrumb();
   const { pathname } = useLocation();
   // The creation wizard uses the whole content area beside the rail, with
   // its own sticky progress and fixed action bar (features/avatars wizard).
   const wide = pathname.startsWith("/avatars/new");
-  const drawer = useDrawer(open, setOpen, pathname);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  // Any navigation closes the drawer: a link in it, or the browser's Back.
+  useEffect(() => setOpen(false), [pathname]);
   const { current, loading, setupFailed, retrySetup } = useOrg();
   const initial = (user?.display_name || user?.username || "?").charAt(0).toUpperCase();
 
   const sidebar = (
     <div className="flex min-h-full flex-col pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
-      <Link
-        to="/"
-        className="flex items-center gap-2.5 px-5 pb-6 pt-5 text-[15px] font-semibold tracking-[-0.01em]"
-      >
+      <Link to="/" className="flex items-center gap-2.5 px-5 pb-6 pt-5 text-[15px] font-semibold tracking-[-0.01em]">
         <img src="/brand/liveface-mark-512.png" alt="" className="h-7 w-7 rounded-[9px]" />
         {t("appName")}
       </Link>
@@ -96,7 +103,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         ))}
       </nav>
 
-      <button
+      {/* The account row: who is signed in, and signing out. A one-off
+          composition (the kit's unstyled button), 44px+ tall as drawn. */}
+      <Button
+        variant="unstyled"
         onClick={logout}
         className="mx-3 mb-3 flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"
       >
@@ -104,12 +114,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           {initial}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium">
-            {user?.display_name || user?.username}
-          </span>
+          <span className="block truncate text-[13px] font-medium">{user?.display_name || user?.username}</span>
           <span className="block truncate text-[11.5px] text-gray-400">{t("logout")}</span>
         </span>
-      </button>
+      </Button>
     </div>
   );
 
@@ -121,63 +129,42 @@ export function AppShell({ children }: { children: ReactNode }) {
         {sidebar}
       </aside>
 
-      {open && (
-        <>
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-label={t("closeMenu")}
-            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-            onClick={() => setOpen(false)}
-          />
-          {/* A modal drawer: focus moves in and stays in (Tab wraps); Esc,
-              the backdrop and any navigation close it; focus goes back to
-              the menu button. Fixed, so the body's side inset does not
-              reach it: its own. It scrolls when a phone on its side is
-              shorter than the list. */}
-          <aside
-            id="app-drawer"
-            ref={drawer.ref}
-            role="dialog"
-            aria-modal="true"
-            aria-label={t("navGroupMenu")}
-            onKeyDown={drawer.onKeyDown}
-            className="fixed inset-y-0 start-0 z-50 box-content w-[232px] overflow-y-auto overscroll-contain bg-white ps-[env(safe-area-inset-left)] lg:hidden dark:bg-panel"
-          >
-            {sidebar}
-          </aside>
-        </>
-      )}
+      {/* Below lg the same list is a modal drawer (Drawer: focus in and
+          kept in, Esc and the backdrop close it, focus back to the menu
+          button). Fixed, so the body's side inset does not reach it: its
+          own. */}
+      <Drawer
+        id="app-drawer"
+        open={open}
+        onClose={() => setOpen(false)}
+        label={t("navGroupMenu")}
+        closeLabel={t("closeMenu")}
+        opener={menuButton}
+        className="w-[232px]"
+      >
+        {sidebar}
+      </Drawer>
 
       <div className="lg:ms-[232px]">
         {/* 3.5rem under the status bar: the wizard's progress sticks just below it. */}
-        <header className="sticky top-0 z-30 h-[calc(3.5rem+env(safe-area-inset-top))] border-b pt-[env(safe-area-inset-top)] border-black/[0.07] bg-white/80 backdrop-blur-xl dark:border-white/[0.07] dark:bg-ink/80">
-          <div
-            className="flex h-full items-center gap-3 px-4"
-          >
-            <button
-              ref={drawer.opener}
-              type="button"
-              aria-label={t("openMenu")}
+        <header className={TOP_BAR}>
+          <div className="flex h-full items-center gap-3 px-4">
+            <IconButton
+              ref={menuButton}
+              label={t("openMenu")}
+              icon="menu"
+              iconClassName="h-5 w-5"
               aria-controls="app-drawer"
               aria-expanded={open}
-              className="-ms-1 grid place-items-center rounded-lg p-1.5 text-gray-500 hover:bg-black/5 coarse:-ms-2.5 coarse:h-11 coarse:w-11 lg:hidden dark:hover:bg-white/10"
+              className="-ms-1 p-1.5 coarse:-ms-2.5 lg:hidden"
               onClick={() => setOpen(true)}
-            >
-              <Icon name="menu" />
-            </button>
+            />
 
             <h1 className="truncate text-[15px] font-medium tracking-[-0.01em]">{crumb}</h1>
 
             <div className="ms-auto flex items-center gap-1">
               <LanguageMenu />
-              <button
-                className="grid place-items-center rounded-lg p-2 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 coarse:h-11 coarse:w-11 dark:hover:bg-white/10 dark:hover:text-white"
-                onClick={toggle}
-                aria-label={t("theme")}
-              >
-                <Icon name={theme === "dark" ? "sun" : "moon"} className="h-[18px] w-[18px]" />
-              </button>
+              <ThemeToggle />
             </div>
           </div>
         </header>
@@ -190,9 +177,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           ) : setupFailed ? (
             <div role="alert" className="space-y-3">
               <p className="text-sm text-gray-600 dark:text-gray-300">{t("workspaceFailed")}</p>
-              <button type="button" className="btn-primary min-h-11" onClick={retrySetup}>
+              <Button size="lg" onClick={retrySetup}>
                 {t("retry")}
-              </button>
+              </Button>
             </div>
           ) : (
             <p role="status" className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
@@ -203,60 +190,4 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
     </div>
   );
-}
-
-/**
- * The phone and tablet drawer, as a modal: focus to the current page's link
- * on open, Tab and Shift+Tab wrap inside it (lib/focus), Esc closes it, any
- * change of route closes it, the page under it does not scroll, and focus
- * goes back to the menu button. Widening the window to the rail's
- * breakpoint closes it too, so the scroll lock never outlives it.
- */
-function useDrawer(open: boolean, setOpen: (open: boolean) => void, pathname: string) {
-  const ref = useRef<HTMLElement>(null);
-  const opener = useRef<HTMLButtonElement>(null);
-
-  // Any navigation: a link in the drawer, or the browser's Back.
-  useEffect(() => setOpen(false), [pathname, setOpen]);
-
-  useEffect(() => {
-    if (!open) return;
-    const panel = ref.current;
-    if (panel) {
-      const items = focusableIn(panel);
-      (items.find((el) => el.getAttribute("aria-current") === "page") ?? items[0])?.focus();
-    }
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    const wide = window.matchMedia("(min-width: 1024px)");
-    const onWide = () => {
-      if (wide.matches) setOpen(false);
-    };
-    const root = document.documentElement;
-    const overflow = root.style.overflow;
-    root.style.overflow = "hidden";
-    document.addEventListener("keydown", onKey);
-    wide.addEventListener("change", onWide);
-    const button = opener.current;
-    return () => {
-      root.style.overflow = overflow;
-      document.removeEventListener("keydown", onKey);
-      wide.removeEventListener("change", onWide);
-      const active = document.activeElement;
-      if (!active || active === document.body || !active.isConnected || panel?.contains(active)) {
-        button?.focus({ preventScroll: true });
-      }
-    };
-  }, [open, setOpen]);
-
-  const onKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
-    if (event.key !== "Tab" || !ref.current) return;
-    const items = focusableIn(ref.current);
-    const next = nextFocusIndex(items.indexOf(document.activeElement as HTMLElement), items.length, event.shiftKey);
-    event.preventDefault();
-    if (next >= 0) items[next].focus();
-  }, []);
-
-  return { ref, opener, onKeyDown };
 }

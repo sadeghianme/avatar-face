@@ -1,6 +1,13 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 
+import { cx } from "@/lib/cx";
 import { focusableIn, nextFocusIndex, returnFocus } from "@/lib/focus";
+
+/** The dialog's sheet: centred, 1rem clear of every edge, scrolling inside. */
+const SHEET = cx(
+  "m-auto max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto rounded-2xl p-5 shadow-xl sm:p-6",
+  "border border-gray-200 bg-white text-gray-900 backdrop:bg-black/50 dark:border-line dark:bg-panel dark:text-gray-100"
+);
 
 /**
  * A modal dialog: the native <dialog> opened with showModal(), which makes
@@ -77,8 +84,7 @@ export function Dialog({
         close.current();
       }}
       onKeyDown={onKeyDown}
-      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-gray-200
-        bg-white p-5 text-gray-900 shadow-xl backdrop:bg-black/50 sm:p-6 dark:border-line dark:bg-panel dark:text-gray-100"
+      className={SHEET}
     >
       {open ? children : null}
     </dialog>

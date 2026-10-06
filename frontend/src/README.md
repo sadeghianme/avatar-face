@@ -6,12 +6,14 @@ src/
 ├── app/                composition root: routes, route guards
 ├── features/           one folder per product area (see below)
 ├── components/         shared UI only
-│   ├── ui/             Icon, Spinner, StatusBadge — used by 3+ features
-│   ├── layout/         AppShell, OrgSwitcher, LanguageMenu
+│   ├── ui/             the UI kit: Button, Field, Input, Card, Disclosure,
+│   │                   Dialog, SegmentedControl… (docs/frontend-ui.md)
+│   ├── layout/         AppShell, OrgSwitcher, LanguageMenu, ThemeToggle
 │   └── brand/          DemoAvatar: the live product avatar on landing + sign-in
 ├── assets/             media imported by code — hashed names, cached forever
 ├── providers/          React contexts: auth, org, theme
-├── lib/                framework-free code: api client, types, image, recorder
+├── lib/                framework-free code: api client, query keys, cx,
+│                       types, image, recorder
 ├── i18n/               i18next init + locales/<lang>/<feature>.ts
 └── devtools/           console harnesses; imported by nothing
 ```
@@ -21,9 +23,14 @@ src/
 ```
 features/<name>/
 ├── index.ts            the ONLY thing other code may import
+├── api.ts (or api/)    its server calls, as hooks, and what each refreshes
 ├── pages/              route components
 └── components/         private to this feature
 ```
+
+Components never call the client themselves: a feature's `api` module
+does, with its query keys from `lib/queryKeys.ts` (lint enforces it; the
+rules and the few exceptions are in docs/frontend-ui.md, "Data").
 
 A feature owns its pages and the components only it uses. Two thirds of the
 old flat `components/` folder was private to a single page; it now lives with
@@ -72,5 +79,5 @@ served `no-cache`.
 - No `store/`. Server state is TanStack Query's cache; session state is the
   two providers; UI preference is `providers/theme`. A second store would copy
   the first and drift.
-- No `hooks/` yet. Feature hooks live in their feature; a hook used by three
-  features earns `lib/`.
+- No top-level `hooks/`. Feature hooks live in their feature
+  (`features/<x>/hooks/`); a hook used by three features earns `lib/`.

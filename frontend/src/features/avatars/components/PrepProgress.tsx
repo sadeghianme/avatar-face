@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Banner } from "@/components/ui/Banner";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { cx } from "@/lib/cx";
 import type { Avatar } from "@/lib/types";
 
 const STALL_SECONDS = 60;
@@ -35,18 +39,19 @@ export function PrepProgress({
   const stalled = elapsed >= STALL_SECONDS;
 
   return (
-    <div className="card">
+    <Card>
       <ol className="flex flex-col gap-3">
         {steps.map((label, i) => (
           <li key={label} className="flex items-center gap-3">
             <span
-              className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+              className={cx(
+                "flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold",
                 i < stepIndex
                   ? "bg-emerald-500 text-white"
                   : i === stepIndex
                     ? "animate-pulse bg-brand-600 text-white"
                     : "bg-gray-200 text-gray-500 dark:bg-gray-700"
-              }`}
+              )}
             >
               {i < stepIndex ? "✓" : i + 1}
             </span>
@@ -56,18 +61,26 @@ export function PrepProgress({
       </ol>
       <p className="mt-4 text-sm text-gray-400">{t("prep.elapsed", { seconds: elapsed })}</p>
       {stalled && (
-        <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
-          <p className="mb-2">{t("prep.stalled")}</p>
-          <button className="btn-secondary" onClick={onRetry}>
-            {t("retry")}
-          </button>
-          {error && (
-            <p className="field-error mt-2" role="alert">
-              {error}
-            </p>
-          )}
-        </div>
+        <Banner
+          appearance="soft"
+          tone="warning"
+          className="mt-3"
+          actions={
+            <Button variant="secondary" onClick={onRetry}>
+              {t("retry")}
+            </Button>
+          }
+          footer={
+            error && (
+              <p className="field-error mt-2" role="alert">
+                {error}
+              </p>
+            )
+          }
+        >
+          {t("prep.stalled")}
+        </Banner>
       )}
-    </div>
+    </Card>
   );
 }

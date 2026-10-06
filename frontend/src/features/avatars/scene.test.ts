@@ -5,18 +5,41 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  clampScene, engineScene, isCutOut, normalizeHex, panned, panStepped, sameScene, sceneErrorKey, sceneOf,
-  SWATCHES, ZOOM_MAX, zoomPreset, zoomText,
+  clampScene,
+  engineScene,
+  isCutOut,
+  normalizeHex,
+  panned,
+  panStepped,
+  sameScene,
+  sceneErrorKey,
+  sceneOf,
+  SWATCHES,
+  ZOOM_MAX,
+  zoomPreset,
+  zoomText,
 } from "./scene.ts";
 
 describe("sceneOf", () => {
   it("reads the saved scene, and falls back to the framing for an avatar from before", () => {
-    assert.deepEqual(sceneOf({ framing: "full" }), { zoom: 0, pan: { x: 0, y: 0 }, background: { kind: "transparent" } });
-    assert.deepEqual(sceneOf({ framing: "face" }), { zoom: 1, pan: { x: 0, y: 0 }, background: { kind: "transparent" } });
+    assert.deepEqual(sceneOf({ framing: "full" }), {
+      zoom: 0,
+      pan: { x: 0, y: 0 },
+      background: { kind: "transparent" },
+    });
+    assert.deepEqual(sceneOf({ framing: "face" }), {
+      zoom: 1,
+      pan: { x: 0, y: 0 },
+      background: { kind: "transparent" },
+    });
     assert.equal(sceneOf(null).zoom, 1);
     const saved = sceneOf({
       framing: "full",
-      scene: { zoom: 1.2, pan: { x: 0.25, y: -0.5 }, background: { kind: "color", color: "#1E3A8A", has_image: false } },
+      scene: {
+        zoom: 1.2,
+        pan: { x: 0.25, y: -0.5 },
+        background: { kind: "color", color: "#1E3A8A", has_image: false },
+      },
     });
     assert.deepEqual(saved, { zoom: 1.2, pan: { x: 0.25, y: -0.5 }, background: { kind: "color", color: "#1e3a8a" } });
   });
@@ -30,8 +53,14 @@ describe("clampScene", () => {
     assert.equal(clampScene({ zoom: Number.NaN, pan: { x: 0, y: 0 }, background: { kind: "transparent" } }).zoom, 0);
   });
   it("gives a colour background a colour, and drops a colour from the others", () => {
-    assert.equal(clampScene({ zoom: 1, pan: { x: 0, y: 0 }, background: { kind: "color", color: "nope" } }).background.color, SWATCHES[4].hex);
-    assert.equal(clampScene({ zoom: 1, pan: { x: 0, y: 0 }, background: { kind: "image", color: "#ffffff" } }).background.color, undefined);
+    assert.equal(
+      clampScene({ zoom: 1, pan: { x: 0, y: 0 }, background: { kind: "color", color: "nope" } }).background.color,
+      SWATCHES[4].hex
+    );
+    assert.equal(
+      clampScene({ zoom: 1, pan: { x: 0, y: 0 }, background: { kind: "image", color: "#ffffff" } }).background.color,
+      undefined
+    );
   });
 });
 
@@ -54,9 +83,15 @@ describe("colours", () => {
 describe("the engine's scene", () => {
   it("names the picture by its URL, and shows nothing when there is none yet", () => {
     const draft = { zoom: 0.5, pan: { x: 0.1, y: 0 }, background: { kind: "image" as const } };
-    assert.deepEqual(engineScene(draft, "https://x/bg.webp").background, { kind: "image", image_url: "https://x/bg.webp" });
+    assert.deepEqual(engineScene(draft, "https://x/bg.webp").background, {
+      kind: "image",
+      image_url: "https://x/bg.webp",
+    });
     assert.deepEqual(engineScene(draft, null).background, { kind: "transparent" });
-    assert.deepEqual(engineScene({ ...draft, background: { kind: "color", color: "#112233" } }, null).background, { kind: "color", color: "#112233" });
+    assert.deepEqual(engineScene({ ...draft, background: { kind: "color", color: "#112233" } }, null).background, {
+      kind: "color",
+      color: "#112233",
+    });
   });
 });
 

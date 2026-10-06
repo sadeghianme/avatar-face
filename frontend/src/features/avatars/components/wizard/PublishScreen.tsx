@@ -1,16 +1,24 @@
 import type { AvatarEngine } from "@liveface/embed";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Icon } from "@/components/ui/Icon";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Spinner } from "@/components/ui/Spinner";
+import { creationRequests } from "@/features/avatars/api";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
-import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
 import { JobProgress, useSeenStages } from "@/features/avatars/components/create/JobProgress";
+import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
 import { PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
 import { BackButton, PhoneNote, StepFooter } from "@/features/avatars/components/wizard/Footer";
-import { useRadioGroup } from "@/features/avatars/components/wizard/radio";
+import { consentProblem, type FaceStatement } from "@/features/avatars/consent";
 import {
   anchorsCurrent,
+  type CreationAnchors,
   currentStep,
+  type DraftStore,
   errorText,
   finishRows,
   isJobActive,
@@ -18,13 +26,8 @@ import {
   mouthExpected,
   pickMarks,
   rememberFinishNotice,
-  type CreationAnchors,
-  type DraftStore,
-  type FinishResult,
-  type PreviewRig,
 } from "@/features/avatars/creation";
-import { consentProblem, type FaceStatement } from "@/features/avatars/consent";
-import { FIT_REASON_LABELS, type FaceMarks, type FitReason } from "@/features/avatars/face-marks";
+import { type FaceMarks, FIT_REASON_LABELS, type FitReason } from "@/features/avatars/face-marks";
 import type { ConsentApi } from "@/features/avatars/hooks/useConsent";
 import type { Run } from "@/features/avatars/hooks/useCreation";
 import { LINES } from "@/features/avatars/lines";
@@ -39,9 +42,8 @@ import {
   type WizardCreation,
 } from "@/features/avatars/wizard";
 import { SampleSpeech } from "@/features/voices";
-import { Icon } from "@/components/ui/Icon";
-import { Spinner } from "@/components/ui/Spinner";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { cx } from "@/lib/cx";
 
 // The preview follows moved points this long after the last move.
 const PREVIEW_DELAY_MS = 400;
@@ -157,9 +159,17 @@ function PublishingPicture({ creation }: { creation: WizardCreation }) {
   const image = currentStep(creation);
   if (!image) return null;
   return (
-    <div className={`relative mx-auto aspect-square w-48 overflow-hidden rounded-full border-4 border-white shadow-xl dark:border-raised ${PICTURE_BACKDROP}`}>
+    <div
+      className={cx(
+        "relative mx-auto aspect-square w-48 overflow-hidden rounded-full border-4 border-white shadow-xl dark:border-raised",
+        PICTURE_BACKDROP
+      )}
+    >
       <img src={image.url} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
-      <span aria-hidden="true" className="absolute inset-0 rounded-full ring-2 ring-brand-500/60 motion-safe:animate-glow" />
+      <span
+        aria-hidden="true"
+        className="absolute inset-0 rounded-full ring-2 ring-brand-500/60 motion-safe:animate-glow"
+      />
     </div>
   );
 }
@@ -189,7 +199,7 @@ function Editor({
 }) {
   const { t } = useTranslation();
   const ids = useId();
-  const base = `/orgs/${orgId}/creations/${creation.id}`;
+  const requests = useMemo(() => creationRequests(orgId, creation.id), [orgId, creation.id]);
   const plan = planOf(creation);
   const line = LINES[creation.face_type ?? "human"];
   const found = faceFound(anchors);
@@ -197,7 +207,6 @@ function Editor({
   // The big picture shows the points (to drag) or the talking preview: two
   // canvases that cannot be one. Points first; playing the sample switches.
   const [view, setView] = useState<PublishView>("points");
-  const viewRadio = useRadioGroup(PUBLISH_VIEWS, view, setView);
   const [marks, setMarks] = useState<FaceMarks>(anchors.marks);
   const [confirmed, setConfirmed] = useState(false);
   const [reasons, setReasons] = useState<FitReason[]>(anchors.validation.reasons);
@@ -216,44 +225,54 @@ function Editor({
   const edited = JSON.stringify(marks) !== JSON.stringify(anchors.marks);
   const footer = footerPlan("publish");
 
+  // Whether the page says "fix the points": per anchors (the editor is
+  // keyed by them); onFixing is the wizard's state setter.
   useEffect(() => {
     onFixing(!found);
-    // Once, for these anchors (the editor is keyed by them).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [onFixing, found]);
 
   // Blob URLs are a real allocation: each is dropped when replaced.
-  useEffect(() => () => {
-    if (rigUrl) URL.revokeObjectURL(rigUrl);
-  }, [rigUrl]);
+  useEffect(
+    () => () => {
+      if (rigUrl) URL.revokeObjectURL(rigUrl);
+    },
+    [rigUrl]
+  );
 
-  // The rig Publish would build, fitted without saving; only the newest
-  // answer lands.
+  // What the preview request reads when it goes, not what starts it: whether
+  // the marks were moved, how to say an error, and whether a preview is up
+  // already (which only picks the delay).
+  const previewInputs = useRef({ edited, refetch, t, shown: false });
+  previewInputs.current = { edited, refetch, t, shown: rigUrl !== null };
+
+  // The rig Publish would build, fitted without saving; it follows the
+  // marks, and only the newest answer lands.
   useEffect(() => {
     const request = ++latest.current;
-    const timer = window.setTimeout(async () => {
-      try {
-        const result = await api.post<PreviewRig>(`${base}/preview-rig`, {
-          anchors_id: anchors.id,
-          ...(edited ? { marks } : {}),
-        });
-        if (request !== latest.current) return;
-        setRigUrl(URL.createObjectURL(new Blob([JSON.stringify(result.rig)], { type: "application/json" })));
-        setReasons(result.reasons);
-        setPreviewError(null);
-      } catch (err) {
-        if (request !== latest.current) return;
-        if (err instanceof ApiError && err.code === "anchors_stale") {
-          void refetch();
-          return;
+    const timer = window.setTimeout(
+      async () => {
+        const { edited, refetch, t } = previewInputs.current;
+        try {
+          const result = await requests.previewRig({ anchors_id: anchors.id, ...(edited ? { marks } : {}) });
+          if (request !== latest.current) return;
+          setRigUrl(URL.createObjectURL(new Blob([JSON.stringify(result.rig)], { type: "application/json" })));
+          setReasons(result.reasons);
+          setPreviewError(null);
+        } catch (err) {
+          if (request !== latest.current) return;
+          if (err instanceof ApiError && err.code === "anchors_stale") {
+            void refetch();
+            return;
+          }
+          setPreviewError(
+            err instanceof ApiError ? errorText(t, err.code, err.detail, err.retryAfter) : t("wzPreviewFailed")
+          );
         }
-        setPreviewError(err instanceof ApiError ? errorText(t, err.code, err.detail, err.retryAfter) : t("wzPreviewFailed"));
-      }
-    }, rigUrl ? PREVIEW_DELAY_MS : 0);
+      },
+      previewInputs.current.shown ? PREVIEW_DELAY_MS : 0
+    );
     return () => window.clearTimeout(timer);
-    // The preview follows the marks; rigUrl only picks the delay.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [marks, anchors.id, base]);
+  }, [marks, anchors.id, requests]);
 
   const blocked = reasons.length > 0;
   const needsConfirm = !found;
@@ -278,7 +297,7 @@ function Editor({
       "finish",
       async () => {
         const consentId = statementScope ? (await consent.record(statementScope, creation.id)).id : undefined;
-        return api.post<FinishResult>(`${base}/finish`, {
+        return requests.finish({
           name,
           anchors_id: anchors.id,
           ...(consentId ? { consent_id: consentId } : {}),
@@ -319,8 +338,12 @@ function Editor({
 
   const preview = (
     <div
-      className={`relative overflow-hidden rounded-3xl border border-gray-200 dark:border-line ${PICTURE_BACKDROP}
-        [&_canvas]:block [&_canvas]:max-h-[max(300px,calc(100dvh-27.5rem))] [&_canvas]:max-w-full [&_canvas]:!w-auto`}
+      className={cx(
+        "relative overflow-hidden rounded-3xl border border-gray-200 dark:border-line",
+        PICTURE_BACKDROP,
+        // The canvas as tall as the screen leaves, its width following.
+        "[&_canvas]:block [&_canvas]:max-h-[max(300px,calc(100dvh-27.5rem))] [&_canvas]:max-w-full [&_canvas]:!w-auto"
+      )}
     >
       {rigUrl && texture ? (
         <AvatarPreview rigUrl={rigUrl} textureUrl={texture} size={640} soft onEngine={setEngine} />
@@ -349,27 +372,21 @@ function Editor({
         <div className="min-w-0">
           <div className="mx-auto" style={fit}>
             <div className="mb-3 flex justify-center">
-              <div
-                role="radiogroup"
-                aria-label={t("wzViewLabel")}
-                className="inline-flex gap-1 rounded-xl bg-gray-100 p-1 dark:bg-white/[0.05]"
-              >
-                {PUBLISH_VIEWS.map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    {...viewRadio(v)}
-                    className={`inline-flex min-h-10 coarse:min-h-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-4 ${
-                      view === v
-                        ? "bg-white text-gray-900 shadow-sm ring-1 ring-black/5 dark:bg-raised dark:text-white dark:ring-white/10"
-                        : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-                    }`}
-                  >
-                    <Icon name={v === "points" ? "target" : "speaker"} className="h-4 w-4" />
-                    {t(`wzView_${v}`)}
-                  </button>
-                ))}
-              </div>
+              <SegmentedControl
+                look="raised"
+                label={t("wzViewLabel")}
+                options={PUBLISH_VIEWS.map((v) => ({
+                  value: v,
+                  label: (
+                    <>
+                      <Icon name={v === "points" ? "target" : "speaker"} className="h-4 w-4" />
+                      {t(`wzView_${v}`)}
+                    </>
+                  ),
+                }))}
+                value={view}
+                onChange={setView}
+              />
             </div>
 
             {view === "points" && texture && (
@@ -398,7 +415,10 @@ function Editor({
                 {PARTS.map((part) => (
                   <li
                     key={part}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300"
+                    className={cx(
+                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium",
+                      "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300"
+                    )}
                   >
                     <Icon name="check" className="h-3 w-3" strokeWidth={2.6} />
                     {t(`wzFound_${part}`)}
@@ -415,18 +435,22 @@ function Editor({
           )}
 
           <div>
-            <button
-              type="button"
-              className="inline-flex min-h-10 coarse:min-h-11 items-center gap-2 rounded-lg text-sm font-medium text-brand-700 hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline dark:text-brand-300 dark:disabled:text-gray-600"
+            {/* Greyed, not faded, while there is nothing to reset. */}
+            <Button
+              variant="link"
+              icon="undo"
+              className="min-h-10 gap-2 rounded-lg text-sm disabled:text-gray-400 disabled:opacity-100 coarse:min-h-11 dark:disabled:text-gray-600"
               onClick={() => setMarks(anchors.marks)}
               disabled={!edited || busy !== null}
             >
-              <Icon name="undo" className="h-4 w-4" />
               {t("wzResetPoints")}
-            </button>
+            </Button>
             <details className="group mt-1 hidden text-xs text-gray-500 dark:text-gray-400 sm:block">
               <summary className="inline-flex min-h-8 coarse:min-h-11 cursor-pointer list-none items-center gap-1 font-medium hover:text-gray-700 dark:hover:text-gray-200">
-                <Icon name="chevron" className="h-3.5 w-3.5 transition-transform group-open:rotate-90 rtl:-scale-x-100" />
+                <Icon
+                  name="chevron"
+                  className="h-3.5 w-3.5 transition-transform group-open:rotate-90 rtl:-scale-x-100"
+                />
                 {t("wzKeysTitle")}
               </summary>
               <p className="mt-1 leading-relaxed">{t("markFaceKeys")}</p>
@@ -440,13 +464,15 @@ function Editor({
               orgId={orgId}
               text={t("wzSample")}
               labels={{ play: t("wzPlay"), stop: t("wzStop") }}
-              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 text-sm font-semibold text-gray-900 shadow-sm transition hover:border-brand-300 hover:bg-brand-50/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:opacity-60 dark:border-line dark:bg-raised dark:text-white dark:hover:border-brand-500/40 [&_svg]:text-brand-600"
             />
             {previewError && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{previewError}</p>}
           </div>
 
           {blocked && (
-            <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100">
+            <div
+              role="alert"
+              className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100"
+            >
               <p className="font-medium">{t("wzFitProblems")}</p>
               <ul className="mt-1 list-disc ps-5">
                 {reasons.map((reason) => (
@@ -457,30 +483,26 @@ function Editor({
           )}
 
           {needsConfirm && (
-            <label className="flex cursor-pointer items-start gap-3 coarse:min-h-11 text-sm text-gray-800 dark:text-gray-200">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"
-                checked={confirmed}
-                onChange={(e) => setConfirmed(e.target.checked)}
-              />
-              <span>{t("wzPointsConfirm")}</span>
-            </label>
+            <Checkbox
+              size="md"
+              className="text-gray-800 dark:text-gray-200"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+              label={<span>{t("wzPointsConfirm")}</span>}
+            />
           )}
 
           {statementScope && (
-            <label className="flex cursor-pointer items-start gap-3 coarse:min-h-11 rounded-xl border border-gray-200 p-3 text-sm text-gray-800 dark:border-line dark:text-gray-200">
-              <input
-                ref={statementBox}
-                type="checkbox"
-                className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"
-                checked={statement}
-                onChange={(e) => setStatement(e.target.checked)}
-              />
-              {/* Worded for the plan: on an "Animal" plan, the detector's
-                  person on a photo may be a dog (see wizard.statementKey). */}
-              <span>{t(statementKey(statementScope, plan))}</span>
-            </label>
+            // Worded for the plan: on an "Animal" plan, the detector's person
+            // on a photo may be a dog (see wizard.statementKey).
+            <Checkbox
+              ref={statementBox}
+              size="md"
+              className="rounded-xl border border-gray-200 p-3 text-gray-800 dark:border-line dark:text-gray-200"
+              checked={statement}
+              onChange={(e) => setStatement(e.target.checked)}
+              label={<span>{t(statementKey(statementScope, plan))}</span>}
+            />
           )}
 
           <div className="rounded-2xl bg-gray-50 p-4 text-sm dark:bg-white/[0.04]">
@@ -494,18 +516,27 @@ function Editor({
         </div>
       </div>
 
-      <StepFooter back={footer.back && <BackButton onClick={onBack} disabled={busy !== null} />} note={hold ? t(hold) : null}>
+      <StepFooter
+        back={footer.back && <BackButton onClick={onBack} disabled={busy !== null} />}
+        note={hold ? t(hold) : null}
+      >
         {footer.primary === "publish" && (
-          <button
-            type="button"
-            className="btn-primary min-h-12 px-6 text-[15px] shadow-sm shadow-brand-600/20 sm:px-7"
+          <Button
+            size="xl"
+            className="px-6 shadow-sm shadow-brand-600/20 sm:px-7"
+            icon={
+              busy === "finish" ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <Icon name="bolt" className="h-4 w-4" strokeWidth={1.9} />
+              )
+            }
             onClick={() => void publish()}
             disabled={Boolean(hold) || busy !== null}
             aria-describedby={hold ? `${ids}-hold` : undefined}
           >
-            {busy === "finish" ? <Spinner className="h-4 w-4" /> : <Icon name="bolt" className="h-4 w-4" strokeWidth={1.9} />}
             {t("wzPublish")}
-          </button>
+          </Button>
         )}
       </StepFooter>
     </div>

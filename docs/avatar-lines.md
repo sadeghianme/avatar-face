@@ -148,12 +148,13 @@ settings    the publish state (PublishBar, one strip) · the finish notice
             (it was "mesh" in the page head).
 ```
 
-The sections are `DetailSection`s: one row each — icon, name, one line of
-what it holds or is set to ("Off", "Photographic"), a chevron — under an
-eyebrow for the group. A folded section stays mounted, only hidden: a
-mouth kit it follows keeps running, the preview keeps answering the
-framing panel's drag. What was unfolded is kept (`liveface.avatarPage.open`,
-localStorage). Each panel takes `embedded` to drop its own card and title.
+The sections are the UI kit's `Disclosure`s (`components/ui/Disclosure.tsx`,
+under a `DisclosureGroup` eyebrow for the group): one row each — icon,
+name, one line of what it holds or is set to ("Off", "Photographic"), a
+chevron. A folded section stays mounted, only hidden: a mouth kit it
+follows keeps running, the preview keeps answering the framing panel's
+drag. What was unfolded is kept (`liveface.avatarPage.open`, localStorage).
+The panels draw no card or title of their own: the section is both.
 "Open the Mouth panel" on the finish notice unfolds Mouth before scrolling.
 On a phone it is one column, the stage first.
 

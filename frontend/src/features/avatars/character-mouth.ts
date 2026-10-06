@@ -23,7 +23,11 @@ export type MouthLook = "character" | "original";
  * person's keeps the classic and the photographic mouths), else the
  * character mouth when its rig names one, or the original.
  */
-export function mouthLook(avatar: { face_type?: string; kind?: string; render_profile?: string | null }): MouthLook | null {
+export function mouthLook(avatar: {
+  face_type?: string;
+  kind?: string;
+  render_profile?: string | null;
+}): MouthLook | null {
   if ((avatar.face_type ?? "human") === "human" || avatar.kind === "model3d") return null;
   return avatar.render_profile && CHARACTER_PROFILES.includes(avatar.render_profile) ? "character" : "original";
 }

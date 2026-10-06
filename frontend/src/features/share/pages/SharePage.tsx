@@ -1,35 +1,16 @@
-import { AvatarEngine, BrowserTTS, type Rig, type Scene } from "@liveface/embed";
-import type { AvatarMouthConfig, ClassicMouthConfig } from "@liveface/embed/mouth";
+import { AvatarEngine, BrowserTTS, type Rig } from "@liveface/embed";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
+import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
+import { Textarea } from "@/components/ui/Textarea";
+import { useAvatarMouth } from "@/features/avatars";
+import { fetchPublicAvatar, phraseCues, type PublicAvatar, speakPublic } from "@/features/share/api";
 import { loadImage } from "@/lib/image";
 import { useMediaQuery } from "@/lib/useMediaQuery";
-import { useAvatarMouth } from "@/features/avatars";
-
-interface PublicAvatar {
-  name: string;
-  kind: string;
-  framing: string;
-  /** The PUBLISHED scene; null for a snapshot from before scenes existed,
-   *  which renders by its framing. */
-  scene?: Scene | null;
-  rig_url: string;
-  image_url: string;
-  thumbnail_url: string;
-  layer_urls?: Record<string, string> | null;
-  voice?: { provider: string; voice: string; locale: string } | null;
-  /** The PUBLISHED mouth; null means the classic one. */
-  mouth?: AvatarMouthConfig | ClassicMouthConfig | null;
-  /** Absent on snapshots published before disclosures were recorded. */
-  disclosure?: {
-    ai_edited: { mode: string; model: string | null } | null;
-    line: "human" | "animal" | "cartoon";
-  };
-}
 
 /**
  * The page behind a share link: one avatar, full screen, and a box to type in.
@@ -65,9 +46,7 @@ export function SharePage() {
     let engine: AvatarEngine | null = null;
 
     const boot = async () => {
-      const response = await fetch(`/api/public/v1/avatars/${token}`);
-      if (!response.ok) throw new Error("unavailable");
-      const info = (await response.json()) as PublicAvatar;
+      const info = await fetchPublicAvatar(token);
       if (cancelled) return;
       setAvatar(info);
 
@@ -137,36 +116,15 @@ export function SharePage() {
       // visitor's own speechSynthesis below.
       const chosen = avatar?.voice;
       const serverVoice = chosen && chosen.provider !== "browser" ? chosen : null;
-      const served = serverVoice
-        ? await fetch(`/api/public/v1/avatars/${token}/speak`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              text: spoken,
-              provider: serverVoice.provider,
-              voice: serverVoice.voice,
-              locale: serverVoice.locale,
-            }),
-          })
-        : await fetch(`/api/public/v1/avatars/${token}/speak`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              text: spoken,
-              provider: "kokoro",
-              voice: "af_heart",
-              locale: "en-US",
-            }),
-          });
-      if (served.ok) {
-        const payload = await served.json();
+      const served = await speakPublic(token, {
+        text: spoken,
+        provider: serverVoice?.provider ?? "kokoro",
+        voice: serverVoice?.voice ?? "af_heart",
+        locale: serverVoice?.locale ?? "en-US",
+      });
+      if (served) {
         await new Promise<void>((resolve) => {
-          engineRef.current!.playAudio(
-            payload.audio_b64,
-            payload.audio_mime,
-            payload.cues,
-            resolve
-          );
+          engineRef.current!.playAudio(served.audio_b64, served.audio_mime, served.cues, resolve);
         });
         return;
       }
@@ -174,16 +132,7 @@ export function SharePage() {
       // No server voice on this instance, or throttled: speak locally rather
       // than leave the visitor looking at a silent face.
       if (!BrowserTTS.supported()) throw new Error(t("shareNoVoice"));
-      const tts = new BrowserTTS(engineRef.current, async (phrase) => {
-        const response = await fetch("/api/embed/v1/cues", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: phrase, locale: "en-US" }),
-        });
-        if (!response.ok) return null;
-        const body = await response.json();
-        return { cues: body.cues, durationMs: body.duration_ms, wordMarks: body.word_marks };
-      });
+      const tts = new BrowserTTS(engineRef.current, phraseCues);
       await tts.speak(spoken, undefined, "en-US");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("error"));
@@ -243,7 +192,7 @@ export function SharePage() {
 
       <footer className="px-4 pb-6 pt-3 [@media(max-height:520px)]:pb-2 [@media(max-height:520px)]:pt-2">
         <div className="mx-auto flex w-full max-w-2xl items-end gap-2">
-          <textarea
+          <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
@@ -257,19 +206,20 @@ export function SharePage() {
             rows={1}
             maxLength={600}
             placeholder={t(narrow ? "sharePlaceholderShort" : "sharePlaceholder")}
-            className="input min-h-[46px] resize-none bg-gray-900 text-gray-100 placeholder-gray-500"
+            className="min-h-[46px] resize-none bg-gray-900 text-gray-100 placeholder-gray-500"
           />
           {/* On a narrow phone the button is its icon (named for screen
               readers), so the box keeps the room for its words. */}
-          <button
-            className="btn-primary h-[46px] min-w-[46px] shrink-0 px-3 sm:px-5"
+          <Button
+            className="h-[46px] min-w-[46px] shrink-0 px-3 sm:px-5"
+            icon="speaker"
+            loading={speaking}
             onClick={() => void speak()}
-            disabled={speaking || !text.trim() || !avatar}
+            disabled={!text.trim() || !avatar}
             aria-label={t("sharePlay")}
           >
-            {speaking ? <Spinner className="h-4 w-4" /> : <Icon name="speaker" className="h-4 w-4" />}
             <span className="max-[400px]:sr-only">{t("sharePlay")}</span>
-          </button>
+          </Button>
         </div>
         {error && <p className="mx-auto mt-2 max-w-2xl text-xs text-red-400">{error}</p>}
         <p className="mx-auto mt-3 max-w-2xl text-center text-[11px] text-gray-500 [@media(max-height:520px)]:mt-1">
@@ -279,4 +229,3 @@ export function SharePage() {
     </div>
   );
 }
-

@@ -39,15 +39,18 @@ export const avatars = {
   avaturnImporting: "Importing your avatar…",
   model3dTitle: "Or import a 3D avatar",
   model3dUrl: "3D model URL (.glb)",
-  model3dHint: "Paste a GLB URL from an allowed host (e.g. Avaturn), or upload a .glb above — any model with ARKit blendshapes or viseme morphs gets sculpted lip-sync.",
+  model3dHint:
+    "Paste a GLB URL from an allowed host (e.g. Avaturn), or upload a .glb above — any model with ARKit blendshapes or viseme morphs gets sculpted lip-sync.",
   publish: "Publish",
   publishDiscard: "Discard changes",
   publishDraftTitle: "You have unpublished changes",
-  publishDraftBody: "Your sites and share links are still showing the last published version. Publish to make these changes live.",
+  publishDraftBody:
+    "Your sites and share links are still showing the last published version. Publish to make these changes live.",
   publishLiveTitle: "Published",
   publishLiveBody: "Everywhere this avatar is embedded is showing the current version.",
   publishFirstTitle: "Not live yet",
-  publishFirstBody: "Your sites and share links show nothing until you publish. Check the points with “Mark the face” first, then publish.",
+  publishFirstBody:
+    "Your sites and share links show nothing until you publish. Check the points with “Mark the face” first, then publish.",
   notLive: "Not live",
   avatarName: "Avatar name",
   retry: "Retry",
@@ -56,10 +59,14 @@ export const avatars = {
   fullscreen: "Fullscreen",
   exitFullscreen: "Exit fullscreen",
   markFace: "Mark the face",
-  markFaceHint: "Drag the purple markers around the outline of the face (forehead, temples, sides, jaw corners and chin, not the hair or the ears), the blue ones onto each eye's corners and lids, and the mouth's corners, top and bottom; the middle mouth dot goes where the lips meet. The amber circles are the pupils: the center dot places one, the rim dot sizes it. Auto-detection assumes a human face, so on stylized art it lands in the wrong place. Nothing is stored until you press Save.",
-  markFaceHintAnimal: "Put the purple markers around the outline of the face (forehead, temples, cheeks and jaw, not the ears) and the blue ones on each eye's corners and lids. The mouth is a line: put its end dots on the corners of the mouth — on a dog, where the lip line ends under each jowl — and the three middle dots along the line where the upper lip meets the lower one: the dark line that runs down from under the nose and across, not the outline of the muzzle. Put the orange dot on the chin, at the bottom of the lower jaw. Nothing is stored until you press Save.",
-  markFaceHintCartoon: "Put the purple markers around the outline of the face (forehead, temples, cheeks, jaw corners and chin, not the hair or the ears) and the blue ones on each eye's corners and lids. The mouth is a line: its end dots on the corners of the mouth, the three middle dots along the line where the lips meet (on a drawn open mouth, along its middle). Put the orange dot on the chin and the amber circles on the pupils. Nothing is stored until you press Save.",
-  markFaceKeys: "Click a marker, then nudge it with the arrow keys: one pixel at a time, ten with Shift. A zoom in the corner of the photo shows three times what is under the pointer (on a touch screen, under your finger) and the marker you are placing. Where markers sit on top of each other, click again to pick the next one.",
+  markFaceHint:
+    "Drag the purple markers around the outline of the face (forehead, temples, sides, jaw corners and chin, not the hair or the ears), the blue ones onto each eye's corners and lids, and the mouth's corners, top and bottom; the middle mouth dot goes where the lips meet. The amber circles are the pupils: the center dot places one, the rim dot sizes it. Auto-detection assumes a human face, so on stylized art it lands in the wrong place. Nothing is stored until you press Save.",
+  markFaceHintAnimal:
+    "Put the purple markers around the outline of the face (forehead, temples, cheeks and jaw, not the ears) and the blue ones on each eye's corners and lids. The mouth is a line: put its end dots on the corners of the mouth — on a dog, where the lip line ends under each jowl — and the three middle dots along the line where the upper lip meets the lower one: the dark line that runs down from under the nose and across, not the outline of the muzzle. Put the orange dot on the chin, at the bottom of the lower jaw. Nothing is stored until you press Save.",
+  markFaceHintCartoon:
+    "Put the purple markers around the outline of the face (forehead, temples, cheeks, jaw corners and chin, not the hair or the ears) and the blue ones on each eye's corners and lids. The mouth is a line: its end dots on the corners of the mouth, the three middle dots along the line where the lips meet (on a drawn open mouth, along its middle). Put the orange dot on the chin and the amber circles on the pupils. Nothing is stored until you press Save.",
+  markFaceKeys:
+    "Click a marker, then nudge it with the arrow keys: one pixel at a time, ten with Shift. A zoom in the corner of the photo shows three times what is under the pointer (on a touch screen, under your finger) and the marker you are placing. Where markers sit on top of each other, click again to pick the next one.",
   markPreviewUpdating: "updating…",
   markHead: "Head",
   markLeftEye: "Eye on the left",
@@ -86,14 +93,18 @@ export const avatars = {
   markPupilCenter: "center",
   markPupilRim: "rim",
   fitRefusedTitle: "These marks cannot be saved yet:",
-  fitFolded_one: "{{count}} triangle of the face would fold over. Move the marks so the eyes, the mouth and the head do not cross each other.",
-  fitFolded_other: "{{count}} triangles of the face would fold over. Move the marks so the eyes, the mouth and the head do not cross each other.",
+  fitFolded_one:
+    "{{count}} triangle of the face would fold over. Move the marks so the eyes, the mouth and the head do not cross each other.",
+  fitFolded_other:
+    "{{count}} triangles of the face would fold over. Move the marks so the eyes, the mouth and the head do not cross each other.",
   fitLidsInverted: "An eye's top marker is below its bottom marker.",
-  fitEyesOrder: "The eye corners are out of order: each eye's left marker must be left of its right one, and the eye on the left left of the eye on the right.",
+  fitEyesOrder:
+    "The eye corners are out of order: each eye's left marker must be left of its right one, and the eye on the left left of the eye on the right.",
   fitMouthReversed: "The mouth's left corner is right of its right corner.",
   fitOutsideHead: "The eyes and the mouth must be inside the head.",
   fitOutlineCrossed: "The head's outline crosses itself. Put its purple markers back in order around the face.",
-  fitOutlineOrder: "The head's outline markers are out of order. Go round the face: top, temple, side, jaw corner, chin, and back up the other side.",
+  fitOutlineOrder:
+    "The head's outline markers are out of order. Go round the face: top, temple, side, jaw corner, chin, and back up the other side.",
   fitPupilOutsideEye: "Each pupil's center must be inside its eye.",
   saving: "Saving…",
   testBeforeSave: "Test before saving",
@@ -129,6 +140,7 @@ export const avatars = {
   qualityNoteHint: "It still works. Crop the photo, or upload one where the face is larger and facing the camera.",
   testInSimulator: "Test",
   cropFree: "Free",
+  cropRatio: "Shape of the crop",
   cropSquare: "1:1",
   cropPortrait: "4:5",
   cropWide: "16:9",
@@ -136,7 +148,8 @@ export const avatars = {
   embedSnippet: "Embed snippet",
   shareTitle: "Public link",
   shareOffBody: "Publish a page anyone with the link can open and type into. No account needed on their side.",
-  shareOnBody: "Anyone with this link can make this avatar speak, billed to your usage. Switch off to revoke it everywhere.",
+  shareOnBody:
+    "Anyone with this link can make this avatar speak, billed to your usage. Switch off to revoke it everywhere.",
   shareOpen: "Open",
   // The avatar page: the Speak card, the settings column's groups and the
   // one line each folded section shows.
@@ -156,7 +169,8 @@ export const avatars = {
   debugMeshHint: "Draws the mesh over the preview, to check the fit. Never published.",
   deleteAsk: "Delete this avatar?",
   mouthTitle: "Mouth",
-  mouthHint: "How the inside of the mouth is drawn when this avatar speaks. A draft change like any other: visitors see it after you publish.",
+  mouthHint:
+    "How the inside of the mouth is drawn when this avatar speaks. A draft change like any other: visitors see it after you publish.",
   mouthClassic: "Classic",
   mouthClassicHint: "Drawn teeth. Works on any photo.",
   mouthContinuous: "Photographic",
@@ -167,11 +181,13 @@ export const avatars = {
   mouthCharacterHint: "An open mouth drawn to match the picture, with a tongue and a jaw that moves.",
   mouthOriginal: "Original mouth",
   mouthOriginalHint: "The mouth this avatar had before the character mouth.",
-  mouthCharacterLegacy: "This avatar was made before the character mouth, so it still has its original one. Choose the character mouth to try it; you can go back, and visitors see the change only after you publish.",
+  mouthCharacterLegacy:
+    "This avatar was made before the character mouth, so it still has its original one. Choose the character mouth to try it; you can go back, and visitors see the change only after you publish.",
   mouthCharacterTeeth: "Show upper teeth",
   mouthCharacterTongue: "Show the tongue",
   mouthPhotoActive: "Using the teeth from your photo",
-  mouthPhotoHint: "Add a second photo of the same person saying \"ee\": front-facing, upper teeth clearly visible, similar light. Without one, standard teeth are used.",
+  mouthPhotoHint:
+    'Add a second photo of the same person saying "ee": front-facing, upper teeth clearly visible, similar light. Without one, standard teeth are used.',
   mouthPhotoAdd: "Add mouth photo",
   mouthPhotoReplace: "Replace photo",
   mouthPhotoRemove: "Use standard teeth instead",
@@ -180,13 +196,18 @@ export const avatars = {
   mouthTeethKind_upload: "Your photo",
   mouthTeethKind_generic: "Standard",
   mouthTeethMade: "The new teeth are in the preview. Visitors see them once you publish.",
-  mouthErr_upload_mouth_teeth_unclear: "This photo does not show the upper teeth clearly enough. Take one saying “ee”, facing the camera, with the whole upper row showing.",
-  mouthErr_upload_reference_no_face: "No clear face was found in this photo. Use a front-facing photo with the whole face visible.",
-  mouthErr_upload_reference_mouth_closed: "The mouth is not open enough in this photo. Take one saying “ee”, with the upper teeth showing.",
+  mouthErr_upload_mouth_teeth_unclear:
+    "This photo does not show the upper teeth clearly enough. Take one saying “ee”, facing the camera, with the whole upper row showing.",
+  mouthErr_upload_reference_no_face:
+    "No clear face was found in this photo. Use a front-facing photo with the whole face visible.",
+  mouthErr_upload_reference_mouth_closed:
+    "The mouth is not open enough in this photo. Take one saying “ee”, with the upper teeth showing.",
   mouthErr_upload_reference_face_small: "The face is too small in this photo. Crop closer to the head and shoulders.",
-  mouthErr_generate_mouth_teeth_unclear: "The AI’s photo did not show the upper teeth clearly enough, so it was not used. Try again.",
+  mouthErr_generate_mouth_teeth_unclear:
+    "The AI’s photo did not show the upper teeth clearly enough, so it was not used. Try again.",
   mouthErr_generate_reference_no_face: "No face was found in the AI’s photo, so it was not used. Try again.",
-  mouthErr_generate_reference_mouth_closed: "The mouth was not open enough in the AI’s photo, so it was not used. Try again.",
+  mouthErr_generate_reference_mouth_closed:
+    "The mouth was not open enough in the AI’s photo, so it was not used. Try again.",
   mouthErr_generate_reference_face_small: "The face was too small in the AI’s photo, so it was not used. Try again.",
   mouthErr_third_party_ai_disabled: "Your organization has turned off third-party AI, so nothing was sent.",
   mouthErr_imagegen_unavailable: "AI editing is not set up on this server.",
@@ -208,9 +229,11 @@ export const avatars = {
   mouthErr_consent_outdated: "The wording of the AI statement has changed. Reload the page to read it.",
   mouthErr_too_many_jobs: "Your team is running several jobs already.",
   mouthErr_job_queue_full: "The server is busy right now.",
-  mouthTeethAiHint: "Made by AI from this avatar’s picture: a photo of you saying “ee”. Visitors see an “AI avatar” label once you publish.",
+  mouthTeethAiHint:
+    "Made by AI from this avatar’s picture: a photo of you saying “ee”. Visitors see an “AI avatar” label once you publish.",
   mouthTeethGeneric: "Standard teeth are in use.",
-  mouthTeethNote_no_ai_consent: "Standard teeth are in use: AI was not used, since you have not agreed to the current statement on sending photos to Google.",
+  mouthTeethNote_no_ai_consent:
+    "Standard teeth are in use: AI was not used, since you have not agreed to the current statement on sending photos to Google.",
   mouthTeethNote_third_party_ai_disabled: "Standard teeth are in use: your organization has turned off third-party AI.",
   mouthTeethNote_imagegen_unavailable: "Standard teeth are in use: AI editing is not set up on this server.",
   mouthTeethNote_image_limit_reached: "Standard teeth are in use: this month’s AI image limit was reached.",
@@ -218,10 +241,14 @@ export const avatars = {
   mouthTeethNote_no_image: "Standard teeth are in use: the AI answered without a picture.",
   mouthTeethNote_provider_error: "Standard teeth are in use: the AI service did not answer. Try again.",
   mouthTeethNote_timeout: "Standard teeth are in use: the AI took too long to answer. Try again.",
-  mouthTeethNote_consent_not_recorded: "Standard teeth are in use: your agreement to send photos could not be recorded, so nothing was sent. Try again.",
-  mouthTeethNote_mouth_teeth_unclear: "Standard teeth are in use: the AI’s photo did not show the upper teeth clearly enough.",
-  mouthTeethNote_teeth_photo_rejected: "Standard teeth are in use: the AI’s teeth photo did not pass the checks, so it was not used.",
-  mouthTeethNote_teeth_photo_rejected_because: "Standard teeth are in use: the AI’s teeth photo was not used ({{reason}}).",
+  mouthTeethNote_consent_not_recorded:
+    "Standard teeth are in use: your agreement to send photos could not be recorded, so nothing was sent. Try again.",
+  mouthTeethNote_mouth_teeth_unclear:
+    "Standard teeth are in use: the AI’s photo did not show the upper teeth clearly enough.",
+  mouthTeethNote_teeth_photo_rejected:
+    "Standard teeth are in use: the AI’s teeth photo did not pass the checks, so it was not used.",
+  mouthTeethNote_teeth_photo_rejected_because:
+    "Standard teeth are in use: the AI’s teeth photo was not used ({{reason}}).",
   mouthTeethNote_reference_no_face: "Standard teeth are in use: no face was found in the AI’s photo.",
   mouthTeethNote_reference_mouth_closed: "Standard teeth are in use: the mouth in the AI’s photo was not open enough.",
   mouthTeethNote_reference_face_small: "Standard teeth are in use: the face in the AI’s photo was too small.",
@@ -229,18 +256,24 @@ export const avatars = {
   mouthTeethNote_face_turned: "Standard teeth are in use: the head is turned too far to make teeth for it.",
   mouthTeethNote_landmarks_unavailable: "Standard teeth are in use: face detection is not available on this server.",
   mouthTeethNote_teeth_failed: "Standard teeth are in use: the teeth could not be made. Try again.",
-  mouthTeethNote_migrated_standard: "Standard teeth. This avatar was moved from the older drawn mouth; make its own teeth and mouth shapes in the Mouth panel.",
+  mouthTeethNote_migrated_standard:
+    "Standard teeth. This avatar was moved from the older drawn mouth; make its own teeth and mouth shapes in the Mouth panel.",
   mouthShapesInUse: "Mouth shapes:",
   mouthShapesKind_own: "Made from your photo · {{generated}} of {{total}}",
   mouthShapesKind_mixed: "{{generated}} of {{total}} from your photo, {{standard}} standard",
   mouthShapesKind_standard: "Standard",
-  mouthShapesAiHint: "Made by AI from this avatar’s picture, one for each speech sound. Visitors see an “AI avatar” label once you publish.",
-  mouthShapesAiHintMixed: "Made by AI from this avatar’s picture; the others are the standard shapes, fitted to this face. Visitors see an “AI avatar” label once you publish.",
+  mouthShapesAiHint:
+    "Made by AI from this avatar’s picture, one for each speech sound. Visitors see an “AI avatar” label once you publish.",
+  mouthShapesAiHintMixed:
+    "Made by AI from this avatar’s picture; the others are the standard shapes, fitted to this face. Visitors see an “AI avatar” label once you publish.",
   mouthShapesStandardHint: "The standard mouth shapes, fitted to this face.",
   mouthShapesWhy: "Standard, and why:",
-  mouthShapesDropped_picture_changed: "Your mouth shapes were made for the previous picture, so the standard ones play now. Make them again for this picture.",
-  mouthShapesDropped_rebase_failed: "Your mouth shapes could not follow the new points, so the standard ones play now. Make them again.",
-  mouthShapesDropped_motion_missing: "Your mouth shapes’ file is missing, so the standard ones play now. Make them again.",
+  mouthShapesDropped_picture_changed:
+    "Your mouth shapes were made for the previous picture, so the standard ones play now. Make them again for this picture.",
+  mouthShapesDropped_rebase_failed:
+    "Your mouth shapes could not follow the new points, so the standard ones play now. Make them again.",
+  mouthShapesDropped_motion_missing:
+    "Your mouth shapes’ file is missing, so the standard ones play now. Make them again.",
   mouthShapesCount: "{{done}} of {{total}}",
   mouthShape_aa: "AA, as in “father”",
   mouthShape_ee: "EE, as in “see”",
@@ -273,8 +306,10 @@ export const avatars = {
   mouthReason_teeth_photo_rejected: "it did not pass the checks",
   mouthKitMake: "Make mouth shapes and teeth from this photo",
   mouthKitMakeShapes: "Make mouth shapes from this photo",
-  mouthKitHint: "Sends crops of this avatar’s face to Google (Gemini), one for its teeth and one for each speech sound, to make its own teeth and mouth shapes. It takes up to about a minute, and you see the result before visitors do.",
-  mouthKitHintShapes: "Sends crops of this avatar’s face to Google (Gemini), one for each speech sound, to make its own mouth shapes. Your teeth photo is kept. It takes up to about a minute, and you see the result before visitors do.",
+  mouthKitHint:
+    "Sends crops of this avatar’s face to Google (Gemini), one for its teeth and one for each speech sound, to make its own teeth and mouth shapes. It takes up to about a minute, and you see the result before visitors do.",
+  mouthKitHintShapes:
+    "Sends crops of this avatar’s face to Google (Gemini), one for each speech sound, to make its own mouth shapes. Your teeth photo is kept. It takes up to about a minute, and you see the result before visitors do.",
   mouthKitWorking: "Making the mouth from this photo…",
   mouthKitStage_shapes: "Making the mouth shapes…",
   mouthKitStage_shapesTeeth: "Making the teeth and mouth shapes…",
@@ -284,7 +319,8 @@ export const avatars = {
   mouthKitMade: "The new mouth shapes are in the preview. Visitors see them once you publish.",
   mouthKitMadeTeeth: "The new mouth shapes and teeth are in the preview. Visitors see them once you publish.",
   mouthKitErr_none: "None of the mouth shapes could be made: {{reason}}.",
-  mouthKitErr_superseded: "The picture changed while the mouth was being made, so nothing was saved. Make it again for this picture.",
+  mouthKitErr_superseded:
+    "The picture changed while the mouth was being made, so nothing was saved. Make it again for this picture.",
   mouthKitErr_job_failed: "Something went wrong while making the mouth. Try again.",
   mouthKitErr_interrupted: "The server restarted while the mouth was being made. Try again.",
   mouthKitTeeth_owner_photo: "Your own teeth photo is kept: the AI made the mouth shapes only.",
@@ -311,15 +347,19 @@ export const avatars = {
   createHeading_background: "Background",
   createHeading_points: "Place the points",
   createHeading_prepare: "Preparing your avatar",
-  createIntro_frame: "A clear, front-facing face works best. We check the photo, frame the face and suggest what kind of face it is.",
+  createIntro_frame:
+    "A clear, front-facing face works best. We check the photo, frame the face and suggest what kind of face it is.",
   createIntro_background: "Keep the room behind the face, or cut it out so the avatar sits on your page.",
   createIntro_points: "These points tell the face how to move. Check them on the photo and watch the preview talk.",
   createIntro_prepare: "We build your avatar from the points you placed, then publish it.",
-  createPrepareMouth: "From your photo, the AI makes your own teeth and mouth shapes, one for each speech sound, and the mouth is fitted to your face. They are labelled as made by AI.",
+  createPrepareMouth:
+    "From your photo, the AI makes your own teeth and mouth shapes, one for each speech sound, and the mouth is fitted to your face. They are labelled as made by AI.",
   createPrepareTeeth: "From your photo, the AI makes your own teeth. They are labelled as made by AI.",
-  createPrepareStandard: "Your own teeth and mouth shapes could not be made this time: the avatar gets the standard ones, and its page says why.",
+  createPrepareStandard:
+    "Your own teeth and mouth shapes could not be made this time: the avatar gets the standard ones, and its page says why.",
   createPrepareAiPurpose: "Make this person’s own teeth and mouth shapes",
-  createFinishAsksAi: "Finishing asks you once whether this photo may be sent to Google (Gemini) to make the person’s own teeth and mouth shapes. Without it, the avatar gets the standard ones.",
+  createFinishAsksAi:
+    "Finishing asks you once whether this photo may be sent to Google (Gemini) to make the person’s own teeth and mouth shapes. Without it, the avatar gets the standard ones.",
   createDropHint: "JPEG, PNG or WebP, up to 15 MB. 3D models (.glb) are imported under “Other ways to create”.",
   createUploading: "Uploading…",
   createBack: "Back",
@@ -361,18 +401,25 @@ export const avatars = {
   createBgBefore: "The photo with its background",
   createBgAfter: "The photo without its background",
   createBgNotYet: "Choose this to cut the person out.",
-  createBgUnavailable_not_for_face_type: "Background removal only understands people for now, so animals and animations keep their background. Continue to place the points.",
-  createBgUnavailable_segmentation_unavailable: "Background removal isn't available on this server right now, so the photo keeps its background.",
+  createBgUnavailable_not_for_face_type:
+    "Background removal only understands people for now, so animals and animations keep their background. Continue to place the points.",
+  createBgUnavailable_segmentation_unavailable:
+    "Background removal isn't available on this server right now, so the photo keeps its background.",
   createBgUnavailable_face_type_required: "Go back to step 1 and choose what is in the photo first.",
-  createGuide_human: "Each dot sits on an edge: the outline of the face (forehead to chin, cheek to cheek, not the hair or the ears), each eye's corners and lids, the mouth's corners, top and bottom (the middle mouth dot where the lips meet). Amber circles are the pupils: the centre dot moves one, the rim dot sizes it.",
-  createGuide_animal: "Nothing detects an animal's face, so these points are a starting guess: move each one onto your animal. The mouth is a line: its end dots on the mouth corners, the three middle dots along the line where the lips meet.",
-  createGuide_cartoon: "Put the purple dots around the outline of the face and the blue ones on each eye's corners and lids. The mouth is a line: end dots on its corners, the middle three along where the lips meet. The orange dot is the chin, the amber circles the pupils.",
-  createGuessChecklist: "These points are a starting guess. Move each part onto the face, or tick it if it already sits right:",
+  createGuide_human:
+    "Each dot sits on an edge: the outline of the face (forehead to chin, cheek to cheek, not the hair or the ears), each eye's corners and lids, the mouth's corners, top and bottom (the middle mouth dot where the lips meet). Amber circles are the pupils: the centre dot moves one, the rim dot sizes it.",
+  createGuide_animal:
+    "Nothing detects an animal's face, so these points are a starting guess: move each one onto your animal. The mouth is a line: its end dots on the mouth corners, the three middle dots along the line where the lips meet.",
+  createGuide_cartoon:
+    "Put the purple dots around the outline of the face and the blue ones on each eye's corners and lids. The mouth is a line: end dots on its corners, the middle three along where the lips meet. The orange dot is the chin, the amber circles the pupils.",
+  createGuessChecklist:
+    "These points are a starting guess. Move each part onto the face, or tick it if it already sits right:",
   createGuessPart_head: "The outline of the face: top, temples, sides, jaw corners and bottom.",
   createGuessPart_left_eye: "Corners and lids of the eye on the left.",
   createGuessPart_right_eye: "Corners and lids of the eye on the right.",
   createGuessPart_mouth: "Corners, top and bottom of the mouth; the middle dot where the lips meet.",
-  createGuessPart_mouth_line: "Along the line where the upper lip meets the lower one, not the outline of the muzzle or mouth.",
+  createGuessPart_mouth_line:
+    "Along the line where the upper lip meets the lower one, not the outline of the muzzle or mouth.",
   createGuessPart_chin: "The bottom of the lower jaw.",
   createGuessPart_left_pupil: "The pupil of the eye on the left: centre dot on it, rim dot on its edge.",
   createGuessPart_right_pupil: "The pupil of the eye on the right: centre dot on it, rim dot on its edge.",
@@ -390,7 +437,8 @@ export const avatars = {
   createDepictionStatement_animal:
     "This photo shows an animal, not a real person — or, if it shows a person, I am that person or have their permission, and they are 18 or older.",
   createDepictionFirst: "Tick the statement above first.",
-  createGeneratedFaceStatement: "This face was made by AI from a description. It is not a real, identifiable person, and I did not ask for one.",
+  createGeneratedFaceStatement:
+    "This face was made by AI from a description. It is not a real, identifiable person, and I did not ask for one.",
   createSavePoints: "Save points",
   createLooksRightHint: "Builds and publishes your avatar from these points.",
   createSaveHint: "Builds and publishes your avatar from the points as placed.",
@@ -399,9 +447,12 @@ export const avatars = {
   createRetryAfterPlace: "Place or tick every part listed below, then retry.",
   createRetryAfterStatement: "Tick the statement below, then retry.",
   createRetryAfterName: "Give the avatar a name below, then retry.",
-  createFinishingHint: "This takes a few seconds. You can leave this page: the avatar is listed as Processing until it is ready.",
-  createFinishingHintMouth: "This can take up to about a minute while the AI makes your teeth and mouth shapes. You can leave this page: the avatar is listed as Processing until it is ready.",
-  createFinishingHintTeeth: "This can take up to half a minute while the AI makes your teeth. You can leave this page: the avatar is listed as Processing until it is ready.",
+  createFinishingHint:
+    "This takes a few seconds. You can leave this page: the avatar is listed as Processing until it is ready.",
+  createFinishingHintMouth:
+    "This can take up to about a minute while the AI makes your teeth and mouth shapes. You can leave this page: the avatar is listed as Processing until it is ready.",
+  createFinishingHintTeeth:
+    "This can take up to half a minute while the AI makes your teeth. You can leave this page: the avatar is listed as Processing until it is ready.",
   createFinishStage_copy: "Copying your picture…",
   createFinishStage_rig: "Fitting the face…",
   createFinishStage_layers: "Separating the layers…",
@@ -428,21 +479,30 @@ export const avatars = {
   finishNoticeToMouth: "Open the Mouth panel",
   finishNoticeDismiss: "Got it",
   avatarPreparingTitle: "Preparing this avatar",
-  avatarPreparingHint: "Its teeth and mouth shapes are being made from the photo, then it is published. It opens here when it is ready.",
+  avatarPreparingHint:
+    "Its teeth and mouth shapes are being made from the photo, then it is published. It opens here when it is ready.",
   avatarPreparingFollow: "Follow it step by step",
   finishNoticeShapes_own: "Its own mouth shapes: all {{total}} made by AI from your photo.",
-  finishNoticeShapes_mixed: "Its own mouth shapes: {{generated}} of {{total}} made by AI from your photo, the rest standard.",
+  finishNoticeShapes_mixed:
+    "Its own mouth shapes: {{generated}} of {{total}} made by AI from your photo, the rest standard.",
   finishNoticeShapes_none: "Standard mouth shapes: none could be made from your photo ({{reason}}).",
   finishNoticeShapes_standard: "Standard mouth shapes are in use.",
   finishNoticeTeeth_ai: "Its own teeth, made by AI from your photo.",
   finishNoticeTeeth_upload: "Its teeth come from your own photo.",
-  finishNoticeStandard_no_ai_consent: "Standard teeth and mouth shapes are in use: AI was not used, since you have not agreed to the current statement on sending photos to Google.",
-  finishNoticeStandard_third_party_ai_disabled: "Standard teeth and mouth shapes are in use: your organization has turned off third-party AI.",
-  finishNoticeStandard_imagegen_unavailable: "Standard teeth and mouth shapes are in use: AI editing is not set up on this server.",
-  finishNoticeStandard_image_limit_reached: "Standard teeth and mouth shapes are in use: this month’s AI image limit was reached.",
-  finishNoticeStandard_teeth_failed: "Standard teeth and mouth shapes are in use: they could not be made. Try again in the Mouth panel.",
-  finishWarning_mouth_open: "The mouth is open in this picture, so the avatar rests with it open. A photo with closed lips looks better.",
-  finishWarning_teeth_showing: "The lips are parted in this picture, so its own teeth stay painted on the lips as the avatar talks. A touch-up closes them.",
+  finishNoticeStandard_no_ai_consent:
+    "Standard teeth and mouth shapes are in use: AI was not used, since you have not agreed to the current statement on sending photos to Google.",
+  finishNoticeStandard_third_party_ai_disabled:
+    "Standard teeth and mouth shapes are in use: your organization has turned off third-party AI.",
+  finishNoticeStandard_imagegen_unavailable:
+    "Standard teeth and mouth shapes are in use: AI editing is not set up on this server.",
+  finishNoticeStandard_image_limit_reached:
+    "Standard teeth and mouth shapes are in use: this month’s AI image limit was reached.",
+  finishNoticeStandard_teeth_failed:
+    "Standard teeth and mouth shapes are in use: they could not be made. Try again in the Mouth panel.",
+  finishWarning_mouth_open:
+    "The mouth is open in this picture, so the avatar rests with it open. A photo with closed lips looks better.",
+  finishWarning_teeth_showing:
+    "The lips are parted in this picture, so its own teeth stay painted on the lips as the avatar talks. A touch-up closes them.",
   createFinished: "Opening your avatar…",
   createDefaultName: "My avatar",
   createJobQueued: "Waiting for a free worker…",
@@ -488,7 +548,8 @@ export const avatars = {
   createStartNew: "Start a new avatar",
   createExpired: "This unfinished avatar expired after a week without changes, and its photo was deleted.",
   createOtherWays: "Other ways to create",
-  createOtherWaysHint: "No photo, or want something else? Generate a face, start from a ready-made one, or bring a 3D avatar.",
+  createOtherWaysHint:
+    "No photo, or want something else? Generate a face, start from a ready-made one, or bring a 3D avatar.",
   createOtherName: "Name for an avatar made below (optional)",
   createGlbUpload: "Upload a .glb file",
   createGlbProgress: "Uploading… {{percent}}%",
@@ -505,7 +566,8 @@ export const avatars = {
   // --- AI adjust, consent, disclosure (M4) ---
   createStep_adjust: "AI adjust",
   createHeading_adjust: "Fix it with AI (optional)",
-  createIntro_adjust: "We check the picture for closed eyes, an open mouth, a turned head or poor light, and recommend a fix only when something needs it.",
+  createIntro_adjust:
+    "We check the picture for closed eyes, an open mouth, a turned head or poor light, and recommend a fix only when something needs it.",
   createJob_generate: "Generating your picture…",
   createJobDone_generate: "Picture ready.",
   createJob_adjust: "The AI is making two versions…",
@@ -527,7 +589,8 @@ export const avatars = {
   photoCheck_ai_no_face: "The AI found no face, so the points start from a guess.",
   photoCheck_ai_points_implausible: "The AI’s points did not make sense, so they start from a guess.",
   photoCheck_safety_refused: "The AI declined to look at this picture, so the points start from a guess.",
-  photoCheck_vision_limit_reached: "Your organization reached its monthly limit for AI point finding, so the points start from a guess.",
+  photoCheck_vision_limit_reached:
+    "Your organization reached its monthly limit for AI point finding, so the points start from a guess.",
   createChecksAiLater: "Step 3 can fix some of these with AI.",
   createStartAgain: "Start again",
   createGeneratedBadge: "Made by AI",
@@ -537,12 +600,16 @@ export const avatars = {
   adjustMode_stylise: "Stylise",
   adjustMode_regenerate: "Regenerate in the best position",
   adjustModeStyled: "{{mode}}: {{style}}",
-  adjustModeHint_touchup: "Opens the eyes towards the camera and gently closes the lips. Nothing else in the picture changes.",
+  adjustModeHint_touchup:
+    "Opens the eyes towards the camera and gently closes the lips. Nothing else in the picture changes.",
   adjustModeHint_stylise: "Redraws the person in another style. The avatar then becomes an animation.",
-  adjustModeHint_regenerate_human: "Redraws the picture facing the camera, level and well lit, with open eyes and closed lips. Check that it still looks like the person.",
-  adjustModeHint_regenerate_animal: "Redraws your animal facing the camera, with both eyes clearly visible and its mouth closed.",
+  adjustModeHint_regenerate_human:
+    "Redraws the picture facing the camera, level and well lit, with open eyes and closed lips. Check that it still looks like the person.",
+  adjustModeHint_regenerate_animal:
+    "Redraws your animal facing the camera, with both eyes clearly visible and its mouth closed.",
   adjustModeHint_regenerate_cartoon: "Redraws the character facing the camera, so its face can be found and animated.",
-  adjustOff: "AI fixes are turned off for your organization, so your picture is used as it is. An owner or admin can turn them on in Settings.",
+  adjustOff:
+    "AI fixes are turned off for your organization, so your picture is used as it is. An owner or admin can turn them on in Settings.",
   adjustNoModes: "There is no AI fix for this kind of picture. Continue with it as it is.",
   adjustCurrentAlt: "The picture as it is now",
   adjustFindingsTitle: "Worth knowing about this picture:",
@@ -551,7 +618,8 @@ export const avatars = {
   adjustReady: "Your photo is ready — no AI needed.",
   adjustReadyAi: "This version is ready — no more AI needed.",
   adjustNoCheck: "AI can touch up or redraw your picture if you want. It is optional.",
-  adjustEyesClosedOther: "The AI will draw new eyes, labelled as AI-generated. A photo with open eyes looks more like the person.",
+  adjustEyesClosedOther:
+    "The AI will draw new eyes, labelled as AI-generated. A photo with open eyes looks more like the person.",
   adjustQuestion: "What should the AI do?",
   adjustRecommended: "Recommended",
   adjustRoundsLeft_one: "{{count}} AI try left for this avatar. Each try makes two versions.",
@@ -592,10 +660,13 @@ export const avatars = {
   adjustWhy_gaze_off_camera: "You are not looking at the camera",
   adjustWhy_mouth_open: "Your mouth is open",
   adjustWhy_teeth_showing: "Your lips are parted, so your teeth may show",
-  adjustAutoStarted: "Your lips are parted over your teeth, which would stay painted on the lips as the avatar talks, so a touch-up that closes them has started. You choose: the result, or your photo as it is.",
+  adjustAutoStarted:
+    "Your lips are parted over your teeth, which would stay painted on the lips as the avatar talks, so a touch-up that closes them has started. You choose: the result, or your photo as it is.",
   adjustAutoReady: "The touch-up that closes your lips is ready below. Use it, or keep your photo as it is.",
-  adjustAutoStartedEyes: "Your lips are parted over your teeth, which would stay painted on the lips as the avatar talks, so a touch-up has started: it closes them, and fixes the eyes the check found too. You choose: the result, or your photo as it is.",
-  adjustAutoReadyEyes: "The touch-up that closes your lips and fixes your eyes is ready below. Use it, or keep your photo as it is.",
+  adjustAutoStartedEyes:
+    "Your lips are parted over your teeth, which would stay painted on the lips as the avatar talks, so a touch-up has started: it closes them, and fixes the eyes the check found too. You choose: the result, or your photo as it is.",
+  adjustAutoReadyEyes:
+    "The touch-up that closes your lips and fixes your eyes is ready below. Use it, or keep your photo as it is.",
   adjustWhy_no_face: "We could not find a face",
   adjustWhy_head_turned: "Your head is turned",
   adjustWhy_head_tilted: "Your head is tilted",
@@ -618,11 +689,15 @@ export const avatars = {
   adjustReason_check_failed: "It failed our checks.",
   aiConsentTitle: "Agree to send pictures to {{providers}}?",
   aiConsentFor: "For: {{purpose}}",
-  aiConsentCheck: "I agree that the photo I upload or the description I type, and crops of my avatar’s face, are sent to {{providers}} to create and adjust my avatar, as described here.",
-  aiConsentSent: "What is sent to {{providers}}’s image model: the photo you upload (or the description you type) to create your avatar’s picture in the style you choose, and again each time you retry or apply a change; for an animal or a drawing, the picture again so the AI can find the eyes and mouth; and, for a realistic person, crops of the final picture to make the avatar’s own teeth and mouth shapes (one crop for the teeth and one for each of six speech sounds, and once more for any the AI declines), when you publish it and when you ask for them in its Mouth panel. Nothing else about you or this avatar is sent.",
-  aiConsentKept: "The results are kept with your avatar and published with it, shown to its visitors with an AI label, until you delete the avatar. An unfinished avatar and its pictures are deleted a week after its last change. We never use your pictures to train AI.",
+  aiConsentCheck:
+    "I agree that the photo I upload or the description I type, and crops of my avatar’s face, are sent to {{providers}} to create and adjust my avatar, as described here.",
+  aiConsentSent:
+    "What is sent to {{providers}}’s image model: the photo you upload (or the description you type) to create your avatar’s picture in the style you choose, and again each time you retry or apply a change; for an animal or a drawing, the picture again so the AI can find the eyes and mouth; and, for a realistic person, crops of the final picture to make the avatar’s own teeth and mouth shapes (one crop for the teeth and one for each of six speech sounds, and once more for any the AI declines), when you publish it and when you ask for them in its Mouth panel. Nothing else about you or this avatar is sent.",
+  aiConsentKept:
+    "The results are kept with your avatar and published with it, shown to its visitors with an AI label, until you delete the avatar. An unfinished avatar and its pictures are deleted a week after its last change. We never use your pictures to train AI.",
   aiConsentRights: "Only send a picture of yourself, or of someone who has agreed to it.",
-  aiConsentOptional: "This is optional for a realistic photo: without AI, your own photo is used, with its background removed. Your answer is remembered for your account, and asked again if this text changes.",
+  aiConsentOptional:
+    "This is optional for a realistic photo: without AI, your own photo is used, with its background removed. Your answer is remembered for your account, and asked again if this text changes.",
   aiConsentRecorded: "Wording version {{version}}. Your agreement is recorded with this version.",
   aiConsentReagree: "We updated how we describe what is sent to AI. Please agree again to continue.",
   aiConsentDecline: "Not now",
@@ -656,29 +731,34 @@ export const avatars = {
   createErr_consent_outdated: "The wording of the consent has changed. Reload the page to read it.",
   createErr_unknown_consent_version: "The wording of the consent has changed. Reload the page to read it.",
   createErr_unknown_provider: "That AI provider is not known. Reload the page.",
-  createErr_third_party_ai_disabled: "Your organization has turned off third-party AI. An owner or admin can turn it on in Settings.",
+  createErr_third_party_ai_disabled:
+    "Your organization has turned off third-party AI. An owner or admin can turn it on in Settings.",
   createErr_adjust_not_for_face_type: "That AI fix is not available for this kind of picture.",
   createErr_style_required: "Choose a style first.",
   createErr_imagegen_unavailable: "AI image editing is not available on this server right now.",
   createErr_budget_spent: "This avatar has used all its AI tries. Continue with any picture shown.",
-  createErr_image_limit_reached: "Your organization reached its monthly AI image limit. It resets at the start of next month.",
+  createErr_image_limit_reached:
+    "Your organization reached its monthly AI image limit. It resets at the start of next month.",
   createErr_candidate_rejected: "This version failed its checks and cannot be used.",
   createErr_ai_points_not_for_face_type: "A person’s points are found by the face detector, not the AI.",
   createErr_ai_points_unavailable: "AI point finding is not available on this server right now.",
   createErr_face_turned: "The head is turned too far for a touch-up. Try Regenerate instead; this try was not used.",
   createErr_no_face_for_touchup: "No face was found to touch up. Try Regenerate instead; this try was not used.",
-  createErr_landmarks_unavailable: "The face could not be measured closely enough for a touch-up. Try Regenerate instead; this try was not used.",
+  createErr_landmarks_unavailable:
+    "The face could not be measured closely enough for a touch-up. Try Regenerate instead; this try was not used.",
   createErr_provider_error: "The AI service did not answer. This try was not used; try again.",
   createErr_safety_refused: "The AI declined to make this picture. Try a different description or photo.",
   createErr_no_image: "The AI answered without a picture. Try again, or change the description.",
   createErr_source_gone: "The avatar this was to start from no longer exists.",
   createErr_avatar_not_found: "That avatar no longer exists.",
   createErr_not_a_photo: "That avatar has no photo to start from. Choose a photo avatar.",
-  createErr_avatar_preparing: "This avatar is still being prepared from its photo. It opens by itself when it is ready.",
+  createErr_avatar_preparing:
+    "This avatar is still being prepared from its photo. It opens by itself when it is ready.",
   createErr_image_missing: "This avatar’s photo has not been uploaded yet.",
   // The framing editor and the scene (FramingScenePanel).
   sceneTitle: "Framing & scene",
-  sceneIntro: "How visitors see the avatar: how close, where the picture sits, and what shows behind a cut-out. Published with the avatar.",
+  sceneIntro:
+    "How visitors see the avatar: how close, where the picture sits, and what shows behind a cut-out. Published with the avatar.",
   sceneZoom: "Zoom",
   sceneZoomFace: "Face",
   sceneZoomFull: "Whole picture",

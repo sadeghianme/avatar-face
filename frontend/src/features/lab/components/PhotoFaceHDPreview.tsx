@@ -2,7 +2,7 @@ import type { CuePlayer, SpeechPlayer } from "@liveface/embed";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { api } from "@/lib/api";
+import { faceDepth } from "@/features/lab/api";
 import type { Avatar } from "@/lib/types";
 
 type HDEngine = SpeechPlayer & CuePlayer & { destroy(): void };
@@ -33,12 +33,7 @@ export function PhotoFaceHDPreview({
       setLoading(true);
       setError(null);
       const { PhotoFaceHDEngine } = await import("@liveface/embed/lab/photoface-hd");
-      // Measured relief from the lab endpoint; a miss means the dome
-      // fallback, which is an answer the comparison can still judge.
-      const depthZ = await api
-        .get<{ detected: boolean; z: number[] }>(`/orgs/${orgId}/lab/avatars/${avatar.id}/depth`)
-        .then((d) => (d.detected ? d.z : null))
-        .catch(() => null);
+      const depthZ = await faceDepth(orgId, avatar.id);
       const instance = await PhotoFaceHDEngine.load(canvasRef.current, {
         rigUrl: avatar.rig_url,
         imageUrl: avatar.image_url,
@@ -69,10 +64,10 @@ export function PhotoFaceHDPreview({
       onEngine?.(null);
       engine?.destroy();
     };
-  }, [avatar.id, avatar.image_url, avatar.rig_url, backgroundUrl, bodyUrl, headUrl, onEngine, t]);
+  }, [orgId, avatar.id, avatar.image_url, avatar.rig_url, backgroundUrl, bodyUrl, headUrl, onEngine, t]);
 
   return (
-    <div className="relative aspect-square overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_50%_30%,rgba(249,115,22,0.16),transparent_58%),linear-gradient(to_bottom,#f8fafc,#e2e8f0)] dark:bg-[radial-gradient(circle_at_50%_30%,rgba(249,115,22,0.18),transparent_58%),linear-gradient(to_bottom,#262626,#111827)]">
+    <div className="backdrop-hd relative aspect-square overflow-hidden rounded-2xl">
       <canvas
         ref={canvasRef}
         width={640}

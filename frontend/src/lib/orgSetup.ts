@@ -22,6 +22,11 @@ export function needsPersonalOrg(state: OrgSetupState): boolean {
 /** Is the workspace still being made, so pages wait (a loader, not a blank
  * page or a "Create organization" choice)? Not once it failed: the retry is
  * then shown. */
-export function settingUpWorkspace(state: { userId: string | null; loaded: boolean; orgCount: number; failed: boolean }): boolean {
+export function settingUpWorkspace(state: {
+  userId: string | null;
+  loaded: boolean;
+  orgCount: number;
+  failed: boolean;
+}): boolean {
   return Boolean(state.userId) && (!state.loaded || (state.orgCount === 0 && !state.failed));
 }

@@ -1,0 +1,48 @@
+/**
+ * The embed snippet: what a site owner pastes, and what the Simulator runs.
+ * Framework-free; the avatar page shows it (EmbedSnippet), the Simulator
+ * prefills it.
+ */
+
+/** Dev: the API runs on its own port. Prod: Caddy exposes it under /api. */
+export function apiBaseUrl(): string {
+  return window.location.origin.includes("localhost") ? "http://localhost:7002" : `${window.location.origin}/api`;
+}
+
+/** The voice the snippet should reproduce. Matches VoiceSelection. */
+export interface SnippetVoice {
+  provider?: string;
+  voice?: string;
+  locale?: string;
+}
+
+/**
+ * Exported so the Simulator prefills exactly what the user is told to paste.
+ * Two copies of this would drift, and the Simulator's whole claim is that it
+ * runs the same thing your site will.
+ *
+ * The voice attributes matter more than they look: `data-locale` chooses the
+ * language the lip-sync is generated for, so a snippet that omits it makes a
+ * French avatar move its mouth to English phonemes no matter which voice was
+ * picked here. Emitted only when set, so the snippet stays short when the
+ * defaults are what you want.
+ */
+export function buildSnippet(avatarId: string, apiKey?: string, voice?: SnippetVoice): string {
+  const apiBase = apiBaseUrl();
+  // The widget bundle is served BY the API, so it lives under the same
+  // base as every other API route (in production that's <origin>/api).
+  const lines = [
+    `<script`,
+    `  src="${apiBase}/liveface.js"`,
+    `  data-avatar="${avatarId}"`,
+    `  data-key="${apiKey ?? "YOUR_API_KEY"}"`,
+    `  data-api="${apiBase}"`,
+  ];
+  // Deliberately NO voice attributes: the widget reads the avatar's
+  // published voice at load time, so changing it in the dashboard reaches
+  // sites that already pasted this snippet. Hand-adding data-provider /
+  // data-voice / data-locale still works and pins that one site.
+  void voice;
+  lines.push(`></script>`, `<script>/* then: Liveface.speak("Hello!") */</script>`);
+  return lines.join("\n");
+}

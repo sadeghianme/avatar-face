@@ -1,7 +1,6 @@
 /** The one-column touch query against Tailwind's `lg`: `npm test` (node --test). */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-
 import defaultTheme from "tailwindcss/defaultTheme.js";
 
 import { TOUCH_ONE_COLUMN } from "./useMediaQuery.ts";

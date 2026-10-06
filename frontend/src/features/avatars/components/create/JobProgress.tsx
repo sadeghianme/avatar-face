@@ -1,18 +1,30 @@
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { Spinner } from "@/components/ui/Spinner";
 import {
-  errorText,
-  finishStage,
-  isJobActive,
-  jobFailure,
   type CreationJob,
+  errorText,
   type FinishRow,
   type FinishStage,
+  finishStage,
+  isJobActive,
   type JobCount,
+  jobFailure,
 } from "@/features/avatars/creation";
-import { Icon } from "@/components/ui/Icon";
-import { Spinner } from "@/components/ui/Spinner";
+import { cx } from "@/lib/cx";
+
+/** A finish row's words, by its state: the current one strongest, a
+ * skipped one struck through. */
+const ROW_TEXT: Record<FinishRow["state"], string> = {
+  current: "font-medium text-gray-900 dark:text-gray-100",
+  done: "text-gray-700 dark:text-gray-300",
+  skipped: "text-gray-500 line-through decoration-gray-400/70 dark:text-gray-400",
+  pending: "text-gray-500 dark:text-gray-400",
+};
 
 /**
  * A creation job, drawn: what is happening and how far along, or why it
@@ -54,7 +66,7 @@ export function JobProgress({
           <Spinner className="h-4 w-4 shrink-0 text-brand-600" />
           {label}
         </p>
-        <ProgressBar fraction={fraction} label={label} />
+        <JobProgressBar fraction={fraction} label={label} />
       </div>
     );
   }
@@ -70,10 +82,9 @@ export function JobProgress({
       {(job.retryable && onRetry) || children ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {job.retryable && onRetry && (
-            <button type="button" className="btn-secondary" onClick={onRetry} disabled={retrying}>
-              {retrying ? <Spinner className="h-4 w-4" /> : null}
+            <Button variant="secondary" onClick={onRetry} loading={retrying}>
               {t("retry")}
-            </button>
+            </Button>
           )}
           {children}
         </div>
@@ -124,7 +135,7 @@ function FinishProgress({ job, rows }: { job: CreationJob; rows: FinishRow[] }) 
           <FinishRowItem key={row.phase} row={row} stage={stage} />
         ))}
       </ol>
-      <ProgressBar fraction={job.progress?.fraction ?? null} label={label} />
+      <JobProgressBar fraction={job.progress?.fraction ?? null} label={label} />
     </div>
   );
 }
@@ -158,17 +169,7 @@ function FinishRowItem({ row, stage }: { row: FinishRow; stage: FinishStage | nu
         )}
       </span>
       <div className="min-w-0 flex-1">
-        <p
-          className={`flex flex-wrap items-baseline gap-x-2.5 text-sm ${
-            row.state === "current"
-              ? "font-medium text-gray-900 dark:text-gray-100"
-              : row.state === "done"
-                ? "text-gray-700 dark:text-gray-300"
-                : row.state === "skipped"
-                  ? "text-gray-500 line-through decoration-gray-400/70 dark:text-gray-400"
-                  : "text-gray-500 dark:text-gray-400"
-          }`}
-        >
+        <p className={cx("flex flex-wrap items-baseline gap-x-2.5 text-sm", ROW_TEXT[row.state])}>
           <span>
             {t(`createFinishPhase_${row.phase}`)}
             <span className="sr-only"> ({t(`createFinishPhaseState_${row.state}`)})</span>
@@ -195,33 +196,25 @@ export function ShapeTicks({ count }: { count: JobCount }) {
       {Array.from({ length: count.total }, (_, i) => (
         <span
           key={i}
-          className={`h-1.5 w-5 rounded-full transition-colors duration-300 motion-reduce:transition-none ${
+          className={cx(
+            "h-1.5 w-5 rounded-full transition-colors duration-300 motion-reduce:transition-none",
             i < count.done ? "bg-brand-500" : "bg-gray-200 dark:bg-white/[0.1]"
-          }`}
+          )}
         />
       ))}
     </span>
   );
 }
 
-/** A job's bar: its fraction, or a pulse while it has none. */
-export function ProgressBar({ fraction, label }: { fraction: number | null; label: string }) {
+/** A job's bar: its fraction (never less than a sliver), or a pulse while it has none. */
+export function JobProgressBar({ fraction, label }: { fraction: number | null; label: string }) {
   return (
-    <div
-      className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-white/[0.08]"
-      role="progressbar"
-      aria-label={label}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={fraction === null ? undefined : Math.round(fraction * 100)}
-    >
-      <div
-        className={`h-full rounded-full bg-brand-500 transition-[width] duration-500 motion-reduce:transition-none ${
-          fraction === null ? "w-1/3 animate-pulse" : ""
-        }`}
-        style={fraction === null ? undefined : { width: `${Math.max(4, Math.round(fraction * 100))}%` }}
-      />
-    </div>
+    <ProgressBar
+      value={fraction === null ? null : Math.max(4, Math.round(fraction * 100))}
+      label={label}
+      className="mt-3 h-1.5 dark:bg-white/[0.08]"
+      barClassName="rounded-full bg-brand-500 duration-500 motion-reduce:transition-none"
+    />
   );
 }
 

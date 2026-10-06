@@ -64,7 +64,14 @@ export const DIAGONALS: readonly Diagonal[] = ["upper_left", "upper_right", "low
  * the top: the order its outline is drawn in, the server checks it in
  * (anchor_fit.HEAD_OUTLINE_EDGES), and the keyboard visits its handles. */
 export const HEAD_OUTLINE: readonly Edge[] = [
-  "top", "upper_right", "right", "lower_right", "bottom", "lower_left", "left", "upper_left",
+  "top",
+  "upper_right",
+  "right",
+  "lower_right",
+  "bottom",
+  "lower_left",
+  "left",
+  "upper_left",
 ];
 
 export const GROUP_COLOURS: Record<GroupId, string> = {
@@ -119,9 +126,7 @@ function regionHandles(group: RegionId, region: RegionMarks): Handle[] {
   // The head's handles go round its outline, so Tab walks the face's edge;
   // a head saved with four points has only those four.
   const edges: Edge[] =
-    group === "head"
-      ? HEAD_OUTLINE.filter((edge) => region[edge] !== undefined)
-      : ["left", "right", "top", "bottom"];
+    group === "head" ? HEAD_OUTLINE.filter((edge) => region[edge] !== undefined) : ["left", "right", "top", "bottom"];
   if (region.center) edges.push("center");
   return edges.map((edge) => ({
     id: `${group}.${edge}`,

@@ -11,10 +11,7 @@ import type { Avatar, TeethRecord } from "@/lib/types";
  * every avatar without teeth of its own (kind "generic"). The server says
  * which in `mouth.teeth` (services.mouth_photo, mouth_kit).
  */
-export type TeethView =
-  | { kind: "ai" }
-  | { kind: "upload" }
-  | { kind: "generic"; note: TeethRecord["note"] };
+export type TeethView = { kind: "ai" } | { kind: "upload" } | { kind: "generic"; note: TeethRecord["note"] };
 
 /** Why a new avatar has the standard teeth, by the note's code. Each has its
  * words (`mouthTeethNote_<code>`); a code not here shows the server's own
@@ -140,8 +137,6 @@ export function aiEditedLabels(edited: Avatar["ai_edited"]): string[] {
 /** The models behind the disclosure, each once, for its tooltip. */
 export function aiEditedModels(edited: Avatar["ai_edited"]): string[] {
   if (!edited) return [];
-  const models = [edited.model, edited.teeth?.model, edited.mouth_shapes?.model].filter(
-    (m): m is string => Boolean(m)
-  );
+  const models = [edited.model, edited.teeth?.model, edited.mouth_shapes?.model].filter((m): m is string => Boolean(m));
   return [...new Set(models)];
 }

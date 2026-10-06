@@ -1,50 +1,48 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Icon } from "@/components/ui/Icon";
+import { Spinner } from "@/components/ui/Spinner";
+import { Textarea } from "@/components/ui/Textarea";
+import { creationRequests } from "@/features/avatars/api";
 import { BackButton, BarAction, StepFooter } from "@/features/avatars/components/wizard/Footer";
 import { Result, Working } from "@/features/avatars/components/wizard/Pictures";
 import { VersionStrip } from "@/features/avatars/components/wizard/Versions";
-import {
-  errorText,
-  isJobActive,
-  jobFailure,
-  type Creation,
-  type DraftStore,
-} from "@/features/avatars/creation";
 import { consentProblem } from "@/features/avatars/consent";
+import { type DraftStore, errorText, isJobActive, jobFailure } from "@/features/avatars/creation";
 import type { ConsentApi } from "@/features/avatars/hooks/useConsent";
 import type { Run } from "@/features/avatars/hooks/useCreation";
 import {
   activeChange,
   applyKeys,
-  heldStage,
   beforeStep,
   canUseOriginal,
+  clearBody,
+  footerPlan,
+  freeClearsLeft,
+  heldStage,
   isPrepareJob,
+  type LastPrepare,
   MAX_WORDS,
   needsPrepare,
   planOf,
+  type PrepareBody,
   prepareChecklist,
   preparedStep,
   preparePhase,
+  type PrepareStage,
   prepareStage,
   recallChoices,
   retryBody,
-  triesLeft,
-  freeClearsLeft,
-  clearBody,
-  footerPlan,
   selectedVersion,
-  versionsOf,
-  type LastPrepare,
+  triesLeft,
   type Version,
-  type PrepareBody,
-  type PrepareStage,
+  versionsOf,
   type WizardCreation,
 } from "@/features/avatars/wizard";
-import { Icon } from "@/components/ui/Icon";
-import { Spinner } from "@/components/ui/Spinner";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 
 /** The picture's width for its height to fit between the bars (the
  * header, the progress and the title above, the action bar below). */
@@ -101,7 +99,7 @@ export function PrepareScreen({
   onContinue: () => void;
 }) {
   const { t } = useTranslation();
-  const base = `/orgs/${orgId}/creations/${creation.id}`;
+  const requests = creationRequests(orgId, creation.id);
   const plan = planOf(creation);
   const choices = recallChoices(tabStore(), creation.id);
   const phase = preparePhase(creation);
@@ -126,7 +124,7 @@ export function PrepareScreen({
     run(body.mode === "change" ? "change" : "prepare", async () => {
       const id = agreed ?? (typeof consentId === "string" ? consentId : undefined);
       try {
-        return await api.post<Creation>(`${base}/prepare`, { ...body, ...(id ? { consent_id: id } : {}) });
+        return await requests.prepare(body, id);
       } catch (err) {
         const problem = err instanceof ApiError ? consentProblem(err.code, err.body) : null;
         if (problem?.kind === "required" && problem.scope === "third_party_ai") {
@@ -138,9 +136,14 @@ export function PrepareScreen({
     });
 
   // Start by itself, once per revision: the intent step 2 recorded, or
-  // what the plan and the member's remembered agreement allow.
+  // what the plan and the member's remembered agreement allow. Decided when
+  // the revision, the job's state, the agreement or the runner changes,
+  // with this render's view of the rest (`auto`).
   const asked = useRef(new Set<number>());
+  const auto = useRef({ creation, plan, choices, aiOn, prepare });
+  auto.current = { creation, plan, choices, aiOn, prepare };
   useEffect(() => {
+    const { creation, plan, choices, aiOn, prepare } = auto.current;
     if (!needsPrepare(creation) || busy !== null || askAi) return;
     if (consentId === undefined) return; // still loading: decide once known
     if (asked.current.has(creation.revision)) return;
@@ -157,7 +160,6 @@ export function PrepareScreen({
     } else {
       setAskAi(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creation.revision, creation.job?.state, consentId, busy, askAi]);
 
   const agreeAndPrepare = async () => {
@@ -173,7 +175,7 @@ export function PrepareScreen({
   const retryJob = () =>
     void run("retry", async () => {
       try {
-        return await api.post<Creation>(`${base}/retry`, typeof consentId === "string" ? { consent_id: consentId } : {});
+        return await requests.retry(typeof consentId === "string" ? consentId : undefined);
       } catch (err) {
         const problem = err instanceof ApiError ? consentProblem(err.code, err.body) : null;
         if (problem?.kind === "required" && problem.scope === "third_party_ai") {
@@ -192,7 +194,7 @@ export function PrepareScreen({
   const idle = (phase === "done" || phase === "failed") && busy === null && !(job && isJobActive(job));
   const stage = idle ? null : heldStage(shownStage.current, prepareStage(job) ?? (busy ? "upload" : null));
   shownStage.current = stage;
-  const fraction = job && isJobActive(job) ? job.progress?.fraction ?? null : null;
+  const fraction = job && isJobActive(job) ? (job.progress?.fraction ?? null) : null;
   const failure = job && isPrepareJob(job) ? jobFailure(job) : null;
   const failureText = failure ? errorText(t, failure.code, failure.detail) : null;
   const canAi = aiOn && tries > 0;
@@ -205,29 +207,26 @@ export function PrepareScreen({
       <p className="text-sm font-medium text-gray-900 dark:text-white">{t("wzAiNeeded")}</p>
       {aiOn ? (
         <>
-          <label className="mt-3 flex cursor-pointer items-start gap-3 coarse:min-h-11 text-sm text-gray-800 dark:text-gray-200">
-            <input
-              type="checkbox"
-              className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"
-              checked={agree}
-              onChange={(e) => setAgree(e.target.checked)}
-            />
-            <span>{t(plan.source === "generate" ? "wzConsentAi_generate" : "wzConsentAi_upload")}</span>
-          </label>
+          <Checkbox
+            size="md"
+            className="mt-3 text-gray-800 dark:text-gray-200"
+            checked={agree}
+            onChange={(e) => setAgree(e.target.checked)}
+            label={<span>{t(plan.source === "generate" ? "wzConsentAi_generate" : "wzConsentAi_upload")}</span>}
+          />
           <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="btn-primary min-h-11"
+            <Button
+              size="lg"
+              icon={busy === "prepare" ? <Spinner className="h-4 w-4" /> : "sparkles"}
               disabled={!agree || busy !== null}
               onClick={() => void agreeAndPrepare()}
             >
-              {busy === "prepare" ? <Spinner className="h-4 w-4" /> : <Icon name="sparkles" className="h-4 w-4" />}
               {t("wzUseAi")}
-            </button>
+            </Button>
             {originalOffered && (
-              <button
-                type="button"
-                className="btn-secondary min-h-11"
+              <Button
+                variant="secondary"
+                size="lg"
                 disabled={busy !== null}
                 onClick={() => {
                   setAskAi(false);
@@ -235,7 +234,7 @@ export function PrepareScreen({
                 }}
               >
                 {t("wzUseOriginal")}
-              </button>
+              </Button>
             )}
           </div>
         </>
@@ -269,32 +268,44 @@ export function PrepareScreen({
     return (
       <div className="max-w-2xl space-y-5">
         {failureText && phase === "failed" && (
-          <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100">
+          <div
+            role="alert"
+            className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100"
+          >
             <p className="flex items-start gap-2">
               <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{failureText}</span>
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {job?.retryable && !askAi && (
-                <button type="button" className="btn-primary min-h-11" onClick={retryJob} disabled={busy !== null}>
-                  {busy === "retry" ? <Spinner className="h-4 w-4" /> : <Icon name="refresh" className="h-4 w-4" />}
+                <Button
+                  size="lg"
+                  icon={busy === "retry" ? <Spinner className="h-4 w-4" /> : "refresh"}
+                  onClick={retryJob}
+                  disabled={busy !== null}
+                >
                   {t("wzTryAgain")}
-                </button>
+                </Button>
               )}
               {originalOffered && job?.step !== "ingest" && (
-                <button type="button" className="btn-secondary min-h-11" onClick={() => void prepare({ mode: "original" })} disabled={busy !== null}>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  onClick={() => void prepare({ mode: "original" })}
+                  disabled={busy !== null}
+                >
                   {t("wzUseOriginal")}
-                </button>
+                </Button>
               )}
-              <button
-                type="button"
-                className={`${job?.retryable || originalOffered ? "btn-secondary" : "btn-primary"} min-h-11`}
+              <Button
+                variant={job?.retryable || originalOffered ? "secondary" : "primary"}
+                size="lg"
+                icon={<Icon name="back" className="h-4 w-4 rtl:-scale-x-100" />}
                 onClick={onBack}
                 disabled={busy !== null}
               >
-                <Icon name="back" className="h-4 w-4 rtl:-scale-x-100" />
                 {t(plan.source === "generate" ? "wzEditDescription" : "wzOtherPhoto")}
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -308,11 +319,7 @@ export function PrepareScreen({
   const applied = activeChange(last);
   const redoing = working || busy === "prepare" || busy === "change" || busy === "retry";
   const switching = busy === "version";
-  const note = !last?.cut && last
-    ? t("wzKeptBackground")
-    : lastWasOriginal
-      ? t("wzOriginalNote")
-      : t("wzAiMadeNote");
+  const note = !last?.cut && last ? t("wzKeptBackground") : lastWasOriginal ? t("wzOriginalNote") : t("wzAiMadeNote");
   const applyChange = () => {
     const words = change.trim();
     if (!words || redoing || busy !== null) return;
@@ -328,9 +335,7 @@ export function PrepareScreen({
       return;
     }
     setPending(version.id);
-    void run("version", () => api.post<Creation>(`${base}/version`, { version: version.id })).finally(() =>
-      setPending(null)
-    );
+    void run("version", () => requests.version(version.id)).finally(() => setPending(null));
   };
 
   return (
@@ -365,7 +370,10 @@ export function PrepareScreen({
 
       <div className="flex flex-col gap-5 lg:col-start-2 lg:row-start-1">
         <p className="flex items-start gap-2.5 rounded-2xl bg-gray-50 p-4 text-sm text-gray-700 dark:bg-white/[0.04] dark:text-gray-300">
-          <Icon name={lastWasOriginal ? "image" : "sparkles"} className="mt-0.5 h-4 w-4 shrink-0 text-brand-600 dark:text-brand-300" />
+          <Icon
+            name={lastWasOriginal ? "image" : "sparkles"}
+            className="mt-0.5 h-4 w-4 shrink-0 text-brand-600 dark:text-brand-300"
+          />
           <span>
             {note}
             {plan.source === "generate" && plan.description && (
@@ -379,15 +387,16 @@ export function PrepareScreen({
                 {aiOn && !askAi && (canAi || freeClear) && (
                   <>
                     {" "}
-                    <button
-                      type="button"
-                      className="inline min-h-6 rounded font-medium text-brand-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:opacity-50 dark:text-brand-300"
+                    {/* In the line of words: inline, so it flows with them. */}
+                    <Button
+                      variant="link"
+                      className="inline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                       onClick={() => void prepare(clearBody(plan))}
                       disabled={redoing || busy !== null}
                       title={t(freeClear ? "wzChangeClearHint" : "wzChangeClearPaidHint")}
                     >
                       {t(freeClear ? "wzChangeClear" : "wzChangeClearPaid")}
-                    </button>
+                    </Button>
                   </>
                 )}
               </span>
@@ -396,7 +405,10 @@ export function PrepareScreen({
         </p>
 
         {failureText && !redoing && (
-          <p role="alert" className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100">
+          <p
+            role="alert"
+            className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100"
+          >
             <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{failureText}</span>
           </p>
@@ -415,10 +427,10 @@ export function PrepareScreen({
             <label htmlFor={`${ids}-change`} className="label mb-0">
               {t("wzChangeLabel")}
             </label>
-            <textarea
+            <Textarea
               id={`${ids}-change`}
               rows={3}
-              className="input min-h-[96px] resize-y text-[15px] leading-relaxed"
+              className="min-h-[96px] resize-y text-[15px] leading-relaxed"
               maxLength={MAX_WORDS}
               placeholder={t("wzChangePlaceholder")}
               value={change}
@@ -440,10 +452,16 @@ export function PrepareScreen({
               <p id={`${ids}-change-keys`} className="hidden text-xs text-gray-500 dark:text-gray-400 sm:block">
                 {t("wzChangeShortcut", { keys: APPLY_KEYS })}
               </p>
-              <button type="submit" className="btn-secondary min-h-11 shrink-0" disabled={!change.trim() || redoing || busy !== null}>
-                {busy === "change" ? <Spinner className="h-4 w-4" /> : <Icon name="pencil" className="h-4 w-4" />}
+              <Button
+                type="submit"
+                variant="secondary"
+                size="lg"
+                className="shrink-0"
+                icon={busy === "change" ? <Spinner className="h-4 w-4" /> : "pencil"}
+                disabled={!change.trim() || redoing || busy !== null}
+              >
                 {t("wzApply")}
-              </button>
+              </Button>
             </div>
           </form>
         )}
@@ -485,16 +503,16 @@ export function PrepareScreen({
           />
         )}
         {footer.primary === "continue" && (
-          <button
-            type="button"
-            className="btn-primary min-h-12 whitespace-nowrap px-5 text-[15px] shadow-sm shadow-brand-600/20 sm:px-6"
+          <Button
+            size="xl"
+            className="whitespace-nowrap shadow-sm shadow-brand-600/20 sm:px-6"
+            iconEnd={<Icon name="arrow" className="h-4 w-4 rtl:-scale-x-100" strokeWidth={2} />}
             onClick={onContinue}
             disabled={redoing || busy !== null}
           >
             <span className="sm:hidden">{t("wzContinueShort")}</span>
             <span className="hidden sm:inline">{t("wzContinue")}</span>
-            <Icon name="arrow" className="h-4 w-4 rtl:-scale-x-100" strokeWidth={2} />
-          </button>
+          </Button>
         )}
       </StepFooter>
     </div>

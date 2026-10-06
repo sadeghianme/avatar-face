@@ -18,11 +18,7 @@ export function Protected({ children }: { children: ReactNode }) {
   const location = useLocation();
   const { t } = useTranslation();
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-gray-500">
-        {t("loading")}
-      </div>
-    );
+    return <div className="flex min-h-screen items-center justify-center text-gray-500">{t("loading")}</div>;
   }
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
   // Screens are code-split: the shell stays on screen while one loads.

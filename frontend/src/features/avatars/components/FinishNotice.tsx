@@ -1,21 +1,23 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Icon } from "@/components/ui/Icon";
+import { Banner } from "@/components/ui/Banner";
+import { Button } from "@/components/ui/Button";
 import {
-  finishNoticeFor,
-  forgetFinishNotice,
   type DraftStore,
   type FinishNotice as Notice,
+  finishNoticeFor,
+  forgetFinishNotice,
 } from "@/features/avatars/creation";
 import {
   factNeedsAttention,
   factText,
   factWantsMore,
-  preparedFacts,
   type PreparedFact,
+  preparedFacts,
 } from "@/features/avatars/mouth-kit";
 import { teethNoteKey, teethView } from "@/features/avatars/teeth";
+import { cx } from "@/lib/cx";
 import type { Avatar } from "@/lib/types";
 
 function tabStore(): DraftStore | null {
@@ -98,47 +100,42 @@ export function FinishNotice({
   };
 
   return (
-    <section
+    <Banner
+      as="section"
       aria-labelledby="finish-notice-title"
-      className={`card flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ${
-        attention ? "border-amber-300/60 dark:border-amber-500/30" : ""
-      }`}
+      tone={attention ? "warning" : "brand"}
+      icon={attention ? "alert" : "sparkles"}
+      actions={
+        <>
+          {toMouthPanel && (
+            <Button variant="secondary" size="lg" icon="sparkles" onClick={toMouth}>
+              {t("finishNoticeToMouth")}
+            </Button>
+          )}
+          <Button variant="secondary" size="lg" onClick={dismiss}>
+            {t("finishNoticeDismiss")}
+          </Button>
+        </>
+      }
     >
-      <div className="flex min-w-0 flex-1 basis-56 items-start gap-2.5">
-        <Icon
-          name={attention ? "alert" : "sparkles"}
-          className={`mt-0.5 h-4 w-4 shrink-0 ${
-            attention ? "text-amber-600 dark:text-amber-400" : "text-brand-600 dark:text-brand-300"
-          }`}
-        />
-        <p className="min-w-0 text-[13px] leading-snug text-gray-600 dark:text-gray-300">
-          <span
-            id="finish-notice-title"
-            className={`font-medium ${
-              attention ? "text-amber-800 dark:text-amber-300" : "text-gray-900 dark:text-gray-100"
-            }`}
-          >
-            {t(attention ? "finishNoticeTitle" : "finishNoticePreparedTitle")}
+      {/* The title runs into the facts: one paragraph, a strip not a card. */}
+      <p className="min-w-0 text-[13px] leading-snug text-gray-600 dark:text-gray-300">
+        <span
+          id="finish-notice-title"
+          className={cx(
+            "font-medium",
+            attention ? "text-amber-800 dark:text-amber-300" : "text-gray-900 dark:text-gray-100"
+          )}
+        >
+          {t(attention ? "finishNoticeTitle" : "finishNoticePreparedTitle")}
+        </span>
+        {items.map((item) => (
+          <span key={item.key}>
+            <span aria-hidden="true"> · </span>
+            {item.text}
           </span>
-          {items.map((item) => (
-            <span key={item.key}>
-              <span aria-hidden="true"> · </span>
-              {item.text}
-            </span>
-          ))}
-        </p>
-      </div>
-      <div className="flex shrink-0 gap-2">
-        {toMouthPanel && (
-          <button type="button" className="btn-secondary min-h-11" onClick={toMouth}>
-            <Icon name="sparkles" className="h-4 w-4" />
-            {t("finishNoticeToMouth")}
-          </button>
-        )}
-        <button type="button" className="btn-secondary min-h-11" onClick={dismiss}>
-          {t("finishNoticeDismiss")}
-        </button>
-      </div>
-    </section>
+        ))}
+      </p>
+    </Banner>
   );
 }

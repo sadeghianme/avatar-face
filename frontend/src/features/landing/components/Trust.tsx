@@ -14,7 +14,10 @@ const ITEMS: { icon: IconName; key: string }[] = [
 export function Trust() {
   const { t } = useTranslation();
   return (
-    <section id="security" className="scroll-mt-20 border-y border-black/[0.06] bg-gray-950 py-24 text-white sm:py-28 dark:border-white/[0.07]">
+    <section
+      id="security"
+      className="scroll-mt-20 border-y border-black/[0.06] bg-gray-950 py-24 text-white sm:py-28 dark:border-white/[0.07]"
+    >
       <div className="mx-auto max-w-7xl px-5 sm:px-6">
         <Reveal className="max-w-2xl">
           <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-brand-400">{t("trustEyebrow")}</p>

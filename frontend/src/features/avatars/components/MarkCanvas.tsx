@@ -4,25 +4,33 @@ import { useTranslation } from "react-i18next";
 import {
   clampToImage,
   closedCurvePath,
+  type FaceMarks,
   GROUP_COLOURS,
   GROUP_LABELS,
+  type Handle,
   handleAt,
   handlesFor,
   headOutline,
-  type FaceMarks,
-  type Handle,
   type Pt,
 } from "@/features/avatars/face-marks";
 import {
+  type Corner,
+  LOUPE_FRAME,
+  LOUPE_ZOOM,
   loupeCorner,
   loupeInner,
   loupeOrigin,
   loupeSize,
   loupeView,
-  LOUPE_FRAME,
-  LOUPE_ZOOM,
-  type Corner,
 } from "@/features/avatars/loupe";
+import { cx } from "@/lib/cx";
+
+/** A point's button: 24px around the dot, centred on the point; the
+ *  canvas takes the pointer, the button takes the keyboard. */
+const HANDLE = cx(
+  "pointer-events-none absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center",
+  "rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white"
+);
 
 // Arrow keys nudge a handle this far, in IMAGE pixels, and ten times that
 // with Shift: a pixel of the photo, whatever size it is displayed at.
@@ -280,19 +288,24 @@ export function MarkCanvas({
   // Every render can move what the zoom shows (a nudge, a drag landing, a
   // resize): repaint after it, before the browser draws.
   useLayoutEffect(paint);
-  useEffect(() => () => {
-    if (frame.current !== null) cancelAnimationFrame(frame.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+    },
+    []
+  );
   // Scrolling moves the photo under a pointer that stays still: the zoom
-  // follows on the scroll itself (a drag moves its handle along too).
+  // follows on the scroll itself (a drag moves its handle along too). The
+  // listener stays for the canvas's life and calls this render's schedule.
+  const latestSchedule = useRef(schedule);
+  latestSchedule.current = schedule;
   useEffect(() => {
     const onScroll = () => {
-      if (lens.current.client) schedule();
+      if (lens.current.client) latestSchedule.current();
     };
     window.addEventListener("scroll", onScroll, { capture: true, passive: true });
     return () => window.removeEventListener("scroll", onScroll, { capture: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imgW, imgH]);
+  }, []);
 
   const place = (h: Handle, to: Pt) => onChange(h.move(marks, clampToImage(to, imgW, imgH)));
 
@@ -371,13 +384,13 @@ export function MarkCanvas({
   // sized in, so they read the same at every photo size.
   const lensPx = scale > 0 ? 1 / (scale * LOUPE_ZOOM) : 1;
   const active = dragging ?? (fromKeys ? focused : null);
-  const cx = inner.width / 2;
-  const cy = inner.height / 2;
+  const midX = inner.width / 2;
+  const midY = inner.height / 2;
   const arms = [
-    [0, cy, cx - CROSSHAIR_GAP_PX, cy],
-    [cx + CROSSHAIR_GAP_PX, cy, inner.width, cy],
-    [cx, 0, cx, cy - CROSSHAIR_GAP_PX],
-    [cx, cy + CROSSHAIR_GAP_PX, cx, inner.height],
+    [0, midY, midX - CROSSHAIR_GAP_PX, midY],
+    [midX + CROSSHAIR_GAP_PX, midY, inner.width, midY],
+    [midX, 0, midX, midY - CROSSHAIR_GAP_PX],
+    [midX, midY + CROSSHAIR_GAP_PX, midX, inner.height],
   ];
 
   return (
@@ -414,9 +427,7 @@ export function MarkCanvas({
             }}
             type="button"
             aria-label={label}
-            className="pointer-events-none absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2
-              items-center justify-center rounded-full outline-none focus-visible:ring-2
-              focus-visible:ring-white"
+            className={HANDLE}
             style={{ left: pct(p.x, imgW), top: pct(p.y, imgH) }}
             onKeyDown={(e) => onKeyDown(h, e)}
             onFocus={() => {
@@ -429,9 +440,11 @@ export function MarkCanvas({
             onBlur={() => setFocused((current) => (current === h.id ? null : current))}
           >
             <span
-              className={`block rounded-full border border-white/90 shadow
-                ${isActive ? "h-3.5 w-3.5 ring-2 ring-white" : "h-2.5 w-2.5"}
-                ${h.primary ? "ring-1 ring-white/70" : ""}`}
+              className={cx(
+                "block rounded-full border border-white/90 shadow",
+                isActive ? "h-3.5 w-3.5 ring-2 ring-white" : "h-2.5 w-2.5",
+                h.primary && "ring-1 ring-white/70"
+              )}
               style={{ backgroundColor: GROUP_COLOURS[h.group] }}
             />
           </button>

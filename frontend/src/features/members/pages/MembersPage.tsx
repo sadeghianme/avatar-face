@@ -1,203 +1,148 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { ROW_ACTION, STACK } from "@/components/ui/stackTable";
-import { api, ApiError } from "@/lib/api";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { StackCell, StackRow, StackTable, TableAction } from "@/components/ui/Table";
+import {
+  useChangeRole,
+  useInvitations,
+  useInvite,
+  useMembers,
+  useRemoveMember,
+  useRevokeInvitation,
+} from "@/features/members/api";
+import { errorMessage } from "@/lib/errorMessage";
+import type { Role } from "@/lib/types";
 import { useOrg } from "@/providers/org";
-import type { Invitation, Member, Role } from "@/lib/types";
 
 export function MembersPage() {
   const { t } = useTranslation();
   const { current } = useOrg();
-  const queryClient = useQueryClient();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("member");
-  const [error, setError] = useState<string | null>(null);
   const orgId = current?.id;
   const isAdmin = current?.role === "owner" || current?.role === "admin";
 
-  const { data: members } = useQuery({
-    queryKey: ["members", orgId],
-    queryFn: () => api.get<Member[]>(`/orgs/${orgId}/members`),
-    enabled: Boolean(orgId),
-  });
-  const { data: invitations } = useQuery({
-    queryKey: ["invitations", orgId],
-    queryFn: () => api.get<Invitation[]>(`/orgs/${orgId}/invitations`),
-    enabled: Boolean(orgId) && isAdmin,
-  });
+  const { data: members } = useMembers(orgId);
+  const { data: invitations } = useInvitations(orgId, isAdmin);
+  const invite = useInvite(orgId);
+  const changeRole = useChangeRole(orgId);
+  const remove = useRemoveMember(orgId);
+  const revoke = useRevokeInvitation(orgId);
+  // The last action's refusal, whichever it was.
+  const failed = invite.error ?? changeRole.error ?? remove.error ?? revoke.error;
+  const pending = invitations?.filter((i) => !i.accepted_at && !i.revoked_at) ?? [];
 
-  const invalidate = () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["members", orgId] }),
-      queryClient.invalidateQueries({ queryKey: ["invitations", orgId] }),
-    ]);
-
-  const invite = useMutation({
-    mutationFn: () => api.post(`/orgs/${orgId}/invitations`, { email, role }),
-    onSuccess: () => {
-      setEmail("");
-      setError(null);
-      void invalidate();
-    },
-    onError: (err) => setError(err instanceof ApiError ? err.detail : t("error")),
-  });
-
-  const changeRole = async (member: Member, newRole: Role) => {
-    setError(null);
-    try {
-      await api.patch(`/orgs/${orgId}/members/${member.membership_id}`, { role: newRole });
-      await invalidate();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.detail : t("error"));
-    }
-  };
-
-  const removeMember = async (member: Member) => {
-    setError(null);
-    try {
-      await api.delete(`/orgs/${orgId}/members/${member.membership_id}`);
-      await invalidate();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.detail : t("error"));
-    }
-  };
+  const roleOptions = (withOwner: boolean) => (
+    <>
+      <option value="member">{t("roles.member")}</option>
+      <option value="admin">{t("roles.admin")}</option>
+      {withOwner && <option value="owner">{t("roles.owner")}</option>}
+    </>
+  );
 
   return (
     <div>
       <h1 className="mb-6 text-2xl font-semibold">{t("members")}</h1>
 
       {isAdmin && (
-        <form
-          className="card mb-6 flex flex-wrap items-end gap-3"
+        <Card
+          as="form"
+          className="mb-6 flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            invite.mutate();
+            invite.mutate({ email, role }, { onSuccess: () => setEmail("") });
           }}
         >
-          <div className="min-w-48 flex-1">
-            <label className="label" htmlFor="invite-email">{t("inviteMember")}</label>
-            <input
-              id="invite-email"
+          <Field id="invite-email" label={t("inviteMember")} className="min-w-48 flex-1">
+            <Input
               type="email"
               required
-              className="input"
               placeholder="teammate@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
-          </div>
-          <div>
-            <label className="label" htmlFor="invite-role">{t("role")}</label>
-            <select
-              id="invite-role"
-              className="input"
-              value={role}
-              onChange={(e) => setRole(e.target.value as Role)}
-            >
-              <option value="member">{t("roles.member")}</option>
-              <option value="admin">{t("roles.admin")}</option>
-              {current?.role === "owner" && <option value="owner">{t("roles.owner")}</option>}
-            </select>
-          </div>
-          <button type="submit" className="btn-primary" disabled={invite.isPending}>
+          </Field>
+          <Field id="invite-role" label={t("role")}>
+            <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
+              {roleOptions(current?.role === "owner")}
+            </Select>
+          </Field>
+          <Button type="submit" disabled={invite.isPending}>
             {t("inviteMember")}
-          </button>
-        </form>
+          </Button>
+        </Card>
       )}
-      {error && <p className="field-error mb-4">{error}</p>}
+      {failed && <p className="field-error mb-4">{errorMessage(failed, t("error"))}</p>}
 
-      <div className="card overflow-x-auto p-0">
-        <table className={STACK.table}>
-          <tbody className={STACK.body}>
-            {members?.map((member) => (
-              <tr
-                key={member.membership_id}
-                className={`${STACK.row} border-b border-gray-100 last:border-0 dark:border-line`}
-              >
-                <td className={STACK.lead}>
-                  <div className="font-medium">{member.display_name || member.username}</div>
-                  <div className="text-xs text-gray-400">{member.email}</div>
-                </td>
-                <td className={STACK.cell}>
-                  {isAdmin ? (
-                    <select
-                      aria-label={`role-${member.username}`}
-                      className="input w-auto py-1"
-                      value={member.role}
-                      onChange={(e) => void changeRole(member, e.target.value as Role)}
-                    >
-                      <option value="member">{t("roles.member")}</option>
-                      <option value="admin">{t("roles.admin")}</option>
-                      <option value="owner">{t("roles.owner")}</option>
-                    </select>
-                  ) : (
-                    t(`roles.${member.role}`)
-                  )}
-                </td>
-                <td className={STACK.end}>
-                  {isAdmin && (
-                    <button
-                      className={`text-sm text-red-600 hover:underline ${ROW_ACTION}`}
-                      onClick={() => void removeMember(member)}
-                    >
-                      {t("delete")}
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Card padding="none" className="overflow-x-auto">
+        <StackTable>
+          {members?.map((member) => (
+            <StackRow key={member.membership_id}>
+              <StackCell kind="lead">
+                <div className="font-medium">{member.display_name || member.username}</div>
+                <div className="text-xs text-gray-400">{member.email}</div>
+              </StackCell>
+              <StackCell>
+                {isAdmin ? (
+                  <Select
+                    aria-label={`role-${member.username}`}
+                    className="w-auto py-1"
+                    value={member.role}
+                    onChange={(e) =>
+                      changeRole.mutate({ membershipId: member.membership_id, role: e.target.value as Role })
+                    }
+                  >
+                    {roleOptions(true)}
+                  </Select>
+                ) : (
+                  t(`roles.${member.role}`)
+                )}
+              </StackCell>
+              <StackCell kind="end">
+                {isAdmin && (
+                  <TableAction onClick={() => remove.mutate(member.membership_id)}>{t("delete")}</TableAction>
+                )}
+              </StackCell>
+            </StackRow>
+          ))}
+        </StackTable>
+      </Card>
 
-      {isAdmin && invitations && invitations.filter((i) => !i.accepted_at && !i.revoked_at).length > 0 && (
+      {isAdmin && pending.length > 0 && (
         <>
           <h2 className="mb-3 mt-8 text-lg font-medium">{t("pendingInvitations")}</h2>
-          <div className="card p-0">
-            <table className={STACK.table}>
-          <tbody className={STACK.body}>
-                {invitations
-                  .filter((i) => !i.accepted_at && !i.revoked_at)
-                  .map((invitation) => (
-                    <tr
-                      key={invitation.id}
-                      className={`${STACK.row} border-b border-gray-100 last:border-0 dark:border-line`}
+          <Card padding="none">
+            <StackTable>
+              {pending.map((invitation) => (
+                <StackRow key={invitation.id}>
+                  <StackCell kind="lead">
+                    <div>{invitation.email}</div>
+                  </StackCell>
+                  <StackCell>{t(`roles.${invitation.role}`)}</StackCell>
+                  <StackCell className="text-xs text-gray-400">
+                    <code>/invite/{invitation.token.slice(0, 12)}…</code>
+                    <TableAction
+                      tone="brand"
+                      className="ms-2"
+                      onClick={() =>
+                        void navigator.clipboard.writeText(`${window.location.origin}/invite/${invitation.token}`)
+                      }
                     >
-                      <td className={STACK.lead}>
-                        <div>{invitation.email}</div>
-                      </td>
-                      <td className={STACK.cell}>{t(`roles.${invitation.role}`)}</td>
-                      <td className={`${STACK.cell} text-xs text-gray-400`}>
-                        <code>/invite/{invitation.token.slice(0, 12)}…</code>
-                        <button
-                          className={`ms-2 text-brand-600 hover:underline ${ROW_ACTION}`}
-                          onClick={() =>
-                            void navigator.clipboard.writeText(
-                              `${window.location.origin}/invite/${invitation.token}`
-                            )
-                          }
-                        >
-                          {t("copy")}
-                        </button>
-                      </td>
-                      <td className={STACK.end}>
-                        <button
-                          className={`text-sm text-red-600 hover:underline ${ROW_ACTION}`}
-                          onClick={async () => {
-                            await api.delete(`/orgs/${orgId}/invitations/${invitation.id}`);
-                            await invalidate();
-                          }}
-                        >
-                          {t("revoke")}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
+                      {t("copy")}
+                    </TableAction>
+                  </StackCell>
+                  <StackCell kind="end">
+                    <TableAction onClick={() => revoke.mutate(invitation.id)}>{t("revoke")}</TableAction>
+                  </StackCell>
+                </StackRow>
+              ))}
+            </StackTable>
+          </Card>
         </>
       )}
     </div>

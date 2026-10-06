@@ -1,8 +1,10 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
+import { Icon } from "@/components/ui/Icon";
+import { Spinner } from "@/components/ui/Spinner";
+import { useCreationCache, useDeleteCreation } from "@/features/avatars/api";
 import { ActionErrorNote } from "@/features/avatars/components/create/JobProgress";
 import { FooterSlot, StepFooter } from "@/features/avatars/components/wizard/Footer";
 import { ModelStep } from "@/features/avatars/components/wizard/ModelStep";
@@ -11,23 +13,19 @@ import { PrepareScreen } from "@/features/avatars/components/wizard/PrepareScree
 import { ProgressHeader } from "@/features/avatars/components/wizard/ProgressHeader";
 import { PublishScreen } from "@/features/avatars/components/wizard/PublishScreen";
 import {
+  type Creation,
+  type DraftStore,
   errorText,
   finishStage,
   forgetDraftMarks,
   isJobActive,
   jobFailure,
   stageCount,
-  type Creation,
-  type DraftStore,
 } from "@/features/avatars/creation";
-import {
-  creationKey,
-  draftsKey,
-  useCreation,
-  useCreationActions,
-} from "@/features/avatars/hooks/useCreation";
 import { useConsent } from "@/features/avatars/hooks/useConsent";
+import { useCreation, useCreationActions } from "@/features/avatars/hooks/useCreation";
 import {
+  type AvatarModel,
   forgetChoices,
   forgetLastChoices,
   FRESH_ENTRY,
@@ -38,15 +36,13 @@ import {
   preparePhase,
   prepareStage,
   recallChoices,
+  type Screen,
   screenFor,
   startFresh,
-  type AvatarModel,
-  type Screen,
   type WizardCreation,
 } from "@/features/avatars/wizard";
-import { Icon } from "@/components/ui/Icon";
-import { Spinner } from "@/components/ui/Spinner";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { cx } from "@/lib/cx";
 
 function tabStore(): DraftStore | null {
   try {
@@ -86,7 +82,8 @@ export function NewWizard({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const queryClient = useQueryClient();
+  const creationCache = useCreationCache(orgId);
+  const deleteCreation = useDeleteCreation(orgId);
   const [params] = useSearchParams();
   const consent = useConsent(orgId);
 
@@ -113,7 +110,13 @@ export function NewWizard({
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const model = parseModel(params.get("model"));
 
-  const screen: Screen = !creationId ? (model ? "photo" : "model") : creation ? screenFor(creation, params.get("step")) : "prepare";
+  const screen: Screen = !creationId
+    ? model
+      ? "photo"
+      : "model"
+    : creation
+      ? screenFor(creation, params.get("step"))
+      : "prepare";
 
   // --- Focus follows the screen -------------------------------------------------------
   const heading = useRef<HTMLHeadingElement>(null);
@@ -134,25 +137,22 @@ export function NewWizard({
     forgetChoices(tabStore(), creation.id);
     // The next avatar starts from nothing, not from this one's choices.
     forgetLastChoices(tabStore());
-    void queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
-    void queryClient.invalidateQueries({ queryKey: draftsKey(orgId) });
+    creationCache.finished();
     navigate(`/avatars/${creation.avatar_id}`, { replace: true });
-  }, [creation?.status, creation?.avatar_id, creation?.id, orgId, navigate, queryClient]);
+  }, [creation?.status, creation?.avatar_id, creation?.id, navigate, creationCache]);
 
   // --- Moves ---------------------------------------------------------------------------
   const chooseModel = (next: AvatarModel) => navigate(`/avatars/new?model=${next}`);
   const created = (next: Creation) => {
-    queryClient.setQueryData(creationKey(orgId, next.id), next);
-    void queryClient.invalidateQueries({ queryKey: draftsKey(orgId) });
+    creationCache.created(next);
     navigate(`/avatars/new/${next.id}`);
   };
   const backToPhoto = async () => {
     const m = creation ? planOf(creation).model : "human";
     if (creationId && creation?.status === "draft") {
       // Abandoned for a new start: gone now rather than a week from now.
-      await api.delete(`/orgs/${orgId}/creations/${creationId}`).catch(() => undefined);
+      await deleteCreation.mutateAsync(creationId).catch(() => undefined);
       forgetDraftMarks(tabStore(), creationId);
-      void queryClient.invalidateQueries({ queryKey: draftsKey(orgId) });
     }
     navigate(`/avatars/new?model=${m}`);
   };
@@ -164,7 +164,9 @@ export function NewWizard({
   const pStage = prepareStage(job);
   const fStage = finishStage(job);
   const count = fStage === "shapes" ? stageCount(job) : null;
-  const announcement = useMemo(() => {
+  // Spoken when its words change, not on every poll: a live region says a
+  // change of its text, and a poll that moves nothing leaves the same words.
+  const announcement = (() => {
     if (!job) return "";
     if (isJobActive(job)) {
       if (isPrepareJob(job) && pStage) return t(`wzStage_${pStage}`);
@@ -176,9 +178,7 @@ export function NewWizard({
     const failure = jobFailure(job);
     if (failure) return errorText(t, failure.code, failure.detail);
     return job.state === "done" ? t(`createJobDone_${job.step}`) : "";
-    // Transitions, not every poll.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job?.id, job?.state, pStage, fStage, count?.done, t]);
+  })();
 
   // --- The screen ----------------------------------------------------------------------
   const gone = loadError instanceof ApiError && loadError.status === 404;
@@ -251,7 +251,9 @@ export function NewWizard({
     );
   } else if (screen === "prepare") {
     const phase = preparePhase(creation);
-    title = t(phase === "done" ? "wzHeading_prepared" : phase === "failed" ? "wzHeading_prepareFailed" : "wzHeading_prepare");
+    title = t(
+      phase === "done" ? "wzHeading_prepared" : phase === "failed" ? "wzHeading_prepareFailed" : "wzHeading_prepare"
+    );
     intro = t(phase === "done" ? "wzIntro_prepared" : phase === "failed" ? "wzIntro_prepareFailed" : "wzIntro_prepare");
     body = (
       <PrepareScreen
@@ -265,7 +267,8 @@ export function NewWizard({
       />
     );
   } else {
-    const building = creation.status === "finishing" || creation.status === "finished" || (job?.step === "finish" && isJobActive(job));
+    const building =
+      creation.status === "finishing" || creation.status === "finished" || (job?.step === "finish" && isJobActive(job));
     title = t(building ? "wzHeading_publishing" : fixing ? "wzHeading_fix" : "wzHeading_publish");
     intro = t(building ? "wzIntro_publishing" : fixing ? "wzIntro_fix" : "wzIntro_publish");
     body = (
@@ -290,16 +293,18 @@ export function NewWizard({
           across it (the main column's padding undone), the steps centred.
           On a short screen (a phone on its side) it scrolls away instead:
           the step needs the height more. */}
-      <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-20 [@media(max-height:520px)]:static -mx-4 border-b border-black/[0.06] bg-white/85 px-4 backdrop-blur-xl dark:border-white/[0.06] dark:bg-ink/85">
+      <div
+        className={cx(
+          "sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-20 -mx-4 px-4 [@media(max-height:520px)]:static",
+          "border-b border-black/[0.06] bg-white/85 backdrop-blur-xl dark:border-white/[0.06] dark:bg-ink/85"
+        )}
+      >
         <ProgressHeader screen={screen} />
       </div>
 
       {/* The step scrolls between the bars; its foot is padded past the
           fixed action bar (and the iPhone's home indicator under it). */}
-      <section
-        aria-labelledby="wizard-heading"
-        className="pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-6 sm:pt-8"
-      >
+      <section aria-labelledby="wizard-heading" className="pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-6 sm:pt-8">
         <header className="mb-6 sm:mb-7">
           <p className="mb-1 text-sm font-medium text-gray-500 dark:text-gray-400">{t("wzTitle")}</p>
           {/* Focused on every change of screen, for screen readers: no

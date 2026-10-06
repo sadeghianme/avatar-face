@@ -23,6 +23,7 @@
      set to 15px or 12px for a mouse); a larger one (the name, text-xl) is
      left alone. */
   @media (pointer: coarse) {
+    /* prettier-ignore */
     input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not(.text-xl),
     textarea:not([hidden]),
     select:not([hidden]) {
@@ -46,20 +47,27 @@
       focus:ring-2 focus:ring-brand-500/25 dark:border-line dark:bg-raised
       dark:text-gray-100;
   }
-  .btn {
+  /* Every button's box, once; each variant below adds only its colours. */
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger,
+  .btn-ghost,
+  .btn-overlay,
+  .btn-contrast {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2
       text-sm font-medium transition-colors disabled:cursor-not-allowed
       disabled:opacity-50;
   }
   .btn-primary {
-    @apply btn bg-brand-600 text-white hover:bg-brand-700;
+    @apply bg-brand-600 text-white hover:bg-brand-700;
   }
   .btn-secondary {
-    @apply btn border border-gray-200 bg-white text-gray-700 hover:bg-gray-50
-      dark:border-line dark:bg-raised dark:text-gray-200 dark:hover:bg-[#242424];
+    @apply border border-gray-200 bg-white text-gray-700 hover:bg-gray-50
+      dark:border-line dark:bg-raised dark:text-gray-200 dark:hover:bg-raised-hover;
   }
   .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700;
+    @apply bg-red-600 text-white hover:bg-red-700;
   }
   .card {
     @apply rounded-2xl border border-gray-200 bg-white p-5 shadow-sm
@@ -80,17 +88,189 @@
   .field-error {
     @apply mt-1 text-xs text-red-600 dark:text-red-400;
   }
+  /* A faint square grid behind a hero or a brand panel. Its line colour and
+     cell size are variables ([--grid-line:…] [--grid-size:48px]); the fade
+     is the caller's mask. */
+  .backdrop-grid {
+    --grid-line: rgba(255, 255, 255, 0.045);
+    --grid-size: 44px;
+    background-image:
+      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+    background-size: var(--grid-size) var(--grid-size);
+  }
+  /* The lab's Photoface HD stage: a warm light over a cool floor. */
+  .backdrop-hd {
+    background-image:
+      radial-gradient(circle at 50% 30%, theme(colors.brand.500 / 16%), transparent 58%),
+      linear-gradient(to bottom, theme(colors.slate.50), theme(colors.slate.200));
+  }
+  .dark .backdrop-hd {
+    background-image:
+      radial-gradient(circle at 50% 30%, theme(colors.brand.500 / 18%), transparent 58%),
+      linear-gradient(to bottom, theme(colors.neutral.800), theme(colors.gray.900));
+  }
+
+  /* ---- The UI kit's looks (components/ui; docs/frontend-ui.md) ----------
+     Classes, not utility strings in the components: a utility passed as a
+     component's `className` (px-3, min-h-12) then always wins over the
+     kit's own, whatever order Tailwind writes them in. */
+  .btn-ghost {
+    @apply text-gray-600 hover:bg-black/[0.04] hover:text-gray-900 dark:text-gray-300
+      dark:hover:bg-white/[0.06] dark:hover:text-white;
+  }
+  /* Translucent black on a picture or video (the demo's play, its sound). */
+  .btn-overlay {
+    @apply rounded-full bg-black/45 text-white backdrop-blur-md transition hover:bg-black/60
+      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white;
+  }
+  /* Ink on paper, paper on ink: the one strong action of a quiet tool page. */
+  .btn-contrast {
+    @apply bg-gray-900 text-white transition-opacity hover:opacity-85 disabled:opacity-40 dark:bg-white
+      dark:text-gray-900;
+  }
+  /* A button that reads as a link: in running text, a row, a hint. */
+  .btn-link {
+    @apply inline-flex items-center gap-1.5 font-medium text-brand-700 underline-offset-2 hover:underline
+      disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline dark:text-brand-300;
+  }
+  /* Quiet words that do something (show the password). */
+  .btn-text {
+    @apply inline-flex items-center gap-1.5 text-gray-500 transition-colors hover:text-gray-900
+      disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-gray-200;
+  }
+  /* Sizes. md is .btn's own (36px); lg is the dashboard's 44px action. */
+  .btn-xs {
+    @apply px-3 py-1 text-xs;
+  }
+  .btn-sm {
+    @apply min-h-9 px-3 py-1 text-xs;
+  }
+  .btn-lg {
+    @apply min-h-11;
+  }
+  .btn-xl {
+    @apply min-h-12 px-5 text-[15px];
+  }
+  /* A square button holding one icon, named by aria-label (IconButton). */
+  .icon-btn {
+    @apply grid shrink-0 place-items-center rounded-lg p-2 text-gray-500 transition-colors hover:bg-black/5
+      hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-white/10
+      dark:hover:text-white;
+  }
+  .icon-btn-plain,
+  .icon-btn-danger {
+    @apply inline-grid shrink-0 place-items-center text-gray-400 transition-colors hover:text-gray-700
+      disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-gray-200;
+  }
+  .icon-btn-danger {
+    @apply hover:text-red-600 dark:hover:text-red-600;
+  }
+  .icon-btn-overlay {
+    @apply grid shrink-0 place-items-center rounded-lg bg-black/40 text-white/90 backdrop-blur transition-colors
+      hover:bg-black/60 hover:text-white;
+  }
+  .checkbox {
+    @apply mt-0.5 h-4 w-4 shrink-0 accent-brand-600;
+  }
+  /* A checkbox and its words, the whole row the label. */
+  .check-row {
+    @apply flex cursor-pointer items-start gap-3 text-sm;
+  }
+  .slider {
+    @apply w-full accent-brand-500;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+  .badge-neutral {
+    @apply bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300;
+  }
+  .badge-muted {
+    @apply bg-gray-200 text-gray-700 dark:bg-white/10 dark:text-gray-200;
+  }
+  .badge-success {
+    @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300;
+  }
+  .badge-warning {
+    @apply bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300;
+  }
+  .badge-danger {
+    @apply bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300;
+  }
+  .badge-brand {
+    @apply bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300;
+  }
+  .progress {
+    @apply h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700;
+  }
+  .progress-bar {
+    @apply h-full bg-brand-600 transition-[width] duration-300;
+  }
+  .code-block {
+    @apply overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs leading-relaxed text-emerald-300;
+  }
+  /* Chips: a filter of a list (pressed = applied), an example to use. */
+  .chip-filter {
+    @apply inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium
+      transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500
+      focus-visible:ring-offset-2 dark:focus-visible:ring-offset-panel;
+  }
+  .chip-filter-off {
+    @apply text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.06]
+      dark:hover:text-white;
+  }
+  .chip-filter-on {
+    @apply bg-gray-900 text-white dark:bg-white dark:text-gray-950;
+  }
+  .chip-suggestion {
+    @apply min-h-9 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 transition-colors
+      hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2
+      focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-line dark:bg-raised
+      dark:text-gray-300 dark:hover:border-brand-500/40 dark:hover:bg-brand-500/10 dark:hover:text-brand-200;
+  }
+  /* A bordered option with its words and a line under them (ChoiceCard). */
+  .choice-tile {
+    @apply rounded-xl border px-3 py-2.5 text-start text-sm transition-colors disabled:cursor-not-allowed;
+  }
+  .choice-tile-off {
+    @apply border-black/10 hover:border-black/25 dark:border-white/10 dark:hover:border-white/25;
+  }
+  .choice-tile-on {
+    @apply border-brand-500 bg-brand-500/10 font-medium;
+  }
+
   /* A finger as the main pointer (phones, tablets): 44px buttons and fields
      (Apple's and WCAG's touch target), and 16px text in a field, under which
      iOS Safari zooms the page on focus. A mouse keeps the compact desktop.
-     In this layer, so a component's own size (a utility) still wins. */
+     Last in this layer: it beats the kit's own sizes (btn-sm's 36px) on a
+     touch screen, and a utility (one place's own size) still beats it. */
   @media (pointer: coarse) {
     .btn,
     .btn-primary,
     .btn-secondary,
     .btn-danger,
+    .btn-ghost,
+    .btn-overlay,
+    .btn-contrast,
+    .btn-link,
+    .btn-text,
+    .check-row,
+    .chip-filter,
+    .chip-suggestion,
     .input {
       min-height: 2.75rem;
+    }
+    .icon-btn,
+    .icon-btn-plain,
+    .icon-btn-danger,
+    .icon-btn-overlay {
+      min-height: 2.75rem;
+      min-width: 2.75rem;
+    }
+    /* A size already over 44px keeps its own. */
+    .btn-xl {
+      min-height: 3rem;
     }
   }
 }

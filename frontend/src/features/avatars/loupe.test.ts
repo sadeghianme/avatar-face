@@ -117,8 +117,8 @@ describe("what the zoom shows", () => {
       const [, , w, h] = loupeView({ x: 600, y: 700 }, scale, inner).split(" ").map(Number);
       // The frame's pixels show nothing: the image inside it is exactly
       // LOUPE_ZOOM times the photo on screen, the same on both axes.
-      assert.ok(Math.abs((inner.width / w) / scale - LOUPE_ZOOM) < 0.01, JSON.stringify(canvas));
-      assert.ok(Math.abs((inner.height / h) / scale - LOUPE_ZOOM) < 0.01, JSON.stringify(canvas));
+      assert.ok(Math.abs(inner.width / w / scale - LOUPE_ZOOM) < 0.01, JSON.stringify(canvas));
+      assert.ok(Math.abs(inner.height / h / scale - LOUPE_ZOOM) < 0.01, JSON.stringify(canvas));
     }
     assert.deepEqual(loupeInner({ width: 3, height: 2 }), { width: 0, height: 0 });
   });

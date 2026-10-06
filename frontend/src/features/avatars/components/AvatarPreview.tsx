@@ -1,5 +1,7 @@
 import { AvatarEngine, type Rig, type Scene } from "@liveface/embed";
 import { useEffect, useRef, useState } from "react";
+
+import { cx } from "@/lib/cx";
 import { loadImage } from "@/lib/image";
 
 /**
@@ -56,16 +58,16 @@ export function AvatarPreview({
   // The scene the engine starts with; later ones are applied live below.
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
+  // The latest callback: a parent's inline one must not rebuild the engine.
+  const onEngineRef = useRef(onEngine);
+  onEngineRef.current = onEngine;
 
   useEffect(() => {
     let engine: AvatarEngine | null = null;
     let cancelled = false;
 
     const boot = async () => {
-      const [rigResponse, texture] = await Promise.all([
-        fetch(rigUrl),
-        loadImage(textureUrl),
-      ]);
+      const [rigResponse, texture] = await Promise.all([fetch(rigUrl), loadImage(textureUrl)]);
       if (!rigResponse.ok) throw new Error(`rig fetch: ${rigResponse.status}`);
       const rig = (await rigResponse.json()) as Rig;
       if (cancelled || !canvasRef.current) return;
@@ -75,8 +77,7 @@ export function AvatarPreview({
       // production, and this file's tsconfig lacks vite/client types for a
       // clean import.meta.env.DEV gate.
       (window as unknown as Record<string, unknown>).__lfEngine = engine;
-      onEngine?.(engine);
-
+      onEngineRef.current?.(engine);
 
       if (layerUrls?.body && layerUrls.head) {
         const held = engine;
@@ -95,11 +96,10 @@ export function AvatarPreview({
 
     return () => {
       cancelled = true;
-      onEngine?.(null);
+      onEngineRef.current?.(null);
       engineRef.current = null;
       engine?.destroy();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rigUrl, textureUrl, debugMesh, fullPhoto, layerUrls]);
 
   // A changed scene moves the running engine; by value, so a parent that
@@ -122,10 +122,11 @@ export function AvatarPreview({
       // layout width, so the avatar uses the whole card instead of a 480px
       // island in the middle of it. In a box, the whole box, letterboxed.
       style={fit === "box" ? { width: "100%", height: "100%" } : { width: "100%", height: "auto" }}
-      className={`mx-auto ${fit === "box" ? "object-contain" : "rounded-xl"} ${
-        soft ? "" : "bg-gray-100 dark:bg-gray-700"
-      }`}
+      className={cx(
+        "mx-auto",
+        fit === "box" ? "object-contain" : "rounded-xl",
+        !soft && "bg-gray-100 dark:bg-gray-700"
+      )}
     />
   );
 }
-

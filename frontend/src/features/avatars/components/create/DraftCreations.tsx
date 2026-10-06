@@ -1,21 +1,13 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
 
-import {
-  currentStep,
-  errorText,
-  isJobActive,
-  jobFailure,
-  stepById,
-  type Creation,
-} from "@/features/avatars/creation";
-import { draftsKey } from "@/features/avatars/hooks/useCreation";
-import { LINES } from "@/features/avatars/lines";
+import { ButtonLink } from "@/components/ui/ButtonLink";
+import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { Icon } from "@/components/ui/Icon";
-import { Spinner } from "@/components/ui/Spinner";
-import { api, ApiError } from "@/lib/api";
+import { useDeleteCreation, useDrafts } from "@/features/avatars/api";
+import { type Creation, currentStep, errorText, isJobActive, jobFailure, stepById } from "@/features/avatars/creation";
+import { LINES } from "@/features/avatars/lines";
+import { ApiError } from "@/lib/api";
 
 /**
  * "Continue your avatar": the org's unfinished creations, newest first,
@@ -25,11 +17,7 @@ import { api, ApiError } from "@/lib/api";
  */
 export function DraftCreations({ orgId }: { orgId: string }) {
   const { t } = useTranslation();
-  const { data: drafts } = useQuery({
-    queryKey: draftsKey(orgId),
-    queryFn: () => api.get<Creation[]>(`/orgs/${orgId}/creations?status=draft`),
-    staleTime: 10_000,
-  });
+  const { data: drafts } = useDrafts(orgId);
 
   if (!drafts?.length) return null;
   return (
@@ -49,14 +37,18 @@ export function DraftCreations({ orgId }: { orgId: string }) {
 
 function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
   const { t, i18n } = useTranslation();
-  const queryClient = useQueryClient();
-  const [confirming, setConfirming] = useState(false);
+  const deleteCreation = useDeleteCreation(orgId);
+  const [attempt, setAttempt] = useState(0);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const image = currentStep(draft) ?? stepById(draft, "original");
   const line = draft.face_type ? t(LINES[draft.face_type].label) : t("createLineUnknown");
-  const when = new Intl.DateTimeFormat(i18n.language, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
-    .format(new Date(draft.updated_at));
+  const when = new Intl.DateTimeFormat(i18n.language, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(draft.updated_at));
   const state = isJobActive(draft.job)
     ? t("createDraftWorking")
     : jobFailure(draft.job)
@@ -67,12 +59,11 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
     setDeleting(true);
     setError(null);
     try {
-      await api.delete(`/orgs/${orgId}/creations/${draft.id}`);
-      await queryClient.invalidateQueries({ queryKey: draftsKey(orgId) });
+      await deleteCreation.mutateAsync(draft.id);
     } catch (err) {
       setError(err instanceof ApiError ? errorText(t, err.code, err.detail) : t("error"));
       setDeleting(false);
-      setConfirming(false);
+      setAttempt((n) => n + 1);
     }
   };
 
@@ -95,47 +86,29 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
           </p>
         )}
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {confirming ? (
-            <>
-              <span className="text-xs text-gray-600 dark:text-gray-300">{t("createDraftDeleteConfirm")}</span>
-              <button
-                type="button"
-                className="btn-danger min-h-9 coarse:min-h-11 px-3 py-1 text-xs"
-                onClick={() => void remove()}
-                disabled={deleting}
-              >
-                {deleting ? <Spinner className="h-3.5 w-3.5" /> : null}
-                {t("delete")}
-              </button>
-              <button
-                type="button"
-                className="btn-secondary min-h-9 coarse:min-h-11 px-3 py-1 text-xs"
-                onClick={() => setConfirming(false)}
-                disabled={deleting}
-              >
-                {t("cancel")}
-              </button>
-            </>
-          ) : (
-            <>
-              <Link
-                to={`/avatars/new/${draft.id}`}
-                className="btn-primary min-h-9 coarse:min-h-11 px-3 py-1 text-xs"
-                aria-label={t("createDraftResumeNamed", { line, when })}
-              >
-                {t("createDraftResume")}
-              </Link>
-              <button
-                type="button"
-                className="btn-secondary min-h-9 coarse:min-h-11 px-3 py-1 text-xs"
-                onClick={() => setConfirming(true)}
-                aria-label={t("createDraftDeleteNamed", { line, when })}
-              >
-                <Icon name="trash" className="h-3.5 w-3.5" />
-                {t("delete")}
-              </button>
-            </>
-          )}
+          <ButtonLink
+            to={`/avatars/new/${draft.id}`}
+            size="sm"
+            aria-label={t("createDraftResumeNamed", { line, when })}
+          >
+            {t("createDraftResume")}
+          </ButtonLink>
+          {/* Remounted after a failed delete (attempt): the question closes. */}
+          <ConfirmButton
+            key={attempt}
+            quiet
+            size="sm"
+            confirmSize="sm"
+            icon="trash"
+            iconClassName="h-3.5 w-3.5"
+            label={t("delete")}
+            triggerLabel={t("createDraftDeleteNamed", { line, when })}
+            question={t("createDraftDeleteConfirm")}
+            confirmLabel={t("delete")}
+            cancelLabel={t("cancel")}
+            busy={deleting}
+            onConfirm={() => void remove()}
+          />
         </div>
       </div>
     </li>

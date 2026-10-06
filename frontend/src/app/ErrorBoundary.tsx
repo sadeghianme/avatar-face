@@ -1,12 +1,16 @@
 import { Component, ErrorInfo, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 
 function Fallback() {
   const { t } = useTranslation();
   return (
-    <div role="alert" className="flex min-h-screen flex-col items-center justify-center gap-5 bg-white px-6 text-center dark:bg-ink">
+    <div
+      role="alert"
+      className="flex min-h-screen flex-col items-center justify-center gap-5 bg-white px-6 text-center dark:bg-ink"
+    >
       <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-500/10 text-brand-600 dark:text-brand-400">
         <Icon name="alert" className="h-6 w-6" />
       </span>
@@ -14,9 +18,9 @@ function Fallback() {
         <h1 className="text-[20px] font-semibold text-gray-950 dark:text-white">{t("error")}</h1>
         <p className="mt-1.5 text-[15px] text-gray-500 dark:text-gray-400">{t("errorPageBody")}</p>
       </div>
-      <button type="button" onClick={() => window.location.reload()} className="btn-primary px-5 py-2.5">
+      <Button onClick={() => window.location.reload()} className="px-5 py-2.5">
         {t("reloadPage")}
-      </button>
+      </Button>
     </div>
   );
 }

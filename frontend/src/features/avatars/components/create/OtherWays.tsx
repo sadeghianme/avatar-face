@@ -1,17 +1,18 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
-import { Avaturn3DPanel } from "@/features/avatars/components/Avaturn3DPanel";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ChoiceCard } from "@/components/ui/ChoiceCard";
+import { Field } from "@/components/ui/Field";
+import { FileInput } from "@/components/ui/FileInput";
 import { Icon } from "@/components/ui/Icon";
-import { api, ApiError, uploadWithProgress } from "@/lib/api";
-import type { Avatar, StockAvatar } from "@/lib/types";
-
-interface Created {
-  avatar: Avatar;
-  upload_url: string;
-}
+import { Input } from "@/components/ui/Input";
+import { useImportAvatar, useStockAvatars } from "@/features/avatars/api";
+import { Avaturn3DPanel } from "@/features/avatars/components/Avaturn3DPanel";
+import { ApiError } from "@/lib/api";
+import type { Avatar } from "@/lib/types";
 
 /**
  * The ways to add an avatar that are not the wizard's: the stock gallery,
@@ -22,7 +23,6 @@ interface Created {
 export function OtherWays({ orgId }: { orgId: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const glbInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [modelUrl, setModelUrl] = useState("");
@@ -30,30 +30,23 @@ export function OtherWays({ orgId }: { orgId: string }) {
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: stock } = useQuery({
-    queryKey: ["stock-avatars"],
-    queryFn: () => api.get<StockAvatar[]>("/stock-avatars"),
-  });
+  const { data: stock } = useStockAvatars();
+  const imports = useImportAvatar(orgId);
 
-  const created = async (avatar: Avatar) => {
-    await queryClient.invalidateQueries({ queryKey: ["avatars", orgId] });
-    navigate(`/avatars/${avatar.id}`);
-  };
+  // Each import resolves once the list knows the new avatar: its page next.
+  const created = (avatar: Avatar) => navigate(`/avatars/${avatar.id}`);
   const failed = (err: unknown) => setError(err instanceof ApiError ? err.detail : t("error"));
 
   const uploadModel = async (file: File) => {
     setError(null);
     try {
-      const made = await api.post<Created>(`/orgs/${orgId}/avatars`, {
-        name: name.trim() || file.name.replace(/\.\w+$/, ""),
-        content_type: "model/gltf-binary",
-      });
-      setProgress(0);
-      // .glb files often have an empty file.type; the presigned PUT signs
-      // the content type, so it is set explicitly.
-      await uploadWithProgress(made.upload_url, file, setProgress, "model/gltf-binary");
-      await api.post(`/orgs/${orgId}/avatars/${made.avatar.id}/uploaded`);
-      await created(made.avatar);
+      created(
+        await imports.fromFile.mutateAsync({
+          file,
+          name: name.trim() || file.name.replace(/\.\w+$/, ""),
+          onProgress: setProgress,
+        })
+      );
     } catch (err) {
       setProgress(null);
       failed(err);
@@ -65,9 +58,7 @@ export function OtherWays({ orgId }: { orgId: string }) {
     setError(null);
     setImporting(true);
     try {
-      await created(
-        await api.post<Avatar>(`/orgs/${orgId}/avatars/from-url`, { url: modelUrl.trim(), name: name.trim() })
-      );
+      created(await imports.fromUrl.mutateAsync({ url: modelUrl.trim(), name: name.trim() }));
     } catch (err) {
       failed(err);
     } finally {
@@ -78,9 +69,7 @@ export function OtherWays({ orgId }: { orgId: string }) {
   const fromStock = async (stockId: string) => {
     setError(null);
     try {
-      await created(
-        await api.post<Avatar>(`/orgs/${orgId}/avatars/from-stock`, { stock_id: stockId, name: name.trim() })
-      );
+      created(await imports.fromStock.mutateAsync({ stockId, name: name.trim() }));
     } catch (err) {
       failed(err);
     }
@@ -94,19 +83,9 @@ export function OtherWays({ orgId }: { orgId: string }) {
       </summary>
       <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("createOtherWaysHint")}</p>
 
-      <div className="mt-5 max-w-sm">
-        <label className="label" htmlFor="other-name">
-          {t("createOtherName")}
-        </label>
-        <input
-          id="other-name"
-          className="input"
-          value={name}
-          maxLength={128}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Ava"
-        />
-      </div>
+      <Field id="other-name" label={t("createOtherName")} className="mt-5 max-w-sm">
+        <Input value={name} maxLength={128} onChange={(e) => setName(e.target.value)} placeholder="Ava" />
+      </Field>
       {error && (
         <p role="alert" className="field-error mt-3 text-sm">
           {error}
@@ -116,35 +95,32 @@ export function OtherWays({ orgId }: { orgId: string }) {
       <h3 className="mb-3 mt-8 text-lg font-medium">{t("stockGallery")}</h3>
       <div className="grid grid-cols-3 gap-3 sm:grid-cols-6 sm:gap-4">
         {stock?.map((item) => (
-          <button
+          <ChoiceCard
             key={item.id}
-            type="button"
+            look="custom"
             className="card flex flex-col items-center gap-2 p-2 transition-shadow hover:shadow-md"
             onClick={() => void fromStock(item.id)}
           >
             <img src={item.image_url} alt="" className="aspect-square w-full rounded-lg object-cover" />
             <span className="text-xs font-medium">{item.name}</span>
-          </button>
+          </ChoiceCard>
         ))}
       </div>
 
       <h3 className="mb-3 mt-10 text-lg font-medium">{t("model3dTitle")}</h3>
-      <div className="card space-y-4">
+      <Card className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            className="btn-secondary"
+          <Button
+            variant="secondary"
+            icon="cube"
             onClick={() => glbInput.current?.click()}
             disabled={progress !== null}
           >
-            <Icon name="cube" className="h-4 w-4" />
             {t("createGlbUpload")}
-          </button>
-          <input
+          </Button>
+          <FileInput
             ref={glbInput}
-            type="file"
             accept=".glb,model/gltf-binary"
-            className="hidden"
             tabIndex={-1}
             onChange={(e) => {
               const file = e.target.files?.[0];
@@ -165,24 +141,18 @@ export function OtherWays({ orgId }: { orgId: string }) {
             void fromModelUrl();
           }}
         >
-          <div className="min-w-0 flex-1 basis-64">
-            <label className="label" htmlFor="rpm-url">
-              {t("model3dUrl")}
-            </label>
-            <input
-              id="rpm-url"
-              className="input"
+          <Field id="rpm-url" label={t("model3dUrl")} hint={t("model3dHint")} className="min-w-0 flex-1 basis-64">
+            <Input
               placeholder="https://models.readyplayer.me/….glb"
               value={modelUrl}
               onChange={(e) => setModelUrl(e.target.value)}
             />
-            <p className="mt-1 text-xs text-gray-400">{t("model3dHint")}</p>
-          </div>
-          <button type="submit" className="btn-primary" disabled={importing || !modelUrl.trim()}>
+          </Field>
+          <Button type="submit" disabled={importing || !modelUrl.trim()}>
             {importing ? "…" : t("create")}
-          </button>
+          </Button>
         </form>
-      </div>
+      </Card>
 
       <h3 className="mb-1 mt-10 text-lg font-medium">{t("avaturnTitle")}</h3>
       <p className="mb-3 text-[13px] text-gray-500 dark:text-gray-400">{t("avaturnSubtitle")}</p>

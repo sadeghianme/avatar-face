@@ -10,7 +10,7 @@ import voice2 from "@/assets/demo/voice-2.m4a?url";
 import voice3 from "@/assets/demo/voice-3.m4a?url";
 import voice4 from "@/assets/demo/voice-4.m4a?url";
 import voice5 from "@/assets/demo/voice-5.m4a?url";
-import { Icon } from "@/components/ui/Icon";
+import { Button } from "@/components/ui/Button";
 import { loadImage } from "@/lib/image";
 
 import type { DemoDirector, DemoLine, DemoSnapshot } from "./demoDirector";
@@ -191,14 +191,14 @@ export function DemoAvatar({
       />
       <canvas ref={overlayRef} aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" />
       {mode === "showcase" && reduced && !armed && (
-        <button
-          type="button"
+        <Button
+          variant="overlay"
+          icon="playTriangle"
           onClick={() => setArmed(true)}
-          className="absolute inset-0 m-auto flex h-14 w-fit items-center gap-2.5 rounded-full bg-black/60 px-5 text-sm font-medium text-white backdrop-blur-md transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          className="absolute inset-0 m-auto flex h-14 w-fit gap-2.5 bg-black/60 px-5 hover:bg-black/75"
         >
-          <Icon name="playTriangle" className="h-4 w-4" />
           {playLabel}
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -209,7 +209,15 @@ export function DemoAvatar({
  * mouth openness. Written to the DOM directly — sixty React renders a second
  * for a decoration would cost more than the avatar itself.
  */
-export function VoiceMeter({ director, bars = 7, className = "" }: { director: DemoDirector; bars?: number; className?: string }) {
+export function VoiceMeter({
+  director,
+  bars = 7,
+  className = "",
+}: {
+  director: DemoDirector;
+  bars?: number;
+  className?: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
   useEffect(() => {
@@ -233,7 +241,11 @@ export function VoiceMeter({ director, bars = 7, className = "" }: { director: D
   return (
     <div ref={ref} className={`flex h-5 items-center gap-[3px] ${className}`} aria-hidden="true">
       {Array.from({ length: bars }, (_, i) => (
-        <span key={i} className="h-full w-[3px] origin-center rounded-full bg-brand-500" style={{ transform: "scaleY(0.14)" }} />
+        <span
+          key={i}
+          className="h-full w-[3px] origin-center rounded-full bg-brand-500"
+          style={{ transform: "scaleY(0.14)" }}
+        />
       ))}
     </div>
   );

@@ -1,10 +1,26 @@
-import { useId, useRef, useState } from "react";
+import { type KeyboardEvent, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { CHECKER_STYLE, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
-import { versionLabel, type Version } from "@/features/avatars/wizard";
+import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { Icon } from "@/components/ui/Icon";
+import { rovingMove, rovingTarget } from "@/components/ui/roving";
 import { Spinner } from "@/components/ui/Spinner";
+import { CHECKER_STYLE, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
+import { type Version, versionLabel } from "@/features/avatars/wizard";
+import { cx } from "@/lib/cx";
+
+/** A version: a square thumbnail with a word under it (phone), beside it (laptop). */
+const VERSION_TILE = cx(
+  "group w-[84px] shrink-0 snap-start text-start focus-visible:outline-none sm:w-[88px]",
+  "lg:flex lg:w-auto lg:min-w-0 lg:items-center lg:gap-3 lg:rounded-xl lg:p-1"
+);
+const THUMB_ON = "border-brand-500 ring-2 ring-brand-500 ring-offset-2 ring-offset-white dark:ring-offset-ink";
+const THUMB_USABLE =
+  "border-gray-200 group-hover:border-brand-300 dark:border-line dark:group-hover:border-brand-500/50";
+const THUMB_UNUSABLE = "border-dashed border-gray-300 opacity-60 dark:border-line";
+/** The tile's keyboard focus, drawn on its thumbnail. */
+const THUMB_FOCUS =
+  "group-focus-visible:ring-2 group-focus-visible:ring-brand-500 group-focus-visible:ring-offset-2 dark:group-focus-visible:ring-offset-ink";
 
 /**
  * Every picture step 3 made: the upload first, then each AI result in the
@@ -47,13 +63,24 @@ export function VersionStrip({
   // The one tab stop: the focused version, else the one in use.
   const stop = focus ?? selected ?? usable[0]?.id ?? null;
 
-  const move = (from: string, step: number) => {
-    if (usable.length === 0) return;
-    const at = Math.max(0, usable.findIndex((v) => v.id === from));
-    const next = usable[(at + step + usable.length) % usable.length];
-    setFocus(next.id);
-    buttons.current.get(next.id)?.focus();
-    buttons.current.get(next.id)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  /** The arrows and Home/End move the focus among the usable versions (roving.ts). */
+  const onKey = (v: Version, e: KeyboardEvent) => {
+    const move = rovingMove(e.key, document.documentElement.dir === "rtl");
+    if (!move) return;
+    e.preventDefault();
+    if ("choose" in move) {
+      choose(v);
+      return;
+    }
+    const next = rovingTarget(
+      usable.map((u) => u.id),
+      v.id,
+      move
+    );
+    if (next === undefined) return;
+    setFocus(next);
+    buttons.current.get(next)?.focus();
+    buttons.current.get(next)?.scrollIntoView({ block: "nearest", inline: "nearest" });
   };
 
   const choose = (v: Version) => {
@@ -63,7 +90,7 @@ export function VersionStrip({
 
   if (versions.length < 2) return null;
   return (
-    <div className={`min-w-0 ${className}`}>
+    <div className={cx("min-w-0", className)}>
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
         <p id={`${ids}-label`} className="text-sm font-semibold text-gray-900 dark:text-white">
           {t("wzVersionsLabel")}
@@ -86,12 +113,12 @@ export function VersionStrip({
           const label = t(versionLabel(v).key, versionLabel(v).values);
           const caption = v.kind === "change" && v.instruction ? v.instruction : t(`wzVersionShort_${v.kind}`);
           return (
-            <button
+            <ChoiceCard
               key={v.id}
+              look="custom"
               ref={(el) => {
                 buttons.current.set(v.id, el);
               }}
-              type="button"
               role="radio"
               aria-checked={on}
               aria-disabled={!v.selectable || disabled || undefined}
@@ -101,35 +128,16 @@ export function VersionStrip({
               onFocus={() => setFocus(v.id)}
               onBlur={() => setFocus(null)}
               onClick={() => choose(v)}
-              onKeyDown={(e) => {
-                const rtl = document.documentElement.dir === "rtl";
-                if (e.key === (rtl ? "ArrowLeft" : "ArrowRight") || e.key === "ArrowDown") {
-                  e.preventDefault();
-                  move(v.id, 1);
-                } else if (e.key === (rtl ? "ArrowRight" : "ArrowLeft") || e.key === "ArrowUp") {
-                  e.preventDefault();
-                  move(v.id, -1);
-                } else if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  choose(v);
-                } else if (e.key === "Home" || e.key === "End") {
-                  e.preventDefault();
-                  const target = e.key === "Home" ? usable[0] : usable[usable.length - 1];
-                  if (target) move(target.id, 0);
-                }
-              }}
-              className={`group w-[84px] shrink-0 snap-start text-start focus-visible:outline-none sm:w-[88px] lg:flex lg:w-auto lg:min-w-0 lg:items-center lg:gap-3 lg:rounded-xl lg:p-1 ${
-                v.selectable ? "" : "cursor-not-allowed"
-              }`}
+              onKeyDown={(e) => onKey(v, e)}
+              className={cx(VERSION_TILE, !v.selectable && "cursor-not-allowed")}
             >
               <span
-                className={`relative block aspect-square overflow-hidden rounded-xl border transition lg:w-16 lg:shrink-0 ${PICTURE_BACKDROP} ${
-                  on
-                    ? "border-brand-500 ring-2 ring-brand-500 ring-offset-2 ring-offset-white dark:ring-offset-ink"
-                    : v.selectable
-                      ? "border-gray-200 group-hover:border-brand-300 dark:border-line dark:group-hover:border-brand-500/50"
-                      : "border-dashed border-gray-300 opacity-60 dark:border-line"
-                } group-focus-visible:ring-2 group-focus-visible:ring-brand-500 group-focus-visible:ring-offset-2 dark:group-focus-visible:ring-offset-ink`}
+                className={cx(
+                  "relative block aspect-square overflow-hidden rounded-xl border transition lg:w-16 lg:shrink-0",
+                  PICTURE_BACKDROP,
+                  on ? THUMB_ON : v.selectable ? THUMB_USABLE : THUMB_UNUSABLE,
+                  THUMB_FOCUS
+                )}
               >
                 {v.shown.cutout && <span className="absolute inset-0" style={CHECKER_STYLE} aria-hidden="true" />}
                 <img
@@ -154,7 +162,10 @@ export function VersionStrip({
                   </span>
                 )}
                 {pending === v.id && (
-                  <span className="absolute inset-0 grid place-items-center bg-white/60 dark:bg-black/50" aria-hidden="true">
+                  <span
+                    className="absolute inset-0 grid place-items-center bg-white/60 dark:bg-black/50"
+                    aria-hidden="true"
+                  >
                     <Spinner className="h-5 w-5 text-brand-600" />
                   </span>
                 )}
@@ -162,13 +173,21 @@ export function VersionStrip({
               {/* Under the thumbnail on a phone, one line: "Using this" or
                   the words. Beside it from a laptop up: the words, up to two
                   lines, and "Using this" under them. */}
-              <span aria-hidden="true" className="mt-1.5 block min-w-0 text-xs text-gray-600 dark:text-gray-300 lg:mt-0 lg:flex-1">
+              <span
+                aria-hidden="true"
+                className="mt-1.5 block min-w-0 text-xs text-gray-600 dark:text-gray-300 lg:mt-0 lg:flex-1"
+              >
                 {on && (
                   <span className="block truncate font-semibold text-brand-700 dark:text-brand-300 lg:hidden">
                     {t("wzVersionUsing")}
                   </span>
                 )}
-                <span className={`${on ? "hidden lg:block lg:text-gray-900 dark:lg:text-white" : "block"} truncate lg:line-clamp-2 lg:whitespace-normal`}>
+                <span
+                  className={cx(
+                    on ? "hidden lg:block lg:text-gray-900 dark:lg:text-white" : "block",
+                    "truncate lg:line-clamp-2 lg:whitespace-normal"
+                  )}
+                >
                   {caption}
                 </span>
                 {on && (
@@ -177,7 +196,7 @@ export function VersionStrip({
                   </span>
                 )}
               </span>
-            </button>
+            </ChoiceCard>
           );
         })}
       </div>
