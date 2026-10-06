@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/FieldError";
 import { Input } from "@/components/ui/Input";
 import { useResetPassword } from "@/features/auth/api";
 import { AuthShell } from "@/features/auth/components/AuthShell";
@@ -93,7 +94,7 @@ export function ResetPasswordPage() {
           />
         </Field>
 
-        {error && <p className="field-error">{error}</p>}
+        {error && <FieldError>{error}</FieldError>}
 
         <Button type="submit" fullWidth disabled={busy || !ready}>
           {busy ? t("loading") : t("setNewPassword")}

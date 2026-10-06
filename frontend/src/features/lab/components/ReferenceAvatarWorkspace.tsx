@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button, type ButtonProps } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { FieldError } from "@/components/ui/FieldError";
 import type { ReferenceUpload } from "@/features/lab/api";
 import { LipSyncPreview } from "@/features/lab/components/LipSyncPreview";
 import { PlaybackButtons, ScriptField } from "@/features/lab/components/PlaybackControls";
@@ -304,11 +305,7 @@ export function ReferenceAvatarWorkspace({ avatar, orgId }: { avatar: Avatar; or
           >
             {t(comparison.busy ? "lipSyncPreparing" : "lipSyncGenerate")}
           </Button>
-          {comparison.error && (
-            <p role="alert" className="field-error">
-              {comparison.error}
-            </p>
-          )}
+          {comparison.error && <FieldError>{comparison.error}</FieldError>}
         </Card>
       </aside>
     </div>

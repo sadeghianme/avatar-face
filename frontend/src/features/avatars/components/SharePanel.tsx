@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { FieldError } from "@/components/ui/FieldError";
 import { Input } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
 import { useAvatarSharing } from "@/features/avatars/api";
@@ -68,7 +69,7 @@ export function SharePanel({ avatar, orgId }: { avatar: Avatar; orgId: string })
           </ButtonLink>
         </div>
       )}
-      {error && <p className="field-error mt-2">{error}</p>}
+      {error && <FieldError className="mt-2">{error}</FieldError>}
     </div>
   );
 }

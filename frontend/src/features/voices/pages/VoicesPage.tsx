@@ -7,6 +7,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { CodeBlock } from "@/components/ui/CodeBlock";
 import { Field } from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/FieldError";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -230,7 +231,7 @@ export function VoicesPage() {
           <Button className="mt-4" icon="plus" loading={submit.isPending} disabled={!canSubmit} onClick={send}>
             {t("voicesSubmit")}
           </Button>
-          {error && <p className="field-error mt-2">{error}</p>}
+          {error && <FieldError className="mt-2">{error}</FieldError>}
         </Card>
 
         {/* ------------------------------------------------ jobs & voices */}
@@ -282,7 +283,11 @@ export function VoicesPage() {
                         className="mt-2 h-1.5 rounded"
                       />
                     )}
-                    {job.error && <p className="field-error mt-2">{job.error}</p>}
+                    {job.error && (
+                      <FieldError live={false} className="mt-2">
+                        {job.error}
+                      </FieldError>
+                    )}
                     {job.status === "done" && (
                       <ul className="mt-2 flex flex-col gap-1">
                         {job.lines.map((line) => {

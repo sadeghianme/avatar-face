@@ -44,6 +44,11 @@ describe("LoginPage", () => {
     expect(identifier).toHaveAccessibleDescription(t("identifierRequired"));
     expect(password).toHaveAttribute("aria-invalid", "true");
     expect(password).toHaveAccessibleDescription(t("passwordRequired"));
+    // Each announced as it appears.
+    expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toEqual([
+      t("identifierRequired"),
+      t("passwordRequired"),
+    ]);
     expect(server.requests("POST", "/auth/login")).toHaveLength(0);
   });
 

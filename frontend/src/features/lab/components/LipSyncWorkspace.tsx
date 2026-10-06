@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { FieldError } from "@/components/ui/FieldError";
 import { Slider } from "@/components/ui/Slider";
 import { LipSyncPreview } from "@/features/lab/components/LipSyncPreview";
 import { PlaybackButtons, ScriptField } from "@/features/lab/components/PlaybackControls";
@@ -81,11 +82,7 @@ export function LipSyncWorkspace({ avatar, orgId }: { avatar: Avatar; orgId: str
         >
           {t(comparison.busy ? "lipSyncPreparing" : "lipSyncGenerate")}
         </Button>
-        {comparison.error && (
-          <p role="alert" className="field-error">
-            {comparison.error}
-          </p>
-        )}
+        {comparison.error && <FieldError>{comparison.error}</FieldError>}
         <div className="border-t border-black/10 pt-4 dark:border-white/10">
           <Slider
             id="lip-sync-lead"

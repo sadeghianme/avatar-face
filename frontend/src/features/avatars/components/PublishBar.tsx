@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
+import { FieldError } from "@/components/ui/FieldError";
 import { Spinner } from "@/components/ui/Spinner";
 import { useDiscardDraft, usePublishAvatar } from "@/features/avatars/api";
 import { ApiError } from "@/lib/api";
@@ -69,7 +70,7 @@ export function PublishBar({ avatar, orgId }: { avatar: Avatar; orgId: string })
           </>
         )
       }
-      footer={error && <p className="field-error mt-2">{error}</p>}
+      footer={error && <FieldError className="mt-2">{error}</FieldError>}
     >
       {neverPublished ? t("publishFirstBody") : dirty ? t("publishDraftBody") : t("publishLiveBody")}
     </Banner>

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { Checkbox } from "@/components/ui/Checkbox";
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
+import { FieldError } from "@/components/ui/FieldError";
 import { Slider } from "@/components/ui/Slider";
 import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import { useUpdateAvatar } from "@/features/avatars/api";
@@ -148,11 +149,7 @@ export function CharacterMouthSection({
           />
         </div>
       )}
-      {error && (
-        <p className="field-error" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <FieldError>{error}</FieldError>}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { createContext, type ReactNode, useContext, useId } from "react";
 
 import { fieldIds, joinDescribedBy } from "@/components/ui/field-ids";
+import { FieldError } from "@/components/ui/FieldError";
 import { cx } from "@/lib/cx";
 
 interface FieldContextValue {
@@ -84,11 +85,7 @@ export function Field({
             {hint}
           </p>
         )}
-        {error && (
-          <p id={ids.errorId} className="field-error">
-            {error}
-          </p>
-        )}
+        {error && <FieldError id={ids.errorId}>{error}</FieldError>}
       </div>
     </FieldContext.Provider>
   );

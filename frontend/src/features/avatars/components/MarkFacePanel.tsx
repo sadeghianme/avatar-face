@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { FieldError } from "@/components/ui/FieldError";
 import { previewRigFit, useResetRig, useRigAnchors, useSaveRigFit } from "@/features/avatars/api";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
@@ -212,7 +213,7 @@ export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgI
           </ul>
         </div>
       )}
-      {error && <p className="field-error mt-3">{error}</p>}
+      {error && <FieldError className="mt-3">{error}</FieldError>}
 
       <div className="mt-4 flex flex-wrap gap-2">
         <Button

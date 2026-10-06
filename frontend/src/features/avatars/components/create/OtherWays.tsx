@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { Field } from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/FieldError";
 import { FileInput } from "@/components/ui/FileInput";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
@@ -86,11 +87,7 @@ export function OtherWays({ orgId }: { orgId: string }) {
       <Field id="other-name" label={t("createOtherName")} className="mt-5 max-w-sm">
         <Input value={name} maxLength={128} onChange={(e) => setName(e.target.value)} placeholder="Ava" />
       </Field>
-      {error && (
-        <p role="alert" className="field-error mt-3 text-sm">
-          {error}
-        </p>
-      )}
+      {error && <FieldError className="mt-3 text-sm">{error}</FieldError>}
 
       <h3 className="mb-3 mt-8 text-lg font-medium">{t("stockGallery")}</h3>
       <div className="grid grid-cols-3 gap-3 sm:grid-cols-6 sm:gap-4">

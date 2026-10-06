@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { FieldError } from "@/components/ui/FieldError";
 import { Textarea } from "@/components/ui/Textarea";
 import { BROWSER_PROVIDER, speechStream, useSpeechLanguages } from "@/features/voices/api";
 import { defaultVoiceSelection, VoicePicker, type VoiceSelection } from "@/features/voices/components/VoicePicker";
@@ -145,7 +146,7 @@ export function SpeakPanel({
           setText(e.target.value);
         }}
       />
-      {error && <p className="field-error">{error}</p>}
+      {error && <FieldError>{error}</FieldError>}
       <div className="flex gap-2">
         <Button
           size="lg"

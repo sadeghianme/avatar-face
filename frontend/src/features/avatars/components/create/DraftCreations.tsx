@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
+import { FieldError } from "@/components/ui/FieldError";
 import { Icon } from "@/components/ui/Icon";
 import { useDeleteCreation, useDrafts } from "@/features/avatars/api";
 import { type Creation, currentStep, errorText, isJobActive, jobFailure, stepById } from "@/features/avatars/creation";
@@ -80,11 +81,7 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
         <p className="truncate text-sm font-semibold">{line}</p>
         <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{t("createDraftUpdated", { when })}</p>
         {state && <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">{state}</p>}
-        {error && (
-          <p role="alert" className="field-error">
-            {error}
-          </p>
-        )}
+        {error && <FieldError>{error}</FieldError>}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <ButtonLink
             to={`/avatars/new/${draft.id}`}

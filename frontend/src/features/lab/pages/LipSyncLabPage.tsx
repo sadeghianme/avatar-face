@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/FieldError";
 import { Select } from "@/components/ui/Select";
 import { useAvatar, useAvatars } from "@/features/avatars";
 import type { ReferenceUpload } from "@/features/lab/api";
@@ -78,9 +79,7 @@ export function LipSyncLabPage({ reference = false }: { reference?: boolean }) {
         </p>
       )}
       {!isSample && !isUpload && (avatars.isError || detail.isError) ? (
-        <p role="alert" className="field-error">
-          {t("error")}
-        </p>
+        <FieldError>{t("error")}</FieldError>
       ) : active && current ? (
         reference ? (
           <ReferenceAvatarWorkspace key={`${current.id}:${active.id}`} avatar={active} orgId={current.id} />

@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/FieldError";
 import { Input } from "@/components/ui/Input";
 import { AuthShell } from "@/features/auth/components/AuthShell";
 import { ApiError } from "@/lib/api";
@@ -58,7 +59,7 @@ export function RegisterPage() {
         <Field id="display_name" label={t("displayName")}>
           <Input {...register("display_name")} />
         </Field>
-        {errors.root && <p className="field-error">{errors.root.message}</p>}
+        {errors.root && <FieldError>{errors.root.message}</FieldError>}
         <Button type="submit" disabled={isSubmitting}>
           {t("register")}
         </Button>

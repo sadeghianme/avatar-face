@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import { ColorInput } from "@/components/ui/ColorInput";
 import { ColorSwatch } from "@/components/ui/ColorSwatch";
+import { FieldError } from "@/components/ui/FieldError";
 import { FileInput } from "@/components/ui/FileInput";
 import { type Segment, SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Slider } from "@/components/ui/Slider";
@@ -412,11 +413,7 @@ export function FramingScenePanel({
         )}
       </div>
 
-      {error && (
-        <p className="field-error mt-3 text-xs leading-relaxed" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <FieldError className="mt-3 text-xs leading-relaxed">{error}</FieldError>}
       <p className="sr-only" role="status" aria-live="polite">
         {status === "saved" ? t("sceneSaved") : status === "saving" ? t("sceneSaving") : ""}
       </p>

@@ -9,6 +9,7 @@ import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Disclosure, DisclosureGroup } from "@/components/ui/Disclosure";
+import { FieldError } from "@/components/ui/FieldError";
 import { IconButton } from "@/components/ui/IconButton";
 import { Spinner } from "@/components/ui/Spinner";
 import {
@@ -189,7 +190,7 @@ export function AvatarDetailPage() {
   );
 
   if (isError) {
-    return <p className="field-error">{t("error")} — avatar not found in this organization.</p>;
+    return <FieldError>{t("error")} — avatar not found in this organization.</FieldError>;
   }
   if (!avatar || !current) {
     return <p className="text-gray-500">{t("loading")}</p>;
@@ -278,15 +279,11 @@ export function AvatarDetailPage() {
 
       {avatar.status === "failed" && (
         <Card tone="danger" className="mb-4">
-          <p className="field-error">{avatar.error}</p>
+          <FieldError live={false}>{avatar.error}</FieldError>
           <Button variant="secondary" size="lg" className="mt-3" onClick={() => void retry()}>
             {t("retry")}
           </Button>
-          {retryError && (
-            <p className="field-error mt-2 text-sm" role="alert">
-              {retryError}
-            </p>
-          )}
+          {retryError && <FieldError className="mt-2 text-sm">{retryError}</FieldError>}
         </Card>
       )}
 

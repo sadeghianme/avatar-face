@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { ColorInput } from "@/components/ui/ColorInput";
 import { Field } from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/FieldError";
 import { FileInput } from "@/components/ui/FileInput";
 import { Input } from "@/components/ui/Input";
 import { PasswordInput } from "@/components/ui/PasswordInput";
@@ -54,7 +55,9 @@ describe("Field", () => {
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(input).toHaveAttribute("aria-describedby", "name-hint name-error");
     expect(input).toHaveAccessibleDescription("As visitors see it A name is needed");
-    expect(document.getElementById("name-error")).toHaveTextContent("A name is needed");
+    // Announced as it appears: it answers the member's submit.
+    expect(screen.getByRole("alert")).toHaveTextContent("A name is needed");
+    expect(screen.getByRole("alert")).toHaveAttribute("id", "name-error");
   });
 
   it("keeps a control's own describedby after the field's, and its own aria-invalid", () => {
@@ -105,6 +108,29 @@ describe("Field", () => {
       </Field>
     );
     expect(screen.getByRole("link", { name: "Forgot?" })).toBeInTheDocument();
+  });
+});
+
+describe("FieldError", () => {
+  it("is an alert by default, with the id a control names in aria-describedby", () => {
+    render(
+      <>
+        <Input aria-label="Teeth photo" aria-describedby="teeth-error" />
+        <FieldError id="teeth-error" className="mt-2">
+          The photo has no face
+        </FieldError>
+      </>
+    );
+    const error = screen.getByRole("alert");
+    expect(error).toHaveTextContent("The photo has no face");
+    expect(error).toHaveClass("field-error", "mt-2");
+    expect(screen.getByRole("textbox", { name: "Teeth photo" })).toHaveAccessibleDescription("The photo has no face");
+  });
+
+  it("live={false}: part of what the page shows, not announced", () => {
+    render(<FieldError live={false}>No face found</FieldError>);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("No face found")).toHaveClass("field-error");
   });
 });
 

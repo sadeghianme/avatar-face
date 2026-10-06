@@ -1,6 +1,7 @@
 import { AvatarEngine, type Rig, type Scene } from "@liveface/embed";
 import { useEffect, useRef, useState } from "react";
 
+import { FieldError } from "@/components/ui/FieldError";
 import { cx } from "@/lib/cx";
 import { loadImage } from "@/lib/image";
 import type { FaceType } from "@/lib/types";
@@ -120,7 +121,7 @@ export function AvatarPreview({
     engineRef.current?.setScene(sceneRef.current);
   }, [sceneKey]);
 
-  if (error) return <p className="field-error">{error}</p>;
+  if (error) return <FieldError>{error}</FieldError>;
   return (
     <canvas
       ref={canvasRef}

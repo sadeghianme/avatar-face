@@ -2,6 +2,7 @@ import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
+import { FieldError } from "@/components/ui/FieldError";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cx } from "@/lib/cx";
 
@@ -383,8 +384,8 @@ export function CropBox({
       <p className="sr-only" aria-live="polite" role="status">
         {spoken}
       </p>
-      {tooSmall && <p className="field-error mt-2">{t("cropTooSmall")}</p>}
-      {error && <p className="field-error mt-2">{error}</p>}
+      {tooSmall && <FieldError className="mt-2">{t("cropTooSmall")}</FieldError>}
+      {error && <FieldError className="mt-2">{error}</FieldError>}
     </div>
   );
 }

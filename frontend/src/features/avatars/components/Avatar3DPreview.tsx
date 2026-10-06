@@ -1,6 +1,7 @@
 import type { SpeechPlayer } from "@liveface/embed";
 import { useEffect, useRef, useState } from "react";
 
+import { FieldError } from "@/components/ui/FieldError";
 import { cx } from "@/lib/cx";
 
 /**
@@ -57,7 +58,7 @@ export function Avatar3DPreview({
     };
   }, [modelUrl]);
 
-  if (error) return <p className="field-error">{error}</p>;
+  if (error) return <FieldError>{error}</FieldError>;
   return (
     <div className={cx("relative", fit === "box" && "h-full w-full")}>
       {loading && (

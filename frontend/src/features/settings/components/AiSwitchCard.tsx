@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { Card } from "@/components/ui/Card";
+import { FieldError } from "@/components/ui/FieldError";
 import { Switch } from "@/components/ui/Switch";
 import { useSetThirdPartyAi } from "@/features/settings/api";
 import { ApiError } from "@/lib/api";
@@ -51,11 +52,7 @@ export function AiSwitchCard({ org }: { org: Org }) {
         {on ? t("aiSwitchOn") : t("aiSwitchOff")}
         {!canChange && <> {t("aiSwitchAdminsOnly")}</>}
       </p>
-      {refusal && (
-        <p role="alert" className="field-error mt-2">
-          {refusal}
-        </p>
-      )}
+      {refusal && <FieldError className="mt-2">{refusal}</FieldError>}
     </Card>
   );
 }

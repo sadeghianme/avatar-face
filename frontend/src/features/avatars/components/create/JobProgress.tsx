@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
+import { FieldError } from "@/components/ui/FieldError";
 import { Icon } from "@/components/ui/Icon";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Spinner } from "@/components/ui/Spinner";
@@ -221,9 +222,5 @@ export function JobProgressBar({ fraction, label }: { fraction: number | null; l
 /** An error from one of the wizard's requests. */
 export function ActionErrorNote({ text }: { text: string | null }) {
   if (!text) return null;
-  return (
-    <p role="alert" className="field-error mt-3 text-sm">
-      {text}
-    </p>
-  );
+  return <FieldError className="mt-3 text-sm">{text}</FieldError>;
 }

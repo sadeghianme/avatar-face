@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { ButtonLink } from "@/components/ui/ButtonLink";
+import { FieldError } from "@/components/ui/FieldError";
 import { ComparisonRecorder } from "@/features/lab/comparison-recorder";
 import { REFERENCE_RENDERER_VERSION } from "@/features/lab/reference-avatar";
 
@@ -104,11 +105,7 @@ export function ReferenceRecording({
           aria-label={t("referenceRecordedComparison")}
         />
       )}
-      {error && (
-        <p role="alert" className="field-error">
-          {error}
-        </p>
-      )}
+      {error && <FieldError>{error}</FieldError>}
     </div>
   );
 }

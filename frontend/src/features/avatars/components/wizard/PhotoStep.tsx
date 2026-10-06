@@ -8,6 +8,7 @@ import { Chip } from "@/components/ui/Chip";
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { DropZone } from "@/components/ui/DropZone";
 import { Field } from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/FieldError";
 import { FileInput } from "@/components/ui/FileInput";
 import { Icon } from "@/components/ui/Icon";
 import { IconButton } from "@/components/ui/IconButton";
@@ -547,11 +548,7 @@ function PhotoDrop({
         disabled={busy}
         onFile={onChoose}
       />
-      {error && (
-        <p role="alert" className="field-error text-sm">
-          {error}
-        </p>
-      )}
+      {error && <FieldError className="text-sm">{error}</FieldError>}
     </div>
   );
 }

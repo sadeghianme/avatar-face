@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { ButtonLink } from "@/components/ui/ButtonLink";
+import { FieldError } from "@/components/ui/FieldError";
 import { FileInput } from "@/components/ui/FileInput";
 import { type ReferenceUpload, uploadReferencePhoto } from "@/features/lab/api";
 import { REFERENCE_SCRIPT_ID } from "@/features/lab/reference-avatar";
@@ -157,11 +158,7 @@ export function ReferencePhotoUpload({
           </div>
         </div>
       )}
-      {error && (
-        <p role="alert" className="field-error mt-2">
-          {error}
-        </p>
-      )}
+      {error && <FieldError className="mt-2">{error}</FieldError>}
     </section>
   );
 }

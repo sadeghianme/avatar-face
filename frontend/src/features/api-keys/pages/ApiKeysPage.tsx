@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Field } from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/FieldError";
 import { Input } from "@/components/ui/Input";
 import { StackCell, StackRow, StackTable, TableAction } from "@/components/ui/Table";
 import { type CreatedKey, useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/features/api-keys/api";
@@ -73,7 +74,7 @@ export function ApiKeysPage() {
         </Field>
         <Button type="submit">{t("createApiKey")}</Button>
       </Card>
-      {create.error && <p className="field-error mb-4">{errorMessage(create.error, t("error"))}</p>}
+      {create.error && <FieldError className="mb-4">{errorMessage(create.error, t("error"))}</FieldError>}
 
       {revealed && (
         <Card tone="success" className="mb-6">

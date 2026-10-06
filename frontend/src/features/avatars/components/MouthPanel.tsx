@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
+import { FieldError } from "@/components/ui/FieldError";
 import { FileInput } from "@/components/ui/FileInput";
 import { Icon } from "@/components/ui/Icon";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -505,11 +506,7 @@ export function MouthPanel({
                   </Button>
                 )}
               </div>
-              {teethError && (
-                <p className="field-error mt-2.5 text-xs leading-relaxed" role="alert">
-                  {teethError}
-                </p>
-              )}
+              {teethError && <FieldError className="mt-2.5 text-xs leading-relaxed">{teethError}</FieldError>}
               {promptPublish && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300/70 p-2.5 dark:border-amber-500/40">
                   <p className="min-w-0 flex-1 text-xs leading-relaxed text-gray-700 dark:text-gray-200">{madeText}</p>
@@ -556,11 +553,7 @@ export function MouthPanel({
           </Button>
         </>
       )}
-      {error && (
-        <p className="field-error" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <FieldError>{error}</FieldError>}
       {consent.dialog}
     </section>
   );

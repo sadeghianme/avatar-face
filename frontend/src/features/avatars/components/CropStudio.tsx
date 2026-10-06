@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { FieldError } from "@/components/ui/FieldError";
 import { useCropAvatar } from "@/features/avatars/api";
 import { CropBox, type CropRect } from "@/features/avatars/components/CropBox";
 import type { Avatar } from "@/lib/types";
@@ -47,7 +48,7 @@ export function CropStudio({
         onApply={(rect) => void apply(rect)}
         onCancel={onCancel}
       />
-      {error && <p className="field-error mt-2">{error}</p>}
+      {error && <FieldError className="mt-2">{error}</FieldError>}
     </div>
   );
 }
