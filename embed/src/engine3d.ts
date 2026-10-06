@@ -9,6 +9,7 @@
  * frame loop, and sequences the parts that do the work:
  *
  *   engine/voice.ts       the speech in flight and its clock (the 2D engine's own)
+ *   engine/frame-loop.ts  the frame loop and its step (the 2D engine's own)
  *   engine3d/visemes.ts   the viseme tables, the cue track's targets, the ARKit decomposition
  *   engine3d/life.ts      blinks, saccades, nods
  *   engine3d/model.ts     what the model offers, the camera's stand, the influences written
@@ -20,6 +21,7 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
 
+import { FrameLoop, FrameStep } from "./engine/frame-loop";
 import { Voice } from "./engine/voice";
 import { HeadBones, type HeadPoseDriver } from "./engine3d/head";
 import { FaceLife, lookMorphs } from "./engine3d/life";
@@ -87,11 +89,11 @@ export class Avatar3DEngine {
   /** Morph weights by target name held in place of the cue track (a still,
    *  a test); null lets the speech drive them. */
   private heldMorphs: Record<string, number> | null = null;
-  private lastTickAt = 0;
+  private readonly frameStep = new FrameStep();
   /** Live animation parameters — mouthOpen/smoothness/headMotion apply
    * (teeth are part of the model's own geometry in 3D). */
   tuning: EngineTuning = { ...DEFAULT_TUNING };
-  private raf = 0;
+  private readonly frameLoop: FrameLoop;
   private readonly startTime = performance.now();
   /** The viseme morphs' weights now, damped toward the cue track's. */
   private readonly morphWeights = restingMorphs();
@@ -143,14 +145,13 @@ export class Avatar3DEngine {
     frameCamera(this.camera, model, parts.headBone, options.frame);
 
     this.life.start(performance.now());
-    this.loop = this.loop.bind(this);
-    this.raf = requestAnimationFrame(this.loop);
+    this.frameLoop = new FrameLoop((now) => this.step(now));
     (globalThis as { __liveface3d?: Avatar3DEngine }).__liveface3d = this;
   }
 
   destroy(): void {
     this.destroyed = true;
-    cancelAnimationFrame(this.raf);
+    this.frameLoop.stop();
     this.speech.stopAudio();
     this.renderer.dispose();
   }
@@ -233,13 +234,6 @@ export class Avatar3DEngine {
     return cueMorphTargets(speech.cues, speech.cueTime(now));
   }
 
-  private loop(now: number): void {
-    if (this.destroyed) return;
-    this.tick(now);
-    this.renderer.render(this.scene, this.camera);
-    this.raf = requestAnimationFrame(this.loop);
-  }
-
   private tick(now: number): void {
     const speaking = this.speech.speaking;
     const jaw = dampMorphs(this.morphWeights, this.cueTargets(now), this.tuning.mouthOpen, this.tuning.smoothness);
@@ -263,8 +257,7 @@ export class Avatar3DEngine {
 
     // Idle head motion on real bones: subtle yaw/pitch drift + nods.
     const nod = this.life.nod(now, speaking);
-    const dt = Math.min(64, Math.max(4, now - (this.lastTickAt || now - 16.7)));
-    this.lastTickAt = now;
+    const dt = this.frameStep.next(now);
     this.head.update({
       t: (now - this.startTime) / 1000,
       now,

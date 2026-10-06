@@ -2,12 +2,14 @@
  * Liveface canvas engine: textured triangle-mesh warp + cue-driven lip-sync.
  *
  * AvatarEngine is the orchestrator: it owns the canvas, the rig and the
- * picture, runs the frame loop, and sequences the parts that do the work:
+ * scene, and sequences the parts that do the work:
  *
+ *   engine/picture.ts              the picture laid on the canvas, and what is built on it
  *   engine/geometry.ts             the mesh laid on the canvas, refined
  *   engine/landmarks.ts            the MediaPipe landmark tables
  *   engine/sampling.ts             what the picture looks like
  *   engine/cues.ts                 the cue track, read
+ *   engine/voice.ts                the voice: cue track, clock, audio (the 3D engine's too)
  *   engine/speech.ts               the speech in flight, the articulation
  *   engine/motion.ts               blinks, gaze, the head and the body
  *   engine/state.ts                the face state those write
@@ -15,8 +17,10 @@
  *   engine/render2d.ts             the frame composed: picture, body, head
  *   engine/mesh-warp.ts            the warped mesh, on the GPU or in 2D
  *   engine/paint-eyes.ts           gaze, lashes, painted lids
+ *   engine/paint-mouth.ts          which mouth paints the mouth
  *   engine/paint-classic-mouth.ts  the drawn mouth and its teeth
  *   engine/scene.ts                the scene, the backdrop of a cut-out
+ *   engine/frame-loop.ts           the frame loop (the 3D engine's too)
  *   engine/debug.ts                the debug mesh overlay
  *   engine/seam.ts                 what the tests and the 3D bake pose and
  *                                  read; in no bundle
@@ -24,38 +28,23 @@
  * A `destroyed` flag makes mount -> unmount -> mount safe under React
  * StrictMode: the loop and every async callback bail once it is set.
  */
-import {
-  CharacterField,
-  characterOpening,
-  mergeTraits,
-  openingPath,
-  type CharacterTraits,
-} from "./character-mouth";
-import { paintCharacter } from "./character-paint";
-import { buildLowerFaceRig, type LowerFaceRig } from "./jaw-rig";
+import { mergeTraits, type CharacterTraits } from "./character-mouth";
 import { kindProfile, type KindProfile } from "./kind-profile";
 import type { MouthExtension, MouthPose } from "./mouth-extension";
 import { DEFAULT_TUNING, ZERO_WEIGHTS, type BlendWeights, type Cue, type EngineTuning, type Rig } from "./types";
 import { emphasisBeats, utteranceMs } from "./engine/cues";
 import { drawDebugMesh } from "./engine/debug";
 import { deformFace } from "./engine/deform";
-import {
-  layOutFace,
-  pixelScale,
-  placeHead,
-  refineMesh,
-  validInnerRing,
-  type FaceMesh,
-  type HeadGeom,
-  type Point,
-} from "./engine/geometry";
+import { FrameLoop, FrameStep } from "./engine/frame-loop";
+import { validInnerRing, type Point } from "./engine/geometry";
 import { LANDMARK_COUNT } from "./engine/landmarks";
 import { MeshWarp, type WarpMode } from "./engine/mesh-warp";
 import { Motion } from "./engine/motion";
 import { ClassicMouth } from "./engine/paint-classic-mouth";
 import { drawGaze, drawLashes, drawPaintedLids } from "./engine/paint-eyes";
-import { composeFrame, cutHeadLayer, motionTravel, type Layers } from "./engine/render2d";
-import { FaceSamples, probeCutOut } from "./engine/sampling";
+import { paintMouthSurface } from "./engine/paint-mouth";
+import { FacePicture } from "./engine/picture";
+import { composeFrame, motionTravel, type Layers } from "./engine/render2d";
 import { Backdrop, type Scene } from "./engine/scene";
 import { SpeechTrack, articulate, easeTongue } from "./engine/speech";
 import { restingFace, type FaceState } from "./engine/state";
@@ -102,11 +91,9 @@ export class AvatarEngine {
   /** What the rig's line changes in the mouth; today's human renderer
    *  unless the rig names a profile. */
   private readonly profile: KindProfile;
-  private texture: HTMLImageElement;
-  /** StrictMode guard: render loop and async callbacks bail once destroyed. */
+  /** StrictMode guard: async callbacks bail once destroyed. */
   private destroyed = false;
-  private raf = 0;
-  private lastTickAt = 0;
+  private readonly frameStep = new FrameStep();
 
   debugMesh: boolean;
   /** Live animation parameters — mutate freely, applied next frame. */
@@ -121,29 +108,13 @@ export class AvatarEngine {
   private readonly backdrop = new Backdrop(() => !this.destroyed);
   // Layered render path (see setLayers). Null means single-photo.
   private layers: Layers | null = null;
-  /** What the picture looks like (sampling.ts), read again with every
-   *  texture. */
-  private readonly samples = new FaceSamples();
-  /** Whether the photo is a cut-out. Decides how far the body may move. */
-  private cutOut = false;
-  /** The face mesh laid on the canvas (geometry.ts): rebuilt whole when
-   *  the viewport or the texture changes. */
-  private mesh: FaceMesh;
+  /** The picture laid on the canvas: the texture, the mesh over it, what
+   *  it looks like, the head cut from it (picture.ts). */
+  private readonly picture: FacePicture;
   /** The inner-lip ring the classic mouth is built on (validInnerRing). */
   private readonly innerRing: number[];
-  // The head as a movable unit (geometry.ts placeHead): where it sits and
-  // how far it may travel, and for a cut-out the head REGION of the photo —
-  // hair, ears, skull — cut out once with feathered edges (render2d.ts).
-  private headGeom: HeadGeom | null = null;
-  private headLayer: HTMLCanvasElement | null = null;
-  /** The character mouth (character-mouth.ts), only for a profile that asks
-   *  for it: the jaw field, what the picture looks like, the owner's traits
-   *  and how high the tongue is now. Null for every classic rig. */
-  private field: CharacterField | null = null;
+  /** The owner's settings for a character mouth (jaw, teeth, tongue). */
   private traits: CharacterTraits;
-  /** The jaw, chin and cheeks for every mouth driver (jaw-rig.ts), built
-   *  from the rest mesh with the framing. */
-  private lowerFace: LowerFaceRig | null = null;
 
   // --- Animation -----------------------------------------------------------
 
@@ -158,6 +129,7 @@ export class AvatarEngine {
   private mouthExtension?: MouthExtension;
   /** A mouth driver's pose, which wins over the cue track's. */
   private readonly pose?: () => MouthPose | null;
+  private readonly frameLoop: FrameLoop;
 
   // --- Drawing -------------------------------------------------------------
 
@@ -174,7 +146,8 @@ export class AvatarEngine {
     this.rig = rig;
     this.profile = kindProfile(rig);
     this.traits = this.profile.traits;
-    this.texture = texture;
+    this.picture = new FacePicture(canvas, rig, this.profile, texture, (pts) =>
+      this.motion.measureBody(pts, canvas.height));
     this.speech = new SpeechTrack(opts.cueClock, {
       onSync: (ms) => this.motion.placeBeatWalker(ms),
       onEnded: () => this.finishSpeech(),
@@ -190,18 +163,21 @@ export class AvatarEngine {
     this.backdrop.load(this.scene.background);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
+    const picture = this.picture;
     this.meshWarp = new MeshWarp(canvas, opts.warp ?? "auto", rig.mouth_indices, () => ({
-      texture: this.texture,
-      mesh: this.mesh,
-      padEverywhere: !!this.field || this.samples.look.flat,
-      lowerFace: this.lowerFace,
+      texture: picture.texture,
+      mesh: picture.mesh,
+      padEverywhere: !!picture.field || picture.samples.look.flat,
+      lowerFace: picture.lowerFace,
     }));
     this.innerRing = validInnerRing(rig);
     this.classicMouth = new ClassicMouth(ctx, this.profile, this.innerRing);
-    this.mesh = this.buildMesh(true);
+    this.picture.lay(this.scene.zoom ?? 1, this.scene.pan, true);
     this.motion.start(performance.now());
-    this.loop = this.loop.bind(this);
-    this.raf = requestAnimationFrame(this.loop);
+    this.frameLoop = new FrameLoop((now) => {
+      this.tick(now);
+      this.render();
+    });
     // Debug handle (last engine wins): lets a console force blinks/visemes.
     (globalThis as { __liveface?: AvatarEngine }).__liveface = this;
   }
@@ -231,28 +207,13 @@ export class AvatarEngine {
    * The widget boots on the 256px thumbnail so a face appears immediately,
    * then upgrades to the full-resolution image when it lands. Everything
    * sampled or derived from the texture is redone, exactly as loading this
-   * texture would have done it: the mesh (texPoints over this texture's
-   * size, the mouth subdivision), the cut-out probe, the head layer, and
-   * what the picture looks like, read at this texture's own landmarks.
+   * texture would have done it (picture.ts): the mesh, the cut-out probe,
+   * the head layer, and what the picture looks like.
    */
   setTexture(texture: HTMLImageElement): void {
     if (this.destroyed) return;
-    this.texture = texture;
-    this.mesh = this.buildMesh(true);
-  }
-
-  /**
-   * Lay the picture on the canvas (layOut), then refine the mesh. With
-   * `sample` (a new texture), first read what the picture looks like at the
-   * landmarks just laid on it: texPoints are over the texture's own size,
-   * so landmarks laid for another texture (the thumbnail before the full
-   * picture) point at the wrong pixels of this one.
-   */
-  private buildMesh(sample: boolean): FaceMesh {
-    const mesh = this.layOut();
-    if (sample) this.samples.sample(this.texture, mesh.texPoints, this.rig, this.profile);
-    refineMesh(mesh, this.rig, this.texture);
-    return mesh;
+    this.picture.texture = texture;
+    this.picture.lay(this.scene.zoom ?? 1, this.scene.pan, true);
   }
 
   /**
@@ -270,7 +231,7 @@ export class AvatarEngine {
       (next.pan?.x ?? 0) !== (this.scene.pan?.x ?? 0) ||
       (next.pan?.y ?? 0) !== (this.scene.pan?.y ?? 0);
     this.scene = next;
-    if (moved) this.mesh = this.buildMesh(false);
+    if (moved) this.picture.lay(this.scene.zoom ?? 1, this.scene.pan, false);
     this.backdrop.load(this.scene.background);
   }
 
@@ -283,21 +244,13 @@ export class AvatarEngine {
   }
 
   /**
-   * Stop or restart drawing, e.g. when the avatar scrolls out of view.
-   *
-   * Browsers already stop animation frames in hidden tabs; this covers a
-   * visible tab where the canvas is simply off-screen, which otherwise costs
-   * a full render every frame for nothing. Time does not jump on resume: the
-   * tick clamps its step, so the motion carries on rather than lurching.
+   * Stop or restart drawing, e.g. when the avatar scrolls out of view
+   * (frame-loop.ts). Time does not jump on resume: the tick clamps its
+   * step, so the motion carries on rather than lurching.
    */
   setActive(active: boolean): void {
     if (this.destroyed) return;
-    if (!active) {
-      cancelAnimationFrame(this.raf);
-      this.raf = 0;
-    } else if (!this.raf) {
-      this.raf = requestAnimationFrame(this.loop);
-    }
+    this.frameLoop.setActive(active);
   }
 
   /**
@@ -305,12 +258,12 @@ export class AvatarEngine {
    * overlays drawn in step with the face (a scan effect, a debug view).
    */
   landmarks(): ReadonlyArray<Readonly<Point>> {
-    return this.mesh.basePoints.slice(0, LANDMARK_COUNT);
+    return this.picture.mesh.basePoints.slice(0, LANDMARK_COUNT);
   }
 
   destroy(): void {
     this.destroyed = true;
-    cancelAnimationFrame(this.raf);
+    this.frameLoop.stop();
     this.speech.destroy();
     this.meshWarp.destroy();
   }
@@ -328,28 +281,6 @@ export class AvatarEngine {
   /** Which path the next frame takes: "gl" when the GPU warp is ready. */
   warpPath(): "gl" | "2d" {
     return this.meshWarp.path();
-  }
-
-  // --- Framing -------------------------------------------------------------
-
-  /**
-   * Lay the picture on the canvas (geometry.ts layOutFace) and place by it
-   * what moves with the framing: the cut-out probe, the body's pivot, the
-   * head's rectangle and layer, the character field and the lower face.
-   * The mesh comes back unrefined (refineMesh).
-   */
-  private layOut(): FaceMesh {
-    const mesh = layOutFace(this.rig, this.texture, this.canvas, this.scene.zoom ?? 1, this.scene.pan);
-    const cutOut = probeCutOut(this.texture);
-    if (cutOut !== null) this.cutOut = cutOut;
-    this.motion.measureBody(mesh.basePoints, this.canvas.height);
-    // The head as a movable unit (geometry.ts placeHead); a cut-out also
-    // gets it as its own feathered layer, which moves over transparency.
-    this.headGeom = placeHead(mesh.basePoints, mesh.picture);
-    this.headLayer = this.headGeom && this.cutOut ? cutHeadLayer(this.texture, this.rig, mesh, this.headGeom) : null;
-    this.field = this.profile.mouth === "character" ? new CharacterField(mesh.basePoints) : null;
-    this.lowerFace = buildLowerFaceRig(mesh.basePoints);
-    return mesh;
   }
 
   // --- Public speech API -----------------------------------------------------
@@ -432,11 +363,9 @@ export class AvatarEngine {
     return this.speech.blendedWeights(now, this.rig.visemes, this.tuning.smoothness);
   }
 
-  private loop(now: number): void {
-    if (this.destroyed) return;
-    this.tick(now);
-    this.render();
-    this.raf = requestAnimationFrame(this.loop);
+  /** The sound being made now: a mouth driver's, else the cue track's. */
+  private visemeNow(now: number): string {
+    return this.pose?.()?.viseme ?? this.speech.currentViseme(now);
   }
 
   private tick(now: number): void {
@@ -457,13 +386,11 @@ export class AvatarEngine {
     this.motion.notePause(now, silent && !speech.awaitingVoice());
     face.targetWeights = visemeWeights;
 
-    // The frame's step, clamped: a hidden tab or a stall resumes the motion
-    // where it was rather than lurching.
-    const dt = Math.min(64, Math.max(4, now - (this.lastTickAt || now - 16.7)));
-    this.lastTickAt = now;
+    // The frame's step, clamped (frame-loop.ts).
+    const dt = this.frameStep.next(now);
     articulate(face.weights, face.targetWeights, dt, this.tuning.smoothness);
 
-    if (this.field) face.tongue = easeTongue(face.tongue, this.pose?.()?.viseme ?? speech.currentViseme(now), dt);
+    if (this.picture.field) face.tongue = easeTongue(face.tongue, this.visemeNow(now), dt);
 
     this.motion.update(dt, now, {
       speaking: speech.speaking,
@@ -479,16 +406,17 @@ export class AvatarEngine {
 
   /** Every mesh vertex this frame (deform.ts). */
   private deformedPoints(): Point[] {
+    const picture = this.picture;
     return deformFace({
       rig: this.rig,
-      mesh: this.mesh,
+      mesh: picture.mesh,
       innerRing: this.innerRing,
       face: this.face,
       tuning: this.tuning,
       profile: this.profile,
-      field: this.field,
+      field: picture.field,
       traits: this.traits,
-      lowerFace: this.lowerFace,
+      lowerFace: picture.lowerFace,
       mouthExtension: this.mouthExtension,
     });
   }
@@ -497,20 +425,21 @@ export class AvatarEngine {
 
   private render(): void {
     const ctx = this.ctx;
+    const picture = this.picture;
     const pts = this.deformedPoints();
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     // The scene's background first, under everything and still.
-    this.backdrop.draw(ctx, this.scene.background, this.cutOut, this.canvas);
-    const travel = motionTravel(!!this.layers, this.cutOut, this.tuning);
+    this.backdrop.draw(ctx, this.scene.background, picture.cutOut, this.canvas);
+    const travel = motionTravel(!!this.layers, picture.cutOut, this.tuning);
     composeFrame({
       ctx,
-      picture: this.mesh.picture,
-      texture: this.texture,
+      picture: picture.mesh.picture,
+      texture: picture.texture,
       layers: this.layers,
-      cutOut: this.cutOut,
-      head: this.headGeom,
-      headLayer: this.headLayer,
-      headOffset: this.motion.headOffset(this.headGeom, travel.head),
+      cutOut: picture.cutOut,
+      head: picture.headGeom,
+      headLayer: picture.headLayer,
+      headOffset: this.motion.headOffset(picture.headGeom, travel.head),
       bodyLean: this.motion.bodyLean(travel.body),
       drawMesh: (affine) => this.meshWarp.draw(ctx, pts, affine),
       drawFeatures: () => this.paintFeatures(pts),
@@ -521,62 +450,24 @@ export class AvatarEngine {
    *  eyes, the lids or the lashes, the mouth, the debug mesh. */
   private paintFeatures(pts: Point[]): void {
     const ctx = this.ctx;
-    const eyes = { texture: this.texture, texPoints: this.mesh.texPoints };
+    const { texture, mesh, samples } = this.picture;
+    const eyes = { texture, texPoints: mesh.texPoints };
     drawGaze(ctx, pts, eyes, this.face.gaze);
-    if (this.profile.blink === "lid") drawPaintedLids(ctx, pts, eyes, this.face.blink, this.tuning.blink, this.samples);
-    else drawLashes(ctx, pts, this.face.blink, this.samples.lashColour);
-    this.drawMouthSurface(pts);
-    if (this.debugMesh) drawDebugMesh(ctx, pts, this.mesh.triangles, this.innerRing);
-  }
-
-  private drawMouthSurface(pts: Point[]): void {
-    let painted = false;
-    if (this.mouthExtension?.paint) {
-      this.ctx.save();
-      try {
-        painted = this.mouthExtension.paint(this.ctx, {
-          points: pts, neutral: this.mesh.basePoints, rig: this.rig, weights: this.face.weights,
-          lipColour: this.samples.lipColour,
-          skinColour: this.samples.skinColour ?? undefined,
-          faceHighlight: this.samples.faceHighlight ?? undefined,
-          soft: this.samples.look.soft,
-          sharpness: this.samples.faceSharpness ?? undefined,
-          pixelScale: pixelScale(this.mesh, this.rig, this.texture),
-          viseme: this.pose?.()?.viseme ?? this.speech.currentViseme(performance.now()),
-        });
-      } finally { this.ctx.restore(); }
-    }
-    if (!painted) {
-      if (this.field && !this.mouthExtension) {
-        this.drawCharacterMouth(pts);
-        return;
-      }
-      this.classicMouth.paint({
-        pts,
-        neutral: this.mesh.basePoints,
-        weights: this.face.weights,
-        lipColour: this.samples.lipColour,
-        skinColour: this.samples.skinColour,
-        mouthOpen: this.tuning.mouthOpen,
-        teethThreshold: this.tuning.teethThreshold,
-        extension: this.mouthExtension,
-        viseme: () => this.pose?.()?.viseme ?? this.speech.currentViseme(performance.now()),
-      });
-    }
-  }
-
-  /** The character mouth's opening, read off the moved lips, and painted. */
-  private drawCharacterMouth(pts: Point[]): void {
-    const opening = characterOpening(pts, this.mesh.basePoints);
-    if (!opening) return;
-    paintCharacter(this.ctx, {
-      opening,
-      clip: openingPath(opening, () => new Path2D()),
-      weights: this.face.weights,
-      look: this.samples.look,
+    if (this.profile.blink === "lid") drawPaintedLids(ctx, pts, eyes, this.face.blink, this.tuning.blink, samples);
+    else drawLashes(ctx, pts, this.face.blink, samples.lashColour);
+    paintMouthSurface({
+      ctx,
+      pts,
+      picture: this.picture,
+      rig: this.rig,
+      face: this.face,
+      tuning: this.tuning,
+      profile: this.profile,
       traits: this.traits,
-      tongueRaise: this.face.tongue,
-      cavityShade: this.profile.cavityShade,
+      extension: this.mouthExtension,
+      classicMouth: this.classicMouth,
+      viseme: () => this.visemeNow(performance.now()),
     });
+    if (this.debugMesh) drawDebugMesh(ctx, pts, mesh.triangles, this.innerRing);
   }
 }

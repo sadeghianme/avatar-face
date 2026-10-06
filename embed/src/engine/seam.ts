@@ -63,20 +63,20 @@ export interface EngineSeam {
 export function engineSeam(engine: AvatarEngine): EngineSeam {
   return {
     face: engine["face"],
-    samples: engine["samples"],
+    samples: engine["picture"].samples,
     speech: engine["speech"],
     motion: engine["motion"],
     meshWarp: engine["meshWarp"],
     classicMouth: engine["classicMouth"],
     backdrop: engine["backdrop"],
     get mesh() {
-      return engine["mesh"];
+      return engine["picture"].mesh;
     },
     get texture() {
-      return engine["texture"];
+      return engine["picture"].texture;
     },
     get cutOut() {
-      return engine["cutOut"];
+      return engine["picture"].cutOut;
     },
     get mouthExtension() {
       return engine["mouthExtension"];

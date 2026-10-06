@@ -2,8 +2,7 @@
   "//": "Private members of the 2D engine that liveface.js renames to short names (esbuild mangleProps; scripts/build.mjs). Only names the engine's own files declare and read, never part of an object another bundle or a page reads, never a key of data from the network, never a console probe (face, motion, speech, classicMouth, lastAperture, blinks). src/__tests__/bundle-mangle.test.ts holds every name to that. A name missing from the list only costs bytes; a wrong one breaks the widget.",
   "names": [
     "destroyed", "lastTickAt", "backdrop", "cutOut", "innerRing", "headGeom", "headLayer", "meshWarp",
-    "buildMesh", "layOut", "blendedCueWeights", "deformedPoints", "drawMouthSurface", "drawCharacterMouth",
-    "paintFeatures", "finishSpeech",
+    "blendedCueWeights", "deformedPoints", "paintFeatures", "finishSpeech",
     "cueStart", "currentAudio", "audioClock", "onAudioEnd", "audioCtx", "analyserData", "attachAnalyser",
     "awaitingVoice", "voicePaused", "blendedWeights", "replaceCues", "startClock",
     "gazeTarget", "nextSaccadeAt", "silenceSince", "nextNodAt", "nodPhase", "nodMs", "nodStrength", "nextBeat",
