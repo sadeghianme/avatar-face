@@ -65,13 +65,14 @@ async def forgot_password(body: ForgotPasswordRequest, db: DB) -> dict:
     Anything else turns this into a membership oracle: try an address, read
     the response, learn who is a customer. That is why there is no "no such
     user" branch and why a delivery failure is not reported either — the
-    difference would be just as readable. A throttled address gets the same
-    answer too: a distinct 429 would leak that this address had already
-    been asked for.
+    difference would be just as readable.
 
-    Rate limited per address (services.accounts.request_password_reset).
+    Rate limited per address so it cannot be used to mail-bomb someone, and
+    because Resend charges per message.
     """
     await accounts.request_password_reset(db, body.email)
+    # The same answer when the address was throttled, on purpose: a distinct
+    # 429 would leak that this address had already been asked for.
     return {"status": "sent"}
 
 
