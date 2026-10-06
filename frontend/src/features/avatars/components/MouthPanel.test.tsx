@@ -5,14 +5,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MouthPanel } from "@/features/avatars/components/MouthPanel";
 import type { MotionChoice } from "@/features/avatars/mouth-config";
-import i18n from "@/i18n";
+import { translate } from "@/i18n";
 import type { Avatar, MouthKit } from "@/lib/types";
 import { mockConsent } from "@/test/api";
 import { anAvatar, ORG_ID } from "@/test/fixtures";
 import { renderScreen } from "@/test/render";
 import { apiError, createServer, type MockServer } from "@/test/server";
 
-const t = i18n.t.bind(i18n);
+const t = translate;
 const AVATAR = `/orgs/${ORG_ID}/avatars/av1`;
 
 type Mouth = NonNullable<Avatar["mouth"]>;

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -7,6 +6,7 @@ import { Field } from "@/components/ui/Field";
 import { FieldError } from "@/components/ui/FieldError";
 import { Input } from "@/components/ui/Input";
 import { useIntegrations, useSaveIntegrations, useTestIntegration } from "@/features/settings/api";
+import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/errorMessage";
 import type { Integration } from "@/lib/types";
 
@@ -26,7 +26,7 @@ const FIELD_LABELS: Record<string, string> = {
  * tested on demand. Owners only.
  */
 export function ProvidersCard({ orgId, kind }: { orgId: string; kind: "voice" | "image" | "model" }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [testResult, setTestResult] = useState<Record<string, string>>({});
   const { data: integrations } = useIntegrations(orgId);

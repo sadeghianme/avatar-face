@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { LoginPage } from "@/features/auth";
-import i18n from "@/i18n";
+import { translate } from "@/i18n";
 import { getTokens } from "@/lib/api";
 import { aUser } from "@/test/fixtures";
 import { renderScreen } from "@/test/render";
@@ -11,7 +11,7 @@ import { apiError, createServer } from "@/test/server";
 // The live avatar beside the form is the engine on a canvas: not this test's.
 vi.mock("@/components/brand/DemoAvatar", () => ({ DEMO_PORTRAIT: "", DemoAvatar: () => null }));
 
-const t = i18n.t.bind(i18n);
+const t = translate;
 
 function setup() {
   const server = createServer();

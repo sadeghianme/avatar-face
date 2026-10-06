@@ -8,6 +8,7 @@
  * pupils. The panel draws whatever the response contains, so it never has
  * to agree with the server about which line has what.
  */
+import type { MessageKey } from "@/i18n/types";
 
 export interface Pt {
   x: number;
@@ -86,7 +87,7 @@ export const GROUP_COLOURS: Record<GroupId, string> = {
 };
 
 /** i18n key naming each part of the face. */
-export const GROUP_LABELS: Record<GroupId, string> = {
+export const GROUP_LABELS: Record<GroupId, MessageKey> = {
   head: "markHead",
   left_eye: "markLeftEye",
   right_eye: "markRightEye",
@@ -97,7 +98,7 @@ export const GROUP_LABELS: Record<GroupId, string> = {
   right_pupil: "markRightPupil",
 };
 
-const EDGE_LABELS: Record<Edge, string> = {
+const EDGE_LABELS: Record<Edge, MessageKey> = {
   left: "markEdgeLeft",
   right: "markEdgeRight",
   top: "markEdgeTop",
@@ -114,7 +115,7 @@ export interface Handle {
   id: string;
   group: GroupId;
   /** i18n key (and its parameters) for which point of the part this is. */
-  label: string;
+  label: MessageKey;
   labelParams?: Record<string, number>;
   /** Drawn larger: the point that moves its whole part (a pupil's center). */
   primary?: boolean;
@@ -331,7 +332,7 @@ export interface FitReason {
 }
 
 /** i18n key per validator code; an unknown code falls back to its prose. */
-export const FIT_REASON_LABELS: Record<string, string> = {
+export const FIT_REASON_LABELS: Record<string, MessageKey> = {
   folded_mesh: "fitFolded",
   lids_inverted: "fitLidsInverted",
   eyes_out_of_order: "fitEyesOrder",

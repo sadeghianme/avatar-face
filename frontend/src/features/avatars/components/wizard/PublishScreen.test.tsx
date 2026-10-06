@@ -10,7 +10,7 @@ import { NewAvatarPage } from "@/features/avatars";
 import { ai, anchors, creation, job, step } from "@/features/avatars/creation/fixtures";
 import type { CreationAnchors } from "@/features/avatars/creation/types";
 import type { Plan, WizardCreation } from "@/features/avatars/wizard";
-import i18n from "@/i18n";
+import { translate } from "@/i18n";
 import { mockConsent, mockSpeech } from "@/test/api";
 import { ORG_ID } from "@/test/fixtures";
 import { renderScreen } from "@/test/render";
@@ -20,7 +20,7 @@ vi.mock("@/features/avatars/components/AvatarPreview", () => ({
   AvatarPreview: ({ rigUrl }: { rigUrl: string }) => <div data-testid="talking-preview" data-rig={rigUrl} />,
 }));
 
-const t = i18n.t.bind(i18n);
+const t = translate;
 const BASE = `/orgs/${ORG_ID}/creations/c1`;
 const PLAN: Plan = { model: "human", look: "realistic", source: "upload", description: null };
 

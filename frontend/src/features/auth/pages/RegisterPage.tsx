@@ -1,6 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { z } from "zod";
 
@@ -9,6 +8,7 @@ import { Field } from "@/components/ui/Field";
 import { FieldError } from "@/components/ui/FieldError";
 import { Input } from "@/components/ui/Input";
 import { AuthShell } from "@/features/auth/components/AuthShell";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/providers/auth";
 
@@ -25,7 +25,7 @@ const schema = z.object({
 type Form = z.infer<typeof schema>;
 
 export function RegisterPage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { register: signup } = useAuth();
   const navigate = useNavigate();
   const {

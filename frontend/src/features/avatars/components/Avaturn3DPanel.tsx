@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
@@ -7,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { FieldError } from "@/components/ui/FieldError";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAvaturnSession, useImportAvatar } from "@/features/avatars/api";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 
 /**
@@ -19,7 +19,7 @@ import { ApiError } from "@/lib/api";
  * host), so the result is an avatar like any other.
  */
 export function Avaturn3DPanel({ orgId }: { orgId: string }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const navigate = useNavigate();
   const session = useAvaturnSession(orgId);
   const { mutateAsync: importFromUrl } = useImportAvatar(orgId).fromUrl;

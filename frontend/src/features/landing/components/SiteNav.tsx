@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import { LanguageMenu } from "@/components/layout/LanguageMenu";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { IconButton } from "@/components/ui/IconButton";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { useAuth } from "@/providers/auth";
 
@@ -37,7 +37,7 @@ const MENU_LINK = cx(
 
 /** Sticky, transparent over the hero, solid once the page scrolls. */
 export function SiteNav() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { user } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);

@@ -10,13 +10,13 @@ import { describe, expect, it } from "vitest";
 import { NewAvatarPage } from "@/features/avatars";
 import { creation } from "@/features/avatars/creation/fixtures";
 import { FRESH_ENTRY } from "@/features/avatars/wizard";
-import i18n from "@/i18n";
+import { translate } from "@/i18n";
 import { mockConsent } from "@/test/api";
 import { ORG_ID } from "@/test/fixtures";
 import { renderScreen, type ScreenOptions } from "@/test/render";
 import { apiError, createServer, type MockServer } from "@/test/server";
 
-const t = i18n.t.bind(i18n);
+const t = translate;
 
 async function setup(
   {

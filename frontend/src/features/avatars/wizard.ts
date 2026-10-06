@@ -28,6 +28,7 @@ import type {
   DraftStore,
   StepId,
 } from "@/features/avatars/creation";
+import type { MessageKey } from "@/i18n/types";
 import type { FaceType } from "@/lib/types";
 
 export type AvatarModel = "human" | "animal";
@@ -151,7 +152,7 @@ export function statementToAsk(
  * so the same scope and version are recorded (services.consent): the plan
  * on the creation says which form was shown.
  */
-export function statementKey(scope: FaceStatement, plan: Pick<Plan, "model">): string {
+export function statementKey(scope: FaceStatement, plan: Pick<Plan, "model">): MessageKey {
   if (scope === "generated_face") return "createGeneratedFaceStatement";
   return plan.model === "animal" ? "createDepictionStatement_animal" : "createDepictionStatement";
 }
@@ -169,7 +170,7 @@ export interface PhotoForm {
 }
 
 /** Why "Create my avatar" is held, as an i18n key, or null when it may go. */
-export function photoBlocker(form: PhotoForm): string | null {
+export function photoBlocker(form: PhotoForm): MessageKey | null {
   if (!form.aiEnabled && aiRequired(form.source, form.look)) return "wzHoldAiOff";
   if (form.source === "upload" && !form.hasFile) return "wzHoldFile";
   if (form.source === "generate" && !form.description.trim()) return "wzHoldDescription";
@@ -480,7 +481,7 @@ export function selectedVersion(creation: WizardCreation): StepId | null {
 /** The words that name a version (its alt text), as an i18n key and its
  * values: "Version 3: change “shorter hair”". */
 export function versionLabel(version: Pick<Version, "number" | "kind" | "instruction">): {
-  key: string;
+  key: MessageKey;
   values: Record<string, string | number>;
 } {
   return {

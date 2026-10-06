@@ -1,4 +1,3 @@
-import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/Badge";
@@ -7,6 +6,7 @@ import { Icon } from "@/components/ui/Icon";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useAvatar } from "@/features/avatars/api";
 import { FRESH_ENTRY } from "@/features/avatars/wizard";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import type { Avatar } from "@/lib/types";
 
@@ -46,7 +46,7 @@ const THUMB_BACKDROP = cx(
 );
 
 export function AvatarCard({ avatar, orgId, locale }: { avatar: Avatar; orgId: string; locale: string }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const createdAt = new Intl.DateTimeFormat(locale, {
     year: "numeric",
     month: "short",
@@ -90,7 +90,7 @@ export function AvatarCard({ avatar, orgId, locale }: { avatar: Avatar; orgId: s
 }
 
 function AvatarThumb({ avatar, orgId }: { avatar: Avatar; orgId: string }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   // The list carries no signed URLs: the thumbnail comes with the detail.
   const { data } = useAvatar(orgId, avatar.id, { enabled: avatar.status === "ready", staleTime: 60_000 });
 
@@ -119,7 +119,7 @@ function AvatarThumb({ avatar, orgId }: { avatar: Avatar; orgId: string }) {
 
 /** A fresh start: every step of the wizard at its default (wizard.FRESH_ENTRY). */
 export function CreateAvatarCard() {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <Link to="/avatars/new" state={FRESH_ENTRY} className={CREATE_CARD}>
       <div>

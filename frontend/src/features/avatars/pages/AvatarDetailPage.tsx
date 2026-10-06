@@ -1,7 +1,6 @@
 import type { SpeechPlayer } from "@liveface/embed";
 import type { AvatarMouthConfig, ClassicMouthConfig } from "@liveface/embed/mouth";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
@@ -47,6 +46,7 @@ import {
 import { engineScene, type SceneDraft, sceneOf } from "@/features/avatars/scene";
 import { SpeakPanel } from "@/features/voices";
 import { defaultVoiceSelection, type VoiceSelection } from "@/features/voices";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { useOrg } from "@/providers/org";
@@ -85,7 +85,7 @@ const STAGE_COVERING = cx(
  * in the column. On a phone it is one column, the stage first.
  */
 export function AvatarDetailPage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { avatarId } = useParams<{ avatarId: string }>();
   const { current } = useOrg();
   const navigate = useNavigate();

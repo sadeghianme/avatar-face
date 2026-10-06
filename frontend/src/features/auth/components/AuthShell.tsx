@@ -1,11 +1,11 @@
 import { ReactNode, useEffect } from "react";
-import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import { DEMO_PORTRAIT, DemoAvatar } from "@/components/brand/DemoAvatar";
 import { LanguageMenu } from "@/components/layout/LanguageMenu";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { Icon } from "@/components/ui/Icon";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 /** The code line under the brand panel's avatar: a glass caption. */
@@ -24,7 +24,7 @@ const SPEAK_CAPTION = cx(
  * stacked: on a phone the form is the only thing anyone came for.
  */
 export function AuthShell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
-  const { t } = useTranslation();
+  const { t } = useT();
 
   useEffect(() => {
     const previous = document.title;
@@ -82,7 +82,7 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
           </div>
 
           <ul className="mt-7 flex flex-wrap justify-center gap-2">
-            {["authPoint1", "authPoint2", "authPoint3"].map((key) => (
+            {(["authPoint1", "authPoint2", "authPoint3"] as const).map((key) => (
               <li
                 key={key}
                 className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3.5 py-1.5 text-[13px] text-gray-300 ring-1 ring-white/10"

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
@@ -8,12 +7,13 @@ import { FieldError } from "@/components/ui/FieldError";
 import { Input } from "@/components/ui/Input";
 import { useResetPassword } from "@/features/auth/api";
 import { AuthShell } from "@/features/auth/components/AuthShell";
+import { useT } from "@/i18n";
 import { useAuth } from "@/providers/auth";
 
 const MIN_LENGTH = 8;
 
 export function ResetPasswordPage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { adoptSession } = useAuth();

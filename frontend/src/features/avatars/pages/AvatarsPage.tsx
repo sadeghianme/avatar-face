@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/Badge";
 import { Banner } from "@/components/ui/Banner";
@@ -17,6 +16,7 @@ import { AvatarCard, CreateAvatarCard, SkeletonCard } from "@/features/avatars/c
 import { StatCard } from "@/features/avatars/components/library/StatCard";
 import { FRESH_ENTRY } from "@/features/avatars/wizard";
 import { useUsage } from "@/features/settings";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { useOrg } from "@/providers/org";
 
@@ -32,7 +32,7 @@ const AI_REPORT = cx(
 );
 
 export function AvatarsPage() {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useT();
   const { current } = useOrg();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<AvatarFilter>("all");

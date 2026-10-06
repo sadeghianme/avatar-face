@@ -1,6 +1,5 @@
 import { AvatarEngine, BrowserTTS, type Rig } from "@liveface/embed";
 import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
@@ -9,6 +8,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
 import { useAvatarMouth } from "@/features/avatars";
 import { fetchPublicAvatar, phraseCues, type PublicAvatar, speakPublic } from "@/features/share/api";
+import { useT } from "@/i18n";
 import { loadImage } from "@/lib/image";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 
@@ -24,7 +24,7 @@ import { useMediaQuery } from "@/lib/useMediaQuery";
  * the owner. Nothing here can address anything but this one avatar.
  */
 export function SharePage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { token } = useParams<{ token: string }>();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<AvatarEngine | null>(null);

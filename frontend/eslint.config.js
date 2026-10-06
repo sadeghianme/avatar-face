@@ -74,6 +74,11 @@ export default tseslint.config(
               importNames: ["api", "fetchStream", "postFormWithProgress", "uploadWithProgress"],
               message: "Call the server through the feature's api module (features/<x>/api), not from a component.",
             },
+            {
+              name: "react-i18next",
+              importNames: ["useTranslation", "Trans", "withTranslation"],
+              message: "Use useT (or translate) from @/i18n: its t takes only the keys en defines (i18n/types.ts).",
+            },
           ],
         },
       ],
@@ -103,6 +108,8 @@ export default tseslint.config(
       "src/features/avatars/hooks/useMouthKit.ts",
       "src/providers/**",
       "src/lib/**",
+      // Where react-i18next's own hook is wrapped (useT).
+      "src/i18n/**",
     ],
     rules: { "no-restricted-imports": "off" },
   },

@@ -3,7 +3,6 @@ import { ContinuousMouth } from "@liveface/embed/mouth/continuous-mouth";
 import { ReferenceMouth } from "@liveface/embed/mouth/reference-mouth";
 import { REFERENCE_POSES } from "@liveface/embed/mouth/reference-mouth-model";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button, type ButtonProps } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -19,6 +18,8 @@ import { useLipSyncComparison } from "@/features/lab/hooks/useLipSyncComparison"
 import { useReferenceProfile } from "@/features/lab/hooks/useReferenceProfile";
 import { REFERENCE_AVATAR, REFERENCE_AVATAR_PROFILE, REFERENCE_SCRIPT_ID } from "@/features/lab/reference-avatar";
 import { defaultVoiceSelection, VoicePicker } from "@/features/voices";
+import { useT } from "@/i18n";
+import type { MessageKey } from "@/i18n/types";
 import type { Avatar } from "@/lib/types";
 
 /** One of a set of choices shown as buttons: the chosen one filled. */
@@ -26,7 +27,7 @@ function Toggle({ on, ...props }: ButtonProps & { on: boolean }) {
   return <Button variant={on ? "primary" : "secondary"} aria-pressed={on} {...props} />;
 }
 
-const POSE_LABELS: Record<string, string> = {
+const POSE_LABELS: Record<string, MessageKey> = {
   rest: "referenceRest",
   closed: "referenceClosed",
   aa: "referenceAA",
@@ -38,7 +39,7 @@ const POSE_LABELS: Record<string, string> = {
 };
 
 export function ReferenceAvatarWorkspace({ avatar, orgId }: { avatar: Avatar; orgId: string }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const draft = useReferenceProfile(
     orgId,
     avatar.id,

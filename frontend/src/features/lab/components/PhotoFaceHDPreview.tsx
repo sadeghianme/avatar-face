@@ -1,9 +1,9 @@
 import type { CuePlayer, SpeechPlayer } from "@liveface/embed";
 import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Banner } from "@/components/ui/Banner";
 import { faceDepth } from "@/features/lab/api";
+import { useT } from "@/i18n";
 import type { Avatar } from "@/lib/types";
 
 type HDEngine = SpeechPlayer & CuePlayer & { destroy(): void };
@@ -17,7 +17,7 @@ export function PhotoFaceHDPreview({
   orgId: string;
   onEngine?: (engine: HDEngine | null) => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

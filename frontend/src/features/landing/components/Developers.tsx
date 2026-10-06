@@ -1,16 +1,17 @@
 import { ReactNode, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Icon } from "@/components/ui/Icon";
 import { Tabs } from "@/components/ui/Tabs";
 import { SNIPPETS } from "@/features/landing/data";
+import { useT } from "@/i18n";
+import type { MessageKey } from "@/i18n/types";
 import { cx } from "@/lib/cx";
 
 import { Reveal, SectionHeader } from "./Reveal";
 
 type Tab = keyof typeof SNIPPETS;
-const TABS: { id: Tab; key: string }[] = [
+const TABS: { id: Tab; key: MessageKey }[] = [
   { id: "html", key: "devTabEmbed" },
   { id: "js", key: "devTabJs" },
   { id: "rest", key: "devTabRest" },
@@ -63,7 +64,7 @@ const COPY_ON_DARK = cx(
 );
 
 export function Developers() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const [tab, setTab] = useState<Tab>("html");
 
   return (
@@ -72,7 +73,7 @@ export function Developers() {
         <div>
           <SectionHeader align="start" eyebrow={t("devEyebrow")} title={t("devTitle")} subtitle={t("devBody")} />
           <ul className="mt-9 space-y-4">
-            {["devPoint1", "devPoint2", "devPoint3"].map((key, i) => (
+            {(["devPoint1", "devPoint2", "devPoint3"] as const).map((key, i) => (
               <Reveal as="li" key={key} delay={i * 70} className="flex gap-3.5">
                 <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-400">
                   <Icon name="check" className="h-3.5 w-3.5" strokeWidth={2.4} />

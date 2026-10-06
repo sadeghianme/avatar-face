@@ -1,5 +1,4 @@
 import { useRef } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +17,8 @@ import {
   type JobCount,
   jobFailure,
 } from "@/features/avatars/creation";
+import { useT } from "@/i18n";
+import type { MessageKey } from "@/i18n/types";
 import { cx } from "@/lib/cx";
 
 /** A finish row's words, by its state: the current one strongest, a
@@ -54,7 +55,7 @@ export function JobProgress({
   /** Extra actions beside Retry (for a failure nothing can retry). */
   children?: React.ReactNode;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
 
   if (isJobActive(job) && job.step === "finish" && rows) {
     return <FinishProgress job={job} rows={rows} />;
@@ -123,7 +124,7 @@ export function useSeenStages(job: CreationJob | null | undefined): ReadonlySet<
  * was not made after all is shown as such ("skipped"), never ticked.
  */
 function FinishProgress({ job, rows }: { job: CreationJob; rows: FinishRow[] }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const stage = finishStage(job);
   const label = t("createJob_finish");
 
@@ -147,14 +148,14 @@ function FinishProgress({ job, rows }: { job: CreationJob; rows: FinishRow[] }) 
 
 // What the row the build is at says beneath its name: the part of the
 // build under way, or where a person's mouth comes from.
-function currentDetail(row: FinishRow, stage: FinishStage | null): string | null {
+function currentDetail(row: FinishRow, stage: FinishStage | null): MessageKey | null {
   if (row.phase === "build") return stage ? `createFinishStage_${stage}` : null;
   if (row.phase === "shapes" || row.phase === "teeth") return `createFinishPhaseHint_${row.phase}`;
   return null;
 }
 
 function FinishRowItem({ row, stage }: { row: FinishRow; stage: FinishStage | null }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const detail = row.state === "current" ? currentDetail(row, stage) : null;
   return (
     <li className="flex items-start gap-3" aria-current={row.state === "current" ? "step" : undefined}>

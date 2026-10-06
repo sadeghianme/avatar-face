@@ -1,16 +1,16 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/FieldError";
 import { useAcceptInvite, useInvite } from "@/features/auth/api";
 import { AuthShell } from "@/features/auth/components/AuthShell";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/providers/auth";
 
 export function AcceptInvitePage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { token } = useParams<{ token: string }>();
   const { user, loading } = useAuth();
   const navigate = useNavigate();

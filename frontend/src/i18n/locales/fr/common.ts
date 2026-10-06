@@ -1,4 +1,7 @@
 /** fr: common strings. A key lives in exactly one file; add new ones here. */
+import type { common as en } from "@/i18n/locales/en/common";
+import type { Locale } from "@/i18n/types";
+
 export const common = {
   dashGreeting: "Bonjour, {{name}}",
   avatarCount_one: "{{count}} avatar",
@@ -91,4 +94,4 @@ export const common = {
   error: "Une erreur est survenue",
   mine: "Créé par moi",
   close: "Fermer",
-} as const;
+} as const satisfies Locale<typeof en>;

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
@@ -11,11 +10,12 @@ import { LipSyncWorkspace } from "@/features/lab/components/LipSyncWorkspace";
 import { ReferenceAvatarWorkspace } from "@/features/lab/components/ReferenceAvatarWorkspace";
 import { ReferencePhotoUpload } from "@/features/lab/components/ReferencePhotoUpload";
 import { REFERENCE_AVATAR } from "@/features/lab/reference-avatar";
+import { useT } from "@/i18n";
 import type { Avatar } from "@/lib/types";
 import { useOrg } from "@/providers/org";
 
 export function LipSyncLabPage({ reference = false }: { reference?: boolean }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { current } = useOrg();
   const [selected, setSelected] = useState("");
   const [testPhoto, setTestPhoto] = useState<(ReferenceUpload & { orgId: string }) | null>(null);

@@ -1,8 +1,7 @@
-import { useTranslation } from "react-i18next";
-
 import { DEMO_PORTRAIT } from "@/components/brand/DemoAvatar";
 import { Icon } from "@/components/ui/Icon";
 import { FACE_PATHS } from "@/features/landing/data";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 import { Reveal, SectionHeader } from "./Reveal";
@@ -19,12 +18,12 @@ const STEP_VISUAL = cx(
 );
 
 export function HowItWorks() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const steps = [
     { key: "step1", visual: <PhotoVisual /> },
     { key: "step2", visual: <VoiceVisual /> },
     { key: "step3", visual: <EmbedVisual /> },
-  ];
+  ] as const;
   return (
     <section id="how" className="scroll-mt-20 py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-5 sm:px-6">
@@ -90,7 +89,7 @@ function PhotoVisual() {
 }
 
 function VoiceVisual() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const languages = ["English", "Español", "Français", "हिन्दी"];
   return (
     <div className="absolute inset-0 flex flex-col justify-center gap-3 px-8">
@@ -142,7 +141,7 @@ function VoiceVisual() {
 }
 
 function EmbedVisual() {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <div className="absolute inset-0 grid place-items-center px-6">
       <div className="w-full overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-black/10 dark:bg-well dark:ring-white/10">

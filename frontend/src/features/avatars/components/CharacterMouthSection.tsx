@@ -1,6 +1,5 @@
 import type { CharacterSettings } from "@liveface/embed/mouth";
 import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Checkbox } from "@/components/ui/Checkbox";
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
@@ -15,6 +14,7 @@ import {
   mouthLook,
   styleChange,
 } from "@/features/avatars/character-mouth";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
 
@@ -42,7 +42,7 @@ export function CharacterMouthSection({
   /** The settings being edited, for the preview; null when saved. */
   onPreview: (settings: CharacterSettings | null) => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const update = useUpdateAvatar(orgId, avatar.id);
   const look = mouthLook(avatar);
   const savedKey = JSON.stringify(avatar.mouth?.character ?? null);

@@ -1,6 +1,5 @@
 import type { AvatarEngine } from "@liveface/embed";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
@@ -43,6 +42,7 @@ import {
   type WizardCreation,
 } from "@/features/avatars/wizard";
 import { SampleSpeech } from "@/features/voices";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
 
@@ -105,7 +105,7 @@ export function PublishScreen({
   /** The editor opened or closed (the heading says which). */
   onFixing: (fixing: boolean) => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const job = creation.job;
   const seen = useSeenStages(job);
   const building = creation.status === "finishing" || creation.status === "finished";
@@ -198,7 +198,7 @@ function Editor({
   onBack: () => void;
   onFixing: (fixing: boolean) => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const ids = useId();
   const requests = useMemo(() => creationRequests(orgId, creation.id), [orgId, creation.id]);
   const plan = planOf(creation);

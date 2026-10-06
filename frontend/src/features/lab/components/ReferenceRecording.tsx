@@ -1,11 +1,11 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { FieldError } from "@/components/ui/FieldError";
 import { ComparisonRecorder } from "@/features/lab/comparison-recorder";
 import { REFERENCE_RENDERER_VERSION } from "@/features/lab/reference-avatar";
+import { useT } from "@/i18n";
 
 export function ReferenceRecording({
   previews,
@@ -22,7 +22,7 @@ export function ReferenceRecording({
   photographic: boolean;
   mouthOnly: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const [recording, setRecording] = useState(false);
   const [result, setResult] = useState<{ url: string; extension: string; version: string } | null>(null);
   const [error, setError] = useState<string | null>(null);

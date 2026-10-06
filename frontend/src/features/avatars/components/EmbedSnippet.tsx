@@ -1,11 +1,10 @@
-import { useTranslation } from "react-i18next";
-
 import { CodeBlock } from "@/components/ui/CodeBlock";
 import { buildSnippet, type SnippetVoice } from "@/features/avatars/snippet";
+import { useT } from "@/i18n";
 
 /** The snippet to paste, with Copy: the avatar page's Embed section. */
 export function EmbedSnippet({ avatarId, apiKey, voice }: { avatarId: string; apiKey?: string; voice?: SnippetVoice }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <CodeBlock
       code={buildSnippet(avatarId, apiKey, voice)}

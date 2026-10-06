@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { VoicesPage } from "@/features/voices";
 import type { ClonedVoice, CloneJob } from "@/features/voices/api";
-import i18n from "@/i18n";
+import { translate } from "@/i18n";
 import { ORG_ID } from "@/test/fixtures";
 import { renderScreen } from "@/test/render";
 import { createServer, type MockServer } from "@/test/server";
@@ -21,7 +21,7 @@ vi.mock("@/lib/recorder", () => ({
   },
 }));
 
-const t = i18n.t.bind(i18n);
+const t = translate;
 const JOBS = `/orgs/${ORG_ID}/clone-jobs`;
 
 const aJob = (extra: Partial<CloneJob> = {}): CloneJob => ({

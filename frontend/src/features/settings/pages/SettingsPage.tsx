@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -9,11 +8,12 @@ import { Select } from "@/components/ui/Select";
 import { useRenameOrg, useUsage } from "@/features/settings/api";
 import { AiSwitchCard } from "@/features/settings/components/AiSwitchCard";
 import { ProvidersCard } from "@/features/settings/components/ProvidersCard";
+import { useT } from "@/i18n";
 import { useOrg } from "@/providers/org";
 import { useTheme } from "@/providers/theme";
 
 export function SettingsPage() {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useT();
   const { current } = useOrg();
   const { theme, toggle } = useTheme();
   const orgId = current?.id;

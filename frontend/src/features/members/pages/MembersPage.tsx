@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -16,12 +15,13 @@ import {
   useRemoveMember,
   useRevokeInvitation,
 } from "@/features/members/api";
+import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/errorMessage";
 import type { Role } from "@/lib/types";
 import { useOrg } from "@/providers/org";
 
 export function MembersPage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { current } = useOrg();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("member");

@@ -9,6 +9,7 @@
  * server will refuse. The stored value `cartoon` is labelled "Animation".
  */
 import type { MarkPart } from "@/features/avatars/creation";
+import type { MessageKey } from "@/i18n/types";
 import type { FaceType } from "@/lib/types";
 
 export type LineExample = "portrait" | "animal" | "animation";
@@ -16,7 +17,7 @@ export type LineExample = "portrait" | "animal" | "animation";
 export interface LineConfig {
   id: FaceType;
   /** i18n keys. */
-  label: string;
+  label: MessageKey;
   summary: string;
   /** What to put where, for this line's marks. */
   guide: string;

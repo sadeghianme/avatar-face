@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FieldError } from "@/components/ui/FieldError";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import type { Avatar } from "@/lib/types";
 
@@ -26,7 +26,7 @@ export function PrepProgress({
   onRetry: () => void;
   error?: string | null;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {

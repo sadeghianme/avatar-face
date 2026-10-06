@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +23,7 @@ import {
   useRenderHere,
   useSubmitClone,
 } from "@/features/voices/api";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { MicRecorder, type Recording } from "@/lib/recorder";
@@ -41,7 +41,7 @@ const MIN_REFERENCE_SECONDS = 6;
  * terminal anywhere.
  */
 export function VoicesPage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { current } = useOrg();
   const orgId = current?.id;
 
@@ -357,7 +357,7 @@ const JOB_TONE: Record<CloneJob["status"], BadgeTone> = {
 };
 
 function JobStatus({ job }: { job: CloneJob }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <Badge tone={JOB_TONE[job.status]}>
       {t(`voicesStatus_${job.status}`)}

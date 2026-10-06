@@ -1,5 +1,4 @@
 import { forwardRef } from "react";
-import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/Badge";
@@ -11,6 +10,7 @@ import { Icon } from "@/components/ui/Icon";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { InlineName } from "@/features/avatars/components/InlineName";
 import { aiEditedLabels, aiEditedModels } from "@/features/avatars/teeth";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import type { Avatar } from "@/lib/types";
 
@@ -68,7 +68,7 @@ export const AvatarPageHead = forwardRef<
   },
   ref
 ) {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <div ref={ref} className={HEAD}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">

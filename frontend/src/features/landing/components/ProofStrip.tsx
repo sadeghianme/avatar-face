@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 /** Numbers that are properties of the product, not of a marketing plan. */
@@ -9,7 +9,7 @@ const PROOF = [
   { value: 15, key: "proofVisemes" },
   { value: 13, key: "proofLanguages" },
   { value: 1, key: "proofEmbed" },
-];
+] as const;
 
 function CountUp({ to }: { to: number }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -40,7 +40,7 @@ function CountUp({ to }: { to: number }) {
 }
 
 export function ProofStrip() {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <section
       aria-label={t("proofLabel")}

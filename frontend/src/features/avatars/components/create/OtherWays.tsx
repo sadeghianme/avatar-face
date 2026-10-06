@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
@@ -12,6 +11,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { useImportAvatar, useStockAvatars } from "@/features/avatars/api";
 import { Avaturn3DPanel } from "@/features/avatars/components/Avaturn3DPanel";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
 
@@ -22,7 +22,7 @@ import type { Avatar } from "@/lib/types";
  * screen. (Generating from words is the wizard's own "Generate with AI".)
  */
 export function OtherWays({ orgId }: { orgId: string }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const navigate = useNavigate();
   const glbInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");

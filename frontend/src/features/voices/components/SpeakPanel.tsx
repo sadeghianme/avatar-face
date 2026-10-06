@@ -9,7 +9,6 @@ import {
   sttSupported,
 } from "@liveface/embed";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -17,6 +16,7 @@ import { FieldError } from "@/components/ui/FieldError";
 import { Textarea } from "@/components/ui/Textarea";
 import { BROWSER_PROVIDER, speechStream, useSpeechLanguages } from "@/features/voices/api";
 import { defaultVoiceSelection, VoicePicker, type VoiceSelection } from "@/features/voices/components/VoicePicker";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 
 export function SpeakPanel({
@@ -38,7 +38,7 @@ export function SpeakPanel({
   title?: string;
   hint?: string;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useT();
   // Prefilled rather than empty: an empty box disables Speak, so the first
   // thing the page offers is a dead button and a blank field.
   const [text, setText] = useState(() => t("speakSample"));

@@ -1,11 +1,12 @@
 import { PROFILE_LIMITS, type ReferenceProfile } from "@liveface/embed/mouth/reference-mouth-model";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Slider } from "@/components/ui/Slider";
+import { useT } from "@/i18n";
+import type { MessageKey } from "@/i18n/types";
 
-const LABELS: Record<keyof ReferenceProfile, string> = {
+const LABELS: Record<keyof ReferenceProfile, MessageKey> = {
   teethScale: "referenceTeethSize",
   teethY: "referenceTeethPosition",
   warmth: "referenceWarmth",
@@ -30,7 +31,7 @@ export function ReferenceFitControls({
   reset: () => void;
   status: "idle" | "saved" | "failed";
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <Card as="section" className="space-y-4">
       <div>

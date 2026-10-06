@@ -1,7 +1,6 @@
-import { useTranslation } from "react-i18next";
-
 import { DEMO_PORTRAIT } from "@/components/brand/DemoAvatar";
 import { Icon, type IconName } from "@/components/ui/Icon";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 import { Reveal, SectionHeader } from "./Reveal";
@@ -12,15 +11,15 @@ const SWAP_STRIP = "col-start-1 row-start-1 flex items-center border-b px-5 py-2
 /** One of the mock's setting rows. */
 const ROW = "rounded-xl bg-gray-50 px-3.5 ring-1 ring-black/[0.05] dark:bg-white/[0.03] dark:ring-white/[0.06]";
 
-const POINTS: { icon: IconName; key: string }[] = [
+const POINTS = [
   { icon: "users", key: "platformTeam" },
   { icon: "key", key: "platformKeys" },
   { icon: "link", key: "platformShare" },
   { icon: "chart", key: "platformUsage" },
-];
+] as const satisfies readonly { icon: IconName; key: string }[];
 
 export function Platform() {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <section id="platform" className="scroll-mt-20 overflow-x-clip py-24 sm:py-32">
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 px-5 sm:px-6 lg:grid-cols-[1fr_1.1fr]">
@@ -57,7 +56,7 @@ export function Platform() {
 
 /** An illustration of the avatar page, built from the dashboard's own parts. */
 function DashboardMock() {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <div className="relative">
       <div
@@ -118,10 +117,12 @@ function DashboardMock() {
             </span>
           </div>
           <dl className="space-y-3 text-[13px]">
-            {[
-              { k: "mockVoice", v: t("mockVoiceValue") },
-              { k: "mockMouth", v: t("mockMouthValue") },
-            ].map((row) => (
+            {(
+              [
+                { k: "mockVoice", v: t("mockVoiceValue") },
+                { k: "mockMouth", v: t("mockMouthValue") },
+              ] as const
+            ).map((row) => (
               <div key={row.k} className={cx(ROW, "flex items-center justify-between py-2.5")}>
                 <dt className="text-gray-500 dark:text-gray-400">{t(row.k)}</dt>
                 <dd className="font-medium text-gray-900 dark:text-white">{row.v}</dd>

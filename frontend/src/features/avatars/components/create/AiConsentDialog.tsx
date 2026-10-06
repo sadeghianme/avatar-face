@@ -1,10 +1,9 @@
-import { useTranslation } from "react-i18next";
-
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { CONSENT_TEXT_VERSIONS, providerLabel } from "@/features/avatars/consent";
+import { useT } from "@/i18n";
 
 /**
  * The third-party AI statement: what is sent, to whom, what is kept, and
@@ -21,7 +20,7 @@ import { CONSENT_TEXT_VERSIONS, providerLabel } from "@/features/avatars/consent
  * The version is shown, since it is what the record will name.
  */
 export function AiConsentText({ providers, id }: { providers: readonly string[]; id?: string }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const named = providers.map(providerLabel).join(", ");
   return (
     <div id={id} className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
@@ -42,7 +41,7 @@ export function AiConsentText({ providers, id }: { providers: readonly string[];
  * and its styling live in one place; callers decide with consent.needsReagree.
  */
 export function AiConsentReagreeNote({ id, className = "" }: { id?: string; className?: string }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <p id={id} role="note" className={`text-sm text-brand-700 dark:text-brand-300 ${className}`}>
       {t("aiConsentReagree")}
@@ -70,7 +69,7 @@ export function AiConsentCheckbox({
   /** consent.needsReagree: say that the wording changed. */
   reagree?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const named = providers.map(providerLabel).join(", ");
   return (
     <div className="rounded-xl border border-gray-200 p-3 sm:p-4 dark:border-line">
@@ -110,7 +109,7 @@ export function AiConsentDialog({
   reagree?: boolean;
   onAnswer: (agreed: boolean) => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const named = providers.map(providerLabel).join(", ");
   return (
     <Dialog open={open} onClose={() => onAnswer(false)} labelledBy="ai-consent-title" describedBy="ai-consent-body">

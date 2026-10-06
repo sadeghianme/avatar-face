@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { ButtonLink } from "@/components/ui/ButtonLink";
@@ -42,6 +41,7 @@ import {
   startFresh,
   type WizardCreation,
 } from "@/features/avatars/wizard";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
 
@@ -80,7 +80,7 @@ export function NewWizard({
   /** Shown under the step, inside its scroll area (the other ways to add an avatar). */
   children?: React.ReactNode;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const navigate = useNavigate();
   const location = useLocation();
   const creationCache = useCreationCache(orgId);

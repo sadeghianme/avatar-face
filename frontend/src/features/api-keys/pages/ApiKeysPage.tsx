@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -9,11 +8,12 @@ import { FieldError } from "@/components/ui/FieldError";
 import { Input } from "@/components/ui/Input";
 import { StackCell, StackRow, StackTable, TableAction } from "@/components/ui/Table";
 import { type CreatedKey, useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/features/api-keys/api";
+import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/errorMessage";
 import { useOrg } from "@/providers/org";
 
 export function ApiKeysPage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { current } = useOrg();
   const orgId = current?.id;
   const [name, setName] = useState("");

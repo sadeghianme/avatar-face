@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { AvatarDetailPage } from "@/features/avatars";
-import i18n from "@/i18n";
+import { translate } from "@/i18n";
 import type { Avatar } from "@/lib/types";
 import { mockConsent, mockSpeech } from "@/test/api";
 import { anAvatar, ORG_ID } from "@/test/fixtures";
@@ -17,7 +17,7 @@ vi.mock("@/features/avatars/components/Avatar3DPreview", () => ({
   Avatar3DPreview: () => <div data-testid="stage-3d" />,
 }));
 
-const t = i18n.t.bind(i18n);
+const t = translate;
 const AVATAR = `/orgs/${ORG_ID}/avatars/av1`;
 
 function setup(avatar: Avatar | (() => Avatar | Response), prepare?: (server: MockServer) => void) {

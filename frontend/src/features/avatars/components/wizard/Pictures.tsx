@@ -1,5 +1,4 @@
 import { useId, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Icon } from "@/components/ui/Icon";
 import { Label } from "@/components/ui/Label";
@@ -8,6 +7,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { CHECKER_STYLE, LookPicture, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
 import type { CreationStep } from "@/features/avatars/creation";
 import { type AvatarModel, checklistRow, type Look, type PrepareStage } from "@/features/avatars/wizard";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 /** A band of light sweeping across the picture while it is worked on. */
@@ -45,7 +45,7 @@ export function Working({
   fraction: number | null;
   hint: string;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const at = checklistRow(stage, stages);
   const shown = stage === "queued" ? t("wzStage_queued") : stage ? t(`wzStage_${stage}`) : t("wzStage_create");
   return (
@@ -169,7 +169,7 @@ export function Result({
   busyLabel: string;
   badge?: React.ReactNode;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const [split, setSplit] = useState(50);
   const ids = useId();
   const transparent = Boolean(after.cutout);

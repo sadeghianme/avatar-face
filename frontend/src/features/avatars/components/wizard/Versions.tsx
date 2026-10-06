@@ -1,5 +1,4 @@
 import { type KeyboardEvent, useId, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { Icon } from "@/components/ui/Icon";
@@ -7,6 +6,7 @@ import { rovingMove, rovingTarget } from "@/components/ui/roving";
 import { Spinner } from "@/components/ui/Spinner";
 import { CHECKER_STYLE, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
 import { type Version, versionLabel } from "@/features/avatars/wizard";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 /** A version: a square thumbnail with a word under it (phone), beside it (laptop). */
@@ -55,7 +55,7 @@ export function VersionStrip({
   /** Where the parent's grid puts it. */
   className?: string;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const ids = useId();
   const buttons = useRef(new Map<string, HTMLButtonElement | null>());
   const usable = versions.filter((v) => v.selectable);

@@ -1,7 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { KeyboardEvent, useState } from "react";
 import { useForm } from "react-hook-form";
-import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { z } from "zod";
 
@@ -13,6 +12,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { AuthShell } from "@/features/auth/components/AuthShell";
+import { isMessageKey, type MessageKey, useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/providers/auth";
 
@@ -23,8 +23,11 @@ const schema = z.object({
 });
 type Form = z.infer<typeof schema>;
 
+/** A field error's message, as the key the schema gave it. */
+const messageKey = (message: string | undefined): MessageKey => (message && isMessageKey(message) ? message : "error");
+
 export function LoginPage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation() as { state?: { from?: { pathname: string } } };
@@ -57,7 +60,7 @@ export function LoginPage() {
         <Field
           id="identifier"
           label={t("usernameOrEmail")}
-          error={errors.username_or_email && t(errors.username_or_email.message ?? "error")}
+          error={errors.username_or_email && t(messageKey(errors.username_or_email.message))}
         >
           <Input
             icon="user"
@@ -82,7 +85,7 @@ export function LoginPage() {
               {t("forgotPassword")}
             </Link>
           }
-          error={errors.password && t(errors.password.message ?? "error")}
+          error={errors.password && t(messageKey(errors.password.message))}
         >
           <PasswordInput
             icon="lock"

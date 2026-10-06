@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import {
   clampToImage,
@@ -23,6 +22,7 @@ import {
   loupeSize,
   loupeView,
 } from "@/features/avatars/loupe";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 /** A point's button: 24px around the dot, centred on the point; the
@@ -158,7 +158,7 @@ export function MarkCanvas({
   marks: FaceMarks;
   onChange: (marks: FaceMarks) => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const loupeRef = useRef<HTMLDivElement>(null);
   const lensRef = useRef<SVGSVGElement>(null);

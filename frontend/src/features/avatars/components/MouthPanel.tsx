@@ -6,7 +6,6 @@ import {
   type ReferenceProfile,
 } from "@liveface/embed/mouth";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -43,6 +42,8 @@ import {
   teethNoteText,
 } from "@/features/avatars/mouth-kit";
 import { type MouthAction, mouthErrorKey, teethNoteKey, teethView } from "@/features/avatars/teeth";
+import { useT } from "@/i18n";
+import type { MessageKey } from "@/i18n/types";
 import { ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import type { Avatar, MouthRenderer } from "@/lib/types";
@@ -53,7 +54,7 @@ const rendererChoices = (avatar: Avatar): MouthRenderer[] =>
 
 /** Lip projection belongs to the older geometric prototype only. */
 const SLIDERS: (keyof ReferenceProfile)[] = ["teethScale", "teethY", "warmth", "jawRange"];
-const LABELS: Record<keyof ReferenceProfile, string> = {
+const LABELS: Record<keyof ReferenceProfile, MessageKey> = {
   teethScale: "mouthTeethSize",
   teethY: "mouthTeethPosition",
   warmth: "mouthWarmth",
@@ -106,7 +107,7 @@ export function MouthPanel({
   motion: MotionChoice;
   onMotion: (choice: MotionChoice) => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const fileRef = useRef<HTMLInputElement>(null);
   const saved = avatar.mouth ?? null;
   const choices = rendererChoices(avatar);
@@ -279,12 +280,13 @@ export function MouthPanel({
   const stage = kit.stage;
   const count = stage === "shapes" ? stageCount(running) : null;
   // The shapes come with the teeth photo, unless the owner's own is kept.
-  const stageKey = stage === "shapes" && !ownTeeth ? "mouthKitStage_shapesTeeth" : `mouthKitStage_${stage}`;
+  const stageKey: MessageKey | null =
+    stage === "shapes" && !ownTeeth ? "mouthKitStage_shapesTeeth" : stage ? `mouthKitStage_${stage}` : null;
   const progressText = !running
     ? ""
     : running.state === "queued"
       ? t("createJobQueued")
-      : stage
+      : stageKey
         ? t(stageKey)
         : t("mouthKitWorking");
   const progressSpoken = count

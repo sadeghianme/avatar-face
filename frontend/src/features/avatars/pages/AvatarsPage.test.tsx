@@ -2,13 +2,13 @@ import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { AvatarsPage } from "@/features/avatars";
-import i18n from "@/i18n";
+import { translate } from "@/i18n";
 import type { Avatar } from "@/lib/types";
 import { anAvatar, ORG_ID } from "@/test/fixtures";
 import { renderScreen } from "@/test/render";
 import { apiError, createServer, type MockServer } from "@/test/server";
 
-const t = i18n.t.bind(i18n);
+const t = translate;
 
 function setup(avatars: Avatar[] | ((server: MockServer) => void)) {
   const server = createServer();

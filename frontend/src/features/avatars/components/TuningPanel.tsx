@@ -1,13 +1,14 @@
 import { DEFAULT_TUNING, type EngineTuning, type SpeechPlayer } from "@liveface/embed";
 import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Slider } from "@/components/ui/Slider";
+import { useT } from "@/i18n";
+import type { MessageKey } from "@/i18n/types";
 
 interface SliderDef {
   key: keyof EngineTuning;
-  labelKey: string;
+  labelKey: MessageKey;
   min: number;
   max: number;
   step: number;
@@ -48,7 +49,7 @@ export function TuningPanel({
   avatarId: string;
   is3d?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const [values, setValues] = useState<EngineTuning>(() => loadTuning(avatarId));
 
   // The engine follows the values: a new engine gets the persisted ones, a

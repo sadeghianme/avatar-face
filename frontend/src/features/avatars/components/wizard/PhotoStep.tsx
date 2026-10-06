@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
@@ -37,6 +36,7 @@ import {
   SOURCES,
   statementFor,
 } from "@/features/avatars/wizard";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
 
@@ -97,7 +97,7 @@ export function PhotoStep({
   onBack: () => void;
   onCreated: (creation: Creation) => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const aiEnabled = consent.aiEnabled;
   const [source, setSource] = useState<PhotoSource>(initial?.source ?? (aiEnabled ? "generate" : "upload"));
   const [look, setLook] = useState<Look>(initial?.look ?? "realistic");
@@ -489,7 +489,7 @@ function PhotoDrop({
   onChoose: (file: File | undefined) => void;
   onClear: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const input = useRef<HTMLInputElement>(null);
   const ids = useId();
 

@@ -1,5 +1,4 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { ColorInput } from "@/components/ui/ColorInput";
@@ -30,6 +29,7 @@ import {
   zoomPreset,
   zoomText,
 } from "@/features/avatars/scene";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
 import { TOUCH_ONE_COLUMN, useMediaQuery } from "@/lib/useMediaQuery";
@@ -73,7 +73,7 @@ export function FramingScenePanel({
   onRemoveBackground: () => Promise<void>;
   busyBackground?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const update = useUpdateAvatar(orgId, avatar.id);
   const uploadImage = useUploadSceneImage(orgId, avatar.id);
   const deleteImage = useRemoveSceneImage(orgId, avatar.id);

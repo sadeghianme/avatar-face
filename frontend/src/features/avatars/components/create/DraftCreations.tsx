@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Card } from "@/components/ui/Card";
@@ -9,6 +8,7 @@ import { Icon } from "@/components/ui/Icon";
 import { useDeleteCreation, useDrafts } from "@/features/avatars/api";
 import { type Creation, currentStep, errorText, isJobActive, jobFailure, stepById } from "@/features/avatars/creation";
 import { LINES } from "@/features/avatars/lines";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 
 /**
@@ -18,7 +18,7 @@ import { ApiError } from "@/lib/api";
  * this is a short list by construction (the server caps it at ten).
  */
 export function DraftCreations({ orgId }: { orgId: string }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { data: drafts } = useDrafts(orgId);
 
   if (!drafts?.length) return null;
@@ -38,7 +38,7 @@ export function DraftCreations({ orgId }: { orgId: string }) {
 }
 
 function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useT();
   const deleteCreation = useDeleteCreation(orgId);
   const [attempt, setAttempt] = useState(0);
   const [deleting, setDeleting] = useState(false);

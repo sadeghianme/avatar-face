@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
+import type { Role } from "@/lib/types";
 
 /**
  * The account pages' requests that are not the session itself (sign-in,
@@ -11,7 +12,7 @@ import { queryKeys } from "@/lib/queryKeys";
 export interface InviteInfo {
   org_name: string;
   email: string;
-  role: string;
+  role: Role;
 }
 
 /** What an invitation link is for; a dead link is an error, not retried. */

@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
@@ -44,6 +43,7 @@ import {
   versionsOf,
   type WizardCreation,
 } from "@/features/avatars/wizard";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 
 /** The picture's width for its height to fit between the bars (the
@@ -100,7 +100,7 @@ export function PrepareScreen({
   onBack: () => void;
   onContinue: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const requests = creationRequests(orgId, creation.id);
   const plan = planOf(creation);
   const choices = recallChoices(tabStore(), creation.id);

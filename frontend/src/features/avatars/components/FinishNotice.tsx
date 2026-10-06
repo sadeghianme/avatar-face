@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
@@ -16,7 +15,8 @@ import {
   type PreparedFact,
   preparedFacts,
 } from "@/features/avatars/mouth-kit";
-import { teethNoteKey, teethView } from "@/features/avatars/teeth";
+import { FINISH_WARNINGS, teethNoteKey, teethView } from "@/features/avatars/teeth";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import type { Avatar } from "@/lib/types";
 
@@ -45,6 +45,10 @@ const factKey = (fact: PreparedFact) => (fact.kind === "both_standard" ? "mouth"
  * One strip: the title, the facts after it, the two buttons; never a card
  * that pushes the page down.
  */
+
+const oneOfWarnings = (code: string): code is (typeof FINISH_WARNINGS)[number] =>
+  (FINISH_WARNINGS as readonly string[]).includes(code);
+
 export function FinishNotice({
   avatar,
   aiEnabled,
@@ -56,7 +60,7 @@ export function FinishNotice({
    *  scrolls to it. */
   onToMouth?: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const [notice, setNotice] = useState<Notice | null>(() => finishNoticeFor(tabStore(), avatar.id));
   if (!notice) return null;
 
@@ -74,7 +78,8 @@ export function FinishNotice({
     })),
     ...notice.warnings.map((w) => ({
       key: w.code,
-      text: t(`finishWarning_${w.code}`, { defaultValue: w.detail }),
+      // A warning this page has no words for says the server's sentence.
+      text: oneOfWarnings(w.code) ? t(`finishWarning_${w.code}`) : w.detail,
       icon: "alert" as const,
     })),
   ];

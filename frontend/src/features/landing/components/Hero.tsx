@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { DemoAvatar, useDemo, VoiceMeter } from "@/components/brand/DemoAvatar";
 import { DemoDirector, type DemoSnapshot } from "@/components/brand/demoDirector";
 import { Button } from "@/components/ui/Button";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Icon } from "@/components/ui/Icon";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { useAuth } from "@/providers/auth";
 
@@ -48,7 +48,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
 };
 
 export function Hero() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { user } = useAuth();
 
   return (
@@ -104,7 +104,7 @@ export function Hero() {
           </Reveal>
           <Reveal delay={240}>
             <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2.5 text-[13.5px] text-gray-600 dark:text-gray-400">
-              {["heroPoint1", "heroPoint2", "heroPoint3"].map((key) => (
+              {(["heroPoint1", "heroPoint2", "heroPoint3"] as const).map((key) => (
                 <li key={key} className="flex items-center gap-2">
                   <span className="grid h-5 w-5 place-items-center rounded-full bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-400">
                     <Icon name="check" className="h-3 w-3" strokeWidth={2.4} />
@@ -130,7 +130,7 @@ export function Hero() {
  * that made it — rig, voice, mouth shape, embed.
  */
 function HeroStage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const [director] = useState(() => new DemoDirector());
   useEffect(() => () => director.stop(), [director]);
   const demo = useDemo(director);
@@ -177,7 +177,7 @@ function HeroStage() {
 }
 
 function SoundToggle({ director, soundOn }: { director: DemoDirector; soundOn: boolean }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <Button
       variant="overlay"
@@ -193,11 +193,15 @@ function SoundToggle({ director, soundOn }: { director: DemoDirector; soundOn: b
   );
 }
 
+/** Each demo line's gloss, in the order the director speaks them. */
+const GLOSSES = ["demoGloss1", "demoGloss2", "demoGloss3", "demoGloss4", "demoGloss5"] as const;
+
 /** Live caption: the words already spoken are bright, the rest are dim. */
 function Caption({ demo, director }: { demo: DemoSnapshot; director: DemoDirector }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const line = demo.line;
-  const gloss = line ? t(`demoGloss${demo.lineIndex + 1}`) : "";
+  const glossKey = GLOSSES[demo.lineIndex];
+  const gloss = line && glossKey ? t(glossKey) : "";
   // The engine could not load: the still portrait speaks for itself.
   if (demo.phase === "unavailable") return null;
   return (
@@ -242,7 +246,7 @@ function Caption({ demo, director }: { demo: DemoSnapshot; director: DemoDirecto
 
 /** The platform around the face: each chip is a real step of the pipeline. */
 function StageChips({ demo }: { demo: DemoSnapshot }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <>
       {demo.rigged && (

@@ -1,9 +1,10 @@
 import { useId, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/FieldError";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { useT } from "@/i18n";
+import type { MessageKey } from "@/i18n/types";
 import { cx } from "@/lib/cx";
 
 /**
@@ -57,7 +58,7 @@ const KEY_STEP = 0.01;
 const KEY_MIN_SIDE = 0.05;
 const DEFAULT_RECT: Rect = { x: 0.08, y: 0.04, w: 0.84, h: 0.92 };
 
-const ASPECTS: { key: string; ratio: number | null }[] = [
+const ASPECTS: { key: MessageKey; ratio: number | null }[] = [
   { key: "cropFree", ratio: null },
   { key: "cropSquare", ratio: 1 },
   { key: "cropPortrait", ratio: 4 / 5 },
@@ -91,7 +92,7 @@ export function CropBox({
   /** Degrees the picture is levelled by (the roll to remove). */
   turn?: number;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const frame = useRef<HTMLDivElement>(null);
   const keysHintId = useId();
   const positionId = useId();

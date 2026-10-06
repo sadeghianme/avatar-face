@@ -1,5 +1,7 @@
 import type { Scene as EngineScene } from "@liveface/embed";
 
+import type { MessageKey } from "@/i18n/types";
+
 /**
  * The scene an avatar is shown in (the Framing & scene panel): how far in,
  * where, and on what. The numbers the engine's viewport takes (embed
@@ -33,7 +35,7 @@ export interface SavedScene {
 
 /** Eight backgrounds that sit well under a cut-out: paper whites, a soft
  *  grey, charcoal, and four deep brand-friendly tones. */
-export const SWATCHES: readonly { hex: string; nameKey: string }[] = [
+export const SWATCHES: readonly { hex: string; nameKey: MessageKey }[] = [
   { hex: "#ffffff", nameKey: "sceneSwatchWhite" },
   { hex: "#f4f4f5", nameKey: "sceneSwatchPaper" },
   { hex: "#d6d3d1", nameKey: "sceneSwatchStone" },
@@ -170,7 +172,7 @@ export function isCutOut(avatar: { original_image_key?: string | null } | null |
 }
 
 /** The panel's own words for a refused request, by the API's code. */
-export function sceneErrorKey(code: string | undefined): string | null {
+export function sceneErrorKey(code: string | undefined): MessageKey | null {
   switch (code) {
     case "unsupported_image_type":
       return "sceneErrImageType";

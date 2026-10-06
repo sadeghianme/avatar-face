@@ -1,10 +1,10 @@
 import { createContext, type ReactNode, useContext } from "react";
 import { createPortal } from "react-dom";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
+import { useT } from "@/i18n";
 
 /**
  * The wizard's fixed action bar. NewWizard owns the bar (a landmark at the
@@ -58,7 +58,7 @@ export function BackButton({
   disabled?: boolean;
   compact?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <Button
       variant="secondary"

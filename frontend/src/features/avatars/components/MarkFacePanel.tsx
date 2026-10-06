@@ -1,6 +1,5 @@
 import type { AvatarEngine } from "@liveface/embed";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -10,6 +9,8 @@ import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { MarkCanvas } from "@/features/avatars/components/MarkCanvas";
 import { type FaceMarks, FIT_REASON_LABELS, type FitReason, marksToSend } from "@/features/avatars/face-marks";
 import { SpeakPanel } from "@/features/voices";
+import { useT } from "@/i18n";
+import type { MessageKey } from "@/i18n/types";
 import { ApiError } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
 
@@ -18,7 +19,7 @@ import type { Avatar } from "@/lib/types";
 const LIVE_PREVIEW_DELAY_MS = 450;
 
 /** Where to put the mouth, said for the line being marked. */
-function guideKey(faceType: Avatar["face_type"]): string {
+function guideKey(faceType: Avatar["face_type"]): MessageKey {
   if (faceType === "animal") return "markFaceHintAnimal";
   if (faceType === "cartoon") return "markFaceHintCartoon";
   return "markFaceHint";
@@ -41,7 +42,7 @@ function guideKey(faceType: Avatar["face_type"]): string {
  * too.
  */
 export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgId: string; onClose: () => void }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const [marks, setMarks] = useState<FaceMarks | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   // The marks the preview shows; the preview is live once there is one.

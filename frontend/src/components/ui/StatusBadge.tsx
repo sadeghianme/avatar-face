@@ -1,6 +1,5 @@
-import { useTranslation } from "react-i18next";
-
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { useT } from "@/i18n";
 import type { AvatarStatus } from "@/lib/types";
 
 const TONE: Record<AvatarStatus, BadgeTone> = {
@@ -12,6 +11,6 @@ const TONE: Record<AvatarStatus, BadgeTone> = {
 
 /** An avatar's build state, in words and its colour. */
 export function StatusBadge({ status }: { status: AvatarStatus }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   return <Badge tone={TONE[status]}>{t(`status.${status}`)}</Badge>;
 }

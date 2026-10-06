@@ -1,6 +1,5 @@
 import type { AvatarEngine } from "@liveface/embed";
 import { useCallback, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -11,10 +10,11 @@ import { PlaybackButtons, ScriptField } from "@/features/lab/components/Playback
 import { SpeechStreamStatus } from "@/features/lab/components/SpeechStreamStatus";
 import { useLipSyncComparison } from "@/features/lab/hooks/useLipSyncComparison";
 import { defaultVoiceSelection, VoicePicker } from "@/features/voices";
+import { useT } from "@/i18n";
 import type { Avatar } from "@/lib/types";
 
 export function LipSyncWorkspace({ avatar, orgId }: { avatar: Avatar; orgId: string }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const [baseline, setBaseline] = useState<AvatarEngine | null>(null);
   const [improved, setImproved] = useState<AvatarEngine | null>(null);
   const [text, setText] = useState<string>(t("lipSyncSample"));

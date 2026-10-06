@@ -1,4 +1,7 @@
 /** fr: settings strings. A key lives in exactly one file; add new ones here. */
+import type { settings as en } from "@/i18n/locales/en/settings";
+import type { Locale } from "@/i18n/types";
+
 export const settings = {
   orgSettings: "Organisation",
   orgName: "Nom de l'organisation",
@@ -11,4 +14,4 @@ export const settings = {
   aiSwitchNotAllowed: "Seuls les propriétaires et les administrateurs peuvent le modifier.",
   usageAiImages: "Images IA : {{used}} / {{limit}}",
   usageAiPoints: "Repérage de points IA : {{used}} / {{limit}}",
-} as const;
+} as const satisfies Locale<typeof en>;

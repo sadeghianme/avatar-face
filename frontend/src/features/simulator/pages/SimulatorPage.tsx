@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
@@ -12,6 +11,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { buildSnippet } from "@/features/avatars";
 import { useSimulatorToken } from "@/features/simulator/api";
 import { buildDocument, type Entry, needsNewToken, type Parsed, parseSnippet } from "@/features/simulator/snippet";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { useOrg } from "@/providers/org";
 
@@ -34,7 +34,7 @@ const RUN_STATE = {
  * page or the snippet's own, and a log of what the widget reports.
  */
 export function SimulatorPage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   // Arriving from an avatar's "Test in Simulator" prefills the snippet, so
   // the common path involves no copying at all.
   const [params] = useSearchParams();
