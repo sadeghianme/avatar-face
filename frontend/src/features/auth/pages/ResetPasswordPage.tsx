@@ -75,7 +75,7 @@ export function ResetPasswordPage() {
               <Button
                 variant="text"
                 onClick={() => setShow((v) => !v)}
-                className="absolute end-3 top-1/2 -translate-y-1/2 text-[13px]"
+                className="absolute end-3 top-1/2 -translate-y-1/2 justify-center text-[13px] coarse:min-w-11"
               >
                 {show ? t("hide") : t("show")}
               </Button>
