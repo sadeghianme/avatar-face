@@ -10,10 +10,23 @@ import tseslint from "typescript-eslint";
 // Raw controls belong to the UI kit (components/ui). Everywhere else a
 // button, field, select or textarea is the kit's, so its look, its touch
 // size and its accessibility come with it.
-const RAW_CONTROLS = ["button", "input", "select", "textarea"].map((tag) => ({
+const RAW_CONTROLS = ["button", "input", "select", "textarea", "label"].map((tag) => ({
   selector: `JSXOpeningElement[name.name='${tag}']`,
-  message: `Use the UI kit (components/ui: Button, IconButton, Input, Select, Textarea, Checkbox, Switch…) instead of a raw <${tag}>.`,
+  message: `Use the UI kit (components/ui: Button, IconButton, Input, Select, Textarea, Checkbox, Switch, Label…) instead of a raw <${tag}>.`,
 }));
+
+// The kit's looks are the kit's: a className (any *ClassName prop, a
+// template, or a cx() call) that spells out a button, a card, a field
+// label or error text is a kit component drawn by hand. Use Button /
+// ButtonLink, Card / Banner, Label / Field, FieldError instead.
+const KIT_CLASS = String.raw`/(^|\s)(btn-[a-z0-9-]+|card|label|field-error)(\s|$)/`;
+const KIT_CLASS_MESSAGE =
+  "A kit look written by hand: use Button/ButtonLink (btn-*), Card/Banner (card), Label/Field (label) or FieldError (field-error).";
+const KIT_CLASSES = [
+  `JSXAttribute[name.name=/[cC]lassName$/] Literal[value=${KIT_CLASS}]`,
+  `JSXAttribute[name.name=/[cC]lassName$/] TemplateElement[value.raw=${KIT_CLASS}]`,
+  `CallExpression[callee.name='cx'] Literal[value=${KIT_CLASS}]`,
+].map((selector) => ({ selector, message: KIT_CLASS_MESSAGE }));
 
 export default tseslint.config(
   { ignores: ["dist", "node_modules", "src/devtools"] },
@@ -48,7 +61,7 @@ export default tseslint.config(
       // Deliberate focus moves (a dialog's safe answer, the sign-in field)
       // are on kit components, which this rule does not see.
       "jsx-a11y/no-autofocus": ["error", { ignoreNonDOM: true }],
-      "no-restricted-syntax": ["error", ...RAW_CONTROLS],
+      "no-restricted-syntax": ["error", ...RAW_CONTROLS, ...KIT_CLASSES],
       // Server calls go through a feature's data hooks (features/<x>/api),
       // which also say what each call refreshes; ApiError, to word a
       // refusal, may be imported anywhere.
