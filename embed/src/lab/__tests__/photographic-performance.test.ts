@@ -17,7 +17,8 @@ describe("authored photographic performance", () => {
   it("keeps interpolation nonnegative, normalized and sparse throughout transitions", () => {
     for (const a of PERFORMANCE_POSES) for (const b of PERFORMANCE_POSES) for (let i = 0; i <= 20; i++) {
       const from = REFERENCE_POSES[a].weights, to = REFERENCE_POSES[b].weights;
-      const w = Object.fromEntries(Object.keys(from).map(k => [k, from[k as keyof typeof from] * (1 - i / 20) + to[k as keyof typeof to] * i / 20])) as typeof from;
+      const w = { ...from };
+      for (const k of Object.keys(from) as (keyof typeof from)[]) w[k] = from[k] * (1 - i / 20) + to[k] * i / 20;
       const mix = performanceMix(w);
       expect(mix.every(n => n >= 0 && Number.isFinite(n))).toBe(true);
       expect(mix.reduce((sum, n) => sum + n, 0)).toBeCloseTo(1, 7);

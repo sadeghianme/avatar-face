@@ -56,8 +56,8 @@ describe("what a head3d GLB tells the engine", () => {
 
   it("turns the head within its range and holds a fixed pose", () => {
     const idle = new IdleHeadPose(() => 0.999); // every draw near +1
-    let pose = idle.update(16, 1000, true, 0);
-    for (let t = 1016; t < 6000; t += 16) pose = idle.update(16, t, true, 0);
+    let pose = idle.update(16, 1000, true);
+    for (let t = 1016; t < 6000; t += 16) pose = idle.update(16, t, true);
     const yawDeg = (pose.yaw * 180) / Math.PI;
     expect(Math.abs(yawDeg)).toBeLessThanOrEqual(HEAD_POSE_RANGE.yawDeg + 1e-6);
     expect(Math.abs(yawDeg)).toBeGreaterThan(HEAD_POSE_RANGE.yawDeg * 0.8); // it got there

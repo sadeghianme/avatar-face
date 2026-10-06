@@ -15,7 +15,8 @@
     "declaration": true,
     "outDir": "dist",
     "rootDir": "src",
-    "composite": true
+    "composite": true,
+    "types": []
   },
   "include": [
     "src"

@@ -144,11 +144,16 @@ export class FaceSamples {
   look: CharacterLook = DEFAULT_LOOK;
 
   /**
-   * Read it all from `texture`, whose landmarks are at `texPoints`. The
-   * order matters: the character look takes its softness from the
-   * sharpness, which is read with the lips.
+   * Read it all from `texture`, whose landmarks are at `texPoints` (over
+   * the texture's own size). The order matters: the character look takes
+   * its softness from the sharpness, which is read with the lips.
+   *
+   * What a texture that cannot be read leaves is the last texture's: its
+   * colours hold for a copy of the same picture, but its sharpness was a
+   * width in that texture's pixels, so it is dropped first.
    */
   sample(texture: HTMLImageElement, texPoints: readonly Point[], rig: Rig, profile: KindProfile): void {
+    this.faceSharpness = null;
     this.sampleLipColour(texture, texPoints, rig.mouth_indices);
     this.sampleLashColour(texture, texPoints);
     this.sampleCharacterLook(texture, texPoints);
@@ -216,11 +221,10 @@ export class FaceSamples {
    * the picture's). The photographic mouth feathers its aperture by it and
    * softens the teeth to it; the character mouth's look takes its softness
    * from it (sampleCharacterLook, which runs after this). Null on a flat
-   * picture, and cleared first, so a texture that cannot be read leaves
-   * no stale value from the one before it.
+   * picture; `sample` clears it first, so a texture that cannot be read
+   * leaves no stale value from the one before it.
    */
   private sampleFaceSharpness(ctx: CanvasRenderingContext2D, texture: HTMLImageElement, texPoints: readonly Point[]): void {
-    this.faceSharpness = null;
     const fields = sharpnessBoxes(texPoints, texture.naturalWidth, texture.naturalHeight).map((b) => {
       const d = ctx.getImageData(b.x, b.y, b.w, b.h);
       return lumaField(d.data, d.width, d.height);

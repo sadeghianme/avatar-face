@@ -7,8 +7,8 @@
  * character field, the lower-face rig, the blink — on the subject's own rig,
  * one weight at a time, and records where every one of the 478 landmarks
  * went. The engine is used as it is: constructed on a stand-in canvas, its
- * state set the way the golden render tests set it (engine.ts is not
- * modified and is not imported for anything it does not already export).
+ * face posed through its seam (engine/seam.ts), as the golden render tests
+ * pose it.
  *
  * Two families come out:
  *
@@ -33,6 +33,7 @@
  * backend turns them into head-frame metres and adds z.
  */
 import { AvatarEngine } from "../../engine";
+import { engineSeam, type EngineSeam } from "../../engine/seam";
 import { blinkEase } from "../../blink";
 import { kindProfile } from "../../kind-profile";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
@@ -71,22 +72,16 @@ export interface BakeResult {
 
 interface Pt { x: number; y: number }
 
-/** The engine's state the golden tests also reach into. */
-interface Internals {
-  face: { weights: BlendWeights; blink: number; gaze: { x: number; y: number } };
-  deformedPoints(now: number): Pt[];
-}
-
 const LANDMARKS = 478;
 const BAKE_CANVAS = 2048;
 
-function engineFor(rig: Rig): { engine: AvatarEngine; e: Internals; base: readonly Pt[]; scale: number } {
+function engineFor(rig: Rig): { engine: AvatarEngine; e: EngineSeam; base: readonly Pt[]; scale: number } {
   installNodeEnvironment();
   const canvas = fakeCanvas(BAKE_CANVAS);
   const [w, h] = rig.image_size;
   const image = { naturalWidth: w, naturalHeight: h, width: w, height: h } as HTMLImageElement;
   const engine = new AvatarEngine(canvas, rig, image, { fullPhoto: true });
-  const e = engine as unknown as Internals;
+  const e = engineSeam(engine);
   e.face.gaze = { x: 0, y: 0 };
   e.face.blink = 0;
   const base = engine.landmarks();
@@ -95,8 +90,8 @@ function engineFor(rig: Rig): { engine: AvatarEngine; e: Internals; base: readon
   return { engine, e, base, scale };
 }
 
-function deltas(e: Internals, base: readonly Pt[], scale: number, at: number): { dx: number[]; dy: number[] } {
-  const pts = e.deformedPoints(0);
+function deltas(e: EngineSeam, base: readonly Pt[], scale: number, at: number): { dx: number[]; dy: number[] } {
+  const pts = e.deformedPoints();
   const dx: number[] = [];
   const dy: number[] = [];
   for (let i = 0; i < LANDMARKS; i++) {
@@ -173,7 +168,7 @@ export function bakeMorphTargets(rig: Rig): BakeResult {
     for (const [viseme, weights] of Object.entries(rig.visemes ?? {})) {
       e.face.weights = { ...ZERO_WEIGHTS, ...weights };
       visemes[viseme] = { at: 1, ...deltas(e, base, scale, 1) };
-      const actual = e.deformedPoints(0);
+      const actual = e.deformedPoints();
       let max = 0;
       let sum = 0;
       for (let i = 0; i < LANDMARKS; i++) {

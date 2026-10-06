@@ -43,7 +43,7 @@ function context() {
 const points = Array.from({ length: 478 }, () => ({ x: 50, y: 25 }));
 const ring = [{ x: 0, y: 0 }, { x: 50, y: 30 }, { x: 100, y: 0 }, { x: 50, y: -10 }];
 ring.forEach((p, i) => { points[i] = p; });
-const warmFace = { lipColour: [175, 79, 66], skinColour: [247, 166, 105], faceHighlight: 207, sharpness: 2.7, pixelScale: 1 };
+const warmFace: Partial<MouthSurfaceFrame> = { lipColour: [175, 79, 66], skinColour: [247, 166, 105], faceHighlight: 207, sharpness: 2.7, pixelScale: 1 };
 const frame = (face: Partial<MouthSurfaceFrame> = warmFace) => ({
   points, neutral: points, rig: { inner_lip_ring: [0, 1, 2, 3, ...Array(17).fill(3)] }, weights: { ...ZERO_WEIGHTS }, viseme: "aa", ...face,
 } as unknown as MouthSurfaceFrame);

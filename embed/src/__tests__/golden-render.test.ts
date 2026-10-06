@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
+import { engineSeam } from "../engine/seam";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
 
 /**
@@ -150,14 +151,8 @@ function makeEngine(
   return { engine, log };
 }
 
-type EngineInternals = {
-  face: { weights: BlendWeights; blink: number; gaze: { x: number; y: number } };
-  deformedPoints(now: number): { x: number; y: number }[];
-  render(): void;
-};
-
 function state(engine: AvatarEngine, weights: Partial<BlendWeights>, blink = 0, gaze = { x: 0, y: 0 }) {
-  const e = engine as unknown as EngineInternals;
+  const e = engineSeam(engine);
   e.face.weights = { ...ZERO_WEIGHTS, ...weights };
   e.face.blink = blink;
   e.face.gaze = { ...gaze };
@@ -190,7 +185,7 @@ const casesFor = (source: Rig): Case[] => [
 /** One frame of `probe` in state `c`, reduced to what the snapshot pins. */
 function frame({ engine, log }: Probe, c: Case) {
   const e = state(engine, c.weights, c.blink ?? 0, c.gaze);
-  const pts = e.deformedPoints(10_000);
+  const pts = e.deformedPoints();
   const mesh = pts.map((p) => `${round(p.x)},${round(p.y)}`).join(";");
   e.render();
   engine.destroy();

@@ -1,0 +1,17 @@
+{
+  // Everything the build leaves out, type-checked with the build's own
+  // settings: the tests (every __tests__ directory) and the Node bake script,
+  // with Node's types, which the browser build keeps out (`types: []`).
+  // `npm run typecheck` runs it after the build's check; ESLint's type-aware
+  // rules read the same program. Never emits.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["src", "scripts"],
+  "exclude": []
+}

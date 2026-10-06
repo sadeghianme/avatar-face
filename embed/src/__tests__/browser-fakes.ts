@@ -148,6 +148,57 @@ export function fakeCanvas(fill: Pixel = [180, 180, 180, 180]) {
   } as unknown as HTMLCanvasElement;
 }
 
+/** A picture whose every pixel a test paints: its size, and its colour at
+ *  each of its own pixels. */
+export type PaintedImage = HTMLImageElement & { paint(x: number, y: number): Pixel };
+
+export function paintedImage(width: number, height: number, paint: (x: number, y: number) => Pixel): PaintedImage {
+  return { naturalWidth: width, naturalHeight: height, width, height, paint } as PaintedImage;
+}
+
+/**
+ * A canvas whose 2D context reads back what was drawn into it: the last
+ * drawImage of a PaintedImage, through that call's source and destination
+ * boxes, one source pixel per pixel read (nearest, no filtering). `taint`
+ * makes getImageData throw, as a canvas a cross-origin picture was drawn
+ * into does; `context: false` makes getContext give nothing.
+ */
+export function readingCanvas(size = 256, { taint = false, context = true } = {}): HTMLCanvasElement {
+  type Drawn = { image: PaintedImage; sx: number; sy: number; sw: number; sh: number; dx: number; dy: number; dw: number; dh: number };
+  let drawn: Drawn | null = null;
+  const target: Record<string, unknown> = {
+    drawImage: (image: PaintedImage, ...a: number[]) => {
+      if (typeof image.paint !== "function") return;
+      const [w, h] = [image.naturalWidth, image.naturalHeight];
+      if (a.length === 2) drawn = { image, sx: 0, sy: 0, sw: w, sh: h, dx: a[0], dy: a[1], dw: w, dh: h };
+      else if (a.length === 4) drawn = { image, sx: 0, sy: 0, sw: w, sh: h, dx: a[0], dy: a[1], dw: a[2], dh: a[3] };
+      else drawn = { image, sx: a[0], sy: a[1], sw: a[2], sh: a[3], dx: a[4], dy: a[5], dw: a[6], dh: a[7] };
+    },
+    getImageData: (x: number, y: number, w: number, h: number) => {
+      if (taint) throw new DOMException("The canvas has been tainted by cross-origin data.", "SecurityError");
+      const data = new Uint8ClampedArray(Math.max(1, w * h) * 4);
+      const d = drawn;
+      if (d) {
+        for (let n = 0; n < w * h; n++) {
+          const px = x + (n % w), py = y + Math.floor(n / w);
+          const sx = Math.floor(d.sx + ((px + 0.5 - d.dx) * d.sw) / d.dw);
+          const sy = Math.floor(d.sy + ((py + 0.5 - d.dy) * d.sh) / d.dh);
+          data.set(d.image.paint(sx, sy), n * 4);
+        }
+      }
+      return { data, width: w, height: h };
+    },
+    createLinearGradient: () => ({ addColorStop: () => undefined }),
+    createRadialGradient: () => ({ addColorStop: () => undefined }),
+    measureText: () => ({ width: 0 }),
+  };
+  const ctx = new Proxy(target, {
+    get: (obj, key: string) => (key in obj ? obj[key] : () => undefined),
+    set: (obj, key: string, value: unknown) => ((obj[key] = value), true),
+  });
+  return { width: size, height: size, getContext: () => (context ? ctx : null) } as unknown as HTMLCanvasElement;
+}
+
 /** Path2D is not in Node; nothing here reads a path back. */
 export class NoopPath {
   moveTo() {}

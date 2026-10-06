@@ -71,7 +71,10 @@ jobs:
       - run: npm ci
       - name: Lint
         run: npm run lint
-      - name: Typecheck
+      # The build's sources, then the tests and the bake script the build
+      # leaves out (tsconfig.test.json): a test that no longer type-checks
+      # against the code it tests fails here, not by passing on stale casts.
+      - name: Typecheck (sources, tests)
         run: npm run typecheck
       # Tests before build: the engine's motion and cue logic had no
       # automated coverage at all, and every regression in it this far has

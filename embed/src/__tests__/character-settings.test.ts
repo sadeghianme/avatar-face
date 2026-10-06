@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
-import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
+import { engineSeam } from "../engine/seam";
+import { ZERO_WEIGHTS, type Rig } from "../types";
 
 /** The owner's character settings and the lid blink, on the engine. */
 
@@ -40,8 +41,6 @@ function fakeCanvas(size = 512) {
   return { width: size, height: size, getContext: () => ctx } as unknown as HTMLCanvasElement;
 }
 
-type Internals = { face: { weights: BlendWeights; blink: number }; deformedPoints(now: number): { x: number; y: number }[] };
-
 describe("character settings and blinks", () => {
   beforeEach(() => {
     vi.spyOn(Math, "random").mockReturnValue(0.5);
@@ -62,48 +61,48 @@ describe("character settings and blinks", () => {
     if (profile) r.render_profile = profile;
     else delete r.render_profile;
     const engine = new AvatarEngine(fakeCanvas(), r, image, { fullPhoto: false });
-    return { engine, e: engine as unknown as Internals };
+    return { engine, e: engineSeam(engine) };
   };
 
   it("the owner's jaw setting opens the chin further, and is clamped", () => {
     const { engine, e } = make("toon@1");
-    const rest = e.deformedPoints(0);
+    const rest = e.deformedPoints();
     e.face.weights = { ...ZERO_WEIGHTS, jawOpen: 0.8 };
-    const normal = e.deformedPoints(0)[152].y - rest[152].y;
+    const normal = e.deformedPoints()[152].y - rest[152].y;
     expect(normal).toBeGreaterThan(20);
     engine.setCharacterTraits({ jaw: 1.5 });
-    expect(e.deformedPoints(0)[152].y - rest[152].y).toBeCloseTo(normal * 1.5, 1);
+    expect(e.deformedPoints()[152].y - rest[152].y).toBeCloseTo(normal * 1.5, 1);
     engine.setCharacterTraits({ jaw: 99 });
-    expect(e.deformedPoints(0)[152].y - rest[152].y).toBeCloseTo(normal * 1.6, 1);
+    expect(e.deformedPoints()[152].y - rest[152].y).toBeCloseTo(normal * 1.6, 1);
     engine.setCharacterTraits(null);
-    expect(e.deformedPoints(0)[152].y - rest[152].y).toBeCloseTo(normal, 1);
+    expect(e.deformedPoints()[152].y - rest[152].y).toBeCloseTo(normal, 1);
   });
 
   it("a classic mouth ignores the owner's character settings", () => {
     const { engine, e } = make(null);
     e.face.weights = { ...ZERO_WEIGHTS, jawOpen: 0.8 };
-    const before = e.deformedPoints(0)[152].y;
+    const before = e.deformedPoints()[152].y;
     engine.setCharacterTraits({ jaw: 1.6 });
-    expect(e.deformedPoints(0)[152].y).toBe(before);
+    expect(e.deformedPoints()[152].y).toBe(before);
   });
 
   it("opens the muzzle further than the classic mouth did, chin included", () => {
     const classic = make("animal@1");
     const character = make("animal@2");
     for (const m of [classic, character]) m.e.face.weights = { ...ZERO_WEIGHTS, jawOpen: 0.9 };
-    const drop = (m: ReturnType<typeof make>, rest: { y: number }[]) => m.e.deformedPoints(0)[152].y - rest[152].y;
-    const restC = make("animal@1").e.deformedPoints(0);
+    const drop = (m: ReturnType<typeof make>, rest: { y: number }[]) => m.e.deformedPoints()[152].y - rest[152].y;
+    const restC = make("animal@1").e.deformedPoints();
     expect(drop(character, restC)).toBeGreaterThan(drop(classic, restC) + 10);
   });
 
   it("the lid blink leaves the mesh still; the mesh blink moves it", () => {
     const lid = make("toon@1");
-    const restLid = lid.e.deformedPoints(0)[159].y;
+    const restLid = lid.e.deformedPoints()[159].y;
     lid.e.face.blink = 0.35;
-    expect(lid.e.deformedPoints(0)[159].y).toBe(restLid);
+    expect(lid.e.deformedPoints()[159].y).toBe(restLid);
     const mesh = make("animal@1");
-    const restMesh = mesh.e.deformedPoints(0)[159].y;
+    const restMesh = mesh.e.deformedPoints()[159].y;
     mesh.e.face.blink = 0.35;
-    expect(mesh.e.deformedPoints(0)[159].y).toBeGreaterThan(restMesh);
+    expect(mesh.e.deformedPoints()[159].y).toBeGreaterThan(restMesh);
   });
 });
