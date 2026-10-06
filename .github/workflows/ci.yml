@@ -80,7 +80,17 @@ jobs:
       # automated coverage at all, and every regression in it this far has
       # been invisible in a screenshot. The golden render snapshots are
       # compared, never rewritten: vitest run fails on a mismatch.
+      # pixels.test.ts draws real frames on Skia's CPU raster
+      # (@napi-rs/canvas, a prebuilt binary npm ci installs: no browser) and
+      # holds them to committed goldens; a frame that fails is uploaded.
       - run: npm test
+      - name: Upload the frames that failed the pixel goldens
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixel-diffs
+          path: embed/dist/pixel-diffs/
+          if-no-files-found: ignore
       - run: npm run build
 
   frontend:

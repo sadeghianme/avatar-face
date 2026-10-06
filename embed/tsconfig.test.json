@@ -10,7 +10,9 @@
     "composite": false,
     "declaration": false,
     "rootDir": ".",
-    "types": ["node"]
+    "types": ["node"],
+    // @napi-rs/canvas's types (the pixel test's canvas) name Float16Array.
+    "lib": ["ES2020", "DOM", "DOM.Iterable", "ESNext.Float16"]
   },
   "include": ["src", "scripts"],
   "exclude": []

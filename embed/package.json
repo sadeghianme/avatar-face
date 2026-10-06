@@ -13,10 +13,14 @@
     "dev": "esbuild src/widget.ts --bundle --format=iife --outfile=dist/liveface.js --watch --servedir=.",
     "build:head3d-bake": "esbuild scripts/head3d-bake.ts --bundle --platform=node --format=esm --outfile=dist/head3d-bake.mjs",
     "build:head3d-harness": "esbuild src/head3d/harness/harness.ts --bundle --format=iife --outfile=dist/head3d-harness.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:pixels": "vitest run src/__tests__/pixels.test.ts",
+    "test:pixels:update": "UPDATE_PIXEL_GOLDENS=1 vitest run src/__tests__/pixels.test.ts",
+    "test:pixels:add-platform": "UPDATE_PIXEL_GOLDENS=hashes vitest run src/__tests__/pixels.test.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@napi-rs/canvas": "^1.0.10",
     "@types/node": "^20.19.43",
     "esbuild": "^0.21.5",
     "eslint": "^10.12.0",
