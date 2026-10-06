@@ -196,9 +196,7 @@ export class AvatarEngine {
     }));
     this.innerRing = validInnerRing(rig);
     this.classicMouth = new ClassicMouth(ctx, this.profile, this.innerRing);
-    this.mesh = this.layOut();
-    this.samples.sample(this.texture, this.mesh.texPoints, this.rig, this.profile);
-    refineMesh(this.mesh, this.rig, this.texture);
+    this.mesh = this.buildMesh(true);
     this.motion.start(performance.now());
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
@@ -230,28 +228,29 @@ export class AvatarEngine {
    *
    * The widget boots on the 256px thumbnail so a face appears immediately,
    * then upgrades to the full-resolution image when it lands. Everything
-   * sampled or derived from the texture is redone: the lip/lash colours,
-   * the mesh (texPoints, the mouth subdivision), the cut-out probe and the
-   * head layer.
+   * sampled or derived from the texture is redone, exactly as loading this
+   * texture would have done it: the mesh (texPoints over this texture's
+   * size, the mouth subdivision), the cut-out probe, the head layer, and
+   * what the picture looks like, read at this texture's own landmarks.
    */
   setTexture(texture: HTMLImageElement): void {
     if (this.destroyed) return;
     this.texture = texture;
-    // NOTE: read at the texPoints laid out for the texture before this one
-    // (rebuildGeometry lays this one out after), so a texture of another
-    // size, the widget's full picture after its thumbnail, is sampled at
-    // the wrong pixels.
-    this.samples.sample(this.texture, this.mesh.texPoints, this.rig, this.profile);
-    this.rebuildGeometry();
+    this.mesh = this.buildMesh(true);
   }
 
   /**
-   * Lay the picture on the canvas again (the viewport or the texture
-   * changed): a new mesh, refined, and everything placed by it.
+   * Lay the picture on the canvas (layOut), then refine the mesh. With
+   * `sample` (a new texture), first read what the picture looks like at the
+   * landmarks just laid on it: texPoints are over the texture's own size,
+   * so landmarks laid for another texture (the thumbnail before the full
+   * picture) point at the wrong pixels of this one.
    */
-  private rebuildGeometry(): void {
-    this.mesh = this.layOut();
-    refineMesh(this.mesh, this.rig, this.texture);
+  private buildMesh(sample: boolean): FaceMesh {
+    const mesh = this.layOut();
+    if (sample) this.samples.sample(this.texture, mesh.texPoints, this.rig, this.profile);
+    refineMesh(mesh, this.rig, this.texture);
+    return mesh;
   }
 
   /**
@@ -269,7 +268,7 @@ export class AvatarEngine {
       (next.pan?.x ?? 0) !== (this.scene.pan?.x ?? 0) ||
       (next.pan?.y ?? 0) !== (this.scene.pan?.y ?? 0);
     this.scene = next;
-    if (moved) this.rebuildGeometry();
+    if (moved) this.mesh = this.buildMesh(false);
     this.backdrop.load(this.scene.background);
   }
 
