@@ -26,6 +26,10 @@
  *   identity transform, one resample, not two.
  * - Source-over compositing where triangles fold over each other, and
  *   premultiplied alpha, so a cut-out's edge filters like the 2D path's.
+ * - Over a picture with transparency only the triangles the face moved
+ *   are drawn (select), on both paths (mesh-warp.ts); here they REPLACE
+ *   what is under them: the same triangles drawn solid (drawCoverage) erase
+ *   the canvas by their coverage, and the mesh is added back.
  *
  * What is different: no seam pads (seam-pad.ts). Adjacent clips in 2D each
  * leave half a pixel of anti-aliased edge that shows the still picture
@@ -172,9 +176,10 @@ precision highp float;
 precision mediump float;
 #endif
 uniform sampler2D uTex;
+uniform float uSolid;
 varying vec2 vUV;
 void main() {
-  gl_FragColor = texture2D(uTex, vUV);
+  gl_FragColor = mix(texture2D(uTex, vUV), vec4(1.0), uSolid);
 }`;
 
 type GL = WebGLRenderingContext;
@@ -192,9 +197,15 @@ export class WarpRenderer {
   private aPos = -1;
   private aUV = -1;
   private uMatrix: WebGLUniformLocation | null = null;
+  private uSolid: WebGLUniformLocation | null = null;
   private posBuffer: WebGLBuffer | null = null;
   private uvBuffer: WebGLBuffer | null = null;
   private indexBuffer: WebGLBuffer | null = null;
+  /** A chosen part of the triangle list (select), rewritten per frame. */
+  private subsetBuffer: WebGLBuffer | null = null;
+  private subsetCount = 0;
+  /** The subset's indices, reused frame to frame. */
+  private kept: Uint16Array | Uint32Array | null = null;
   private texture: WebGLTexture | null = null;
   private positions = new Float32Array(0);
   private indexType = 0;
@@ -297,12 +308,14 @@ export class WarpRenderer {
       this.aPos = gl.getAttribLocation(program, "aPos");
       this.aUV = gl.getAttribLocation(program, "aUV");
       this.uMatrix = gl.getUniformLocation(program, "uMatrix");
+      this.uSolid = gl.getUniformLocation(program, "uSolid");
       const uTex = gl.getUniformLocation(program, "uTex");
       gl.useProgram(program);
       gl.uniform1i(uTex, 0);
       this.posBuffer = gl.createBuffer();
       this.uvBuffer = gl.createBuffer();
       this.indexBuffer = gl.createBuffer();
+      this.subsetBuffer = gl.createBuffer();
       // Source-over, premultiplied: where the mesh folds over itself a
       // later triangle composites over an earlier one as the 2D path's
       // drawImage does, and a cut-out's transparent texels add nothing.
@@ -412,8 +425,60 @@ export class WarpRenderer {
    * order) through `affine`, into the offscreen canvas. False when it did
    * not draw (no context, no texture, no mesh): the caller falls back.
    */
-  draw(points: readonly Point[], affine: Affine): boolean {
-    if (!this.available || !this.imageOk || !this.count || !this.program) return false;
+  draw(points: readonly Point[], affine: Affine, subset = false): boolean {
+    return this.render(points, affine, false, subset);
+  }
+
+  /**
+   * The same triangles at the same points, rasterized exactly as `draw`
+   * rasterizes them, in solid white: the mesh's coverage, 1 inside and the
+   * anti-aliased share along its outer edge. What the warp replaces on the
+   * canvas where the picture has transparency (mesh-warp.ts).
+   */
+  drawCoverage(points: readonly Point[], affine: Affine, subset = false): boolean {
+    return this.render(points, affine, true, subset);
+  }
+
+  /**
+   * Choose the triangles the next draws `subset` draw: those of the mesh
+   * that `keep` passes, in the mesh's order. How many there are; 0 when
+   * none (or nothing could be uploaded).
+   */
+  select(keep: (a: number, b: number, c: number) => boolean): number {
+    const mesh = this.mesh;
+    this.subsetCount = 0;
+    if (!this.available || !mesh || !this.indexType || !this.subsetBuffer) return 0;
+    const all = mesh.indices;
+    if (this.kept?.constructor !== all.constructor || this.kept.length !== all.length) {
+      this.kept = all instanceof Uint32Array ? new Uint32Array(all.length) : new Uint16Array(all.length);
+    }
+    const kept = this.kept;
+    let n = 0;
+    for (let t = 0; t < mesh.count; t++) {
+      const a = all[t * 3],
+        b = all[t * 3 + 1],
+        c = all[t * 3 + 2];
+      if (!keep(a, b, c)) continue;
+      kept[n * 3] = a;
+      kept[n * 3 + 1] = b;
+      kept[n * 3 + 2] = c;
+      n++;
+    }
+    if (!n) return 0;
+    try {
+      const gl = this.gl;
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.subsetBuffer);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, kept.subarray(0, n * 3), gl.DYNAMIC_DRAW);
+      this.subsetCount = n;
+    } catch {
+      this.subsetCount = 0;
+    }
+    return this.subsetCount;
+  }
+
+  private render(points: readonly Point[], affine: Affine, solid: boolean, subset: boolean): boolean {
+    const count = subset ? this.subsetCount : this.count;
+    if (!this.available || !this.imageOk || !count || !this.program) return false;
     const gl = this.gl;
     const positions = this.positions;
     const n = Math.min(points.length, positions.length / 2);
@@ -435,10 +500,11 @@ export class WarpRenderer {
       gl.enableVertexAttribArray(this.aUV);
       gl.vertexAttribPointer(this.aUV, 2, gl.FLOAT, false, 0, 0);
       gl.uniformMatrix3fv(this.uMatrix, false, clipMatrix(affine, w, h));
+      gl.uniform1f(this.uSolid, solid ? 1 : 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.texture);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
-      gl.drawElements(gl.TRIANGLES, this.count * 3, this.indexType, 0);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, subset ? this.subsetBuffer : this.indexBuffer);
+      gl.drawElements(gl.TRIANGLES, count * 3, this.indexType, 0);
       return !gl.isContextLost();
     } catch {
       return false;
@@ -458,6 +524,7 @@ export class WarpRenderer {
       if (this.posBuffer) gl.deleteBuffer(this.posBuffer);
       if (this.uvBuffer) gl.deleteBuffer(this.uvBuffer);
       if (this.indexBuffer) gl.deleteBuffer(this.indexBuffer);
+      if (this.subsetBuffer) gl.deleteBuffer(this.subsetBuffer);
       if (this.program) gl.deleteProgram(this.program);
       // Browsers allow a handful of live contexts a page; an engine that is
       // mounted and unmounted (React StrictMode, a list of previews) must
@@ -469,7 +536,7 @@ export class WarpRenderer {
       // Already lost: nothing left to free.
     }
     this.texture = null;
-    this.posBuffer = this.uvBuffer = this.indexBuffer = null;
+    this.posBuffer = this.uvBuffer = this.indexBuffer = this.subsetBuffer = null;
     this.program = null;
     this.image = null;
     this.mesh = null;

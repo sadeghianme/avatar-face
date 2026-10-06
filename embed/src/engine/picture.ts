@@ -11,7 +11,7 @@ import { buildLowerFaceRig, type LowerFaceRig } from "./jaw-rig";
 import type { KindProfile } from "./kind-profile";
 import type { Rig } from "../types";
 import { layOutFace, placeHead, refineMesh, type FaceMesh, type HeadGeom, type Point } from "./geometry";
-import { cutHeadLayer } from "./render2d";
+import { cutHeadLayer, type HeadLayer } from "./render2d";
 import { FaceSamples, probeCutOut } from "./sampling";
 
 export class FacePicture {
@@ -25,7 +25,7 @@ export class FacePicture {
   headGeom: HeadGeom | null = null;
   /** A cut-out's head REGION — hair, ears, skull — cut out once with
    *  feathered edges, which moves over transparency. */
-  headLayer: HTMLCanvasElement | null = null;
+  headLayer: HeadLayer | null = null;
   /** The character mouth's jaw field, only for a profile that asks for it. */
   field: CharacterField | null = null;
   /** The jaw, chin and cheeks for every mouth driver (jaw-rig.ts). */
@@ -55,11 +55,13 @@ export class FacePicture {
     if (cutOut !== null) this.cutOut = cutOut;
     this.onLaid(mesh.basePoints);
     this.headGeom = placeHead(mesh.basePoints, mesh.picture);
-    this.headLayer = this.headGeom && this.cutOut ? cutHeadLayer(this.texture, this.rig, mesh, this.headGeom) : null;
     this.field = this.profile.mouth === "character" ? new CharacterField(mesh.basePoints) : null;
     this.lowerFace = buildLowerFaceRig(mesh.basePoints);
     if (sample) this.samples.sample(this.texture, mesh.texPoints, this.rig, this.profile);
     refineMesh(mesh, this.rig, this.texture);
+    // After the refinement: the head's mask must be whole over every vertex
+    // the warp draws, the neck band's included.
+    this.headLayer = this.headGeom && this.cutOut ? cutHeadLayer(this.texture, mesh, this.headGeom) : null;
     this.mesh = mesh;
   }
 }

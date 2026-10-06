@@ -52,9 +52,15 @@ export class Backdrop {
   }
 
   /**
-   * What is behind a cut-out, drawn first and still: a colour, or a
-   * picture cover-fitted to the canvas. An opaque picture covers the whole
-   * canvas wherever it reaches, so nothing is drawn for it.
+   * What is behind a cut-out, still: a colour, or a picture cover-fitted to
+   * the canvas. An opaque picture covers the whole canvas wherever it
+   * reaches, so nothing is drawn for it.
+   *
+   * Drawn LAST, behind the finished picture (destination-over), not first
+   * under it: a cut-out's frame is composed by erasing and adding back (its
+   * head's feathered layer, the warp replacing the picture under it;
+   * render2d.ts, mesh-warp.ts), and over a backdrop drawn first the erase
+   * would cut holes in the backdrop wherever the picture is clear.
    */
   draw(
     ctx: CanvasRenderingContext2D,
@@ -67,6 +73,7 @@ export class Backdrop {
       ch = canvas.height;
     if (background.kind === "color" && background.color) {
       ctx.save();
+      ctx.globalCompositeOperation = "destination-over";
       ctx.fillStyle = background.color;
       ctx.fillRect(0, 0, cw, ch);
       ctx.restore();
@@ -80,6 +87,9 @@ export class Backdrop {
     const scale = Math.max(cw / iw, ch / ih);
     const w = iw * scale,
       h = ih * scale;
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-over";
     ctx.drawImage(img, 0, 0, iw, ih, (cw - w) / 2, (ch - h) / 2, w, h);
+    ctx.restore();
   }
 }

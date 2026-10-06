@@ -85,19 +85,24 @@ describe("the scene's background", () => {
     vi.unstubAllGlobals();
   });
 
-  it("is a colour filled first, under everything, behind a cut-out", () => {
+  it("is a colour filled last, behind everything (destination-over), behind a cut-out", () => {
     const { engine, e, log } = engineWith(cutOut, { background: { kind: "color", color: "#1e3a8a" } });
     expect(e.cutOut).toBe(true);
     e.render();
     engine.destroy();
+    // Behind the finished picture, so the cut-out's erase-and-add-back
+    // (the head's layer, the warp) never cuts holes in it.
     const clear = log.findIndex((l) => l.startsWith("clearRect("));
+    const picture = log.findIndex((l) => l.startsWith("drawImage("));
+    const behind = log.lastIndexOf("globalCompositeOperation=destination-over");
     const fill = log.findIndex((l) => l === "fillStyle=#1e3a8a");
     const rect = log.findIndex((l) => l === "fillRect(0,0,512,512)");
-    const picture = log.findIndex((l) => l.startsWith("drawImage("));
     expect(clear).toBeGreaterThanOrEqual(0);
-    expect(fill).toBeGreaterThan(clear);
+    expect(picture).toBeGreaterThan(clear);
+    expect(behind).toBeGreaterThan(picture);
+    expect(fill).toBeGreaterThan(behind);
     expect(rect).toBe(fill + 1);
-    expect(picture).toBeGreaterThan(rect);
+    expect(log.slice(rect + 1).some((l) => l.startsWith("drawImage("))).toBe(false);
   });
 
   it("is not drawn behind an opaque picture, which would cover it anyway", () => {

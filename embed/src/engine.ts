@@ -207,6 +207,7 @@ export class AvatarEngine {
       mesh: picture.mesh,
       padEverywhere: !!picture.field || picture.samples.look.flat,
       lowerFace: picture.lowerFace,
+      replace: picture.cutOut,
     }));
     this.innerRing = validInnerRing(rig);
     this.classicMouth = new ClassicMouth(ctx, this.profile, this.innerRing);
@@ -463,8 +464,6 @@ export class AvatarEngine {
     const picture = this.picture;
     const pts = this.deformedPoints();
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    // The scene's background first, under everything and still.
-    this.backdrop.draw(ctx, this.scene.background, picture.cutOut, this.canvas);
     const travel = motionTravel(!!this.layers, picture.cutOut, this.tuning);
     composeFrame({
       ctx,
@@ -479,6 +478,9 @@ export class AvatarEngine {
       drawMesh: (affine) => this.meshWarp.draw(ctx, pts, affine),
       drawFeatures: () => this.paintFeatures(pts),
     });
+    // The scene's background last, still, BEHIND the finished picture
+    // (scene.ts).
+    this.backdrop.draw(ctx, this.scene.background, picture.cutOut, this.canvas);
   }
 
   /** Everything painted over the warped mesh, in the head's frame: the
