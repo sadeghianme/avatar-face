@@ -4,6 +4,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Avatar3DEngine } from "../../engine3d";
+import { stubCanvas, stubRenderer } from "../../engine3d/__tests__/three-fakes";
 import { readHead3DExtras } from "../extras";
 import { optionsFor } from "../load";
 
@@ -86,11 +87,9 @@ describe("a head3d GLB in three.js", () => {
   it("is driven by the engine with its own options", async () => {
     const scene = await loadFixture();
     const extras = readHead3DExtras(scene);
-    const renderer = { setPixelRatio() {}, setSize() {}, render() {}, dispose() {}, info: { render: { calls: 0, triangles: 0 } } } as unknown as THREE.WebGLRenderer;
-    const canvas = { width: 256, height: 256, dataset: {} } as unknown as HTMLCanvasElement;
     let now = 10_000;
     vi.spyOn(performance, "now").mockImplementation(() => now);
-    const engine = new Avatar3DEngine(canvas, scene, renderer, optionsFor(extras));
+    const engine = new Avatar3DEngine(stubCanvas(), scene, stubRenderer().renderer, optionsFor(extras));
     const face = scene.getObjectByName("Face") as THREE.Mesh;
     engine.playCues([{ t: 0, viseme: "aa", a: 1 }, { t: 5000, viseme: "aa", a: 1 }]);
     for (let t = 0; t < 600; t += 16) {

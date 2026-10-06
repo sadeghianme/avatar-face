@@ -13,6 +13,7 @@ import * as THREE from "three";
 import { AvatarEngine } from "../../engine";
 import { engineSeam } from "../../engine/seam";
 import type { Avatar3DEngine } from "../../engine3d";
+import { VISEME_TO_MORPH } from "../../engine3d/visemes";
 import { ZERO_WEIGHTS, type Cue, type Rig } from "../../types";
 import { expandVisemeTable, type Head3DExtras } from "../extras";
 import { FixedHeadPose } from "../head-pose";
@@ -128,18 +129,11 @@ function label(ctx: CanvasRenderingContext2D, text: string, x: number, y: number
   ctx.fillText(text, x + 5, y + size + 1);
 }
 
-/** The engine's own name for a viseme's shape target (engine3d's map). */
-const VISEME_MORPH: Record<string, string> = {
-  sil: "viseme_sil", PP: "viseme_PP", FF: "viseme_FF", TH: "viseme_TH", DD: "viseme_DD", kk: "viseme_kk",
-  CH: "viseme_CH", SS: "viseme_SS", nn: "viseme_nn", RR: "viseme_RR", aa: "viseme_aa", E: "viseme_E",
-  ih: "viseme_I", oh: "viseme_O", ou: "viseme_U",
-};
-
 function still(loaded: Loaded, viseme: string, yawDeg: number): void {
   loaded.pose.set(yawDeg);
   // The viseme's own shape when the head carries it (exact), else the
   // ARKit decomposition at the table's weights.
-  const shape = VISEME_MORPH[viseme];
+  const shape = VISEME_TO_MORPH[viseme];
   const hasShape = loaded.extras?.morphs.includes(shape) ?? false;
   loaded.engine.holdMorphs(hasShape ? { [shape]: 1 } : loaded.table[viseme] ?? {});
   // Early in the engine's life: before its first blink or saccade.
