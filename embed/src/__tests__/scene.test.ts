@@ -45,7 +45,7 @@ function fakeCanvas(log: string[], texture: Texture, size = 512): HTMLCanvasElem
   return { width: size, height: size, getContext: () => ctx } as unknown as HTMLCanvasElement;
 }
 
-type Internals = { render(): void; cutOut: boolean; mesh: { basePoints: { x: number; y: number }[] }; deformedPoints(now: number): unknown[]; backgroundImage: unknown };
+type Internals = { render(): void; cutOut: boolean; mesh: { basePoints: { x: number; y: number }[] }; deformedPoints(now: number): unknown[]; backdrop: { image: unknown } };
 
 function engineWith(texture: Texture, scene: ConstructorParameters<typeof AvatarEngine>[3]["scene"]) {
   const log: string[] = [];
@@ -95,7 +95,7 @@ describe("the scene's background", () => {
   it("a picture that cannot load leaves the scene transparent and the avatar drawing", () => {
     // No Image in this environment: the load fails at once.
     const { engine, e, log } = engineWith(cutOut, { background: { kind: "image", image_url: "https://example.test/bg.webp" } });
-    expect(e.backgroundImage).toBeNull();
+    expect(e.backdrop.image).toBeNull();
     e.render();
     engine.destroy();
     expect(log.some((l) => l.startsWith("drawImage("))).toBe(true);

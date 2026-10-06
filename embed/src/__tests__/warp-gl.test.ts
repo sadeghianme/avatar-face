@@ -243,7 +243,7 @@ function makeEngine(opts: { warp?: "auto" | "2d" } = {}, log: string[] = []) {
   return new AvatarEngine(canvas as unknown as HTMLCanvasElement, rig, image, { fullPhoto: false, ...opts });
 }
 
-type Internals = { render(): void; warp: WarpRenderer | null };
+type Internals = { render(): void; meshWarp: { renderer: WarpRenderer | null } };
 
 describe("which path the engine takes", () => {
   beforeEach(() => { FakeGL.instances = []; });
@@ -306,7 +306,7 @@ describe("which path the engine takes", () => {
     const log: string[] = [];
     const engine = makeEngine({}, log);
     const e = engine as unknown as Internals;
-    const glCanvas = e.warp!.canvas as unknown as { fire(type: string): void };
+    const glCanvas = e.meshWarp.renderer!.canvas as unknown as { fire(type: string): void };
     e.render();
     expect(log.filter((l) => l.startsWith("clip(")).length).toBe(0);
 
@@ -348,10 +348,10 @@ describe("which path the engine takes", () => {
     stubBrowser(true);
     const engine = makeEngine();
     const e = engine as unknown as Internals;
-    const warp = e.warp!;
+    const warp = e.meshWarp.renderer!;
     expect(warp.available).toBe(true);
     engine.destroy();
-    expect(e.warp).toBeNull();
+    expect(e.meshWarp.renderer).toBeNull();
     expect(warp.available).toBe(false);
   });
 });

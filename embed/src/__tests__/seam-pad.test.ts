@@ -101,7 +101,7 @@ function fakeCanvas(texture: Texture, size = 512): HTMLCanvasElement {
 
 type Internals = {
   mesh: { triangles: [number, number, number][] };
-  trianglePads(): Float32Array | null;
+  meshWarp: { trianglePads(): Float32Array | null };
   samples: { look: { flat: boolean } };
 };
 
@@ -112,7 +112,7 @@ function padsFor(texture: Texture, profile?: string): { tris: [number, number, n
   if (profile) source.render_profile = profile;
   const engine = new AvatarEngine(fakeCanvas(texture), source, image, { fullPhoto: false });
   const e = engine as unknown as Internals;
-  const pads = e.trianglePads()!;
+  const pads = e.meshWarp.trianglePads()!;
   engine.destroy();
   return { tris: e.mesh.triangles, pads, flat: e.samples.look.flat };
 }
