@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { Icon, type IconName } from "@/components/ui/Icon";
+import { cx } from "@/lib/cx";
 
 import { Reveal, SectionHeader } from "./Reveal";
 
@@ -11,6 +12,17 @@ const CASES: { icon: IconName; key: string }[] = [
   { icon: "globe", key: "useGlobal" },
 ];
 
+/** A use case: lifts and warms under the pointer. */
+const CASE_CARD = cx(
+  "group h-full rounded-3xl border border-black/[0.07] bg-white p-7 transition duration-300 dark:border-white/[0.08] dark:bg-panel",
+  "hover:-translate-y-1 hover:border-brand-300/70 hover:shadow-[0_30px_60px_-35px_rgba(234,106,12,0.5)] dark:hover:border-brand-500/30"
+);
+
+const CASE_ICON = cx(
+  "grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-white",
+  "shadow-[0_10px_25px_-10px_rgba(234,106,12,0.8)]"
+);
+
 export function UseCases() {
   const { t } = useTranslation();
   return (
@@ -20,8 +32,8 @@ export function UseCases() {
         <ul className="mt-16 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {CASES.map((item, i) => (
             <Reveal as="li" key={item.key} delay={i * 70}>
-              <div className="group h-full rounded-3xl border border-black/[0.07] bg-white p-7 transition duration-300 hover:-translate-y-1 hover:border-brand-300/70 hover:shadow-[0_30px_60px_-35px_rgba(234,106,12,0.5)] dark:border-white/[0.08] dark:bg-panel dark:hover:border-brand-500/30">
-                <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-[0_10px_25px_-10px_rgba(234,106,12,0.8)]">
+              <div className={CASE_CARD}>
+                <span className={CASE_ICON}>
                   <Icon name={item.icon} className="h-5 w-5" />
                 </span>
                 <h3 className="mt-6 text-[18px] font-semibold tracking-[-0.02em] text-gray-950 dark:text-white">

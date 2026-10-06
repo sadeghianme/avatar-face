@@ -3,8 +3,20 @@ import { useTranslation } from "react-i18next";
 import { DEMO_PORTRAIT } from "@/components/brand/DemoAvatar";
 import { Icon } from "@/components/ui/Icon";
 import { FACE_PATHS } from "@/features/landing/data";
+import { cx } from "@/lib/cx";
 
 import { Reveal, SectionHeader } from "./Reveal";
+
+/** A step: its picture over its words, lifting a little under the pointer. */
+const STEP_CARD = cx(
+  "group flex h-full flex-col overflow-hidden rounded-3xl border border-black/[0.07] bg-white transition duration-300",
+  "hover:-translate-y-1 hover:shadow-[0_30px_60px_-30px_rgba(0,0,0,0.3)] dark:border-white/[0.08] dark:bg-panel"
+);
+
+const STEP_VISUAL = cx(
+  "relative aspect-[16/10] overflow-hidden border-b border-black/[0.06] bg-gradient-to-br from-gray-50 to-gray-100",
+  "dark:border-white/[0.06] dark:from-white/[0.03] dark:to-white/[0.01]"
+);
 
 export function HowItWorks() {
   const { t } = useTranslation();
@@ -20,10 +32,8 @@ export function HowItWorks() {
         <ol className="mt-16 grid grid-cols-1 gap-6 lg:grid-cols-3">
           {steps.map((step, i) => (
             <Reveal as="li" key={step.key} delay={i * 90}>
-              <div className="group flex h-full flex-col overflow-hidden rounded-3xl border border-black/[0.07] bg-white transition duration-300 hover:-translate-y-1 hover:shadow-[0_30px_60px_-30px_rgba(0,0,0,0.3)] dark:border-white/[0.08] dark:bg-panel">
-                <div className="relative aspect-[16/10] overflow-hidden border-b border-black/[0.06] bg-gradient-to-br from-gray-50 to-gray-100 dark:border-white/[0.06] dark:from-white/[0.03] dark:to-white/[0.01]">
-                  {step.visual}
-                </div>
+              <div className={STEP_CARD}>
+                <div className={STEP_VISUAL}>{step.visual}</div>
                 <div className="flex flex-1 flex-col p-7">
                   <span className="text-[13px] font-semibold text-brand-600 dark:text-brand-400">
                     {t("stepLabel", { n: i + 1 })}
@@ -88,11 +98,12 @@ function VoiceVisual() {
         {languages.map((name, i) => (
           <span
             key={name}
-            className={`rounded-full px-3 py-1.5 text-[12.5px] font-medium ring-1 ${
+            className={cx(
+              "rounded-full px-3 py-1.5 text-[12.5px] font-medium ring-1",
               i === 1
                 ? "bg-brand-500 text-white ring-brand-500"
                 : "bg-white text-gray-700 ring-black/10 dark:bg-white/[0.06] dark:text-gray-200 dark:ring-white/10"
-            }`}
+            )}
           >
             {name}
           </span>
@@ -110,7 +121,12 @@ function VoiceVisual() {
             ))}
           </div>
         </div>
-        <span className="relative inline-grid h-8 min-w-[92px] place-items-center rounded-full bg-gray-900 px-3 text-[12px] font-semibold text-white dark:bg-white dark:text-gray-900">
+        <span
+          className={cx(
+            "relative inline-grid h-8 min-w-[92px] place-items-center rounded-full bg-gray-900 px-3",
+            "text-[12px] font-semibold text-white dark:bg-white dark:text-gray-900"
+          )}
+        >
           <span className="col-start-1 row-start-1 motion-safe:animate-swap">{t("stepVisualPublish")}</span>
           <span
             className="col-start-1 row-start-1 flex items-center gap-1 text-emerald-300 opacity-0 motion-safe:animate-swap dark:text-emerald-600"
@@ -129,7 +145,7 @@ function EmbedVisual() {
   const { t } = useTranslation();
   return (
     <div className="absolute inset-0 grid place-items-center px-6">
-      <div className="w-full overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-black/10 dark:bg-[#101010] dark:ring-white/10">
+      <div className="w-full overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-black/10 dark:bg-well dark:ring-white/10">
         <div className="flex items-center gap-1.5 border-b border-black/[0.06] px-3 py-2 dark:border-white/[0.06]">
           <span className="h-2 w-2 rounded-full bg-red-400" />
           <span className="h-2 w-2 rounded-full bg-amber-400" />
@@ -155,7 +171,10 @@ function EmbedVisual() {
             alt=""
             loading="lazy"
             decoding="async"
-            className="absolute bottom-3 end-3 h-14 w-14 rounded-full object-cover shadow-lg ring-2 ring-white motion-safe:animate-float dark:ring-[#101010]"
+            className={cx(
+              "absolute bottom-3 end-3 h-14 w-14 rounded-full object-cover shadow-lg ring-2 ring-white",
+              "motion-safe:animate-float dark:ring-well"
+            )}
           />
         </div>
       </div>

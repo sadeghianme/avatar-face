@@ -2,8 +2,15 @@ import { useTranslation } from "react-i18next";
 
 import { DEMO_PORTRAIT } from "@/components/brand/DemoAvatar";
 import { Icon, type IconName } from "@/components/ui/Icon";
+import { cx } from "@/lib/cx";
 
 import { Reveal, SectionHeader } from "./Reveal";
+
+/** A status strip that swaps with its twin under the mock's title bar. */
+const SWAP_STRIP = "col-start-1 row-start-1 flex items-center border-b px-5 py-2.5 motion-safe:animate-swap";
+
+/** One of the mock's setting rows. */
+const ROW = "rounded-xl bg-gray-50 px-3.5 ring-1 ring-black/[0.05] dark:bg-white/[0.03] dark:ring-white/[0.06]";
 
 const POINTS: { icon: IconName; key: string }[] = [
   { icon: "users", key: "platformTeam" },
@@ -72,14 +79,22 @@ function DashboardMock() {
         </div>
 
         <div className="grid">
-          <div className="col-start-1 row-start-1 flex items-center justify-between border-b border-amber-200/70 bg-amber-50 px-5 py-2.5 motion-safe:animate-swap dark:border-amber-500/20 dark:bg-amber-500/10">
+          <div
+            className={cx(
+              SWAP_STRIP,
+              "justify-between border-amber-200/70 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10"
+            )}
+          >
             <span className="text-[12.5px] font-medium text-amber-800 dark:text-amber-300">{t("mockUnpublished")}</span>
             <span className="rounded-full bg-brand-600 px-3 py-1 text-[11.5px] font-semibold text-white">
               {t("mockPublish")}
             </span>
           </div>
           <div
-            className="col-start-1 row-start-1 flex items-center gap-2 border-b border-emerald-200/70 bg-emerald-50 px-5 py-2.5 opacity-0 motion-safe:animate-swap dark:border-emerald-500/20 dark:bg-emerald-500/10"
+            className={cx(
+              SWAP_STRIP,
+              "gap-2 border-emerald-200/70 bg-emerald-50 opacity-0 dark:border-emerald-500/20 dark:bg-emerald-500/10"
+            )}
             style={{ animationDelay: "-3s" }}
           >
             <Icon name="check" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" strokeWidth={2.4} />
@@ -107,15 +122,12 @@ function DashboardMock() {
               { k: "mockVoice", v: t("mockVoiceValue") },
               { k: "mockMouth", v: t("mockMouthValue") },
             ].map((row) => (
-              <div
-                key={row.k}
-                className="flex items-center justify-between rounded-xl bg-gray-50 px-3.5 py-2.5 ring-1 ring-black/[0.05] dark:bg-white/[0.03] dark:ring-white/[0.06]"
-              >
+              <div key={row.k} className={cx(ROW, "flex items-center justify-between py-2.5")}>
                 <dt className="text-gray-500 dark:text-gray-400">{t(row.k)}</dt>
                 <dd className="font-medium text-gray-900 dark:text-white">{row.v}</dd>
               </div>
             ))}
-            <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3.5 py-2.5 ring-1 ring-black/[0.05] dark:bg-white/[0.03] dark:ring-white/[0.06]">
+            <div className={cx(ROW, "flex items-center justify-between py-2.5")}>
               <dt className="text-gray-500 dark:text-gray-400">{t("mockShare")}</dt>
               <dd>
                 <span className="relative inline-flex h-5 w-9 items-center rounded-full bg-brand-500 p-0.5">
@@ -123,7 +135,7 @@ function DashboardMock() {
                 </span>
               </dd>
             </div>
-            <div className="rounded-xl bg-gray-50 px-3.5 py-3 ring-1 ring-black/[0.05] dark:bg-white/[0.03] dark:ring-white/[0.06]">
+            <div className={cx(ROW, "py-3")}>
               <div className="flex justify-between">
                 <dt className="text-gray-500 dark:text-gray-400">{t("mockUsage")}</dt>
                 <dd className="font-mono text-[12px] text-gray-500 dark:text-gray-400">38%</dd>

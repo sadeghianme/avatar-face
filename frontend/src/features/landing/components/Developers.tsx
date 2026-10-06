@@ -1,8 +1,11 @@
 import { ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Icon } from "@/components/ui/Icon";
+import { Tabs } from "@/components/ui/Tabs";
 import { SNIPPETS } from "@/features/landing/data";
+import { cx } from "@/lib/cx";
 
 import { Reveal, SectionHeader } from "./Reveal";
 
@@ -47,10 +50,21 @@ function highlight(code: string): ReactNode[] {
   return out;
 }
 
+/** The dark window the snippets sit in, whatever the page's theme. */
+const CODE_WINDOW = cx(
+  "overflow-hidden rounded-3xl border border-black/10 bg-code dark:border-white/10",
+  "shadow-[0_40px_100px_-40px_rgba(0,0,0,0.6)]"
+);
+
+/** A ghost button drawn for that window: light words, a light hover. */
+const COPY_ON_DARK = cx(
+  "gap-1.5 px-2.5 py-1.5 text-[12px] leading-normal text-gray-300",
+  "hover:bg-white/10 hover:text-white dark:hover:bg-white/10"
+);
+
 export function Developers() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>("html");
-  const [copied, setCopied] = useState(false);
 
   return (
     <section id="developers" className="scroll-mt-20 py-24 sm:py-32">
@@ -70,41 +84,28 @@ export function Developers() {
         </div>
 
         <Reveal delay={100}>
-          <div className="overflow-hidden rounded-3xl border border-black/10 bg-[#0b0b0c] shadow-[0_40px_100px_-40px_rgba(0,0,0,0.6)] dark:border-white/10">
+          <div className={CODE_WINDOW}>
             <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-2.5">
-              <div role="tablist" aria-label={t("devTabsLabel")} className="flex gap-1">
-                {TABS.map((item) => (
-                  <button
-                    key={item.id}
-                    role="tab"
-                    type="button"
-                    id={`dev-tab-${item.id}`}
-                    aria-selected={tab === item.id}
-                    aria-controls="dev-panel"
-                    onClick={() => {
-                      setTab(item.id);
-                      setCopied(false);
-                    }}
-                    className={`rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition-colors coarse:min-h-11 ${
-                      tab === item.id ? "bg-white/10 text-white" : "text-gray-400 hover:text-gray-200"
-                    }`}
-                  >
-                    {t(item.key)}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  void navigator.clipboard.writeText(SNIPPETS[tab]);
-                  setCopied(true);
-                  window.setTimeout(() => setCopied(false), 1600);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-gray-300 transition-colors coarse:min-h-11 hover:bg-white/10 hover:text-white"
-              >
-                <Icon name={copied ? "check" : "copyIcon"} className="h-3.5 w-3.5" />
-                {copied ? t("copied") : t("copy")}
-              </button>
+              <Tabs
+                items={TABS.map((item) => ({ value: item.id, label: t(item.key) }))}
+                value={tab}
+                onChange={setTab}
+                label={t("devTabsLabel")}
+                idPrefix="dev-tab"
+                panelId="dev-panel"
+              />
+              {/* Keyed by the tab: "Copied" belongs to the snippet it copied. */}
+              <CopyButton
+                key={tab}
+                text={SNIPPETS[tab]}
+                label={t("copy")}
+                copiedLabel={t("copied")}
+                icon="copyIcon"
+                copiedIcon="check"
+                iconClassName="h-3.5 w-3.5"
+                variant="ghost"
+                className={COPY_ON_DARK}
+              />
             </div>
             <pre
               id="dev-panel"
