@@ -1,4 +1,3 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -12,26 +11,21 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Textarea } from "@/components/ui/Textarea";
-import { api, ApiError } from "@/lib/api";
+import {
+  CLONED_PROVIDER,
+  type CloneJob,
+  synthesize,
+  useClonedVoices,
+  useCloneJobs,
+  useRemoveClonedVoice,
+  useRemoveCloneJob,
+  useRenderCapability,
+  useRenderHere,
+  useSubmitClone,
+} from "@/features/voices/api";
+import { ApiError } from "@/lib/api";
 import { MicRecorder, type Recording } from "@/lib/recorder";
 import { useOrg } from "@/providers/org";
-
-interface CloneJob {
-  id: string;
-  name: string;
-  locale: string;
-  lines: string[];
-  status: "pending" | "processing" | "done" | "failed";
-  error: string | null;
-  done_lines: number;
-}
-
-interface ClonedVoice {
-  voice: string;
-  label: string;
-  lines: number;
-  total_ms: number;
-}
 
 /** Long enough to carry a voice, short enough to actually get recorded. */
 const MIN_REFERENCE_SECONDS = 6;
@@ -47,7 +41,6 @@ const MIN_REFERENCE_SECONDS = 6;
 export function VoicesPage() {
   const { t } = useTranslation();
   const { current } = useOrg();
-  const queryClient = useQueryClient();
   const orgId = current?.id;
 
   // --- recorder state
@@ -76,42 +69,25 @@ export function VoicesPage() {
 
   // Can the backend render on its own hardware? Locally yes; on the
   // CPU-only server no — the UI adapts rather than assuming.
-  const { data: renderCap } = useQuery({
-    queryKey: ["render-capability", orgId],
-    queryFn: () =>
-      api.get<{ available: boolean; reason: string | null }>(`/orgs/${orgId}/clone-jobs/render-capability`),
-    enabled: Boolean(orgId),
-    staleTime: Infinity, // cannot change without a backend restart
-  });
+  const { data: renderCap } = useRenderCapability(orgId);
+  const render = useRenderHere(orgId);
 
   const renderHere = async (jobId: string) => {
     setError(null);
     try {
-      await api.post(`/orgs/${orgId}/clone-jobs/${jobId}/render`, {});
-      void queryClient.invalidateQueries({ queryKey: ["clone-jobs", orgId] });
+      await render.mutateAsync(jobId);
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : t("error"));
     }
   };
 
-  const { data: jobs = [] } = useQuery({
-    queryKey: ["clone-jobs", orgId],
-    queryFn: () => api.get<CloneJob[]>(`/orgs/${orgId}/clone-jobs`),
-    enabled: Boolean(orgId),
-    // Live progress while anything is rendering.
-    refetchInterval: (query) =>
-      query.state.data?.some((j) => j.status === "pending" || j.status === "processing") ? 2000 : false,
-  });
-  const { data: voices = [] } = useQuery({
-    queryKey: ["cloned-voices", orgId],
-    queryFn: () => api.get<ClonedVoice[]>(`/orgs/${orgId}/cloned-voices`),
-    enabled: Boolean(orgId),
-  });
-  // A finishing job changes the voices list too.
-  const doneCount = jobs.filter((j) => j.status === "done").length;
-  useEffect(() => {
-    void queryClient.invalidateQueries({ queryKey: ["cloned-voices", orgId] });
-  }, [doneCount, orgId, queryClient]);
+  // Live progress while anything is rendering; a finished job's voice
+  // joins the list (useCloneJobs).
+  const { data: jobs = [] } = useCloneJobs(orgId);
+  const { data: voices = [] } = useClonedVoices(orgId);
+  const removeJobRequest = useRemoveCloneJob(orgId);
+  const removeVoiceRequest = useRemoveClonedVoice(orgId);
+  const submit = useSubmitClone(orgId);
 
   const toggleRecording = async () => {
     setError(null);
@@ -131,40 +107,37 @@ export function VoicesPage() {
     }
   };
 
-  const submit = useMutation({
-    mutationFn: async () => {
-      const form = new FormData();
-      form.append("name", name.trim());
-      form.append("locale", "en-US");
-      form.append(
-        "lines",
-        JSON.stringify(
-          lines
-            .split("\n")
-            .map((l) => l.trim())
-            .filter(Boolean)
-        )
-      );
-      form.append("consent", String(consent));
-      form.append("reference", reference!.blob, "reference.wav");
-      return api.postForm<CloneJob>(`/orgs/${orgId}/clone-jobs`, form);
-    },
-    onSuccess: () => {
-      setReference(null);
-      setName("");
-      setConsent(false);
-      void queryClient.invalidateQueries({ queryKey: ["clone-jobs", orgId] });
-    },
-    onError: (err) => setError(err instanceof ApiError ? err.detail : t("error")),
-  });
+  /** Queue the clone: the recording, its name, the lines, the consent. */
+  const send = () => {
+    const form = new FormData();
+    form.append("name", name.trim());
+    form.append("locale", "en-US");
+    form.append(
+      "lines",
+      JSON.stringify(
+        lines
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean)
+      )
+    );
+    form.append("consent", String(consent));
+    form.append("reference", reference!.blob, "reference.wav");
+    submit.mutate(form, {
+      onSuccess: () => {
+        setReference(null);
+        setName("");
+        setConsent(false);
+      },
+      onError: (err) => setError(err instanceof ApiError ? err.detail : t("error")),
+    });
+  };
 
   const removeJob = async (id: string) => {
-    await api.delete(`/orgs/${orgId}/clone-jobs/${id}`);
-    void queryClient.invalidateQueries({ queryKey: ["clone-jobs", orgId] });
+    await removeJobRequest.mutateAsync(id);
   };
   const removeVoice = async (label: string) => {
-    await api.delete(`/orgs/${orgId}/cloned-voices/${label}`);
-    void queryClient.invalidateQueries({ queryKey: ["cloned-voices", orgId] });
+    await removeVoiceRequest.mutateAsync(label);
   };
 
   // Play one rendered line through the normal synthesis path (cache hit).
@@ -173,12 +146,7 @@ export function VoicesPage() {
     const key = `${voice}:${text}`;
     setPlaying(key);
     try {
-      const payload = await api.post<{ audio_b64: string; audio_mime: string }>(`/tts/orgs/${orgId}/synthesize`, {
-        provider: "cloned",
-        voice,
-        locale: "en-US",
-        text,
-      });
+      const payload = await synthesize(orgId!, { provider: CLONED_PROVIDER, voice, locale: "en-US", text });
       const audio = new Audio(`data:${payload.audio_mime};base64,${payload.audio_b64}`);
       await audio.play();
       audio.onended = () => setPlaying(null);
@@ -255,13 +223,7 @@ export function VoicesPage() {
             label={t("voicesConsent")}
           />
 
-          <Button
-            className="mt-4"
-            icon="plus"
-            loading={submit.isPending}
-            disabled={!canSubmit}
-            onClick={() => submit.mutate()}
-          >
+          <Button className="mt-4" icon="plus" loading={submit.isPending} disabled={!canSubmit} onClick={send}>
             {t("voicesSubmit")}
           </Button>
           {error && <p className="field-error mt-2">{error}</p>}

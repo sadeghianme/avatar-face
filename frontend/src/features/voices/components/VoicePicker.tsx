@@ -1,26 +1,21 @@
-import { BrowserTTS } from "@liveface/embed";
-import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "@/components/ui/Field";
 import { Select } from "@/components/ui/Select";
-import { api } from "@/lib/api";
-import type { Provider, Voice } from "@/lib/types";
+import {
+  CLONED_PROVIDER,
+  type ClonedVoice,
+  SERVER_PROVIDER,
+  useClonedVoices,
+  useProviderVoices,
+  useSpeechLanguages,
+  useSpeechProviders,
+} from "@/features/voices/api";
 import { useOrg } from "@/providers/org";
 
-export const BROWSER_PROVIDER = "browser";
-export const SERVER_PROVIDER = "kokoro";
-export const CLONED_PROVIDER = "cloned";
-
-export interface SpeechLanguage {
-  locale: string;
-  name: string;
-  native_name: string;
-  sample: string;
-  provider: string;
-  voice: string;
-}
+/** One empty list for "no clones", so the voices query is not re-keyed by a new []. */
+const NO_CLONES: readonly ClonedVoice[] = [];
 
 export interface VoiceSelection {
   provider: string;
@@ -55,30 +50,15 @@ export function VoicePicker({
   // Cloned voices are rows in this org's speech cache, not a global list, so
   // they come from the org-scoped endpoint and are merged in here — the
   // generic provider listing is unauthenticated and could not scope them.
-  const { data: cloned = [] } = useQuery({
-    queryKey: ["cloned-voices", orgId],
-    queryFn: () => api.get<{ voice: string; label: string; locale: string }[]>(`/orgs/${orgId}/cloned-voices`),
-    enabled: Boolean(orgId),
-  });
+  const { data: cloned = NO_CLONES } = useClonedVoices(orgId);
 
   // Languages the server can actually speak, each already resolved to the
   // best provider and voice. Choosing a language is the primary act; the
   // provider is an implementation detail the picker fills in.
-  const { data: languages } = useQuery({
-    queryKey: ["tts-languages"],
-    queryFn: () => api.get<SpeechLanguage[]>("/tts/languages"),
-  });
+  const { data: languages } = useSpeechLanguages();
 
-  const { data: providers } = useQuery({
-    queryKey: ["tts-providers"],
-    queryFn: async () => {
-      const server = await api.get<Provider[]>("/tts/providers");
-      // Free local voices via the Web Speech API, when the browser has them.
-      return BrowserTTS.supported()
-        ? [{ name: BROWSER_PROVIDER, display_name: "Browser voice (free)" }, ...server]
-        : server;
-    },
-  });
+  // Free local voices via the Web Speech API first, when the browser has them.
+  const { data: providers } = useSpeechProviders();
 
   // Offered only when this org actually has one: an empty "Cloned voice"
   // entry would be a dead end for everyone who never recorded anything.
@@ -87,30 +67,7 @@ export function VoicePicker({
     () => (hasCloned ? [...(providers ?? []), { name: CLONED_PROVIDER, display_name: t("clonedVoices") }] : providers),
     [hasCloned, providers, t]
   );
-  const { data: voices } = useQuery({
-    queryKey: ["tts-voices", value.provider, cloned.length],
-    queryFn: async (): Promise<Voice[]> => {
-      if (value.provider === CLONED_PROVIDER) {
-        return cloned.map((c) => ({
-          id: c.voice,
-          name: c.label,
-          locale: c.locale || "en-US",
-          gender: "neutral",
-        }));
-      }
-      if (value.provider === BROWSER_PROVIDER) {
-        const list = await BrowserTTS.voices();
-        return list.map((v) => ({
-          id: v.voiceURI,
-          name: v.name,
-          locale: v.lang,
-          gender: "neutral",
-        }));
-      }
-      return api.get<Voice[]>(`/tts/providers/${value.provider}/voices`);
-    },
-    enabled: Boolean(value.provider),
-  });
+  const { data: voices } = useProviderVoices(value.provider, cloned);
 
   // Keep the PROVIDER valid too. The default names the server voice, which
   // an instance without the model files does not have — without this the

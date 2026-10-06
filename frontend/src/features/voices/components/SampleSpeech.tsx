@@ -11,8 +11,8 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { SERVER_PROVIDER, type VoiceSelection } from "@/features/voices/components/VoicePicker";
-import { fetchStream } from "@/lib/api";
+import { SERVER_PROVIDER, speechStream } from "@/features/voices/api";
+import type { VoiceSelection } from "@/features/voices/components/VoicePicker";
 import { cx } from "@/lib/cx";
 
 /** The built-in voice a sample is read in, by the dashboard's language. */
@@ -80,7 +80,7 @@ export function SampleSpeech({
       await player.unlock();
       const handle = streamSpeech(
         engine as unknown as Parameters<typeof streamSpeech>[0],
-        () => fetchStream(`/tts/orgs/${orgId}/stream`, { text, ...voice }),
+        () => speechStream(orgId, { text, ...voice }),
         { player }
       );
       stream.current = handle;
