@@ -12,7 +12,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Icon } from "@/components/ui/Icon";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Textarea } from "@/components/ui/Textarea";
 import {
   BROWSER_PROVIDER,
   defaultVoiceSelection,
@@ -140,7 +142,7 @@ export function SpeakPanel({
   };
 
   return (
-    <section className="card flex flex-col gap-4" aria-label={title}>
+    <Card as="section" className="flex flex-col gap-4" aria-label={title}>
       {title && (
         <div>
           <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h2>
@@ -148,8 +150,9 @@ export function SpeakPanel({
         </div>
       )}
       <VoicePicker value={selection} onChange={setSelection} />
-      <textarea
-        className="input min-h-24"
+      <Textarea
+        aria-label={t("speakPlaceholder")}
+        className="min-h-24"
         placeholder={t("speakPlaceholder")}
         value={text}
         onChange={(e) => {
@@ -159,16 +162,19 @@ export function SpeakPanel({
       />
       {error && <p className="field-error">{error}</p>}
       <div className="flex gap-2">
-        <button
-          className="btn-primary min-h-11 flex-1"
+        <Button
+          size="lg"
+          icon="speaker"
+          className="flex-1"
           disabled={!engine || !text.trim() || busy}
           onClick={() => void speak()}
         >
-          <Icon name="speaker" className="me-1.5 inline h-4 w-4" />
           {t("speak")}
-        </button>
-        <button
-          className="btn-secondary min-h-11"
+        </Button>
+        <Button
+          variant="secondary"
+          size="lg"
+          icon="stop"
           disabled={!engine}
           onClick={() => {
             browserTts?.stop();
@@ -176,21 +182,21 @@ export function SpeakPanel({
             setBusy(false);
           }}
         >
-          <Icon name="stop" className="me-1.5 inline h-4 w-4" />
           {t("stop")}
-        </button>
+        </Button>
         {sttSupported() && (
-          <button
-            className="btn-secondary min-h-11 min-w-11"
+          <Button
+            variant="secondary"
+            size="lg"
+            className="min-w-11"
+            icon={listening ? "ear" : "mic"}
             disabled={listening}
             onClick={() => void dictate()}
             title={t("dictate")}
             aria-label={t("dictate")}
-          >
-            <Icon name={listening ? "ear" : "mic"} className="h-4 w-4" />
-          </button>
+          />
         )}
       </div>
-    </section>
+    </Card>
   );
 }

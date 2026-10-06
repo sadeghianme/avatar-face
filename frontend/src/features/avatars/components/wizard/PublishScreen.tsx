@@ -44,21 +44,12 @@ import {
 } from "@/features/avatars/wizard";
 import { SampleSpeech } from "@/features/voices";
 import { api, ApiError } from "@/lib/api";
-import { cx } from "@/lib/cx";
 
 // The preview follows moved points this long after the last move.
 const PREVIEW_DELAY_MS = 400;
 const PARTS = ["eyes", "lips", "head"] as const;
 const PUBLISH_VIEWS = ["points", "preview"] as const;
 type PublishView = (typeof PUBLISH_VIEWS)[number];
-
-/** Play a sample: a full-width white button with the brand's play mark. */
-const PLAY_SAMPLE = cx(
-  "inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold shadow-sm transition",
-  "border border-gray-200 bg-white text-gray-900 hover:border-brand-300 hover:bg-brand-50/50 [&_svg]:text-brand-600",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:opacity-60",
-  "dark:border-line dark:bg-raised dark:text-white dark:hover:border-brand-500/40"
-);
 
 function tabStore(): DraftStore | null {
   try {
@@ -466,7 +457,6 @@ function Editor({
               orgId={orgId}
               text={t("wzSample")}
               labels={{ play: t("wzPlay"), stop: t("wzStop") }}
-              className={PLAY_SAMPLE}
             />
             {previewError && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{previewError}</p>}
           </div>
