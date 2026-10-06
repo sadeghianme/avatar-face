@@ -41,7 +41,9 @@ export type Pixel = [number, number, number, number];
 /** What one URL answers with. */
 export type Resource =
   | { json: unknown }
-  | { status: number }
+  /** An HTTP error; `error` is its JSON body (the API's `{code, detail}`),
+   *  else the body is an error page that is not JSON. */
+  | { status: number; error?: unknown }
   /** The request itself fails: offline, DNS, CORS. */
   | { offline: true }
   /** An image, all of one colour. */
@@ -52,6 +54,8 @@ export type Resource =
 export interface FakeNetwork {
   /** Every download in order, fetch() and image sources alike. */
   requested: string[];
+  /** Every fetch() in order, with the headers it sent. */
+  fetches: { url: string; headers: Record<string, string> }[];
 }
 
 /**
@@ -61,24 +65,31 @@ export interface FakeNetwork {
  */
 export function stubNetwork(resources: Record<string, Resource>): FakeNetwork {
   const requested: string[] = [];
+  const fetches: FakeNetwork["fetches"] = [];
   const find = (url: string): Resource => resources[url] ?? { status: 404 };
-  vi.stubGlobal("fetch", async (input: string | URL, init?: { signal?: AbortSignal | null }) => {
-    const url = String(input);
-    requested.push(url);
-    if (init?.signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
-    const resource = find(url);
-    if ("offline" in resource) throw new TypeError("Failed to fetch");
-    if ("json" in resource) {
-      return { ok: true, status: 200, json: async () => structuredClone(resource.json) };
+  vi.stubGlobal(
+    "fetch",
+    async (input: string | URL, init?: { signal?: AbortSignal | null; headers?: Record<string, string> }) => {
+      const url = String(input);
+      requested.push(url);
+      fetches.push({ url, headers: { ...(init?.headers ?? {}) } });
+      if (init?.signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+      const resource = find(url);
+      if ("offline" in resource) throw new TypeError("Failed to fetch");
+      if ("json" in resource) {
+        return { ok: true, status: 200, json: async () => structuredClone(resource.json) };
+      }
+      const error = "error" in resource ? resource.error : undefined;
+      return {
+        ok: false,
+        status: "status" in resource ? resource.status : 404,
+        json: async () => {
+          if (error === undefined) throw new SyntaxError("Unexpected token '<'");
+          return structuredClone(error);
+        },
+      };
     }
-    return {
-      ok: false,
-      status: "status" in resource ? resource.status : 404,
-      json: async () => {
-        throw new SyntaxError("Unexpected token '<'");
-      },
-    };
-  });
+  );
 
   class NetworkImage {
     crossOrigin: string | null = null;
@@ -108,7 +119,7 @@ export function stubNetwork(resources: Record<string, Resource>): FakeNetwork {
     }
   }
   vi.stubGlobal("Image", NetworkImage);
-  return { requested };
+  return { requested, fetches };
 }
 
 /**
@@ -119,24 +130,27 @@ export function stubNetwork(resources: Record<string, Resource>): FakeNetwork {
  */
 export function fakeCanvas(fill: Pixel = [180, 180, 180, 180]) {
   let drawn: Pixel | undefined;
-  const ctx = new Proxy({
-    drawImage: (image: { fill?: Pixel }) => {
-      drawn = image.fill ?? drawn;
-    },
-    getImageData: (_x: number, _y: number, w: number, h: number) => {
-      const data = new Uint8ClampedArray(Math.max(1, w * h) * 4);
-      const colour = drawn ?? fill;
-      for (let i = 0; i < data.length; i += 4) data.set(colour, i);
-      return { data, width: w, height: h };
-    },
-    createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }),
-    createLinearGradient: () => ({ addColorStop() {} }),
-    createRadialGradient: () => ({ addColorStop() {} }),
-    measureText: () => ({ width: 0 }),
-  } as Record<string, unknown>, {
-    get: (obj, key: string) => (key in obj ? obj[key] : () => undefined),
-    set: (obj, key: string, value) => ((obj[key] = value), true),
-  });
+  const ctx = new Proxy(
+    {
+      drawImage: (image: { fill?: Pixel }) => {
+        drawn = image.fill ?? drawn;
+      },
+      getImageData: (_x: number, _y: number, w: number, h: number) => {
+        const data = new Uint8ClampedArray(Math.max(1, w * h) * 4);
+        const colour = drawn ?? fill;
+        for (let i = 0; i < data.length; i += 4) data.set(colour, i);
+        return { data, width: w, height: h };
+      },
+      createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }),
+      createLinearGradient: () => ({ addColorStop() {} }),
+      createRadialGradient: () => ({ addColorStop() {} }),
+      measureText: () => ({ width: 0 }),
+    } as Record<string, unknown>,
+    {
+      get: (obj, key: string) => (key in obj ? obj[key] : () => undefined),
+      set: (obj, key: string, value) => ((obj[key] = value), true),
+    }
+  );
   return {
     width: 256,
     height: 256,
@@ -164,7 +178,17 @@ export function paintedImage(width: number, height: number, paint: (x: number, y
  * into does; `context: false` makes getContext give nothing.
  */
 export function readingCanvas(size = 256, { taint = false, context = true } = {}): HTMLCanvasElement {
-  type Drawn = { image: PaintedImage; sx: number; sy: number; sw: number; sh: number; dx: number; dy: number; dw: number; dh: number };
+  type Drawn = {
+    image: PaintedImage;
+    sx: number;
+    sy: number;
+    sw: number;
+    sh: number;
+    dx: number;
+    dy: number;
+    dw: number;
+    dh: number;
+  };
   let drawn: Drawn | null = null;
   const target: Record<string, unknown> = {
     drawImage: (image: PaintedImage, ...a: number[]) => {
@@ -180,7 +204,8 @@ export function readingCanvas(size = 256, { taint = false, context = true } = {}
       const d = drawn;
       if (d) {
         for (let n = 0; n < w * h; n++) {
-          const px = x + (n % w), py = y + Math.floor(n / w);
+          const px = x + (n % w),
+            py = y + Math.floor(n / w);
           const sx = Math.floor(d.sx + ((px + 0.5 - d.dx) * d.sw) / d.dw);
           const sy = Math.floor(d.sy + ((py + 0.5 - d.dy) * d.sh) / d.dh);
           data.set(d.image.paint(sx, sy), n * 4);

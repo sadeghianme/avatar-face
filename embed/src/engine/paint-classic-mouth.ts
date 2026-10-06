@@ -9,7 +9,7 @@
  * Teeth are anatomically fixed-size and hang from the lips; jawOpen grows
  * the dark gap, NOT the teeth.
  */
-import type { KindProfile } from "../kind-profile";
+import type { KindProfile } from "./kind-profile";
 import { centralMouthAnchors, type MouthExtension } from "../mouth-extension";
 import { DEFAULT_TUNING, type BlendWeights } from "../types";
 import type { Point } from "./geometry";
@@ -142,19 +142,29 @@ export class ClassicMouth {
     // A smiling/bowed seam is not its corner chord. Seat oral geometry at
     // the measured central seam, otherwise upper incisors disappear above
     // the aperture while the lower row appears to be the upper teeth.
-    const [anchorA, anchorB] = centralMouthAnchors(this.innerRing.map(i => f.neutral[i]), neutralA, neutralB);
+    const [anchorA, anchorB] = centralMouthAnchors(
+      this.innerRing.map((i) => f.neutral[i]),
+      neutralA,
+      neutralB
+    );
     ctx.save();
     try {
       extension.draw(ctx, {
         weights: f.weights,
         viseme: f.viseme(),
-        upper: a.upper, lower: a.lower, aperture: a.path,
+        upper: a.upper,
+        lower: a.lower,
+        aperture: a.path,
         neutralLeft: anchorA.x <= anchorB.x ? anchorA : anchorB,
         neutralRight: anchorA.x <= anchorB.x ? anchorB : anchorA,
-        lipColour: f.lipColour, skinColour: f.skinColour ?? undefined,
-        cavityAlpha: a.cavityAlpha, teethAlpha: a.teethAlpha,
+        lipColour: f.lipColour,
+        skinColour: f.skinColour ?? undefined,
+        cavityAlpha: a.cavityAlpha,
+        teethAlpha: a.teethAlpha,
       });
-    } finally { ctx.restore(); }
+    } finally {
+      ctx.restore();
+    }
   }
 
   /**
@@ -225,10 +235,8 @@ export class ClassicMouth {
     // twice — once inside `retract`/gapRatio and again as an explicit
     // multiplier — which is why the spread vowels saturated.
     const teethAmount =
-      Math.max(
-        Math.max(0, Math.min(1, (a.gapRatio - teethGap) / 0.08)),
-        a.teethDrive * 0.75
-      ) * Math.max(0, Math.min(1, 1 - a.rounding / 0.45));
+      Math.max(Math.max(0, Math.min(1, (a.gapRatio - teethGap) / 0.08)), a.teethDrive * 0.75) *
+      Math.max(0, Math.min(1, 1 - a.rounding / 0.45));
     ctx.globalAlpha = 1;
     if (!(this.profile.teeth && teethAmount > 0.02 && teethAlpha > 0.02)) return;
     const upperH = Math.min(bh * 0.3, bw * 0.04) * (0.45 + 0.55 * teethAmount);
@@ -380,12 +388,7 @@ export class ClassicMouth {
       ctx.moveTo(a.x + gapPx, ay);
       ctx.quadraticCurveTo(mid.x, my - 0.1 * h * dir, b.x - gapPx, by);
       ctx.lineTo(b.x - gapPx, by + h * 0.72 * dir);
-      ctx.quadraticCurveTo(
-        mid.x,
-        my + h * 1.1 * dir,
-        a.x + gapPx,
-        ay + h * 0.72 * dir
-      );
+      ctx.quadraticCurveTo(mid.x, my + h * 1.1 * dir, a.x + gapPx, ay + h * 0.72 * dir);
       ctx.closePath();
 
       // Darker toward the corners (in shadow) and darker overall on the
@@ -393,7 +396,10 @@ export class ClassicMouth {
       const tint = (isLower ? 0.42 : 0.5) + (isLower ? 0.36 : 0.5) * depth;
       const g = ctx.createLinearGradient(0, my, 0, my + h * dir);
       g.addColorStop(0, `rgba(${Math.round(236 * tint)}, ${Math.round(230 * tint)}, ${Math.round(216 * tint)}, 0.98)`);
-      g.addColorStop(0.7, `rgba(${Math.round(248 * tint)}, ${Math.round(242 * tint)}, ${Math.round(228 * tint)}, 0.97)`);
+      g.addColorStop(
+        0.7,
+        `rgba(${Math.round(248 * tint)}, ${Math.round(242 * tint)}, ${Math.round(228 * tint)}, 0.97)`
+      );
       g.addColorStop(1, `rgba(${Math.round(200 * tint)}, ${Math.round(192 * tint)}, ${Math.round(176 * tint)}, 0.8)`);
       ctx.fillStyle = g;
       ctx.fill();
@@ -406,9 +412,7 @@ export class ClassicMouth {
     // Shadow where the row meets the lip/gum.
     const first = archAt(0);
     const last = archAt(1);
-    const y0 = isLower
-      ? Math.max(first.y, last.y) - height * 0.1
-      : Math.min(first.y, last.y) - height * 0.25;
+    const y0 = isLower ? Math.max(first.y, last.y) - height * 0.1 : Math.min(first.y, last.y) - height * 0.25;
     const shade = ctx.createLinearGradient(0, y0, 0, y0 + height * 0.7 * dir);
     shade.addColorStop(0, "rgba(70, 26, 24, 0.5)");
     shade.addColorStop(1, "rgba(70, 26, 24, 0)");

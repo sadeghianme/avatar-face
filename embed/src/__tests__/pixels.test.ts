@@ -90,7 +90,8 @@ describe("the engine's pixels", () => {
   });
   afterAll(() => {
     if (!MODE) return;
-    goldens["//"] = "Written by npm run test:pixels:update / test:pixels:add-platform (src/__tests__/pixels.test.ts), never by hand.";
+    goldens["//"] =
+      "Written by npm run test:pixels:update / test:pixels:add-platform (src/__tests__/pixels.test.ts), never by hand.";
     writeFileSync(GOLDENS, JSON.stringify(goldens, null, 1) + "\n");
   });
 
@@ -112,7 +113,9 @@ describe("the engine's pixels", () => {
       // The poses and the scene really changed the picture (a closed mouth
       // may well look like the rest: an animal's does).
       const rest = frames[0].sha256;
-      expect(frames.filter((f) => /held (aa|E|ou)|whole/.test(f.name) && f.sha256 === rest).map((f) => f.name)).toEqual([]);
+      expect(frames.filter((f) => /held (aa|E|ou)|whole/.test(f.name) && f.sha256 === rest).map((f) => f.name)).toEqual(
+        []
+      );
 
       if (MODE === "1") {
         // What is being blessed, to look at before committing it.
@@ -125,24 +128,30 @@ describe("the engine's pixels", () => {
 
       const golden = goldens.subjects[name];
       expect(frames.map((f) => f.name)).toEqual(golden.map((f) => f.name));
-      const hashes = MODE === "hashes" || process.env.PIXELS_GRID_ONLY === "1" ? undefined : goldens.hashes[HERE]?.[name];
+      const hashes =
+        MODE === "hashes" || process.env.PIXELS_GRID_ONLY === "1" ? undefined : goldens.hashes[HERE]?.[name];
       const failures: string[] = [];
       frames.forEach((frame, i) => {
         const full = drift(Buffer.from(frame.full, "base64"), Buffer.from(golden[i].full, "base64"));
         const mouth = drift(Buffer.from(frame.mouth, "base64"), Buffer.from(golden[i].mouth, "base64"));
         const hashOff = hashes !== undefined && frame.sha256 !== hashes[i];
         const gridOff =
-          full.max > TOLERANCE.full.max || full.mean > TOLERANCE.full.mean ||
-          mouth.max > TOLERANCE.mouth.max || mouth.mean > TOLERANCE.mouth.mean;
+          full.max > TOLERANCE.full.max ||
+          full.mean > TOLERANCE.full.mean ||
+          mouth.max > TOLERANCE.mouth.max ||
+          mouth.mean > TOLERANCE.mouth.mean;
         if (!hashOff && !gridOff) return;
         failures.push(
           `${frame.name}: ${hashOff ? "pixels differ; " : ""}whole cells max ${full.max} mean ${full.mean.toFixed(3)}, ` +
-          `mouth cells max ${mouth.max} mean ${mouth.mean.toFixed(3)}`
+            `mouth cells max ${mouth.max} mean ${mouth.mean.toFixed(3)}`
         );
         mkdirSync(`${DIST}pixel-diffs`, { recursive: true });
         writeFileSync(`${DIST}pixel-diffs/${file(name, frame.name)}`, drawn[i].png());
       });
-      expect(failures, `${name}: goldens drawn on ${goldens.platform}, ${hashes ? "with" : "without"} hashes for ${HERE}`).toEqual([]);
+      expect(
+        failures,
+        `${name}: goldens drawn on ${goldens.platform}, ${hashes ? "with" : "without"} hashes for ${HERE}`
+      ).toEqual([]);
       if (MODE === "hashes") goldens.hashes[HERE][name] = frames.map((f) => f.sha256);
     });
   }

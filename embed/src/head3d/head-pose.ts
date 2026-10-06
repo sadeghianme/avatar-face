@@ -6,7 +6,7 @@
  * degrees, which is what the skull is for.
  */
 import type { HeadPose, HeadPoseDriver } from "../engine3d";
-import { HeadMotion } from "../headmotion";
+import { HeadMotion } from "../engine/headmotion";
 
 /** Peak travel at |pose| = 1, which the signed-square draw rarely reaches. */
 export const HEAD_POSE_RANGE = { yawDeg: 20, pitchDeg: 12, rollDeg: 4 } as const;

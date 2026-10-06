@@ -9,8 +9,8 @@ import {
   type Pt,
   type Rgb,
 } from "./character-mouth";
-import { enamelReveal } from "./mouth/lip-occlusion-model";
-import type { BlendWeights } from "./types";
+import { enamelReveal } from "../mouth/lip-occlusion-model";
+import type { BlendWeights } from "../types";
 
 /**
  * Painting the character mouth: what is inside the opening.
@@ -26,7 +26,18 @@ import type { BlendWeights } from "./types";
 /** How high the tongue sits for each sound, 0 (resting) to 1 (against the
  *  teeth). The engine eases it: the sounds are discrete and the tongue is not. */
 export const TONGUE_RAISE: Record<string, number> = {
-  TH: 1, DD: 0.85, nn: 0.8, SS: 0.55, CH: 0.5, kk: 0.45, RR: 0.4, ih: 0.4, E: 0.3, ou: 0.22, oh: 0.12, aa: 0.05,
+  TH: 1,
+  DD: 0.85,
+  nn: 0.8,
+  SS: 0.55,
+  CH: 0.5,
+  kk: 0.45,
+  RR: 0.4,
+  ih: 0.4,
+  E: 0.3,
+  ou: 0.22,
+  oh: 0.12,
+  aa: 0.05,
 };
 
 export interface CharacterFrameInput {
@@ -69,8 +80,7 @@ export function along(line: readonly Pt[], t: number): Pt {
 }
 
 /** Taper to nothing at both ends: 1 in the middle, 0 at t = 0 and 1. */
-export const bump = (t: number, edge: number) =>
-  Math.pow(Math.max(0, 1 - Math.pow(Math.abs(2 * t - 1), edge)), 0.6);
+export const bump = (t: number, edge: number) => Math.pow(Math.max(0, 1 - Math.pow(Math.abs(2 * t - 1), edge)), 0.6);
 
 /** How much of the upper teeth show, 0..1: the mouth open, or the lips drawn
  *  back, and never on a rounded mouth. A jaw that has only just parted the
@@ -133,8 +143,13 @@ function bandFrom(ctx: CanvasRenderingContext2D, line: readonly Pt[], height: nu
 /** Fill the current path with enamel: flat on cel art, shaded in a render and
  *  receding into the mouth's corners. */
 function fillEnamel(
-  ctx: CanvasRenderingContext2D, look: CharacterLook, flat: boolean,
-  top: number, height: number, left: number, right: number
+  ctx: CanvasRenderingContext2D,
+  look: CharacterLook,
+  flat: boolean,
+  top: number,
+  height: number,
+  left: number,
+  right: number
 ) {
   const enamel = toothColour(look);
   if (flat) {
@@ -177,8 +192,12 @@ export function paintCharacter(ctx: CanvasRenderingContext2D, f: CharacterFrameI
   const bottom = Math.max(...o.lower.map((p) => p.y));
   const left = Math.min(...o.upper.map((p) => p.x));
   const right = Math.max(...o.upper.map((p) => p.x));
-  const box = (): [number, number, number, number] =>
-    [left - W * 0.1, top - W * 0.1, right - left + W * 0.2, bottom - top + W * 0.2];
+  const box = (): [number, number, number, number] => [
+    left - W * 0.1,
+    top - W * 0.1,
+    right - left + W * 0.2,
+    bottom - top + W * 0.2,
+  ];
 
   ctx.save();
   ctx.clip(f.clip);
@@ -268,8 +287,10 @@ export function paintCharacter(ctx: CanvasRenderingContext2D, f: CharacterFrameI
       ctx.stroke();
       if (!flat) {
         // Light beside the groove, soft and low on the tongue.
-        const rx = Math.max(span * 0.14, 2), ry = Math.max(rise * 0.2, 1.5);
-        const cx = mid.x - rx * 0.5, cy = mid.y + rise * 0.28;
+        const rx = Math.max(span * 0.14, 2),
+          ry = Math.max(rise * 0.2, 1.5);
+        const cx = mid.x - rx * 0.5,
+          cy = mid.y + rise * 0.28;
         const shine = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
         shine.addColorStop(0, "rgba(255, 226, 220, 0.34)");
         shine.addColorStop(1, "rgba(255, 226, 220, 0)");
@@ -335,7 +356,11 @@ export function paintCharacter(ctx: CanvasRenderingContext2D, f: CharacterFrameI
     // lip's tone fading inwards, so the cavity does not end in a cut.
     const inner = mix(look.line, look.lip, 0.45);
     ctx.lineJoin = "round";
-    for (const [k, a] of [[6, 0.14], [3.4, 0.2], [1.6, 0.28]] as const) {
+    for (const [k, a] of [
+      [6, 0.14],
+      [3.4, 0.2],
+      [1.6, 0.28],
+    ] as const) {
       ctx.strokeStyle = rgb(inner, a);
       ctx.lineWidth = feather * k;
       ctx.stroke(f.clip);
@@ -354,7 +379,11 @@ export function paintCharacter(ctx: CanvasRenderingContext2D, f: CharacterFrameI
     ctx.stroke(f.clip);
   } else {
     const edge = mix(look.line, look.lip, 0.25);
-    for (const [k, a] of [[5.5, 0.07], [2.8, 0.15], [1.3 + tuck * 0.7, 0.3 + tuck * 0.25]] as const) {
+    for (const [k, a] of [
+      [5.5, 0.07],
+      [2.8, 0.15],
+      [1.3 + tuck * 0.7, 0.3 + tuck * 0.25],
+    ] as const) {
       ctx.strokeStyle = rgb(edge, a);
       ctx.lineWidth = Math.max(1, feather * k);
       ctx.stroke(f.clip);

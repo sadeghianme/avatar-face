@@ -12,10 +12,21 @@ export type ArkitWeights = Record<string, number>;
 /** Oculus viseme -> Ready Player Me morph-target name. ih/oh/ou are I/O/U
  *  in RPM's naming. */
 export const VISEME_TO_MORPH: Readonly<Record<string, string>> = {
-  sil: "viseme_sil", PP: "viseme_PP", FF: "viseme_FF", TH: "viseme_TH",
-  DD: "viseme_DD", kk: "viseme_kk", CH: "viseme_CH", SS: "viseme_SS",
-  nn: "viseme_nn", RR: "viseme_RR", aa: "viseme_aa", E: "viseme_E",
-  ih: "viseme_I", oh: "viseme_O", ou: "viseme_U",
+  sil: "viseme_sil",
+  PP: "viseme_PP",
+  FF: "viseme_FF",
+  TH: "viseme_TH",
+  DD: "viseme_DD",
+  kk: "viseme_kk",
+  CH: "viseme_CH",
+  SS: "viseme_SS",
+  nn: "viseme_nn",
+  RR: "viseme_RR",
+  aa: "viseme_aa",
+  E: "viseme_E",
+  ih: "viseme_I",
+  oh: "viseme_O",
+  ou: "viseme_U",
 };
 
 /** Every viseme morph target, in table order. */

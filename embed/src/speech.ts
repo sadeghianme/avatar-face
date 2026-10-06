@@ -50,8 +50,7 @@ export function splitSentences(text: string): string[] {
   const merged: string[] = [];
   for (const chunk of wrapped) {
     const prev = merged[merged.length - 1];
-    if (prev && (chunk.length < MIN_CHUNK || prev.length < MIN_CHUNK) &&
-        prev.length + chunk.length + 1 <= MAX_CHUNK) {
+    if (prev && (chunk.length < MIN_CHUNK || prev.length < MIN_CHUNK) && prev.length + chunk.length + 1 <= MAX_CHUNK) {
       merged[merged.length - 1] = `${prev} ${chunk}`;
     } else {
       merged.push(chunk);

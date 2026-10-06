@@ -17,7 +17,13 @@ function morphMesh(names: string[], start = 0): THREE.Mesh {
 const read = (mesh: THREE.Mesh, name: string) => mesh.morphTargetInfluences![mesh.morphTargetDictionary![name]];
 
 const still: MorphFrame = {
-  held: null, speechNames: [], arkit: null, visemes: {}, blink: 0, look: {}, brow: 0,
+  held: null,
+  speechNames: [],
+  arkit: null,
+  visemes: {},
+  blink: 0,
+  look: {},
+  brow: 0,
 };
 
 describe("what the engine finds in a model", () => {
@@ -184,7 +190,9 @@ describe("the head and neck nodes", () => {
 
   it("ask no driver when there is no head to turn", () => {
     const calls: number[] = [];
-    const bones = new HeadBones(null, new THREE.Object3D(), { update: () => (calls.push(1), { yaw: 1, pitch: 1, roll: 1 }) });
+    const bones = new HeadBones(null, new THREE.Object3D(), {
+      update: () => (calls.push(1), { yaw: 1, pitch: 1, roll: 1 }),
+    });
     bones.update(frame);
     expect(calls).toEqual([]);
   });

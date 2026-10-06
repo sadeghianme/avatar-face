@@ -6,9 +6,9 @@
  * the lower face's rig. All of it is rebuilt whole when the texture or the
  * viewport changes, and nothing else changes it.
  */
-import { CharacterField } from "../character-mouth";
-import { buildLowerFaceRig, type LowerFaceRig } from "../jaw-rig";
-import type { KindProfile } from "../kind-profile";
+import { CharacterField } from "./character-mouth";
+import { buildLowerFaceRig, type LowerFaceRig } from "./jaw-rig";
+import type { KindProfile } from "./kind-profile";
 import type { Rig } from "../types";
 import { layOutFace, placeHead, refineMesh, type FaceMesh, type HeadGeom, type Point } from "./geometry";
 import { cutHeadLayer } from "./render2d";

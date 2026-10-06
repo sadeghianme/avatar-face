@@ -1,8 +1,16 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { EYE_LINE, eyeLine, faceViewport, fullViewport, MAX_UPSCALE, viewportFor, type ViewportInput } from "../viewport";
-import type { Rig } from "../types";
+import {
+  EYE_LINE,
+  eyeLine,
+  faceViewport,
+  fullViewport,
+  MAX_UPSCALE,
+  viewportFor,
+  type ViewportInput,
+} from "../viewport";
+import type { Rig } from "../../types";
 
 /**
  * The viewport: the whole picture laid on the canvas, "face" and "full"
@@ -11,25 +19,52 @@ import type { Rig } from "../types";
  * across the canvas shapes the product uses.
  */
 
-const rig = JSON.parse(readFileSync(new URL("./fixtures/human-rig.json", import.meta.url), "utf8")) as Rig;
+const rig = JSON.parse(
+  readFileSync(new URL("../../__tests__/fixtures/human-rig.json", import.meta.url), "utf8")
+) as Rig;
 
 const square: Omit<ViewportInput, "canvasW" | "canvasH" | "zoom"> = {
-  imageW: rig.image_size[0], imageH: rig.image_size[1], faceBox: rig.face_box, eyeY: eyeLine(rig.points, rig.face_box),
+  imageW: rig.image_size[0],
+  imageH: rig.image_size[1],
+  faceBox: rig.face_box,
+  eyeY: eyeLine(rig.points, rig.face_box),
 };
 /** A wizard picture: the face in the upper half, shoulders below. */
 const tall: Omit<ViewportInput, "canvasW" | "canvasH" | "zoom"> = {
-  imageW: 768, imageH: 1376, faceBox: [199, 473, 571, 883], eyeY: 620,
+  imageW: 768,
+  imageH: 1376,
+  faceBox: [199, 473, 571, 883],
+  eyeY: 620,
 };
-const SIZES: [number, number][] = [[200, 200], [300, 400], [400, 300], [600, 600], [800, 300], [40, 40], [1000, 1000]];
+const SIZES: [number, number][] = [
+  [200, 200],
+  [300, 400],
+  [400, 300],
+  [600, 600],
+  [800, 300],
+  [40, 40],
+  [1000, 1000],
+];
 
-const at = (base: typeof square, canvasW: number, canvasH: number, zoom: number): ViewportInput => ({ ...base, canvasW, canvasH, zoom });
+const at = (base: typeof square, canvasW: number, canvasH: number, zoom: number): ViewportInput => ({
+  ...base,
+  canvasW,
+  canvasH,
+  zoom,
+});
 /** The canvas rectangle the picture covers. */
 const picture = (i: ViewportInput, v: { scale: number; offsetX: number; offsetY: number }) => ({
-  x0: v.offsetX, y0: v.offsetY, x1: v.offsetX + i.imageW * v.scale, y1: v.offsetY + i.imageH * v.scale,
+  x0: v.offsetX,
+  y0: v.offsetY,
+  x1: v.offsetX + i.imageW * v.scale,
+  y1: v.offsetY + i.imageH * v.scale,
 });
 
 describe("the face zoom", () => {
-  for (const [name, base] of [["square portrait", square], ["tall picture", tall]] as const) {
+  for (const [name, base] of [
+    ["square portrait", square],
+    ["tall picture", tall],
+  ] as const) {
     for (const [cw, ch] of SIZES) {
       const i = at(base, cw, ch, 1);
       const v = faceViewport(i);
@@ -114,7 +149,15 @@ describe("the face zoom", () => {
   });
 
   it("keeps a small picture sharp: the canvas background shows beside it instead of a blur", () => {
-    const i: ViewportInput = { imageW: 200, imageH: 200, faceBox: [50, 40, 150, 170], eyeY: 90, canvasW: 1000, canvasH: 1000, zoom: 1 };
+    const i: ViewportInput = {
+      imageW: 200,
+      imageH: 200,
+      faceBox: [50, 40, 150, 170],
+      eyeY: 90,
+      canvasW: 1000,
+      canvasH: 1000,
+      zoom: 1,
+    };
     const v = faceViewport(i);
     expect(v.scale).toBe(MAX_UPSCALE);
     const p = picture(i, v);
@@ -129,7 +172,10 @@ describe("the face zoom", () => {
 });
 
 describe("the full zoom", () => {
-  for (const [name, base] of [["square portrait", square], ["tall picture", tall]] as const) {
+  for (const [name, base] of [
+    ["square portrait", square],
+    ["tall picture", tall],
+  ] as const) {
     for (const [cw, ch] of SIZES) {
       it(`${name} ${cw}x${ch}: the whole picture is visible, contained and centred`, () => {
         const i = at(base, cw, ch, 0);
@@ -153,7 +199,8 @@ describe("the full zoom", () => {
 describe("zoom between", () => {
   it("is the face at 1, the whole picture at 0, and in proportion between", () => {
     const i = at(tall, 600, 600, 0.5);
-    const face = faceViewport({ ...i, zoom: 1 }), full = fullViewport({ ...i, zoom: 0 });
+    const face = faceViewport({ ...i, zoom: 1 }),
+      full = fullViewport({ ...i, zoom: 0 });
     const half = viewportFor(i);
     expect(half.scale).toBeCloseTo((face.scale + full.scale) / 2, 9);
     expect(half.offsetY).toBeCloseTo((face.offsetY + full.offsetY) / 2, 9);

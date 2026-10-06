@@ -2,7 +2,11 @@ import type { CuePlayer } from "../browser-tts";
 import type { Cue } from "../types";
 
 type Receiver = CuePlayer & { updateCueTrack?: (cues: Cue[]) => void };
-interface Span { start: number; end: number; offset: number }
+interface Span {
+  start: number;
+  end: number;
+  offset: number;
+}
 
 /**
  * Maps scheduled audio time to content time, excluding buffer underruns.

@@ -14,10 +14,21 @@ import type { Cue } from "../../types";
  * camera is read through its seam.
  */
 
-const ARKIT = ["jawOpen", "mouthClose", "mouthPucker", "mouthFunnel", "mouthStretchLeft", "mouthStretchRight", "eyeBlinkLeft"];
+const ARKIT = [
+  "jawOpen",
+  "mouthClose",
+  "mouthPucker",
+  "mouthFunnel",
+  "mouthStretchLeft",
+  "mouthStretchRight",
+  "eyeBlinkLeft",
+];
 const VISEMES = ["viseme_sil", "viseme_aa", "viseme_PP"];
 
-const CUES: Cue[] = [{ t: 0, viseme: "aa", a: 1 }, { t: 5000, viseme: "aa", a: 1 }];
+const CUES: Cue[] = [
+  { t: 0, viseme: "aa", a: 1 },
+  { t: 5000, viseme: "aa", a: 1 },
+];
 
 /** The lights the engine put in the scene it added the model to. */
 const lightsOf = (model: THREE.Object3D) =>
@@ -83,7 +94,11 @@ describe("the 3D engine's options", () => {
     expect(key.intensity).toBe(0.6);
     engine.destroy();
     const plain = engineWith(ARKIT);
-    expect(lightsOf(plain.root).map((l) => l.intensity).sort()).toEqual([1.4, 1.6]);
+    expect(
+      lightsOf(plain.root)
+        .map((l) => l.intensity)
+        .sort()
+    ).toEqual([1.4, 1.6]);
     plain.engine.destroy();
   });
 

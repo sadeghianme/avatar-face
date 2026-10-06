@@ -181,8 +181,7 @@ describe("the widget's continuous mouth", () => {
     expect(teethPhotoOf(attached.engine)).toBe(true);
     // Beside the bundled motion the widget names (`${apiBase}/…`), not
     // beside the customer's page; each once, and the motion not at all.
-    expect(network.requested.filter((url) => [KIT, BUNDLED, ...STANDARD].includes(url)))
-      .toEqual([KIT, ...STANDARD]);
+    expect(network.requested.filter((url) => [KIT, BUNDLED, ...STANDARD].includes(url))).toEqual([KIT, ...STANDARD]);
     expect(network.requested.some((url) => url.startsWith("https://shop.example"))).toBe(false);
   });
 
@@ -211,7 +210,8 @@ describe("the widget's continuous mouth", () => {
     await expect(attached.done).rejects.toMatchObject({ name: "DentalPhotoError" });
     expect(mouthOf(attached.engine)).toBeNull();
     const mouthFiles = network.requested.filter((url) =>
-      [KIT, BUNDLED, oral.image_url, oral.rig_url, ...STANDARD].includes(url));
+      [KIT, BUNDLED, oral.image_url, oral.rig_url, ...STANDARD].includes(url)
+    );
     // Its own photo refused is not replaced by the standard teeth: the
     // owner's choice of teeth is not overruled on visitors' pages.
     expect(mouthFiles).toEqual([KIT, oral.image_url, oral.rig_url]);

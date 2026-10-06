@@ -43,7 +43,11 @@ export interface ViewportInput {
 }
 
 /** The mapping rig image px -> canvas px: canvas = image * scale + offset. */
-export interface Viewport { scale: number; offsetX: number; offsetY: number }
+export interface Viewport {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+}
 
 /** Where the eyes sit on a "face" canvas, as a fraction of its height. */
 export const EYE_LINE = 0.4;
@@ -79,7 +83,8 @@ const clamp = (v: number, lo: number, hi: number) => (lo > hi ? (lo + hi) / 2 : 
 export function fullViewport(i: ViewportInput): Viewport {
   const scale = Math.min(i.canvasW / i.imageW, i.canvasH / i.imageH, MAX_UPSCALE);
   const pan = panOf(i);
-  const pictureW = i.imageW * scale, pictureH = i.imageH * scale;
+  const pictureW = i.imageW * scale,
+    pictureH = i.imageH * scale;
   return {
     scale,
     offsetX: settle((i.canvasW - pictureW) / 2 - pan.x * i.canvasW, pictureW, i.canvasW),
@@ -90,14 +95,16 @@ export function fullViewport(i: ViewportInput): Viewport {
 /** The face, composed as a portrait. */
 export function faceViewport(i: ViewportInput): Viewport {
   const [bx0, by0, bx1, by1] = i.faceBox;
-  const bw = Math.max(1, bx1 - bx0), bh = Math.max(1, by1 - by0);
+  const bw = Math.max(1, bx1 - bx0),
+    bh = Math.max(1, by1 - by0);
   // The view: hair margin above, the face's own margin to each side, down
   // to the picture's bottom edge, all inside the picture.
   const vx0 = Math.max(0, bx0 - bw * FACE_MARGIN.side);
   const vx1 = Math.min(i.imageW, bx1 + bw * FACE_MARGIN.side);
   const vy0 = Math.max(0, by0 - bh * FACE_MARGIN.top);
   const vy1 = i.imageH;
-  const viewW = Math.max(1, vx1 - vx0), viewH = Math.max(1, vy1 - vy0);
+  const viewW = Math.max(1, vx1 - vx0),
+    viewH = Math.max(1, vy1 - vy0);
   // The span that must fit: brows to below the chin.
   const my0 = Math.max(0, by0 + bh * BROW);
   const my1 = Math.min(i.imageH, by1 + bh * FACE_MARGIN.chin);
@@ -112,7 +119,8 @@ export function faceViewport(i: ViewportInput): Viewport {
   if (closer > 0) scale = Math.min(scale * (1 + closer * ZOOM_IN_GAIN), MAX_UPSCALE);
 
   const pan = panOf(i);
-  const pictureW = i.imageW * scale, pictureH = i.imageH * scale;
+  const pictureW = i.imageW * scale,
+    pictureH = i.imageH * scale;
   // Across: the face box centred, then the owner's pan, as far as the
   // picture still covers the canvas; a picture narrower than the canvas
   // sits where the pan puts it, inside the canvas.
@@ -146,7 +154,10 @@ export function viewportFor(i: ViewportInput): Viewport {
 }
 
 /** The eye line of a face mesh: the mean height of the eye corners. */
-export function eyeLine(points: readonly (readonly [number, number])[], faceBox: readonly [number, number, number, number]): number {
+export function eyeLine(
+  points: readonly (readonly [number, number])[],
+  faceBox: readonly [number, number, number, number]
+): number {
   const corners = [33, 133, 263, 362].filter((k) => k < points.length);
   if (corners.length < 4) return faceBox[1] + (faceBox[3] - faceBox[1]) * 0.35;
   return corners.reduce((sum, k) => sum + points[k][1], 0) / corners.length;

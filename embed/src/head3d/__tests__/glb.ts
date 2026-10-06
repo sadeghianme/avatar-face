@@ -32,7 +32,13 @@ export interface Accessor {
   min?: number[];
   max?: number[];
 }
-export interface BufferView { buffer: number; byteOffset?: number; byteLength: number; byteStride?: number; target?: number }
+export interface BufferView {
+  buffer: number;
+  byteOffset?: number;
+  byteLength: number;
+  byteStride?: number;
+  target?: number;
+}
 export interface Primitive {
   attributes: Record<string, number>;
   indices?: number;
@@ -40,8 +46,21 @@ export interface Primitive {
   mode?: number;
   targets?: Record<string, number>[];
 }
-export interface Mesh { name?: string; primitives: Primitive[]; weights?: number[]; extras?: { targetNames?: string[] } }
-export interface Node { name?: string; mesh?: number; children?: number[]; translation?: number[]; rotation?: number[]; scale?: number[]; matrix?: number[] }
+export interface Mesh {
+  name?: string;
+  primitives: Primitive[];
+  weights?: number[];
+  extras?: { targetNames?: string[] };
+}
+export interface Node {
+  name?: string;
+  mesh?: number;
+  children?: number[];
+  translation?: number[];
+  rotation?: number[];
+  scale?: number[];
+  matrix?: number[];
+}
 
 /** The JSON chunk, as far as these tests read it. */
 export interface Gltf {
@@ -61,7 +80,11 @@ export interface Gltf {
   extensionsRequired?: string[];
 }
 
-export interface Chunk { type: number; offset: number; length: number }
+export interface Chunk {
+  type: number;
+  offset: number;
+  length: number;
+}
 
 export interface Glb {
   version: number;
@@ -82,7 +105,7 @@ export function readGlb(bytes: Uint8Array): Glb {
   const version = view.getUint32(4, true);
   const length = view.getUint32(8, true);
   const chunks: Chunk[] = [];
-  for (let at = 12; at < Math.min(length, bytes.byteLength); ) {
+  for (let at = 12; at < Math.min(length, bytes.byteLength);) {
     const chunkLength = view.getUint32(at, true);
     const type = view.getUint32(at + 4, true);
     chunks.push({ type, offset: at + 8, length: chunkLength });
@@ -111,12 +134,23 @@ export function readAccessor(glb: Glb, index: number): number[][] {
     for (let c = 0; c < components; c++) {
       const at = base + i * stride + c * size;
       switch (accessor.componentType) {
-        case 5120: element.push(data.getInt8(at)); break;
-        case 5121: element.push(data.getUint8(at)); break;
-        case 5122: element.push(data.getInt16(at, true)); break;
-        case 5123: element.push(data.getUint16(at, true)); break;
-        case 5125: element.push(data.getUint32(at, true)); break;
-        default: element.push(data.getFloat32(at, true));
+        case 5120:
+          element.push(data.getInt8(at));
+          break;
+        case 5121:
+          element.push(data.getUint8(at));
+          break;
+        case 5122:
+          element.push(data.getInt16(at, true));
+          break;
+        case 5123:
+          element.push(data.getUint16(at, true));
+          break;
+        case 5125:
+          element.push(data.getUint32(at, true));
+          break;
+        default:
+          element.push(data.getFloat32(at, true));
       }
     }
     out.push(element);

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { blinkEase } from "../../blink";
+import { blinkEase } from "../../engine/blink";
 import { AvatarEngine } from "../../engine";
 import { engineSeam } from "../../engine/seam";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
@@ -31,10 +31,13 @@ function engineShape(source: Rig, weights: Partial<BlendWeights>): { x: number; 
   e.face.blink = 0;
   const base = engine.landmarks();
   const scale = (base[454].x - base[234].x) / (source.points[454][0] - source.points[234][0]);
-  const pts = e.deformedPoints().slice(0, 478).map((p, i) => ({
-    x: source.points[i][0] + (p.x - base[i].x) / scale,
-    y: source.points[i][1] + (p.y - base[i].y) / scale,
-  }));
+  const pts = e
+    .deformedPoints()
+    .slice(0, 478)
+    .map((p, i) => ({
+      x: source.points[i][0] + (p.x - base[i].x) / scale,
+      y: source.points[i][1] + (p.y - base[i].y) / scale,
+    }));
   engine.destroy();
   return pts;
 }
@@ -133,7 +136,12 @@ describe("baking the 2D deformers", () => {
       ...rig,
       image_size: [Math.round(rig.image_size[0] * s + 2 * dx), Math.round(rig.image_size[1] * s + 2 * dy)],
       points: rig.points.map(([x, y]) => [x * s + dx, y * s + dy]),
-      face_box: [rig.face_box[0] * s + dx, rig.face_box[1] * s + dy, rig.face_box[2] * s + dx, rig.face_box[3] * s + dy],
+      face_box: [
+        rig.face_box[0] * s + dx,
+        rig.face_box[1] * s + dy,
+        rig.face_box[2] * s + dx,
+        rig.face_box[3] * s + dy,
+      ],
     };
     const other = bakeMorphTargets(moved);
     const mouthWidth = Math.hypot(rig.points[291][0] - rig.points[61][0], rig.points[291][1] - rig.points[61][1]);
@@ -142,7 +150,10 @@ describe("baking the 2D deformers", () => {
       const theirs = other.targets[name] ?? other.visemes[name];
       expect(theirs.at).toBe(baked.at);
       for (let i = 0; i < 478; i++) {
-        worst = Math.max(worst, Math.hypot(theirs.dx[i] - baked.dx[i] * s, theirs.dy[i] - baked.dy[i] * s) / (mouthWidth * s));
+        worst = Math.max(
+          worst,
+          Math.hypot(theirs.dx[i] - baked.dx[i] * s, theirs.dy[i] - baked.dy[i] * s) / (mouthWidth * s)
+        );
       }
     }
     expect(worst).toBeLessThan(1e-9); // the same to rounding (measured: 4e-15)
@@ -155,7 +166,8 @@ describe("baking the 2D deformers", () => {
     const rest = bake.visemes.sil;
     // Silence is a closed mouth: the upper face never moves for a mouth shape.
     for (const shape of [...Object.values(bake.visemes), ...SYMMETRIC_WEIGHTS.map((k) => bake.targets[k])]) {
-      for (const i of [10, 151, 9, 8, 168, 6, 197]) { // the forehead and the bridge of the nose
+      for (const i of [10, 151, 9, 8, 168, 6, 197]) {
+        // the forehead and the bridge of the nose
         expect(Math.abs(shape.dx[i]) + Math.abs(shape.dy[i])).toBeLessThan(1e-6);
       }
     }

@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  BodyMotion,
-  breathCurve,
-  phaseForExhaleValue,
-  SPEECH_INHALE_MS,
-  SPEECH_INHALE_PEAK,
-} from "../bodymotion";
+import { BodyMotion, breathCurve, phaseForExhaleValue, SPEECH_INHALE_MS, SPEECH_INHALE_PEAK } from "../bodymotion";
 
 /** Run the driver forward at a fixed frame interval. */
 function advance(body: BodyMotion, from: number, ms: number, frameMs: number): number {
@@ -23,7 +17,7 @@ function advance(body: BodyMotion, from: number, ms: number, frameMs: number): n
 /** Seeded so sway noise is repeatable; breath does not use it. */
 const seeded = () => {
   let x = 12345;
-  return () => ((x = (x * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  return () => (x = (x * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 };
 
 describe("speech breathing", () => {

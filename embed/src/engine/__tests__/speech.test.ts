@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { TONGUE_RAISE } from "../../character-paint";
+import { TONGUE_RAISE } from "../character-paint";
 import { ZERO_WEIGHTS, type BlendWeights, type Cue, type Rig } from "../../types";
 import { FakeAudio } from "../../__tests__/browser-fakes";
 import { articulationLead, blendCueWeights, prepareCues } from "../cues";
@@ -35,7 +35,8 @@ describe("articulate", () => {
   });
 
   it("closes faster than it opens", () => {
-    const opening = all(0), closing = all(1);
+    const opening = all(0),
+      closing = all(1);
     articulate(opening, all(1), 30, 1);
     articulate(closing, all(0), 30, 1);
     for (const key of keys) expect(1 - closing[key]).toBeGreaterThan(opening[key]);
@@ -51,7 +52,10 @@ describe("articulate", () => {
   it("divides its time constants by the tuning's smoothness, floored at 0.15", () => {
     // `smoothness` scales the rate (tau = 47 ms / smoothness): 2 follows the
     // track twice as fast as 1; 0 is as slow as the floor allows.
-    const quick = weights(), slow = weights(), zero = weights(), floor = weights();
+    const quick = weights(),
+      slow = weights(),
+      zero = weights(),
+      floor = weights();
     articulate(quick, all(1), 16, 2);
     articulate(slow, all(1), 16, 0.5);
     articulate(zero, all(1), 16, 0);
@@ -82,8 +86,11 @@ describe("easeTongue", () => {
 
 const VISEMES: Rig["visemes"] = { sil: {}, aa: { jawOpen: 0.7 }, PP: { mouthClose: 1 }, E: { mouthStretch: 0.5 } };
 const TRACK: Cue[] = [
-  { t: 0, viseme: "sil", a: 1 }, { t: 120, viseme: "PP", a: 1 }, { t: 220, viseme: "aa", a: 1 },
-  { t: 520, viseme: "E", a: 1 }, { t: 800, viseme: "sil", a: 1 },
+  { t: 0, viseme: "sil", a: 1 },
+  { t: 120, viseme: "PP", a: 1 },
+  { t: 220, viseme: "aa", a: 1 },
+  { t: 520, viseme: "E", a: 1 },
+  { t: 800, viseme: "sil", a: 1 },
 ];
 const hooks = () => ({ onSync: vi.fn<(ms: number) => void>(), onEnded: vi.fn<() => void>() });
 

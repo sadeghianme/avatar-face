@@ -9,7 +9,10 @@
  */
 
 /** Where the eyes look: offsets in the eyeLook* morphs' units. */
-export interface Gaze { x: number; y: number }
+export interface Gaze {
+  x: number;
+  y: number;
+}
 
 /** The blink's sweep: up to fully closed by 0.4 of its phase, open again by 1. */
 export function blinkAmount(phase: number): number {

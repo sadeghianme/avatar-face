@@ -55,32 +55,64 @@ interface BenchSpec {
 type Spec = SheetSpec | CompareSpec | PhraseSpec | BenchSpec;
 
 const VISEME_LABELS: Record<string, string> = {
-  sil: "rest", aa: "aa", E: "ee", ou: "oo", oh: "oh", FF: "fv", TH: "th",
+  sil: "rest",
+  aa: "aa",
+  E: "ee",
+  ou: "oo",
+  oh: "oh",
+  FF: "fv",
+  TH: "th",
 };
 const DEFAULT_VISEMES = ["sil", "aa", "E", "ou", "oh", "FF", "TH"];
 const DEFAULT_YAWS = [-20, 0, 20];
 
 /** "Hello, how are you today? I am a three dee head." as a cue track. */
 export const PHRASE_CUES: Cue[] = [
-  { t: 0, viseme: "sil" }, { t: 120, viseme: "kk" }, { t: 200, viseme: "E" }, { t: 330, viseme: "nn" },
-  { t: 420, viseme: "oh" }, { t: 560, viseme: "sil" }, { t: 700, viseme: "kk" }, { t: 780, viseme: "aa" },
-  { t: 900, viseme: "ou" }, { t: 1000, viseme: "aa" }, { t: 1120, viseme: "RR" }, { t: 1220, viseme: "ih" },
-  { t: 1320, viseme: "ou" }, { t: 1460, viseme: "TH" }, { t: 1540, viseme: "ou" }, { t: 1640, viseme: "DD" },
-  { t: 1720, viseme: "E" }, { t: 1900, viseme: "sil" }, { t: 2100, viseme: "aa" }, { t: 2220, viseme: "ih" },
-  { t: 2330, viseme: "PP" }, { t: 2420, viseme: "aa" }, { t: 2560, viseme: "TH" }, { t: 2640, viseme: "RR" },
-  { t: 2740, viseme: "E" }, { t: 2900, viseme: "DD" }, { t: 2980, viseme: "E" }, { t: 3120, viseme: "kk" },
-  { t: 3200, viseme: "E" }, { t: 3340, viseme: "DD" }, { t: 3480, viseme: "sil" }, { t: 3800, viseme: "sil" },
+  { t: 0, viseme: "sil" },
+  { t: 120, viseme: "kk" },
+  { t: 200, viseme: "E" },
+  { t: 330, viseme: "nn" },
+  { t: 420, viseme: "oh" },
+  { t: 560, viseme: "sil" },
+  { t: 700, viseme: "kk" },
+  { t: 780, viseme: "aa" },
+  { t: 900, viseme: "ou" },
+  { t: 1000, viseme: "aa" },
+  { t: 1120, viseme: "RR" },
+  { t: 1220, viseme: "ih" },
+  { t: 1320, viseme: "ou" },
+  { t: 1460, viseme: "TH" },
+  { t: 1540, viseme: "ou" },
+  { t: 1640, viseme: "DD" },
+  { t: 1720, viseme: "E" },
+  { t: 1900, viseme: "sil" },
+  { t: 2100, viseme: "aa" },
+  { t: 2220, viseme: "ih" },
+  { t: 2330, viseme: "PP" },
+  { t: 2420, viseme: "aa" },
+  { t: 2560, viseme: "TH" },
+  { t: 2640, viseme: "RR" },
+  { t: 2740, viseme: "E" },
+  { t: 2900, viseme: "DD" },
+  { t: 2980, viseme: "E" },
+  { t: 3120, viseme: "kk" },
+  { t: 3200, viseme: "E" },
+  { t: 3340, viseme: "DD" },
+  { t: 3480, viseme: "sil" },
+  { t: 3800, viseme: "sil" },
 ];
 
 const view = document.getElementById("view") as HTMLCanvasElement;
 const sheet = document.getElementById("sheet") as HTMLCanvasElement;
 const log = document.getElementById("log") as HTMLPreElement;
-const say = (text: string) => { log.textContent += text + "\n"; };
+const say = (text: string) => {
+  log.textContent += text + "\n";
+};
 
 /** Time as the engines see it: virtual for stills and phrases, real for the bench. */
 let virtualNow: number | null = null;
 const realNow = performance.now.bind(performance);
-performance.now = () => (virtualNow ?? realNow());
+performance.now = () => virtualNow ?? realNow();
 
 interface Loaded {
   engine: Avatar3DEngine;
@@ -102,7 +134,11 @@ async function load(url: string, size: number, fixed = true): Promise<Loaded> {
   return { engine, extras, pose, table, renderer };
 }
 
-async function load2D(rigUrl: string, imageUrl: string, size: number): Promise<{ engine: AvatarEngine; canvas: HTMLCanvasElement; rig: Rig }> {
+async function load2D(
+  rigUrl: string,
+  imageUrl: string,
+  size: number
+): Promise<{ engine: AvatarEngine; canvas: HTMLCanvasElement; rig: Rig }> {
   const rig = (await (await fetch(rigUrl)).json()) as Rig;
   const image = new Image();
   image.crossOrigin = "anonymous";
@@ -135,7 +171,7 @@ function still(loaded: Loaded, viseme: string, yawDeg: number): void {
   // ARKit decomposition at the table's weights.
   const shape = VISEME_TO_MORPH[viseme];
   const hasShape = loaded.extras?.morphs.includes(shape) ?? false;
-  loaded.engine.holdMorphs(hasShape ? { [shape]: 1 } : loaded.table[viseme] ?? {});
+  loaded.engine.holdMorphs(hasShape ? { [shape]: 1 } : (loaded.table[viseme] ?? {}));
   // Early in the engine's life: before its first blink or saccade.
   virtualNow = 10_100;
   loaded.engine.step(virtualNow);
@@ -207,7 +243,12 @@ async function runPhrase(spec: PhraseSpec): Promise<string> {
   const ctx = sheet.getContext("2d")!;
   ctx.fillStyle = "#2a2a30";
   ctx.fillRect(0, 0, sheet.width, sheet.height);
-  label(ctx, `${spec.label ?? spec.glb}: "Hello, how are you today? I am a 3D head." every ${every} ms${flat ? " (2D above, 3D below)" : ""}`, 4, 2);
+  label(
+    ctx,
+    `${spec.label ?? spec.glb}: "Hello, how are you today? I am a 3D head." every ${every} ms${flat ? " (2D above, 3D below)" : ""}`,
+    4,
+    2
+  );
   loaded.engine.playCues(PHRASE_CUES);
   flat?.engine.playCues(PHRASE_CUES);
   let next = 0;
@@ -283,15 +324,21 @@ async function runBench(spec: BenchSpec): Promise<Record<string, unknown>> {
 async function run(spec: Spec): Promise<unknown> {
   say(`run ${spec.mode} ${spec.glb}`);
   switch (spec.mode) {
-    case "sheet": return runSheet(spec);
-    case "compare": return runCompare(spec);
-    case "phrase": return runPhrase(spec);
-    case "bench": return runBench(spec);
+    case "sheet":
+      return runSheet(spec);
+    case "compare":
+      return runCompare(spec);
+    case "phrase":
+      return runPhrase(spec);
+    case "bench":
+      return runBench(spec);
   }
 }
 
 declare global {
-  interface Window { __head3d: { run(spec: Spec): Promise<unknown> } }
+  interface Window {
+    __head3d: { run(spec: Spec): Promise<unknown> };
+  }
 }
 window.__head3d = { run };
 
@@ -302,21 +349,32 @@ if (glb) {
   const mode = params.get("mode") ?? "view";
   if (mode === "view") {
     virtualNow = null;
-    load(glb, 640, false).then(({ engine }) => {
-      say("loaded; press space to speak");
-      window.addEventListener("keydown", (ev) => {
-        if (ev.key === " ") engine.playCues(PHRASE_CUES);
-      });
-    }, (err) => say(String(err)));
+    load(glb, 640, false).then(
+      ({ engine }) => {
+        say("loaded; press space to speak");
+        window.addEventListener("keydown", (ev) => {
+          if (ev.key === " ") engine.playCues(PHRASE_CUES);
+        });
+      },
+      (err) => say(String(err))
+    );
   } else {
     const rig = params.get("rig") ?? undefined;
     const image = params.get("image") ?? undefined;
     const spec: Spec | null =
-      mode === "sheet" || mode === "bench" ? { mode, glb }
-      : mode === "phrase" ? { mode, glb, rig, image }
-      : mode === "compare" && rig && image ? { mode, glb, rig, image }
-      : null;
-    if (!spec) say(`mode=${mode} needs ${mode === "compare" ? "rig= and image=" : "to be sheet, compare, phrase or bench"}`);
-    else run(spec).then((result) => say(typeof result === "string" ? "done" : JSON.stringify(result, null, 2)), (err) => say(String(err)));
+      mode === "sheet" || mode === "bench"
+        ? { mode, glb }
+        : mode === "phrase"
+          ? { mode, glb, rig, image }
+          : mode === "compare" && rig && image
+            ? { mode, glb, rig, image }
+            : null;
+    if (!spec)
+      say(`mode=${mode} needs ${mode === "compare" ? "rig= and image=" : "to be sheet, compare, phrase or bench"}`);
+    else
+      run(spec).then(
+        (result) => say(typeof result === "string" ? "done" : JSON.stringify(result, null, 2)),
+        (err) => say(String(err))
+      );
   }
 }

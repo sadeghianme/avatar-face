@@ -2,9 +2,14 @@ import { ZERO_WEIGHTS, type BlendWeights } from "../types";
 import { PERFORMANCE_POSES } from "./photographic-performance-model";
 import { REFERENCE_POSES } from "./reference-mouth-model";
 
-const features = (w: BlendWeights) => [w.jawOpen * 1.3, w.mouthPucker * 1.25,
-  w.mouthFunnel * .65, w.mouthStretch * .7 + w.mouthSmile * .3, w.mouthClose * .8];
-const anchors = PERFORMANCE_POSES.map(id => features(REFERENCE_POSES[id].weights));
+const features = (w: BlendWeights) => [
+  w.jawOpen * 1.3,
+  w.mouthPucker * 1.25,
+  w.mouthFunnel * 0.65,
+  w.mouthStretch * 0.7 + w.mouthSmile * 0.3,
+  w.mouthClose * 0.8,
+];
+const anchors = PERFORMANCE_POSES.map((id) => features(REFERENCE_POSES[id].weights));
 
 /** Rendering must use the same spring-integrated pose as the lip geometry,
  * not the input target (which may already be on the next phoneme). */
@@ -20,12 +25,12 @@ export function mouthMixWeights(mix: readonly number[]): BlendWeights {
  * These coefficients move geometry only. No expression textures are dissolved. */
 export function continuousMouthMix(w: BlendWeights): number[] {
   const f = features(w);
-  const distances = anchors.map(a => a.reduce((sum, v, k) => sum + (v - f[k]) ** 2, 0));
-  const exact = distances.findIndex(d => d < 1e-12);
-  if (exact >= 0) return distances.map((_, i) => i === exact ? 1 : 0);
-  const raw = distances.map(d => 1 / (d * d));
+  const distances = anchors.map((a) => a.reduce((sum, v, k) => sum + (v - f[k]) ** 2, 0));
+  const exact = distances.findIndex((d) => d < 1e-12);
+  if (exact >= 0) return distances.map((_, i) => (i === exact ? 1 : 0));
+  const raw = distances.map((d) => 1 / (d * d));
   const sum = raw.reduce((a, b) => a + b, 0);
-  const result = raw.map(n => n / sum);
+  const result = raw.map((n) => n / sum);
   const seal = bilabialSeal(w);
   return result.map((n, i) => n * (1 - seal) + (i === 0 ? seal : 0));
 }
@@ -34,14 +39,20 @@ export function continuousMouthMix(w: BlendWeights): number[] {
  *  with anticipatory rounding. F/V carries stretch and cannot enter this
  *  closure gate. */
 export function bilabialSeal(w: BlendWeights): number {
-  const closure = Math.max(0, Math.min(1, (w.mouthClose - .4) / .4)) *
-    Math.max(0, Math.min(1, (.2 - w.mouthStretch) / .1));
+  const closure =
+    Math.max(0, Math.min(1, (w.mouthClose - 0.4) / 0.4)) * Math.max(0, Math.min(1, (0.2 - w.mouthStretch) / 0.1));
   return closure * closure * (3 - 2 * closure);
 }
 
 /** Exact critically damped integration for a constant target over dt.
  * Velocity is retained across phoneme changes, unlike restarting a tween. */
-export function dampMouth(value: number, velocity: number, target: number, dt: number, omega: number): [number, number] {
+export function dampMouth(
+  value: number,
+  velocity: number,
+  target: number,
+  dt: number,
+  omega: number
+): [number, number] {
   const offset = value - target;
   const travel = velocity + omega * offset;
   const decay = Math.exp(-omega * dt);
@@ -74,18 +85,18 @@ export const SPRING_OMEGA = 35;
 export const CLOSURE_OMEGA = 80;
 
 export class MouthMotion {
-  values: number[] = PERFORMANCE_POSES.map((_, i) => i === 0 ? 1 : 0);
+  values: number[] = PERFORMANCE_POSES.map((_, i) => (i === 0 ? 1 : 0));
   private velocities = PERFORMANCE_POSES.map(() => 0);
   step(w: BlendWeights, dt: number): number[] {
     const target = continuousMouthMix(w);
     const omega = SPRING_OMEGA + (CLOSURE_OMEGA - SPRING_OMEGA) * bilabialSeal(w);
     this.values = this.values.map((v, i) => {
-      const [next, speed] = dampMouth(v, this.velocities[i], target[i], Math.min(.08, Math.max(0, dt)), omega);
+      const [next, speed] = dampMouth(v, this.velocities[i], target[i], Math.min(0.08, Math.max(0, dt)), omega);
       this.velocities[i] = speed;
       return Math.max(0, next);
     });
     const sum = this.values.reduce((a, b) => a + b, 0);
-    this.values = this.values.map(v => v / sum);
+    this.values = this.values.map((v) => v / sum);
     return this.values;
   }
 }

@@ -1,21 +1,49 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  apertureFeather, CORNER_REACH, CORNER_STOPS, cornerWeight, edgeSoftness, FEATHER_CEILING, FEATHER_FLOOR, featherAlpha, featherAlphaAt,
-  FeatheredLayer, featherSteps, MASK_ERODE, MASK_SIGMA,
+  apertureFeather,
+  CORNER_REACH,
+  CORNER_STOPS,
+  cornerWeight,
+  edgeSoftness,
+  FEATHER_CEILING,
+  FEATHER_FLOOR,
+  featherAlpha,
+  featherAlphaAt,
+  FeatheredLayer,
+  featherSteps,
+  MASK_ERODE,
+  MASK_SIGMA,
 } from "../aperture-feather";
 
 /** A 2D context that records every call and property set, in order. */
 function recorder(log: string[], extra: Record<string, unknown> = {}) {
-  const round = (v: unknown) => (typeof v === "number" ? Math.round(v * 100) / 100 : v instanceof Object && "id" in v ? (v as { id: string }).id : String(v));
+  const round = (v: unknown) =>
+    typeof v === "number"
+      ? Math.round(v * 100) / 100
+      : v instanceof Object && "id" in v
+        ? (v as { id: string }).id
+        : String(v);
   const target: Record<string, unknown> = { ...extra };
   return new Proxy(target, {
-    get: (obj, key: string) => (key in obj ? obj[key] : (...args: unknown[]) => {
-      log.push(`${key}(${args.map(round).join(",")})`);
-      // A gradient that records its stops.
-      if (key === "createRadialGradient" || key === "createLinearGradient") return { addColorStop: (o: number, c: string) => { log.push(`addColorStop(${round(o)},${c})`); } };
-      return undefined;
-    }),
-    set: (obj, key: string, value) => { obj[key] = value; log.push(`${key}=${round(value)}`); return true; },
+    get: (obj, key: string) =>
+      key in obj
+        ? obj[key]
+        : (...args: unknown[]) => {
+            log.push(`${key}(${args.map(round).join(",")})`);
+            // A gradient that records its stops.
+            if (key === "createRadialGradient" || key === "createLinearGradient")
+              return {
+                addColorStop: (o: number, c: string) => {
+                  log.push(`addColorStop(${round(o)},${c})`);
+                },
+              };
+            return undefined;
+          },
+    set: (obj, key: string, value) => {
+      obj[key] = value;
+      log.push(`${key}=${round(value)}`);
+      return true;
+    },
   }) as unknown as CanvasRenderingContext2D;
 }
 
@@ -25,7 +53,12 @@ function canvas(id: string, log: string[], filters: boolean) {
   return { id, width: 0, height: 0, getContext: () => ctx } as unknown as HTMLCanvasElement;
 }
 
-const ring = [{ x: 100, y: 50 }, { x: 150, y: 70 }, { x: 200, y: 50 }, { x: 150, y: 30 }];
+const ring = [
+  { x: 100, y: 50 },
+  { x: 150, y: 70 },
+  { x: 200, y: 50 },
+  { x: 150, y: 30 },
+];
 const aperture = { id: "aperture" } as unknown as Path2D;
 
 describe("the aperture's feather", () => {
@@ -80,7 +113,11 @@ describe("the aperture's feather", () => {
     expect(cornerWeight(reach * 2, reach)).toBe(0);
     expect(cornerWeight(5, 0)).toBe(0);
     let previous = 1;
-    for (let d = 0; d <= reach; d += reach / 50) { const w = cornerWeight(d, reach); expect(w).toBeLessThanOrEqual(previous); previous = w; }
+    for (let d = 0; d <= reach; d += reach / 50) {
+      const w = cornerWeight(d, reach);
+      expect(w).toBeLessThanOrEqual(previous);
+      previous = w;
+    }
     for (const feather of [1.2, 4.5, 9]) {
       for (const corner of [0, 0.3, 0.7, 1]) {
         // Whole just inside the edge at the corner itself; the feather's own profile where the stamp is gone.
@@ -135,7 +172,9 @@ describe("the aperture's feather", () => {
     // What is left at a distance d inside the edge after every ring that reaches it.
     const left = (d: number) => steps.reduce((kept, s) => (s.lineWidth / 2 > d ? kept * (1 - s.alpha) : kept), 1);
     for (const d of [0.14, 0.3, 0.45, 0.6, 0.75, 0.9, 1.05, 1.3].map((k) => k * feather)) {
-      const band = steps.find((s, i) => s.lineWidth / 2 > d && (i === steps.length - 1 || steps[i + 1].lineWidth / 2 <= d));
+      const band = steps.find(
+        (s, i) => s.lineWidth / 2 > d && (i === steps.length - 1 || steps[i + 1].lineWidth / 2 <= d)
+      );
       expect(band).toBeDefined();
       expect(Math.abs(left(d) - featherAlpha(d, feather))).toBeLessThan(0.05);
     }
@@ -150,10 +189,21 @@ describe("the feathered layer", () => {
   let made: HTMLCanvasElement[];
   let filters = true;
   beforeEach(() => {
-    log = []; main = []; made = [];
-    vi.stubGlobal("document", { createElement: () => { const c = canvas(`c${made.length}`, log, filters); made.push(c); return c; } });
+    log = [];
+    main = [];
+    made = [];
+    vi.stubGlobal("document", {
+      createElement: () => {
+        const c = canvas(`c${made.length}`, log, filters);
+        made.push(c);
+        return c;
+      },
+    });
   });
-  afterEach(() => { vi.unstubAllGlobals(); filters = true; });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    filters = true;
+  });
 
   it("paints the interior with the face's coordinates on a canvas of the aperture's size, and brings it back through the eroded, blurred aperture", () => {
     const layer = new FeatheredLayer();
@@ -178,16 +228,26 @@ describe("the feathered layer", () => {
     // Restored to what begin() left, then the mask: fill, erode by a stroke of the feather's width...
     expect(log[1]).toBe("restore()");
     expect(text).toContain("fill(aperture)");
-    expect(text).toContain(`globalCompositeOperation=destination-out strokeStyle=#000 lineJoin=round lineCap=round lineWidth=${feather} stroke(aperture)`);
+    expect(text).toContain(
+      `globalCompositeOperation=destination-out strokeStyle=#000 lineJoin=round lineCap=round lineWidth=${feather} stroke(aperture)`
+    );
     // ...blurred in place by 0.4 of the feather (the mask over itself, replacing it)...
-    expect(text).toContain(`setTransform(1,0,0,1,0,0) globalCompositeOperation=copy filter=blur(${(feather * MASK_SIGMA).toFixed(2)}px) drawImage(c1,0,0,${size},0,0,${size}) filter=none`);
+    expect(text).toContain(
+      `setTransform(1,0,0,1,0,0) globalCompositeOperation=copy filter=blur(${(feather * MASK_SIGMA).toFixed(2)}px) drawImage(c1,0,0,${size},0,0,${size}) filter=none`
+    );
     // ...then the layer kept where the mask is, with no filter of its own...
-    expect(text).toContain(`globalAlpha=1 globalCompositeOperation=destination-in drawImage(c1,0,0,${size},0,0,${size}) globalCompositeOperation=source-over`);
-    expect(text.indexOf("globalCompositeOperation=copy")).toBeLessThan(text.indexOf("globalCompositeOperation=destination-in"));
+    expect(text).toContain(
+      `globalAlpha=1 globalCompositeOperation=destination-in drawImage(c1,0,0,${size},0,0,${size}) globalCompositeOperation=source-over`
+    );
+    expect(text.indexOf("globalCompositeOperation=copy")).toBeLessThan(
+      text.indexOf("globalCompositeOperation=destination-in")
+    );
     // ...no corner stamps when no corners are given...
     expect(text).not.toContain("createRadialGradient");
     // ...and onto the face in device pixels, at the ring's corner less the margin.
-    expect(main.join(" ")).toContain(`save() setTransform(1,0,0,1,0,0) globalAlpha=1 drawImage(c0,0,0,${size},${100 - margin},${30 - margin},${size}) restore()`);
+    expect(main.join(" ")).toContain(
+      `save() setTransform(1,0,0,1,0,0) globalAlpha=1 drawImage(c0,0,0,${size},${100 - margin},${30 - margin},${size}) restore()`
+    );
   });
 
   it("stamps the hard aperture back at each corner, through its radial weight, after the blur and before the layer is masked", () => {
@@ -200,12 +260,17 @@ describe("the feathered layer", () => {
     const stamps = text.split("createRadialGradient").length - 1;
     expect(stamps).toBe(2);
     // Each stamp clipped to its own box, under the face's transform.
-    expect(text).toContain("globalCompositeOperation=source-over save() beginPath() rect(80,30,40,40) clip() createRadialGradient(100,50,0,100,50,20)");
+    expect(text).toContain(
+      "globalCompositeOperation=source-over save() beginPath() rect(80,30,40,40) clip() createRadialGradient(100,50,0,100,50,20)"
+    );
     expect(text).toContain("save() beginPath() rect(180,30,40,40) clip() createRadialGradient(200,50,0,200,50,20)");
     expect(text.slice(text.indexOf("createRadialGradient")).split("restore()").length - 1).toBeGreaterThanOrEqual(2);
-    for (const [t, a] of CORNER_STOPS) expect(text).toContain(`addColorStop(${Math.round(t * 100) / 100},rgba(0,0,0,${a.toFixed(3)}))`);
+    for (const [t, a] of CORNER_STOPS)
+      expect(text).toContain(`addColorStop(${Math.round(t * 100) / 100},rgba(0,0,0,${a.toFixed(3)}))`);
     // Under the face's transform (shifted into the layer), filled through the aperture, each stamp after the blur and before the mask is applied.
-    const blurAt = text.indexOf("globalCompositeOperation=copy"), stampAt = text.indexOf("createRadialGradient"), maskAt = text.indexOf("globalCompositeOperation=destination-in");
+    const blurAt = text.indexOf("globalCompositeOperation=copy"),
+      stampAt = text.indexOf("createRadialGradient"),
+      maskAt = text.indexOf("globalCompositeOperation=destination-in");
     expect(blurAt).toBeLessThan(stampAt);
     expect(stampAt).toBeLessThan(maskAt);
     expect(text.slice(stampAt, maskAt).split("fill(aperture)").length - 1).toBe(2);
@@ -228,19 +293,28 @@ describe("the feathered layer", () => {
     expect(made[0].height).toBe(100 + 2 * margin);
     expect(log).toContain(`setTransform(0,1,-1,0,${500 - (430 - margin)},${0 - (100 - margin)})`);
     layer.end(ctx, aperture, 2);
-    expect(main.join(" ")).toContain(`drawImage(c0,0,0,${40 + 2 * margin},${100 + 2 * margin},${430 - margin},${100 - margin},`);
+    expect(main.join(" ")).toContain(
+      `drawImage(c0,0,0,${40 + 2 * margin},${100 + 2 * margin},${430 - margin},${100 - margin},`
+    );
   });
 
   it("grows its canvases for a wider mouth and keeps them for a narrower one", () => {
     const layer = new FeatheredLayer();
     const ctx = recorder(main);
-    layer.begin(ctx, ring, 2); layer.end(ctx, aperture, 2);
+    layer.begin(ctx, ring, 2);
+    layer.end(ctx, aperture, 2);
     const [w, h] = [made[0].width, made[0].height];
-    layer.begin(ctx, ring.map((p) => ({ x: p.x * 2, y: p.y * 2 })), 2); layer.end(ctx, aperture, 2);
+    layer.begin(
+      ctx,
+      ring.map((p) => ({ x: p.x * 2, y: p.y * 2 })),
+      2
+    );
+    layer.end(ctx, aperture, 2);
     expect(made[0].width).toBeGreaterThan(w);
     expect(made[0].height).toBeGreaterThan(h);
     const [w2, h2] = [made[0].width, made[0].height];
-    layer.begin(ctx, ring, 2); layer.end(ctx, aperture, 2);
+    layer.begin(ctx, ring, 2);
+    layer.end(ctx, aperture, 2);
     expect(made[0].width).toBe(w2);
     expect(made[0].height).toBe(h2);
     expect(made).toHaveLength(2);
@@ -272,7 +346,10 @@ describe("the feathered layer", () => {
     const text = log.join(" ");
     expect(text).not.toContain("filter=");
     const steps = featherSteps(feather);
-    for (const s of steps) expect(text).toContain(`lineWidth=${Math.round(s.lineWidth * 100) / 100} globalAlpha=${Math.round(s.alpha * 100) / 100} stroke(aperture)`);
+    for (const s of steps)
+      expect(text).toContain(
+        `lineWidth=${Math.round(s.lineWidth * 100) / 100} globalAlpha=${Math.round(s.alpha * 100) / 100} stroke(aperture)`
+      );
     expect(log.filter((l) => l === "stroke(aperture)")).toHaveLength(steps.length + 1);
     expect(text).toContain("globalAlpha=1 globalCompositeOperation=destination-in drawImage(c1,0,0,");
   });

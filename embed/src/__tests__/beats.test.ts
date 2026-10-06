@@ -77,9 +77,7 @@ describe("emphasisBeats", () => {
   });
 
   it("emits beats in order, with a bounded strength", () => {
-    const beats = emphasisBeats([
-      v(0, 0.3), v(300, 1.0), v(600, 0.3), v(1500, 0.8), v(1800, 0.3), v(3000, 0.95),
-    ]);
+    const beats = emphasisBeats([v(0, 0.3), v(300, 1.0), v(600, 0.3), v(1500, 0.8), v(1800, 0.3), v(3000, 0.95)]);
     for (let i = 1; i < beats.length; i++) {
       expect(beats[i].t).toBeGreaterThan(beats[i - 1].t);
     }

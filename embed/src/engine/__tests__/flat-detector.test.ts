@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { sampleLook, type Pt, type Rgb } from "../character-mouth";
-import { decodePng } from "./png-fixture";
+import { decodePng } from "../../__tests__/png-fixture";
 
 /**
  * Is the picture cel art? Checked on crops (120 x 96, at the picture's own
@@ -16,15 +16,21 @@ import { decodePng } from "./png-fixture";
 function lookOf(file: string) {
   const { w, h, rgb } = decodePng(file);
   const pixel = (x: number, y: number): Rgb | null => {
-    const px = Math.round(x), py = Math.round(y);
+    const px = Math.round(x),
+      py = Math.round(y);
     if (px < 0 || py < 0 || px >= w || py >= h) return null;
     const i = (py * w + px) * 3;
     return [rgb[i], rgb[i + 1], rgb[i + 2]];
   };
   // The sampler looks at 3 mouth-widths by 2.4: the crop is that area.
   const width = w / 3;
-  const cx = w / 2, cy = h * 0.375;
-  const seam: Pt[] = [{ x: cx - width * 0.3, y: cy }, { x: cx, y: cy }, { x: cx + width * 0.3, y: cy }];
+  const cx = w / 2,
+    cy = h * 0.375;
+  const seam: Pt[] = [
+    { x: cx - width * 0.3, y: cy },
+    { x: cx, y: cy },
+    { x: cx + width * 0.3, y: cy },
+  ];
   return sampleLook(pixel, seam, { cx, cy, w: width }, [150, 90, 80], [200, 160, 140]);
 }
 

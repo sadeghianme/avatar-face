@@ -7,9 +7,9 @@
  * RULE; the naive derivation is degenerate and draws nothing. |det| < 1e-6
  * is skipped.
  */
-import type { LowerFaceRig } from "../jaw-rig";
-import { padTriangle } from "../seam-pad";
-import { WarpRenderer, buildWarpMesh, type Affine } from "../warp-gl";
+import type { LowerFaceRig } from "./jaw-rig";
+import { padTriangle } from "./seam-pad";
+import { WarpRenderer, buildWarpMesh, type Affine } from "./warp-gl";
 import type { FaceMesh, Point, Rect } from "./geometry";
 import { LANDMARK_COUNT } from "./landmarks";
 
@@ -174,7 +174,10 @@ export class MeshWarp {
   /** The mesh's bounding box on the canvas, through `affine`, grown by
    *  `margin` px and clipped to the canvas; whole pixels. */
   private box(pts: Point[], affine: Affine, margin: number): Rect {
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    let x0 = Infinity,
+      y0 = Infinity,
+      x1 = -Infinity,
+      y1 = -Infinity;
     for (const p of pts) {
       const x = affine.a * p.x + affine.c * p.y + affine.e;
       const y = affine.b * p.x + affine.d * p.y + affine.f;
@@ -183,9 +186,12 @@ export class MeshWarp {
       if (y < y0) y0 = y;
       if (y > y1) y1 = y;
     }
-    const cw = this.canvas.width, ch = this.canvas.height;
-    const x = Math.max(0, Math.floor(x0 - margin)), y = Math.max(0, Math.floor(y0 - margin));
-    const w = Math.min(cw, Math.ceil(x1 + margin)) - x, h = Math.min(ch, Math.ceil(y1 + margin)) - y;
+    const cw = this.canvas.width,
+      ch = this.canvas.height;
+    const x = Math.max(0, Math.floor(x0 - margin)),
+      y = Math.max(0, Math.floor(y0 - margin));
+    const w = Math.min(cw, Math.ceil(x1 + margin)) - x,
+      h = Math.min(ch, Math.ceil(y1 + margin)) - y;
     return w > 0 && h > 0 ? { x, y, w, h } : { x: 0, y: 0, w: cw, h: ch };
   }
 }
@@ -204,30 +210,25 @@ function drawWarpedTriangle(
   i2: number,
   pad = 0
 ): void {
-  const s0 = texPoints[i0], s1 = texPoints[i1], s2 = texPoints[i2];
-  const d0 = pts[i0], d1 = pts[i1], d2 = pts[i2];
+  const s0 = texPoints[i0],
+    s1 = texPoints[i1],
+    s2 = texPoints[i2];
+  const d0 = pts[i0],
+    d1 = pts[i1],
+    d2 = pts[i2];
 
-  const det =
-    s0.x * (s1.y - s2.y) + s1.x * (s2.y - s0.y) + s2.x * (s0.y - s1.y);
+  const det = s0.x * (s1.y - s2.y) + s1.x * (s2.y - s0.y) + s2.x * (s0.y - s1.y);
   if (Math.abs(det) < 1e-6) return;
 
-  const a =
-    (d0.x * (s1.y - s2.y) + d1.x * (s2.y - s0.y) + d2.x * (s0.y - s1.y)) / det;
-  const c =
-    (d0.x * (s2.x - s1.x) + d1.x * (s0.x - s2.x) + d2.x * (s1.x - s0.x)) / det;
+  const a = (d0.x * (s1.y - s2.y) + d1.x * (s2.y - s0.y) + d2.x * (s0.y - s1.y)) / det;
+  const c = (d0.x * (s2.x - s1.x) + d1.x * (s0.x - s2.x) + d2.x * (s1.x - s0.x)) / det;
   const e =
-    (d0.x * (s1.x * s2.y - s2.x * s1.y) +
-      d1.x * (s2.x * s0.y - s0.x * s2.y) +
-      d2.x * (s0.x * s1.y - s1.x * s0.y)) /
+    (d0.x * (s1.x * s2.y - s2.x * s1.y) + d1.x * (s2.x * s0.y - s0.x * s2.y) + d2.x * (s0.x * s1.y - s1.x * s0.y)) /
     det;
-  const b =
-    (d0.y * (s1.y - s2.y) + d1.y * (s2.y - s0.y) + d2.y * (s0.y - s1.y)) / det;
-  const d =
-    (d0.y * (s2.x - s1.x) + d1.y * (s0.x - s2.x) + d2.y * (s1.x - s0.x)) / det;
+  const b = (d0.y * (s1.y - s2.y) + d1.y * (s2.y - s0.y) + d2.y * (s0.y - s1.y)) / det;
+  const d = (d0.y * (s2.x - s1.x) + d1.y * (s0.x - s2.x) + d2.y * (s1.x - s0.x)) / det;
   const f =
-    (d0.y * (s1.x * s2.y - s2.x * s1.y) +
-      d1.y * (s2.x * s0.y - s0.x * s2.y) +
-      d2.y * (s0.x * s1.y - s1.x * s0.y)) /
+    (d0.y * (s1.x * s2.y - s2.x * s1.y) + d1.y * (s2.x * s0.y - s0.x * s2.y) + d2.y * (s0.x * s1.y - s1.x * s0.y)) /
     det;
 
   ctx.save();

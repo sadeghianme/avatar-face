@@ -39,8 +39,14 @@ export function smoothClosedPath(points: { x: number; y: number }[]): Path2D {
 
 /** Least-squares quadratic c0 + c1 t + c2 t² through (ts, values). */
 export function fitQuadratic(values: number[], ts: number[]): number[] {
-  let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0;
-  let b0 = 0, b1 = 0, b2 = 0;
+  let s0 = 0,
+    s1 = 0,
+    s2 = 0,
+    s3 = 0,
+    s4 = 0;
+  let b0 = 0,
+    b1 = 0,
+    b2 = 0;
   for (let i = 0; i < ts.length; i++) {
     const t = ts[i];
     const t2 = t * t;
@@ -54,15 +60,11 @@ export function fitQuadratic(values: number[], ts: number[]): number[] {
     b2 += values[i] * t2;
   }
   // Solve the 3x3 normal equations by Cramer's rule.
-  const det =
-    s0 * (s2 * s4 - s3 * s3) - s1 * (s1 * s4 - s3 * s2) + s2 * (s1 * s3 - s2 * s2);
+  const det = s0 * (s2 * s4 - s3 * s3) - s1 * (s1 * s4 - s3 * s2) + s2 * (s1 * s3 - s2 * s2);
   if (Math.abs(det) < 1e-9) return [values[0] ?? 0, 0, 0];
-  const c0 =
-    (b0 * (s2 * s4 - s3 * s3) - s1 * (b1 * s4 - b2 * s3) + s2 * (b1 * s3 - b2 * s2)) / det;
-  const c1 =
-    (s0 * (b1 * s4 - b2 * s3) - b0 * (s1 * s4 - s3 * s2) + s2 * (s1 * b2 - s2 * b1)) / det;
-  const c2 =
-    (s0 * (s2 * b2 - s3 * b1) - s1 * (s1 * b2 - s2 * b1) + b0 * (s1 * s3 - s2 * s2)) / det;
+  const c0 = (b0 * (s2 * s4 - s3 * s3) - s1 * (b1 * s4 - b2 * s3) + s2 * (b1 * s3 - b2 * s2)) / det;
+  const c1 = (s0 * (b1 * s4 - b2 * s3) - b0 * (s1 * s4 - s3 * s2) + s2 * (s1 * b2 - s2 * b1)) / det;
+  const c2 = (s0 * (s2 * b2 - s3 * b1) - s1 * (s1 * b2 - s2 * b1) + b0 * (s1 * s3 - s2 * s2)) / det;
   return [c0, c1, c2];
 }
 
@@ -142,8 +144,7 @@ export interface OpeningDrive {
 
 export function openingDrive(w: BlendWeights, axisLen: number, mouthOpen: number): OpeningDrive {
   const rounding = Math.min(1, w.mouthPucker + w.mouthFunnel * 0.6);
-  const openFrac =
-    w.jawOpen * 0.23 + w.mouthFunnel * 0.07 + w.mouthStretch * 0.03 - w.mouthClose * 0.05;
+  const openFrac = w.jawOpen * 0.23 + w.mouthFunnel * 0.07 + w.mouthStretch * 0.03 - w.mouthClose * 0.05;
   // Lip RETRACTION, which is a different thing from jaw opening. /f/ /v/
   // /s/ /z/ /sh/ barely drop the jaw — measured, /f/'s openFrac is exactly
   // 0.010 against a 0.012 bail, so the whole interior returned early and
@@ -169,8 +170,7 @@ export function openingDrive(w: BlendWeights, axisLen: number, mouthOpen: number
   const teethDrive = Math.max(retract, tuck);
   // A geometry floor, deliberately well below the cavity's 0.03 knee: /f/
   // gets an arch to hang teeth from, not a black hole.
-  const synthHeight =
-    Math.max(Math.max(0, openFrac), teethDrive * 0.018) * axisLen * mouthOpen;
+  const synthHeight = Math.max(Math.max(0, openFrac), teethDrive * 0.018) * axisLen * mouthOpen;
   return { rounding, teethDrive, synthHeight };
 }
 
@@ -192,18 +192,21 @@ function seamCurve(ring: readonly Point[], axis: MouthAxis): (t: number) => Poin
     const up = ring[n - k];
     const sx = (lo.x + up.x) / 2;
     const sy = (lo.y + up.y) / 2;
-    const t = Math.max(
-      0,
-      Math.min(1, ((sx - left.x) * axis.ax + (sy - left.y) * axis.ay) / axis.len2)
-    );
+    const t = Math.max(0, Math.min(1, ((sx - left.x) * axis.ax + (sy - left.y) * axis.ay) / axis.len2));
     seam.push({ x: sx, y: sy, t });
   }
   seam.push({ x: right.x, y: right.y, t: 1 });
   seam.sort((p, q) => p.t - q.t);
 
   const seamTs = seam.map((q) => q.t);
-  const fx = fitQuadratic(seam.map((q) => q.x), seamTs);
-  const fy = fitQuadratic(seam.map((q) => q.y), seamTs);
+  const fx = fitQuadratic(
+    seam.map((q) => q.x),
+    seamTs
+  );
+  const fy = fitQuadratic(
+    seam.map((q) => q.y),
+    seamTs
+  );
   return (t: number) => {
     const tc = Math.max(0, Math.min(1, t));
     return {
@@ -230,12 +233,19 @@ function seamCurve(ring: readonly Point[], axis: MouthAxis): (t: number) => Poin
  * silence. The seam is the midpoint of each pair, so the parting splits
  * equally above and below it.
  */
-export function measuredParting(ring: readonly Point[], rest: readonly Point[], axis: MouthAxis): (t: number) => number {
+export function measuredParting(
+  ring: readonly Point[],
+  rest: readonly Point[],
+  axis: MouthAxis
+): (t: number) => number {
   const n = ring.length;
   const half = Math.floor(n / 2);
   const along = (q: Point) => (q.x - axis.left.x) * axis.nx + (q.y - axis.left.y) * axis.ny;
   const fitRing = (points: Point[]) =>
-    fitQuadratic(points.map(along), points.map((q) => alongAxis(axis, q)));
+    fitQuadratic(
+      points.map(along),
+      points.map((q) => alongAxis(axis, q))
+    );
   const lowerNow: Point[] = [];
   const upperNow: Point[] = [];
   const lowerRest: Point[] = [];
@@ -285,8 +295,8 @@ function apertureEdges(
   const synthSpanHalf = (0.84 - open.rounding * 0.4) / 2;
 
   const SAMPLES = 26;
-  const LOWER_SHARE = 0.80; // the jaw drops; the upper lip barely lifts
-  const UPPER_SHARE = 0.20;
+  const LOWER_SHARE = 0.8; // the jaw drops; the upper lip barely lifts
+  const UPPER_SHARE = 0.2;
   const upper: Point[] = [];
   const lower: Point[] = [];
   for (let i = 0; i <= SAMPLES; i++) {
@@ -320,7 +330,6 @@ function apertureEdges(
   }
   return { upper, lower };
 }
-
 
 /** The open mouth this frame, as its interior is painted into it. */
 export interface Aperture {
@@ -365,7 +374,7 @@ export function measureAperture(
   let measuredMax = 0;
   for (let i = 0; i <= 8; i++) measuredMax = Math.max(measuredMax, partingHalfAt(0.2 + (i / 8) * 0.6));
   const openHeight = Math.max(open.synthHeight, measuredMax * 2);
-  if (openHeight < axis.len * 0.010) return { outline: null, aperture: null }; // lips together
+  if (openHeight < axis.len * 0.01) return { outline: null, aperture: null }; // lips together
 
   const { upper, lower } = apertureEdges(seamAt, partingHalfAt, open, axis);
   // Drop the shared endpoints: at u=0 and u=1 the gap is zero, so

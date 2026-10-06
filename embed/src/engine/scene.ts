@@ -63,7 +63,8 @@ export class Backdrop {
     canvas: { width: number; height: number }
   ): void {
     if (!background || background.kind === "transparent" || !cutOut) return;
-    const cw = canvas.width, ch = canvas.height;
+    const cw = canvas.width,
+      ch = canvas.height;
     if (background.kind === "color" && background.color) {
       ctx.save();
       ctx.fillStyle = background.color;
@@ -73,10 +74,12 @@ export class Backdrop {
     }
     const img = this.image;
     if (background.kind !== "image" || !img) return;
-    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+    const iw = img.naturalWidth || img.width,
+      ih = img.naturalHeight || img.height;
     if (!iw || !ih) return;
     const scale = Math.max(cw / iw, ch / ih);
-    const w = iw * scale, h = ih * scale;
+    const w = iw * scale,
+      h = ih * scale;
     ctx.drawImage(img, 0, 0, iw, ih, (cw - w) / 2, (ch - h) / 2, w, h);
   }
 }

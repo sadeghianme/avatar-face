@@ -1,4 +1,4 @@
-import type { BlendWeights } from "./types";
+import type { BlendWeights } from "../types";
 
 /**
  * The lower face as one rig: the jaw, the chin and the cheeks, for every
@@ -37,24 +37,42 @@ import type { BlendWeights } from "./types";
  * then lets the cheeks respond. Pure functions; the engine supplies points.
  */
 
-export interface Pt { x: number; y: number }
+export interface Pt {
+  x: number;
+  y: number;
+}
 
 /** The mouth's own frame in a mesh: origin at the lip seam, unit axes along
  *  the mouth (`ax, ay`, image left to right) and down the face (`nx, ny`),
  *  `w` the width corner to corner. */
 export interface MouthFrame {
-  cx: number; cy: number; w: number;
-  ax: number; ay: number; nx: number; ny: number;
+  cx: number;
+  cy: number;
+  w: number;
+  ax: number;
+  ay: number;
+  nx: number;
+  ny: number;
 }
 
 export function mouthFrame(points: readonly Pt[]): MouthFrame {
-  const l = points[61], r = points[291];
+  const l = points[61],
+    r = points[291];
   const w = Math.max(Math.hypot(r.x - l.x, r.y - l.y), 1);
-  let ax = (r.x - l.x) / w, ay = (r.y - l.y) / w;
-  if (ax < 0) { ax = -ax; ay = -ay; }
+  let ax = (r.x - l.x) / w,
+    ay = (r.y - l.y) / w;
+  if (ax < 0) {
+    ax = -ax;
+    ay = -ay;
+  }
   return {
-    cx: (points[13].x + points[14].x) / 2, cy: (points[13].y + points[14].y) / 2, w,
-    ax, ay, nx: -ay, ny: ax,
+    cx: (points[13].x + points[14].x) / 2,
+    cy: (points[13].y + points[14].y) / 2,
+    w,
+    ax,
+    ay,
+    nx: -ay,
+    ny: ax,
   };
 }
 
@@ -92,11 +110,18 @@ export const JAW_INWARD = 0.15;
  *  larger than what the jaw does. */
 export const CHEEK = {
   /** Stretch/smile: the cheek lateral to the corner bulges out and up. */
-  stretchOut: 0.035, stretchUp: 0.02, smileOut: 0.05, smileUp: 0.04,
+  stretchOut: 0.035,
+  stretchUp: 0.02,
+  smileOut: 0.05,
+  smileUp: 0.04,
   /** The nasolabial fold lifts and moves out with a spread lip. */
-  foldStretchUp: 0.025, foldSmileUp: 0.04, foldStretchOut: 0.015, foldSmileOut: 0.02,
+  foldStretchUp: 0.025,
+  foldSmileUp: 0.04,
+  foldStretchOut: 0.015,
+  foldSmileOut: 0.02,
   /** Pucker/funnel: the cheeks hollow toward the mouth. */
-  puckerIn: 0.03, funnelIn: 0.015,
+  puckerIn: 0.03,
+  funnelIn: 0.015,
 } as const;
 
 // --- The landmarks ------------------------------------------------------------
@@ -104,8 +129,8 @@ export const CHEEK = {
 /** MediaPipe's face oval, from the forehead clockwise (image left is the
  *  face's right). */
 export const FACE_OVAL = [
-  10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377,
-  152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
+  10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
+  172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
 ];
 /** The jaw's arc of the oval, chin tip to the ear-level pivot, each side.
  *  Image left (the face's right) and image right. */
@@ -140,32 +165,34 @@ const NASOLABIAL = [203, 206, 216, 92, 165, 423, 426, 436, 322, 391];
  *  makes the exclusion exact whatever the face's proportions. */
 export const UPPER_FACE: ReadonlySet<number> = new Set([
   // eyes: lid rings, sockets, irises
-  33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246,
-  263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466,
-  130, 25, 110, 24, 23, 22, 26, 112, 243, 244, 189, 56, 28, 27, 29, 30, 247, 226, 113,
-  225, 224, 223, 222, 221, 190, 31, 228, 229, 230, 231, 232, 233, 128, 245, 188, 174,
-  359, 255, 339, 254, 253, 252, 256, 341, 463, 464, 413, 286, 258, 257, 259, 260, 467, 446, 342,
-  445, 444, 443, 442, 441, 414, 261, 448, 449, 450, 451, 452, 453, 357, 465, 412, 399,
-  468, 469, 470, 471, 472, 473, 474, 475, 476, 477,
+  33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246, 263, 249, 390, 373, 374, 380, 381, 382,
+  362, 398, 384, 385, 386, 387, 388, 466, 130, 25, 110, 24, 23, 22, 26, 112, 243, 244, 189, 56, 28, 27, 29, 30, 247,
+  226, 113, 225, 224, 223, 222, 221, 190, 31, 228, 229, 230, 231, 232, 233, 128, 245, 188, 174, 359, 255, 339, 254, 253,
+  252, 256, 341, 463, 464, 413, 286, 258, 257, 259, 260, 467, 446, 342, 445, 444, 443, 442, 441, 414, 261, 448, 449,
+  450, 451, 452, 453, 357, 465, 412, 399, 468, 469, 470, 471, 472, 473, 474, 475, 476, 477,
   // brows
   70, 63, 105, 66, 107, 55, 65, 52, 53, 46, 300, 293, 334, 296, 336, 285, 295, 282, 283, 276,
   // nose: bridge, dorsum, tip, columella, alae and their bases
-  1, 2, 4, 5, 6, 19, 20, 94, 97, 98, 99, 102, 115, 125, 129, 131, 134, 141, 166, 168, 193, 195,
-  196, 197, 198, 209, 217, 218, 219, 220, 235, 236, 237, 238, 239, 240, 241, 242, 248, 250,
-  274, 275, 278, 281, 290, 294, 305, 309, 326, 327, 328, 331, 344, 354, 358, 360, 363, 370,
-  392, 420, 429, 437, 438, 439, 440, 455, 456, 457, 458, 459, 460, 461, 462,
-  3, 45, 48, 49, 51, 59, 60, 64, 75, 79, 44, 114, 122, 126, 142, 188, 196, 351, 355, 371, 419,
-  279, 289, 417, 343,
+  1, 2, 4, 5, 6, 19, 20, 94, 97, 98, 99, 102, 115, 125, 129, 131, 134, 141, 166, 168, 193, 195, 196, 197, 198, 209, 217,
+  218, 219, 220, 235, 236, 237, 238, 239, 240, 241, 242, 248, 250, 274, 275, 278, 281, 290, 294, 305, 309, 326, 327,
+  328, 331, 344, 354, 358, 360, 363, 370, 392, 420, 429, 437, 438, 439, 440, 455, 456, 457, 458, 459, 460, 461, 462, 3,
+  45, 48, 49, 51, 59, 60, 64, 75, 79, 44, 114, 122, 126, 142, 188, 196, 351, 355, 371, 419, 279, 289, 417, 343,
   // forehead and temples
-  10, 338, 297, 332, 284, 251, 389, 356, 109, 67, 103, 54, 21, 162, 127, 9, 8, 151, 108, 337,
-  69, 299, 104, 333, 68, 298, 71, 301, 139, 368, 34, 264, 156, 383, 35, 265, 124, 353, 143, 372,
-  111, 340, 117, 346, 118, 347, 119, 348, 120, 349, 121, 350, 234, 454, 93, 323, 116, 345, 227, 447,
+  10, 338, 297, 332, 284, 251, 389, 356, 109, 67, 103, 54, 21, 162, 127, 9, 8, 151, 108, 337, 69, 299, 104, 333, 68,
+  298, 71, 301, 139, 368, 34, 264, 156, 383, 35, 265, 124, 353, 143, 372, 111, 340, 117, 346, 118, 347, 119, 348, 120,
+  349, 121, 350, 234, 454, 93, 323, 116, 345, 227, 447,
 ]);
 
 // --- The rig ------------------------------------------------------------------
 
 /** Vertex roles: skin, upper lip, lower lip, corner, upper face (never moved). */
-export enum Role { Skin = 0, UpperLip = 1, LowerLip = 2, Corner = 3, UpperFace = 4 }
+export enum Role {
+  Skin = 0,
+  UpperLip = 1,
+  LowerLip = 2,
+  Corner = 3,
+  UpperFace = 4,
+}
 
 export interface LowerFaceRig {
   readonly frame: MouthFrame;
@@ -199,15 +226,22 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 /** One side of the jaw line: for each oval vertex from the chin up to the
  *  pivot, its depth, its distance from the mouth's axis, and the fraction of
  *  the arc walked from the chin (0) to the pivot (1). */
-interface JawArc { v: Float64Array; r: Float64Array; f: Float64Array }
+interface JawArc {
+  v: Float64Array;
+  r: Float64Array;
+  f: Float64Array;
+}
 
 function jawArc(indices: number[], u: Float32Array, v: Float32Array): JawArc {
   const n = indices.length;
-  const av = new Float64Array(n), ar = new Float64Array(n), af = new Float64Array(n);
+  const av = new Float64Array(n),
+    ar = new Float64Array(n),
+    af = new Float64Array(n);
   let length = 0;
   for (let k = 0; k < n; k++) {
     const i = indices[k];
-    av[k] = v[i]; ar[k] = Math.abs(u[i]);
+    av[k] = v[i];
+    ar[k] = Math.abs(u[i]);
     if (k > 0) length += Math.hypot(u[i] - u[indices[k - 1]], v[i] - v[indices[k - 1]]);
     af[k] = length;
   }
@@ -239,10 +273,14 @@ export function buildLowerFaceRig(rest: readonly Pt[], count = 478): LowerFaceRi
   const n = Math.min(count, rest.length);
   const frame = mouthFrame(rest);
   const role = new Uint8Array(n);
-  const u = new Float32Array(n), v = new Float32Array(n);
-  const weight = new Float32Array(n), jaw = new Float32Array(n), cheek = new Float32Array(n);
+  const u = new Float32Array(n),
+    v = new Float32Array(n);
+  const weight = new Float32Array(n),
+    jaw = new Float32Array(n),
+    cheek = new Float32Array(n);
   for (let i = 0; i < n; i++) {
-    const dx = rest[i].x - frame.cx, dy = rest[i].y - frame.cy;
+    const dx = rest[i].x - frame.cx,
+      dy = rest[i].y - frame.cy;
     u[i] = (dx * frame.ax + dy * frame.ay) / frame.w;
     v[i] = (dx * frame.nx + dy * frame.ny) / frame.w;
   }
@@ -257,12 +295,15 @@ export function buildLowerFaceRig(rest: readonly Pt[], count = 478): LowerFaceRi
   let lipDepth = 0;
   for (const i of LOWER_ROWS[3].slice(2, 7)) lipDepth += v[i];
   const ramp = Math.max(0.05, (lipDepth / 5) * 0.9);
-  const left = jawArc(JAW_ARC_LEFT, u, v), right = jawArc(JAW_ARC_RIGHT, u, v);
+  const left = jawArc(JAW_ARC_LEFT, u, v),
+    right = jawArc(JAW_ARC_RIGHT, u, v);
 
   for (let i = 0; i < n; i++) {
     const r = role[i];
     if (r === Role.UpperFace) continue;
-    const ui = u[i], vi = v[i], au = Math.abs(ui);
+    const ui = u[i],
+      vi = v[i],
+      au = Math.abs(ui);
     // The upper lip's gate: data reaches the lip and the philtrum, never the
     // nose base above it (the photographic mouth's "below the nose" gate).
     const gate = smooth((vi + 0.4) / 0.22);
@@ -295,7 +336,8 @@ export function buildLowerFaceRig(rest: readonly Pt[], count = 478): LowerFaceRi
     jaw[i] = lerp(centreJ, edgeJ, t);
     // Cheek gate: a band about the mouth's height, lateral to the corners,
     // fading before the jaw line's far end and the cheekbone.
-    cheek[i] = smooth((au - 0.5) / 0.3) * (1 - smooth((au - 1.0) / 0.3)) * (1 - smooth((Math.abs(vi + 0.2) - 0.35) / 0.4));
+    cheek[i] =
+      smooth((au - 0.5) / 0.3) * (1 - smooth((au - 1.0) / 0.3)) * (1 - smooth((Math.abs(vi + 0.2) - 0.35) / 0.4));
   }
   return { frame, n, role, u, v, weight, jaw, cheek, vChin, vCheek, ramp };
 }
@@ -319,12 +361,17 @@ export const NECK_BAND = { inner: 0.3, innerShare: 0.65, outer: 0.8 } as const;
 export const JAW_ARC = [...JAW_ARC_LEFT].reverse().concat(JAW_ARC_RIGHT.slice(1));
 
 export interface NeckVertex {
-  x: number; y: number;
+  x: number;
+  y: number;
   /** The jaw-line vertex this one hangs from, and the share of its motion
    *  it takes (0: still). */
-  parent: number; share: number;
+  parent: number;
+  share: number;
 }
-export interface NeckBand { vertices: NeckVertex[]; triangles: [number, number, number][] }
+export interface NeckBand {
+  vertices: NeckVertex[];
+  triangles: [number, number, number][];
+}
 
 /**
  * The band for a rest mesh, its vertices numbered from `firstIndex` on
@@ -344,17 +391,24 @@ export function buildNeckBand(rest: readonly Pt[], firstIndex: number): NeckBand
   for (const ring of rings) {
     for (let k = 0; k < n; k++) {
       const p = rest[arc[k]];
-      const prev = rest[arc[Math.max(0, k - 1)]], next = rest[arc[Math.min(n - 1, k + 1)]];
+      const prev = rest[arc[Math.max(0, k - 1)]],
+        next = rest[arc[Math.min(n - 1, k + 1)]];
       // Outward normal of the jaw line: perpendicular to its direction here,
       // pointing away from the mouth.
-      let nx = -(next.y - prev.y), ny = next.x - prev.x;
+      let nx = -(next.y - prev.y),
+        ny = next.x - prev.x;
       const len = Math.hypot(nx, ny) || 1;
-      nx /= len; ny /= len;
-      if (nx * (p.x - f.cx) + ny * (p.y - f.cy) < 0) { nx = -nx; ny = -ny; }
+      nx /= len;
+      ny /= len;
+      if (nx * (p.x - f.cx) + ny * (p.y - f.cy) < 0) {
+        nx = -nx;
+        ny = -ny;
+      }
       vertices.push({ x: p.x + nx * ring.offset, y: p.y + ny * ring.offset, parent: arc[k], share: ring.share });
     }
   }
-  const inner = (k: number) => firstIndex + k, outer = (k: number) => firstIndex + n + k;
+  const inner = (k: number) => firstIndex + k,
+    outer = (k: number) => firstIndex + n + k;
   for (let k = 0; k + 1 < n; k++) {
     triangles.push([arc[k], arc[k + 1], inner(k + 1)], [arc[k], inner(k + 1), inner(k)]);
     triangles.push([inner(k), inner(k + 1), outer(k + 1)], [inner(k), outer(k + 1), outer(k)]);
@@ -365,8 +419,10 @@ export function buildNeckBand(rest: readonly Pt[], firstIndex: number): NeckBand
 /** How far to trust a driver's chin, 0..1, from its drop over the lower
  *  lip's: 1 inside the plausible band, 0 well outside it. */
 export function chinTrust(ratio: number): number {
-  return smooth((ratio - JAW_RATIO_MIN[0]) / (JAW_RATIO_MIN[1] - JAW_RATIO_MIN[0])) *
-    (1 - smooth((ratio - JAW_RATIO_MAX[0]) / (JAW_RATIO_MAX[1] - JAW_RATIO_MAX[0])));
+  return (
+    smooth((ratio - JAW_RATIO_MIN[0]) / (JAW_RATIO_MIN[1] - JAW_RATIO_MIN[0])) *
+    (1 - smooth((ratio - JAW_RATIO_MAX[0]) / (JAW_RATIO_MAX[1] - JAW_RATIO_MAX[0])))
+  );
 }
 
 export interface LowerFaceReport {
@@ -414,7 +470,8 @@ export function applyLowerFace(
   for (let i = 0; i < rig.n; i++) {
     if (rig.role[i] !== Role.Skin) continue;
     const share = rig.jaw[i];
-    let da = 0, dn = 0;
+    let da = 0,
+      dn = 0;
     if (share > 0) {
       const have = drop(i);
       // Below the seam: the jaw's body, hinged only as far as the driver's
@@ -443,7 +500,8 @@ export function applyLowerFace(
   if (foldUp > 0 || foldOut > 0) {
     for (const i of NASOLABIAL) {
       if (i >= rig.n || rig.role[i] !== Role.Skin) continue;
-      const da = Math.sign(rig.u[i]) * foldOut, dn = -foldUp;
+      const da = Math.sign(rig.u[i]) * foldOut,
+        dn = -foldUp;
       pts[i].x += da * f.ax + dn * f.nx;
       pts[i].y += da * f.ay + dn * f.ny;
     }

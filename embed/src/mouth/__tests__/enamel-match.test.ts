@@ -1,10 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
-  enamelMatch, HIGHLIGHT_HEADROOM, LUMA_FLOOR, MAX_BLUR, OWN_TEETH_STRENGTH, sampleEnamel,
-  type EnamelSample, type FaceLook,
+  enamelMatch,
+  HIGHLIGHT_HEADROOM,
+  LUMA_FLOOR,
+  MAX_BLUR,
+  OWN_TEETH_STRENGTH,
+  sampleEnamel,
+  type EnamelSample,
+  type FaceLook,
 } from "../enamel-match-model";
-import { cavityReveal, CAVITY_REVEAL, contactSeam, enamelReveal, ENAMEL_REVEAL, REVEAL_RISE_MS, RevealRamp } from "../lip-occlusion-model";
-import { faceHighlight, insidePolygon, lumaPercentile } from "../../face-light";
+import {
+  cavityReveal,
+  CAVITY_REVEAL,
+  contactSeam,
+  enamelReveal,
+  ENAMEL_REVEAL,
+  REVEAL_RISE_MS,
+  RevealRamp,
+} from "../lip-occlusion-model";
+import { faceHighlight, insidePolygon, lumaPercentile } from "../../engine/face-light";
 
 /** The standard teeth, as measured: a warm cream, bright crowns, soft edges
  *  from the photo's upscale to the extraction canvas. */
@@ -28,16 +42,19 @@ describe("the teeth come into the light as the lips part", () => {
   it("is continuous and monotone as the mouth opens, and never below the cavity", () => {
     // A lip gap moves well under 0.002 of a mouth width per frame at speech
     // speed; no ramp may step more than its slope over that.
-    let previous = 0, previousCavity = 0;
+    let previous = 0,
+      previousCavity = 0;
     for (let i = 0; i <= 2000; i++) {
-      const gap = i / 2000 * 0.3;
-      const reveal = enamelReveal(gap, 1), cavity = cavityReveal(gap, 1);
+      const gap = (i / 2000) * 0.3;
+      const reveal = enamelReveal(gap, 1),
+        cavity = cavityReveal(gap, 1);
       expect(reveal).toBeGreaterThanOrEqual(previous);
       expect(reveal - previous).toBeLessThan(0.006);
       expect(cavity).toBeGreaterThanOrEqual(previousCavity);
       expect(cavity - previousCavity).toBeLessThan(0.006);
       expect(cavity).toBeGreaterThanOrEqual(reveal);
-      previous = reveal; previousCavity = cavity;
+      previous = reveal;
+      previousCavity = cavity;
     }
     expect(CAVITY_REVEAL[0]).toBeLessThanOrEqual(ENAMEL_REVEAL[0]);
   });
@@ -53,7 +70,7 @@ describe("the teeth come into the light as the lips part", () => {
     for (let g = 0.02; g <= 0.12; g += 0.005) expect(contactSeam(g, 1) + cavityReveal(g, 1)).toBeGreaterThan(0.9);
     let previous = contactSeam(0, 1);
     for (let i = 1; i <= 2000; i++) {
-      const next = contactSeam(i / 2000 * 0.2, 1);
+      const next = contactSeam((i / 2000) * 0.2, 1);
       expect(Math.abs(next - previous)).toBeLessThan(0.015);
       previous = next;
     }
@@ -68,7 +85,8 @@ describe("the teeth come into the light as the lips part", () => {
 
 describe("the enamel fitted to the face", () => {
   it("warms toward a warm face and cools toward a cool one, without changing its luma", () => {
-    const w = enamelMatch(warm, STANDARD).gain, c = enamelMatch(cool, STANDARD).gain;
+    const w = enamelMatch(warm, STANDARD).gain,
+      c = enamelMatch(cool, STANDARD).gain;
     expect(w[0]).toBeGreaterThan(w[2]);
     expect(c[2]).toBeGreaterThan(c[0]);
     expect(w[0] / w[2]).toBeGreaterThan(c[0] / c[2]);
@@ -106,7 +124,8 @@ describe("the enamel fitted to the face", () => {
   });
   it("fits a face's own teeth photo the same way, gently", () => {
     const face: FaceLook = { ...warm, highlight: 150, sharp: 0.03 };
-    const standard = enamelMatch(face, STANDARD), own = enamelMatch(face, STANDARD, true);
+    const standard = enamelMatch(face, STANDARD),
+      own = enamelMatch(face, STANDARD, true);
     expect(own.blur).toBeCloseTo(standard.blur * OWN_TEETH_STRENGTH, 6);
     for (let i = 0; i < 3; i++) {
       expect(Math.abs(own.gain[i] - 1)).toBeLessThan(Math.abs(standard.gain[i] - 1));
@@ -126,8 +145,12 @@ describe("the enamel fitted to the face", () => {
     for (const g of reference.gain) expect(g).toBeCloseTo(1, 9);
     expect(reference.blur).toBe(0);
     expect(enamelMatch({ lip: [0, 0, 0] }, STANDARD)).toEqual({ gain: [1, 1, 1], blur: 0 });
-    expect(enamelMatch({ lip: [NaN, 1, 2] as unknown as [number, number, number], highlight: NaN, sharp: NaN }, { cast: [NaN, 1, 1], bright: NaN, edge: NaN }))
-      .toEqual({ gain: [1, 1, 1], blur: 0 });
+    expect(
+      enamelMatch(
+        { lip: [NaN, 1, 2] as unknown as [number, number, number], highlight: NaN, sharp: NaN },
+        { cast: [NaN, 1, 1], bright: NaN, edge: NaN }
+      )
+    ).toEqual({ gain: [1, 1, 1], blur: 0 });
   });
   it("is deterministic", () => {
     expect(enamelMatch(warm, STANDARD)).toEqual(enamelMatch(warm, STANDARD));
@@ -136,31 +159,46 @@ describe("the enamel fitted to the face", () => {
 
 describe("the enamel sample", () => {
   it("reads the arch's cast, its brightest crowns and its edge width from the layer", () => {
-    const width = 60, height = 30;
+    const width = 60,
+      height = 30;
     const source = { width, height, data: new Uint8ClampedArray(width * height * 4) };
-    const layer = { pixels: { width, height, data: new Uint8ClampedArray(width * height * 4) }, box: { x: 10, y: 8, width: 40, height: 14 } };
+    const layer = {
+      pixels: { width, height, data: new Uint8ClampedArray(width * height * 4) },
+      box: { x: 10, y: 8, width: 40, height: 14 },
+    };
     // A cream block of teeth over a dark mouth, with a one-pixel step at its
     // top and bottom: contrast over steepest step is 1 there.
-    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-      const k = (y * width + x) * 4;
-      const enamel = y >= 8 && y < 22 && x >= 10 && x < 50;
-      source.data.set(enamel ? [230, 210, 190, 255] : [40, 20, 20, 255], k);
-      if (enamel) layer.pixels.data.set([230, 210, 190, 255], k);
-    }
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) {
+        const k = (y * width + x) * 4;
+        const enamel = y >= 8 && y < 22 && x >= 10 && x < 50;
+        source.data.set(enamel ? [230, 210, 190, 255] : [40, 20, 20, 255], k);
+        if (enamel) layer.pixels.data.set([230, 210, 190, 255], k);
+      }
     const sample = sampleEnamel(layer, source);
     expect(sample.cast[0]).toBeGreaterThan(sample.cast[2]);
     expect(sample.cast[0] * 210).toBeCloseTo(230, 0);
     expect(sample.bright).toBeCloseTo(luma([230, 210, 190]), 0);
     expect(sample.edge).toBe(1);
-    expect(sampleEnamel({ ...layer, pixels: { width, height, data: new Uint8ClampedArray(width * height * 4) } }, source))
-      .toEqual({ cast: [1, 1, 1], bright: 0, edge: 0 });
+    expect(
+      sampleEnamel({ ...layer, pixels: { width, height, data: new Uint8ClampedArray(width * height * 4) } }, source)
+    ).toEqual({ cast: [1, 1, 1], bright: 0, edge: 0 });
   });
 });
 
 describe("the face's highlight", () => {
   it("is a high percentile of the luma inside the face oval only", () => {
     // A square face oval, eight points round.
-    const oval = [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 50 }, { x: 100, y: 100 }, { x: 50, y: 100 }, { x: 0, y: 100 }, { x: 0, y: 50 }];
+    const oval = [
+      { x: 0, y: 0 },
+      { x: 50, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 50 },
+      { x: 100, y: 100 },
+      { x: 50, y: 100 },
+      { x: 0, y: 100 },
+      { x: 0, y: 50 },
+    ];
     expect(insidePolygon(oval, 50, 50)).toBe(true);
     expect(insidePolygon(oval, 150, 50)).toBe(false);
     expect(lumaPercentile([], 0.97)).toBeNull();
@@ -168,12 +206,23 @@ describe("the face's highlight", () => {
     // A 10 x 10 grid over the oval's box, the left half dim and the right half
     // bright, with one glint: the highlight is the bright half's level, not
     // the glint.
-    const pixel = (column: number, row: number) => (column === 9 && row === 9 ? [255, 255, 255] : column < 5 ? [60, 60, 60] : [180, 180, 180]);
+    const pixel = (column: number, row: number) =>
+      column === 9 && row === 9 ? [255, 255, 255] : column < 5 ? [60, 60, 60] : [180, 180, 180];
     expect(faceHighlight(oval, pixel, 10)).toBe(180);
     // Outside the oval nothing counts: a diamond in the same box, bright
     // only in the box's corners, which lie outside it.
-    const diamond = [{ x: 50, y: 0 }, { x: 75, y: 25 }, { x: 100, y: 50 }, { x: 75, y: 75 }, { x: 50, y: 100 }, { x: 25, y: 75 }, { x: 0, y: 50 }, { x: 25, y: 25 }];
-    const corners = (c: number, r: number) => (Math.abs((c + 0.5) * 10 - 50) + Math.abs((r + 0.5) * 10 - 50) > 60 ? [250, 250, 250] : [100, 100, 100]);
+    const diamond = [
+      { x: 50, y: 0 },
+      { x: 75, y: 25 },
+      { x: 100, y: 50 },
+      { x: 75, y: 75 },
+      { x: 50, y: 100 },
+      { x: 25, y: 75 },
+      { x: 0, y: 50 },
+      { x: 25, y: 25 },
+    ];
+    const corners = (c: number, r: number) =>
+      Math.abs((c + 0.5) * 10 - 50) + Math.abs((r + 0.5) * 10 - 50) > 60 ? [250, 250, 250] : [100, 100, 100];
     expect(faceHighlight(diamond, corners, 10)).toBe(100);
     expect(faceHighlight(oval.slice(0, 3), pixel, 10)).toBeNull();
   });
@@ -189,13 +238,16 @@ describe("a reveal followed over time (RevealRamp)", () => {
     const ramp = new RevealRamp();
     ramp.step(0, frame);
     const steps: number[] = [];
-    let value = 0, elapsed = 0;
+    let value = 0,
+      elapsed = 0;
     while (value < 1 && elapsed < 1000) {
       value = ramp.step(1, frame);
       elapsed += frame;
       steps.push(value);
     }
-    expect(Math.max(...steps.map((v, i) => v - (steps[i - 1] ?? 0)))).toBeLessThanOrEqual(frame / REVEAL_RISE_MS + 1e-9);
+    expect(Math.max(...steps.map((v, i) => v - (steps[i - 1] ?? 0)))).toBeLessThanOrEqual(
+      frame / REVEAL_RISE_MS + 1e-9
+    );
     expect(elapsed).toBeGreaterThanOrEqual(REVEAL_RISE_MS - 1e-9);
     expect(elapsed).toBeLessThan(REVEAL_RISE_MS + 2 * frame);
     expect(value).toBe(1);
@@ -212,8 +264,12 @@ describe("a reveal followed over time (RevealRamp)", () => {
     const at = (fps: number) => {
       const ramp = new RevealRamp();
       ramp.step(0, 0);
-      let value = 0, elapsed = 0;
-      while (value < 0.5) { value = ramp.step(0.5, 1000 / fps); elapsed += 1000 / fps; }
+      let value = 0,
+        elapsed = 0;
+      while (value < 0.5) {
+        value = ramp.step(0.5, 1000 / fps);
+        elapsed += 1000 / fps;
+      }
       return { value, elapsed };
     };
     expect(at(30).value).toBe(0.5);

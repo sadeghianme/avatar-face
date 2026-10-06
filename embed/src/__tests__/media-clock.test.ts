@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
 import { engineSeam, type EngineSeam } from "../engine/seam";
-import { MAX_EXTRAPOLATION_MS, MediaClock } from "../media-clock";
+import { MAX_EXTRAPOLATION_MS, MediaClock } from "../engine/media-clock";
 import type { Cue, Rig } from "../types";
 import { FakeAudio, fakeCanvas, NoopPath } from "./browser-fakes";
 
@@ -46,7 +46,11 @@ describe("the media clock", () => {
     const clock = new MediaClock(media);
     media.paused = false;
     clock.sync(0);
-    for (const [now, position] of [[16, 0.010], [33, 0.031], [50, 0.052]]) {
+    for (const [now, position] of [
+      [16, 0.01],
+      [33, 0.031],
+      [50, 0.052],
+    ]) {
       media.currentTime = position;
       expect(clock.read(now)).toBeCloseTo(position * 1000);
     }
@@ -63,7 +67,7 @@ describe("the media clock", () => {
     expect(clock.read(116)).toBe(116);
     expect(clock.read(133)).toBe(133);
     // The refresh reports a little less than extrapolated: held, not rewound.
-    media.currentTime = 0.130;
+    media.currentTime = 0.13;
     expect(clock.read(150)).toBe(133);
     expect(clock.read(170)).toBe(150);
   });
@@ -95,9 +99,7 @@ describe("the media clock", () => {
   });
 });
 
-const rig = JSON.parse(
-  readFileSync(new URL("./fixtures/human-rig.json", import.meta.url), "utf8")
-) as Rig;
+const rig = JSON.parse(readFileSync(new URL("./fixtures/human-rig.json", import.meta.url), "utf8")) as Rig;
 
 const CUES: Cue[] = [
   { t: 0, viseme: "sil", a: 1 },

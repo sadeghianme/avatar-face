@@ -13,7 +13,7 @@ import {
 
 const seeded = () => {
   let x = 4242;
-  return () => ((x = (x * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  return () => (x = (x * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 };
 
 /** Step the scheduler and count blink onsets (phase leaving zero). */
@@ -27,7 +27,7 @@ function run(
   const onsets: number[] = [];
   let now = from;
   let wasOpen = s.phase === 0;
-  for (const end = from + ms; now < end; ) {
+  for (const end = from + ms; now < end;) {
     now += frame;
     s.update(frame, now, ctx);
     const open = s.phase === 0;
@@ -57,7 +57,10 @@ describe("blinkEase", () => {
     let rising = true;
     for (let t = 0.001; t <= 1; t += 0.001) {
       const v = blinkEase(t);
-      if (rising && v < prev) { peaks++; rising = false; }
+      if (rising && v < prev) {
+        peaks++;
+        rising = false;
+      }
       prev = v;
     }
     expect(peaks).toBe(1);

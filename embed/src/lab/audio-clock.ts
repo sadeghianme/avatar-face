@@ -14,14 +14,22 @@ export class AudioClockComparison {
   constructor(
     private baseline: CuePlayer,
     private improved: CuePlayer,
-    private createAudio = (src: string) => new Audio(src),
+    private createAudio = (src: string) => new Audio(src)
   ) {}
 
   readonly readTime = (): number => Math.max(0, (this.audio?.currentTime ?? 0) * 1000 + this.leadMs);
 
-  get media(): HTMLAudioElement | null { return this.audio; }
+  get media(): HTMLAudioElement | null {
+    return this.audio;
+  }
 
-  play(audioB64: string, mime: string, baseline: Cue[], improved: Cue[], onMedia?: (audio: HTMLAudioElement) => void): Promise<void> {
+  play(
+    audioB64: string,
+    mime: string,
+    baseline: Cue[],
+    improved: Cue[],
+    onMedia?: (audio: HTMLAudioElement) => void
+  ): Promise<void> {
     this.stop();
     this.baselineCues = baseline;
     this.improvedCues = improved;
@@ -39,7 +47,8 @@ export class AudioClockComparison {
         this.improved.stopSpeech();
         audio.removeAttribute("src");
         audio.load();
-        if (error) reject(error); else resolve();
+        if (error) reject(error);
+        else resolve();
       };
       const playing = () => {
         if (this.audio !== audio) return;
@@ -53,7 +62,9 @@ export class AudioClockComparison {
         this.baseline.stopSpeech();
         this.improved.stopSpeech();
       };
-      const seek = () => { if (this.started && !audio.paused) playing(); };
+      const seek = () => {
+        if (this.started && !audio.paused) playing();
+      };
       const ended = () => finish();
       const failed = () => finish(new Error("Audio playback failed"));
       const cleanup = () => {
@@ -73,17 +84,25 @@ export class AudioClockComparison {
       this.release = () => finish();
       try {
         onMedia?.(audio);
-        void audio.play().catch((error: unknown) => finish(
-          error instanceof Error ? error : new Error("Audio playback failed"),
-        ));
+        void audio
+          .play()
+          .catch((error: unknown) => finish(error instanceof Error ? error : new Error("Audio playback failed")));
       } catch (error) {
         finish(error instanceof Error ? error : new Error("Audio playback failed"));
       }
     });
   }
 
-  pause(): void { this.audio?.pause(); }
-  async resume(): Promise<void> { await this.audio?.play(); }
-  stop(): void { this.release?.(); }
-  destroy(): void { this.stop(); }
+  pause(): void {
+    this.audio?.pause();
+  }
+  async resume(): Promise<void> {
+    await this.audio?.play();
+  }
+  stop(): void {
+    this.release?.();
+  }
+  destroy(): void {
+    this.stop();
+  }
 }

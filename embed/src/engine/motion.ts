@@ -9,9 +9,9 @@
  * timing lives in blink.ts, the body's in bodymotion.ts, the head's drift
  * in headmotion.ts; this schedules them and turns them into transforms.
  */
-import { BlinkScheduler } from "../blink";
-import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "../bodymotion";
-import { HeadMotion } from "../headmotion";
+import { BlinkScheduler } from "./blink";
+import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
+import { HeadMotion } from "./headmotion";
 import type { Beat } from "./cues";
 import type { HeadGeom, Point } from "./geometry";
 import type { FaceState } from "./state";
@@ -90,8 +90,8 @@ export class Motion {
   private nextBeat = 0;
   /** Where the body pivots, and its reach (measureBody). */
   private bodyPivot = { x: 0, y: 0 };
-  private swayAngle = 0;   // radians at full deflection
-  private breathRise = 0;  // pixels at the top of an inhale
+  private swayAngle = 0; // radians at full deflection
+  private breathRise = 0; // pixels at the top of an inhale
 
   /** `face`: the shared state whose blink and gaze this motion moves. */
   constructor(private readonly face: FaceState) {}
@@ -286,10 +286,7 @@ export class Motion {
     const p = this.nodPhase;
     const nod = p < 1 ? Math.sin(p * Math.PI) ** 2 : 0;
     const dx = this.head.yaw * g.yawPx * s;
-    const dy =
-      (this.head.pitch * g.pitchPx +
-        nod * this.nodStrength * this.energy * g.faceH * 0.013) *
-      s;
+    const dy = (this.head.pitch * g.pitchPx + nod * this.nodStrength * this.energy * g.faceH * 0.013) * s;
     const roll = this.head.roll * 0.02 * s;
     // NO face parallax. The face mesh redrawn at its own offset over the
     // head layer duplicates whatever crosses the mesh hull — bangs over a

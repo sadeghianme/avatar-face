@@ -9,6 +9,8 @@
   "scripts": {
     "typecheck": "tsc -b && tsc -p tsconfig.test.json",
     "lint": "eslint .",
+    "format": "prettier --write \"src/**/*.ts\" \"browser-tests/**/*.ts\" \"scripts/**/*.{ts,mjs,mts}\" \"*.{js,ts}\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"browser-tests/**/*.ts\" \"scripts/**/*.{ts,mjs,mts}\" \"*.{js,ts}\"",
     "build": "tsc -b && node scripts/build.mjs && cp assets/mouth-motion.json assets/mouth-teeth.webp assets/mouth-teeth.rig.json dist/",
     "dev": "esbuild src/widget.ts --bundle --format=iife --outfile=dist/liveface.js --watch --servedir=.",
     "build:head3d-bake": "esbuild scripts/head3d-bake.ts --bundle --platform=node --format=esm --outfile=dist/head3d-bake.mjs",
@@ -16,7 +18,9 @@
     "test": "vitest run",
     "test:pixels": "vitest run src/__tests__/pixels.test.ts",
     "test:pixels:update": "UPDATE_PIXEL_GOLDENS=1 vitest run src/__tests__/pixels.test.ts",
-    "test:pixels:add-platform": "UPDATE_PIXEL_GOLDENS=hashes vitest run src/__tests__/pixels.test.ts"
+    "test:pixels:add-platform": "UPDATE_PIXEL_GOLDENS=hashes vitest run src/__tests__/pixels.test.ts",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
+    "test:browser:update": "UPDATE_BROWSER_GOLDENS=1 vitest run --config vitest.browser.config.ts browser-tests/gl-warp.test.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -24,6 +28,8 @@
     "@types/node": "^20.19.43",
     "esbuild": "^0.21.5",
     "eslint": "^10.12.0",
+    "playwright": "1.63.0",
+    "prettier": "3.9.9",
     "typescript": "^5.4.5",
     "typescript-eslint": "^8.71.1",
     "vitest": "^2.1.9"

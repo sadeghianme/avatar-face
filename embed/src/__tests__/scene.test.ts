@@ -35,7 +35,11 @@ function fakeCanvas(log: string[], texture: Texture, size = 512): HTMLCanvasElem
   const ctx = new Proxy(target, {
     get(obj, key: string) {
       if (key in obj) return obj[key];
-      return (...args: unknown[]) => { log.push(`${key}(${args.map((a) => (typeof a === "number" ? Math.round(a) : typeof a === "object" && a ? "obj" : String(a))).join(",")})`); };
+      return (...args: unknown[]) => {
+        log.push(
+          `${key}(${args.map((a) => (typeof a === "number" ? Math.round(a) : typeof a === "object" && a ? "obj" : String(a))).join(",")})`
+        );
+      };
     },
     set(obj, key: string, value: unknown) {
       obj[key] = value;
@@ -61,7 +65,20 @@ describe("the scene's background", () => {
     vi.spyOn(performance, "now").mockReturnValue(10_000);
     vi.stubGlobal("requestAnimationFrame", () => 1);
     vi.stubGlobal("cancelAnimationFrame", () => undefined);
-    vi.stubGlobal("Path2D", class { moveTo() {} lineTo() {} closePath() {} bezierCurveTo() {} quadraticCurveTo() {} arc() {} ellipse() {} rect() {} addPath() {} });
+    vi.stubGlobal(
+      "Path2D",
+      class {
+        moveTo() {}
+        lineTo() {}
+        closePath() {}
+        bezierCurveTo() {}
+        quadraticCurveTo() {}
+        arc() {}
+        ellipse() {}
+        rect() {}
+        addPath() {}
+      }
+    );
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -93,7 +110,9 @@ describe("the scene's background", () => {
 
   it("a picture that cannot load leaves the scene transparent and the avatar drawing", () => {
     // No Image in this environment: the load fails at once.
-    const { engine, e, log } = engineWith(cutOut, { background: { kind: "image", image_url: "https://example.test/bg.webp" } });
+    const { engine, e, log } = engineWith(cutOut, {
+      background: { kind: "image", image_url: "https://example.test/bg.webp" },
+    });
     expect(e.backdrop.image).toBeNull();
     e.render();
     engine.destroy();
@@ -118,9 +137,16 @@ describe("the scene's background", () => {
   it("the zoom option wins over the scene's, which wins over the framing", () => {
     const framed = engineWith(cutOut, undefined);
     const byScene = engineWith(cutOut, { zoom: 0 });
-    const byOption = new AvatarEngine(fakeCanvas([], cutOut), rig, { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement, { fullPhoto: false, scene: { zoom: 0 }, zoom: 1 });
+    const byOption = new AvatarEngine(
+      fakeCanvas([], cutOut),
+      rig,
+      { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement,
+      { fullPhoto: false, scene: { zoom: 0 }, zoom: 1 }
+    );
     expect(byScene.engine.landmarks()[152].y).not.toBeCloseTo(framed.engine.landmarks()[152].y, 1);
     expect(byOption.landmarks()[152].y).toBeCloseTo(framed.engine.landmarks()[152].y, 6);
-    framed.engine.destroy(); byScene.engine.destroy(); byOption.destroy();
+    framed.engine.destroy();
+    byScene.engine.destroy();
+    byOption.destroy();
   });
 });

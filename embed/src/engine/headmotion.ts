@@ -39,8 +39,7 @@ export class HeadMotion {
 
   update(dt: number, now: number, speaking: boolean): void {
     if (now >= this.nextMoveAt) {
-      this.nextMoveAt =
-        now + (speaking ? 1400 : 2600) + this.random() * (speaking ? 2200 : 4000);
+      this.nextMoveAt = now + (speaking ? 1400 : 2600) + this.random() * (speaking ? 2200 : 4000);
       // Signed square: same range, most draws near zero, so a wide move
       // stays genuinely occasional rather than the head scanning the room.
       const draw = () => {

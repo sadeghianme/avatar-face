@@ -2,10 +2,21 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
-  applyLowerFace, buildLowerFaceRig, buildNeckBand, CHEEK, CHIN_SHARE, chinTrust, JAW_ARC, LOWER_ROWS, mouthFrame,
-  NECK_BAND, Role, UPPER_FACE, type Pt,
+  applyLowerFace,
+  buildLowerFaceRig,
+  buildNeckBand,
+  CHEEK,
+  CHIN_SHARE,
+  chinTrust,
+  JAW_ARC,
+  LOWER_ROWS,
+  mouthFrame,
+  NECK_BAND,
+  Role,
+  UPPER_FACE,
+  type Pt,
 } from "../jaw-rig";
-import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
+import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
 
 /**
  * The lower-face rig: the weight map an AI pose is applied through, the jaw
@@ -14,8 +25,10 @@ import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
  * Reference's own rest pose (the face the bundled motion is measured on).
  */
 
-const fixture = JSON.parse(readFileSync(new URL("./fixtures/human-rig.json", import.meta.url), "utf8")) as Rig;
-const motion = JSON.parse(readFileSync(new URL("../../assets/mouth-motion.json", import.meta.url), "utf8")) as {
+const fixture = JSON.parse(
+  readFileSync(new URL("../../__tests__/fixtures/human-rig.json", import.meta.url), "utf8")
+) as Rig;
+const motion = JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8")) as {
   poses: { points: [number, number][] }[];
 };
 const human: Pt[] = fixture.points.map(([x, y]) => ({ x, y }));
@@ -37,12 +50,21 @@ const dist = (p: readonly Pt[], i: number, j: number) => Math.hypot(p[i].x - p[j
 function drive(rest: readonly Pt[], lip: number, chin = 0): Pt[] {
   const f = mouthFrame(rest);
   const pts = copy(rest);
-  for (const i of LIPS_LOWER) { pts[i].x += lip * f.nx; pts[i].y += lip * f.ny; }
-  if (chin) { pts[152].x += chin * f.nx; pts[152].y += chin * f.ny; }
+  for (const i of LIPS_LOWER) {
+    pts[i].x += lip * f.nx;
+    pts[i].y += lip * f.ny;
+  }
+  if (chin) {
+    pts[152].x += chin * f.nx;
+    pts[152].y += chin * f.ny;
+  }
   return pts;
 }
 
-describe.each([["human fixture", human], ["Reference rest", reference]])("lower-face weight map on the %s", (_name, rest) => {
+describe.each([
+  ["human fixture", human],
+  ["Reference rest", reference],
+])("lower-face weight map on the %s", (_name, rest) => {
   const rig = buildLowerFaceRig(rest);
   const W = rig.frame.w;
 
@@ -65,7 +87,10 @@ describe.each([["human fixture", human], ["Reference rest", reference]])("lower-
       let twin = false;
       for (const j of UPPER_FACE) {
         if (j >= rig.n) continue;
-        if (Math.abs(rig.u[j] + rig.u[i]) < 0.08 && Math.abs(rig.v[j] - rig.v[i]) < 0.08) { twin = true; break; }
+        if (Math.abs(rig.u[j] + rig.u[i]) < 0.08 && Math.abs(rig.v[j] - rig.v[i]) < 0.08) {
+          twin = true;
+          break;
+        }
       }
       expect(twin, `landmark ${i} has no excluded mirror`).toBe(true);
     }
@@ -79,13 +104,17 @@ describe.each([["human fixture", human], ["Reference rest", reference]])("lower-
     expect(rig.weight[13]).toBe(rig.weight[14]);
     expect(Math.abs(rig.weight[17] - rig.weight[18])).toBeLessThan(0.01);
     // Beside the corners, the skin just above and just below the seam agree.
-    for (const [above, below] of [[212, 57], [432, 287]]) {
+    for (const [above, below] of [
+      [212, 57],
+      [432, 287],
+    ]) {
       expect(Math.abs(rig.weight[above] - rig.weight[below])).toBeLessThan(0.25);
     }
   });
 
   it("follows the jaw line in full to mid-jaw and tapers toward the ear-side corners", () => {
-    for (const i of [148, 377, 176, 400, 149, 378, 150, 379]) expect(rig.weight[i], `weight ${i}`).toBeGreaterThan(0.85);
+    for (const i of [148, 377, 176, 400, 149, 378, 150, 379])
+      expect(rig.weight[i], `weight ${i}`).toBeGreaterThan(0.85);
     for (const i of [136, 365]) expect(rig.weight[i], `weight ${i}`).toBeGreaterThan(0.75);
     for (const i of [58, 288]) {
       expect(rig.weight[i], `weight ${i}`).toBeGreaterThan(0.3);
@@ -128,7 +157,10 @@ describe.each([["human fixture", human], ["Reference rest", reference]])("lower-
 });
 
 describe("the jaw hinge (classic driver: the lip drops, the chin did not)", () => {
-  for (const [name, rest] of [["human fixture", human], ["Reference rest", reference]] as const) {
+  for (const [name, rest] of [
+    ["human fixture", human],
+    ["Reference rest", reference],
+  ] as const) {
     const rig = buildLowerFaceRig(rest);
     const W = rig.frame.w;
 
@@ -186,7 +218,12 @@ describe("the jaw hinge (classic driver: the lip drops, the chin did not)", () =
 
     it(`${name}: the eyes, brows, nose and forehead do not move at all`, () => {
       const pts = drive(rest, 0.3 * W);
-      applyLowerFace(pts, rest, rig, weights({ jawOpen: 1, mouthStretch: 1, mouthSmile: 1, mouthPucker: 1, mouthFunnel: 1 }));
+      applyLowerFace(
+        pts,
+        rest,
+        rig,
+        weights({ jawOpen: 1, mouthStretch: 1, mouthSmile: 1, mouthPucker: 1, mouthFunnel: 1 })
+      );
       for (const i of [...EYES, ...BROWS, ...NOSE, ...FOREHEAD]) {
         expect(pts[i].x, `x ${i}`).toBe(rest[i].x);
         expect(pts[i].y, `y ${i}`).toBe(rest[i].y);
@@ -251,14 +288,16 @@ describe("the neck band", () => {
     expect(band.vertices).toHaveLength(2 * n);
     expect(band.triangles).toHaveLength(4 * (n - 1));
     for (let k = 0; k < n; k++) {
-      const inner = band.vertices[k], outer = band.vertices[n + k];
+      const inner = band.vertices[k],
+        outer = band.vertices[n + k];
       expect(inner.parent).toBe(JAW_ARC[k]);
       expect(outer.parent).toBe(JAW_ARC[k]);
       expect(inner.share).toBe(NECK_BAND.innerShare);
       expect(outer.share).toBe(0);
       // Outside the jaw line, further for the outer ring.
       const p = reference[JAW_ARC[k]];
-      const out = (q: { x: number; y: number }) => Math.hypot(q.x - f.cx, q.y - f.cy) - Math.hypot(p.x - f.cx, p.y - f.cy);
+      const out = (q: { x: number; y: number }) =>
+        Math.hypot(q.x - f.cx, q.y - f.cy) - Math.hypot(p.x - f.cx, p.y - f.cy);
       expect(out(inner)).toBeGreaterThan(f.w * 0.2);
       expect(out(outer)).toBeGreaterThan(out(inner));
     }
@@ -301,7 +340,10 @@ describe("the cheeks", () => {
     const lip = 0.28 * W;
     const pts = drive(reference, lip);
     applyLowerFace(pts, reference, rig, weights({ jawOpen: 0.72 }));
-    for (const [jawSide, cheekbone] of [[214, 50], [434, 280]]) {
+    for (const [jawSide, cheekbone] of [
+      [214, 50],
+      [434, 280],
+    ]) {
       expect(dy(pts, jawSide)).toBeGreaterThan(dy(pts, cheekbone));
       expect(dy(pts, cheekbone)).toBeGreaterThan(0.005);
       expect(dy(pts, cheekbone)).toBeLessThan(0.06);
@@ -314,13 +356,20 @@ describe("the cheeks", () => {
   it("bulge out and up on a spread lip, and lift the nasolabial fold", () => {
     const pts = copy(reference);
     applyLowerFace(pts, reference, rig, weights({ mouthStretch: 0.72, mouthSmile: 0.08 }));
-    for (const [left, right] of [[50, 280], [205, 425], [187, 411]]) {
+    for (const [left, right] of [
+      [50, 280],
+      [205, 425],
+      [187, 411],
+    ]) {
       expect(dx(pts, left)).toBeLessThan(-0.005);
       expect(dx(pts, right)).toBeGreaterThan(0.005);
       expect(dy(pts, left)).toBeLessThan(0);
       expect(Math.abs(dx(pts, left))).toBeLessThan(0.06);
     }
-    for (const [left, right] of [[206, 426], [92, 322]]) {
+    for (const [left, right] of [
+      [206, 426],
+      [92, 322],
+    ]) {
       expect(dy(pts, left)).toBeLessThan(-0.01);
       expect(dy(pts, right)).toBeLessThan(-0.01);
       expect(dx(pts, left)).toBeLessThan(0);
@@ -331,7 +380,10 @@ describe("the cheeks", () => {
   it("hollow toward the mouth on a rounded lip", () => {
     const pts = copy(reference);
     applyLowerFace(pts, reference, rig, weights({ mouthPucker: 0.85, mouthFunnel: 0.55 }));
-    for (const [left, right] of [[50, 280], [205, 425]]) {
+    for (const [left, right] of [
+      [50, 280],
+      [205, 425],
+    ]) {
       expect(dx(pts, left)).toBeGreaterThan(0.005);
       expect(dx(pts, right)).toBeLessThan(-0.005);
       expect(Math.abs(dx(pts, left))).toBeLessThan(0.06);
@@ -346,7 +398,8 @@ describe("the cheeks", () => {
   });
 
   it("scale with the owner's jaw range", () => {
-    const full = copy(reference), half = copy(reference);
+    const full = copy(reference),
+      half = copy(reference);
     applyLowerFace(full, reference, rig, weights({ mouthStretch: 1 }), 1);
     applyLowerFace(half, reference, rig, weights({ mouthStretch: 1 }), 0.5);
     expect(dx(half, 280)).toBeCloseTo(dx(full, 280) / 2, 6);

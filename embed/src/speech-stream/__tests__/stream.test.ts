@@ -16,16 +16,31 @@ const pcm = (samples: number) => {
   return btoa(s);
 };
 const chunk = (sequence: number, start: number, samples: number) => ({
-  type: "chunk", sequence, start_sample: start, sample_count: samples, sample_rate: 24000,
-  pcm_b64: pcm(samples), cues: [{ t: 0, viseme: "aa", a: 1 }, { t: (samples / 24), viseme: "sil", a: 1 }],
-  baseline_cues: [{ t: 0, viseme: "aa", a: 1 }, { t: (samples / 24), viseme: "sil", a: 1 }],
+  type: "chunk",
+  sequence,
+  start_sample: start,
+  sample_count: samples,
+  sample_rate: 24000,
+  pcm_b64: pcm(samples),
+  cues: [
+    { t: 0, viseme: "aa", a: 1 },
+    { t: samples / 24, viseme: "sil", a: 1 },
+  ],
+  baseline_cues: [
+    { t: 0, viseme: "aa", a: 1 },
+    { t: samples / 24, viseme: "sil", a: 1 },
+  ],
 });
 const ndjson = (frames: object[]) =>
   new Response(new Blob([frames.map((f) => JSON.stringify(f)).join("\n") + "\n"]).stream(), { status: 200 });
 
 const fakeEngine = () => ({
   playAudio: vi.fn((_a: string, _m: string, _c: unknown[], onEnd?: () => void) => onEnd?.()),
-  playCues: vi.fn(), syncCueTime: vi.fn(), stopSpeech: vi.fn(), isSpeaking: () => false, updateCueTrack: vi.fn(),
+  playCues: vi.fn(),
+  syncCueTime: vi.fn(),
+  stopSpeech: vi.fn(),
+  isSpeaking: () => false,
+  updateCueTrack: vi.fn(),
 });
 const fakePlayer = () => {
   let resolve!: () => void;
@@ -39,8 +54,13 @@ describe("streamSpeech", () => {
     const player = fakePlayer();
     const handle = streamSpeech(
       engine as never,
-      async () => ndjson([{ type: "start", version: 1, mode: "phrases" }, chunk(0, 0, 2400), chunk(1, 2400, 4800),
-        { type: "done", chunks: 2, total_samples: 7200, sample_rate: 24000 }]),
+      async () =>
+        ndjson([
+          { type: "start", version: 1, mode: "phrases" },
+          chunk(0, 0, 2400),
+          chunk(1, 2400, 4800),
+          { type: "done", chunks: 2, total_samples: 7200, sample_rate: 24000 },
+        ]),
       { player: player as never }
     );
     await handle.done;
@@ -61,11 +81,26 @@ describe("streamSpeech", () => {
     const player = fakePlayer();
     const handle = streamSpeech(
       engine as never,
-      async () => ndjson([{ type: "start", version: 1, mode: "recording" },
-        { type: "recording", audio_b64: "AAAA", audio_mime: "audio/wav", duration_ms: 500,
-          cues: [{ t: 0, viseme: "aa", a: 1 }, { t: 500, viseme: "sil", a: 1 }],
-          baseline_cues: [{ t: 0, viseme: "aa", a: 1 }, { t: 500, viseme: "sil", a: 1 }], timing_source: "existing_provider" },
-        { type: "done", chunks: 0 }]),
+      async () =>
+        ndjson([
+          { type: "start", version: 1, mode: "recording" },
+          {
+            type: "recording",
+            audio_b64: "AAAA",
+            audio_mime: "audio/wav",
+            duration_ms: 500,
+            cues: [
+              { t: 0, viseme: "aa", a: 1 },
+              { t: 500, viseme: "sil", a: 1 },
+            ],
+            baseline_cues: [
+              { t: 0, viseme: "aa", a: 1 },
+              { t: 500, viseme: "sil", a: 1 },
+            ],
+            timing_source: "existing_provider",
+          },
+          { type: "done", chunks: 0 },
+        ]),
       { player: player as never }
     );
     await handle.done;
@@ -79,8 +114,12 @@ describe("streamSpeech", () => {
     const player = fakePlayer();
     const handle = streamSpeech(
       engine as never,
-      async () => ndjson([{ type: "start", version: 1, mode: "phrases" }, chunk(0, 0, 2400),
-        { type: "error", code: "speech_stream_failed", detail: "boom" }]),
+      async () =>
+        ndjson([
+          { type: "start", version: 1, mode: "phrases" },
+          chunk(0, 0, 2400),
+          { type: "error", code: "speech_stream_failed", detail: "boom" },
+        ]),
       { player: player as never }
     );
     await expect(handle.done).rejects.toThrow("boom");
@@ -91,15 +130,18 @@ describe("streamSpeech", () => {
 
   it("a stream that ends without done is an error, not a shortened recording", async () => {
     const player = fakePlayer();
-    const handle = streamSpeech(fakeEngine() as never,
+    const handle = streamSpeech(
+      fakeEngine() as never,
       async () => ndjson([{ type: "start", version: 1, mode: "phrases" }, chunk(0, 0, 2400)]),
-      { player: player as never });
+      { player: player as never }
+    );
     await expect(handle.done).rejects.toThrow(/without finishing/);
   });
 
   it("a non-2xx response is an error", async () => {
-    const handle = streamSpeech(fakeEngine() as never, async () => new Response("nope", { status: 429 }),
-      { player: fakePlayer() as never });
+    const handle = streamSpeech(fakeEngine() as never, async () => new Response("nope", { status: 429 }), {
+      player: fakePlayer() as never,
+    });
     await expect(handle.done).rejects.toThrow("429");
   });
 
@@ -108,9 +150,18 @@ describe("streamSpeech", () => {
     const player = fakePlayer();
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
-    const handle = streamSpeech(engine as never, async () => { await gate; return ndjson([
-      { type: "start", version: 1, mode: "phrases" }, chunk(0, 0, 2400),
-      { type: "done", chunks: 1, total_samples: 2400, sample_rate: 24000 }]); }, { player: player as never });
+    const handle = streamSpeech(
+      engine as never,
+      async () => {
+        await gate;
+        return ndjson([
+          { type: "start", version: 1, mode: "phrases" },
+          chunk(0, 0, 2400),
+          { type: "done", chunks: 1, total_samples: 2400, sample_rate: 24000 },
+        ]);
+      },
+      { player: player as never }
+    );
     handle.stop();
     release();
     await handle.done;

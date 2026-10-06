@@ -3,8 +3,8 @@
  * eye slid inside the lids), the lash line riding a mesh blink, and the
  * painted lid of a profile that blinks that way (blink-lid.ts).
  */
-import { blinkEase } from "../blink";
-import { lidAmount, paintLid, type Blit } from "../blink-lid";
+import { blinkEase } from "./blink";
+import { lidAmount, paintLid, type Blit } from "./blink-lid";
 import type { Point } from "./geometry";
 import { EYE_CORNERS, IRISES, LOWER_LIDS, UPPER_LIDS, eyeShape } from "./landmarks";
 import type { FaceSamples } from "./sampling";
@@ -44,32 +44,35 @@ export function drawGaze(ctx: CanvasRenderingContext2D, pts: Point[], src: EyeSo
   // eye's own width: stylised faces (anime) have eyes near half the face
   // wide, and an eye-width-proportional shift slides those giant irises
   // several px — enough to tear against the lashes at the clip boundary.
-  const eL0 = pts[EYE_CORNERS[0][0]], eL1 = pts[EYE_CORNERS[0][1]];
-  const eR0 = pts[EYE_CORNERS[1][0]], eR1 = pts[EYE_CORNERS[1][1]];
+  const eL0 = pts[EYE_CORNERS[0][0]],
+    eL1 = pts[EYE_CORNERS[0][1]];
+  const eR0 = pts[EYE_CORNERS[1][0]],
+    eR1 = pts[EYE_CORNERS[1][1]];
   const interOc =
-    eL0 && eL1 && eR0 && eR1
-      ? Math.hypot(
-          (eR0.x + eR1.x - eL0.x - eL1.x) / 2,
-          (eR0.y + eR1.y - eL0.y - eL1.y) / 2
-        )
-      : 0;
+    eL0 && eL1 && eR0 && eR1 ? Math.hypot((eR0.x + eR1.x - eL0.x - eL1.x) / 2, (eR0.y + eR1.y - eL0.y - eL1.y) / 2) : 0;
 
   for (let e = 0; e < 2; e++) {
     const [c0, c1] = EYE_CORNERS[e];
-    const a = pts[c0], b = pts[c1];
-    const ta = src.texPoints[c0], tb = src.texPoints[c1];
+    const a = pts[c0],
+      b = pts[c1];
+    const ta = src.texPoints[c0],
+      tb = src.texPoints[c1];
     if (!a || !b || !ta || !tb) continue;
     const eyeW = Math.hypot(b.x - a.x, b.y - a.y);
     if (eyeW < 3) continue;
 
     // The pupil detector: iris center and radius from the ring points.
     const [ic, ring] = IRISES[e];
-    const c = pts[ic], tc = src.texPoints[ic];
+    const c = pts[ic],
+      tc = src.texPoints[ic];
     if (!c || !tc) continue;
     let r = 0;
     for (const i of ring) {
       const q = pts[i];
-      if (!q) { r = 0; break; }
+      if (!q) {
+        r = 0;
+        break;
+      }
       r += Math.hypot(q.x - c.x, q.y - c.y);
     }
     r /= 4;
@@ -101,7 +104,8 @@ export function drawGaze(ctx: CanvasRenderingContext2D, pts: Point[], src: EyeSo
     // giant stylised iris still moves a believable few pixels).
     const capX = Math.min(r * 0.35, interOc * 0.05);
     const capY = Math.min(r * 0.25, interOc * 0.035);
-    const sx = gx * capX, sy = gy * capY;
+    const sx = gx * capX,
+      sy = gy * capY;
 
     // Source box around the iris in texture space, mapped through the
     // same texture<->canvas ratio the triangles use so content lands 1:1.
@@ -110,8 +114,14 @@ export function drawGaze(ctx: CanvasRenderingContext2D, pts: Point[], src: EyeSo
     const m = R + 3;
     ctx.drawImage(
       src.texture,
-      tc.x - m * k, tc.y - m * k, 2 * m * k, 2 * m * k,
-      c.x - m + sx, c.y - m + sy, 2 * m, 2 * m
+      tc.x - m * k,
+      tc.y - m * k,
+      2 * m * k,
+      2 * m * k,
+      c.x - m + sx,
+      c.y - m + sy,
+      2 * m,
+      2 * m
     );
     ctx.restore();
   }
@@ -127,13 +137,16 @@ export function drawGaze(ctx: CanvasRenderingContext2D, pts: Point[], src: EyeSo
  * face can have brown, auburn or near-white lashes and a black line on
  * those looks pasted on.
  */
-export function drawLashes(ctx: CanvasRenderingContext2D, pts: Point[], blink: number, lashColour: readonly string[]): void {
+export function drawLashes(
+  ctx: CanvasRenderingContext2D,
+  pts: Point[],
+  blink: number,
+  lashColour: readonly string[]
+): void {
   if (blink <= 0) return;
   const phase = blink;
   const amount =
-    phase < 0.4
-      ? Math.sin((phase / 0.4) * (Math.PI / 2))
-      : Math.cos(((phase - 0.4) / 0.6) * (Math.PI / 2));
+    phase < 0.4 ? Math.sin((phase / 0.4) * (Math.PI / 2)) : Math.cos(((phase - 0.4) / 0.6) * (Math.PI / 2));
   if (amount <= 0.02) return;
   for (let e = 0; e < 2; e++) {
     const lid = UPPER_LIDS[e]
@@ -192,7 +205,10 @@ export function drawPaintedLids(
  *  corners. */
 function fromTexture(e: number, pts: Point[], texPoints: readonly Point[], t: Point): Point {
   const [c0, c1] = EYE_CORNERS[e];
-  const a = pts[c0], b = pts[c1], ta = texPoints[c0], tb = texPoints[c1];
+  const a = pts[c0],
+    b = pts[c1],
+    ta = texPoints[c0],
+    tb = texPoints[c1];
   if (!a || !b || !ta || !tb) return t;
   const k = Math.hypot(tb.x - ta.x, tb.y - ta.y) / Math.max(Math.hypot(b.x - a.x, b.y - a.y), 1e-6);
   return { x: a.x + (t.x - ta.x) / k, y: a.y + (t.y - ta.y) / k };
@@ -205,15 +221,24 @@ function fromTexture(e: number, pts: Point[], texPoints: readonly Point[], t: Po
  */
 function lidBlit(e: number, pts: Point[], src: EyeSource): Blit | null {
   const [c0, c1] = EYE_CORNERS[e];
-  const a = pts[c0], b = pts[c1], ta = src.texPoints[c0], tb = src.texPoints[c1];
+  const a = pts[c0],
+    b = pts[c1],
+    ta = src.texPoints[c0],
+    tb = src.texPoints[c1];
   if (!a || !b || !ta || !tb) return null;
   const k = Math.hypot(tb.x - ta.x, tb.y - ta.y) / Math.max(Math.hypot(b.x - a.x, b.y - a.y), 1e-6);
   return (c, dst, from) => {
     if (dst.w < 1 || dst.h < 1 || from.w < 1 || from.h < 1) return;
     c.drawImage(
       src.texture,
-      ta.x + (from.x - a.x) * k, ta.y + (from.y - a.y) * k, from.w * k, from.h * k,
-      dst.x, dst.y, dst.w, dst.h
+      ta.x + (from.x - a.x) * k,
+      ta.y + (from.y - a.y) * k,
+      from.w * k,
+      from.h * k,
+      dst.x,
+      dst.y,
+      dst.w,
+      dst.h
     );
   };
 }

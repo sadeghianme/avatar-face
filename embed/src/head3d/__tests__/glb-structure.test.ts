@@ -93,7 +93,11 @@ describe("the GLB reader", () => {
     expect(read.version).toBe(2);
     expect(read.chunks.map((c) => c.type)).toEqual([CHUNK_JSON, CHUNK_BIN]);
     expect(read.json).toEqual(json);
-    expect(readAccessor(read, 0)).toEqual([[0, 0, 0], [1, 0, 0], [0, 1, 0]]);
+    expect(readAccessor(read, 0)).toEqual([
+      [0, 0, 0],
+      [1, 0, 0],
+      [0, 1, 0],
+    ]);
     expect(readAccessor(read, 1)[0]).toEqual([0, 0.5, 0]);
     expect(readAccessor(read, 2)).toEqual([[0], [1], [2]]);
     expect(readAccessor(read, 3)).toEqual([[0], [0], [1]]); // y of each vertex
@@ -153,8 +157,10 @@ describe("the head3d GLB as a glTF 2.0 container", () => {
       const start = (view.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
       expect(start % size, `accessor ${i} alignment`).toBe(0);
       const stride = view.byteStride ?? size * components;
-      expect((accessor.byteOffset ?? 0) + stride * (accessor.count - 1) + size * components, `accessor ${i} length`)
-        .toBeLessThanOrEqual(view.byteLength);
+      expect(
+        (accessor.byteOffset ?? 0) + stride * (accessor.count - 1) + size * components,
+        `accessor ${i} length`
+      ).toBeLessThanOrEqual(view.byteLength);
       if (view.target === 34962) expect(start % 4, `vertex accessor ${i}`).toBe(0);
     }
   });
@@ -248,7 +254,10 @@ describe("the head3d GLB as a glTF 2.0 container", () => {
       expect(texture.source!).toBeLessThan(gltf.images!.length);
       if (texture.sampler !== undefined) expect(texture.sampler).toBeLessThan(gltf.samplers!.length);
     }
-    const signatures: Record<string, number[]> = { "image/png": [0x89, 0x50, 0x4e, 0x47], "image/jpeg": [0xff, 0xd8, 0xff] };
+    const signatures: Record<string, number[]> = {
+      "image/png": [0x89, 0x50, 0x4e, 0x47],
+      "image/jpeg": [0xff, 0xd8, 0xff],
+    };
     for (const image of gltf.images!) {
       expect(image.uri).toBeUndefined();
       const view = gltf.bufferViews![image.bufferView!];
@@ -327,7 +336,9 @@ describe("the head3d GLB's face", () => {
       const shape = target("Face", VISEME_TO_MORPH[viseme]);
       const parts = Object.entries(weights)
         .filter(([, w]) => (w ?? 0) > 0)
-        .map(([key, w]) => [target("Face", SYMMETRIC_TO_ARKIT[key as keyof typeof SYMMETRIC_TO_ARKIT][0]), w!] as const);
+        .map(
+          ([key, w]) => [target("Face", SYMMETRIC_TO_ARKIT[key as keyof typeof SYMMETRIC_TO_ARKIT][0]), w!] as const
+        );
       for (let i = 0; i < 478; i++) {
         for (let c = 0; c < 3; c++) {
           const sum = parts.reduce((s, [t, w]) => s + t[i][c] * w, 0);

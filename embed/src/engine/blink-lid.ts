@@ -27,10 +27,18 @@ export interface EyeShape {
 }
 
 /** What the lid is made of: the skin above the eye and the skin below it. */
-export interface LidTone { above: Rgb; below: Rgb }
+export interface LidTone {
+  above: Rgb;
+  below: Rgb;
+}
 
 /** A rectangle in the canvas the lid is painted in. */
-export interface Box { x: number; y: number; w: number; h: number }
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 /** Copies the picture's own pixels: `src` (canvas coordinates of the face as
  *  drawn) onto `dst`. Supplied by the engine, which knows the texture. */
@@ -52,9 +60,7 @@ export function lidSamplePoints(upper: readonly Pt[], lower: readonly Pt[]): Pt[
  *  the lid is skin in light, and the samples round an eye include its shadow
  *  and lashes, so the lighter end is the better guess. */
 export function medianColour(samples: readonly (Rgb | null)[], percentile = 0.5): Rgb | null {
-  const got = samples
-    .filter((s): s is Rgb => !!s)
-    .sort((a, b) => a[0] + a[1] + a[2] - (b[0] + b[1] + b[2]));
+  const got = samples.filter((s): s is Rgb => !!s).sort((a, b) => a[0] + a[1] + a[2] - (b[0] + b[1] + b[2]));
   if (!got.length) return null;
   return got[Math.min(got.length - 1, Math.floor(got.length * percentile))];
 }
@@ -95,14 +101,18 @@ export function lidEdge(eye: EyeShape, amount: number): Pt[] {
   });
   // The lids' landmarks are noisy; a closing lid is a smooth curve.
   return raw.map((p, i) => {
-    const a = raw[Math.max(0, i - 1)], b = raw[Math.min(raw.length - 1, i + 1)];
+    const a = raw[Math.max(0, i - 1)],
+      b = raw[Math.min(raw.length - 1, i + 1)];
     return { x: p.x, y: (a.y + 2 * p.y + b.y) / 4 };
   });
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
-const smoothStep = (x: number) => { const t = clamp(x, 0, 1); return t * t * (3 - 2 * t); };
+const smoothStep = (x: number) => {
+  const t = clamp(x, 0, 1);
+  return t * t * (3 - 2 * t);
+};
 const gShape = (u: number) => 1 - Math.pow(Math.abs(u), 2.1);
 const taper = (t: number) => 0.3 + 0.7 * Math.pow(Math.sin(Math.PI * t), 0.6);
 
@@ -126,25 +136,33 @@ export function regularEye(eye: EyeShape, n = 11): EyeShape {
     y: (upper[upper.length - 1].y + lower[lower.length - 1].y) / 2,
   };
   const w = Math.max(Math.hypot(b.x - a.x, b.y - a.y), 1);
-  const tx = (b.x - a.x) / w, ty = (b.y - a.y) / w;
+  const tx = (b.x - a.x) / w,
+    ty = (b.y - a.y) / w;
   // Down the face for an eye read left to right.
-  const nx = -ty, ny = tx;
+  const nx = -ty,
+    ny = tx;
   const flip = ny < 0 ? -1 : 1;
   const heights = (lid: readonly Pt[], sign: number) =>
     lid
       .map((p) => {
-        const dx = p.x - a.x, dy = p.y - a.y;
-        return { u: clamp(2 * ((dx * tx + dy * ty) / w) - 1, -1, 1), h: Math.max(0, (dx * nx + dy * ny) * flip * sign) };
+        const dx = p.x - a.x,
+          dy = p.y - a.y;
+        return {
+          u: clamp(2 * ((dx * tx + dy * ty) / w) - 1, -1, 1),
+          h: Math.max(0, (dx * nx + dy * ny) * flip * sign),
+        };
       })
       .sort((p, q) => p.u - q.u);
-  const hu = heights(upper, -1), hl = heights(lower, 1);
+  const hu = heights(upper, -1),
+    hl = heights(lower, 1);
   const amp = (hs: { u: number; h: number }[], lo: number, hi: number) =>
     clamp(median(hs.filter((p) => gShape(p.u) > 0.25).map((p) => p.h / gShape(p.u))), lo * w, hi * w);
   const aU = amp(hu, 0.1, 0.55);
   const aL = amp(hl, 0.04, 0.4);
   const at = (hs: { u: number; h: number }[], u: number) => {
     for (let i = 0; i < hs.length - 1; i++) {
-      if (u <= hs[i + 1].u) return lerp(hs[i].h, hs[i + 1].h, clamp((u - hs[i].u) / Math.max(hs[i + 1].u - hs[i].u, 1e-6), 0, 1));
+      if (u <= hs[i + 1].u)
+        return lerp(hs[i].h, hs[i + 1].h, clamp((u - hs[i].u) / Math.max(hs[i + 1].u - hs[i].u, 1e-6), 0, 1));
     }
     return hs[hs.length - 1].h;
   };
@@ -172,23 +190,24 @@ export function regularEye(eye: EyeShape, n = 11): EyeShape {
  * so a shadow, a brow or a crease that touches the eye cannot swell it.
  * `pixel` and the result are in the same (texture) pixels as `eye`.
  */
-export function eyeExtent(
-  pixel: (x: number, y: number) => Rgb | null,
-  eye: EyeShape,
-  tolerance = 50,
-  rays = 16
-): Pt[] {
+export function eyeExtent(pixel: (x: number, y: number) => Rgb | null, eye: EyeShape, tolerance = 50, rays = 16): Pt[] {
   const all = [...eye.upper, ...eye.lower];
-  const minY = Math.min(...all.map((p) => p.y)), maxY = Math.max(...all.map((p) => p.y));
-  const minX = Math.min(...all.map((p) => p.x)), maxX = Math.max(...all.map((p) => p.x));
+  const minY = Math.min(...all.map((p) => p.y)),
+    maxY = Math.max(...all.map((p) => p.y));
+  const minX = Math.min(...all.map((p) => p.x)),
+    maxX = Math.max(...all.map((p) => p.x));
   const w = Math.max(maxX - minX, 1);
-  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-  const rx = w / 2, ry = Math.max((maxY - minY) / 2, 0.16 * w);
+  const cx = (minX + maxX) / 2,
+    cy = (minY + maxY) / 2;
+  const rx = w / 2,
+    ry = Math.max((maxY - minY) / 2, 0.16 * w);
   const reach: number[] = [];
-  const lo: number[] = [], hi: number[] = [];
+  const lo: number[] = [],
+    hi: number[] = [];
   for (let k = 0; k < rays; k++) {
     const a = (2 * Math.PI * k) / rays;
-    const dx = Math.cos(a), dy = Math.sin(a);
+    const dx = Math.cos(a),
+      dy = Math.sin(a);
     const re = 1 / Math.sqrt((dx / rx) ** 2 + (dy / ry) ** 2);
     // The surround in this direction, read just beyond where the eye ought to
     // end: skin here, a patch of shadow or fur there. The eye reaches as far as
@@ -199,21 +218,27 @@ export function eyeExtent(
       if (c) ring.push(c);
     }
     const surround = medianColour(ring, 0.5);
-    let last = 0, calm = 0;
+    let last = 0,
+      calm = 0;
     if (surround) {
       for (let r = 0; r <= re * 1.5; r += 1) {
         const c = pixel(cx + dx * r, cy + dy * r);
         if (!c) break;
         const d = Math.hypot(c[0] - surround[0], c[1] - surround[1], c[2] - surround[2]);
-        if (d > tolerance) { last = r; calm = 0; } else if (++calm >= 4 && r > re * 0.6) break;
+        if (d > tolerance) {
+          last = r;
+          calm = 0;
+        } else if (++calm >= 4 && r > re * 0.6) break;
       }
     }
-    lo.push(re * 0.95); hi.push(re * 1.45);
+    lo.push(re * 0.95);
+    hi.push(re * 1.45);
     reach.push(clamp(last + 1.5, lo[k], hi[k]));
   }
   for (let pass = 0; pass < 2; pass++) {
     const c = reach.slice();
-    for (let k = 0; k < rays; k++) reach[k] = clamp((c[(k + rays - 1) % rays] + 2 * c[k] + c[(k + 1) % rays]) / 4, lo[k], hi[k]);
+    for (let k = 0; k < rays; k++)
+      reach[k] = clamp((c[(k + rays - 1) % rays] + 2 * c[k] + c[(k + 1) % rays]) / 4, lo[k], hi[k]);
   }
   return reach.map((r, k) => {
     const a = (2 * Math.PI * k) / rays;
@@ -242,7 +267,8 @@ function closed(ctx: CanvasRenderingContext2D, pts: readonly Pt[]) {
   const n = pts.length;
   ctx.moveTo((pts[0].x + pts[n - 1].x) / 2, (pts[0].y + pts[n - 1].y) / 2);
   for (let i = 0; i < n; i++) {
-    const a = pts[i], b = pts[(i + 1) % n];
+    const a = pts[i],
+      b = pts[(i + 1) % n];
     ctx.quadraticCurveTo(a.x, a.y, (a.x + b.x) / 2, (a.y + b.y) / 2);
   }
   ctx.closePath();
@@ -278,7 +304,8 @@ export function paintLid(
   // A shut eye is a gentle curve, not the lower lid's whole arch: the lash line
   // settles part of the way back to the chord between the corners.
   const settle = smoothStep((amount - 0.5) / 0.5) * 0.32;
-  const c0 = raw[0], c1 = raw[raw.length - 1];
+  const c0 = raw[0],
+    c1 = raw[raw.length - 1];
   const edge = raw.map((p) => ({
     x: p.x,
     y: lerp(p.y, c0.y + ((c1.y - c0.y) * (p.x - c0.x)) / Math.max(c1.x - c0.x, 1e-6), settle),
@@ -286,10 +313,12 @@ export function paintLid(
   // What the lid fills reaches the whole opening as it lands, so no sliver of
   // eye is left below a lash line that stopped short of the lower lid.
   const reach = smoothStep((amount - 0.8) / 0.2);
-  const top =shape ? Math.min(...shape.map((p) => p.y)) : Math.min(...upper.map((p) => p.y)) - w * 0.1;
+  const top = shape ? Math.min(...shape.map((p) => p.y)) : Math.min(...upper.map((p) => p.y)) - w * 0.1;
   const bottom = shape ? Math.max(...shape.map((p) => p.y)) : Math.max(...lower.map((p) => p.y)) + w * 0.1;
   const left = shape ? Math.min(...shape.map((p) => p.x)) : Math.min(upper[0].x, lower[0].x) - w * 0.1;
-  const right = shape ? Math.max(...shape.map((p) => p.x)) : Math.max(upper[upper.length - 1].x, lower[lower.length - 1].x) + w * 0.1;
+  const right = shape
+    ? Math.max(...shape.map((p) => p.x))
+    : Math.max(upper[upper.length - 1].x, lower[lower.length - 1].x) + w * 0.1;
   const fillEdge = edge.map((p, i) => ({
     x: p.x,
     y: lerp(p.y, shape ? bottom : lower[Math.min(i, lower.length - 1)].y + w * 0.12, reach),
@@ -304,8 +333,19 @@ export function paintLid(
       closed(c, shape);
     } else {
       // The eye's opening, slightly grown so no sliver of eyeball survives.
-      through(c, upper.map((p) => ({ x: p.x, y: p.y - w * 0.1 })), true);
-      through(c, lower.slice().reverse().map((p) => ({ x: p.x, y: p.y + w * 0.1 })), false);
+      through(
+        c,
+        upper.map((p) => ({ x: p.x, y: p.y - w * 0.1 })),
+        true
+      );
+      through(
+        c,
+        lower
+          .slice()
+          .reverse()
+          .map((p) => ({ x: p.x, y: p.y + w * 0.1 })),
+        false
+      );
       c.closePath();
     }
   };
@@ -361,11 +401,15 @@ export function paintLid(
     // fades into the fur or skin round it (the lid's own edge stays crisp).
     const f = Math.max(1.5, w * 0.06);
     const pad = Math.ceil(f * 3) + 2;
-    const bx = Math.floor(left - pad), by = Math.floor(top - pad);
-    const bw = Math.ceil(right - left + pad * 2) + 1, bh = Math.ceil(bottom - top + pad * 2) + 1;
+    const bx = Math.floor(left - pad),
+      by = Math.floor(top - pad);
+    const bw = Math.ceil(right - left + pad * 2) + 1,
+      bh = Math.ceil(bottom - top + pad * 2) + 1;
     const big = bw + 4000;
-    scratch.mask.width = bw; scratch.mask.height = bh;
-    scratch.body.width = bw; scratch.body.height = bh;
+    scratch.mask.width = bw;
+    scratch.mask.height = bh;
+    scratch.body.width = bw;
+    scratch.body.height = bh;
     const mc = scratch.mask.getContext("2d")!;
     mc.shadowColor = "#000";
     mc.shadowBlur = f * 2;
@@ -375,12 +419,16 @@ export function paintLid(
     if (shape) {
       // The fade starts outside the eye's reach, not on it: otherwise the rim
       // of the eye's own white shows through the soft edge as a ring.
-      const mx = (left + right) / 2, my = (top + bottom) / 2;
+      const mx = (left + right) / 2,
+        my = (top + bottom) / 2;
       mc.beginPath();
-      closed(mc, shape.map((p) => {
-        const d = Math.hypot(p.x - mx, p.y - my) || 1;
-        return { x: p.x + ((p.x - mx) / d) * f * 1.2, y: p.y + ((p.y - my) / d) * f * 1.2 };
-      }));
+      closed(
+        mc,
+        shape.map((p) => {
+          const d = Math.hypot(p.x - mx, p.y - my) || 1;
+          return { x: p.x + ((p.x - mx) / d) * f * 1.2, y: p.y + ((p.y - my) / d) * f * 1.2 };
+        })
+      );
     } else {
       shapePath(mc);
     }
@@ -406,7 +454,11 @@ export function paintLid(
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     const crease = upper.map((p) => ({ x: p.x, y: p.y - w * 0.035 }));
-    for (const [k, a] of [[0.06, 0.025], [0.03, 0.045], [0.014, 0.07]] as const) {
+    for (const [k, a] of [
+      [0.06, 0.025],
+      [0.03, 0.045],
+      [0.014, 0.07],
+    ] as const) {
       ctx.beginPath();
       through(ctx, crease, true);
       ctx.strokeStyle = rgb(mix(above, line, 0.5), a * amount);

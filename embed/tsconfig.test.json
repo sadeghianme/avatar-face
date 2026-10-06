@@ -1,7 +1,8 @@
 {
   // Everything the build leaves out, type-checked with the build's own
-  // settings: the tests (every __tests__ directory) and the Node bake script,
-  // with Node's types, which the browser build keeps out (`types: []`).
+  // settings: the tests (every __tests__ directory, the browser tests) and
+  // the Node scripts, with Node's types, which the browser build keeps out
+  // (`types: []`).
   // `npm run typecheck` runs it after the build's check; ESLint's type-aware
   // rules read the same program. Never emits.
   "extends": "./tsconfig.json",
@@ -14,6 +15,6 @@
     // @napi-rs/canvas's types (the pixel test's canvas) name Float16Array.
     "lib": ["ES2020", "DOM", "DOM.Iterable", "ESNext.Float16"]
   },
-  "include": ["src", "scripts"],
+  "include": ["src", "scripts", "browser-tests", "vitest.config.ts", "vitest.browser.config.ts"],
   "exclude": []
 }

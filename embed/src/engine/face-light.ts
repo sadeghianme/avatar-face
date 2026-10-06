@@ -8,8 +8,8 @@
 
 /** The face's silhouette, MediaPipe's face-oval landmarks in order. */
 export const FACE_OVAL: readonly number[] = [
-  10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377,
-  152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
+  10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
+  172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
 ];
 
 /** The percentile of the face's luma read as its highlight: high enough to
@@ -19,8 +19,9 @@ export const HIGHLIGHT_SHARE = 0.97;
 export function insidePolygon(poly: readonly { x: number; y: number }[], x: number, y: number): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i], b = poly[j];
-    if ((a.y > y) !== (b.y > y) && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+    const a = poly[i],
+      b = poly[j];
+    if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
   }
   return inside;
 }
@@ -40,16 +41,19 @@ export function lumaPercentile(samples: readonly number[], share: number): numbe
 export function faceHighlight(
   oval: readonly { x: number; y: number }[],
   pixel: (column: number, row: number) => readonly number[] | null,
-  grid: number,
+  grid: number
 ): number | null {
   if (oval.length < 8 || grid < 2) return null;
-  const x0 = Math.min(...oval.map((p) => p.x)), x1 = Math.max(...oval.map((p) => p.x));
-  const y0 = Math.min(...oval.map((p) => p.y)), y1 = Math.max(...oval.map((p) => p.y));
+  const x0 = Math.min(...oval.map((p) => p.x)),
+    x1 = Math.max(...oval.map((p) => p.x));
+  const y0 = Math.min(...oval.map((p) => p.y)),
+    y1 = Math.max(...oval.map((p) => p.y));
   if (!(x1 > x0) || !(y1 > y0)) return null;
   const samples: number[] = [];
   for (let row = 0; row < grid; row++) {
     for (let column = 0; column < grid; column++) {
-      const x = x0 + ((column + 0.5) * (x1 - x0)) / grid, y = y0 + ((row + 0.5) * (y1 - y0)) / grid;
+      const x = x0 + ((column + 0.5) * (x1 - x0)) / grid,
+        y = y0 + ((row + 0.5) * (y1 - y0)) / grid;
       if (!insidePolygon(oval, x, y)) continue;
       const c = pixel(column, row);
       if (c) samples.push(0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]);

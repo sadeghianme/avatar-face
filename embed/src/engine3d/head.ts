@@ -6,7 +6,11 @@
 import * as THREE from "three";
 
 /** A head pose in radians, applied over the model's rest pose. */
-export interface HeadPose { yaw: number; pitch: number; roll: number }
+export interface HeadPose {
+  yaw: number;
+  pitch: number;
+  roll: number;
+}
 
 /** Drives the head's idle motion in place of the built-in drift: called
  *  once per frame with the step in ms, the frame time, whether the avatar

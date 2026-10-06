@@ -48,7 +48,10 @@ export function findModelParts(model: THREE.Object3D): ModelParts {
 
 /** Where the camera looks, if the model says: a centre and a visible
  *  height, model units. */
-export interface FrameSpec { center: [number, number, number]; height: number }
+export interface FrameSpec {
+  center: [number, number, number];
+  height: number;
+}
 
 /**
  * Stand `camera` before `model`. A frame the model gives is taken as it is;
@@ -64,7 +67,7 @@ export function frameCamera(
   model.updateWorldMatrix(true, true);
   if (spec) {
     const centre = new THREE.Vector3(...spec.center);
-    const distance = (spec.height / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+    const distance = spec.height / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
     camera.position.set(centre.x, centre.y, centre.z + distance);
     camera.lookAt(centre);
     return;
@@ -78,9 +81,7 @@ export function frameCamera(
   } else {
     box.getCenter(target);
   }
-  const distance = headBone
-    ? Math.max(size.x, size.y * 0.35) * 1.9 + 0.25
-    : Math.max(size.x, size.y) * 1.35 + 0.12;
+  const distance = headBone ? Math.max(size.x, size.y * 0.35) * 1.9 + 0.25 : Math.max(size.x, size.y) * 1.35 + 0.12;
   camera.position.set(target.x, target.y + 0.02, target.z + distance);
   camera.lookAt(target);
 }

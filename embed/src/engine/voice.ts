@@ -5,7 +5,7 @@
  * the amplitude fallback and reads the track for the mouth; the 3D engine
  * uses this as it is.
  */
-import { MediaClock } from "../media-clock";
+import { MediaClock } from "./media-clock";
 import type { Cue } from "../types";
 import { prepareCues } from "./cues";
 

@@ -10,11 +10,7 @@ import { POSE_SCALE, poseToRotation } from "../photoface-hd";
  */
 describe("poseToRotation", () => {
   it("stays within the stated peaks at full deflection", () => {
-    const out = poseToRotation(
-      { yaw: 1, pitch: 1, roll: 1 },
-      { sway: 1, breath: 1 },
-      0.45
-    );
+    const out = poseToRotation({ yaw: 1, pitch: 1, roll: 1 }, { sway: 1, breath: 1 }, 0.45);
     expect(Math.abs(out.y)).toBeLessThanOrEqual(POSE_SCALE.yawRad + 1e-9);
     expect(Math.abs(out.x)).toBeLessThanOrEqual(POSE_SCALE.pitchRad + 0.018 * 0.45 + 1e-9);
     expect(Math.abs(out.z)).toBeLessThanOrEqual(POSE_SCALE.rollRad + POSE_SCALE.swayRad + 1e-9);

@@ -106,8 +106,8 @@ export function enamelMatch(face: FaceLook, enamel: EnamelSample, own = false): 
   const lip = colour(face.lip);
   const gain: [number, number, number] = [1, 1, 1];
   const tinted = skin
-    ? cast(skin).map((c, i) => enamelCast[i] > 1e-6 ? partly(c, TEETH_CHROMA) / enamelCast[i] : 1)
-    : lip && cast(lip).some(c => c !== 1)
+    ? cast(skin).map((c, i) => (enamelCast[i] > 1e-6 ? partly(c, TEETH_CHROMA) / enamelCast[i] : 1))
+    : lip && cast(lip).some((c) => c !== 1)
       ? cast(lip).map((c, i) => partly(c, LIP_CHROMA) / partly(cast(REFERENCE_LIP)[i], LIP_CHROMA))
       : null;
   if (tinted) {
@@ -147,34 +147,44 @@ export function enamelMatch(face: FaceLook, enamel: EnamelSample, own = false): 
  *  extraction canvas the layer was cut from, for edge profiles that run off
  *  the enamel onto the gap or the gum. */
 export function sampleEnamel(
-  layer: { pixels: { width: number; height: number; data: Uint8ClampedArray }; box: { x: number; y: number; width: number; height: number } },
-  source: { width: number; height: number; data: Uint8ClampedArray },
+  layer: {
+    pixels: { width: number; height: number; data: Uint8ClampedArray };
+    box: { x: number; y: number; width: number; height: number };
+  },
+  source: { width: number; height: number; data: Uint8ClampedArray }
 ): EnamelSample {
   const { width, height, data } = layer.pixels;
-  let r = 0, g = 0, b = 0, n = 0;
+  let r = 0,
+    g = 0,
+    b = 0,
+    n = 0;
   const lumas: number[] = [];
   for (let i = 0; i < width * height; i++) {
     if (data[i * 4 + 3] < 40) continue;
-    r += data[i * 4]; g += data[i * 4 + 1]; b += data[i * 4 + 2]; n++;
+    r += data[i * 4];
+    g += data[i * 4 + 1];
+    b += data[i * 4 + 2];
+    n++;
     lumas.push(luma(data.subarray(i * 4, i * 4 + 3)));
   }
   if (!n) return { cast: [1, 1, 1], bright: 0, edge: 0 };
   lumas.sort((p, q) => p - q);
   const widths: number[] = [];
   const { x: bx, y: by, width: bw, height: bh } = layer.box;
-  for (let x = bx; x < bx + bw; x += 3) for (let y = Math.max(5, by); y < Math.min(height - 5, by + bh); y += 3) {
-    if (data[(y * width + x) * 4 + 3] < 40) continue;
-    const profile: number[] = [];
-    for (let dy = -5; dy <= 5; dy++) {
-      const k = ((y + dy) * source.width + x) * 4;
-      profile.push(luma(source.data.subarray(k, k + 3)));
+  for (let x = bx; x < bx + bw; x += 3)
+    for (let y = Math.max(5, by); y < Math.min(height - 5, by + bh); y += 3) {
+      if (data[(y * width + x) * 4 + 3] < 40) continue;
+      const profile: number[] = [];
+      for (let dy = -5; dy <= 5; dy++) {
+        const k = ((y + dy) * source.width + x) * 4;
+        profile.push(luma(source.data.subarray(k, k + 3)));
+      }
+      const contrast = Math.max(...profile) - Math.min(...profile);
+      if (contrast < 25) continue;
+      let steepest = 0;
+      for (let i = 0; i + 1 < profile.length; i++) steepest = Math.max(steepest, Math.abs(profile[i + 1] - profile[i]));
+      if (steepest > 0) widths.push(contrast / steepest);
     }
-    const contrast = Math.max(...profile) - Math.min(...profile);
-    if (contrast < 25) continue;
-    let steepest = 0;
-    for (let i = 0; i + 1 < profile.length; i++) steepest = Math.max(steepest, Math.abs(profile[i + 1] - profile[i]));
-    if (steepest > 0) widths.push(contrast / steepest);
-  }
   widths.sort((p, q) => p - q);
   return {
     cast: cast([r / n, g / n, b / n]),

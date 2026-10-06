@@ -96,7 +96,7 @@ const MIN_DOMINANCE_MS = 42;
  * value is how fully the constraint is enforced at its own instant.
  */
 const IMPERATIVE: Record<string, number> = {
-  PP: 1.0,  // p, b, m — full lip closure; the most legible shape there is
+  PP: 1.0, // p, b, m — full lip closure; the most legible shape there is
   FF: 0.85, // f, v — lower lip tucked to the upper teeth
   // The tongue consonants, now that they survive to be drawn at all. Same
   // argument, weaker claim: a 45-60ms segment cannot reach its own shape
@@ -104,7 +104,7 @@ const IMPERATIVE: Record<string, number> = {
   // bell. Held well below PP/FF because a /d/ is a smaller, less legible
   // gesture than a lip closure and should not fight the vowel for the jaw.
   nn: 0.35, // n, l, ng
-  DD: 0.3,  // t, d
+  DD: 0.3, // t, d
 };
 
 /** Constraint bells are narrower than the blend's own (which uses 0.62× span
@@ -262,7 +262,8 @@ export function blendCueWeights(cues: readonly Cue[], visemes: Rig["visemes"], t
   // pulled toward rest only in proportion to how long the silence is.
   const silShare = (i: number): number => {
     if (cues[i].viseme !== "sil") return 1;
-    const before = cues[i - 1], after = cues[i + 1];
+    const before = cues[i - 1],
+      after = cues[i + 1];
     if (!before || !after || before.viseme === "sil" || after.viseme === "sil") return 1;
     return Math.min(1, spanOf(i) / SHORT_SILENCE_MS);
   };

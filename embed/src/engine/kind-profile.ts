@@ -1,5 +1,5 @@
 import type { CharacterTraits } from "./character-mouth";
-import type { Rig } from "./types";
+import type { Rig } from "../types";
 
 /**
  * What a line of faces changes in the renderer, and nothing more.

@@ -7,11 +7,11 @@
  * taints the canvas and getImageData throws): it keeps what it had, which
  * is the default until a readable texture has been seen.
  */
-import { eyeExtent, lidSamplePoints, medianColour, type LidTone } from "../blink-lid";
-import { DEFAULT_LOOK, INNER_UPPER, sampleLook, type CharacterLook, type Rgb } from "../character-mouth";
-import { FACE_OVAL, faceHighlight } from "../face-light";
-import { faceSharpness, lumaField, sharpnessBoxes } from "../face-sharpness";
-import type { KindProfile } from "../kind-profile";
+import { eyeExtent, lidSamplePoints, medianColour, type LidTone } from "./blink-lid";
+import { DEFAULT_LOOK, INNER_UPPER, sampleLook, type CharacterLook, type Rgb } from "./character-mouth";
+import { FACE_OVAL, faceHighlight } from "./face-light";
+import { faceSharpness, lumaField, sharpnessBoxes } from "./face-sharpness";
+import type { KindProfile } from "./kind-profile";
 import type { Rig } from "../types";
 import type { Point } from "./geometry";
 import { CHEEK_LANDMARKS, UPPER_LIDS, eyeShape } from "./landmarks";
@@ -61,9 +61,7 @@ export function pickScleraColour(candidates: Sample[], skin: Sample | null): str
   const skinChroma = skin ? chroma(skin.rgb) : 40;
   const maxChroma = Math.max(6, skinChroma * MAX_SCLERA_CHROMA_VS_SKIN);
   const minLum = skin ? skin.lum * MIN_SCLERA_LUMA_VS_SKIN : 120;
-  const found = brightestFirst.find(
-    (s) => chroma(s.rgb) <= maxChroma && s.lum >= minLum
-  );
+  const found = brightestFirst.find((s) => chroma(s.rgb) <= maxChroma && s.lum >= minLum);
   return found ? `rgb(${found.rgb.join(", ")})` : null;
 }
 
@@ -130,7 +128,10 @@ export class FaceSamples {
   lashColour: string[] = ["rgba(60, 42, 38, 0.75)", "rgba(60, 42, 38, 0.75)"];
   /** The same, as numbers, and each eye's lid colour: for the painted lid
    *  of a profile that blinks that way (blink-lid.ts). */
-  lashRgb: Rgb[] = [[60, 42, 38], [60, 42, 38]];
+  lashRgb: Rgb[] = [
+    [60, 42, 38],
+    [60, 42, 38],
+  ];
   /** Each eye's real reach in texture pixels (blink-lid.ts eyeExtent), and
    *  whether the skin below it is plain enough to copy for a lid. */
   lidExtent: (Point[] | null)[] = [null, null];
@@ -224,7 +225,11 @@ export class FaceSamples {
    * picture; `sample` clears it first, so a texture that cannot be read
    * leaves no stale value from the one before it.
    */
-  private sampleFaceSharpness(ctx: CanvasRenderingContext2D, texture: HTMLImageElement, texPoints: readonly Point[]): void {
+  private sampleFaceSharpness(
+    ctx: CanvasRenderingContext2D,
+    texture: HTMLImageElement,
+    texPoints: readonly Point[]
+  ): void {
     const fields = sharpnessBoxes(texPoints, texture.naturalWidth, texture.naturalHeight).map((b) => {
       const d = ctx.getImageData(b.x, b.y, b.w, b.h);
       return lumaField(d.data, d.width, d.height);
@@ -241,8 +246,10 @@ export class FaceSamples {
   private sampleFaceHighlight(texture: HTMLImageElement, texPoints: readonly Point[]): void {
     const oval = FACE_OVAL.map((i) => texPoints[i]).filter(Boolean);
     if (oval.length < 8) return;
-    const x0 = Math.min(...oval.map((p) => p.x)), x1 = Math.max(...oval.map((p) => p.x));
-    const y0 = Math.min(...oval.map((p) => p.y)), y1 = Math.max(...oval.map((p) => p.y));
+    const x0 = Math.min(...oval.map((p) => p.x)),
+      x1 = Math.max(...oval.map((p) => p.x));
+    const y0 = Math.min(...oval.map((p) => p.y)),
+      y1 = Math.max(...oval.map((p) => p.y));
     if (!(x1 > x0) || !(y1 > y0)) return;
     const grid = 96;
     const small = document.createElement("canvas");
@@ -252,10 +259,14 @@ export class FaceSamples {
     if (!ctx) return;
     ctx.drawImage(texture, x0, y0, x1 - x0, y1 - y0, 0, 0, grid, grid);
     const data = ctx.getImageData(0, 0, grid, grid).data;
-    this.faceHighlight = faceHighlight(oval, (column, row) => {
-      const i = (row * grid + column) * 4;
-      return data[i + 3] < 128 ? null : [data[i], data[i + 1], data[i + 2]];
-    }, grid);
+    this.faceHighlight = faceHighlight(
+      oval,
+      (column, row) => {
+        const i = (row * grid + column) * 4;
+        return data[i + 3] < 128 ? null : [data[i], data[i + 1], data[i + 2]];
+      },
+      grid
+    );
   }
 
   /** Each eye's lid colour, from the skin beside it, for the painted lid. */
@@ -267,7 +278,8 @@ export class FaceSamples {
       for (let e = 0; e < 2; e++) {
         const shape = eyeShape(texPoints, e);
         const read = (p: Point): Rgb | null => {
-          const x = Math.round(p.x), y = Math.round(p.y);
+          const x = Math.round(p.x),
+            y = Math.round(p.y);
           if (x < 0 || y < 0 || x >= off.width || y >= off.height) return null;
           const d = ctx.getImageData(x, y, 1, 1).data;
           return d[3] < 128 ? null : [d[0], d[1], d[2]];
@@ -284,7 +296,10 @@ export class FaceSamples {
         const either = above ?? below;
         if (either) this.lidTone[e] = { above: above ?? either, below: below ?? either };
         // How far the eye really reaches, and whether the skin below is plain.
-        const w = Math.hypot(shape.upper[shape.upper.length - 1].x - shape.upper[0].x, shape.upper[shape.upper.length - 1].y - shape.upper[0].y);
+        const w = Math.hypot(
+          shape.upper[shape.upper.length - 1].x - shape.upper[0].x,
+          shape.upper[shape.upper.length - 1].y - shape.upper[0].y
+        );
         const all = [...shape.upper, ...shape.lower];
         const rx0 = Math.max(0, Math.floor(Math.min(...all.map((q) => q.x)) - w * 1.1));
         const ry0 = Math.max(0, Math.floor(Math.min(...all.map((q) => q.y)) - w * 1.1));
@@ -293,7 +308,8 @@ export class FaceSamples {
         if (rx1 > rx0 && ry1 > ry0 && either) {
           const img = ctx.getImageData(rx0, ry0, rx1 - rx0, ry1 - ry0);
           const at = (x: number, y: number): Rgb | null => {
-            const px = Math.round(x) - rx0, py = Math.round(y) - ry0;
+            const px = Math.round(x) - rx0,
+              py = Math.round(y) - ry0;
             if (px < 0 || py < 0 || px >= img.width || py >= img.height) return null;
             const i = (py * img.width + px) * 4;
             return img.data[i + 3] < 128 ? null : [img.data[i], img.data[i + 1], img.data[i + 2]];
@@ -303,14 +319,18 @@ export class FaceSamples {
           const around = [...readUp, ...readDown].filter((c): c is Rgb => !!c);
           const ref = either;
           const spread = around.length
-            ? Math.sqrt(around.reduce((sum, c) => sum + (c[0] - ref[0]) ** 2 + (c[1] - ref[1]) ** 2 + (c[2] - ref[2]) ** 2, 0) / around.length)
+            ? Math.sqrt(
+                around.reduce((sum, c) => sum + (c[0] - ref[0]) ** 2 + (c[1] - ref[1]) ** 2 + (c[2] - ref[2]) ** 2, 0) /
+                  around.length
+              )
             : 0;
           this.lidExtent[e] = eyeExtent(at, shape, Math.max(50, Math.min(95, spread * 2.5)));
           // The patch the lid would copy: the skin below the eye. It must be one
           // surface (fur, skin), not an outline or another shape.
           const bottom = Math.max(...shape.lower.map((q) => q.y));
           const left = Math.min(...all.map((q) => q.x));
-          let far = 0, n = 0;
+          let far = 0,
+            n = 0;
           for (let a = 0; a < 10; a++) {
             for (let b = 0; b < 5; b++) {
               const c = at(left + (w * (a + 0.5)) / 10, bottom + w * (0.08 + 0.1 * b));
@@ -342,11 +362,14 @@ export class FaceSamples {
     const skin: Rgb = this.skinColour ?? DEFAULT_LOOK.skin;
     this.look = { ...DEFAULT_LOOK, lip: this.lipColour, skin };
     try {
-      const l = texPoints[61], r = texPoints[291];
+      const l = texPoints[61],
+        r = texPoints[291];
       if (!l || !r) return;
       const w = Math.max(Math.hypot(r.x - l.x, r.y - l.y), 4);
-      const cx = (l.x + r.x) / 2, cy = (l.y + r.y) / 2;
-      const x0 = Math.max(0, Math.floor(cx - w * 2)), y0 = Math.max(0, Math.floor(cy - w * 1.2));
+      const cx = (l.x + r.x) / 2,
+        cy = (l.y + r.y) / 2;
+      const x0 = Math.max(0, Math.floor(cx - w * 2)),
+        y0 = Math.max(0, Math.floor(cy - w * 1.2));
       const x1 = Math.min(texture.naturalWidth, Math.ceil(cx + w * 2));
       const y1 = Math.min(texture.naturalHeight, Math.ceil(cy + w * 1.7));
       if (x1 <= x0 || y1 <= y0) return;
@@ -354,7 +377,8 @@ export class FaceSamples {
       if (!page) return;
       const data = page.ctx.getImageData(x0, y0, x1 - x0, y1 - y0);
       const pixel = (x: number, y: number): Rgb | null => {
-        const px = Math.round(x) - x0, py = Math.round(y) - y0;
+        const px = Math.round(x) - x0,
+          py = Math.round(y) - y0;
         if (px < 0 || py < 0 || px >= data.width || py >= data.height) return null;
         const i = (py * data.width + px) * 4;
         if (data.data[i + 3] < 128) return null;

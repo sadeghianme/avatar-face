@@ -12,7 +12,9 @@ import { LANDMARK_COUNT } from "../landmarks";
  * as a movable rectangle.
  */
 
-const rig = JSON.parse(readFileSync(new URL("../../__tests__/fixtures/human-rig.json", import.meta.url), "utf8")) as Rig;
+const rig = JSON.parse(
+  readFileSync(new URL("../../__tests__/fixtures/human-rig.json", import.meta.url), "utf8")
+) as Rig;
 const [W, H] = rig.image_size;
 const image = (width: number, height: number) =>
   ({ naturalWidth: width, naturalHeight: height, width, height }) as HTMLImageElement;
@@ -77,10 +79,14 @@ describe("refineMesh", () => {
       expect(t.y).toBeCloseTo((mesh.texPoints[a].y + mesh.texPoints[b].y) / 2, 9);
     });
     // Each subdivided triangle became four; the rest are kept; then the band.
-    const subdivided = mesh.triangles.filter((tri) => tri.some((i) => i >= LANDMARK_COUNT && i < LANDMARK_COUNT + mesh.derivedParents.length));
+    const subdivided = mesh.triangles.filter((tri) =>
+      tri.some((i) => i >= LANDMARK_COUNT && i < LANDMARK_COUNT + mesh.derivedParents.length)
+    );
     expect(subdivided.length % 4).toBe(0);
     const band = mesh.triangles.length - (rig.triangles.length - subdivided.length / 4) - subdivided.length;
-    expect(band).toBe(mesh.triangles.filter((tri) => tri.some((i) => i >= LANDMARK_COUNT + mesh.derivedParents.length)).length);
+    expect(band).toBe(
+      mesh.triangles.filter((tri) => tri.some((i) => i >= LANDMARK_COUNT + mesh.derivedParents.length)).length
+    );
   });
 
   it("hangs the neck band below the jaw, its texture where the framing says it is", () => {
@@ -100,7 +106,8 @@ describe("refineMesh", () => {
   });
 
   it("refines the same triangles whichever texture: only the texture coordinates scale", () => {
-    const full = refined(FULL), thumb = refined(THUMB);
+    const full = refined(FULL),
+      thumb = refined(THUMB);
     expect(thumb.triangles).toEqual(full.triangles);
     expect(thumb.derivedParents).toEqual(full.derivedParents);
     const k = THUMB.naturalWidth / W;
@@ -143,7 +150,11 @@ describe("validInnerRing", () => {
 });
 
 describe("placeHead", () => {
-  const face: Point[] = [{ x: 200, y: 200 }, { x: 400, y: 200 }, { x: 300, y: 460 }];
+  const face: Point[] = [
+    { x: 200, y: 200 },
+    { x: 400, y: 200 },
+    { x: 300, y: 460 },
+  ];
 
   it("is a rectangle round the whole head within the picture, pivoting below the chin", () => {
     const head = placeHead(face, { x: -500, y: -500, w: 2000, h: 2000 })!;
@@ -164,6 +175,14 @@ describe("placeHead", () => {
   });
 
   it("is nothing for a face too small to move", () => {
-    expect(placeHead([{ x: 10, y: 10 }, { x: 12, y: 30 }], { x: 0, y: 0, w: 100, h: 100 })).toBeNull();
+    expect(
+      placeHead(
+        [
+          { x: 10, y: 10 },
+          { x: 12, y: 30 },
+        ],
+        { x: 0, y: 0, w: 100, h: 100 }
+      )
+    ).toBeNull();
   });
 });

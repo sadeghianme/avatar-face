@@ -7,9 +7,9 @@
  * Texture coords map to the TEXTURE's own naturalWidth/naturalHeight (the
  * thumbnail may be scaled down), never to rig.image_size.
  */
-import { buildNeckBand } from "../jaw-rig";
+import { buildNeckBand } from "./jaw-rig";
 import type { Rig } from "../types";
-import { eyeLine, viewportFor } from "../viewport";
+import { eyeLine, viewportFor } from "./viewport";
 
 export interface Point {
   x: number;
@@ -77,7 +77,8 @@ export function layOutFace(
 ): FaceMesh {
   const [imageW, imageH] = rig.image_size;
   const view = viewportFor({
-    imageW, imageH,
+    imageW,
+    imageH,
     faceBox: rig.face_box,
     eyeY: eyeLine(rig.points, rig.face_box),
     canvasW: canvas.width,
@@ -215,8 +216,7 @@ export function validInnerRing(rig: Rig): number[] {
   const mys = mpts.map((p) => p[1]);
   const mouthW = Math.max(...mxs) - Math.min(...mxs);
   const mouthH = Math.max(...mys) - Math.min(...mys);
-  const plausible =
-    ringW > mouthW * 0.2 && ringW <= mouthW * 1.05 && ringH <= Math.max(mouthH * 1.05, 1);
+  const plausible = ringW > mouthW * 0.2 && ringW <= mouthW * 1.05 && ringH <= Math.max(mouthH * 1.05, 1);
   return plausible ? ring : ringFromMouth(rig, mouth);
 }
 
@@ -258,9 +258,12 @@ export interface HeadGeom extends Rect {
 export function placeHead(basePoints: readonly Point[], picture: Rect): HeadGeom | null {
   const xs = basePoints.map((p) => p.x);
   const ys = basePoints.map((p) => p.y);
-  const fx0 = Math.min(...xs), fx1 = Math.max(...xs);
-  const fy0 = Math.min(...ys), fy1 = Math.max(...ys);
-  const faceW = fx1 - fx0, faceH = fy1 - fy0;
+  const fx0 = Math.min(...xs),
+    fx1 = Math.max(...xs);
+  const fy0 = Math.min(...ys),
+    fy1 = Math.max(...ys);
+  const faceW = fx1 - fx0,
+    faceH = fy1 - fy0;
   if (faceW < 4 || faceH < 4) return null;
 
   // Within the picture, not the canvas: the head may reach past the
@@ -276,7 +279,10 @@ export function placeHead(basePoints: readonly Point[], picture: Rect): HeadGeom
   // itself only a cut-out, whose head moves over transparency. An opaque
   // picture moves as one instead (render), so it needs no copy.
   return {
-    x, y, w, h,
+    x,
+    y,
+    w,
+    h,
     pivotX: (fx0 + fx1) / 2,
     // A head pivots where it meets the spine, in the upper chest — not
     // about its own middle, which reads as the face rotating in the skull.

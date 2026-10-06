@@ -2,38 +2,66 @@
  * Liveface canvas engine: textured triangle-mesh warp + cue-driven lip-sync.
  *
  * AvatarEngine is the orchestrator: it owns the canvas, the rig and the
- * scene, and sequences the parts that do the work:
+ * scene, and sequences the parts that do the work, all under engine/. From
+ * outside it, engine/ imports only the contracts (types.ts,
+ * mouth-extension.ts) and the enamel model it shares with the continuous
+ * mouth (mouth/lip-occlusion-model.ts):
  *
+ * The picture
  *   engine/picture.ts              the picture laid on the canvas, and what is built on it
+ *   engine/viewport.ts             where it lies: the zoom and the pan
  *   engine/geometry.ts             the mesh laid on the canvas, refined
  *   engine/landmarks.ts            the MediaPipe landmark tables
+ *   engine/jaw-rig.ts              the lower face as one rig: jaw, chin, cheeks, neck band
+ *   engine/kind-profile.ts         what a line of faces (human, toon, animal) changes
  *   engine/sampling.ts             what the picture looks like
+ *   engine/face-light.ts           its brightest skin, the teeth's ceiling
+ *   engine/face-sharpness.ts       how sharp its edges are
+ * Time
  *   engine/cues.ts                 the cue track, read
  *   engine/voice.ts                the voice: cue track, clock, audio (the 3D engine's too)
+ *   engine/media-clock.ts          the audio element's own position, as the cue clock
  *   engine/speech.ts               the speech in flight, the articulation
- *   engine/motion.ts               blinks, gaze, the head and the body
+ *   engine/motion.ts               blinks, gaze, the head and the body, from
+ *   engine/blink.ts                  when to blink
+ *   engine/headmotion.ts             where the head is going
+ *   engine/bodymotion.ts             the sway and the breath
  *   engine/state.ts                the face state those write
+ *   engine/frame-loop.ts           the frame loop (the 3D engine's too)
+ * The frame
  *   engine/deform.ts               every vertex, this frame
  *   engine/render2d.ts             the frame composed: picture, body, head
- *   engine/mesh-warp.ts            the warped mesh, on the GPU or in 2D
- *   engine/paint-eyes.ts           gaze, lashes, painted lids
- *   engine/paint-mouth.ts          which mouth paints the mouth
- *   engine/paint-classic-mouth.ts  the drawn mouth and its teeth
+ *   engine/mesh-warp.ts            the warped mesh, on the GPU or in 2D, with
+ *   engine/warp-gl.ts                the GPU path
+ *   engine/seam-pad.ts               the overlap that hides the seams between triangles
+ *   engine/paint-eyes.ts           gaze, lashes, and
+ *   engine/blink-lid.ts              the painted lids
+ *   engine/paint-mouth.ts          which mouth paints the mouth:
+ *   engine/paint-classic-mouth.ts    the drawn mouth and its teeth, in
+ *   engine/mouth-aperture.ts         the aperture the lips part to
+ *   engine/character-mouth.ts        a character's or an animal's mouth, and
+ *   engine/character-paint.ts        its painting
  *   engine/scene.ts                the scene, the backdrop of a cut-out
- *   engine/frame-loop.ts           the frame loop (the 3D engine's too)
  *   engine/debug.ts                the debug mesh overlay
+ *   engine/debug-handle.ts         the console handle, when a page asks for it
  *   engine/seam.ts                 what the tests and the 3D bake pose and
  *                                  read; in no bundle
+ *
+ * src/ itself holds only the entry points (this, engine3d.ts, index.ts, the
+ * three widget bundles) and what several bundles or pages share: the
+ * contracts, speech.ts, browser-tts.ts, stt.ts. The widget's own parts are
+ * under widget/, the continuous mouth's under mouth/.
  *
  * A `destroyed` flag makes mount -> unmount -> mount safe under React
  * StrictMode: the loop and every async callback bail once it is set.
  */
-import { mergeTraits, type CharacterTraits } from "./character-mouth";
-import { kindProfile, type KindProfile } from "./kind-profile";
+import { mergeTraits, type CharacterTraits } from "./engine/character-mouth";
+import { kindProfile, type KindProfile } from "./engine/kind-profile";
 import type { MouthExtension, MouthPose } from "./mouth-extension";
 import { DEFAULT_TUNING, ZERO_WEIGHTS, type BlendWeights, type Cue, type EngineTuning, type Rig } from "./types";
 import { emphasisBeats, utteranceMs } from "./engine/cues";
 import { drawDebugMesh } from "./engine/debug";
+import { NO_DEBUG_HANDLE, exposeDebugHandle } from "./engine/debug-handle";
 import { deformFace } from "./engine/deform";
 import { FrameLoop, FrameStep } from "./engine/frame-loop";
 import { validInnerRing, type Point } from "./engine/geometry";
@@ -41,7 +69,7 @@ import { LANDMARK_COUNT } from "./engine/landmarks";
 import { MeshWarp, type WarpMode } from "./engine/mesh-warp";
 import { Motion } from "./engine/motion";
 import { ClassicMouth } from "./engine/paint-classic-mouth";
-import { drawGaze, drawLashes, drawPaintedLids } from "./engine/paint-eyes";
+import { drawGaze, drawLashes, drawPaintedLids, type EyeSource } from "./engine/paint-eyes";
 import { paintMouthSurface } from "./engine/paint-mouth";
 import { FacePicture } from "./engine/picture";
 import { composeFrame, motionTravel, type Layers } from "./engine/render2d";
@@ -57,6 +85,14 @@ export type { Scene, SceneBackground } from "./engine/scene";
 
 export interface EngineOptions {
   debugMesh?: boolean;
+  /**
+   * Put this engine on `globalThis.__liveface` for the console and for
+   * measurement scripts (the last engine made wins); `destroy()` takes it
+   * back. Off by default, so a customer's page gets no globals from the
+   * engine: the widget turns it on with `data-debug` on its script tag or
+   * `?liveface-debug` in the page's URL (engine/debug-handle.ts).
+   */
+  debug?: boolean;
   /** Optional mouth renderer (see mouth/). Omitted means the classic mouth. */
   mouthExtension?: MouthExtension;
   pose?: () => MouthPose | null;
@@ -93,6 +129,8 @@ export class AvatarEngine {
   /** StrictMode guard: async callbacks bail once destroyed. */
   private destroyed = false;
   private readonly frameStep = new FrameStep();
+  /** Takes the console handle back (EngineOptions.debug). */
+  private readonly releaseDebugHandle: () => void;
 
   debugMesh: boolean;
   /** Live animation parameters — mutate freely, applied next frame. */
@@ -146,7 +184,8 @@ export class AvatarEngine {
     this.profile = kindProfile(rig);
     this.traits = this.profile.traits;
     this.picture = new FacePicture(canvas, rig, this.profile, texture, (pts) =>
-      this.motion.measureBody(pts, canvas.height));
+      this.motion.measureBody(pts, canvas.height)
+    );
     this.speech = new SpeechTrack(opts.cueClock, {
       onSync: (ms) => this.motion.placeBeatWalker(ms),
       onEnded: () => this.finishSpeech(),
@@ -177,8 +216,7 @@ export class AvatarEngine {
       this.tick(now);
       this.render();
     });
-    // Debug handle (last engine wins): lets a console force blinks/visemes.
-    (globalThis as { __liveface?: AvatarEngine }).__liveface = this;
+    this.releaseDebugHandle = opts.debug ? exposeDebugHandle("__liveface", this) : NO_DEBUG_HANDLE;
   }
 
   /**
@@ -191,11 +229,7 @@ export class AvatarEngine {
    * the punch-out and feathered-cutout machinery of the single-photo path
    * becomes unnecessary and is simply not used.
    */
-  setLayers(layers: {
-    background?: HTMLImageElement;
-    body: HTMLImageElement;
-    head: HTMLImageElement;
-  }): void {
+  setLayers(layers: { background?: HTMLImageElement; body: HTMLImageElement; head: HTMLImageElement }): void {
     if (this.destroyed) return;
     this.layers = layers;
   }
@@ -265,6 +299,7 @@ export class AvatarEngine {
     this.frameLoop.stop();
     this.speech.destroy();
     this.meshWarp.destroy();
+    this.releaseDebugHandle();
   }
 
   /**
@@ -372,7 +407,8 @@ export class AvatarEngine {
     const face = this.face;
     // Viseme targets: co-articulated blend across cues (+ amplitude
     // fallback when the track is silent but audio clearly isn't).
-    const visemeWeights = this.pose?.()?.weights ?? (speech.speaking ? this.blendedCueWeights(now) : { ...ZERO_WEIGHTS });
+    const visemeWeights =
+      this.pose?.()?.weights ?? (speech.speaking ? this.blendedCueWeights(now) : { ...ZERO_WEIGHTS });
     const silent = speech.speaking && speech.currentViseme(now) === "sil";
     if (silent) {
       const amp = speech.amplitude();
@@ -450,7 +486,7 @@ export class AvatarEngine {
   private paintFeatures(pts: Point[]): void {
     const ctx = this.ctx;
     const { texture, mesh, samples } = this.picture;
-    const eyes = { texture, texPoints: mesh.texPoints };
+    const eyes: EyeSource = { texture, texPoints: mesh.texPoints };
     drawGaze(ctx, pts, eyes, this.face.gaze);
     if (this.profile.blink === "lid") drawPaintedLids(ctx, pts, eyes, this.face.blink, this.tuning.blink, samples);
     else drawLashes(ctx, pts, this.face.blink, samples.lashColour);

@@ -7,30 +7,34 @@ import { validateOralRig } from "../oral-photo";
 import { ContinuousMouth, CORNER_EASE, PROTRUSION } from "../continuous-mouth";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
 
-const interpolate = (a: BlendWeights, b: BlendWeights, t: number) => Object.fromEntries(
-  Object.keys(a).map(key => [key, a[key as keyof BlendWeights] * (1 - t) + b[key as keyof BlendWeights] * t]),
-) as unknown as BlendWeights;
+const interpolate = (a: BlendWeights, b: BlendWeights, t: number) =>
+  Object.fromEntries(
+    Object.keys(a).map((key) => [key, a[key as keyof BlendWeights] * (1 - t) + b[key as keyof BlendWeights] * t])
+  ) as unknown as BlendWeights;
 
 describe("continuous mouth movement", () => {
   it("reaches every authored geometry anchor", () => {
     for (const [i, pose] of PERFORMANCE_POSES.entries()) {
-      expect(continuousMouthMix(REFERENCE_POSES[pose].weights)).toEqual(PERFORMANCE_POSES.map((_, j) => i === j ? 1 : 0));
+      expect(continuousMouthMix(REFERENCE_POSES[pose].weights)).toEqual(
+        PERFORMANCE_POSES.map((_, j) => (i === j ? 1 : 0))
+      );
     }
   });
   it("has no nearest-edge discontinuities across every pose pair", () => {
-    for (const a of Object.values(REFERENCE_POSES)) for (const b of Object.values(REFERENCE_POSES)) {
-      let previous = continuousMouthMix(a.weights);
-      for (let i = 1; i <= 500; i++) {
-        const mix = continuousMouthMix(interpolate(a.weights, b.weights, i / 500));
-        expect(mix.every(n => Number.isFinite(n) && n >= 0)).toBe(true);
-        expect(mix.reduce((sum, n) => sum + n, 0)).toBeCloseTo(1, 10);
-        expect(Math.max(...mix.map((n, j) => Math.abs(n - previous[j])))).toBeLessThan(.03);
-        previous = mix;
+    for (const a of Object.values(REFERENCE_POSES))
+      for (const b of Object.values(REFERENCE_POSES)) {
+        let previous = continuousMouthMix(a.weights);
+        for (let i = 1; i <= 500; i++) {
+          const mix = continuousMouthMix(interpolate(a.weights, b.weights, i / 500));
+          expect(mix.every((n) => Number.isFinite(n) && n >= 0)).toBe(true);
+          expect(mix.reduce((sum, n) => sum + n, 0)).toBeCloseTo(1, 10);
+          expect(Math.max(...mix.map((n, j) => Math.abs(n - previous[j])))).toBeLessThan(0.03);
+          previous = mix;
+        }
       }
-    }
   });
   it("seals bilabials without deleting F/V", () => {
-    expect(continuousMouthMix({ ...ZERO_WEIGHTS, jawOpen: .05, mouthClose: .9, mouthPucker: .25 })[0]).toBe(1);
+    expect(continuousMouthMix({ ...ZERO_WEIGHTS, jawOpen: 0.05, mouthClose: 0.9, mouthPucker: 0.25 })[0]).toBe(1);
     expect(continuousMouthMix(REFERENCE_POSES.fv.weights)[5]).toBe(1);
   });
   it("integrates the same motion at 30, 60 and 120 fps", () => {
@@ -49,23 +53,23 @@ describe("continuous mouth movement", () => {
     let previous = motion.values[0];
     let largest = 0;
     for (let i = 1; i <= 30; i++) {
-      const close = .3 + .7 * i / 30;
-      const mix = motion.step({ ...ZERO_WEIGHTS, jawOpen: .72 * (1 - close), mouthClose: close }, 1 / 60);
+      const close = 0.3 + (0.7 * i) / 30;
+      const mix = motion.step({ ...ZERO_WEIGHTS, jawOpen: 0.72 * (1 - close), mouthClose: close }, 1 / 60);
       expect(mix[0]).toBeGreaterThanOrEqual(previous - 1e-9);
       largest = Math.max(largest, mix[0] - previous);
       previous = mix[0];
     }
-    expect(previous).toBeGreaterThan(.95);
-    expect(largest).toBeLessThan(.12);
+    expect(previous).toBeGreaterThan(0.95);
+    expect(largest).toBeLessThan(0.12);
     expect(bilabialSeal(REFERENCE_POSES.closed.weights)).toBe(1);
     expect(bilabialSeal(REFERENCE_POSES.fv.weights)).toBe(0);
-    expect(bilabialSeal({ ...ZERO_WEIGHTS, mouthClose: .6 })).toBeCloseTo(.5, 10);
+    expect(bilabialSeal({ ...ZERO_WEIGHTS, mouthClose: 0.6 })).toBeCloseTo(0.5, 10);
   });
   it("retains velocity when interrupted instead of snapping to a new pose", () => {
-    const [v, speed] = dampMouth(0, 0, 1, .02, 65);
-    const [next, nextSpeed] = dampMouth(v, speed, 0, .000001, 65);
-    expect(Math.abs(v - next)).toBeLessThan(.0001);
-    expect(Math.abs(speed - nextSpeed)).toBeLessThan(.02);
+    const [v, speed] = dampMouth(0, 0, 1, 0.02, 65);
+    const [next, nextSpeed] = dampMouth(v, speed, 0, 0.000001, 65);
+    expect(Math.abs(v - next)).toBeLessThan(0.0001);
+    expect(Math.abs(speed - nextSpeed)).toBeLessThan(0.02);
   });
   it("closes quickly and stays finite during repeated interrupted movements", () => {
     const motion = new MouthMotion();
@@ -74,31 +78,35 @@ describe("continuous mouth movement", () => {
     // 80: 99.7% there in six frames; it was four at 125, and the jolt of
     // switching to it mid-flight was the largest step of a sentence).
     for (let i = 0; i < 6; i++) motion.step(REFERENCE_POSES.closed.weights, 1 / 60);
-    expect(motion.values[0]).toBeGreaterThan(.99);
+    expect(motion.values[0]).toBeGreaterThan(0.99);
     for (let i = 0; i < 1000; i++) {
       const mix = motion.step(REFERENCE_POSES[PERFORMANCE_POSES[i % 7]].weights, 1 / 120);
-      expect(mix.every(n => Number.isFinite(n) && n >= 0 && n <= 1)).toBe(true);
+      expect(mix.every((n) => Number.isFinite(n) && n >= 0 && n <= 1)).toBe(true);
     }
   });
   it("retargets only the mouth area and keeps a single skin source", () => {
-    const manifest = validatePerformanceManifest(JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8")));
+    const manifest = validatePerformanceManifest(
+      JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8"))
+    );
     const mouth = new ContinuousMouth(manifest);
     const neutral = manifest.poses[0].points.map(([x, y]) => ({ x: x * 1000, y: y * 1000 }));
-    const points = neutral.map(p => ({ ...p }));
+    const points = neutral.map((p) => ({ ...p }));
     mouth.deform(points, neutral, {} as Rig, REFERENCE_POSES.aa.weights);
     expect(points[1]).toEqual(neutral[1]);
     expect(points[33]).toEqual(neutral[33]);
     expect(points[14].y).toBeGreaterThan(neutral[14].y);
-    expect(points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))).toBe(true);
+    expect(points.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))).toBe(true);
   });
   it("eases the corners' inward pull on rounded vowels, and only there", () => {
     // Found on a real closed-mouth portrait: the full pull stretched the dark
     // crease at each commissure into streaks across the cheek.
-    const manifest = validatePerformanceManifest(JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8")));
+    const manifest = validatePerformanceManifest(
+      JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8"))
+    );
     const neutral = manifest.poses[0].points.map(([x, y]) => ({ x: x * 1000, y: y * 1000 }));
     const settle = (weights: BlendWeights) => {
       const mouth = new ContinuousMouth(manifest);
-      const points = neutral.map(p => ({ ...p }));
+      const points = neutral.map((p) => ({ ...p }));
       // Several steps so the mouth's own spring reaches the pose.
       for (let i = 0; i < 400; i++) mouth.deform(points, neutral, {} as Rig, weights);
       return points;
@@ -121,11 +129,13 @@ describe("continuous mouth movement", () => {
     expect(Math.abs(oo[13].x - neutral[13].x)).toBeLessThan(neutralWidth * 0.06);
   });
   it("brings the lips forward on rounded vowels: a small mound, centred, gone by the cheeks", () => {
-    const manifest = validatePerformanceManifest(JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8")));
+    const manifest = validatePerformanceManifest(
+      JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8"))
+    );
     const neutral = manifest.poses[0].points.map(([x, y]) => ({ x: x * 1000, y: y * 1000 }));
     const settle = (weights: BlendWeights) => {
       const mouth = new ContinuousMouth(manifest);
-      const points = neutral.map(p => ({ ...p }));
+      const points = neutral.map((p) => ({ ...p }));
       for (let i = 0; i < 400; i++) mouth.deform(points, neutral, {} as Rig, weights);
       return points;
     };

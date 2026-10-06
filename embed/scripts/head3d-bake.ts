@@ -22,5 +22,5 @@ writeFileSync(outPath, JSON.stringify(result));
 const worst = Object.entries(result.fidelity).sort((a, b) => b[1].max - a[1].max)[0];
 console.log(
   `baked ${Object.keys(result.targets).length} targets for ${rig.image_size.join("x")} ` +
-  `(profile ${result.profile ?? "classic"}); worst linear error ${worst ? `${worst[0]} ${(worst[1].max * 100).toFixed(2)}% of mouth width` : "n/a"}`
+    `(profile ${result.profile ?? "classic"}); worst linear error ${worst ? `${worst[0]} ${(worst[1].max * 100).toFixed(2)}% of mouth width` : "n/a"}`
 );

@@ -72,7 +72,13 @@ describe("blendCueWeights", () => {
   });
 
   it("passes through a short silence between two sounds, and closes on a pause", () => {
-    const gap = (ms: number) => [cue(0, "aa"), cue(200, "sil"), cue(200 + ms, "aa"), cue(600 + ms, "sil"), cue(900 + ms, "sil")];
+    const gap = (ms: number) => [
+      cue(0, "aa"),
+      cue(200, "sil"),
+      cue(200 + ms, "aa"),
+      cue(600 + ms, "sil"),
+      cue(900 + ms, "sil"),
+    ];
     const short = at(gap(40), 220).jawOpen;
     const pause = at(gap(400), 400).jawOpen;
     expect(short).toBeGreaterThan(0.3);

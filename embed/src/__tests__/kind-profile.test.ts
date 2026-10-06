@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
 import { engineSeam } from "../engine/seam";
-import { HUMAN_PROFILE, kindProfile } from "../kind-profile";
+import { HUMAN_PROFILE, kindProfile } from "../engine/kind-profile";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
 
 /**
@@ -131,7 +131,11 @@ describe("render profiles", () => {
     const shape = human.visemes.E; // open, but short of the human tongue
     const people = frame(human, shape).log;
     const muzzle = frame(withProfile(human, "animal@1"), shape).log;
-    const firstStop = (log: string) => log.match(/stop\(0,rgb\((\d+), (\d+), (\d+)\)\)/)!.slice(1).map(Number);
+    const firstStop = (log: string) =>
+      log
+        .match(/stop\(0,rgb\((\d+), (\d+), (\d+)\)\)/)!
+        .slice(1)
+        .map(Number);
     const [hr] = firstStop(people);
     const [ar] = firstStop(muzzle);
     expect(ar).toBeLessThan(hr);
