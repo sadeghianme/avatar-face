@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
+import { ClassicMouth } from "../engine/paint-classic-mouth";
 import { HUMAN_PROFILE, kindProfile } from "../kind-profile";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
 
@@ -64,6 +65,10 @@ class NoopPath {
 type Internals = {
   face: { weights: BlendWeights };
   render(): void;
+};
+
+/** The classic mouth's parts, to count which ran. */
+type ClassicMouthParts = {
   drawTeethRow(...args: unknown[]): void;
   drawLipContactLine(...args: unknown[]): void;
 };
@@ -73,7 +78,7 @@ function frame(rig: Rig, weights: Partial<BlendWeights>) {
   const log: string[] = [];
   vi.stubGlobal("document", { createElement: () => recordingCanvas([]) });
   const image = { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement;
-  const proto = AvatarEngine.prototype as unknown as Internals;
+  const proto = ClassicMouth.prototype as unknown as ClassicMouthParts;
   const teeth = vi.spyOn(proto, "drawTeethRow");
   const contact = vi.spyOn(proto, "drawLipContactLine");
   const engine = new AvatarEngine(recordingCanvas(log), rig, image, { fullPhoto: true });
