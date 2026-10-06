@@ -1,39 +1,78 @@
 # Liveface
 
 Turn a single uploaded photo into a real-time, lip-syncing talking avatar that
-embeds on any website with one `<script>` tag.
+embeds on any website with one `<script>` tag. Live at
+[avatar.mehdisadeghian.com](https://avatar.mehdisadeghian.com).
+
+## Layout
 
 ```
-/backend    FastAPI · async SQLAlchemy 2.0 · Alembic · Pydantic v2
-/frontend   Vite · React 18 · TypeScript · Tailwind · TanStack Query · i18n (en/fr + RTL)
-/embed      Framework-agnostic widget + canvas engine (TS, zero deps)
-/infra      docker-compose: Postgres 16 + MinIO (both optional)
+backend/    API: FastAPI · async SQLAlchemy 2 · Alembic · Pydantic v2 (Python 3.12)
+            MediaPipe face landmarks, Kokoro and Piper speech, espeak-ng phonemes
+frontend/   Dashboard: Vite · React 18 · TypeScript · Tailwind · TanStack Query ·
+            react-router · i18next (en/fr, right-to-left ready); served by nginx
+embed/      The widget (/liveface.js) and its engines: Canvas 2D / WebGL photo
+            warp, three.js for 3D models. The dashboard imports it from source
+deploy/     deploy.sh (release, rollback), the production compose file,
+            the database backup, smoke tests of the built images (smoke/)
+infra/      docker compose for optional local Postgres 16 + MinIO
+docs/       process (release, rollback, CI, pins, security headers),
+            frontend-ui (the UI kit and lint rules), engine and lab write-ups
+.github/    CI (workflows/ci.yml), Dependabot
 ```
 
-## Quickstart (zero configuration)
+`system-design.md` is the architecture overview (diagram:
+`docs/system-design.svg`); `LIVEFACE_BUILD_PROMPT.md` is the original build
+brief, kept for history.
 
-No API keys, no Docker, no .env needed — SQLite, local-file storage, and the
-built-in offline TTS provider cover everything out of the box.
+## Run it locally
+
+No API keys, no Docker and no `.env` are needed: SQLite, local-file storage
+and the built-in offline speech provider cover everything. Python 3.12 (via
+[uv](https://docs.astral.sh/uv/)) and Node 22 or newer.
 
 ```bash
-# Backend (Python 3.12 via uv)
+# API on http://localhost:7002
 cd backend
-uv venv --python 3.12 .venv && uv pip install -p .venv/bin/python -e '.[dev]'
-cd .. && make backend          # http://localhost:7002
+uv venv --python 3.12 .venv
+uv pip install -p .venv/bin/python -c constraints.txt -e '.[rig,dev]'
+cd .. && make backend
 
-# Frontend (new terminal)
-cd frontend && npm install
-cd .. && make frontend         # http://localhost:5174
+# Dashboard on http://localhost:5174 (proxies /api to :7002)
+npm ci --prefix embed && npm ci --prefix frontend
+make frontend
 
-# Embed widget bundle (served by the backend at /liveface.js)
-cd embed && npm install && cd .. && make embed
+# The widget bundle the API serves at /liveface.js
+make embed
 ```
 
-Then: register → an org is created for you → **New avatar** → upload a photo,
-pick a stock avatar, or import a **3D model** (.glb with ARKit blendshapes or
-viseme morphs — e.g. an Avaturn export) → it rigs in seconds → open it and
-press **Speak**. 3D avatars render with Three.js (sculpted visemes, real head
-bones, eyelid blinks); the widget lazy-loads the 3D bundle only when needed.
+Then register (an organization is created for you), **New avatar**, upload a
+photo or import a 3D model (`.glb` with ARKit blendshapes or viseme morphs),
+open it and press **Speak**.
+
+Optional, for production behaviour locally: `brew install espeak-ng` (phonemes
+for non-English lip-sync), and model files pointed to by `RIG_MODEL_PATH`,
+`KOKORO_MODEL_PATH`, `PIPER_VOICES_DIR` (the URLs are in `backend/Dockerfile`;
+without a face model the rig falls back to a synthetic mesh). Every setting is
+in [backend/.env.example](backend/.env.example).
+
+Ports: API **7002**, dashboard **5174**, Postgres **7003**, MinIO
+**7004**/**7005** (`make up`).
+
+## Tests and checks
+
+What CI runs, per package (`.github/workflows/ci.yml`):
+
+| Package | Commands (from the package directory) |
+|---|---|
+| backend | `ruff check .` · `pyright` · `python -m pytest tests -q` (or `make test` from the root) |
+| embed | `npm run lint` · `npm run typecheck` (sources and tests) · `npm test` (vitest, pixel goldens included) · `npm run build` |
+| frontend | `npm run check` (feature boundaries, en/fr parity) · `npm run lint` · `npm run format:check` · `npm test` (`node --test`, Node 22+) · `npm run build` (type check + bundle) |
+| deploy | `deploy/test-deploy.sh` (every gate of `deploy.sh`) · ShellCheck on `deploy/*.sh` |
+| images | both Dockerfiles build, boot and pass `deploy/smoke/web-sweep.mjs`: every page in headless Chrome, zero CSP violations ([docs/process.md](docs/process.md#ci)) |
+
+CI runs on every push to main and every pull request; a newer push cancels the
+run it supersedes.
 
 ## Embedding on any site
 
@@ -41,10 +80,10 @@ Create an API key (API keys page), then:
 
 ```html
 <script
-  src="https://your-api.example.com/liveface.js"
+  src="https://avatar.mehdisadeghian.com/api/liveface.js"
   data-avatar="AVATAR_ID"
   data-key="lf_..."
-  data-api="https://your-api.example.com"
+  data-api="https://avatar.mehdisadeghian.com/api"
 ></script>
 <script>
   Liveface.speak("Hello! Long text streams sentence by sentence.");
@@ -52,58 +91,39 @@ Create an API key (API keys page), then:
 </script>
 ```
 
-A sample third-party host page lives at `embed/example/index.html`
-(serve it from any other origin to exercise the cross-origin path).
+The dashboard's **Simulator** runs a pasted snippet in a clean frame. A sample
+third-party page is `embed/example/index.html` (serve it from another origin to
+exercise the cross-origin path). An avatar's share link (`/s/<token>`) is a
+public page that may be framed by any site.
+
+## Deploy and roll back
+
+```bash
+deploy/deploy.sh --dry-run    # every check, then what would ship
+deploy/deploy.sh              # ship HEAD: clean tree, pushed to origin/main, CI green on it
+deploy/deploy.sh --rollback   # put back the release that was live before
+```
+
+A deploy ships `git archive` of one commit, never the working tree, bakes the
+commit into both images, backs up the database first, and finishes only when
+`/api/health` and `/version.json` report that commit. The whole release path,
+branch protection, rollback with a database restore, and how every pin is
+moved: [docs/process.md](docs/process.md).
 
 ## Scaling up (all optional)
 
-| Concern   | Default            | Configured                                          |
-|-----------|--------------------|-----------------------------------------------------|
-| Database  | SQLite             | `DATABASE_URL=postgresql+asyncpg://…` (`make up` for local Postgres on :7003) |
-| Storage   | Local files + HMAC-signed URLs | `R2_*` env vars (R2/S3/MinIO on :7004)  |
-| TTS       | Offline provider   | Azure / ElevenLabs / Google / OpenAI — keys via env or Settings → Voice providers (encrypted at rest, hot-reloaded) |
-| Face rig  | Synthetic 478-pt mesh | `RIG_MODEL_PATH` → MediaPipe FaceLandmarker (478 pts + 52 blendshapes) |
+| Concern | Default | Configured |
+|---|---|---|
+| Database | SQLite | `DATABASE_URL=postgresql+asyncpg://…` (`make up` for local Postgres on :7003) |
+| Storage | Local files + HMAC-signed URLs | `R2_*` env vars (R2/S3/MinIO on :7004) |
+| Speech | Offline provider; Kokoro and Piper when their models are present | Azure / ElevenLabs / Google / OpenAI: keys via env or Settings → Voice providers (encrypted at rest, hot-reloaded) |
+| Face rig | Synthetic 478-point mesh | `RIG_MODEL_PATH` → MediaPipe FaceLandmarker (478 points + 52 blendshapes) |
 
-Every knob is documented in [backend/.env.example](backend/.env.example).
-Ports: API **7002**, dashboard **5174**, Postgres **7003**, MinIO **7004**/**7005**.
+## Known limits (deliberate, for now)
 
-## Development
-
-```bash
-make test        # backend pytest suite (102 tests)
-make typecheck   # tsc -b for frontend + embed
-make migrate     # alembic upgrade head (per-milestone migrations)
-```
-
-## Pinned backend versions
-
-The production image installs backend libraries with
-`pip install -c constraints.txt . "mediapipe==1.0.1"`.
-[backend/constraints.txt](backend/constraints.txt) is the `pip freeze` of the
-production container (the versions tested end to end), so a rebuild cannot
-silently upgrade a library. It only limits versions: it adds no packages, and
-dev tools such as pytest are unaffected. The embed and frontend images use
-`npm ci` with their committed `package-lock.json`, which is pinned already.
-
-To upgrade deliberately: change the pin in `constraints.txt` (and the range in
-`pyproject.toml` if it forbids it), rebuild, run the backend tests and a real
-photo-to-avatar flow, deploy, then regenerate the file by running `pip freeze`
-in the new production container and dropping the `liveface-backend` line.
-
-## Production-hardening backlog (known, deliberate)
-
-1. Move in-memory state (credential overlay, embed rate limiter) to Redis —
-   required before running more than one worker.
-2. Replace `BackgroundTasks` rig jobs with a real queue (RQ/Celery) + a
-   stuck-job sweeper so avatars can't hang in `processing` after a restart.
-3. Revocable refresh tokens (server-side session table).
-4. CI running the test suite on push.
-5. Rate-limit auth endpoints (login/register), not just the embed API.
-6. Set `RIG_MODEL_PATH` in any real deployment — the synthetic rig looks
-   wrong on real photos.
-
-## Next quality tier
-
-A neural render provider (SadTalker/Wav2Lip-class via a serverless GPU,
-~$0.02/clip) for cacheable phrases — render once, store the MP4, serve
-forever — while the canvas engine keeps handling live speech for free.
+1. In-memory state (credential overlay, rate limiters, job runner): one API
+   process only. More workers need Redis and a real queue.
+2. Refresh tokens cannot be revoked yet (no server-side session table).
+3. Login and register are not rate limited; the embed and share APIs are.
+4. The dashboard's CSP allows inline scripts because of the Simulator's frame
+   ([docs/process.md](docs/process.md#security-headers) has the way out).

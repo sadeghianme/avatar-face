@@ -138,7 +138,7 @@ BACKEND
   MediaPipe FaceLandmarker    478 landmarks + 52 ARKit blendshapes
   Pillow · numpy              image handling, mesh maths
   passlib · python-jose       password hashing, JWT
-  pytest + pytest-asyncio     230 tests
+  pytest + pytest-asyncio     behaviour tests, mostly over HTTP
 
 SPEECH
   Custom G2P              dependency-free English grapheme → phoneme

@@ -1,0 +1,26 @@
+# Monthly pull requests for the pins nobody would otherwise notice going
+# stale: the base-image digests in the two Dockerfiles (security fixes in
+# the same tag) and the GitHub Actions versions. Only digests move for the
+# images: a new Node, Python or nginx line is a decision, not a refresh
+# (docs/process.md, "Dependency pins"). npm and pip pins move by hand, by
+# that same procedure: their lockfile and constraints.txt are what runs.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directories: ["/backend", "/frontend"]
+    schedule:
+      interval: monthly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    groups:
+      base-images:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
