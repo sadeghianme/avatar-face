@@ -41,7 +41,9 @@ export type Pixel = [number, number, number, number];
 /** What one URL answers with. */
 export type Resource =
   | { json: unknown }
-  | { status: number }
+  /** An HTTP error; `error` is its JSON body (the API's `{code, detail}`),
+   *  else the body is an error page that is not JSON. */
+  | { status: number; error?: unknown }
   /** The request itself fails: offline, DNS, CORS. */
   | { offline: true }
   /** An image, all of one colour. */
@@ -52,6 +54,8 @@ export type Resource =
 export interface FakeNetwork {
   /** Every download in order, fetch() and image sources alike. */
   requested: string[];
+  /** Every fetch() in order, with the headers it sent. */
+  fetches: { url: string; headers: Record<string, string> }[];
 }
 
 /**
@@ -61,21 +65,25 @@ export interface FakeNetwork {
  */
 export function stubNetwork(resources: Record<string, Resource>): FakeNetwork {
   const requested: string[] = [];
+  const fetches: FakeNetwork["fetches"] = [];
   const find = (url: string): Resource => resources[url] ?? { status: 404 };
-  vi.stubGlobal("fetch", async (input: string | URL, init?: { signal?: AbortSignal | null }) => {
+  vi.stubGlobal("fetch", async (input: string | URL, init?: { signal?: AbortSignal | null; headers?: Record<string, string> }) => {
     const url = String(input);
     requested.push(url);
+    fetches.push({ url, headers: { ...(init?.headers ?? {}) } });
     if (init?.signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
     const resource = find(url);
     if ("offline" in resource) throw new TypeError("Failed to fetch");
     if ("json" in resource) {
       return { ok: true, status: 200, json: async () => structuredClone(resource.json) };
     }
+    const error = "error" in resource ? resource.error : undefined;
     return {
       ok: false,
       status: "status" in resource ? resource.status : 404,
       json: async () => {
-        throw new SyntaxError("Unexpected token '<'");
+        if (error === undefined) throw new SyntaxError("Unexpected token '<'");
+        return structuredClone(error);
       },
     };
   });
@@ -108,7 +116,7 @@ export function stubNetwork(resources: Record<string, Resource>): FakeNetwork {
     }
   }
   vi.stubGlobal("Image", NetworkImage);
-  return { requested };
+  return { requested, fetches };
 }
 
 /**

@@ -15,19 +15,33 @@
  *   Liveface.listen({lang}) — browser STT, resolves with the transcript
  *   Liveface.sttSupported()
  *
+ * The key travels in the X-Api-Key header, never in a URL (where it would
+ * reach access logs, proxies and Referer headers).
+ *
  * An avatar whose face an AI made or changed shows a small "AI avatar"
- * label under the canvas (see disclosure.ts); data-ai-label="off" turns it
- * off for a site that discloses it another way.
+ * label under the canvas (see widget/disclosure.ts); data-ai-label="off"
+ * turns it off for a site that discloses it another way.
+ *
+ * An avatar that cannot be shown (the API refuses the key, a signed URL
+ * expired, a picture does not load) leaves a short note under the canvas,
+ * a console warning and a `liveface:error` event on the canvas
+ * (widget/failure.ts); `liveface:ready` says it is up. Nothing is thrown
+ * into the host page.
+ *
+ * data-debug on the snippet (or ?liveface-debug in the page's URL) puts the
+ * engine on globalThis.__liveface for the console (engine/debug-handle.ts).
  */
 import { BrowserTTS } from "./browser-tts";
 import { aiLabel, renderAiLabel, type Disclosure } from "./disclosure";
 import { AvatarEngine, type Scene } from "./engine";
-import type { Avatar3DEngine } from "./engine3d";
+import type { Avatar3DEngine, Avatar3DOptions } from "./engine3d";
 import { SpeechPlayer, SpeechQueue } from "./speech";
 import { listen, sttSupported, ListenOptions } from "./stt";
 import type { ClassicMouthConfig } from "./character-mouth";
 import type { AvatarMouthConfig } from "./mouth";
 import { EngineTuning, Rig, SynthesisPayload } from "./types";
+import { showFailure } from "./widget/failure";
+import { asFailure, fetchJson, loadImage, loadScript } from "./widget/load";
 
 interface LivefaceApi {
   speak(text: string): Promise<void>;
@@ -44,7 +58,7 @@ declare global {
   interface Window {
     Liveface?: LivefaceApi;
     __Liveface3D?: {
-      load: (canvas: HTMLCanvasElement, modelUrl: string) => Promise<Avatar3DEngine>;
+      load: (canvas: HTMLCanvasElement, modelUrl: string, options?: Avatar3DOptions) => Promise<Avatar3DEngine>;
     };
     /** Set by liveface-mouth.js, loaded only for avatars that use it.
      *  `motionUrl` is the bundled Reference motion; `config.motion_url`, when
@@ -55,56 +69,59 @@ declare global {
   }
 }
 
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${src}"]`);
-    if (existing) return resolve();
-    const script = document.createElement("script");
-    script.src = src;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`failed to load ${src}`));
-    document.head.appendChild(script);
-  });
+/** What GET /embed/v1/avatars/{id} answers (backend/app/api/embed.py). */
+interface PublishedAvatar {
+  kind?: string;
+  framing?: string;
+  /** The published scene (zoom, pan, background), or null for a snapshot
+   *  from before scenes existed. */
+  scene?: Scene | null;
+  rig_url: string;
+  thumbnail_url: string;
+  image_url?: string | null;
+  model_url?: string | null;
+  layer_urls?: { background?: string; body: string; head: string } | null;
+  voice?: { provider: string; voice: string; locale: string } | null;
+  mouth?: AvatarMouthConfig | ClassicMouthConfig | null;
+  /** Absent for snapshots published before disclosures were recorded. */
+  disclosure?: Disclosure;
 }
 
-function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`failed to load ${url}`));
-    img.src = url;
-  });
+/** A data-* switch: present and not "off", "false" or "0". */
+function switchedOn(value: string | undefined): boolean {
+  return value !== undefined && !["off", "false", "0"].includes(value.trim().toLowerCase());
 }
+
+/** window.Liveface for an avatar that could not be shown: the page's calls
+ *  answer quietly (nothing to say, nothing speaking) instead of throwing. */
+const UNAVAILABLE: LivefaceApi = {
+  speak: () => Promise.resolve(),
+  stop: () => undefined,
+  isSpeaking: () => false,
+  listen: (options?: ListenOptions) => listen(options),
+  sttSupported,
+  tune: () => undefined,
+  engine: null,
+};
 
 async function bootstrap(script: HTMLScriptElement): Promise<void> {
   const avatarId = script.dataset.avatar;
   const apiKey = script.dataset.key;
   const apiBase = (script.dataset.api ?? new URL(script.src).origin).replace(/\/$/, "");
-  // Voice precedence: explicit data-* attributes on the snippet win (that
-  // is per-site intent), then the avatar's PUBLISHED voice from the meta
-  // response below (so changing it in the dashboard and publishing reaches
-  // every embedding site), then the server-voice default.
-  let provider = script.dataset.provider ?? "";
-  let voice = script.dataset.voice ?? "";
-  let locale = script.dataset.locale ?? "";
-  const size = Number(script.dataset.size ?? 320);
   if (!avatarId || !apiKey) {
     console.error("[liveface] missing data-avatar or data-key");
     return;
   }
+  const sizeAttr = Number(script.dataset.size ?? 320);
+  const size = Number.isFinite(sizeAttr) && sizeAttr > 0 ? sizeAttr : 320;
 
   const canvas = document.createElement("canvas");
-  // The backing store has to be in DEVICE pixels. CSS pixels are not what the
-  // screen has, and at the default size of 320 that difference is the whole
-  // ballgame: an individual tooth is ~4.5px wide, so the teeth, the lip-depth
-  // bands and the corner fade were all being drawn into a few pixels and
-  // averaged away. The 3D path has always done this (setPixelRatio); the 2D
-  // path never did. Capped at 2x — past that the fill cost is real and the
-  // gain is not visible.
-  // Capped at 3 rather than 2 now that the texture is the full-resolution
-  // photo — with a 256px thumbnail behind it, more backing store bought
-  // nothing but a bigger upscale, so the old cap cost nothing. It does now.
+  // The backing store is in DEVICE pixels: at the default 320 CSS pixels a
+  // tooth is ~4.5px wide, and drawn into CSS pixels the teeth, the lip-depth
+  // bands and the corner fade averaged away. Capped at 3: the texture is the
+  // full-resolution photo, which a 3x store still shows more of; past that
+  // the fill cost is real and the gain is not visible. (The 3D path sets
+  // its own ratio.)
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
   canvas.width = Math.round(size * dpr);
   canvas.height = Math.round(size * dpr);
@@ -116,30 +133,40 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
   canvas.setAttribute("data-liveface", avatarId);
   script.insertAdjacentElement("afterend", canvas);
 
+  try {
+    await mount(script, canvas, { avatarId, apiKey, apiBase });
+  } catch (error) {
+    // Until the avatar's own locale is known, the note speaks the snippet's
+    // language, else the page's.
+    const locale = script.dataset.locale || document.documentElement?.lang || "en";
+    showFailure(canvas, asFailure(error, "engine"), locale);
+    // A page that calls Liveface.speak() gets a quiet answer, not a
+    // TypeError; another widget's working API is left in place.
+    window.Liveface ??= UNAVAILABLE;
+  }
+}
+
+/** Everything after the canvas is in place: the avatar fetched and drawn,
+ *  window.Liveface set. Throws (a WidgetFailure, mostly) when it cannot. */
+async function mount(
+  script: HTMLScriptElement,
+  canvas: HTMLCanvasElement,
+  { avatarId, apiKey, apiBase }: { avatarId: string; apiKey: string; apiBase: string }
+): Promise<void> {
+  // Voice precedence: explicit data-* attributes on the snippet win (that
+  // is per-site intent), then the avatar's PUBLISHED voice from the meta
+  // response below (so changing it in the dashboard and publishing reaches
+  // every embedding site), then the server-voice default.
+  let provider = script.dataset.provider ?? "";
+  let voice = script.dataset.voice ?? "";
+  let locale = script.dataset.locale ?? "";
+  // The console handle (engine/debug-handle.ts): off unless asked for.
+  const debug = switchedOn(script.dataset.debug) || new URLSearchParams(location.search).has("liveface-debug");
+
   const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
-  const meta = await fetch(`${apiBase}/embed/v1/avatars/${avatarId}`, {
+  const info = await fetchJson<PublishedAvatar>(`${apiBase}/embed/v1/avatars/${avatarId}`, "avatar", {
     headers: { "X-Api-Key": apiKey },
   });
-  if (!meta.ok) {
-    console.error("[liveface] avatar fetch failed:", await meta.text());
-    return;
-  }
-  const info: {
-    kind?: string;
-    framing?: string;
-    /** The published scene (zoom, pan, background), or null for a snapshot
-     *  from before scenes existed. */
-    scene?: Scene | null;
-    rig_url: string;
-    thumbnail_url: string;
-    image_url?: string | null;
-    model_url?: string | null;
-    layer_urls?: { background?: string; body: string; head: string } | null;
-    voice?: { provider: string; voice: string; locale: string } | null;
-    mouth?: AvatarMouthConfig | ClassicMouthConfig | null;
-    /** Absent for snapshots published before disclosures were recorded. */
-    disclosure?: Disclosure;
-  } = await meta.json();
 
   if (!provider) {
     provider = info.voice?.provider ?? "kokoro";
@@ -155,9 +182,8 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
   let engine: AvatarEngine | Avatar3DEngine;
   if (info.kind === "model3d" && info.model_url) {
     // 3D avatar: lazy-load the Three.js bundle, then hand it the GLB.
-    await loadScript(`${apiBase}/liveface-3d.js`);
-    if (!window.__Liveface3D) throw new Error("liveface-3d.js failed to initialize");
-    engine = await window.__Liveface3D.load(canvas, info.model_url);
+    await loadScript(`${apiBase}/liveface-3d.js`, () => !!window.__Liveface3D, "model");
+    engine = await window.__Liveface3D!.load(canvas, info.model_url, { debug });
   } else {
     // Progressive texture: boot on whichever image lands first — usually the
     // 256px thumbnail, tens of KB — so a face appears and starts animating
@@ -168,13 +194,12 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     const fullUrl = info.image_url || info.thumbnail_url;
     const thumbPromise = loadImage(info.thumbnail_url);
     const fullPromise = fullUrl === info.thumbnail_url ? null : loadImage(fullUrl);
-    const [rigResponse, first] = await Promise.all([
-      fetch(info.rig_url),
+    const [rig, first] = await Promise.all([
+      fetchJson<Rig>(info.rig_url, "rig"),
       fullPromise
         ? Promise.race([thumbPromise, fullPromise]).catch(() => thumbPromise)
         : thumbPromise,
     ]);
-    const rig: Rig = await rigResponse.json();
     // The zoom: data-zoom on the snippet wins, then data-framing (face is
     // 1, full 0), then the avatar's published scene, then its framing — so
     // what the owner sets in the dashboard reaches sites already embedding
@@ -192,6 +217,7 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
       // data-warp="2d" keeps the mesh on the Canvas 2D path (warp-gl.ts):
       // for a site that must not use WebGL, and for comparing the two.
       warp: script.dataset.warp === "2d" ? "2d" : undefined,
+      debug,
     });
     engine = photoEngine;
     // How the owner set a character mouth (jaw, teeth, tongue); a classic
@@ -203,7 +229,6 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
       })
       .catch(() => undefined); // thumbnail stays — worse, but alive
 
-
     // Mouth upgrade, progressive as well. Any failure — bundle, template,
     // the avatar's own teeth photo — leaves the classic mouth, which always
     // works.
@@ -214,7 +239,7 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
       // An avatar without a teeth photo of its own gets the standard teeth,
       // which the API serves beside that motion.
       const mouthConfig = info.mouth;
-      void loadScript(`${apiBase}/liveface-mouth.js`)
+      void loadScript(`${apiBase}/liveface-mouth.js`, () => !!window.__LivefaceMouth, "engine")
         .then(() =>
           window.__LivefaceMouth?.attach(photoEngine, mouthConfig, `${apiBase}/mouth-motion.json`)
         )
@@ -282,11 +307,13 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     },
     engine,
   };
+  canvas.setAttribute("data-liveface-state", "ready");
   canvas.dispatchEvent(new CustomEvent("liveface:ready", { bubbles: true }));
 }
 
 const current = document.currentScript as HTMLScriptElement | null;
 if (current?.dataset.avatar) {
+  // bootstrap shows its own failures; this only guards against a bug there.
   void bootstrap(current).catch((err) => console.error("[liveface]", err));
 }
 

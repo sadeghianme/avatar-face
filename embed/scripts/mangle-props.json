@@ -46,7 +46,8 @@
     "program": "a DOM member",
     "upload": "a DOM member (XMLHttpRequest.upload)",
     "random": "Math.random; written by bodymotion.ts and headmotion.ts",
-    "ready": "a DOM member (FontFaceSet.ready); the widget's"
+    "ready": "a DOM member (FontFaceSet.ready); the widget's",
+    "picture": "the widget's failure stage 'picture' (widget/load.ts), a string the quoted-name check cannot tell from a key"
   },
   "extra": [
     "cutOut", "headGeom", "headLayer", "field", "lay",
