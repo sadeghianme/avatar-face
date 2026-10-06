@@ -169,10 +169,19 @@ async function launch() {
       pending.set(id, { resolve, reject });
       ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
     });
-  const close = () => {
+  // Chrome keeps writing its profile until it has exited, so the profile is
+  // removed after the exit, with retries; a leftover temp dir must never
+  // fail a sweep whose pages all passed.
+  const close = async () => {
     ws.close();
+    const exited = new Promise((resolve) => chrome.once("exit", resolve));
     chrome.kill();
-    rmSync(profile, { recursive: true, force: true });
+    await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 5000))]);
+    try {
+      rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    } catch (error) {
+      console.warn(`left the browser profile at ${profile}: ${error.message}`);
+    }
   };
   return { send, listeners, close };
 }
@@ -376,7 +385,7 @@ try {
     for (const e of errors.slice(0, 5)) console.log(`       console: ${e.slice(0, 220)}`);
   }
 } finally {
-  browser.close();
+  await browser.close();
 }
 console.log(`${results.length} pages, ${results.reduce((n, r) => n + r.violations, 0)} CSP violations, ${failures} failures`);
 process.exit(failures ? 1 : 0);
