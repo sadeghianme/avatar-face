@@ -303,7 +303,7 @@ app/services/
                     mesh → Delaunay again → validator (0 flipped triangles)
   vision_points.py  Gemini vision keypoints (named model, metered, consent-gated)
   photo_analysis.py blur, exposure, size, eyes/mouth state (landmarks + blendshapes)
-  photo_adjust.py   touch-up on a face crop with masked paste-back; stylise; regenerate
+  photo_adjust/     touch-up on a face crop with masked paste-back; stylise; regenerate
   background.py     segmenter per line; RGB zeroed under alpha 0
   consent.py        append-only consents table
 ```
