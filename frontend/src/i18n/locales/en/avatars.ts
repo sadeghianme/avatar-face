@@ -9,6 +9,7 @@ export const avatars = {
   statUsage: "Usage this month",
   emptyTitle: "No avatars yet",
   emptyBody: "Upload a portrait and Liveface builds a face that speaks your text.",
+  avatarsLoadFailed: "Your avatars could not be loaded. Check your connection and try again.",
   statTotal: "Avatars",
   statTotalHint: "In this organisation",
   avatarLibrary: "Avatar workspace",

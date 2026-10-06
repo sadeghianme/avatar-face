@@ -9,6 +9,7 @@ export const avatars = {
   statUsage: "Usage ce mois-ci",
   emptyTitle: "Aucun avatar pour l'instant",
   emptyBody: "Téléversez un portrait et Liveface construit un visage qui parle.",
+  avatarsLoadFailed: "Impossible de charger vos avatars. Vérifiez votre connexion et réessayez.",
   statTotal: "Avatars",
   statTotalHint: "Dans cette organisation",
   avatarLibrary: "Espace avatars",

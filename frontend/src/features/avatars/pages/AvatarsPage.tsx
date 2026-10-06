@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/Badge";
+import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Card } from "@/components/ui/Card";
@@ -36,7 +37,7 @@ export function AvatarsPage() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<AvatarFilter>("all");
 
-  const { data: avatars, isLoading } = useAvatars(current?.id, { poll: true });
+  const { data: avatars, isLoading, isError, refetch } = useAvatars(current?.id, { poll: true });
   const { data: usage } = useUsage(current?.id, { staleTime: 60_000 });
 
   const ready = avatars?.filter((avatar) => avatar.status === "ready").length ?? 0;
@@ -181,7 +182,21 @@ export function AvatarsPage() {
         </Card>
 
         <div className="mt-5">
-          {isLoading || !current ? (
+          {/* A list that could not be loaded is not an empty one. */}
+          {isError && !avatars ? (
+            <Banner
+              tone="danger"
+              icon="alert"
+              role="alert"
+              actions={
+                <Button variant="secondary" size="lg" onClick={() => void refetch()}>
+                  {t("retry")}
+                </Button>
+              }
+            >
+              {t("avatarsLoadFailed")}
+            </Banner>
+          ) : isLoading || !current ? (
             <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }, (_, index) => (
                 <SkeletonCard key={index} />
