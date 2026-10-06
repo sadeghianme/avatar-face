@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { cx } from "@/lib/cx";
 import type { Avatar } from "@/lib/types";
 
 const STALL_SECONDS = 60;
@@ -43,13 +44,14 @@ export function PrepProgress({
         {steps.map((label, i) => (
           <li key={label} className="flex items-center gap-3">
             <span
-              className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+              className={cx(
+                "flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold",
                 i < stepIndex
                   ? "bg-emerald-500 text-white"
                   : i === stepIndex
                     ? "animate-pulse bg-brand-600 text-white"
                     : "bg-gray-200 text-gray-500 dark:bg-gray-700"
-              }`}
+              )}
             >
               {i < stepIndex ? "✓" : i + 1}
             </span>

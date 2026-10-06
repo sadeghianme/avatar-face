@@ -27,6 +27,13 @@ const CREATE_CARD = cx(
   "dark:border-gray-700 dark:bg-white/[0.025] dark:hover:border-brand-500/60 dark:hover:bg-brand-500/[0.05] dark:focus-visible:ring-offset-ink"
 );
 
+/** Its plus, on a white tile that grows a little under the pointer. */
+const CREATE_PLUS = cx(
+  "mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white text-brand-600 shadow-sm",
+  "transition-transform duration-200 group-hover:scale-105 motion-reduce:transition-none",
+  "dark:bg-white/[0.07] dark:text-brand-300 dark:shadow-none"
+);
+
 /**
  * Behind a thumbnail: a warm glow on grey (raised in dark). It used to be
  * one arbitrary background, the gradient and the grey together, which
@@ -116,7 +123,7 @@ export function CreateAvatarCard() {
   return (
     <Link to="/avatars/new" state={FRESH_ENTRY} className={CREATE_CARD}>
       <div>
-        <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white text-brand-600 shadow-sm transition-transform duration-200 group-hover:scale-105 motion-reduce:transition-none dark:bg-white/[0.07] dark:text-brand-300 dark:shadow-none">
+        <span className={CREATE_PLUS}>
           <Icon name="plus" className="h-5 w-5" strokeWidth={1.8} />
         </span>
         <h3 className="mt-4 text-sm font-semibold">{t("newAvatar")}</h3>

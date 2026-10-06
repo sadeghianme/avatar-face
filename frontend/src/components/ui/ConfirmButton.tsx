@@ -5,6 +5,12 @@ import type { IconLike } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { cx } from "@/lib/cx";
 
+/** The question in place of the trigger, on a red tint, its answers at the end. */
+const QUESTION = cx(
+  "flex flex-wrap items-center gap-2 rounded-lg border py-1 pe-1 ps-3 text-sm",
+  "border-red-200 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
+);
+
 /**
  * A destructive action that asks once, in place: pressed, the button
  * becomes its question with Cancel (focused) and the action; Escape is
@@ -80,11 +86,7 @@ export function ConfirmButton({
     if (event.key === "Escape") setAsking(false);
   };
   return (
-    <span
-      role="group"
-      aria-label={question}
-      className="flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 py-1 pe-1 ps-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
-    >
+    <span role="group" aria-label={question} className={QUESTION}>
       {question}
       <Button
         variant="secondary"

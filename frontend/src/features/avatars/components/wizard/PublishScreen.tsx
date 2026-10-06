@@ -43,6 +43,7 @@ import {
 } from "@/features/avatars/wizard";
 import { SampleSpeech } from "@/features/voices";
 import { ApiError } from "@/lib/api";
+import { cx } from "@/lib/cx";
 
 // The preview follows moved points this long after the last move.
 const PREVIEW_DELAY_MS = 400;
@@ -159,7 +160,10 @@ function PublishingPicture({ creation }: { creation: WizardCreation }) {
   if (!image) return null;
   return (
     <div
-      className={`relative mx-auto aspect-square w-48 overflow-hidden rounded-full border-4 border-white shadow-xl dark:border-raised ${PICTURE_BACKDROP}`}
+      className={cx(
+        "relative mx-auto aspect-square w-48 overflow-hidden rounded-full border-4 border-white shadow-xl dark:border-raised",
+        PICTURE_BACKDROP
+      )}
     >
       <img src={image.url} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
       <span
@@ -334,8 +338,12 @@ function Editor({
 
   const preview = (
     <div
-      className={`relative overflow-hidden rounded-3xl border border-gray-200 dark:border-line ${PICTURE_BACKDROP}
-        [&_canvas]:block [&_canvas]:max-h-[max(300px,calc(100dvh-27.5rem))] [&_canvas]:max-w-full [&_canvas]:!w-auto`}
+      className={cx(
+        "relative overflow-hidden rounded-3xl border border-gray-200 dark:border-line",
+        PICTURE_BACKDROP,
+        // The canvas as tall as the screen leaves, its width following.
+        "[&_canvas]:block [&_canvas]:max-h-[max(300px,calc(100dvh-27.5rem))] [&_canvas]:max-w-full [&_canvas]:!w-auto"
+      )}
     >
       {rigUrl && texture ? (
         <AvatarPreview rigUrl={rigUrl} textureUrl={texture} size={640} soft onEngine={setEngine} />
@@ -407,7 +415,10 @@ function Editor({
                 {PARTS.map((part) => (
                   <li
                     key={part}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300"
+                    className={cx(
+                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium",
+                      "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300"
+                    )}
                   >
                     <Icon name="check" className="h-3 w-3" strokeWidth={2.6} />
                     {t(`wzFound_${part}`)}

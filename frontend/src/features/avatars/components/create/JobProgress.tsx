@@ -15,6 +15,16 @@ import {
   type JobCount,
   jobFailure,
 } from "@/features/avatars/creation";
+import { cx } from "@/lib/cx";
+
+/** A finish row's words, by its state: the current one strongest, a
+ * skipped one struck through. */
+const ROW_TEXT: Record<FinishRow["state"], string> = {
+  current: "font-medium text-gray-900 dark:text-gray-100",
+  done: "text-gray-700 dark:text-gray-300",
+  skipped: "text-gray-500 line-through decoration-gray-400/70 dark:text-gray-400",
+  pending: "text-gray-500 dark:text-gray-400",
+};
 
 /**
  * A creation job, drawn: what is happening and how far along, or why it
@@ -159,17 +169,7 @@ function FinishRowItem({ row, stage }: { row: FinishRow; stage: FinishStage | nu
         )}
       </span>
       <div className="min-w-0 flex-1">
-        <p
-          className={`flex flex-wrap items-baseline gap-x-2.5 text-sm ${
-            row.state === "current"
-              ? "font-medium text-gray-900 dark:text-gray-100"
-              : row.state === "done"
-                ? "text-gray-700 dark:text-gray-300"
-                : row.state === "skipped"
-                  ? "text-gray-500 line-through decoration-gray-400/70 dark:text-gray-400"
-                  : "text-gray-500 dark:text-gray-400"
-          }`}
-        >
+        <p className={cx("flex flex-wrap items-baseline gap-x-2.5 text-sm", ROW_TEXT[row.state])}>
           <span>
             {t(`createFinishPhase_${row.phase}`)}
             <span className="sr-only"> ({t(`createFinishPhaseState_${row.state}`)})</span>
@@ -196,9 +196,10 @@ export function ShapeTicks({ count }: { count: JobCount }) {
       {Array.from({ length: count.total }, (_, i) => (
         <span
           key={i}
-          className={`h-1.5 w-5 rounded-full transition-colors duration-300 motion-reduce:transition-none ${
+          className={cx(
+            "h-1.5 w-5 rounded-full transition-colors duration-300 motion-reduce:transition-none",
             i < count.done ? "bg-brand-500" : "bg-gray-200 dark:bg-white/[0.1]"
-          }`}
+          )}
         />
       ))}
     </span>

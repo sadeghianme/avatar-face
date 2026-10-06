@@ -23,6 +23,14 @@ import {
   loupeSize,
   loupeView,
 } from "@/features/avatars/loupe";
+import { cx } from "@/lib/cx";
+
+/** A point's button: 24px around the dot, centred on the point; the
+ *  canvas takes the pointer, the button takes the keyboard. */
+const HANDLE = cx(
+  "pointer-events-none absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center",
+  "rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white"
+);
 
 // Arrow keys nudge a handle this far, in IMAGE pixels, and ten times that
 // with Shift: a pixel of the photo, whatever size it is displayed at.
@@ -376,13 +384,13 @@ export function MarkCanvas({
   // sized in, so they read the same at every photo size.
   const lensPx = scale > 0 ? 1 / (scale * LOUPE_ZOOM) : 1;
   const active = dragging ?? (fromKeys ? focused : null);
-  const cx = inner.width / 2;
-  const cy = inner.height / 2;
+  const midX = inner.width / 2;
+  const midY = inner.height / 2;
   const arms = [
-    [0, cy, cx - CROSSHAIR_GAP_PX, cy],
-    [cx + CROSSHAIR_GAP_PX, cy, inner.width, cy],
-    [cx, 0, cx, cy - CROSSHAIR_GAP_PX],
-    [cx, cy + CROSSHAIR_GAP_PX, cx, inner.height],
+    [0, midY, midX - CROSSHAIR_GAP_PX, midY],
+    [midX + CROSSHAIR_GAP_PX, midY, inner.width, midY],
+    [midX, 0, midX, midY - CROSSHAIR_GAP_PX],
+    [midX, midY + CROSSHAIR_GAP_PX, midX, inner.height],
   ];
 
   return (
@@ -419,9 +427,7 @@ export function MarkCanvas({
             }}
             type="button"
             aria-label={label}
-            className="pointer-events-none absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2
-              items-center justify-center rounded-full outline-none focus-visible:ring-2
-              focus-visible:ring-white"
+            className={HANDLE}
             style={{ left: pct(p.x, imgW), top: pct(p.y, imgH) }}
             onKeyDown={(e) => onKeyDown(h, e)}
             onFocus={() => {
@@ -434,9 +440,11 @@ export function MarkCanvas({
             onBlur={() => setFocused((current) => (current === h.id ? null : current))}
           >
             <span
-              className={`block rounded-full border border-white/90 shadow
-                ${isActive ? "h-3.5 w-3.5 ring-2 ring-white" : "h-2.5 w-2.5"}
-                ${h.primary ? "ring-1 ring-white/70" : ""}`}
+              className={cx(
+                "block rounded-full border border-white/90 shadow",
+                isActive ? "h-3.5 w-3.5 ring-2 ring-white" : "h-2.5 w-2.5",
+                h.primary && "ring-1 ring-white/70"
+              )}
               style={{ backgroundColor: GROUP_COLOURS[h.group] }}
             />
           </button>

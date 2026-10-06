@@ -10,6 +10,7 @@ import { Drawer } from "@/components/ui/Drawer";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { Spinner } from "@/components/ui/Spinner";
+import { cx } from "@/lib/cx";
 import { useAuth } from "@/providers/auth";
 import { useOrg } from "@/providers/org";
 
@@ -20,6 +21,12 @@ import { useOrg } from "@/providers/org";
  * the labels took more vertical space than the links they organised, which is
  * exactly the kind of structure that makes a small app feel like paperwork.
  */
+/** The bar over every page: 3.5rem under the status bar, frosted. */
+const TOP_BAR = cx(
+  "sticky top-0 z-30 h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)]",
+  "border-b border-black/[0.07] bg-white/80 backdrop-blur-xl dark:border-white/[0.07] dark:bg-ink/80"
+);
+
 const NAV: { to: string; key: string; icon: IconName }[] = [
   { to: "/app", key: "avatars", icon: "faces" },
   { to: "/photoface-hd", key: "photofaceHD", icon: "cube" },
@@ -140,7 +147,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="lg:ms-[232px]">
         {/* 3.5rem under the status bar: the wizard's progress sticks just below it. */}
-        <header className="sticky top-0 z-30 h-[calc(3.5rem+env(safe-area-inset-top))] border-b border-black/[0.07] bg-white/80 pt-[env(safe-area-inset-top)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-ink/80">
+        <header className={TOP_BAR}>
           <div className="flex h-full items-center gap-3 px-4">
             <IconButton
               ref={menuButton}

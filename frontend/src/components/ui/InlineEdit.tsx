@@ -3,6 +3,12 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/lib/cx";
 
+/** The value as a button: a faint tint under the pointer, a ring on focus. */
+const TRIGGER = cx(
+  "group -mx-1.5 inline-flex min-w-0 items-center gap-2 rounded-lg px-1.5 py-0.5 text-start coarse:min-h-11",
+  "hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:hover:bg-white/[0.06]"
+);
+
 export interface InlineEditLabels {
   /** The field's label, for a screen reader. */
   field: string;
@@ -138,7 +144,7 @@ export function InlineEdit({
         ref={trigger}
         type="button"
         onClick={() => setEditing(true)}
-        className="group -mx-1.5 inline-flex min-w-0 items-center gap-2 rounded-lg px-1.5 py-0.5 text-start hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 coarse:min-h-11 dark:hover:bg-white/[0.06]"
+        className={TRIGGER}
         aria-label={`${saved}. ${labels.edit}`}
         title={labels.edit}
       >

@@ -1,6 +1,7 @@
 import { AvatarEngine, type Rig, type Scene } from "@liveface/embed";
 import { useEffect, useRef, useState } from "react";
 
+import { cx } from "@/lib/cx";
 import { loadImage } from "@/lib/image";
 
 /**
@@ -121,9 +122,11 @@ export function AvatarPreview({
       // layout width, so the avatar uses the whole card instead of a 480px
       // island in the middle of it. In a box, the whole box, letterboxed.
       style={fit === "box" ? { width: "100%", height: "100%" } : { width: "100%", height: "auto" }}
-      className={`mx-auto ${fit === "box" ? "object-contain" : "rounded-xl"} ${
-        soft ? "" : "bg-gray-100 dark:bg-gray-700"
-      }`}
+      className={cx(
+        "mx-auto",
+        fit === "box" ? "object-contain" : "rounded-xl",
+        !soft && "bg-gray-100 dark:bg-gray-700"
+      )}
     />
   );
 }

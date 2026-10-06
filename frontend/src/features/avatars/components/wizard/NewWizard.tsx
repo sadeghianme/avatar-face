@@ -42,6 +42,7 @@ import {
   type WizardCreation,
 } from "@/features/avatars/wizard";
 import { ApiError } from "@/lib/api";
+import { cx } from "@/lib/cx";
 
 function tabStore(): DraftStore | null {
   try {
@@ -292,7 +293,12 @@ export function NewWizard({
           across it (the main column's padding undone), the steps centred.
           On a short screen (a phone on its side) it scrolls away instead:
           the step needs the height more. */}
-      <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-20 [@media(max-height:520px)]:static -mx-4 border-b border-black/[0.06] bg-white/85 px-4 backdrop-blur-xl dark:border-white/[0.06] dark:bg-ink/85">
+      <div
+        className={cx(
+          "sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-20 -mx-4 px-4 [@media(max-height:520px)]:static",
+          "border-b border-black/[0.06] bg-white/85 backdrop-blur-xl dark:border-white/[0.06] dark:bg-ink/85"
+        )}
+      >
         <ProgressHeader screen={screen} />
       </div>
 

@@ -1,6 +1,8 @@
 import type { SpeechPlayer } from "@liveface/embed";
 import { useEffect, useRef, useState } from "react";
 
+import { cx } from "@/lib/cx";
+
 /**
  * 3D GLB avatar preview. The Three.js engine is dynamically imported so
  * the main dashboard bundle stays slim — only avatars with kind=model3d
@@ -57,7 +59,7 @@ export function Avatar3DPreview({
 
   if (error) return <p className="field-error">{error}</p>;
   return (
-    <div className={`relative ${fit === "box" ? "h-full w-full" : ""}`}>
+    <div className={cx("relative", fit === "box" && "h-full w-full")}>
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center text-gray-400">Loading 3D model…</div>
       )}
@@ -65,9 +67,10 @@ export function Avatar3DPreview({
         ref={canvasRef}
         width={size}
         height={size}
-        className={`mx-auto bg-gradient-to-b from-indigo-100 to-slate-200 dark:from-gray-700 dark:to-gray-800 ${
+        className={cx(
+          "mx-auto bg-gradient-to-b from-indigo-100 to-slate-200 dark:from-gray-700 dark:to-gray-800",
           fit === "box" ? "h-full w-full object-contain" : "max-w-full rounded-xl"
-        }`}
+        )}
       />
     </div>
   );

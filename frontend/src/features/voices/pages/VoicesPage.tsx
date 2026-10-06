@@ -24,6 +24,7 @@ import {
   useSubmitClone,
 } from "@/features/voices/api";
 import { ApiError } from "@/lib/api";
+import { cx } from "@/lib/cx";
 import { MicRecorder, type Recording } from "@/lib/recorder";
 import { useOrg } from "@/providers/org";
 
@@ -195,7 +196,10 @@ export function VoicesPage() {
                 {/* eslint-disable-next-line jsx-a11y/media-has-caption -- the member's own voice, just recorded: there is no text to caption */}
                 <audio controls src={reference.url} className="h-9 max-w-52" />
                 <span
-                  className={`text-xs ${reference.seconds < MIN_REFERENCE_SECONDS ? "text-amber-600" : "text-gray-500"}`}
+                  className={cx(
+                    "text-xs",
+                    reference.seconds < MIN_REFERENCE_SECONDS ? "text-amber-600" : "text-gray-500"
+                  )}
                 >
                   {reference.seconds.toFixed(1)}s
                   {reference.seconds < MIN_REFERENCE_SECONDS && ` — ${t("voicesTooShort")}`}

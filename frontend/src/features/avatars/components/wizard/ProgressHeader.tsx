@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { type Screen, SCREENS } from "@/features/avatars/wizard";
+import { cx } from "@/lib/cx";
 
 /**
  * 1 Model · 2 Photo · 3 Prepare · 4 Publish: four slim bars, the ones
@@ -36,19 +37,22 @@ export function ProgressHeader({ screen }: { screen: Screen }) {
           return (
             <li key={id} aria-current={current ? "step" : undefined} className="min-w-0">
               <span
-                className={`block h-1.5 rounded-full transition-colors duration-300 ${
-                  done || current ? "bg-brand-500" : "bg-gray-200 dark:bg-white/[0.08]"
-                } ${current ? "motion-safe:animate-glow" : ""}`}
+                className={cx(
+                  "block h-1.5 rounded-full transition-colors duration-300",
+                  done || current ? "bg-brand-500" : "bg-gray-200 dark:bg-white/[0.08]",
+                  current && "motion-safe:animate-glow"
+                )}
                 aria-hidden="true"
               />
               <span
-                className={`mt-2 flex items-center gap-1.5 text-sm ${
+                className={cx(
+                  "mt-2 flex items-center gap-1.5 text-sm",
                   current
                     ? "font-semibold text-gray-900 dark:text-white"
                     : done
                       ? "text-gray-600 dark:text-gray-300"
                       : "text-gray-400 dark:text-gray-500"
-                }`}
+                )}
               >
                 <span className="sr-only">{t("wzStepN", { n: i + 1, total })} </span>
                 <span aria-hidden="true" className="tabular-nums">

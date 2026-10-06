@@ -118,7 +118,7 @@ export function Features() {
           </Reveal>
 
           <Reveal className="lg:col-span-6">
-            <div className={`${card} lg:flex-row lg:items-center lg:gap-10`}>
+            <div className={cx(card, "lg:flex-row lg:items-center lg:gap-10")}>
               <div className="lg:max-w-md">
                 <CardHead icon="image" title={t("featStylesTitle")} body={t("featStylesBody")} />
               </div>

@@ -153,7 +153,10 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
         <div className="relative pb-6 text-center">
           <Link
             to="/"
-            className="inline-flex items-center gap-1.5 text-[13px] text-gray-500 transition-colors coarse:min-h-11 coarse:px-2 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+            className={cx(
+              "inline-flex items-center gap-1.5 text-[13px] text-gray-500 transition-colors coarse:min-h-11 coarse:px-2",
+              "hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+            )}
           >
             <Icon name="arrow" className="h-3.5 w-3.5 rotate-180 rtl:rotate-0" />
             {t("backToSite")}

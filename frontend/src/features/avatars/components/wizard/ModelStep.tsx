@@ -78,7 +78,10 @@ export function ModelStep({
               </span>
               <span
                 aria-hidden="true"
-                className="mt-0.5 hidden h-10 w-10 shrink-0 place-items-center rounded-full bg-gray-100 text-gray-500 transition-colors group-hover:bg-brand-600 group-hover:text-white sm:grid dark:bg-white/[0.06] dark:text-gray-300"
+                className={cx(
+                  "mt-0.5 hidden h-10 w-10 shrink-0 place-items-center rounded-full bg-gray-100 text-gray-500 sm:grid",
+                  "transition-colors group-hover:bg-brand-600 group-hover:text-white dark:bg-white/[0.06] dark:text-gray-300"
+                )}
               >
                 <Icon name="arrow" className="h-4 w-4 rtl:-scale-x-100" strokeWidth={2} />
               </span>

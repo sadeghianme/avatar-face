@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { cx } from "@/lib/cx";
 
 /**
  * The crop interaction: an image, a rectangle, handles, aspect presets.
@@ -299,7 +300,7 @@ export function CropBox({
           onPointerMove={move}
           onPointerUp={() => end()}
         >
-          <div className={`absolute inset-0 ring-1 ${tooSmall ? "ring-red-400" : "ring-white/70"}`} />
+          <div className={cx("absolute inset-0 ring-1", tooSmall ? "ring-red-400" : "ring-white/70")} />
           {/* Thirds, shown only while dragging — permanent guides turn into
               clutter the moment you stop needing them. */}
           {dragging && (
@@ -326,7 +327,7 @@ export function CropBox({
               onPointerDown={(e) => start(e, { kind: "resize", handle, start: rect })}
               onPointerMove={move}
               onPointerUp={() => end()}
-              className={`absolute h-6 w-6 border-white ${cls}`}
+              className={cx("absolute h-6 w-6 border-white", cls)}
             />
           ))}
 

@@ -90,7 +90,7 @@ export function VersionStrip({
 
   if (versions.length < 2) return null;
   return (
-    <div className={`min-w-0 ${className}`}>
+    <div className={cx("min-w-0", className)}>
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
         <p id={`${ids}-label`} className="text-sm font-semibold text-gray-900 dark:text-white">
           {t("wzVersionsLabel")}
@@ -183,7 +183,10 @@ export function VersionStrip({
                   </span>
                 )}
                 <span
-                  className={`${on ? "hidden lg:block lg:text-gray-900 dark:lg:text-white" : "block"} truncate lg:line-clamp-2 lg:whitespace-normal`}
+                  className={cx(
+                    on ? "hidden lg:block lg:text-gray-900 dark:lg:text-white" : "block",
+                    "truncate lg:line-clamp-2 lg:whitespace-normal"
+                  )}
                 >
                   {caption}
                 </span>

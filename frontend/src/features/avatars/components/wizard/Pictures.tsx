@@ -7,6 +7,14 @@ import { Spinner } from "@/components/ui/Spinner";
 import { CHECKER_STYLE, LookPicture, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
 import type { CreationStep } from "@/features/avatars/creation";
 import { type AvatarModel, checklistRow, type Look, type PrepareStage } from "@/features/avatars/wizard";
+import { cx } from "@/lib/cx";
+
+/** A band of light sweeping across the picture while it is worked on. */
+const SHIMMER = cx(
+  "absolute inset-0 bg-[length:250%_100%] motion-safe:animate-shimmer",
+  "bg-[linear-gradient(110deg,transparent_30%,rgba(255,255,255,0.45)_50%,transparent_70%)]",
+  "dark:bg-[linear-gradient(110deg,transparent_30%,rgba(255,255,255,0.08)_50%,transparent_70%)]"
+);
 
 /** The square every picture of step 3 sits in: the same size loading,
  * compared and done, so nothing jumps when the result arrives. */
@@ -41,7 +49,7 @@ export function Working({
   const shown = stage === "queued" ? t("wzStage_queued") : stage ? t(`wzStage_${stage}`) : t("wzStage_create");
   return (
     <div className="grid gap-5 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] md:items-center">
-      <div className={`${STAGE} ${PICTURE_BACKDROP}`}>
+      <div className={cx(STAGE, PICTURE_BACKDROP)}>
         {before ? (
           <img
             src={before.url}
@@ -56,10 +64,7 @@ export function Working({
           />
         )}
         {/* Shimmer and scan line: motion only for those who want it. */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-[linear-gradient(110deg,transparent_30%,rgba(255,255,255,0.45)_50%,transparent_70%)] bg-[length:250%_100%] motion-safe:animate-shimmer dark:bg-[linear-gradient(110deg,transparent_30%,rgba(255,255,255,0.08)_50%,transparent_70%)]"
-        />
+        <div aria-hidden="true" className={SHIMMER} />
         <div aria-hidden="true" className="absolute inset-x-0 top-0 h-1/3 motion-safe:animate-scan">
           <div className="h-full bg-gradient-to-b from-transparent via-brand-400/25 to-transparent" />
           <div className="h-0.5 bg-brand-500/70 shadow-[0_0_18px_4px_rgba(249,115,22,0.45)]" />
@@ -78,13 +83,14 @@ export function Working({
               <li key={s} className="flex items-center gap-3 text-sm">
                 <span
                   aria-hidden="true"
-                  className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border ${
+                  className={cx(
+                    "grid h-7 w-7 shrink-0 place-items-center rounded-full border",
                     done
                       ? "border-emerald-500 bg-emerald-500 text-white"
                       : current
                         ? "border-brand-500 bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300"
                         : "border-gray-200 text-gray-300 dark:border-line dark:text-gray-600"
-                  }`}
+                  )}
                 >
                   {done ? (
                     <Icon name="check" className="h-4 w-4 motion-safe:animate-tick-in" strokeWidth={2.6} />
@@ -119,9 +125,10 @@ export function Working({
           aria-valuenow={fraction !== null ? Math.round(fraction * 100) : undefined}
         >
           <div
-            className={`h-full rounded-full bg-brand-500 transition-[width] duration-700 ease-out ${
-              fraction === null ? "w-1/3 motion-safe:animate-pulse" : ""
-            }`}
+            className={cx(
+              "h-full rounded-full bg-brand-500 transition-[width] duration-700 ease-out",
+              fraction === null && "w-1/3 motion-safe:animate-pulse"
+            )}
             style={fraction !== null ? { width: `${Math.max(6, Math.round(fraction * 100))}%` } : undefined}
           />
         </div>

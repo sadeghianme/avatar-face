@@ -68,6 +68,13 @@ const STAGE_SQUARE = cx(
   "lg:max-h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-var(--head-h)-1rem)]"
 );
 
+/** The head's actions: one row that scrolls sideways on a phone (full-bleed,
+ *  no scrollbar), wrapped on a wide screen. */
+const HEAD_ACTIONS = cx(
+  "-mx-4 flex min-w-0 max-w-[100vw] items-center gap-2 overflow-x-auto px-4 py-1 [scrollbar-width:none] [&>*]:shrink-0",
+  "lg:mx-0 lg:max-w-none lg:flex-wrap lg:overflow-visible lg:px-0 lg:py-0"
+);
+
 /** An iPhone's "fullscreen": the stage covers the window, safe areas padded. */
 const STAGE_COVERING = cx(
   "!fixed inset-0 z-[60] !m-0 !aspect-auto !max-h-none bg-white dark:bg-ink",
@@ -388,7 +395,7 @@ export function AvatarDetailPage() {
               One row that scrolls sideways on a phone (three rows of
               buttons used to sit between the title and the avatar); wrapped
               on a wide screen. */}
-          <div className="-mx-4 flex min-w-0 max-w-[100vw] items-center gap-2 overflow-x-auto px-4 py-1 [scrollbar-width:none] lg:mx-0 lg:max-w-none lg:flex-wrap lg:overflow-visible lg:px-0 lg:py-0 [&>*]:shrink-0">
+          <div className={HEAD_ACTIONS}>
             {editable && (
               <>
                 <Button
