@@ -48,8 +48,22 @@ export default tseslint.config(
       // Deliberate focus moves (a dialog's safe answer, the sign-in field)
       // are on kit components, which this rule does not see.
       "jsx-a11y/no-autofocus": ["error", { ignoreNonDOM: true }],
-      // A warning while the features move to the kit; an error once none is left.
-      "no-restricted-syntax": ["warn", ...RAW_CONTROLS],
+      "no-restricted-syntax": ["error", ...RAW_CONTROLS],
+      // Server calls go through a feature's data hooks (features/<x>/api),
+      // which also say what each call refreshes; ApiError, to word a
+      // refusal, may be imported anywhere.
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/lib/api",
+              importNames: ["api", "fetchStream", "postFormWithProgress", "uploadWithProgress"],
+              message: "Call the server through the feature's api module (features/<x>/api), not from a component.",
+            },
+          ],
+        },
+      ],
       "simple-import-sort/imports": [
         "error",
         // Packages, then the app's own (@/…), then relative files.
@@ -62,6 +76,22 @@ export default tseslint.config(
     // The kit is where raw controls live.
     files: ["src/components/ui/**"],
     rules: { "no-restricted-syntax": "off" },
+  },
+  {
+    // Where the client may be called (docs/frontend-ui.md, "Data"): the
+    // features' api modules, the stateful data hooks that own their
+    // polling and cache (one creation, the mouth kit's job, consent), the
+    // session and org providers every page reads, and the client itself.
+    files: [
+      "src/features/*/api.ts",
+      "src/features/*/api/**",
+      "src/features/avatars/hooks/useConsent.tsx",
+      "src/features/avatars/hooks/useCreation.ts",
+      "src/features/avatars/hooks/useMouthKit.ts",
+      "src/providers/**",
+      "src/lib/**",
+    ],
+    rules: { "no-restricted-imports": "off" },
   },
   {
     // Drawing surfaces (docs/frontend-ui.md, "Exceptions"): a point you
