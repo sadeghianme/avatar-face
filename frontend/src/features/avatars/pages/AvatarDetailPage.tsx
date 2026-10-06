@@ -2,20 +2,15 @@ import type { SpeechPlayer } from "@liveface/embed";
 import type { AvatarMouthConfig, ClassicMouthConfig } from "@liveface/embed/mouth";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { iconButtonClass } from "@/components/ui/button-styles";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
-import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { Disclosure, DisclosureGroup } from "@/components/ui/Disclosure";
-import { Icon } from "@/components/ui/Icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { Spinner } from "@/components/ui/Spinner";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   useAvatar,
   useAvatarBackground,
@@ -25,12 +20,12 @@ import {
   useUpdateAvatar,
 } from "@/features/avatars/api";
 import { Avatar3DPreview } from "@/features/avatars/components/Avatar3DPreview";
+import { AvatarPageHead } from "@/features/avatars/components/AvatarPageHead";
 import { AvatarPreview } from "@/features/avatars/components/AvatarPreview";
 import { CropStudio } from "@/features/avatars/components/CropStudio";
 import { EmbedSnippet } from "@/features/avatars/components/EmbedSnippet";
 import { FinishNotice } from "@/features/avatars/components/FinishNotice";
 import { FramingScenePanel } from "@/features/avatars/components/FramingScenePanel";
-import { InlineName } from "@/features/avatars/components/InlineName";
 import { MarkFacePanel } from "@/features/avatars/components/MarkFacePanel";
 import { MouthPanel } from "@/features/avatars/components/MouthPanel";
 import { PrepProgress } from "@/features/avatars/components/PrepProgress";
@@ -39,6 +34,8 @@ import { SharePanel } from "@/features/avatars/components/SharePanel";
 import { TuningPanel } from "@/features/avatars/components/TuningPanel";
 import { errorText } from "@/features/avatars/creation";
 import { useAvatarMouth } from "@/features/avatars/hooks/useAvatarMouth";
+import { useOpenSections } from "@/features/avatars/hooks/useOpenSections";
+import { useStageFullscreen } from "@/features/avatars/hooks/useStageFullscreen";
 import {
   draftMouthConfig,
   type MotionChoice,
@@ -47,7 +44,6 @@ import {
   urlIdentity,
 } from "@/features/avatars/mouth-config";
 import { engineScene, type SceneDraft, sceneOf } from "@/features/avatars/scene";
-import { aiEditedLabels, aiEditedModels } from "@/features/avatars/teeth";
 import { SpeakPanel } from "@/features/voices";
 import { defaultVoiceSelection, type VoiceSelection } from "@/features/voices";
 import { ApiError } from "@/lib/api";
@@ -68,45 +64,11 @@ const STAGE_SQUARE = cx(
   "lg:max-h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-var(--head-h)-1rem)]"
 );
 
-/** The head's actions: one row that scrolls sideways on a phone (full-bleed,
- *  no scrollbar), wrapped on a wide screen. */
-const HEAD_ACTIONS = cx(
-  "-mx-4 flex min-w-0 max-w-[100vw] items-center gap-2 overflow-x-auto px-4 py-1 [scrollbar-width:none] [&>*]:shrink-0",
-  "lg:mx-0 lg:max-w-none lg:flex-wrap lg:overflow-visible lg:px-0 lg:py-0"
-);
-
 /** An iPhone's "fullscreen": the stage covers the window, safe areas padded. */
 const STAGE_COVERING = cx(
   "!fixed inset-0 z-[60] !m-0 !aspect-auto !max-h-none bg-white dark:bg-ink",
   "pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]"
 );
-
-/**
- * The settings column's folded sections. Framing opens by itself: it is
- * the one the preview answers to (drag to pan). The rest open on demand,
- * and what was opened is kept for the next avatar (a member tuning mouths
- * does not unfold Mouth on every page).
- */
-type SectionId = "scene" | "mouth" | "share" | "embed" | "tuning";
-const OPEN_BY_DEFAULT: Record<SectionId, boolean> = {
-  scene: true,
-  mouth: false,
-  share: false,
-  embed: false,
-  tuning: false,
-};
-const OPEN_KEY = "liveface.avatarPage.open";
-
-function loadOpen(): Record<SectionId, boolean> {
-  try {
-    const raw = localStorage.getItem(OPEN_KEY);
-    return raw
-      ? { ...OPEN_BY_DEFAULT, ...(JSON.parse(raw) as Partial<Record<SectionId, boolean>>) }
-      : { ...OPEN_BY_DEFAULT };
-  } catch {
-    return { ...OPEN_BY_DEFAULT };
-  }
-}
 
 /**
  * The avatar's page: the avatar on the left, everything about it on the
@@ -132,7 +94,8 @@ export function AvatarDetailPage() {
   const [cropping, setCropping] = useState(false);
   // Delete asks once, in place (ConfirmButton); nothing destructive on one click.
   const [deleting, setDeleting] = useState(false);
-  const [open, setOpen] = useState<Record<SectionId, boolean>>(loadOpen);
+  // The settings' folded sections, as the member left them.
+  const sections = useOpenSections();
   // The avatar's DRAFT voice. Seeded from the saved value once loaded, and
   // every change is written back — voice is a published property like
   // framing now, so picking one shows the Publish bar and publishing makes
@@ -168,57 +131,9 @@ export function AvatarDetailPage() {
     headObserver.current.observe(el);
   }, []);
 
-  // Native fullscreen on the stage. The `fullscreen` state exists so the
-  // toggle icon flips even when the user leaves with Esc, which never
-  // passes through our button.
+  // The stage, full screen or covering the window (useStageFullscreen).
   const previewBoxRef = useRef<HTMLDivElement>(null);
-  const [fullscreen, setFullscreen] = useState(false);
-  useEffect(() => {
-    const onChange = () => setFullscreen(document.fullscreenElement === previewBoxRef.current);
-    document.addEventListener("fullscreenchange", onChange);
-    return () => document.removeEventListener("fullscreenchange", onChange);
-  }, []);
-  // An iPhone has no fullscreen for an element (Safari gives it to video
-  // only; `requestFullscreen` is not there): the stage then covers the
-  // window itself, over the shell, and the same button or Esc leaves.
-  const [covering, setCovering] = useState(false);
-  useEffect(() => {
-    if (!covering) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setCovering(false);
-    };
-    const root = document.documentElement;
-    const overflow = root.style.overflow;
-    root.style.overflow = "hidden";
-    document.addEventListener("keydown", onKey);
-    return () => {
-      root.style.overflow = overflow;
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [covering]);
-  const toggleFullscreen = () => {
-    const box = previewBoxRef.current;
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else if (covering) setCovering(false);
-    else if (box && typeof box.requestFullscreen === "function" && document.fullscreenEnabled) {
-      box.requestFullscreen().catch(() => setCovering(true));
-    } else setCovering(true);
-  };
-  const expanded = fullscreen || covering;
-
-  const toggleSection = (id: SectionId) =>
-    setOpen((current) => {
-      const next = { ...current, [id]: !current[id] };
-      try {
-        localStorage.setItem(OPEN_KEY, JSON.stringify(next));
-      } catch {
-        // best effort: the defaults next time
-      }
-      return next;
-    });
-  const openSection = (id: SectionId) => {
-    if (!open[id]) toggleSection(id);
-  };
+  const { expanded, covering, toggle: toggleFullscreen } = useStageFullscreen(previewBoxRef);
 
   // The page's server calls. The org and the id are known by the time any
   // of them runs (the page renders nothing before the avatar is loaded).
@@ -342,122 +257,24 @@ export function AvatarDetailPage() {
 
   return (
     <div style={{ "--head-h": `${headHeight}px` } as CSSProperties}>
-      {/* The page head. On a wide screen it stays under the shell's header
-          (full-bleed across the main column's padding, like the wizard's
-          progress bar) while the settings scroll; the stage sticks under
-          it (--head-h). Both rows wrap: on a phone the title's disclosure
-          and the row of tools are each wider than the screen. */}
-      <div
+      {/* The page head (AvatarPageHead). On a wide screen it stays under
+          the shell's header while the settings scroll; the stage sticks
+          under it (--head-h). */}
+      <AvatarPageHead
         ref={headRef}
-        className="pb-4 lg:sticky lg:top-[calc(3.5rem+env(safe-area-inset-top))] lg:z-20 lg:-mx-4 lg:-mt-4 lg:bg-white/85 lg:px-4 lg:pt-4 lg:backdrop-blur-xl dark:lg:bg-ink/85"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-            {/* Back before the title, not buried in the sidebar: a detail page
-                reached from a list needs a way out of it that is where the eye
-                already is. */}
-            <Link
-              to="/app"
-              aria-label={t("avatars")}
-              title={t("avatars")}
-              className={cx(iconButtonClass(), "-ms-2 h-11 w-11")}
-            >
-              <Icon name="back" className="h-5 w-5 rtl:-scale-x-100" />
-            </Link>
-            <InlineName name={avatar.name} onSave={rename} />
-            <StatusBadge status={avatar.status} />
-            {/* The same disclosure visitors get with the published avatar:
-                what the AI did to the picture, "AI teeth" when it made the
-                teeth photo too, "AI mouth shapes" when it made some of them. */}
-            {avatar.ai_edited && (
-              <Badge
-                tone="brand"
-                icon="sparkles"
-                className="min-w-0 max-w-full px-2.5"
-                title={
-                  aiEditedModels(avatar.ai_edited).length > 0
-                    ? t("aiEditedModel", { model: aiEditedModels(avatar.ai_edited).join(", ") })
-                    : undefined
-                }
-              >
-                <span className="truncate">
-                  {aiEditedLabels(avatar.ai_edited)
-                    .map((key) => t(key))
-                    .join(" · ")}
-                </span>
-              </Badge>
-            )}
-          </div>
-
-          {/* The actions, ranked: the edits to the picture first, Test (the
-              widget on a page), then Delete, quiet and last. Publishing is
-              not here: it is the settings column's own state (PublishBar).
-              One row that scrolls sideways on a phone (three rows of
-              buttons used to sit between the title and the avatar); wrapped
-              on a wide screen. */}
-          <div className={HEAD_ACTIONS}>
-            {editable && (
-              <>
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  icon="target"
-                  aria-pressed={adjusting}
-                  onClick={() => setAdjusting((a) => !a)}
-                >
-                  {t("markFace")}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  icon="crop"
-                  aria-pressed={cropping}
-                  onClick={() => setCropping((c) => !c)}
-                >
-                  {t("crop")}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  icon="eraser"
-                  onClick={() => void toggleBackground()}
-                  disabled={busyBg}
-                  title={t("removeBgHint")}
-                >
-                  {busyBg ? t("loading") : avatar.original_image_key ? t("restoreBg") : t("removeBg")}
-                </Button>
-              </>
-            )}
-            {avatar.undo_label && (
-              <Button
-                variant="secondary"
-                size="lg"
-                icon="undo"
-                onClick={() => void undo()}
-                title={t("undoWhat", { what: avatar.undo_label })}
-              >
-                {t("undoWhat", { what: avatar.undo_label })}
-              </Button>
-            )}
-            {editable && (
-              <ButtonLink variant="secondary" size="lg" icon="play" to={`/simulator?avatar=${avatar.id}`}>
-                {t("testInSimulator")}
-              </ButtonLink>
-            )}
-            {/* Asks once, in place; another avatar on this page drops the question (key). */}
-            <ConfirmButton
-              key={avatar.id}
-              icon="trash"
-              label={t("delete")}
-              question={t("deleteAsk")}
-              confirmLabel={t("delete")}
-              cancelLabel={t("cancel")}
-              busy={deleting}
-              onConfirm={() => void remove()}
-            />
-          </div>
-        </div>
-      </div>
+        avatar={avatar}
+        onRename={rename}
+        editable={editable}
+        adjusting={adjusting}
+        onToggleAdjusting={() => setAdjusting((a) => !a)}
+        cropping={cropping}
+        onToggleCropping={() => setCropping((c) => !c)}
+        busyBackground={busyBg}
+        onToggleBackground={() => void toggleBackground()}
+        onUndo={() => void undo()}
+        deleting={deleting}
+        onDelete={() => void remove()}
+      />
 
       {avatar.status === "failed" && (
         <Card tone="danger" className="mb-4">
@@ -602,7 +419,7 @@ export function AvatarDetailPage() {
               key={avatar.id}
               avatar={avatar}
               aiEnabled={current.third_party_ai_enabled ?? true}
-              onToMouth={() => openSection("mouth")}
+              onToMouth={() => sections.reveal("mouth")}
             />
 
             <SpeakPanel
@@ -622,8 +439,8 @@ export function AvatarDetailPage() {
                     icon="image"
                     title={t("sceneTitle")}
                     summary={t("sceneSummary")}
-                    open={open.scene}
-                    onToggle={() => toggleSection("scene")}
+                    open={sections.open.scene}
+                    onToggle={() => sections.toggle("scene")}
                   >
                     <FramingScenePanel
                       avatar={avatar}
@@ -641,8 +458,8 @@ export function AvatarDetailPage() {
                   icon="faces"
                   title={t("mouthTitle")}
                   summary={mouthSummary}
-                  open={open.mouth}
-                  onToggle={() => toggleSection("mouth")}
+                  open={sections.open.mouth}
+                  onToggle={() => sections.toggle("mouth")}
                 >
                   <MouthPanel
                     avatar={avatar}
@@ -664,8 +481,8 @@ export function AvatarDetailPage() {
                 icon="link"
                 title={t("shareTitle")}
                 summary={avatar.share_token ? t("shareSummaryOn") : t("shareSummaryOff")}
-                open={open.share}
-                onToggle={() => toggleSection("share")}
+                open={sections.open.share}
+                onToggle={() => sections.toggle("share")}
               >
                 <SharePanel avatar={avatar} orgId={current.id} />
               </Disclosure>
@@ -674,8 +491,8 @@ export function AvatarDetailPage() {
                 icon="code"
                 title={t("embedSnippet")}
                 summary={t("embedSummary")}
-                open={open.embed}
-                onToggle={() => toggleSection("embed")}
+                open={sections.open.embed}
+                onToggle={() => sections.toggle("embed")}
               >
                 <EmbedSnippet avatarId={avatar.id} voice={voice} />
               </Disclosure>
@@ -687,8 +504,8 @@ export function AvatarDetailPage() {
                 icon="sliders"
                 title={t("tuning")}
                 summary={t("tuningSummary")}
-                open={open.tuning}
-                onToggle={() => toggleSection("tuning")}
+                open={sections.open.tuning}
+                onToggle={() => sections.toggle("tuning")}
               >
                 <TuningPanel engine={engine} avatarId={avatar.id} is3d={is3d} />
                 {photo && (
