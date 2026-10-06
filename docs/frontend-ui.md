@@ -123,16 +123,19 @@ nothing else from it; lint makes that an error elsewhere.
 ## Big components
 
 A screen with real state is a hook and the sections that draw it: the
-hook (`features/avatars/hooks/use…`) holds the state, the requests and
+hook (`features/<x>/hooks/use…`) holds the state, the requests and
 the derived words; the component lays out presentational sections. Busy
 and error states are the mutations' (`isPending`, `error`) rather than
 flags kept beside them; state whose transitions belong together is a
 reducer (a pure one, like `mouth-teeth-line.ts`, is unit-tested). The
 Mouth panel (`useMouthPanel`, `components/mouth/`), the wizard's step 2
-(`usePhotoStep`, `wizard/photo/`) and step 4 (`usePublishEditor`,
-`wizard/publish/`) and the avatar page (`useAvatarDetail`,
-`components/detail/`) are built so: no file over 300 lines, no component
-with more than five `useState`.
+(`usePhotoStep`, `wizard/photo/`), step 3 (`usePrepareScreen`,
+`wizard/prepare/`) and step 4 (`usePublishEditor`, `wizard/publish/`),
+the avatar page (`useAvatarDetail`, `components/detail/`) and the voices
+page (`useVoicesPage`, `useVoiceRecorder`) are built so: no file over 300
+lines, no component with more than five `useState`. Not yet: the lab's
+ReferenceAvatarWorkspace, MarkFacePanel, SharePage, SpeakPanel and
+CropBox (six to eleven `useState` each, no screen tests to hold a split).
 
 ## Lint rules (`frontend/eslint.config.js`)
 
@@ -215,7 +218,10 @@ Formatting is Prettier (`printWidth` 120), applied once in its own commit;
   missing pieces (`dom-shims.ts`: layout for focusable elements, `<dialog>`
   with Escape, matchMedia, observers) and fixtures. Only tests may import
   it (the structure check). The engine's canvases are stood in for by
-  markers (`vi.mock`).
+  markers (`vi.mock`). axe-core runs every WCAG 2.1 A/AA rule that needs
+  no layout over the whole kit (`a11y.test.tsx`) and over each screen as
+  it first shows (`expectAccessible`, `src/test/axe.ts`); colour contrast
+  needs real pixels and is the visual audit's.
 - Both are type-checked (`npm run typecheck`: the app, then
   `tsconfig.test.json`).
 
