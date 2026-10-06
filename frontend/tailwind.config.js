@@ -23,7 +23,7 @@ export default {
         // `panel` the cards, `line` the hairlines between them.
         ink: "#0a0a0a",
         panel: "#141414",
-        raised: "#1c1c1c",
+        raised: { DEFAULT: "#1c1c1c", hover: "#242424" },
         line: "#262626",
       },
       borderRadius: { "2xl": "1rem", "3xl": "1.5rem", "4xl": "2rem" },
