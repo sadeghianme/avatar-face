@@ -182,7 +182,7 @@ export function openingDrive(w: BlendWeights, axisLen: number, mouthOpen: number
  * strongest jaw displacement, so the midline kinked and the aperture
  * sheared into a hook. A real lip line is a smooth curve, so fit one.
  */
-export function seamCurve(ring: readonly Point[], axis: MouthAxis): (t: number) => Point {
+function seamCurve(ring: readonly Point[], axis: MouthAxis): (t: number) => Point {
   const n = ring.length;
   const half = Math.floor(n / 2);
   const { left, right } = axis;
@@ -273,7 +273,7 @@ export function measuredParting(ring: readonly Point[], rest: readonly Point[], 
  * profile closes on its own at the corners. Rounded shapes still narrow
  * the synthetic profile.
  */
-export function apertureEdges(
+function apertureEdges(
   seamAt: (t: number) => Point,
   partingHalfAt: (t: number) => number,
   open: OpeningDrive,
