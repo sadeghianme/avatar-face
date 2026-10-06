@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 
 import { Button, type ButtonProps } from "@/components/ui/Button";
 import type { IconLike } from "@/components/ui/Icon";
@@ -63,14 +63,15 @@ export function ConfirmButton({
     );
   }
 
+  // Escape on either answer is Cancel.
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === "Escape") setAsking(false);
+  };
   return (
     <span
       role="group"
       aria-label={question}
       className="flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 py-1 pe-1 ps-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") setAsking(false);
-      }}
     >
       {question}
       <Button
@@ -79,11 +80,12 @@ export function ConfirmButton({
         // The safe answer takes the focus: Enter twice deletes nothing.
         autoFocus
         onClick={() => setAsking(false)}
+        onKeyDown={onKeyDown}
         disabled={busy}
       >
         {cancelLabel}
       </Button>
-      <Button variant="danger" size={confirmSize} onClick={onConfirm} disabled={busy}>
+      <Button variant="danger" size={confirmSize} onClick={onConfirm} onKeyDown={onKeyDown} disabled={busy}>
         {busy ? <Spinner className="h-4 w-4" /> : confirmLabel}
       </Button>
     </span>

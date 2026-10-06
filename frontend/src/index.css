@@ -23,6 +23,7 @@
      set to 15px or 12px for a mouse); a larger one (the name, text-xl) is
      left alone. */
   @media (pointer: coarse) {
+    /* prettier-ignore */
     input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not(.text-xl),
     textarea:not([hidden]),
     select:not([hidden]) {

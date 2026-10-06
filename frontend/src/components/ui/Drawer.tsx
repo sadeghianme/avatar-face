@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 
 import { focusableIn, nextFocusIndex } from "@/lib/focus";
 import { cx } from "@/lib/cx";
@@ -51,6 +51,15 @@ export function Drawer({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") close.current();
     };
+    // Tab and Shift+Tab wrap inside the panel.
+    const onTab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || !panel) return;
+      const items = focusableIn(panel);
+      const next = nextFocusIndex(items.indexOf(document.activeElement as HTMLElement), items.length, event.shiftKey);
+      event.preventDefault();
+      if (next >= 0) items[next].focus();
+    };
+    panel?.addEventListener("keydown", onTab);
     const wide = window.matchMedia(closeAt);
     const onWide = () => {
       if (wide.matches) close.current();
@@ -63,6 +72,7 @@ export function Drawer({
     const button = opener?.current;
     return () => {
       root.style.overflow = overflow;
+      panel?.removeEventListener("keydown", onTab);
       document.removeEventListener("keydown", onKey);
       wide.removeEventListener("change", onWide);
       const active = document.activeElement;
@@ -71,14 +81,6 @@ export function Drawer({
       }
     };
   }, [open, closeAt, opener]);
-
-  const onKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
-    if (event.key !== "Tab" || !ref.current) return;
-    const items = focusableIn(ref.current);
-    const next = nextFocusIndex(items.indexOf(document.activeElement as HTMLElement), items.length, event.shiftKey);
-    event.preventDefault();
-    if (next >= 0) items[next].focus();
-  }, []);
 
   if (!open) return null;
   return (
@@ -96,7 +98,6 @@ export function Drawer({
         role="dialog"
         aria-modal="true"
         aria-label={label}
-        onKeyDown={onKeyDown}
         className={cx(
           "fixed inset-y-0 start-0 z-50 box-content overflow-y-auto overscroll-contain bg-white ps-[env(safe-area-inset-left)] lg:hidden dark:bg-panel",
           className
