@@ -53,7 +53,6 @@ export { articulationLead, emphasisBeats, prepareCues, type Beat } from "./engin
 export { hingeShare } from "./engine/deform";
 export type { Point } from "./engine/geometry";
 export type { WarpMode } from "./engine/mesh-warp";
-export { luma, pickScleraColour, type Sample } from "./engine/sampling";
 export type { Scene, SceneBackground } from "./engine/scene";
 
 export interface EngineOptions {

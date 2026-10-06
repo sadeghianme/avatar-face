@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { bilabialSeal, continuousMouthMix, dampMouth, MouthMotion } from "../continuous-mouth-model";
 import { REFERENCE_POSES } from "../reference-mouth-model";
 import { PERFORMANCE_POSES, validatePerformanceManifest } from "../photographic-performance-model";
-import { validateOralRig } from "../photographic-oral-surface";
+import { validateOralRig } from "../oral-photo";
 import { ContinuousMouth, CORNER_EASE, PROTRUSION } from "../continuous-mouth";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
 

@@ -3,7 +3,7 @@ import type { BlendWeights, Rig } from "../types";
 import { MouthMotion, mouthMixWeights } from "./continuous-mouth-model";
 import { cavityReveal, contactSeam, dentalOpening, enamelReveal, openingPath, RevealRamp } from "./lip-occlusion-model";
 import { validateMotionManifest, type AvatarPerformanceManifest, type MotionManifest } from "./photographic-performance-model";
-import { validateOralRig, type OralPhoto } from "./photographic-oral-surface";
+import { validateOralRig, type OralPhoto } from "./oral-photo";
 import { DentalOralSurface, type TeethOrigin } from "./dental-oral-surface";
 import { dentalLighting } from "./dental-lighting-model";
 import { ReferenceMouth } from "./reference-mouth";

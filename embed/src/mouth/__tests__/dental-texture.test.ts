@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dentalCrownCoverage, dentalPlacement, enamelMask, extractDentalLayers, lowerDentalExposure, type DentalPixels } from "../dental-texture-model";
-import { validateOralRig } from "../photographic-oral-surface";
+import { validateOralRig } from "../oral-photo";
 
 function fixture() {
   const pixels: DentalPixels = { width: 100, height: 80, data: new Uint8ClampedArray(100 * 80 * 4) };

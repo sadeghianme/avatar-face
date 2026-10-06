@@ -19,7 +19,7 @@
  * label under the canvas (see disclosure.ts); data-ai-label="off" turns it
  * off for a site that discloses it another way.
  */
-import { BrowserTTS, CuePlayer } from "./browser-tts";
+import { BrowserTTS } from "./browser-tts";
 import { aiLabel, renderAiLabel, type Disclosure } from "./disclosure";
 import { AvatarEngine, type Scene } from "./engine";
 import type { Avatar3DEngine } from "./engine3d";
@@ -152,7 +152,7 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
   const label = aiLabel(info.disclosure, locale, script.dataset.aiLabel);
   if (label) renderAiLabel(canvas, label);
 
-  let engine: SpeechPlayer & { isSpeaking(): boolean };
+  let engine: AvatarEngine | Avatar3DEngine;
   if (info.kind === "model3d" && info.model_url) {
     // 3D avatar: lazy-load the Three.js bundle, then hand it the GLB.
     await loadScript(`${apiBase}/liveface-3d.js`);
@@ -264,7 +264,7 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     return { cues: data.cues, durationMs: data.duration_ms, wordMarks: data.word_marks };
   };
   const browserTts = useBrowserVoice
-    ? new BrowserTTS(engine as unknown as CuePlayer, fetchCues)
+    ? new BrowserTTS(engine, fetchCues)
     : null;
 
   window.Liveface = {
@@ -278,7 +278,7 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     listen: (options?: ListenOptions) => listen(options),
     sttSupported,
     tune: (partial: Partial<EngineTuning>) => {
-      Object.assign((engine as unknown as { tuning: EngineTuning }).tuning, partial);
+      Object.assign(engine.tuning, partial);
     },
     engine,
   };

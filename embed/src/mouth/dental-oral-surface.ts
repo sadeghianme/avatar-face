@@ -1,6 +1,6 @@
 import type { MouthPoint, MouthSurfaceFrame } from "../mouth-extension";
 import { dentalCrownCoverage, dentalPlacement, extractDentalLayers, type DentalLayer } from "./dental-texture-model";
-import { validateOralRig, type OralPhoto } from "./photographic-oral-surface";
+import { validateOralRig, type OralPhoto } from "./oral-photo";
 import { DEFAULT_REFERENCE_PROFILE, normalizeProfile, type ReferenceProfile } from "./reference-mouth-model";
 import { dentalLighting, ENAMEL_EDGE_STOPS, ORAL_CORNER_STOPS } from "./dental-lighting-model";
 import { dentalOpening, openingPath } from "./lip-occlusion-model";
