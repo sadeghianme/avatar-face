@@ -248,7 +248,7 @@ a visitor coming back downloads neither the motion nor the teeth photo
 again; the draft's JSON stays `no-cache` (the draft rig is rewritten in
 place). An S3/R2 bucket needs the same CORS rule for JSON, and its presigned
 URLs stay per request. The owner API returns the DRAFT `mouth.motion_url` on
-every route that returns one avatar (`api.avatars._SignedMouthRoute`), so the
+every route that returns one avatar (`api.avatars.routing._SignedMouthRoute`), so the
 dashboard previews what visitors will get; the avatar list leaves it null
 (it shows no mouth, and signing each would cost a storage round trip per
 avatar).

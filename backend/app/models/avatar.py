@@ -96,7 +96,7 @@ class Avatar(TimestampedBase):
     draft_revision: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     published_config: Mapped[str | None] = mapped_column(Text, nullable=True)
     # JSON list of snapshots taken before each edit, oldest first. See
-    # app.api.avatars._snapshot.
+    # app.services.avatars.history.
     edit_history: Mapped[str | None] = mapped_column(Text, nullable=True)
     # {mode, model} when the picture this avatar was built from was made or
     # changed by an AI (the creation wizard's adjust or generate step);
@@ -115,7 +115,7 @@ class Avatar(TimestampedBase):
 
     if TYPE_CHECKING:
         # Not columns: set on one instance by the owner API before it is
-        # serialized (api.avatars._sign_motion), read back with a default by
+        # serialized (api.avatars.routing.sign_motion), read back with a default by
         # `mouth` and `render_profile` below. Declared for the type checker
         # only, so the mapper never sees them.
         signed_motion_url: str | None
@@ -142,7 +142,7 @@ class Avatar(TimestampedBase):
     @property
     def render_profile(self) -> str | None:
         """The draft rig's render profile, as the owner API read it off the
-        rig for this instance (api.avatars._sign_motion), or null."""
+        rig for this instance (api.avatars.routing.sign_motion), or null."""
         return getattr(self, "signed_render_profile", None)
 
     @property

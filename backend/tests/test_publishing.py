@@ -171,7 +171,7 @@ async def test_rebuilding_the_draft_keeps_the_published_avatar_live(client, setu
     async def stalled(_avatar_id):  # the job never gets to finish
         return None
 
-    import app.api.avatars as avatars_api
+    import app.api.avatars.core as avatars_api
 
     monkeypatch.setattr(avatars_api, "process_avatar", stalled)
     reset = await client.post(f"{base}/rig-reset", headers=headers)

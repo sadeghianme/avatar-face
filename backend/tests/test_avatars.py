@@ -162,7 +162,7 @@ async def test_retry_reenqueues(client):
 
 async def test_background_removal_is_reversible(client, monkeypatch):
     """Replacing the photo is destructive, so the original has to survive it."""
-    from app.api import avatars as avatars_api
+    from app.services.avatars import photo as avatar_photo
 
     headers = await register_and_login(client, "bgowner")
     org_id = await create_org(client, headers)
@@ -185,7 +185,7 @@ async def test_background_removal_is_reversible(client, monkeypatch):
         Image.new("RGBA", (300, 300), (0, 0, 0, 0)).save(out, format="PNG")
         return out.getvalue()
 
-    monkeypatch.setattr(avatars_api, "remove_background", fake_cut_out)
+    monkeypatch.setattr(avatar_photo, "remove_background", fake_cut_out)
 
     removed = await client.post(
         f"/orgs/{org_id}/avatars/{avatar_id}/background", json={"remove": True}, headers=headers
@@ -301,7 +301,7 @@ async def test_undo_restores_the_image_and_the_rig_together(client):
 
 async def test_undo_steps_back_one_edit_at_a_time(client, monkeypatch):
     """Two different kinds of edit, undone in reverse order."""
-    from app.api import avatars as avatars_api
+    from app.services.avatars import photo as avatar_photo
 
     def fake_cut_out(raw: bytes) -> bytes:
         import io
@@ -312,7 +312,7 @@ async def test_undo_steps_back_one_edit_at_a_time(client, monkeypatch):
         Image.new("RGBA", (300, 300), (0, 0, 0, 0)).save(out, format="PNG")
         return out.getvalue()
 
-    monkeypatch.setattr(avatars_api, "remove_background", fake_cut_out)
+    monkeypatch.setattr(avatar_photo, "remove_background", fake_cut_out)
 
     headers = await register_and_login(client, "undoer2")
     org_id = await create_org(client, headers)
@@ -376,7 +376,7 @@ async def test_cut_out_thumbnail_is_a_png_and_reverts_on_restore(client, monkeyp
     so leaving it alone after a removal means the dashboard, and anything
     else reading the thumbnail, still shows the old background.
     """
-    from app.api import avatars as avatars_api
+    from app.services.avatars import photo as avatar_photo
 
     headers = await register_and_login(client, "thumbowner")
     org_id = await create_org(client, headers)
@@ -391,7 +391,7 @@ async def test_cut_out_thumbnail_is_a_png_and_reverts_on_restore(client, monkeyp
         Image.new("RGBA", (300, 300), (0, 0, 0, 0)).save(out, format="PNG")
         return out.getvalue()
 
-    monkeypatch.setattr(avatars_api, "remove_background", fake_cut_out)
+    monkeypatch.setattr(avatar_photo, "remove_background", fake_cut_out)
 
     removed = await client.post(
         f"/orgs/{org_id}/avatars/{avatar_id}/background", json={"remove": True}, headers=headers
@@ -408,7 +408,7 @@ async def test_cut_out_thumbnail_is_a_png_and_reverts_on_restore(client, monkeyp
 
 
 async def test_background_removal_reports_when_unconfigured(client, monkeypatch):
-    from app.api import avatars as avatars_api
+    from app.services.avatars import photo as avatar_photo
     from app.services.segment import SegmentationUnavailable
 
     headers = await register_and_login(client, "bgnomodel")
@@ -418,7 +418,7 @@ async def test_background_removal_reports_when_unconfigured(client, monkeypatch)
     def unavailable(_raw):
         raise SegmentationUnavailable("no model")
 
-    monkeypatch.setattr(avatars_api, "remove_background", unavailable)
+    monkeypatch.setattr(avatar_photo, "remove_background", unavailable)
     response = await client.post(
         f"/orgs/{org_id}/avatars/{avatar_id}/background", json={"remove": True}, headers=headers
     )

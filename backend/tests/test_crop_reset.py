@@ -145,7 +145,7 @@ async def test_an_unrecoverable_origin_re_detects_as_the_right_face_type(client)
 
 @pytest.mark.parametrize("left, top", [(0, 0), (17, 5), (100, 150)])
 def test_locating_a_crop(left, top):
-    from app.api.avatars import _locate_crop
+    from app.services.avatars.photo import _locate_crop
 
     photo = Image.open(io.BytesIO(textured_png()))
     crop = photo.crop((left, top, left + 120, top + 90))
@@ -156,7 +156,7 @@ def test_locating_a_crop(left, top):
 
 def test_a_crop_moves_every_kind_of_mark():
     """Mouth lines and chins are marks too; the source is not a point."""
-    from app.api.avatars import _move_anchors
+    from app.services.avatars.photo import _move_anchors
 
     anchors = {
         "head": {"left": {"x": 10, "y": 20}, "right": {"x": 30, "y": 20},
