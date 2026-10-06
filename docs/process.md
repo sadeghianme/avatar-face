@@ -79,8 +79,9 @@ A migration that fails crash-loops the new container: roll back.
 
 Ships a pushed commit without a green CI run, behind a banner, and records
 "SKIPPED" in the summary. Everything else still applies: a clean tree, a commit
-on `origin/main`, the version check after the restart. Re-run CI on that commit
-afterwards (`gh run rerun <id>` or `gh workflow run ci`).
+on `origin/main`, the version check after the restart. Afterwards, watch that
+commit's own run finish (`gh run watch`) or re-run it if it failed for a
+reason outside the code (`gh run rerun <id>`), and roll back if it stays red.
 
 ## Rollback
 

@@ -216,7 +216,7 @@ else
     --limit 1 --json status,conclusion,url --jq '.[] | [.status, .conclusion, .url] | join("|")')" \
     || refuse 5 "could not ask GitHub for CI runs (gh auth status?). --skip-ci-check exists for emergencies."
   if [ -z "$latest" ]; then
-    refuse 5 "no CI run on main for $SHA. CI runs for the newest commit of each push: deploy that one, or start a run (gh workflow run ci)."
+    refuse 5 "no CI run on main for $SHA. CI runs once per push, on its newest commit: deploy that commit (or a later one)."
   fi
   IFS='|' read -r ci_status ci_conclusion ci_url <<EOF
 $latest
