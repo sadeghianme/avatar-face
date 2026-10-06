@@ -27,6 +27,12 @@ async def get_org(db: AsyncSession, org_id: str) -> Organization | None:
     ).scalar_one_or_none()
 
 
+async def loaded_org(db: AsyncSession, org_id: str) -> Organization | None:
+    """The org, from the session's identity map when it is loaded there (the
+    route's membership check loads it, so this is no query then)."""
+    return await db.get(Organization, org_id)
+
+
 async def membership_of(db: AsyncSession, org_id: str, user_id: str) -> Membership | None:
     return (
         await db.execute(

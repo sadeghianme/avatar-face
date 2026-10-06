@@ -16,6 +16,7 @@ from app.models import Creation, CreationStatus
 from app.services.jobs import (
     DONE,
     FAILED,
+    INTERRUPTED,
     Job,
 )
 from app.services.storage import get_storage
@@ -25,6 +26,30 @@ logger = logging.getLogger("liveface.creations")
 
 def error_record(code: str, detail: str) -> dict:
     return {"code": code, "detail": detail}
+
+
+# A retry would fail the same way: the file, the marks or the line is the
+# problem, and only the owner can change it.
+NOT_RETRYABLE = frozenset(
+    {
+        "unreadable_image", "image_too_large", "anchors_stale", "fit_invalid",
+        # AI: a refusal is never asked again, and a photo the touch-up
+        # cannot use stays unusable.
+        "safety_refused", "face_turned", "no_face_for_touchup", "landmarks_unavailable",
+        "imagegen_unavailable", "source_gone",
+        # The organization turned third-party AI off while the job waited.
+        "third_party_ai_disabled",
+    }
+)
+
+
+def retryable(record: dict) -> bool:
+    """Would POST /retry run this job record's job again? A failed or
+    interrupted one, unless it failed in a way a retry would repeat."""
+    return (
+        record["state"] in (FAILED, INTERRUPTED)
+        and (record.get("error") or {}).get("code") not in NOT_RETRYABLE
+    )
 
 
 def job_record(

@@ -288,7 +288,7 @@ async def test_the_header_is_read_off_the_loop_and_only_once_admitted(client, mo
     finally:
         for job in held:
             runner.release(job)
-    monkeypatch.setattr(svc, "MAX_DRAFTS_PER_ORG", 1)
+    monkeypatch.setattr(svc.rules, "MAX_DRAFTS_PER_ORG", 1)
     full = await _upload(client, headers, org_id)
     assert full.status_code == 409 and full.json()["code"] == "too_many_drafts"
     assert len(probed_on) == 1
@@ -324,7 +324,7 @@ async def test_a_photo_that_will_not_decode_fails_its_job_for_good(client):
 
 
 async def test_an_org_keeps_at_most_ten_drafts(client, monkeypatch):
-    monkeypatch.setattr(svc, "MAX_DRAFTS_PER_ORG", 2)
+    monkeypatch.setattr(svc.rules, "MAX_DRAFTS_PER_ORG", 2)
     headers, org_id = await _org(client, "hoarder")
     await _create(client, headers, org_id)
     await _create(client, headers, org_id)
@@ -1245,7 +1245,7 @@ async def test_the_sweeper_expires_creations(client, face, monkeypatch):
 
 
 async def test_finished_rows_do_not_count_as_drafts(client, face, monkeypatch):
-    monkeypatch.setattr(svc, "MAX_DRAFTS_PER_ORG", 1)
+    monkeypatch.setattr(svc.rules, "MAX_DRAFTS_PER_ORG", 1)
     headers, org_id = await _org(client, "counted")
     base, _ = await _create(client, headers, org_id)
     anchors = await _detect(client, headers, base)

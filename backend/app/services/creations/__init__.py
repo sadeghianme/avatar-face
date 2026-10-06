@@ -58,7 +58,19 @@ The package, by what each part does:
     mouth     a finished person's own mouth, before the first publish
     recovery  creations stranded by a restart, idle drafts expired
 
-Everything is re-exported here, so `services.creations.X` keeps working.
+and what the owner's requests do (api.creations), each checked before
+anything is written or a job admitted:
+
+    repo      the rows: read as stored, a revision-checked change, the
+              draft limit, the list, deletion
+    guards    the state a request needs, marks that fit the line and image
+    new       a creation from an upload, or with a generated original
+    edits     framing and line, the image chosen, the background answer
+    requests  face detection, AI adjust, step 3 and its versions, Finish,
+              and a retry of whichever job failed
+
+The job side is re-exported here, so `services.creations.X` keeps working;
+the request side is imported by module.
 """
 
 from __future__ import annotations
@@ -119,6 +131,8 @@ from app.services.creations.records import (
     error_record,
     job_record,
     _load,
+    NOT_RETRYABLE,
+    retryable,
     _store_result,
     SUPERSEDED,
     _update_ai_usage,
@@ -244,6 +258,7 @@ __all__ = [
     "MAX_UPLOAD_BYTES",
     "MIN_CROP_FRACTION",
     "mouth_warnings",
+    "NOT_RETRYABLE",
     "ordered_step_ids",
     "_over",
     "_own_mouth",
@@ -257,6 +272,7 @@ __all__ = [
     "_refund_round",
     "_remove_steps",
     "required_marks",
+    "retryable",
     "round_source",
     "rules_for",
     "_run",
