@@ -5,7 +5,15 @@
  * `.icon-btn-*`), each with its 44px touch size built in.
  */
 
-export type ButtonVariant = "primary" | "secondary" | "danger" | "ghost" | "contrast" | "overlay" | "link" | "text";
+/**
+ * `unstyled` is the escape hatch: a button whose look is a one-off
+ * composition (the sidebar's account row) gets the kit's semantics (type,
+ * busy, icons) and draws itself with `className`; it does not get the
+ * 44px touch size by construction, so it must size itself. Used sparingly;
+ * docs/frontend-ui.md lists where.
+ */
+export type ButtonVariant =
+  "primary" | "secondary" | "danger" | "ghost" | "contrast" | "overlay" | "link" | "text" | "unstyled";
 
 /**
  * xs 26px · sm 36px · md 36px (the default, `.btn`'s own) · lg 44px (the
@@ -23,6 +31,7 @@ const VARIANT: Record<ButtonVariant, string> = {
   overlay: "btn-overlay",
   link: "btn-link",
   text: "btn-text",
+  unstyled: "",
 };
 
 const SIZE: Record<ButtonSize, string> = {
@@ -34,7 +43,7 @@ const SIZE: Record<ButtonSize, string> = {
 };
 
 /** Link and text buttons sit in a line of text: they have no box to size. */
-const UNSIZED: ReadonlySet<ButtonVariant> = new Set(["link", "text"]);
+const UNSIZED: ReadonlySet<ButtonVariant> = new Set(["link", "text", "unstyled"]);
 
 export interface ButtonLook {
   variant?: ButtonVariant;

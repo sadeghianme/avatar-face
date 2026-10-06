@@ -88,6 +88,17 @@
   .field-error {
     @apply mt-1 text-xs text-red-600 dark:text-red-400;
   }
+  /* A faint square grid behind a hero or a brand panel. Its line colour and
+     cell size are variables ([--grid-line:…] [--grid-size:48px]); the fade
+     is the caller's mask. */
+  .backdrop-grid {
+    --grid-line: rgba(255, 255, 255, 0.045);
+    --grid-size: 44px;
+    background-image:
+      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+    background-size: var(--grid-size) var(--grid-size);
+  }
 
   /* ---- The UI kit's looks (components/ui; docs/frontend-ui.md) ----------
      Classes, not utility strings in the components: a utility passed as a

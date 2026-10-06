@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { useOrg } from "@/providers/org";
 
 export function OrgSwitcher() {
@@ -13,28 +16,23 @@ export function OrgSwitcher() {
     return (
       <form
         className="mb-2 flex flex-col gap-2"
-        onSubmit={async (e) => {
+        onSubmit={(e) => {
           e.preventDefault();
           if (!name.trim()) return;
-          await createOrg(name.trim());
-          setName("");
-          setCreating(false);
+          void createOrg(name.trim()).then(() => {
+            setName("");
+            setCreating(false);
+          });
         }}
       >
-        <input
-          autoFocus
-          className="input"
-          placeholder={t("newOrgName")}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+        <Input autoFocus placeholder={t("newOrgName")} value={name} onChange={(e) => setName(e.target.value)} />
         <div className="flex gap-2">
-          <button type="submit" className="btn-primary flex-1 py-1">
+          <Button type="submit" className="flex-1 py-1">
             {t("create")}
-          </button>
-          <button type="button" className="btn-secondary flex-1 py-1" onClick={() => setCreating(false)}>
+          </Button>
+          <Button variant="secondary" className="flex-1 py-1" onClick={() => setCreating(false)}>
             {t("cancel")}
-          </button>
+          </Button>
         </div>
       </form>
     );
@@ -42,9 +40,8 @@ export function OrgSwitcher() {
 
   return (
     <div className="mb-2">
-      <select
+      <Select
         aria-label="organization"
-        className="input"
         disabled={loading && orgs.length === 0}
         value={current?.id ?? ""}
         onChange={(e) => {
@@ -62,7 +59,7 @@ export function OrgSwitcher() {
           </option>
         ))}
         <option value="__new__">＋ {t("createOrg")}</option>
-      </select>
+      </Select>
     </div>
   );
 }

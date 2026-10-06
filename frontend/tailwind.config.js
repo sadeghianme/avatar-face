@@ -25,6 +25,15 @@ export default {
         panel: "#141414",
         raised: { DEFAULT: "#1c1c1c", hover: "#242424" },
         line: "#262626",
+        // Dark surfaces of pictures and frames, so no component writes a hex:
+        // the sign-in brand panel and its code caption,
+        night: { DEFAULT: "#0c0a09", glass: "#171412" },
+        // the landing page's code window,
+        code: "#0b0b0c",
+        // a dark frame around a preview (the Simulator's page, the landing's card),
+        well: "#101010",
+        // the wizard's warm backdrops behind its pictures, in dark mode.
+        ember: { 800: "#2a1d12", 850: "#241a12", 900: "#1f1711", 950: "#1a1410" },
       },
       borderRadius: { "2xl": "1rem", "3xl": "1.5rem", "4xl": "2rem" },
       // Marketing motion. Every one of these is applied through a

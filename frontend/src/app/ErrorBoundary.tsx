@@ -1,6 +1,7 @@
 import { Component, ErrorInfo, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 
 function Fallback() {
@@ -17,9 +18,9 @@ function Fallback() {
         <h1 className="text-[20px] font-semibold text-gray-950 dark:text-white">{t("error")}</h1>
         <p className="mt-1.5 text-[15px] text-gray-500 dark:text-gray-400">{t("errorPageBody")}</p>
       </div>
-      <button type="button" onClick={() => window.location.reload()} className="btn-primary px-5 py-2.5">
+      <Button onClick={() => window.location.reload()} className="px-5 py-2.5">
         {t("reloadPage")}
-      </button>
+      </Button>
     </div>
   );
 }
