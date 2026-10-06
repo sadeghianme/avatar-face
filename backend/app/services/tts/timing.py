@@ -20,7 +20,10 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from typing import Any
 
 from app.services.tts.espeak import supports as espeak_supports
 from app.services.tts.espeak import words_to_ipa
@@ -326,8 +329,8 @@ def plan_utterance(text: str, locale: str = "en-US") -> tuple[list[Segment], lis
     cannot drift apart.
 
     Outside English this waits on espeak-ng (once for the whole text, see
-    services.tts.espeak), so it BLOCKS: on the event loop, await
-    `plan_utterance_async` instead.
+    services.tts.espeak), so it BLOCKS: on the event loop, run it on a
+    thread (`on_planner_thread`).
     """
     segments: list[Segment] = []
     marks: list[dict] = []
@@ -376,13 +379,24 @@ def plan_utterance(text: str, locale: str = "en-US") -> tuple[list[Segment], lis
     return segments, marks
 
 
-async def plan_utterance_async(
-    text: str, locale: str = "en-US"
-) -> tuple[list[Segment], list[dict]]:
-    """`plan_utterance` on a worker thread, for callers on the event loop.
+# Planning for requests on the event loop runs on these threads. Not the
+# CPU thread (services.jobs.run_cpu): planning is milliseconds of Python and
+# a wait on espeak, and queueing a visitor's sentence behind someone's photo
+# upload would cost seconds of silence. Two of them, not the default pool:
+# planning is Python, which holds the GIL, and every thread that wants it
+# is one more the loop thread waits behind (at 5 ms a turn). Twenty
+# requests at once queue here instead.
+_planner = ThreadPoolExecutor(max_workers=2, thread_name_prefix="liveface-speech")
 
-    A thread rather than the CPU thread (services.jobs.run_cpu): planning is
-    milliseconds of Python and a wait on espeak, and queueing a visitor's
-    sentence behind someone's photo upload would cost seconds of silence.
-    """
-    return await asyncio.to_thread(plan_utterance, text, locale)
+
+def cue_track(text: str, locale: str = "en-US") -> tuple[list[dict], int, list[dict]]:
+    """Cues, total duration and word offsets for `text` at the model's own
+    pace: what the browser voice is driven by (api.embed /cues)."""
+    segments, marks = plan_utterance(text, locale)
+    return cues_from_segments(segments), total_duration_ms(segments), marks
+
+
+async def on_planner_thread[T](fn: Callable[..., T], /, *args: Any) -> T:
+    """`fn(*args)` on a planning thread: for work built on `plan_utterance`
+    (or `cue_track`) that a caller on the event loop needs."""
+    return await asyncio.get_running_loop().run_in_executor(_planner, fn, *args)

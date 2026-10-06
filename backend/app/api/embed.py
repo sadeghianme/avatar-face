@@ -15,7 +15,7 @@ from __future__ import annotations
 import base64
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field
 
 from app.api.deps import DB, client_address
@@ -29,7 +29,7 @@ from app.services.rate_limit import CUES_PER_CLIENT, embed_per_key, enforce
 from app.services.simulator_token import looks_like_one as looks_like_simulator_token
 from app.services.storage import get_storage
 from app.services.tts.registry import synthesize_cached
-from app.services.tts.timing import cues_from_segments, plan_utterance_async, total_duration_ms
+from app.services.tts.timing import cue_track, on_planner_thread
 from app.services.usage import check_usage_limit, record_synthesis
 
 router = APIRouter(prefix="/embed/v1", tags=["embed"])
@@ -180,8 +180,24 @@ class CueResponse(BaseModel):
     word_marks: list[WordMark]
 
 
+def _cue_body(text: str, locale: str) -> bytes:
+    """The /cues answer, serialised.
+
+    Built whole on the planning thread, JSON included: two thousand
+    characters are a thousand cues, and validating and encoding twenty of
+    those at once on the event loop was what still held it up.
+    """
+    cues, duration_ms, marks = cue_track(text, locale)
+    answer = CueResponse(
+        cues=[CueOut(**c) for c in cues],
+        duration_ms=duration_ms,
+        word_marks=[WordMark(**m) for m in marks],
+    )
+    return answer.model_dump_json().encode()
+
+
 @router.post("/cues", response_model=CueResponse)
-async def embed_cues(body: CueRequest, request: Request) -> CueResponse:
+async def embed_cues(body: CueRequest, request: Request) -> Response:
     """Viseme cues for text WITHOUT synthesising audio.
 
     The browser-voice path plays audio through speechSynthesis, which never
@@ -202,12 +218,8 @@ async def embed_cues(body: CueRequest, request: Request) -> CueResponse:
     `rate_limit.CUES_PER_CLIENT` requests a minute from one address.
     """
     enforce(CUES_PER_CLIENT, client_address(request))
-    segments, marks = await plan_utterance_async(body.text, body.locale)
-    return CueResponse(
-        cues=[CueOut(**c) for c in cues_from_segments(segments)],
-        duration_ms=total_duration_ms(segments),
-        word_marks=[WordMark(**m) for m in marks],
-    )
+    content = await on_planner_thread(_cue_body, body.text, body.locale)
+    return Response(content=content, media_type="application/json")
 
 
 @router.post("/synthesize", response_model=SynthesizeResponse)

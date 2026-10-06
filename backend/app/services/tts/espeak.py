@@ -23,7 +23,7 @@ is split in half and each half tried again, so one odd word costs a few
 more processes rather than a wrong mouth for every word after it.
 
 Everything here BLOCKS: it waits on a process. Callers on the event loop go
-through a thread (timing.plan_utterance_async). At most `MAX_CONCURRENT`
+through a thread (timing.on_planner_thread; the TTS providers' own). At most `MAX_CONCURRENT`
 processes run at once, whichever threads ask.
 
 Absence is normal, not an error. Development machines mostly do not have

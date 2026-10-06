@@ -1,8 +1,10 @@
+import json
 import threading
 from datetime import timedelta
 
 from app.api import embed
 from app.models import ApiKey, utcnow
+from app.schemas.tts import CueOut
 from app.services import api_keys
 from app.services.rate_limit import Limit
 from app.services.tts import timing
@@ -313,6 +315,24 @@ async def test_cues_are_rate_limited_per_client(client, monkeypatch) -> None:
     refused = await client.post("/embed/v1/cues", json={"text": "Hello."})
     assert refused.json()["code"] == "rate_limited"
     assert 1 <= int(refused.headers["retry-after"]) <= 60
+
+
+async def test_cues_answer_is_byte_for_byte_what_fastapi_rendered(client) -> None:
+    """Serialised on the planning thread now; the bytes must not change."""
+    text = "Bonjour, tout le monde! L'économie va bien."
+    response = await client.post("/embed/v1/cues", json={"text": text, "locale": "fr-FR"})
+    cues, duration_ms, marks = timing.cue_track(text, "fr-FR")
+    model = embed.CueResponse(
+        cues=[CueOut(**c) for c in cues],
+        duration_ms=duration_ms,
+        word_marks=[embed.WordMark(**m) for m in marks],
+    )
+    # What FastAPI's JSONResponse does with a response_model's output.
+    rendered = json.dumps(
+        model.model_dump(mode="json"), ensure_ascii=False, allow_nan=False, separators=(",", ":")
+    ).encode()
+    assert response.content == rendered
+    assert response.headers["content-type"] == "application/json"
 
 
 async def test_cues_are_planned_off_the_event_loop(client, monkeypatch) -> None:
