@@ -26,10 +26,9 @@ import {
 } from "./character-mouth";
 import { TONGUE_RAISE, paintCharacter } from "./character-paint";
 import { HeadMotion } from "./headmotion";
-import { applyLowerFace, buildLowerFaceRig, buildNeckBand, UPPER_FACE, type LowerFaceRig } from "./jaw-rig";
+import { applyLowerFace, buildLowerFaceRig, UPPER_FACE, type LowerFaceRig } from "./jaw-rig";
 import { kindProfile, type KindProfile } from "./kind-profile";
 import { padTriangle } from "./seam-pad";
-import { eyeLine, viewportFor } from "./viewport";
 import { IDENTITY, WarpRenderer, buildWarpMesh, rotate, translate, type Affine } from "./warp-gl";
 import { MediaClock } from "./media-clock";
 import type { MouthExtension, MouthPose } from "./mouth-extension";
@@ -44,8 +43,18 @@ import {
   visemeAt,
   type Beat,
 } from "./engine/cues";
-import { EYE_CORNERS, IRISES, LEFT_BROW, LOWER_LIDS, RIGHT_BROW, UPPER_LIDS, eyeShape } from "./engine/landmarks";
-import type { Point } from "./engine/geometry";
+import {
+  layOutFace,
+  pixelScale,
+  placeHead,
+  refineMesh,
+  validInnerRing,
+  type FaceMesh,
+  type HeadGeom,
+  type Point,
+} from "./engine/geometry";
+import { EYE_CORNERS, IRISES, LANDMARK_COUNT, LEFT_BROW, LOWER_LIDS, RIGHT_BROW, UPPER_LIDS, eyeShape } from "./engine/landmarks";
+import { cutHeadLayer } from "./engine/render2d";
 import { FaceSamples, probeCutOut } from "./engine/sampling";
 
 export { articulationLead, emphasisBeats, prepareCues, type Beat } from "./engine/cues";
@@ -284,22 +293,11 @@ export class AvatarEngine {
   /** StrictMode guard: render loop and async callbacks bail once destroyed. */
   private destroyed = false;
 
-  // Framing: rig image coords -> canvas coords.
-  private scale = 1;
-  private offsetX = 0;
-  private offsetY = 0;
-
-  private basePoints: Point[] = []; // canvas space, neutral pose
-  private texPoints: Point[] = []; // texture space (naturalWidth/Height)
-  // Mouth-region subdivision: extra midpoint vertices (index >= 478) that
-  // follow their two parents, and the refined triangle list using them.
-  private derivedParents: [number, number][] = [];
-  // The neck band (jaw-rig.ts): derived vertices below the jaw line, after
-  // the midpoints, each hanging from a jaw-line vertex by a share of its
-  // motion, so the chin drops over stretching neck skin, not a still one.
-  private neckBand: { base: Point; parent: number; share: number }[] = [];
-  private triangles: [number, number, number][] = [];
-  private innerRing: number[] = [];
+  /** The face mesh laid on the canvas (geometry.ts): rebuilt whole when
+   *  the viewport or the texture changes. */
+  private mesh: FaceMesh;
+  /** The inner-lip ring the classic mouth is built on (validInnerRing). */
+  private readonly innerRing: number[];
 
   // Animation state
   private cues: Cue[] = [];
@@ -331,11 +329,7 @@ export class AvatarEngine {
   // vertices instead, and the face slid around inside a stationary head.
   private headDrive = new HeadMotion();
   private headLayer: HTMLCanvasElement | null = null;
-  private headGeom: {
-    x: number; y: number; w: number; h: number;
-    pivotX: number; pivotY: number;
-    yawPx: number; pitchPx: number; faceH: number;
-  } | null = null;
+  private headGeom: HeadGeom | null = null;
   private bodyPivot = { x: 0, y: 0 };
   private swayAngle = 0;   // radians at full deflection
   private breathRise = 0;  // pixels at the top of an inhale
@@ -371,9 +365,6 @@ export class AvatarEngine {
    *  and null for good when it fails (the avatar never waits for it). */
   private backgroundImage: HTMLImageElement | null = null;
   private backgroundUrl: string | null = null;
-  /** Where the whole picture lies on the canvas, canvas px (viewport.ts);
-   *  parts of it may be outside the canvas. */
-  private picture = { x: 0, y: 0, w: 0, h: 0 };
 
   // Layered render path (see setLayers). Null means single-photo.
   private layers: {
@@ -416,11 +407,10 @@ export class AvatarEngine {
     ctx.imageSmoothingQuality = "high";
     this.warpMode = opts.warp ?? "auto";
     if (this.warpMode !== "2d") this.warp = WarpRenderer.create(canvas.width, canvas.height);
-    this.innerRing = this.validInnerRing();
-    this.computeFraming();
-    this.samples.sample(this.texture, this.texPoints, this.rig, this.profile);
-    this.subdivideMouthRegion();
-    this.buildNeckBand();
+    this.innerRing = validInnerRing(rig);
+    this.mesh = this.layOut();
+    this.samples.sample(this.texture, this.mesh.texPoints, this.rig, this.profile);
+    refineMesh(this.mesh, this.rig, this.texture);
     this.startTime = performance.now();
     this.blinks.reset(this.startTime);
     this.nextNodAt = this.startTime + 2500;
@@ -456,10 +446,9 @@ export class AvatarEngine {
    *
    * The widget boots on the 256px thumbnail so a face appears immediately,
    * then upgrades to the full-resolution image when it lands. Everything
-   * sampled or derived from the texture is redone: texPoints and the mouth
-   * subdivision (derivedParents cleared first — the subdivision APPENDS
-   * derived points, so re-running it without the reset doubles them), the
-   * lip/lash colours, the cut-out probe and the head layer.
+   * sampled or derived from the texture is redone: the lip/lash colours,
+   * the mesh (texPoints, the mouth subdivision), the cut-out probe and the
+   * head layer.
    */
   setTexture(texture: HTMLImageElement): void {
     if (this.destroyed) return;
@@ -468,20 +457,17 @@ export class AvatarEngine {
     // (rebuildGeometry lays this one out after), so a texture of another
     // size, the widget's full picture after its thumbnail, is sampled at
     // the wrong pixels.
-    this.samples.sample(this.texture, this.texPoints, this.rig, this.profile);
+    this.samples.sample(this.texture, this.mesh.texPoints, this.rig, this.profile);
     this.rebuildGeometry();
   }
 
   /**
-   * Lay the picture on the canvas again (the viewport changed): the base
-   * points, the mouth subdivision and the neck band are derived from it,
-   * and the subdivision APPENDS vertices, so it starts from a clean list.
+   * Lay the picture on the canvas again (the viewport or the texture
+   * changed): a new mesh, refined, and everything placed by it.
    */
   private rebuildGeometry(): void {
-    this.derivedParents = [];
-    this.computeFraming();
-    this.subdivideMouthRegion();
-    this.buildNeckBand();
+    this.mesh = this.layOut();
+    refineMesh(this.mesh, this.rig, this.texture);
   }
 
   /**
@@ -581,7 +567,7 @@ export class AvatarEngine {
    * overlays drawn in step with the face (a scan effect, a debug view).
    */
   landmarks(): ReadonlyArray<Readonly<Point>> {
-    return this.basePoints.slice(0, 478);
+    return this.mesh.basePoints.slice(0, LANDMARK_COUNT);
   }
 
   destroy(): void {
@@ -620,139 +606,23 @@ export class AvatarEngine {
   // --- Framing -------------------------------------------------------------
 
   /**
-   * Lay the whole picture on the canvas (viewport.ts): the face zoom
-   * composes it as a portrait that fills the canvas, the full zoom shows
-   * all of it. Nothing is cropped; what falls outside the canvas is
-   * outside. The mapping is rig image px -> canvas px.
+   * Lay the picture on the canvas (geometry.ts layOutFace) and place by it
+   * what moves with the framing: the cut-out probe, the body's pivot, the
+   * head's rectangle and layer, the character field and the lower face.
+   * The mesh comes back unrefined (refineMesh).
    */
-  private computeFraming(): void {
-    const [imageW, imageH] = this.rig.image_size;
-    const view = viewportFor({
-      imageW, imageH,
-      faceBox: this.rig.face_box,
-      eyeY: eyeLine(this.rig.points, this.rig.face_box),
-      canvasW: this.canvas.width,
-      canvasH: this.canvas.height,
-      zoom: this.scene.zoom ?? 1,
-      pan: this.scene.pan,
-    });
-    this.scale = view.scale;
-    this.offsetX = view.offsetX;
-    this.offsetY = view.offsetY;
-    this.picture = { x: view.offsetX, y: view.offsetY, w: imageW * view.scale, h: imageH * view.scale };
-
-    // Texture coords use the texture's OWN dimensions — the thumbnail may
-    // be a scaled copy of the original image.
-    const tw = this.texture.naturalWidth / this.rig.image_size[0];
-    const th = this.texture.naturalHeight / this.rig.image_size[1];
-    this.texPoints = this.rig.points.map(([x, y]) => ({ x: x * tw, y: y * th }));
-    this.basePoints = this.rig.points.map(([x, y]) => ({
-      x: x * this.scale + this.offsetX,
-      y: y * this.scale + this.offsetY,
-    }));
+  private layOut(): FaceMesh {
+    const mesh = layOutFace(this.rig, this.texture, this.canvas, this.scene.zoom ?? 1, this.scene.pan);
     const cutOut = probeCutOut(this.texture);
     if (cutOut !== null) this.cutOut = cutOut;
-    this.measureBody();
-    this.buildHeadLayer();
-    this.field = this.profile.mouth === "character" ? new CharacterField(this.basePoints) : null;
-    this.lowerFace = buildLowerFaceRig(this.basePoints);
-  }
-
-  /**
-   * Cut the head out of the photo, once, as its own layer.
-   *
-   * The face mesh spans eyebrows to chin — it knows nothing about hair or
-   * ears. Warping it moves the face while the rest of the head stands still,
-   * which is exactly the failure the first head-motion attempt shipped. So
-   * the unit of motion is a rectangle around the whole head, sampled from
-   * the texture with feathered edges: soft at the sides and top so a moved
-   * layer blends into the still background, and a deep fade at the neck,
-   * where a seam lands on a collar instead of across a chin.
-   */
-  private buildHeadLayer(): void {
-    this.headLayer = null;
-    this.headGeom = null;
-    const xs = this.basePoints.map((p) => p.x);
-    const ys = this.basePoints.map((p) => p.y);
-    const fx0 = Math.min(...xs), fx1 = Math.max(...xs);
-    const fy0 = Math.min(...ys), fy1 = Math.max(...ys);
-    const faceW = fx1 - fx0, faceH = fy1 - fy0;
-    if (faceW < 4 || faceH < 4) return;
-
-    // Within the picture, not the canvas: the head may reach past the
-    // canvas edge (hair above a face zoom) and still be the unit that moves.
-    const pic = this.picture;
-    const x = Math.max(pic.x, fx0 - faceW * 0.42);
-    const y = Math.max(pic.y, fy0 - faceH * 0.9);
-    const w = Math.min(pic.x + pic.w, fx1 + faceW * 0.42) - x;
-    const h = Math.min(pic.y + pic.h, fy1 + faceH * 0.5) - y;
-    if (w < 8 || h < 8) return;
-
-    // The geometry (pivot, travel) serves every picture; the cut-out layer
-    // itself only a cut-out, whose head moves over transparency. An opaque
-    // picture moves as one instead (render), so it needs no copy.
-    this.headGeom = {
-      x, y, w, h,
-      pivotX: (fx0 + fx1) / 2,
-      // A head pivots where it meets the spine, in the upper chest — not
-      // about its own middle, which reads as the face rotating in the skull.
-      pivotY: fy1 + faceH * 0.85,
-      // Peak travel, |pose|=1 extremes the signed-square draw rarely
-      // reaches. Kept close to SitePal's measured ~2% drift: anything
-      // livelier drags the layer boundary across hair and background
-      // detail, which reads as the image tearing, not the head turning.
-      yawPx: faceW * 0.03,
-      pitchPx: faceH * 0.025,
-      faceH,
-    };
-    if (!this.cutOut) return;
-
-    const layer = document.createElement("canvas");
-    layer.width = Math.round(w);
-    layer.height = Math.round(h);
-    const lctx = layer.getContext("2d");
-    if (!lctx) return;
-
-    // The same canvas<->texture mapping the base draw uses.
-    const tw = this.texture.naturalWidth / this.rig.image_size[0];
-    const th = this.texture.naturalHeight / this.rig.image_size[1];
-    lctx.drawImage(
-      this.texture,
-      ((x - this.offsetX) / this.scale) * tw,
-      ((y - this.offsetY) / this.scale) * th,
-      (w / this.scale) * tw,
-      (h / this.scale) * th,
-      0, 0, w, h
-    );
-
-    // Feather. destination-out with gradients, one per edge; the bottom one
-    // is much deeper because that is the neck seam.
-    // Each gradient runs from the interior boundary OUT to the canvas edge.
-    // destination-out erases where the fill is opaque, so the interior stop
-    // must be transparent — and crucially, points beyond a gradient's start
-    // clamp to the first stop, which is what keeps the whole interior at
-    // "erase nothing". With the stops reversed, the interior clamps to
-    // full-erase and the layer comes out blank; that shipped briefly and
-    // made this entire feature a silent no-op.
-    const fade = (x0: number, y0: number, x1: number, y1: number) => {
-      const g = lctx.createLinearGradient(x0, y0, x1, y1);
-      g.addColorStop(0, "rgba(0,0,0,0)");
-      g.addColorStop(1, "rgba(0,0,0,1)");
-      lctx.fillStyle = g;
-      lctx.fillRect(0, 0, w, h);
-    };
-    lctx.globalCompositeOperation = "destination-out";
-    // Wide side/top bands: hair routinely crosses this boundary (long or
-    // voluminous hair extends well past the face-derived rect), and a narrow
-    // feather there turns every head shift into a visible slice through it.
-    const side = w * 0.16, top = h * 0.13, neck = h * 0.26;
-    fade(side, 0, 0, 0);
-    fade(w - side, 0, w, 0);
-    fade(0, top, 0, 0);
-    fade(0, h - neck, 0, h);
-    lctx.globalCompositeOperation = "source-over";
-
-    this.headLayer = layer;
+    this.measureBody(mesh.basePoints);
+    // The head as a movable unit (geometry.ts placeHead); a cut-out also
+    // gets it as its own feathered layer, which moves over transparency.
+    this.headGeom = placeHead(mesh.basePoints, mesh.picture);
+    this.headLayer = this.headGeom && this.cutOut ? cutHeadLayer(this.texture, this.rig, mesh, this.headGeom) : null;
+    this.field = this.profile.mouth === "character" ? new CharacterField(mesh.basePoints) : null;
+    this.lowerFace = buildLowerFaceRig(mesh.basePoints);
+    return mesh;
   }
 
   /** Current head displacement in canvas px, plus the face's parallax share. */
@@ -791,9 +661,9 @@ export class AvatarEngine {
    * with height — which is both what an inverted pendulum does and the reason
    * the bottom of the frame stays put while the head moves.
    */
-  private measureBody(): void {
-    const xs = this.basePoints.map((p) => p.x);
-    const ys = this.basePoints.map((p) => p.y);
+  private measureBody(basePoints: readonly Point[]): void {
+    const xs = basePoints.map((p) => p.x);
+    const ys = basePoints.map((p) => p.y);
     const faceW = Math.max(1, Math.max(...xs) - Math.min(...xs));
     const faceH = Math.max(1, Math.max(...ys) - Math.min(...ys));
     const faceCentreY = (Math.min(...ys) + Math.max(...ys)) / 2;
@@ -812,12 +682,6 @@ export class AvatarEngine {
     this.breathRise = faceH * BREATH_RISE;
   }
 
-  /** How many canvas pixels one texture pixel is, at rest. */
-  private pixelScale(): number {
-    const tw = this.texture.naturalWidth / Math.max(1, this.rig.image_size[0]);
-    return tw > 0 ? this.scale / tw : this.scale;
-  }
-
   /**
    * Copies of the picture's own pixels for a painted lid: a canvas rectangle
    * of the face as drawn, from the texture the face is drawn from. The eye
@@ -827,7 +691,7 @@ export class AvatarEngine {
   /** A texture point of an eye, in the canvas the eye is drawn in. */
   private fromTexture(e: number, pts: Point[], t: Point): Point {
     const [c0, c1] = EYE_CORNERS[e];
-    const a = pts[c0], b = pts[c1], ta = this.texPoints[c0], tb = this.texPoints[c1];
+    const a = pts[c0], b = pts[c1], ta = this.mesh.texPoints[c0], tb = this.mesh.texPoints[c1];
     if (!a || !b || !ta || !tb) return t;
     const k = Math.hypot(tb.x - ta.x, tb.y - ta.y) / Math.max(Math.hypot(b.x - a.x, b.y - a.y), 1e-6);
     return { x: a.x + (t.x - ta.x) / k, y: a.y + (t.y - ta.y) / k };
@@ -835,7 +699,7 @@ export class AvatarEngine {
 
   private lidBlit(e: number, pts: Point[]): Blit | null {
     const [c0, c1] = EYE_CORNERS[e];
-    const a = pts[c0], b = pts[c1], ta = this.texPoints[c0], tb = this.texPoints[c1];
+    const a = pts[c0], b = pts[c1], ta = this.mesh.texPoints[c0], tb = this.mesh.texPoints[c1];
     if (!a || !b || !ta || !tb) return null;
     const k = Math.hypot(tb.x - ta.x, tb.y - ta.y) / Math.max(Math.hypot(b.x - a.x, b.y - a.y), 1e-6);
     return (c, dst, src) => {
@@ -861,123 +725,6 @@ export class AvatarEngine {
       const blit = flat || !this.samples.lidCloneOk[e] ? null : this.lidBlit(e, pts);
       paintLid(this.ctx, shape, amount, this.samples.lidTone[e], this.samples.lashRgb[e], flat, blit, outline);
     }
-  }
-
-  /**
-   * Refine the mesh around the mouth: 1:4 subdivide every triangle with at
-   * least two vertices near the mouth. Big triangles are what make lip
-   * deformation look faceted — midpoint vertices (tracked by parent pair)
-   * follow the warp smoothly at near-zero cost (~200 extra triangles).
-   */
-  private subdivideMouthRegion(): void {
-    const mouth = this.rig.mouth_indices ?? [];
-    if (!mouth.length) {
-      this.triangles = this.rig.triangles.map((t) => [...t] as [number, number, number]);
-      return;
-    }
-    let mcx = 0;
-    let mcy = 0;
-    for (const i of mouth) {
-      mcx += this.basePoints[i].x;
-      mcy += this.basePoints[i].y;
-    }
-    mcx /= mouth.length;
-    mcy /= mouth.length;
-    const xs = mouth.map((i) => this.basePoints[i].x);
-    const radius = Math.max((Math.max(...xs) - Math.min(...xs)) * 0.95, 8);
-    const near = new Set<number>();
-    for (let i = 0; i < this.basePoints.length; i++) {
-      if (Math.hypot(this.basePoints[i].x - mcx, this.basePoints[i].y - mcy) < radius) {
-        near.add(i);
-      }
-    }
-
-    const midCache = new Map<string, number>();
-    const midpoint = (a: number, b: number): number => {
-      const key = a < b ? `${a}:${b}` : `${b}:${a}`;
-      let index = midCache.get(key);
-      if (index === undefined) {
-        index = this.basePoints.length + this.derivedParents.length;
-        midCache.set(key, index);
-        this.derivedParents.push([a, b]);
-        this.texPoints.push({
-          x: (this.texPoints[a].x + this.texPoints[b].x) / 2,
-          y: (this.texPoints[a].y + this.texPoints[b].y) / 2,
-        });
-      }
-      return index;
-    };
-
-    this.triangles = [];
-    for (const [a, b, c] of this.rig.triangles) {
-      const inside = Number(near.has(a)) + Number(near.has(b)) + Number(near.has(c));
-      if (inside >= 2) {
-        const ab = midpoint(a, b);
-        const bc = midpoint(b, c);
-        const ca = midpoint(c, a);
-        this.triangles.push([a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]);
-      } else {
-        this.triangles.push([a, b, c]);
-      }
-    }
-  }
-
-  /**
-   * The neck band below the jaw line (jaw-rig.ts buildNeckBand), appended
-   * after the mouth subdivision's midpoints: its vertices, their texture
-   * positions (the still picture below the chin) and its triangles. Every
-   * rig gets one, derived from its own points.
-   */
-  private buildNeckBand(): void {
-    this.neckBand = [];
-    const band = buildNeckBand(this.basePoints, this.basePoints.length + this.derivedParents.length);
-    const tw = this.texture.naturalWidth / this.rig.image_size[0];
-    const th = this.texture.naturalHeight / this.rig.image_size[1];
-    for (const v of band.vertices) {
-      this.neckBand.push({ base: { x: v.x, y: v.y }, parent: v.parent, share: v.share });
-      this.texPoints.push({
-        x: ((v.x - this.offsetX) / this.scale) * tw,
-        y: ((v.y - this.offsetY) / this.scale) * th,
-      });
-    }
-    this.triangles.push(...band.triangles);
-  }
-
-  /**
-   * Guard: if the stored inner-lip ring spread is implausible vs the mouth
-   * box (bad rig / wrong indices), rebuild a usable ring from mouth_indices.
-   */
-  private validInnerRing(): number[] {
-    const ring = this.rig.inner_lip_ring ?? [];
-    const mouth = this.rig.mouth_indices ?? [];
-    if (ring.length < 6) return this.ringFromMouth(mouth);
-    const pts = ring.map((i) => this.rig.points[i]);
-    const xs = pts.map((p) => p[0]);
-    const ys = pts.map((p) => p[1]);
-    const ringW = Math.max(...xs) - Math.min(...xs);
-    const ringH = Math.max(...ys) - Math.min(...ys);
-    const mpts = mouth.map((i) => this.rig.points[i]);
-    const mxs = mpts.map((p) => p[0]);
-    const mys = mpts.map((p) => p[1]);
-    const mouthW = Math.max(...mxs) - Math.min(...mxs);
-    const mouthH = Math.max(...mys) - Math.min(...mys);
-    const plausible =
-      ringW > mouthW * 0.2 && ringW <= mouthW * 1.05 && ringH <= Math.max(mouthH * 1.05, 1);
-    return plausible ? ring : this.ringFromMouth(mouth);
-  }
-
-  private ringFromMouth(mouth: number[]): number[] {
-    if (!mouth.length) return [];
-    // Innermost half of the mouth points (closest to the mouth centroid).
-    const cx = mouth.reduce((s, i) => s + this.rig.points[i][0], 0) / mouth.length;
-    const cy = mouth.reduce((s, i) => s + this.rig.points[i][1], 0) / mouth.length;
-    return [...mouth]
-      .sort((a, b) => {
-        const da = (this.rig.points[a][0] - cx) ** 2 + (this.rig.points[a][1] - cy) ** 2;
-        const db = (this.rig.points[b][0] - cx) ** 2 + (this.rig.points[b][1] - cy) ** 2;
-        return da - db;
-      })
-      .slice(0, Math.max(8, Math.floor(mouth.length / 2)));
   }
 
   // --- Public speech API -----------------------------------------------------
@@ -1356,7 +1103,7 @@ export class AvatarEngine {
   // --- Deformation -----------------------------------------------------------
 
   private deformedPoints(_now: number): Point[] {
-    const pts = this.basePoints.map((p) => ({ x: p.x, y: p.y }));
+    const pts = this.mesh.basePoints.map((p) => ({ x: p.x, y: p.y }));
     const w = this.weights;
 
     // Mouth geometry in canvas space.
@@ -1526,23 +1273,23 @@ export class AvatarEngine {
     // see buildHeadLayer. Warping vertices for it is how the face ended up
     // sliding around inside a stationary head.
 
-    this.mouthExtension?.deform?.(pts, this.basePoints, this.rig, w);
+    this.mouthExtension?.deform?.(pts, this.mesh.basePoints, this.rig, w);
 
     // The lower face, for every driver: the chin and the jaw line hinge
     // with the lower lip wherever the driver left them behind (the classic
     // field always did; a photographed pose whose chin lags its lip), and
     // the cheeks follow the jaw and the lip shapes. After the driver, so it
     // reads what the lip actually did, jaw range and all.
-    if (this.lowerFace) applyLowerFace(pts, this.basePoints, this.lowerFace, w, this.tuning.mouthOpen);
+    if (this.lowerFace) applyLowerFace(pts, this.mesh.basePoints, this.lowerFace, w, this.tuning.mouthOpen);
 
     // Derived midpoint vertices (mouth subdivision) follow their parents
     // through EVERY layer above — computed last, from final positions.
-    for (const [a, b] of this.derivedParents) {
+    for (const [a, b] of this.mesh.derivedParents) {
       pts.push({ x: (pts[a].x + pts[b].x) / 2, y: (pts[a].y + pts[b].y) / 2 });
     }
     // The neck band follows the jaw line by each vertex's share.
-    for (const v of this.neckBand) {
-      const p = pts[v.parent], b = this.basePoints[v.parent];
+    for (const v of this.mesh.neckBand) {
+      const p = pts[v.parent], b = this.mesh.basePoints[v.parent];
       pts.push({ x: v.base.x + (p.x - b.x) * v.share, y: v.base.y + (p.y - b.y) * v.share });
     }
 
@@ -1640,7 +1387,7 @@ export class AvatarEngine {
   /** Draw a whole full-frame image (the photo, or a layer aligned to it)
    *  through the viewport. */
   private drawFullFrame(img: HTMLImageElement): void {
-    const pic = this.picture;
+    const pic = this.mesh.picture;
     this.ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, pic.x, pic.y, pic.w, pic.h);
   }
 
@@ -1686,13 +1433,13 @@ export class AvatarEngine {
       this.ctx.save();
       try {
         painted = this.mouthExtension.paint(this.ctx, {
-          points: pts, neutral: this.basePoints, rig: this.rig, weights: this.weights,
+          points: pts, neutral: this.mesh.basePoints, rig: this.rig, weights: this.weights,
           lipColour: this.samples.lipColour,
           skinColour: this.samples.skinColour ?? undefined,
           faceHighlight: this.samples.faceHighlight ?? undefined,
           soft: this.samples.look.soft,
           sharpness: this.samples.faceSharpness ?? undefined,
-          pixelScale: this.pixelScale(),
+          pixelScale: pixelScale(this.mesh, this.rig, this.texture),
           viseme: this.pose?.()?.viseme ?? this.currentViseme(performance.now()),
         });
       } finally { this.ctx.restore(); }
@@ -1709,7 +1456,7 @@ export class AvatarEngine {
 
   /** The character mouth's opening, read off the moved lips, and painted. */
   private drawCharacterMouth(pts: Point[]): void {
-    const opening = characterOpening(pts, this.basePoints);
+    const opening = characterOpening(pts, this.mesh.basePoints);
     if (!opening) return;
     paintCharacter(this.ctx, {
       opening,
@@ -1789,7 +1536,7 @@ export class AvatarEngine {
     }
     const pads = this.trianglePads();
     let t = 0;
-    for (const [a, b, c] of this.triangles) {
+    for (const [a, b, c] of this.mesh.triangles) {
       this.drawWarpedTriangle(pts, a, b, c, pads ? pads[t++] : 0);
     }
   }
@@ -1827,9 +1574,9 @@ export class AvatarEngine {
       this.warpMeshFor = null;
     }
     if (!this.warpTextureOk) return null;
-    if (this.warpMeshFor !== this.triangles) {
-      this.warpMeshFor = this.triangles;
-      warp.setMesh(buildWarpMesh(this.texPoints, this.triangles, this.texture.naturalWidth, this.texture.naturalHeight));
+    if (this.warpMeshFor !== this.mesh.triangles) {
+      this.warpMeshFor = this.mesh.triangles;
+      warp.setMesh(buildWarpMesh(this.mesh.texPoints, this.mesh.triangles, this.texture.naturalWidth, this.texture.naturalHeight));
     }
     return warp;
   }
@@ -1848,13 +1595,13 @@ export class AvatarEngine {
    * did. Half a pixel where the lips' own drawn line crosses the mesh.
    */
   private trianglePads(): Float32Array | null {
-    if (this.padsFor !== this.triangles || !this.pads) {
-      this.padsFor = this.triangles;
+    if (this.padsFor !== this.mesh.triangles || !this.pads) {
+      this.padsFor = this.mesh.triangles;
       const everywhere = !!this.field || this.samples.look.flat;
       const rig = this.lowerFace;
       const moves = (i: number) =>
         i >= 478 || (!!rig && (rig.jaw[i] > 0 || rig.weight[i] > 0 || rig.cheek[i] > 0));
-      this.pads = Float32Array.from(this.triangles, ([a, b, c]) =>
+      this.pads = Float32Array.from(this.mesh.triangles, ([a, b, c]) =>
         this.touchesMouth(a, b, c) ? 0.45 : everywhere || moves(a) || moves(b) || moves(c) ? 1 : 0
       );
     }
@@ -1870,7 +1617,7 @@ export class AvatarEngine {
     const set = this.mouthSet;
     const mouthy = (i: number): boolean => {
       if (i < 478) return set.has(i);
-      const parents = this.derivedParents[i - 478];
+      const parents = this.mesh.derivedParents[i - 478];
       return !!parents && (set.has(parents[0]) || set.has(parents[1]));
     };
     return mouthy(a) || mouthy(b) || mouthy(c);
@@ -1882,7 +1629,7 @@ export class AvatarEngine {
    */
   private drawWarpedTriangle(pts: Point[], i0: number, i1: number, i2: number, pad = 0): void {
     const ctx = this.ctx;
-    const s0 = this.texPoints[i0], s1 = this.texPoints[i1], s2 = this.texPoints[i2];
+    const s0 = this.mesh.texPoints[i0], s1 = this.mesh.texPoints[i1], s2 = this.mesh.texPoints[i2];
     const d0 = pts[i0], d1 = pts[i1], d2 = pts[i2];
 
     const det =
@@ -2017,14 +1764,14 @@ export class AvatarEngine {
     for (let e = 0; e < 2; e++) {
       const [c0, c1] = EYE_CORNERS[e];
       const a = pts[c0], b = pts[c1];
-      const ta = this.texPoints[c0], tb = this.texPoints[c1];
+      const ta = this.mesh.texPoints[c0], tb = this.mesh.texPoints[c1];
       if (!a || !b || !ta || !tb) continue;
       const eyeW = Math.hypot(b.x - a.x, b.y - a.y);
       if (eyeW < 3) continue;
 
       // The pupil detector: iris center and radius from the ring points.
       const [ic, ring] = IRISES[e];
-      const c = pts[ic], tc = this.texPoints[ic];
+      const c = pts[ic], tc = this.mesh.texPoints[ic];
       if (!c || !tc) continue;
       let r = 0;
       for (const i of ring) {
@@ -2292,8 +2039,8 @@ export class AvatarEngine {
     for (let k = 1; k < half; k++) {
       lowerNow.push(ring[k]);
       upperNow.push(ring[n - k]);
-      lowerRest.push(this.basePoints[this.innerRing[k]]);
-      upperRest.push(this.basePoints[this.innerRing[n - k]]);
+      lowerRest.push(this.mesh.basePoints[this.innerRing[k]]);
+      upperRest.push(this.mesh.basePoints[this.innerRing[n - k]]);
     }
     // Four fits per frame, not four per sample.
     const fits =
@@ -2391,12 +2138,12 @@ export class AvatarEngine {
     const aperture = smoothClosedPath(outline);
 
     if (this.mouthExtension) {
-      const neutralA = this.basePoints[this.innerRing[ia]];
-      const neutralB = this.basePoints[this.innerRing[ib]];
+      const neutralA = this.mesh.basePoints[this.innerRing[ia]];
+      const neutralB = this.mesh.basePoints[this.innerRing[ib]];
       // A smiling/bowed seam is not its corner chord. Seat oral geometry at
       // the measured central seam, otherwise upper incisors disappear above
       // the aperture while the lower row appears to be the upper teeth.
-      const [anchorA, anchorB] = centralMouthAnchors(this.innerRing.map(i => this.basePoints[i]), neutralA, neutralB);
+      const [anchorA, anchorB] = centralMouthAnchors(this.innerRing.map(i => this.mesh.basePoints[i]), neutralA, neutralB);
       ctx.save();
       try {
         this.mouthExtension.draw(ctx, {
@@ -2660,7 +2407,7 @@ export class AvatarEngine {
     ctx.save();
     ctx.strokeStyle = "rgba(0, 255, 140, 0.35)";
     ctx.lineWidth = 0.5;
-    for (const [a, b, c] of this.triangles) {
+    for (const [a, b, c] of this.mesh.triangles) {
       ctx.beginPath();
       ctx.moveTo(pts[a].x, pts[a].y);
       ctx.lineTo(pts[b].x, pts[b].y);

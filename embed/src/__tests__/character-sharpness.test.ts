@@ -65,7 +65,7 @@ const stripes = (ramp: number): Texture => (x) => {
 };
 const flat: Texture = () => grey(140);
 
-type Internals = { samples: { look: CharacterLook; faceSharpness: number | null }; texPoints: { x: number; y: number }[] };
+type Internals = { samples: { look: CharacterLook; faceSharpness: number | null }; mesh: { texPoints: { x: number; y: number }[] } };
 
 describe("the look's softness on the engine", () => {
   let texture: Texture = flat;
@@ -84,7 +84,7 @@ describe("the look's softness on the engine", () => {
   });
 
   const image = (size: number) => ({ naturalWidth: size, naturalHeight: size, width: size, height: size }) as HTMLImageElement;
-  const mouthWidth = (e: Internals) => Math.hypot(e.texPoints[291].x - e.texPoints[61].x, e.texPoints[291].y - e.texPoints[61].y);
+  const mouthWidth = (e: Internals) => Math.hypot(e.mesh.texPoints[291].x - e.mesh.texPoints[61].x, e.mesh.texPoints[291].y - e.mesh.texPoints[61].y);
 
   it("is the picture's sharpness over the mouth's width, and is rebuilt from the upgraded texture", () => {
     texture = stripes(0);

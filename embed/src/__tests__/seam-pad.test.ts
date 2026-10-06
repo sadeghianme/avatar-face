@@ -100,7 +100,7 @@ function fakeCanvas(texture: Texture, size = 512): HTMLCanvasElement {
 }
 
 type Internals = {
-  triangles: [number, number, number][];
+  mesh: { triangles: [number, number, number][] };
   trianglePads(): Float32Array | null;
   samples: { look: { flat: boolean } };
 };
@@ -114,7 +114,7 @@ function padsFor(texture: Texture, profile?: string): { tris: [number, number, n
   const e = engine as unknown as Internals;
   const pads = e.trianglePads()!;
   engine.destroy();
-  return { tris: e.triangles, pads, flat: e.samples.look.flat };
+  return { tris: e.mesh.triangles, pads, flat: e.samples.look.flat };
 }
 
 const EYE = 159, BROW = 65, CHIN = 152, LIP = 14;

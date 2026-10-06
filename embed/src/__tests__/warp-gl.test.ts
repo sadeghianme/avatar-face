@@ -110,19 +110,19 @@ describe("the mesh buffers", () => {
   it("match the engine's triangle list for a real rig, mouth subdivision and neck band included", () => {
     stubBrowser();
     const engine = makeEngine();
-    const e = engine as unknown as { texPoints: Point[]; triangles: [number, number, number][]; texture: HTMLImageElement };
-    const mesh = buildWarpMesh(e.texPoints, e.triangles, e.texture.naturalWidth, e.texture.naturalHeight);
+    const e = engine as unknown as { mesh: { texPoints: Point[]; triangles: [number, number, number][] }; texture: HTMLImageElement };
+    const mesh = buildWarpMesh(e.mesh.texPoints, e.mesh.triangles, e.texture.naturalWidth, e.texture.naturalHeight);
     // The 2D path draws a triangle unless its source is degenerate; the
     // fixture's are all drawn, and the GL list is the same list.
-    const drawn = e.triangles.filter(([a, b, c]) => {
-      const s0 = e.texPoints[a], s1 = e.texPoints[b], s2 = e.texPoints[c];
+    const drawn = e.mesh.triangles.filter(([a, b, c]) => {
+      const s0 = e.mesh.texPoints[a], s1 = e.mesh.texPoints[b], s2 = e.mesh.texPoints[c];
       return Math.abs(s0.x * (s1.y - s2.y) + s1.x * (s2.y - s0.y) + s2.x * (s0.y - s1.y)) >= MIN_SOURCE_DET;
     });
     expect(mesh.count).toBe(drawn.length);
-    expect(mesh.count + mesh.skipped).toBe(e.triangles.length);
-    expect(e.triangles.length).toBeGreaterThan(rig.triangles.length); // subdivided, with the neck band
+    expect(mesh.count + mesh.skipped).toBe(e.mesh.triangles.length);
+    expect(e.mesh.triangles.length).toBeGreaterThan(rig.triangles.length); // subdivided, with the neck band
     expect(Array.from(mesh.indices)).toEqual(drawn.flat());
-    expect(mesh.uv.length).toBe(e.texPoints.length * 2);
+    expect(mesh.uv.length).toBe(e.mesh.texPoints.length * 2);
     engine.destroy();
     restoreBrowser();
   });
@@ -257,7 +257,7 @@ describe("which path the engine takes", () => {
     log.length = 0;
     (engine as unknown as Internals).render();
     const clips = log.filter((l) => l.startsWith("clip(")).length;
-    const triangles = (engine as unknown as { triangles: unknown[] }).triangles.length;
+    const triangles = (engine as unknown as { mesh: { triangles: unknown[] } }).mesh.triangles.length;
     expect(clips).toBe(triangles);
     expect(FakeGL.instances).toHaveLength(0);
     engine.destroy();

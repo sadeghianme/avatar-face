@@ -45,7 +45,7 @@ function fakeCanvas(log: string[], texture: Texture, size = 512): HTMLCanvasElem
   return { width: size, height: size, getContext: () => ctx } as unknown as HTMLCanvasElement;
 }
 
-type Internals = { render(): void; cutOut: boolean; basePoints: { x: number; y: number }[]; deformedPoints(now: number): unknown[]; backgroundImage: unknown };
+type Internals = { render(): void; cutOut: boolean; mesh: { basePoints: { x: number; y: number }[] }; deformedPoints(now: number): unknown[]; backgroundImage: unknown };
 
 function engineWith(texture: Texture, scene: ConstructorParameters<typeof AvatarEngine>[3]["scene"]) {
   const log: string[] = [];
@@ -104,15 +104,15 @@ describe("the scene's background", () => {
 
   it("changes live: a new zoom moves every base point and keeps the mesh whole", () => {
     const { engine, e } = engineWith(cutOut, { zoom: 1 });
-    const before = e.basePoints.map((p) => ({ ...p }));
+    const before = e.mesh.basePoints.map((p) => ({ ...p }));
     const vertices = e.deformedPoints(10_000).length;
     engine.setScene({ zoom: 0, pan: { x: 0, y: 0 }, background: { kind: "color", color: "#ffffff" } });
-    expect(e.basePoints[152].y).not.toBeCloseTo(before[152].y, 1);
+    expect(e.mesh.basePoints[152].y).not.toBeCloseTo(before[152].y, 1);
     expect(e.deformedPoints(10_000).length).toBe(vertices);
     // The same scene again moves nothing.
-    const after = e.basePoints.map((p) => ({ ...p }));
+    const after = e.mesh.basePoints.map((p) => ({ ...p }));
     engine.setScene({ zoom: 0, pan: { x: 0, y: 0 }, background: { kind: "transparent" } });
-    expect(e.basePoints[152]).toEqual(after[152]);
+    expect(e.mesh.basePoints[152]).toEqual(after[152]);
     engine.destroy();
   });
 
@@ -120,8 +120,8 @@ describe("the scene's background", () => {
     const framed = engineWith(cutOut, undefined);
     const byScene = engineWith(cutOut, { zoom: 0 });
     const byOption = new AvatarEngine(fakeCanvas([], cutOut), rig, { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement, { fullPhoto: false, scene: { zoom: 0 }, zoom: 1 }) as unknown as Internals & { destroy(): void };
-    expect(byScene.e.basePoints[152].y).not.toBeCloseTo(framed.e.basePoints[152].y, 1);
-    expect(byOption.basePoints[152].y).toBeCloseTo(framed.e.basePoints[152].y, 6);
+    expect(byScene.e.mesh.basePoints[152].y).not.toBeCloseTo(framed.e.mesh.basePoints[152].y, 1);
+    expect(byOption.mesh.basePoints[152].y).toBeCloseTo(framed.e.mesh.basePoints[152].y, 6);
     framed.engine.destroy(); byScene.engine.destroy(); byOption.destroy();
   });
 });
