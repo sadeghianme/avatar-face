@@ -119,6 +119,22 @@ class Limit:
 # voice speaks. Two a second per address is far beyond a person listening.
 CUES_PER_CLIENT = Limit("cues-client", 120, 60)
 
+# Signing in. Per address bounds a scripted guesser; per account bounds a
+# distributed one aimed at one person (at the price that it can lock that
+# person out for ten minutes, which is the usual trade).
+LOGIN_PER_CLIENT = Limit("login-client", 30, 60)
+LOGIN_PER_ACCOUNT = Limit("login-account", 10, 600)
+# Accounts made from one address: a household or an office signs up a few
+# people, a script signs up thousands.
+REGISTER_PER_CLIENT = Limit("register-client", 20, 3600)
+# Asking for reset mail, per address. The per-mailbox limit (RESET_LIMIT,
+# below) is the one that protects an inbox; this one stops one client from
+# cycling through other people's addresses.
+FORGOT_PER_CLIENT = Limit("forgot-client", 10, 3600)
+# Setting a new password from a link. A link is signed, so guessing them is
+# hopeless; this bounds the password hashing a client can make the box do.
+RESET_PER_CLIENT = Limit("reset-client", 20, 900)
+
 # A visitor on a shared link is a person pressing Play, not a program. These
 # are generous for the former and useless for the latter (api.share).
 SHARE_PER_TOKEN = Limit("share-token", 30, 60)
