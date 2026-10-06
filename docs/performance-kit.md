@@ -3,7 +3,7 @@
 Status: wired, 2026-09-26 (Step 5, "Preparing your avatar"). Finishing a
 person makes their kit before the first publish; the Mouth panel makes it
 for an existing avatar; publishing serves it to the widget and the share
-page. `services/performance_kit/` makes a kit; `services/mouth_kit.py` is
+page. `services/performance_kit/` makes a kit; `services/mouth_kit/` is
 everything around it (who may send, metering, storage, disclosure, later
 edits). See "Wired" below. Revised after review the same day: the teeth
 photo is a request of its own, every shape is held to the Reference's size,
@@ -168,7 +168,7 @@ the bundled motion plays the same shape on the same face.
   the same for every avatar and not made from its picture: `ai_edited`
   does not list them.
 
-## Wired (services/mouth_kit.py)
+## Wired (services/mouth_kit/)
 
 **When.** At Finish, for a person (`services.creations._own_mouth`), and by the
 Mouth panel's one AI action (`POST /orgs/{org}/avatars/{id}/mouth-kit`). AI

@@ -1279,7 +1279,7 @@ async def test_the_panels_kit_sends_nothing_before_its_consent_is_recorded(
             raise OperationalError("SELECT avatars", {}, Exception("database is locked"))
         return await real(db, org, aid)
 
-    monkeypatch.setattr(mouth_kit, "_load_avatar", flaky)
+    monkeypatch.setattr(mouth_kit.panel, "_load_avatar", flaky)
     recorded_before_sending: list[bool] = []
 
     async def sent_after_the_record():
