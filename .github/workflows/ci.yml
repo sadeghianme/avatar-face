@@ -22,8 +22,13 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install espeak-ng (multilingual phonemes)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends espeak-ng
+      - name: Install system libraries (as the Dockerfile does)
+        # espeak-ng for multilingual phonemes; libegl1/libgles2 because
+        # mediapipe 1.x loads a C library needing them at its first task, and
+        # without them face detection silently falls back (backend/Dockerfile).
+        run: >
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends
+          espeak-ng libgl1 libglib2.0-0 libegl1 libgles2
       - name: Install backend
         # With the production pins (constraints.txt, as the Dockerfile
         # installs): the tests and the type check see the library versions
