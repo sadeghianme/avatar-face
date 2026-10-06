@@ -309,9 +309,14 @@ if (glb) {
       });
     }, (err) => say(String(err)));
   } else {
-    const spec = {
-      mode, glb, rig: params.get("rig") ?? undefined, image: params.get("image") ?? undefined,
-    } as unknown as Spec;
-    run(spec).then((result) => say(typeof result === "string" ? "done" : JSON.stringify(result, null, 2)), (err) => say(String(err)));
+    const rig = params.get("rig") ?? undefined;
+    const image = params.get("image") ?? undefined;
+    const spec: Spec | null =
+      mode === "sheet" || mode === "bench" ? { mode, glb }
+      : mode === "phrase" ? { mode, glb, rig, image }
+      : mode === "compare" && rig && image ? { mode, glb, rig, image }
+      : null;
+    if (!spec) say(`mode=${mode} needs ${mode === "compare" ? "rig= and image=" : "to be sheet, compare, phrase or bench"}`);
+    else run(spec).then((result) => say(typeof result === "string" ? "done" : JSON.stringify(result, null, 2)), (err) => say(String(err)));
   }
 }
