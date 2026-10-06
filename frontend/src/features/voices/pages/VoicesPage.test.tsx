@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { VoicesPage } from "@/features/voices";
 import type { ClonedVoice, CloneJob } from "@/features/voices/api";
 import { translate } from "@/i18n";
+import { expectAccessible } from "@/test/axe";
 import { ORG_ID } from "@/test/fixtures";
 import { renderScreen } from "@/test/render";
 import { createServer, type MockServer } from "@/test/server";
@@ -151,5 +152,13 @@ describe("VoicesPage", () => {
     expect(within(yours).getByText(t("voicesStats", { lines: 12, seconds: 41 }))).toBeInTheDocument();
     await user.click(within(yours).getByRole("button", { name: t("delete") }));
     await waitFor(() => expect(server.requests("DELETE", `/orgs/${ORG_ID}/cloned-voices/ana`)).toHaveLength(1));
+  });
+  it("passes axe, with jobs and voices", async () => {
+    const { container } = setup({
+      jobs: [aJob(), aJob({ id: "j2", name: "busy", status: "processing", done_lines: 1 })],
+      voices: [{ voice: "org1:ana", label: "ana", locale: "en-US", lines: 12, total_ms: 41_000 }],
+    });
+    await card(t("voicesYours"));
+    await expectAccessible(container);
   });
 });

@@ -37,50 +37,55 @@ export function DropZone({
     if (!disabled) input.current?.click();
   };
 
+  // The file input sits beside the zone, not in it: a control inside a
+  // button is a nested interactive control (axe: nested-interactive), and
+  // its click would bubble back into the zone's.
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-disabled={disabled || undefined}
-      aria-labelledby={cx(labelledBy, `${ids}-title`)}
-      aria-describedby={hint ? `${ids}-hint` : undefined}
-      className={cx(
-        "flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-8 text-center transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500",
-        dragging
-          ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10"
-          : "border-gray-300 bg-white hover:border-brand-400 hover:bg-brand-50/40 dark:border-line dark:bg-raised dark:hover:bg-brand-500/[0.06]",
-        className
-      )}
-      onClick={open}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-disabled={disabled || undefined}
+        aria-labelledby={cx(labelledBy, `${ids}-title`)}
+        aria-describedby={hint ? `${ids}-hint` : undefined}
+        className={cx(
+          "flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-8 text-center transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500",
+          dragging
+            ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10"
+            : "border-gray-300 bg-white hover:border-brand-400 hover:bg-brand-50/40 dark:border-line dark:bg-raised dark:hover:bg-brand-500/[0.06]",
+          className
+        )}
+        onClick={open}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            open();
+          }
+        }}
+        onDragOver={(e) => {
           e.preventDefault();
-          open();
-        }
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragging(true);
-      }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setDragging(false);
-        if (!disabled) onFile(e.dataTransfer.files[0]);
-      }}
-    >
-      <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">
-        <Icon name={icon} className="h-6 w-6" />
-      </span>
-      <p id={`${ids}-title`} className="mt-3 text-sm font-medium text-gray-800 dark:text-gray-100">
-        {title}
-      </p>
-      {hint && (
-        <p id={`${ids}-hint`} className="mt-1 max-w-md text-xs text-gray-500 dark:text-gray-400">
-          {hint}
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          if (!disabled) onFile(e.dataTransfer.files[0]);
+        }}
+      >
+        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">
+          <Icon name={icon} className="h-6 w-6" />
+        </span>
+        <p id={`${ids}-title`} className="mt-3 text-sm font-medium text-gray-800 dark:text-gray-100">
+          {title}
         </p>
-      )}
+        {hint && (
+          <p id={`${ids}-hint`} className="mt-1 max-w-md text-xs text-gray-500 dark:text-gray-400">
+            {hint}
+          </p>
+        )}
+      </div>
       <FileInput
         ref={input}
         srOnly
@@ -92,6 +97,6 @@ export function DropZone({
           e.target.value = "";
         }}
       />
-    </div>
+    </>
   );
 }

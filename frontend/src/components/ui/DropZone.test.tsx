@@ -36,8 +36,7 @@ describe("DropZone", () => {
 
   it("Enter or Space opens the picker", async () => {
     const { zone, input } = setup();
-    // A picker opening is a click on the file input (the browser drops the
-    // nested one its bubbling click asks for).
+    // A picker opening is a click on the file input, once per key.
     const opened = vi.fn();
     input.addEventListener("click", opened);
     zone.focus();

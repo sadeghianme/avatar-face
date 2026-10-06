@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { AvatarsPage } from "@/features/avatars";
 import { translate } from "@/i18n";
 import type { Avatar } from "@/lib/types";
+import { expectAccessible } from "@/test/axe";
 import { anAvatar, ORG_ID } from "@/test/fixtures";
 import { renderScreen } from "@/test/render";
 import { apiError, createServer, type MockServer } from "@/test/server";
@@ -77,5 +78,10 @@ describe("AvatarsPage", () => {
     await user.click(within(alert).getByRole("button", { name: t("retry") }));
     expect(await screen.findByRole("link", { name: t("openAvatarNamed", { name: "Maya" }) })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+  it("passes axe with a list", async () => {
+    const { container } = setup([anAvatar({ id: "a1", name: "Maya" }), anAvatar({ id: "a2", name: "Leo" })]);
+    await screen.findByRole("link", { name: t("openAvatarNamed", { name: "Maya" }) });
+    await expectAccessible(container);
   });
 });

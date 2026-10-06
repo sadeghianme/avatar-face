@@ -12,6 +12,7 @@ import { creation } from "@/features/avatars/creation/fixtures";
 import { FRESH_ENTRY } from "@/features/avatars/wizard";
 import { translate } from "@/i18n";
 import { mockConsent } from "@/test/api";
+import { expectAccessible } from "@/test/axe";
 import { ORG_ID } from "@/test/fixtures";
 import { renderScreen, type ScreenOptions } from "@/test/render";
 import { apiError, createServer, type MockServer } from "@/test/server";
@@ -219,5 +220,12 @@ describe("step 2: the photo", () => {
     const sent = server.requests("POST", `/orgs/${ORG_ID}/creations/generate`);
     expect(sent).toHaveLength(2);
     expect(sent[1].body).toMatchObject({ consent_id: "consent-third_party_ai" });
+  });
+  it("passes axe, step 1 and step 2", async () => {
+    const { user, container } = await setup();
+    await expectAccessible(container);
+    await user.click(screen.getByRole("button", { name: new RegExp(t("wzModel_human")) }));
+    await screen.findByRole("heading", { level: 1, name: t("wzHeading_photo") });
+    await expectAccessible(container);
   });
 });

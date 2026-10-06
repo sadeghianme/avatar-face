@@ -11,6 +11,7 @@ import { ai, anchors, creation, job, step } from "@/features/avatars/creation/fi
 import type { Plan, WizardCreation } from "@/features/avatars/wizard";
 import { translate } from "@/i18n";
 import { mockConsent } from "@/test/api";
+import { expectAccessible } from "@/test/axe";
 import { ORG_ID } from "@/test/fixtures";
 import { renderScreen } from "@/test/render";
 import { apiError, createServer, type MockServer } from "@/test/server";
@@ -183,5 +184,14 @@ describe("step 3: Prepare", () => {
       instruction: "shorter hair",
     });
     await waitFor(() => expect(box).toHaveValue(""));
+  });
+  it("passes axe, failed and prepared", async () => {
+    const failedView = await setup(draft(UPLOAD, { job: failed("provider_error", true) }));
+    await screen.findByRole("alert");
+    await expectAccessible(failedView.container);
+    failedView.unmount();
+    const { container } = await setup(prepared());
+    await screen.findByRole("textbox", { name: t("wzChangeLabel") });
+    await expectAccessible(container);
   });
 });

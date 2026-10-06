@@ -12,6 +12,7 @@ import type { CreationAnchors } from "@/features/avatars/creation/types";
 import type { Plan, WizardCreation } from "@/features/avatars/wizard";
 import { translate } from "@/i18n";
 import { mockConsent, mockSpeech } from "@/test/api";
+import { expectAccessible } from "@/test/axe";
 import { ORG_ID } from "@/test/fixtures";
 import { renderScreen } from "@/test/render";
 import { apiError, createServer, type MockServer } from "@/test/server";
@@ -149,5 +150,10 @@ describe("step 4: Publish", () => {
     const { user, location } = await setup(ready());
     await user.click(await screen.findByRole("button", { name: t("wzBack") }));
     await waitFor(() => expect(location()).toBe("/avatars/new/c1"));
+  });
+  it("passes axe, a face to place with a statement to make", async () => {
+    const { container } = await setup(ready({ statement: "depiction" }, NOT_FOUND));
+    await screen.findByRole("checkbox", { name: t("wzPointsConfirm") });
+    await expectAccessible(container);
   });
 });

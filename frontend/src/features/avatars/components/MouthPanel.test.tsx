@@ -8,6 +8,7 @@ import type { MotionChoice } from "@/features/avatars/mouth-config";
 import { translate } from "@/i18n";
 import type { Avatar, MouthKit } from "@/lib/types";
 import { mockConsent } from "@/test/api";
+import { expectAccessible } from "@/test/axe";
 import { anAvatar, ORG_ID } from "@/test/fixtures";
 import { renderScreen } from "@/test/render";
 import { apiError, createServer, type MockServer } from "@/test/server";
@@ -242,5 +243,19 @@ describe("MouthPanel", () => {
     expect(onMotion).toHaveBeenCalledWith("standard");
     // Own teeth made by AI: the kit makes the shapes and teeth.
     expect(screen.getByRole("button", { name: t("mouthKitMake") })).toBeInTheDocument();
+  });
+  it("passes axe, the photographic mouth with its shapes and teeth", async () => {
+    const { container } = setup(
+      anAvatar({
+        mouth: photographic({
+          motion_url: "/api/storage/motion.json",
+          kit: ownKit(),
+          has_oral_photo: true,
+          teeth: { source: "ai", note: null },
+        }),
+      })
+    );
+    await screen.findByRole("button", { name: t("mouthKitMake") });
+    await expectAccessible(container);
   });
 });

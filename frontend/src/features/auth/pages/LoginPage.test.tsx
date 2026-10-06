@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { LoginPage } from "@/features/auth";
 import { translate } from "@/i18n";
 import { getTokens } from "@/lib/api";
+import { expectAccessible } from "@/test/axe";
 import { aUser } from "@/test/fixtures";
 import { renderScreen } from "@/test/render";
 import { apiError, createServer } from "@/test/server";
@@ -78,5 +79,11 @@ describe("LoginPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Wrong username or password");
     expect(getTokens()).toBeNull();
     expect(identifier).toHaveValue("ana");
+  });
+  it("passes axe, with its errors showing", async () => {
+    const { user, container } = setup();
+    await user.click(screen.getByRole("button", { name: t("login") }));
+    await screen.findAllByRole("alert");
+    await expectAccessible(container);
   });
 });

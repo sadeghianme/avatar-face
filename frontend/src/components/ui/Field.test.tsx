@@ -253,7 +253,8 @@ describe("the bare inputs", () => {
     expect(screen.getByRole("slider", { name: "Divider" })).toHaveAttribute("type", "range");
     expect(screen.getByLabelText("Background colour")).toHaveAttribute("type", "color");
     const files = container.querySelectorAll('input[type="file"]');
-    expect(files[0]).toHaveClass("hidden");
+    expect(files[0]).toHaveAttribute("hidden");
+    expect(files[0]).not.toBeVisible();
     // srOnly: still in the accessibility tree (and droppable), out of sight.
     expect(files[1]).toHaveClass("sr-only");
   });

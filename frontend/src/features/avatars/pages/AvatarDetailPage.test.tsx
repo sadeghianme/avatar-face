@@ -5,6 +5,7 @@ import { AvatarDetailPage } from "@/features/avatars";
 import { translate } from "@/i18n";
 import type { Avatar } from "@/lib/types";
 import { mockConsent, mockSpeech } from "@/test/api";
+import { expectAccessible } from "@/test/axe";
 import { anAvatar, ORG_ID } from "@/test/fixtures";
 import { renderScreen } from "@/test/render";
 import { apiError, createServer, type MockServer } from "@/test/server";
@@ -172,5 +173,14 @@ describe("AvatarDetailPage", () => {
     await user.selectOptions(voice, "af_heart");
     await waitFor(() => expect(server.requests("PATCH", AVATAR).length).toBeGreaterThan(0));
     expect(server.requests("PATCH", AVATAR).at(-1)?.body).toMatchObject({ voice: { voice: "af_heart" } });
+  });
+  it("passes axe, every section open", async () => {
+    localStorage.setItem(
+      "liveface.avatarPage.open",
+      JSON.stringify({ scene: true, mouth: true, share: true, embed: true, tuning: true })
+    );
+    const { container } = setup(anAvatar({ unpublished: true }));
+    await screen.findByTestId("stage");
+    await expectAccessible(container);
   });
 });
