@@ -62,8 +62,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.errors import Forbidden403, Validation422
-from app.models import Consent, Organization
+from app.core.errors import Forbidden403, NotFound404, Validation422
+from app.models import Consent, Creation, Organization
 from app.services.ai_models import PROVIDER as GOOGLE
 
 THIRD_PARTY_AI: Final = "third_party_ai"
@@ -128,6 +128,20 @@ async def ai_switched_off(org_id: str) -> bool:
             )
         ).scalar_one_or_none()
     return not enabled
+
+
+async def creation_subject(db: AsyncSession, org: Organization, creation_id: str) -> str:
+    """The id of the creation a statement about a face names, when it is one
+    of `org`'s (404 creation_not_found otherwise): what `record` takes as
+    `subject_id`."""
+    found = (
+        await db.execute(
+            select(Creation.id).where(Creation.id == creation_id, Creation.org_id == org.id)
+        )
+    ).scalar_one_or_none()
+    if found is None:
+        raise NotFound404("Creation not found", code="creation_not_found")
+    return found
 
 
 async def record(

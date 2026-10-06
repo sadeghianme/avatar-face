@@ -13,11 +13,8 @@ from typing import Literal
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 
 from app.api.deps import DB, OrgMember
-from app.core.errors import NotFound404
-from app.models import Creation
 from app.services import consent as svc
 from app.services.ai_models import PROVIDER
 
@@ -121,16 +118,7 @@ async def give_consent(
     keyed hash is stored."""
     subject_id = None
     if body.scope in svc.SUBJECT_SCOPES and body.creation_id:
-        found = (
-            await db.execute(
-                select(Creation.id).where(
-                    Creation.id == body.creation_id, Creation.org_id == ctx.org.id
-                )
-            )
-        ).scalar_one_or_none()
-        if found is None:
-            raise NotFound404("Creation not found", code="creation_not_found")
-        subject_id = found
+        subject_id = await svc.creation_subject(db, ctx.org, body.creation_id)
     consent = await svc.record(
         db,
         ctx.org,

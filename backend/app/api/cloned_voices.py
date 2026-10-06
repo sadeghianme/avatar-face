@@ -13,23 +13,16 @@ already treat a cache hit as the normal case.
 from __future__ import annotations
 
 import io
-import json
-import logging
 import wave
 
 from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import Row
 
 from app.api.deps import DB, OrgMember
-from app.core.errors import Conflict409, NotFound404, Validation422
-from app.db import execute_dml
-from app.models import SpeechCache
-from app.services.tts.cloned import PROVIDER_NAME, scoped_voice_id
-from app.services.tts.registry import cache_key
-from app.services.tts.visemes import cues_from_text
+from app.core.errors import Validation422
+from app.services.tts import cloned
 
-logger = logging.getLogger("liveface.cloned")
 router = APIRouter(prefix="/orgs/{org_id}/cloned-voices", tags=["cloned-voices"])
 
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
@@ -72,31 +65,7 @@ def _wav_facts(data: bytes) -> tuple[int, int]:
 @router.get("", response_model=list[ClonedVoiceOut])
 async def list_cloned_voices(ctx: OrgMember, db: DB) -> list[ClonedVoiceOut]:
     """Voices this org has uploaded, with how much is rendered for each."""
-    rows = (
-        await db.execute(
-            select(
-                SpeechCache.voice,
-                func.count().label("lines"),
-                func.sum(SpeechCache.duration_ms).label("total_ms"),
-                func.min(SpeechCache.locale).label("locale"),
-            )
-            .where(
-                SpeechCache.provider == PROVIDER_NAME,
-                SpeechCache.voice.like(f"{ctx.org.id}:%"),
-            )
-            .group_by(SpeechCache.voice)
-        )
-    ).all()
-    return [
-        ClonedVoiceOut(
-            voice=row.voice,
-            label=row.voice.partition(":")[2],
-            lines=row.lines,
-            total_ms=int(row.total_ms or 0),
-            locale=row.locale or "en-US",
-        )
-        for row in rows
-    ]
+    return [_voice_out(row.voice, row) for row in await cloned.voice_summaries(db, ctx.org.id)]
 
 
 @router.post("/{name}/lines", response_model=ClonedVoiceOut)
@@ -129,14 +98,8 @@ async def upload_line(
         raise Validation422("Audio exceeds 10MB", code="audio_too_large")
     duration_ms, _ = _wav_facts(data)
 
-    from app.services.tts.cloned import store_line
-
-    await store_line(db, ctx.org.id, name, locale, text, data, duration_ms)
-    voice = scoped_voice_id(ctx.org.id, name)
-    await db.commit()
-    logger.info("cloned line stored for %s (%d ms)", voice, duration_ms)
-
-    return await _summarise(db, ctx.org.id, voice)
+    voice = await cloned.upload_line(db, ctx.org.id, name, locale, text, data, duration_ms)
+    return _voice_out(voice, await cloned.voice_summary(db, voice))
 
 
 @router.delete("/{name}", status_code=204)
@@ -146,28 +109,10 @@ async def delete_cloned_voice(name: str, ctx: OrgMember, db: DB) -> None:
     A hard delete, not a flag: the whole point of a takedown path for a
     likeness is that the audio stops existing.
     """
-    voice = scoped_voice_id(ctx.org.id, name)
-    removed = await execute_dml(
-        db,
-        delete(SpeechCache).where(
-            SpeechCache.provider == PROVIDER_NAME, SpeechCache.voice == voice
-        ),
-    )
-    await db.commit()
-    if not removed:
-        raise NotFound404("No such cloned voice", code="voice_not_found")
+    await cloned.delete_voice(db, ctx.org.id, name)
 
 
-async def _summarise(db, org_id: str, voice: str) -> ClonedVoiceOut:
-    row = (
-        await db.execute(
-            select(
-                func.count().label("lines"),
-                func.sum(SpeechCache.duration_ms).label("total_ms"),
-                func.min(SpeechCache.locale).label("locale"),
-            ).where(SpeechCache.provider == PROVIDER_NAME, SpeechCache.voice == voice)
-        )
-    ).one()
+def _voice_out(voice: str, row: Row) -> ClonedVoiceOut:
     return ClonedVoiceOut(
         voice=voice,
         label=voice.partition(":")[2],
