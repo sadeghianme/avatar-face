@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { CONSENT_TEXT_VERSIONS, providerLabel } from "@/features/avatars/consent";
@@ -72,17 +74,14 @@ export function AiConsentCheckbox({
   const named = providers.map(providerLabel).join(", ");
   return (
     <div className="rounded-xl border border-gray-200 p-3 sm:p-4 dark:border-line">
-      <label className="flex cursor-pointer items-start gap-3">
-        <input
-          type="checkbox"
-          className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"
-          checked={checked}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.checked)}
-          aria-describedby="ai-consent-inline-body"
-        />
-        <span className="text-sm font-medium">{t("aiConsentCheck", { providers: named })}</span>
-      </label>
+      <Checkbox
+        size="md"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        aria-describedby="ai-consent-inline-body"
+        label={<span className="text-sm font-medium">{t("aiConsentCheck", { providers: named })}</span>}
+      />
       <div className="mt-2 space-y-2 ps-8">
         {reagree && <AiConsentReagreeNote />}
         <AiConsentText providers={providers} id="ai-consent-inline-body" />
@@ -131,12 +130,12 @@ export function AiConsentDialog({
         <AiConsentText providers={providers} id="ai-consent-body" />
       </div>
       <div className="mt-5 flex flex-wrap justify-end gap-3">
-        <button type="button" className="btn-secondary min-h-11" onClick={() => onAnswer(false)} data-autofocus>
+        <Button variant="secondary" size="lg" onClick={() => onAnswer(false)} data-autofocus>
           {t("aiConsentDecline")}
-        </button>
-        <button type="button" className="btn-primary min-h-11 px-5" onClick={() => onAnswer(true)}>
+        </Button>
+        <Button size="lg" className="px-5" onClick={() => onAnswer(true)}>
           {t("aiConsentAgree")}
-        </button>
+        </Button>
       </div>
     </Dialog>
   );

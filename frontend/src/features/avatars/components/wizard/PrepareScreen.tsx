@@ -1,8 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
+import { Textarea } from "@/components/ui/Textarea";
 import { BackButton, BarAction, StepFooter } from "@/features/avatars/components/wizard/Footer";
 import { Result, Working } from "@/features/avatars/components/wizard/Pictures";
 import { VersionStrip } from "@/features/avatars/components/wizard/Versions";
@@ -202,29 +205,26 @@ export function PrepareScreen({
       <p className="text-sm font-medium text-gray-900 dark:text-white">{t("wzAiNeeded")}</p>
       {aiOn ? (
         <>
-          <label className="mt-3 flex cursor-pointer items-start gap-3 coarse:min-h-11 text-sm text-gray-800 dark:text-gray-200">
-            <input
-              type="checkbox"
-              className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"
-              checked={agree}
-              onChange={(e) => setAgree(e.target.checked)}
-            />
-            <span>{t(plan.source === "generate" ? "wzConsentAi_generate" : "wzConsentAi_upload")}</span>
-          </label>
+          <Checkbox
+            size="md"
+            className="mt-3 text-gray-800 dark:text-gray-200"
+            checked={agree}
+            onChange={(e) => setAgree(e.target.checked)}
+            label={<span>{t(plan.source === "generate" ? "wzConsentAi_generate" : "wzConsentAi_upload")}</span>}
+          />
           <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="btn-primary min-h-11"
+            <Button
+              size="lg"
+              icon={busy === "prepare" ? <Spinner className="h-4 w-4" /> : "sparkles"}
               disabled={!agree || busy !== null}
               onClick={() => void agreeAndPrepare()}
             >
-              {busy === "prepare" ? <Spinner className="h-4 w-4" /> : <Icon name="sparkles" className="h-4 w-4" />}
               {t("wzUseAi")}
-            </button>
+            </Button>
             {originalOffered && (
-              <button
-                type="button"
-                className="btn-secondary min-h-11"
+              <Button
+                variant="secondary"
+                size="lg"
                 disabled={busy !== null}
                 onClick={() => {
                   setAskAi(false);
@@ -232,7 +232,7 @@ export function PrepareScreen({
                 }}
               >
                 {t("wzUseOriginal")}
-              </button>
+              </Button>
             )}
           </div>
         </>
@@ -276,30 +276,34 @@ export function PrepareScreen({
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {job?.retryable && !askAi && (
-                <button type="button" className="btn-primary min-h-11" onClick={retryJob} disabled={busy !== null}>
-                  {busy === "retry" ? <Spinner className="h-4 w-4" /> : <Icon name="refresh" className="h-4 w-4" />}
+                <Button
+                  size="lg"
+                  icon={busy === "retry" ? <Spinner className="h-4 w-4" /> : "refresh"}
+                  onClick={retryJob}
+                  disabled={busy !== null}
+                >
                   {t("wzTryAgain")}
-                </button>
+                </Button>
               )}
               {originalOffered && job?.step !== "ingest" && (
-                <button
-                  type="button"
-                  className="btn-secondary min-h-11"
+                <Button
+                  variant="secondary"
+                  size="lg"
                   onClick={() => void prepare({ mode: "original" })}
                   disabled={busy !== null}
                 >
                   {t("wzUseOriginal")}
-                </button>
+                </Button>
               )}
-              <button
-                type="button"
-                className={`${job?.retryable || originalOffered ? "btn-secondary" : "btn-primary"} min-h-11`}
+              <Button
+                variant={job?.retryable || originalOffered ? "secondary" : "primary"}
+                size="lg"
+                icon={<Icon name="back" className="h-4 w-4 rtl:-scale-x-100" />}
                 onClick={onBack}
                 disabled={busy !== null}
               >
-                <Icon name="back" className="h-4 w-4 rtl:-scale-x-100" />
                 {t(plan.source === "generate" ? "wzEditDescription" : "wzOtherPhoto")}
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -383,15 +387,16 @@ export function PrepareScreen({
                 {aiOn && !askAi && (canAi || freeClear) && (
                   <>
                     {" "}
-                    <button
-                      type="button"
-                      className="inline min-h-6 rounded font-medium text-brand-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:opacity-50 dark:text-brand-300"
+                    {/* In the line of words: inline, so it flows with them. */}
+                    <Button
+                      variant="link"
+                      className="inline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                       onClick={() => void prepare(clearBody(plan))}
                       disabled={redoing || busy !== null}
                       title={t(freeClear ? "wzChangeClearHint" : "wzChangeClearPaidHint")}
                     >
                       {t(freeClear ? "wzChangeClear" : "wzChangeClearPaid")}
-                    </button>
+                    </Button>
                   </>
                 )}
               </span>
@@ -422,10 +427,10 @@ export function PrepareScreen({
             <label htmlFor={`${ids}-change`} className="label mb-0">
               {t("wzChangeLabel")}
             </label>
-            <textarea
+            <Textarea
               id={`${ids}-change`}
               rows={3}
-              className="input min-h-[96px] resize-y text-[15px] leading-relaxed"
+              className="min-h-[96px] resize-y text-[15px] leading-relaxed"
               maxLength={MAX_WORDS}
               placeholder={t("wzChangePlaceholder")}
               value={change}
@@ -447,14 +452,16 @@ export function PrepareScreen({
               <p id={`${ids}-change-keys`} className="hidden text-xs text-gray-500 dark:text-gray-400 sm:block">
                 {t("wzChangeShortcut", { keys: APPLY_KEYS })}
               </p>
-              <button
+              <Button
                 type="submit"
-                className="btn-secondary min-h-11 shrink-0"
+                variant="secondary"
+                size="lg"
+                className="shrink-0"
+                icon={busy === "change" ? <Spinner className="h-4 w-4" /> : "pencil"}
                 disabled={!change.trim() || redoing || busy !== null}
               >
-                {busy === "change" ? <Spinner className="h-4 w-4" /> : <Icon name="pencil" className="h-4 w-4" />}
                 {t("wzApply")}
-              </button>
+              </Button>
             </div>
           </form>
         )}
@@ -496,16 +503,16 @@ export function PrepareScreen({
           />
         )}
         {footer.primary === "continue" && (
-          <button
-            type="button"
-            className="btn-primary min-h-12 whitespace-nowrap px-5 text-[15px] shadow-sm shadow-brand-600/20 sm:px-6"
+          <Button
+            size="xl"
+            className="whitespace-nowrap shadow-sm shadow-brand-600/20 sm:px-6"
+            iconEnd={<Icon name="arrow" className="h-4 w-4 rtl:-scale-x-100" strokeWidth={2} />}
             onClick={onContinue}
             disabled={redoing || busy !== null}
           >
             <span className="sm:hidden">{t("wzContinueShort")}</span>
             <span className="hidden sm:inline">{t("wzContinue")}</span>
-            <Icon name="arrow" className="h-4 w-4 rtl:-scale-x-100" strokeWidth={2} />
-          </button>
+          </Button>
         )}
       </StepFooter>
     </div>

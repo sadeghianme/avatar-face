@@ -1,8 +1,17 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Banner } from "@/components/ui/Banner";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Chip } from "@/components/ui/Chip";
+import { ChoiceCard } from "@/components/ui/ChoiceCard";
+import { DropZone } from "@/components/ui/DropZone";
+import { Field } from "@/components/ui/Field";
+import { FileInput } from "@/components/ui/FileInput";
 import { Icon } from "@/components/ui/Icon";
-import { Spinner } from "@/components/ui/Spinner";
+import { IconButton } from "@/components/ui/IconButton";
+import { Textarea } from "@/components/ui/Textarea";
 import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import { AiConsentReagreeNote } from "@/features/avatars/components/create/AiConsentDialog";
 import { LookPicture, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
@@ -25,8 +34,26 @@ import {
   statementFor,
 } from "@/features/avatars/wizard";
 import { api, ApiError, postFormWithProgress } from "@/lib/api";
+import { cx } from "@/lib/cx";
 
 const EXAMPLES = [1, 2, 3, 4] as const;
+
+/** Generate / Upload: two halves of one grey bar, the chosen one raised. */
+const SOURCE_TAB = cx(
+  "flex min-h-14 items-center justify-center gap-2.5 rounded-xl px-3 py-2.5 text-start transition",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+);
+const SOURCE_TAB_ON = "bg-white shadow-sm ring-1 ring-black/5 dark:bg-raised dark:ring-white/10";
+const SOURCE_TAB_OFF = "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white";
+
+/** A look: its picture over its name, ringed when chosen. */
+const LOOK_CARD = cx(
+  "group relative flex flex-col overflow-hidden rounded-2xl border bg-white text-start transition dark:bg-raised",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-ink",
+  "disabled:cursor-not-allowed disabled:opacity-45"
+);
+const LOOK_CARD_ON = "border-brand-500 ring-1 ring-brand-500";
+const LOOK_CARD_OFF = "border-gray-200 hover:border-brand-300 dark:border-line dark:hover:border-brand-500/40";
 
 function tabStore(): DraftStore | null {
   try {
@@ -216,25 +243,21 @@ export function PhotoStep({
                 const disabled = s === "generate" && !aiEnabled;
                 const on = s === source;
                 return (
-                  <button
+                  <ChoiceCard
                     key={s}
-                    type="button"
+                    look="custom"
                     {...sourceRadio(s)}
                     disabled={disabled}
-                    className={`flex min-h-14 items-center justify-center gap-2.5 rounded-xl px-3 py-2.5 text-start transition focus-visible:outline-none
-                      focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50 ${
-                        on
-                          ? "bg-white shadow-sm ring-1 ring-black/5 dark:bg-raised dark:ring-white/10"
-                          : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-                      }`}
+                    className={cx(SOURCE_TAB, on ? SOURCE_TAB_ON : SOURCE_TAB_OFF)}
                   >
                     <span
                       aria-hidden="true"
-                      className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
+                      className={cx(
+                        "grid h-9 w-9 shrink-0 place-items-center rounded-lg",
                         on
                           ? "bg-brand-600 text-white"
                           : "bg-white text-gray-500 dark:bg-white/[0.06] dark:text-gray-400"
-                      }`}
+                      )}
                     >
                       <Icon
                         name={s === "generate" ? "sparkles" : "upload"}
@@ -244,11 +267,11 @@ export function PhotoStep({
                     </span>
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold leading-tight">{t(`wzSource_${s}`)}</span>
-                      <span className="hidden text-xs text-gray-500 dark:text-gray-400 sm:block">
+                      <span className="hidden text-xs text-gray-500 sm:block dark:text-gray-400">
                         {disabled ? t("wzAiOffBadge") : t(`wzSourceHint_${s}`)}
                       </span>
                     </span>
-                  </button>
+                  </ChoiceCard>
                 );
               })}
             </div>
@@ -257,49 +280,43 @@ export function PhotoStep({
 
           {source === "generate" ? (
             <div>
-              <label htmlFor={`${ids}-describe`} className="label">
-                {t(`wzDescribeLabel_${model}`)}
-              </label>
-              <div className="relative">
-                <textarea
-                  id={`${ids}-describe`}
-                  ref={describe}
-                  rows={3}
-                  maxLength={MAX_WORDS}
-                  className="input min-h-[96px] resize-none pb-7 text-[15px] leading-relaxed"
-                  placeholder={t(`wzDescribePlaceholder_${model}`)}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  aria-describedby={`${ids}-count`}
-                  disabled={busy}
-                />
-                <span
-                  id={`${ids}-count`}
-                  className="pointer-events-none absolute bottom-2 end-3 text-[11px] tabular-nums text-gray-400"
-                >
-                  {t("wzCharCount", { count: description.length, max: MAX_WORDS })}
-                </span>
-              </div>
+              <Field id={`${ids}-describe`} label={t(`wzDescribeLabel_${model}`)}>
+                <div className="relative">
+                  <Textarea
+                    ref={describe}
+                    rows={3}
+                    maxLength={MAX_WORDS}
+                    className="min-h-[96px] resize-none pb-7 text-[15px] leading-relaxed"
+                    placeholder={t(`wzDescribePlaceholder_${model}`)}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    aria-describedby={`${ids}-count`}
+                    disabled={busy}
+                  />
+                  <span
+                    id={`${ids}-count`}
+                    className="pointer-events-none absolute bottom-2 end-3 text-[11px] tabular-nums text-gray-400"
+                  >
+                    {t("wzCharCount", { count: description.length, max: MAX_WORDS })}
+                  </span>
+                </div>
+              </Field>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{t("wzTry")}</span>
                 {EXAMPLES.map((n) => {
                   const text = t(`wzExample_${model}_${n}`);
                   return (
-                    <button
+                    <Chip
                       key={n}
-                      type="button"
+                      variant="suggestion"
                       disabled={busy}
                       onClick={() => {
                         setDescription(text);
                         describe.current?.focus();
                       }}
-                      className="min-h-9 coarse:min-h-11 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 transition-colors
-                        hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2
-                        focus-visible:ring-brand-500 dark:border-line dark:bg-raised dark:text-gray-300 dark:hover:border-brand-500/40
-                        dark:hover:bg-brand-500/10 dark:hover:text-brand-200"
                     >
                       {text}
-                    </button>
+                    </Chip>
                   );
                 })}
               </div>
@@ -331,21 +348,15 @@ export function PhotoStep({
                 const on = l === look;
                 const disabled = lookDisabled(l);
                 return (
-                  <button
+                  <ChoiceCard
                     key={l}
-                    type="button"
+                    look="custom"
                     {...lookRadio(l)}
                     disabled={disabled || busy}
                     aria-describedby={`${ids}-look-${l}`}
-                    className={`group relative flex flex-col overflow-hidden rounded-2xl border bg-white text-start transition
-                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2
-                      disabled:cursor-not-allowed disabled:opacity-45 dark:bg-raised dark:focus-visible:ring-offset-ink ${
-                        on
-                          ? "border-brand-500 ring-1 ring-brand-500"
-                          : "border-gray-200 hover:border-brand-300 dark:border-line dark:hover:border-brand-500/40"
-                      }`}
+                    className={cx(LOOK_CARD, on ? LOOK_CARD_ON : LOOK_CARD_OFF)}
                   >
-                    <span className={`relative block aspect-square w-full overflow-hidden ${PICTURE_BACKDROP}`}>
+                    <span className={cx("relative block aspect-square w-full overflow-hidden", PICTURE_BACKDROP)}>
                       <LookPicture model={model} look={l} className="absolute inset-0 h-full w-full" />
                       {on && (
                         <span className="absolute end-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-brand-600 text-white shadow motion-safe:animate-tick-in">
@@ -357,14 +368,14 @@ export function PhotoStep({
                       <span className="block text-sm font-semibold">{t(`wzLook_${l}`)}</span>
                       <span
                         id={`${ids}-look-${l}`}
-                        className="mt-0.5 hidden text-xs leading-snug text-gray-500 dark:text-gray-400 sm:block"
+                        className="mt-0.5 hidden text-xs leading-snug text-gray-500 sm:block dark:text-gray-400"
                       >
                         {disabled
                           ? t("wzAiOffBadge")
                           : t(source === "upload" ? `wzLookUploadHint_${l}` : `wzLookHint_${l}`)}
                       </span>
                     </span>
-                  </button>
+                  </ChoiceCard>
                 );
               })}
             </div>
@@ -375,17 +386,15 @@ export function PhotoStep({
             <div className="space-y-3 rounded-2xl border border-gray-200 bg-gray-50/70 p-4 dark:border-line dark:bg-white/[0.03]">
               {aiEnabled && (
                 <div>
-                  <label className="flex cursor-pointer items-start gap-3 coarse:min-h-11 text-sm text-gray-800 dark:text-gray-200">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"
-                      checked={aiAgreed}
-                      disabled={busy}
-                      onChange={(e) => setAiAgreed(e.target.checked)}
-                      aria-describedby={`${ids}-ai-more`}
-                    />
-                    <span>{t(source === "upload" ? "wzConsentAi_upload" : "wzConsentAi_generate")}</span>
-                  </label>
+                  <Checkbox
+                    size="md"
+                    className="text-gray-800 dark:text-gray-200"
+                    checked={aiAgreed}
+                    disabled={busy}
+                    onChange={(e) => setAiAgreed(e.target.checked)}
+                    aria-describedby={`${ids}-ai-more`}
+                    label={<span>{t(source === "upload" ? "wzConsentAi_upload" : "wzConsentAi_generate")}</span>}
+                  />
                   <div id={`${ids}-ai-more`} className="ms-8 mt-1 space-y-1 text-xs text-gray-500 dark:text-gray-400">
                     {consent.aiReagree && <AiConsentReagreeNote className="!text-xs font-medium" />}
                     <p>
@@ -412,18 +421,18 @@ export function PhotoStep({
                 </div>
               )}
               {statement && (
-                <label className="flex cursor-pointer items-start gap-3 coarse:min-h-11 text-sm text-gray-800 dark:text-gray-200">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"
-                    checked={statementAgreed}
-                    disabled={busy}
-                    onChange={(e) => setStatementAgreed(e.target.checked)}
-                  />
-                  <span>
-                    {t(statement === "depiction" ? "createDepictionStatement" : "createGeneratedFaceStatement")}
-                  </span>
-                </label>
+                <Checkbox
+                  size="md"
+                  className="text-gray-800 dark:text-gray-200"
+                  checked={statementAgreed}
+                  disabled={busy}
+                  onChange={(e) => setStatementAgreed(e.target.checked)}
+                  label={
+                    <span>
+                      {t(statement === "depiction" ? "createDepictionStatement" : "createGeneratedFaceStatement")}
+                    </span>
+                  }
+                />
               )}
             </div>
           )}
@@ -431,31 +440,29 @@ export function PhotoStep({
       </div>
 
       {error && (
-        <p
-          role="alert"
-          className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
-        >
+        <Banner appearance="soft" tone="danger" role="alert">
           {error}
-        </p>
+        </Banner>
       )}
 
       {blocker && !busy && <PhoneNote id={`${ids}-hold`}>{t(blocker)}</PhoneNote>}
 
       <StepFooter back={<BackButton onClick={onBack} disabled={busy} />} note={blocker && !busy ? t(blocker) : null}>
-        <button
-          type="button"
-          className="btn-primary min-h-12 px-5 text-[15px] shadow-sm shadow-brand-600/20 sm:px-6"
+        <Button
+          size="xl"
+          className="shadow-sm shadow-brand-600/20 sm:px-6"
+          icon={<Icon name="sparkles" className="h-4 w-4" strokeWidth={1.9} />}
+          loading={busy}
           onClick={() => void start()}
-          disabled={Boolean(blocker) || busy}
+          disabled={Boolean(blocker)}
           aria-describedby={blocker ? `${ids}-hold` : undefined}
         >
-          {busy ? <Spinner className="h-4 w-4" /> : <Icon name="sparkles" className="h-4 w-4" strokeWidth={1.9} />}
           {busy
             ? progress !== null && progress < 1
               ? t("wzUploading", { percent: Math.round(progress * 100) })
               : t("wzStarting")
             : t("wzCreate")}
-        </button>
+        </Button>
       </StepFooter>
     </div>
   );
@@ -480,24 +487,7 @@ function PhotoDrop({
 }) {
   const { t } = useTranslation();
   const input = useRef<HTMLInputElement>(null);
-  const [dragging, setDragging] = useState(false);
   const ids = useId();
-  const open = () => !busy && input.current?.click();
-
-  const picker = (
-    <input
-      ref={input}
-      type="file"
-      className="sr-only"
-      tabIndex={-1}
-      aria-hidden="true"
-      accept={ACCEPTED_TYPES.join(",")}
-      onChange={(e) => {
-        onChoose(e.target.files?.[0]);
-        e.target.value = "";
-      }}
-    />
-  );
 
   if (file && preview) {
     return (
@@ -508,26 +498,36 @@ function PhotoDrop({
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{file.name}</p>
             <p className="text-xs text-gray-500 dark:text-gray-400">{(file.size / (1024 * 1024)).toFixed(1)} MB</p>
-            <button
-              type="button"
-              className="mt-2 text-start text-sm font-medium text-brand-700 hover:underline disabled:opacity-50 dark:text-brand-300"
-              onClick={open}
+            <Button
+              variant="link"
+              className="mt-2 text-start text-sm"
+              onClick={() => input.current?.click()}
               disabled={busy}
             >
               {t("wzChangePhoto")}
-            </button>
+            </Button>
           </div>
-          <button
-            type="button"
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 dark:hover:bg-white/[0.06] dark:hover:text-gray-200"
+          <IconButton
+            variant="plain"
+            label={t("wzRemovePhoto")}
+            tooltip
+            icon="close"
+            iconClassName="h-5 w-5"
+            className="h-11 w-11 rounded-full hover:bg-gray-100 dark:hover:bg-white/[0.06]"
             onClick={onClear}
             disabled={busy}
-            aria-label={t("wzRemovePhoto")}
-            title={t("wzRemovePhoto")}
-          >
-            <Icon name="close" className="h-5 w-5" />
-          </button>
-          {picker}
+          />
+          <FileInput
+            ref={input}
+            srOnly
+            tabIndex={-1}
+            aria-hidden="true"
+            accept={ACCEPTED_TYPES.join(",")}
+            onChange={(e) => {
+              onChoose(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
         </div>
       </div>
     );
@@ -538,46 +538,14 @@ function PhotoDrop({
       <p id={`${ids}-label`} className="label">
         {t("wzDropLabel")}
       </p>
-      <div
-        role="button"
-        tabIndex={0}
-        aria-labelledby={`${ids}-label ${ids}-drop`}
-        aria-describedby={`${ids}-hint`}
-        className={`flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-8 text-center transition-colors
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
-            dragging
-              ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10"
-              : "border-gray-300 bg-white hover:border-brand-400 hover:bg-brand-50/40 dark:border-line dark:bg-raised dark:hover:bg-brand-500/[0.06]"
-          }`}
-        onClick={open}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            open();
-          }
-        }}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragging(false);
-          onChoose(e.dataTransfer.files[0]);
-        }}
-      >
-        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">
-          <Icon name="image" className="h-6 w-6" />
-        </span>
-        <p id={`${ids}-drop`} className="mt-3 text-sm font-medium text-gray-800 dark:text-gray-100">
-          {t("wzDrop")}
-        </p>
-        <p id={`${ids}-hint`} className="mt-1 max-w-md text-xs text-gray-500 dark:text-gray-400">
-          {t(`wzDropHint_${model}`)}
-        </p>
-        {picker}
-      </div>
+      <DropZone
+        labelledBy={`${ids}-label`}
+        title={t("wzDrop")}
+        hint={t(`wzDropHint_${model}`)}
+        accept={ACCEPTED_TYPES.join(",")}
+        disabled={busy}
+        onFile={onChoose}
+      />
       {error && (
         <p role="alert" className="field-error text-sm">
           {error}

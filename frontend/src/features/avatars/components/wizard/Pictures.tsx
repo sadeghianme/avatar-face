@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Icon } from "@/components/ui/Icon";
+import { RangeInput } from "@/components/ui/RangeInput";
 import { Spinner } from "@/components/ui/Spinner";
 import { CHECKER_STYLE, LookPicture, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
 import type { CreationStep } from "@/features/avatars/creation";
@@ -214,9 +215,8 @@ export function Result({
           <label htmlFor={`${ids}-split`} className="sr-only">
             {t("wzCompare")}
           </label>
-          <input
+          <RangeInput
             id={`${ids}-split`}
-            type="range"
             min={0}
             max={100}
             value={split}

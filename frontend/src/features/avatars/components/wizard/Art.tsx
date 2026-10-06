@@ -41,7 +41,7 @@ export function LookPicture({ model, look, className }: { model: AvatarModel; lo
 
 /** The backdrop every look sits on in the wizard: warm in light, deep in
  * dark, and the same under a photo and a drawing so they compare. */
-export const PICTURE_BACKDROP = "bg-gradient-to-b from-brand-50 to-orange-100/70 dark:from-[#241a12] dark:to-[#1a1410]";
+export const PICTURE_BACKDROP = "bg-gradient-to-b from-brand-50 to-orange-100/70 dark:from-ember-850 dark:to-ember-950";
 
 /** A checkerboard, for pictures whose background was taken off. */
 export const CHECKER_STYLE: React.CSSProperties = {

@@ -2,6 +2,7 @@ import { createContext, type ReactNode, useContext } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/Button";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 
@@ -59,18 +60,22 @@ export function BackButton({
 }) {
   const { t } = useTranslation();
   return (
-    <button
-      type="button"
-      className="btn-secondary min-h-11 min-w-11 px-3 sm:px-4"
+    <Button
+      variant="secondary"
+      size="lg"
+      className={BAR_BUTTON}
+      icon={<Icon name="back" className="h-4 w-4 rtl:-scale-x-100" />}
       onClick={onClick}
       disabled={disabled}
       aria-label={compact ? t("wzBack") : undefined}
     >
-      <Icon name="back" className="h-4 w-4 rtl:-scale-x-100" />
       <span className={compact ? "hidden sm:inline" : ""}>{t("wzBack")}</span>
-    </button>
+    </Button>
   );
 }
+
+/** The bar's secondary buttons: square on a phone, padded from a tablet up. */
+const BAR_BUTTON = "min-w-11 px-3 sm:px-4";
 
 /** A secondary action in the bar: its words from a tablet up, and on a phone
  * its short words (`short`) beside the icon: a finger has no hover to show
@@ -92,18 +97,19 @@ export function BarAction({
   busy?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      className="btn-secondary min-h-11 min-w-11 px-3 sm:px-4"
+    <Button
+      variant="secondary"
+      size="lg"
+      className={BAR_BUTTON}
+      icon={busy ? <Spinner className="h-4 w-4" /> : icon}
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
       title={label}
     >
-      {busy ? <Spinner className="h-4 w-4" /> : <Icon name={icon} className="h-4 w-4" />}
       <span className="sm:hidden">{short}</span>
       <span className="hidden sm:inline">{label}</span>
-    </button>
+    </Button>
   );
 }
 
