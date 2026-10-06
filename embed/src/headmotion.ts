@@ -10,7 +10,8 @@
  * This drives a LAYER, not a mesh. The first attempt at head movement warped
  * face vertices, which moved the face inside a head that stayed put — the
  * user's screenshot of that is why this file exists. The whole head (hair,
- * ears, skull) now travels as one rigid unit; see engine.buildHeadLayer.
+ * ears, skull) now travels as one rigid unit; see engine/geometry.ts
+ * placeHead and engine/render2d.ts.
  */
 
 const SETTLE_S = 0.9;

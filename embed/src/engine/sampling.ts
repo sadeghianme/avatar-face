@@ -334,7 +334,7 @@ export class FaceSamples {
    */
   private sampleCharacterLook(texture: HTMLImageElement, texPoints: readonly Point[]): void {
     // For every profile: the character mouth paints with it, and the mesh
-    // pads its seams on flat art whichever mouth it has (trianglePads).
+    // pads its seams on flat art whichever mouth it has (MeshWarp.trianglePads).
     const skin: Rgb = this.skinColour ?? DEFAULT_LOOK.skin;
     this.look = { ...DEFAULT_LOOK, lip: this.lipColour, skin };
     try {

@@ -257,7 +257,7 @@ export class ClassicMouth {
       };
     };
 
-    // --- MEASURED parting. The jaw hinge (deformedPoints) now moves the
+    // --- MEASURED parting. The jaw hinge (deform.ts) now moves the
     // whole lower lip, so the inner rings genuinely separate in the mesh
     // and the triangles between them stretch. The painted cavity has to
     // cover exactly that region, or the stretched lip texture shows as a
