@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { dentalLighting, ENAMEL_EDGE_STOPS, ORAL_CORNER_STOPS } from "../dental-lighting-model";
-import { DentalOralSurface } from "../dental-oral-surface";
+import { dentalSurfaceIn } from "../seam";
 import { DEFAULT_REFERENCE_PROFILE } from "../reference-mouth-model";
 import { ZERO_WEIGHTS } from "../../types";
 import type { MouthSurfaceFrame } from "../../mouth-extension";
@@ -66,8 +66,7 @@ describe("photographic dental lighting", () => {
     // Draw-only fixture; extraction and source coverage have separate tests.
     // The first frame fits the enamel to the face on a canvas of its own.
     vi.stubGlobal("document", { createElement: () => fakeCanvas() });
-    const surface = Object.create(DentalOralSurface.prototype) as DentalOralSurface;
-    Object.assign(surface, { lowerIncisal: 0, origin: "own", enamel: { cast: [1, 1, 1], bright: 220, edge: 4 },
+    const surface = dentalSurfaceIn({ lowerIncisal: 0, origin: "own", enamel: { cast: [1, 1, 1], bright: 220, edge: 4 },
       arches: [0, 1].map(() => ({ canvas: {}, layer: { count: 1000, box: { x: 100, y: 120, width: 400, height: 80 } } })) });
     surface.setProfile(DEFAULT_REFERENCE_PROFILE);
     const frame = {

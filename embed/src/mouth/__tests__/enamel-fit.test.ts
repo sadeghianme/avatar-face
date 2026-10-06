@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
-import { DentalOralSurface } from "../dental-oral-surface";
+import { dentalSurfaceIn } from "../seam";
 import { ContinuousMouth, SEAM_STROKES } from "../continuous-mouth";
+import { ReferenceMouth } from "../reference-mouth";
 import { DEFAULT_REFERENCE_PROFILE, REFERENCE_POSES } from "../reference-mouth-model";
 import { validatePerformanceManifest } from "../photographic-performance-model";
 import { ZERO_WEIGHTS, type Rig } from "../../types";
@@ -18,8 +19,7 @@ class TestPath { moveTo() {} lineTo() {} closePath() {} }
 
 /** A surface as extracted: two arches, an enamel sample like the standard teeth's. */
 function surface(origin: "own" | "standard" = "standard") {
-  const s = Object.create(DentalOralSurface.prototype) as DentalOralSurface;
-  Object.assign(s, { lowerIncisal: 0, origin, fitted: null, enamel: { cast: [1.093, 0.984, 0.922], bright: 227, edge: 4 },
+  const s = dentalSurfaceIn({ lowerIncisal: 0, origin, enamel: { cast: [1.093, 0.984, 0.922], bright: 227, edge: 4 },
     arches: [0, 1].map((i) => ({ canvas: { id: `raw${i}` }, layer: { count: 1000, box: { x: 100, y: 120, width: 400, height: 80 } } })) });
   s.setProfile(DEFAULT_REFERENCE_PROFILE);
   return s;
@@ -203,12 +203,14 @@ describe("the photographic mouth as the lips part", () => {
 
   it("hands the reveal to the geometric fallback as its teeth alpha", () => {
     const mouth = new ContinuousMouth(manifest);
-    const geometric = vi.spyOn((mouth as unknown as { geometric: { draw: (...a: unknown[]) => void } }).geometric, "draw").mockImplementation(() => {});
+    // Without a teeth photo the geometric mouth draws the teeth: its public draw, watched.
+    const geometric = vi.spyOn(ReferenceMouth.prototype, "draw").mockImplementation(() => {});
     const points = neutral.map((p) => ({ ...p }));
     points[13].y -= width * 0.025; points[14].y += width * 0.025;
     const ctx = { save() {}, restore() {}, clip() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, setTransform() {}, drawImage() {}, globalAlpha: 1 } as unknown as CanvasRenderingContext2D;
     mouth.paint(ctx, { points, neutral, rig, weights: REFERENCE_POSES.rest.weights, viseme: "sil" });
     const frame = geometric.mock.calls[0][1] as { teethAlpha: number; cavityAlpha: number };
+    geometric.mockRestore();
     expect(frame.teethAlpha).toBeGreaterThan(0);
     expect(frame.teethAlpha).toBeLessThan(0.5);
     expect(frame.cavityAlpha).toBeGreaterThanOrEqual(frame.teethAlpha);

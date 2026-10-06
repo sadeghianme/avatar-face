@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dentalOpening } from "../lip-occlusion-model";
 import { MouthMotion, mouthMixWeights } from "../continuous-mouth-model";
 import { ContinuousMouth } from "../continuous-mouth";
-import { DentalOralSurface } from "../dental-oral-surface";
+import { dentalSurfaceIn } from "../seam";
 import { ReferenceMouth } from "../reference-mouth";
 import { DEFAULT_REFERENCE_PROFILE, REFERENCE_POSES } from "../reference-mouth-model";
 import { PERFORMANCE_POSES, validatePerformanceManifest } from "../photographic-performance-model";
@@ -130,8 +130,7 @@ describe("lip-driven tooth visibility", () => {
     vi.stubGlobal("Path2D", TestPath);
     // The first frame fits the enamel to the face on a canvas of its own.
     vi.stubGlobal("document", { createElement: () => fakeCanvas() });
-    const surface = Object.create(DentalOralSurface.prototype) as DentalOralSurface;
-    Object.assign(surface, { lowerIncisal: 0, origin: "own", enamel: { cast: [1, 1, 1], bright: 220, edge: 4 },
+    const surface = dentalSurfaceIn({ lowerIncisal: 0, origin: "own", enamel: { cast: [1, 1, 1], bright: 220, edge: 4 },
       arches: [0, 1].map(() => ({ canvas: {}, layer: { count: 1000, box: { x: 100, y: 120, width: 400, height: 80 } } })) });
     surface.setProfile(DEFAULT_REFERENCE_PROFILE);
     for (let step = 0; step <= 20; step++) {

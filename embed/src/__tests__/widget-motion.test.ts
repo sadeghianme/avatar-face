@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AvatarEngine } from "../engine";
 import { engineSeam } from "../engine/seam";
+import { attachedMouthSeam } from "../mouth/seam";
 import { fakeCanvas, NoopPath, stubNetwork, type FakeNetwork, type Resource } from "./browser-fakes";
 
 /**
@@ -106,19 +107,18 @@ async function embed(info: ReturnType<typeof published>, answers: Record<string,
   return { network, scripts, attached: await attached };
 }
 
-/** The continuous mouth's own state read here (mouth/continuous-mouth.ts). */
-type ContinuousParts = { template: { character: string }; oral?: object };
-const mouthIn = (engine: AvatarEngine) =>
-  engineSeam(engine).mouthExtension as unknown as ContinuousParts | undefined;
+/** The continuous mouth the engine draws with, through its seam (null for
+ *  the classic mouth). */
+const mouthIn = (engine: AvatarEngine) => attachedMouthSeam(engineSeam(engine).mouthExtension);
 
-/** The mouth the engine draws with now, and the motion it plays. */
+/** The mouth the engine draws with now, by the motion it plays. */
 function mouthOf(engine: AvatarEngine): string | null {
-  return mouthIn(engine)?.template.character ?? null;
+  return mouthIn(engine)?.character ?? null;
 }
 
 /** Whether the engine's mouth draws its teeth from a photo. */
 function teethPhotoOf(engine: AvatarEngine): boolean {
-  return Boolean(mouthIn(engine)?.oral);
+  return mouthIn(engine)?.teethPhoto ?? false;
 }
 
 describe("the widget's continuous mouth", () => {

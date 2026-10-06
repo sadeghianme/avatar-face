@@ -6,6 +6,7 @@ import type { ContinuousMouth } from "../continuous-mouth";
 import { DentalPhotoError } from "../dental-oral-surface";
 import { attachAvatarMouth, loadAvatarMouth } from "../index";
 import { normalizeProfile } from "../reference-mouth-model";
+import { continuousMouthSeam } from "../seam";
 
 /**
  * attachAvatarMouth is the one entry point shared by the dashboard, the share
@@ -58,9 +59,8 @@ const network = (answers: Record<string, Resource> = {}) => stubNetwork({
 
 const host = () => ({ setMouthExtension: vi.fn(), tuning: { mouthOpen: 1.4 } });
 /** The motion a loaded mouth plays, by its manifest's character. */
-const playing = (mouth: ContinuousMouth) =>
-  (mouth as unknown as { template: { character: string } }).template.character;
-const hasTeethPhoto = (mouth: ContinuousMouth) => Boolean((mouth as unknown as { oral?: object }).oral);
+const playing = (mouth: ContinuousMouth) => continuousMouthSeam(mouth).character;
+const hasTeethPhoto = (mouth: ContinuousMouth) => continuousMouthSeam(mouth).teethPhoto;
 
 beforeEach(() => {
   vi.stubGlobal("document", { createElement: () => fakeCanvas() });

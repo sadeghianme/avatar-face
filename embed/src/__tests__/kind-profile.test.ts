@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
 import { engineSeam } from "../engine/seam";
-import { ClassicMouth } from "../engine/paint-classic-mouth";
 import { HUMAN_PROFILE, kindProfile } from "../kind-profile";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
 
@@ -63,30 +62,31 @@ class NoopPath {
   addPath() {}
 }
 
-/** The classic mouth's parts, to count which ran. */
-type ClassicMouthParts = {
-  drawTeethRow(...args: unknown[]): void;
-  drawLipContactLine(...args: unknown[]): void;
-};
+/**
+ * What the classic mouth (engine/paint-classic-mouth.ts) put on the canvas,
+ * told by its strokes: every incisor is outlined by a faint hairline of one
+ * colour, and the lip contact line is the one stroke of its warm brown.
+ */
+const INCISOR_HAIRLINE = "strokeStyle=rgba(96, 74, 62, 0.2)";
+const CONTACT_LINE = /^strokeStyle=rgba\(70, 30, 28, /;
 
-/** One frame of `rig` in `weights`: the draw log, and which mouth parts ran. */
+/** One frame of `rig` in `weights`: the draw log, the incisors and the
+ *  contact lines in it. */
 function frame(rig: Rig, weights: Partial<BlendWeights>) {
   const log: string[] = [];
   vi.stubGlobal("document", { createElement: () => recordingCanvas([]) });
   const image = { naturalWidth: 1024, naturalHeight: 1024, width: 1024, height: 1024 } as HTMLImageElement;
-  const proto = ClassicMouth.prototype as unknown as ClassicMouthParts;
-  const teeth = vi.spyOn(proto, "drawTeethRow");
-  const contact = vi.spyOn(proto, "drawLipContactLine");
   const engine = new AvatarEngine(recordingCanvas(log), rig, image, { fullPhoto: true });
   log.length = 0;
   const e = engineSeam(engine);
   e.face.weights = { ...ZERO_WEIGHTS, ...weights };
   e.render();
   engine.destroy();
-  const result = { log: log.join("\n"), teeth: teeth.mock.calls.length, contact: contact.mock.calls.length };
-  teeth.mockRestore();
-  contact.mockRestore();
-  return result;
+  return {
+    log: log.join("\n"),
+    teeth: log.filter((line) => line === INCISOR_HAIRLINE).length,
+    contact: log.filter((line) => CONTACT_LINE.test(line)).length,
+  };
 }
 
 const withProfile = (rig: Rig, render_profile: string | null | undefined): Rig => ({ ...rig, render_profile });
