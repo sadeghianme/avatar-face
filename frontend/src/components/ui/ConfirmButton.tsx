@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 
 import { Button, type ButtonProps } from "@/components/ui/Button";
 import type { IconLike } from "@/components/ui/Icon";
@@ -60,10 +60,24 @@ export function ConfirmButton({
   disabled?: boolean;
 }) {
   const [asking, setAsking] = useState(false);
+  // Cancelled, the question gives the focus back to the trigger it replaced
+  // (it would otherwise fall to the page with the Cancel button it was on).
+  const trigger = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
+  const cancel = () => {
+    refocus.current = true;
+    setAsking(false);
+  };
+  useEffect(() => {
+    if (asking || !refocus.current) return;
+    refocus.current = false;
+    trigger.current?.focus();
+  }, [asking]);
 
   if (!asking) {
     return (
       <Button
+        ref={trigger}
         variant="secondary"
         size={size}
         icon={icon}
@@ -83,7 +97,7 @@ export function ConfirmButton({
 
   // Escape on either answer is Cancel.
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === "Escape") setAsking(false);
+    if (event.key === "Escape") cancel();
   };
   return (
     <span role="group" aria-label={question} className={QUESTION}>
@@ -93,7 +107,7 @@ export function ConfirmButton({
         size={confirmSize}
         // The safe answer takes the focus: Enter twice deletes nothing.
         autoFocus
-        onClick={() => setAsking(false)}
+        onClick={cancel}
         onKeyDown={onKeyDown}
         disabled={busy}
       >
