@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ButtonLink } from "@/components/ui/ButtonLink";
+import { Card } from "@/components/ui/Card";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { FieldError } from "@/components/ui/FieldError";
 import { Icon } from "@/components/ui/Icon";
@@ -69,7 +70,7 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
   };
 
   return (
-    <li className="flex gap-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm dark:border-line dark:bg-panel dark:shadow-none">
+    <Card as="li" className="flex gap-3 p-3">
       <span className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-gray-100 dark:bg-white/[0.06]">
         {image ? (
           <img src={image.url} alt="" className="h-full w-full object-cover" loading="lazy" />
@@ -108,6 +109,6 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
           />
         </div>
       </div>
-    </li>
+    </Card>
   );
 }

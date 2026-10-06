@@ -2,6 +2,7 @@ import type { AvatarEngine } from "@liveface/embed";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Icon } from "@/components/ui/Icon";
@@ -435,10 +436,9 @@ function Editor({
               <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">{t("wzPointsHint")}</p>
             </div>
           ) : (
-            <p className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100">
-              <Icon name="target" className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{t("wzNotFound")}</span>
-            </p>
+            <Banner appearance="soft" tone="warning" icon="target">
+              {t("wzNotFound")}
+            </Banner>
           )}
 
           <div>
@@ -476,17 +476,14 @@ function Editor({
           </div>
 
           {blocked && (
-            <div
-              role="alert"
-              className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100"
-            >
+            <Banner appearance="soft" tone="warning" role="alert">
               <p className="font-medium">{t("wzFitProblems")}</p>
               <ul className="mt-1 list-disc ps-5">
                 {reasons.map((reason) => (
                   <li key={reason.code}>{reasonText(reason)}</li>
                 ))}
               </ul>
-            </div>
+            </Banner>
           )}
 
           {needsConfirm && (

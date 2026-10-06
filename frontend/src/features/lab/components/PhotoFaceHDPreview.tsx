@@ -2,6 +2,7 @@ import type { CuePlayer, SpeechPlayer } from "@liveface/embed";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Banner } from "@/components/ui/Banner";
 import { faceDepth } from "@/features/lab/api";
 import type { Avatar } from "@/lib/types";
 
@@ -84,12 +85,9 @@ export function PhotoFaceHDPreview({
         </div>
       ) : null}
       {error ? (
-        <div
-          role="alert"
-          className="absolute inset-x-5 bottom-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
-        >
+        <Banner appearance="soft" tone="danger" role="alert" className="absolute inset-x-5 bottom-5">
           {error}
-        </div>
+        </Banner>
       ) : null}
     </div>
   );

@@ -1,9 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Icon } from "@/components/ui/Icon";
+import { Label } from "@/components/ui/Label";
 import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
 import { creationRequests } from "@/features/avatars/api";
@@ -203,7 +205,7 @@ export function PrepareScreen({
 
   // --- Agreement needed before the AI can run -------------------------------------
   const agreementPanel = (
-    <div className="rounded-2xl border border-brand-200 bg-brand-50/60 p-4 dark:border-brand-500/30 dark:bg-brand-500/[0.07]">
+    <Banner appearance="soft" tone="brand">
       <p className="text-sm font-medium text-gray-900 dark:text-white">{t("wzAiNeeded")}</p>
       {aiOn ? (
         <>
@@ -241,7 +243,7 @@ export function PrepareScreen({
       ) : (
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{t("wzHoldAiOff")}</p>
       )}
-    </div>
+    </Banner>
   );
 
   const footer = footerPlan("prepare", { prepared: Boolean(result) });
@@ -268,46 +270,47 @@ export function PrepareScreen({
     return (
       <div className="max-w-2xl space-y-5">
         {failureText && phase === "failed" && (
-          <div
+          <Banner
+            appearance="soft"
+            tone="warning"
+            icon="alert"
             role="alert"
-            className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100"
+            actions={
+              <>
+                {job?.retryable && !askAi && (
+                  <Button
+                    size="lg"
+                    icon={busy === "retry" ? <Spinner className="h-4 w-4" /> : "refresh"}
+                    onClick={retryJob}
+                    disabled={busy !== null}
+                  >
+                    {t("wzTryAgain")}
+                  </Button>
+                )}
+                {originalOffered && job?.step !== "ingest" && (
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    onClick={() => void prepare({ mode: "original" })}
+                    disabled={busy !== null}
+                  >
+                    {t("wzUseOriginal")}
+                  </Button>
+                )}
+                <Button
+                  variant={job?.retryable || originalOffered ? "secondary" : "primary"}
+                  size="lg"
+                  icon={<Icon name="back" className="h-4 w-4 rtl:-scale-x-100" />}
+                  onClick={onBack}
+                  disabled={busy !== null}
+                >
+                  {t(plan.source === "generate" ? "wzEditDescription" : "wzOtherPhoto")}
+                </Button>
+              </>
+            }
           >
-            <p className="flex items-start gap-2">
-              <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{failureText}</span>
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {job?.retryable && !askAi && (
-                <Button
-                  size="lg"
-                  icon={busy === "retry" ? <Spinner className="h-4 w-4" /> : "refresh"}
-                  onClick={retryJob}
-                  disabled={busy !== null}
-                >
-                  {t("wzTryAgain")}
-                </Button>
-              )}
-              {originalOffered && job?.step !== "ingest" && (
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  onClick={() => void prepare({ mode: "original" })}
-                  disabled={busy !== null}
-                >
-                  {t("wzUseOriginal")}
-                </Button>
-              )}
-              <Button
-                variant={job?.retryable || originalOffered ? "secondary" : "primary"}
-                size="lg"
-                icon={<Icon name="back" className="h-4 w-4 rtl:-scale-x-100" />}
-                onClick={onBack}
-                disabled={busy !== null}
-              >
-                {t(plan.source === "generate" ? "wzEditDescription" : "wzOtherPhoto")}
-              </Button>
-            </div>
-          </div>
+            {failureText}
+          </Banner>
         )}
         {askAi && agreementPanel}
         <StepFooter back={footer.back && backButton} />
@@ -405,13 +408,9 @@ export function PrepareScreen({
         </p>
 
         {failureText && !redoing && (
-          <p
-            role="alert"
-            className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100"
-          >
-            <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{failureText}</span>
-          </p>
+          <Banner appearance="soft" tone="warning" icon="alert" role="alert">
+            {failureText}
+          </Banner>
         )}
 
         {askAi && agreementPanel}
@@ -424,9 +423,9 @@ export function PrepareScreen({
               applyChange();
             }}
           >
-            <label htmlFor={`${ids}-change`} className="label mb-0">
+            <Label htmlFor={`${ids}-change`} className="mb-0">
               {t("wzChangeLabel")}
-            </label>
+            </Label>
             <Textarea
               id={`${ids}-change`}
               rows={3}

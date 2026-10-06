@@ -6,6 +6,7 @@ import { ColorInput } from "@/components/ui/ColorInput";
 import { ColorSwatch } from "@/components/ui/ColorSwatch";
 import { FieldError } from "@/components/ui/FieldError";
 import { FileInput } from "@/components/ui/FileInput";
+import { Label } from "@/components/ui/Label";
 import { type Segment, SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Slider } from "@/components/ui/Slider";
 import { useRemoveSceneImage, useUpdateAvatar, useUploadSceneImage } from "@/features/avatars/api";
@@ -323,9 +324,9 @@ export function FramingScenePanel({
       </div>
 
       <div className="mb-4">
-        <p className="label" id="scene-pan-label">
+        <Label as="p" id="scene-pan-label">
           {t("scenePan")}
-        </p>
+        </Label>
         <p className="mb-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
           {t(dragPans ? "scenePanHint" : "scenePanHintTouch")}
         </p>
@@ -333,9 +334,9 @@ export function FramingScenePanel({
       </div>
 
       <div>
-        <p className="label" id="scene-bg-label">
+        <Label as="p" id="scene-bg-label">
           {t("sceneBackground")}
-        </p>
+        </Label>
         {/* The arrows move the focus only: choosing Picture with none yet
             opens the file picker, which an arrow key must not do. */}
         <SegmentedControl
@@ -375,13 +376,13 @@ export function FramingScenePanel({
                 onClick={() => chooseColor(swatch.hex)}
               />
             ))}
-            <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+            <Label look="plain" className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
               <ColorInput
                 value={draft.background.color ?? DEFAULT_COLOR}
                 onChange={(event) => chooseColor(event.target.value)}
               />
               {t("sceneBgCustomColor")}
-            </label>
+            </Label>
           </div>
         )}
         <FileInput

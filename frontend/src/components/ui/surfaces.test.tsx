@@ -39,6 +39,29 @@ describe("Card", () => {
     render(<CardHeader as="h3" title="Keys" />);
     expect(screen.getByRole("heading", { level: 3, name: "Keys" })).toBeInTheDocument();
   });
+
+  it("is a list item, a figure or a details when it is one; muted is a flat grey well", () => {
+    render(
+      <>
+        <ul>
+          <Card as="li">A draft</Card>
+        </ul>
+        <Card as="figure" aria-label="Baseline">
+          <figcaption>Baseline</figcaption>
+        </Card>
+        <Card as="details" data-testid="more">
+          <summary>Other ways</summary>
+        </Card>
+        <Card tone="muted" data-testid="well">
+          Working
+        </Card>
+      </>
+    );
+    expect(screen.getByRole("listitem")).toHaveClass("card");
+    expect(screen.getByRole("figure", { name: "Baseline" })).toHaveClass("card");
+    expect(screen.getByTestId("more").tagName).toBe("DETAILS");
+    expect(screen.getByTestId("well")).toHaveClass("card", "bg-gray-50", "shadow-none");
+  });
 });
 
 describe("Banner", () => {

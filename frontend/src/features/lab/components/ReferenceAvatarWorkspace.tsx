@@ -149,7 +149,7 @@ export function ReferenceAvatarWorkspace({ avatar, orgId }: { avatar: Avatar; or
           </div>
         </Card>
         <section ref={previews} className="grid gap-4 md:grid-cols-2" aria-label={t("referenceCompare")}>
-          <figure className="card p-3">
+          <Card as="figure" className="p-3">
             <figcaption className="mb-3 px-1">
               <h3 className="text-sm font-semibold">{t("referenceBaseline")}</h3>
               <p className="mt-1 text-xs text-gray-500">{t("referenceBaselineHint")}</p>
@@ -162,8 +162,8 @@ export function ReferenceAvatarWorkspace({ avatar, orgId }: { avatar: Avatar; or
               mouthOnly={mouthOnly}
               onEngine={baselineReady}
             />
-          </figure>
-          <figure className="card border-brand-300 p-3 dark:border-brand-700">
+          </Card>
+          <Card as="figure" className="border-brand-300 p-3 dark:border-brand-700">
             <figcaption className="mb-3 px-1">
               <h3 className="text-sm font-semibold text-brand-600 dark:text-brand-300">
                 {t(photographic ? "referencePhotographic" : "referenceCandidate")}
@@ -197,7 +197,7 @@ export function ReferenceAvatarWorkspace({ avatar, orgId }: { avatar: Avatar; or
                 onEngine={candidateReady}
               />
             )}
-          </figure>
+          </Card>
         </section>
         <Card as="section" className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">

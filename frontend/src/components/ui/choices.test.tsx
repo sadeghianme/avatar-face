@@ -162,6 +162,21 @@ describe("ChoiceCard with useRadioGroup", () => {
   });
 });
 
+describe("ChoiceCard looks", () => {
+  it("card: a Card's surface to press; custom: only the caller's classes", () => {
+    render(
+      <>
+        <ChoiceCard look="card">Ava</ChoiceCard>
+        <ChoiceCard look="custom" className="rounded-3xl">
+          Human
+        </ChoiceCard>
+      </>
+    );
+    expect(screen.getByRole("button", { name: "Ava" })).toHaveClass("card");
+    expect(screen.getByRole("button", { name: "Human" })).toHaveAttribute("class", "rounded-3xl");
+  });
+});
+
 describe("Chip", () => {
   it("a filter is pressed when applied; a suggestion is a plain button", async () => {
     const onClick = vi.fn();

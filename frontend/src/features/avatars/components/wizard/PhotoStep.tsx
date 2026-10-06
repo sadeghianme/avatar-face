@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Chip } from "@/components/ui/Chip";
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
@@ -12,6 +13,7 @@ import { FieldError } from "@/components/ui/FieldError";
 import { FileInput } from "@/components/ui/FileInput";
 import { Icon } from "@/components/ui/Icon";
 import { IconButton } from "@/components/ui/IconButton";
+import { Label } from "@/components/ui/Label";
 import { Textarea } from "@/components/ui/Textarea";
 import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import { startCreation } from "@/features/avatars/api";
@@ -342,9 +344,9 @@ export function PhotoStep({
         <div className="space-y-7">
           {/* The look */}
           <div>
-            <p id={`${ids}-look`} className="label">
+            <Label as="p" id={`${ids}-look`}>
               {t("wzLookLabel")}
-            </p>
+            </Label>
             <div role="radiogroup" aria-labelledby={`${ids}-look`} className="grid grid-cols-3 gap-2.5 sm:gap-4">
               {LOOKS.map((l) => {
                 const on = l === look;
@@ -385,7 +387,7 @@ export function PhotoStep({
 
           {/* Agreements, here and only here */}
           {(aiEnabled || statement) && (
-            <div className="space-y-3 rounded-2xl border border-gray-200 bg-gray-50/70 p-4 dark:border-line dark:bg-white/[0.03]">
+            <Card tone="muted" className="space-y-3 p-4">
               {aiEnabled && (
                 <div>
                   <Checkbox
@@ -436,7 +438,7 @@ export function PhotoStep({
                   }
                 />
               )}
-            </div>
+            </Card>
           )}
         </div>
       </div>
@@ -494,8 +496,8 @@ function PhotoDrop({
   if (file && preview) {
     return (
       <div>
-        <p className="label">{t("wzDropLabel")}</p>
-        <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-3 dark:border-line dark:bg-raised">
+        <Label as="p">{t("wzDropLabel")}</Label>
+        <Card className="flex items-center gap-4 p-3 shadow-none dark:bg-raised">
           <img src={preview} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover sm:h-24 sm:w-24" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{file.name}</p>
@@ -530,16 +532,16 @@ function PhotoDrop({
               e.target.value = "";
             }}
           />
-        </div>
+        </Card>
       </div>
     );
   }
 
   return (
     <div>
-      <p id={`${ids}-label`} className="label">
+      <Label as="p" id={`${ids}-label`}>
         {t("wzDropLabel")}
-      </p>
+      </Label>
       <DropZone
         labelledBy={`${ids}-label`}
         title={t("wzDrop")}

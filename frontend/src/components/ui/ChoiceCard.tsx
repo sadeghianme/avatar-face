@@ -8,11 +8,12 @@ export interface ChoiceCardProps extends ButtonHTMLAttributes<HTMLButtonElement>
   selected?: boolean;
   /**
    * tile: a bordered option with its words and a line under them (the
-   * mouth's Classic / Photographic) · custom: the caller draws the whole
-   * card (the wizard's pictures); the kit gives it a button's semantics,
-   * keyboard and focus.
+   * mouth's Classic / Photographic) · card: a Card's surface to press (a
+   * stock avatar, its picture and name) · custom: the caller draws the
+   * whole card (the wizard's pictures); the kit gives it a button's
+   * semantics, keyboard and focus.
    */
-  look?: "tile" | "custom";
+  look?: "tile" | "card" | "custom";
 }
 
 /**
@@ -28,6 +29,7 @@ export const ChoiceCard = forwardRef<HTMLButtonElement, ChoiceCardProps>(functio
       ref={ref}
       type={type}
       className={cx(
+        look === "card" && "card",
         look === "tile" && "choice-tile",
         look === "tile" && (selected ? "choice-tile-on" : "choice-tile-off"),
         className

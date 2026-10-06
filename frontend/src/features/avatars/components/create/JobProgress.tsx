@@ -1,7 +1,9 @@
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { FieldError } from "@/components/ui/FieldError";
 import { Icon } from "@/components/ui/Icon";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -62,35 +64,37 @@ export function JobProgress({
     const fraction = job.progress?.fraction ?? null;
     const label = job.state === "queued" ? t("createJobQueued") : t(`createJob_${job.step}`);
     return (
-      <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-line dark:bg-white/[0.03]">
+      <Card tone="muted" className="rounded-xl p-4">
         <p className="flex items-center gap-2 text-sm font-medium">
           <Spinner className="h-4 w-4 shrink-0 text-brand-600" />
           {label}
         </p>
         <JobProgressBar fraction={fraction} label={label} />
-      </div>
+      </Card>
     );
   }
 
   const failure = jobFailure(job);
   if (!failure) return null;
   return (
-    <div
-      className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900
-        dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+    <Banner
+      appearance="soft"
+      tone="warning"
+      actions={
+        (job.retryable && onRetry) || children ? (
+          <>
+            {job.retryable && onRetry && (
+              <Button variant="secondary" onClick={onRetry} loading={retrying}>
+                {t("retry")}
+              </Button>
+            )}
+            {children}
+          </>
+        ) : undefined
+      }
     >
       <p>{errorText(t, failure.code, failure.detail)}</p>
-      {(job.retryable && onRetry) || children ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {job.retryable && onRetry && (
-            <Button variant="secondary" onClick={onRetry} loading={retrying}>
-              {t("retry")}
-            </Button>
-          )}
-          {children}
-        </div>
-      ) : null}
-    </div>
+    </Banner>
   );
 }
 
@@ -124,7 +128,7 @@ function FinishProgress({ job, rows }: { job: CreationJob; rows: FinishRow[] }) 
   const label = t("createJob_finish");
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-line dark:bg-white/[0.03]">
+    <Card tone="muted" className="rounded-xl p-4">
       {job.state === "queued" && (
         <p className="mb-3 flex items-center gap-2 text-sm font-medium">
           <Spinner className="h-4 w-4 shrink-0 text-brand-600" />
@@ -137,7 +141,7 @@ function FinishProgress({ job, rows }: { job: CreationJob; rows: FinishRow[] }) 
         ))}
       </ol>
       <JobProgressBar fraction={job.progress?.fraction ?? null} label={label} />
-    </div>
+    </Card>
   );
 }
 

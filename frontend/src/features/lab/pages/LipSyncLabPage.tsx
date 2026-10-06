@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
 import { FieldError } from "@/components/ui/FieldError";
 import { Select } from "@/components/ui/Select";
@@ -87,9 +88,9 @@ export function LipSyncLabPage({ reference = false }: { reference?: boolean }) {
           <LipSyncWorkspace key={`${current.id}:${active.id}`} avatar={active} orgId={current.id} />
         )
       ) : (
-        <div className="card py-20 text-center text-sm text-gray-500" role="status">
+        <Card role="status" className="py-20 text-center text-sm text-gray-500">
           {avatars.isLoading || detail.isFetching ? t("loading") : t("photofaceHDEmptyBody")}
-        </div>
+        </Card>
       )}
     </div>
   );

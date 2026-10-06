@@ -77,7 +77,7 @@ export function OtherWays({ orgId }: { orgId: string }) {
   };
 
   return (
-    <details className="group mx-auto mt-8 max-w-4xl rounded-2xl border border-gray-200 bg-white/60 px-5 py-4 dark:border-line dark:bg-panel/60">
+    <Card as="details" className="group mx-auto mt-8 max-w-4xl bg-white/60 px-5 py-4 shadow-none dark:bg-panel/60">
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-gray-700 dark:text-gray-200">
         <span>{t("wzOtherWays")}</span>
         <Icon name="chevron" className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90 rtl:-scale-x-100" />
@@ -94,8 +94,8 @@ export function OtherWays({ orgId }: { orgId: string }) {
         {stock?.map((item) => (
           <ChoiceCard
             key={item.id}
-            look="custom"
-            className="card flex flex-col items-center gap-2 p-2 transition-shadow hover:shadow-md"
+            look="card"
+            className="flex flex-col items-center gap-2 p-2 transition-shadow hover:shadow-md"
             onClick={() => void fromStock(item.id)}
           >
             <img src={item.image_url} alt="" className="aspect-square w-full rounded-lg object-cover" />
@@ -154,6 +154,6 @@ export function OtherWays({ orgId }: { orgId: string }) {
       <h3 className="mb-1 mt-10 text-lg font-medium">{t("avaturnTitle")}</h3>
       <p className="mb-3 text-[13px] text-gray-500 dark:text-gray-400">{t("avaturnSubtitle")}</p>
       <Avaturn3DPanel orgId={orgId} />
-    </details>
+    </Card>
   );
 }

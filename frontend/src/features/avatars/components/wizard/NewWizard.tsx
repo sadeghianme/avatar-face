@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
+import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { useCreationCache, useDeleteCreation } from "@/features/avatars/api";
@@ -194,10 +195,14 @@ export function NewWizard({
         <ModelStep chosen={recallChoices(tabStore(), null)?.model ?? null} onChoose={chooseModel} />
         <StepFooter
           back={
-            <Link to="/app" className="btn-secondary min-h-11">
-              <Icon name="back" className="h-4 w-4 rtl:-scale-x-100" />
+            <ButtonLink
+              to="/app"
+              variant="secondary"
+              className="min-h-11"
+              icon={<Icon name="back" className="h-4 w-4 rtl:-scale-x-100" />}
+            >
               {t("wzCancel")}
-            </Link>
+            </ButtonLink>
           }
         >
           <p className="text-end text-sm text-gray-500 dark:text-gray-400">{t("wzModelPick")}</p>
@@ -226,9 +231,9 @@ export function NewWizard({
           {gone ? t("createErr_creation_not_found") : t("error")}
         </p>
         <StepFooter>
-          <Link to="/avatars/new" state={FRESH_ENTRY} className="btn-primary min-h-11">
+          <ButtonLink to="/avatars/new" state={FRESH_ENTRY} className="min-h-11">
             {t("createStartNew")}
-          </Link>
+          </ButtonLink>
         </StepFooter>
       </>
     );
@@ -243,9 +248,9 @@ export function NewWizard({
       <>
         <p className="text-sm text-gray-600 dark:text-gray-300">{t("createExpired")}</p>
         <StepFooter>
-          <Link to="/avatars/new" state={FRESH_ENTRY} className="btn-primary min-h-11">
+          <ButtonLink to="/avatars/new" state={FRESH_ENTRY} className="min-h-11">
             {t("createStartNew")}
-          </Link>
+          </ButtonLink>
         </StepFooter>
       </>
     );

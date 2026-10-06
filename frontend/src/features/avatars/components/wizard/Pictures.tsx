@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Icon } from "@/components/ui/Icon";
+import { Label } from "@/components/ui/Label";
 import { RangeInput } from "@/components/ui/RangeInput";
 import { Spinner } from "@/components/ui/Spinner";
 import { CHECKER_STYLE, LookPicture, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
@@ -219,9 +220,9 @@ export function Result({
           <span className="pointer-events-none absolute end-3 top-3 rounded-full bg-brand-600 px-2.5 py-1 text-xs font-medium text-white shadow">
             {t("wzAfter")}
           </span>
-          <label htmlFor={`${ids}-split`} className="sr-only">
+          <Label htmlFor={`${ids}-split`} srOnly>
             {t("wzCompare")}
-          </label>
+          </Label>
           <RangeInput
             id={`${ids}-split`}
             min={0}

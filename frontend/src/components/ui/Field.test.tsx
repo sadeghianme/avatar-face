@@ -8,6 +8,7 @@ import { Field } from "@/components/ui/Field";
 import { FieldError } from "@/components/ui/FieldError";
 import { FileInput } from "@/components/ui/FileInput";
 import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { RangeInput } from "@/components/ui/RangeInput";
 import { Select } from "@/components/ui/Select";
@@ -174,6 +175,51 @@ describe("Checkbox", () => {
     await userEvent.click(screen.getByText("For checking a fit"));
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(box).toBeChecked();
+  });
+});
+
+describe("Label", () => {
+  it("names one control by htmlFor, with the field label look", () => {
+    render(
+      <>
+        <Label htmlFor="change">Describe a change</Label>
+        <Textarea id="change" />
+      </>
+    );
+    expect(screen.getByRole("textbox", { name: "Describe a change" })).toBeInTheDocument();
+    expect(screen.getByText("Describe a change")).toHaveClass("label");
+  });
+
+  it("as a paragraph, names a group by id", () => {
+    render(
+      <>
+        <Label as="p" id="bg-label">
+          Background
+        </Label>
+        <div role="radiogroup" aria-labelledby="bg-label" />
+      </>
+    );
+    expect(screen.getByText("Background").tagName).toBe("P");
+    expect(screen.getByRole("radiogroup", { name: "Background" })).toBeInTheDocument();
+  });
+
+  it("plain, wraps its control; srOnly, is only heard", () => {
+    render(
+      <>
+        <Label look="plain" className="flex gap-2">
+          <ColorInput />
+          Custom colour
+        </Label>
+        <Label htmlFor="split" srOnly>
+          Compare
+        </Label>
+        <RangeInput id="split" />
+      </>
+    );
+    expect(screen.getByLabelText("Custom colour")).toHaveAttribute("type", "color");
+    expect(screen.getByText("Custom colour")).not.toHaveClass("label");
+    expect(screen.getByText("Compare")).toHaveClass("sr-only");
+    expect(screen.getByRole("slider", { name: "Compare" })).toBeInTheDocument();
   });
 });
 
