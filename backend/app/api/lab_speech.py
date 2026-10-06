@@ -53,6 +53,8 @@ async def synthesize(body: LabSpeechRequest, ctx: OrgMember, db: DB) -> LabSpeec
         try:
             audio, duration, cues, baseline = await lab_timing.synthesize_native(body.text, body.voice)
         except Exception as error:
+            # Broad on purpose: the lab model's runtime fails in its own
+            # types, and every one of them is this 422.
             logger.exception("Native lip-sync synthesis failed")
             raise Validation422(
                 "The lab model could not return valid phoneme timings. Check its model and runtime configuration.",
@@ -141,6 +143,8 @@ async def stream(body: LabSpeechRequest, ctx: OrgMember, db: DB):
         except asyncio.CancelledError:
             raise
         except Exception:
+            # Broad on purpose: the headers are sent, so any failure is said
+            # in the stream itself, where the client shows it.
             logger.exception("Lab speech stream failed")
             yield _line({"type": "error", "code": "speech_stream_failed",
                 "detail": "Speech preparation was interrupted. Please try again. No automatic retry was made."})

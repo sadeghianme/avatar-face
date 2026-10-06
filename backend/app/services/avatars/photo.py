@@ -31,7 +31,7 @@ from app.services.avatars.derived import rebuild_layers, rebuild_thumbnail
 from app.services.avatars.history import snapshot
 from app.services.publishing import mark_dirty
 from app.services.segment import SegmentationUnavailable, remove_background
-from app.services.storage import get_storage
+from app.services.storage import STORAGE_ERRORS, get_storage
 
 logger = logging.getLogger("liveface.avatars")
 
@@ -210,7 +210,7 @@ async def _kit_follows_rig(avatar: Avatar, storage) -> list[str]:
         return []
     try:
         rig = json.loads(await storage.get_bytes(avatar.rig_key))
-    except Exception:
+    except STORAGE_ERRORS:
         logger.exception("rig read failed for avatar %s", avatar.id)
         return []
     return await mouth_kit.follow_points(avatar, storage, rig["points"], rig["image_size"])
@@ -268,7 +268,8 @@ async def _uncrop_rig(avatar: Avatar, storage, cropped_keys: list[str]) -> None:
         for key in cropped_keys:
             try:
                 cropped = Image.open(io.BytesIO(await storage.get_bytes(key)))
-            except Exception:
+            except STORAGE_ERRORS:  # Pillow's unreadable file is an OSError too
+                logger.warning("crop candidate %s of avatar %s unreadable", key, avatar.id)
                 continue
             origin = _locate_crop(precrop, cropped)
             if origin is not None:
@@ -335,6 +336,8 @@ def _redetect_rig(
     try:
         points, blendshapes, size, detected = landmarks_from_image(image_bytes)
     except Exception:
+        # Broad on purpose: the detector's runtime fails in its own types,
+        # and the reset then leaves the rig as it is.
         logger.exception("rig rebuild failed after crop reset for avatar %s", avatar.id)
         return None
     if previous.get("user_anchors"):

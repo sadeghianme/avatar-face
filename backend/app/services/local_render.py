@@ -52,6 +52,10 @@ def capability() -> dict:
                 ChatterboxTTS,
             )
         except Exception as exc:
+            # Broad on purpose: importing torch can fail as ImportError,
+            # OSError (a missing library) or RuntimeError (the device), and
+            # every one of them means "not here".
+            logger.info("local rendering unavailable: %s", type(exc).__name__)
             _probe_result = {
                 "available": False,
                 "device": None,
@@ -167,5 +171,7 @@ async def render_job(org_id: str, job_id: str) -> None:
             await clonejobs.finish_job(storage, org_id, job_id)
             logger.info("rendered clone job %s in-process", job_id)
     except Exception as exc:
+        # Broad on purpose: the background job's boundary; the job records
+        # how it failed.
         logger.exception("in-process render failed for job %s", job_id)
         await clonejobs.finish_job(storage, org_id, job_id, error=f"{type(exc).__name__}: {exc}"[:900])

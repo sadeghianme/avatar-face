@@ -4,6 +4,7 @@ points, unless the drift and shape gates refuse it."""
 from __future__ import annotations
 
 import io
+import logging
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -29,6 +30,8 @@ from app.services.performance_kit.registration import (
     similarity_on_anchors,
 )
 from app.services.performance_kit.requests import PoseRequest
+
+logger = logging.getLogger("liveface.performance_kit")
 
 # Drift guards, measured on the Reference's six poses (registered, as a
 # fraction of the face width, 234 to 454) and set with a wide margin:
@@ -237,6 +240,9 @@ def register_answer(
         with Image.open(io.BytesIO(answer)) as decoded:
             image = decoded.convert("RGB")
     except Exception:
+        # Broad on purpose: Pillow raises many types on bytes it cannot
+        # decode, and any of them is an unusable answer.
+        logger.warning("the %s answer is not a readable image", request.shape, exc_info=True)
         result.reason = _reason("unreadable_result", "The AI returned no usable image")
         return result
     aspect = image.width / image.height

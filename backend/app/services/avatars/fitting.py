@@ -35,7 +35,7 @@ from app.services.anchor_fit import (
     write_fit_base,
 )
 from app.services.publishing import mark_dirty
-from app.services.storage import get_storage
+from app.services.storage import STORAGE_ERRORS, get_storage
 
 logger = logging.getLogger("liveface.avatars")
 
@@ -62,7 +62,8 @@ async def rig_profile(avatar: Avatar) -> str | None:
         return None
     try:
         rig = json.loads(await get_storage().get_bytes(avatar.rig_key))
-    except Exception:
+    except STORAGE_ERRORS:
+        logger.debug("no readable rig for avatar %s", avatar.id, exc_info=True)
         return None
     profile = rig.get("render_profile")
     return profile if isinstance(profile, str) else None
@@ -92,7 +93,7 @@ async def reprofile_visemes(avatar: Avatar, visemes: bool = True) -> None:
         await storage.put_bytes(
             avatar.rig_key, json.dumps(rig).encode(), "application/json"
         )
-    except Exception:
+    except STORAGE_ERRORS:
         logger.exception("viseme reprofile failed for avatar %s", avatar.id)
 
 

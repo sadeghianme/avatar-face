@@ -229,6 +229,8 @@ class JobRunner:
                 # the next startup marks it interrupted.
                 raise
             except Exception:
+                # Broad on purpose: the runner's last line. A job's own handler
+                # records its failure; this only keeps the runner alive.
                 logger.exception("job %s (%s) failed outside its handler", job.id, job.step)
             finally:
                 self.release(job)

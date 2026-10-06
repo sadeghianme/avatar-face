@@ -105,6 +105,8 @@ async def _generate(job: Job, params: dict) -> None:
             "Image generation is not configured on this server", code="imagegen_unavailable"
         ) from exc
     except Exception as exc:
+        # Broad on purpose: the provider's call fails in many types; any
+        # other than those above is provider_error, which may be retried.
         logger.exception("generation %s failed", job.id)
         raise AppError("The AI service did not return an image; try again",
                        code="provider_error") from exc

@@ -98,6 +98,7 @@ async def _run(job: Job, params: dict) -> None:
         logger.info("mouth kit %s for avatar %s failed: %s", job.id, job.subject_id, exc.detail)
         _end(job, FAILED, {"code": exc.code, "detail": exc.detail})
     except Exception:
+        # Broad on purpose: the job boundary; the panel is told it failed.
         logger.exception("mouth kit %s for avatar %s crashed", job.id, job.subject_id)
         _end(job, FAILED, {"code": "job_failed", "detail": "Something went wrong; try again"})
     else:

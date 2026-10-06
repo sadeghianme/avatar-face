@@ -47,7 +47,7 @@ async def sweep_once() -> int:
         try:
             removed = await get_storage().sweep(ORG_PREFIX, ttl, CANDIDATE_SEGMENT)
         except Exception:
-            # Never fatal: a storage hiccup must not take the API with it, and
+            # Broad on purpose, never fatal: a storage hiccup must not take the API with it, and
             # the next tick will try again.
             logger.exception("candidate sweep failed")
         if removed:
@@ -66,6 +66,8 @@ async def expire_creations() -> int:
     """
     from app.services.creations import expire_idle, recover_stranded
 
+    # Broad on purpose, both: periodic housekeeping must never take the
+    # API down, and the next tick tries again.
     try:
         await recover_stranded()
     except Exception:

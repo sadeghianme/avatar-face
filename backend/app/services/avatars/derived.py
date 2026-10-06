@@ -37,6 +37,8 @@ async def rebuild_layers(avatar: Avatar, storage) -> None:
                 avatar, storage, await storage.get_bytes(avatar.image_key), rig["face_box"]
             )
     except Exception:
+        # Broad on purpose: segmentation, matting and storage, all optional
+        # by contract; without layers the embed draws the single photo.
         logger.exception("layer rebuild failed for avatar %s", avatar.id)
 
 
@@ -49,8 +51,9 @@ async def rebuild_thumbnail(avatar: Avatar, storage) -> None:
     try:
         thumb, thumb_type = make_thumbnail(await storage.get_bytes(avatar.image_key))
     except Exception:
-        # A stale thumbnail is a cosmetic problem. Failing the request is not:
-        # it would leave someone unable to restore their original photo
+        # Broad on purpose: decoding and resizing any picture. A stale
+        # thumbnail is a cosmetic problem. Failing the request is not: it
+        # would leave someone unable to restore their original photo
         # because the preview of it could not be regenerated.
         logger.exception("thumbnail rebuild failed for avatar %s", avatar.id)
         return

@@ -110,7 +110,8 @@ class CallGuard:
                 try:
                     await self._on_first_send()
                 except Exception as exc:
-                    # Kept for the next call to try again; this one does
+                    # Broad on purpose (the caller's callback). Kept for the
+                    # next call to try again; this one does
                     # not go, since nothing would say what allowed it.
                     logger.exception("could not record the consent for org %s", self.org_id)
                     raise _Stopped(*CONSENT_NOT_RECORDED) from exc
@@ -158,7 +159,7 @@ class CallGuard:
                         await record_generation(db, self.org_id, "gemini", SHAPES_CALL)
                     self.metered += 1
             except Exception:
-                # The call happened either way; a lost usage row must not
+                # Broad on purpose: the call happened either way; a lost usage row must not
                 # turn an answer into a failure.
                 logger.exception("could not meter a mouth shape call for org %s", self.org_id)
             finally:

@@ -202,6 +202,8 @@ async def follow_points(avatar, storage, points, image_size=None) -> list[str]:
         manifest = json.loads(await storage.get_bytes(key))
         rebased = await run_cpu(performance_kit.rebase_manifest, manifest, points, None, size)
     except Exception:
+        # Broad on purpose: storage, the manifest and its triangulation fail
+        # in many types; a kit that cannot follow is dropped, not left wrong.
         logger.exception("the mouth kit of avatar %s could not follow its points", avatar.id)
         return drop(avatar, REBASE_FAILED)
     if rebased == manifest:

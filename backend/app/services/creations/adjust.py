@@ -260,6 +260,8 @@ async def _adjust(job: Job, params: dict) -> None:
                 "AI editing is not configured on this server", code="imagegen_unavailable"
             ) from exc
         except Exception:
+            # Broad on purpose: the provider's call fails in many types; any
+            # other than those above costs this candidate, not the round.
             logger.exception("adjust %s: the provider call failed", job.id)
             outcomes.append((
                 photo_adjust.Candidate(None, rejected=photo_adjust.reason(

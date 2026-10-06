@@ -18,7 +18,7 @@ from app.db import execute_dml
 from app.models import Creation, CreationStatus
 from app.services.creations import rules
 from app.services.creations.rules import creation_prefix
-from app.services.storage import get_storage
+from app.services.storage import STORAGE_ERRORS, get_storage
 
 logger = logging.getLogger("liveface.creations")
 
@@ -122,5 +122,5 @@ async def delete(db: AsyncSession, creation: Creation) -> None:
     # owner's problem.
     try:
         await storage.delete_prefix(prefix)
-    except Exception:
+    except STORAGE_ERRORS:
         logger.exception("second file pass failed for deleted creation %s", creation_id)

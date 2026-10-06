@@ -437,11 +437,14 @@ async def build_kit(
                     record.update(outcome="cancelled", billed=None)
                     raise
                 except Exception as exc:
+                    # Broad on purpose: the provider's call, classified by
+                    # call_billing whatever it raised.
                     if call_billing(exc) is None:
                         # Sent, and possibly billed: the kit's own bound, or
                         # the provider's read or write timeout (imagegen's
                         # 90 s arrives as httpx's). Never asked again; the
                         # caller decides how to meter it.
+                        logger.warning("performance kit: the %s edit timed out (%r)", shape, exc)
                         record.update(outcome="timeout", billed=None)
                         entry.update(outcome="timeout", reason=_reason(
                             "timeout", "The AI did not answer in time"))
@@ -459,7 +462,7 @@ async def build_kit(
                     base_detected,
                 )
             except Exception:
-                # A check that breaks on an answer is a check the answer did
+                # Broad on purpose. A check that breaks on an answer is a check the answer did
                 # not pass: given up, like any rejected one, and the other
                 # requests' paid calls carry on.
                 logger.exception("performance kit: checking the %s answer failed", shape)
@@ -515,6 +518,8 @@ async def build_kit(
             }
         await report_progress("mouth kit ready", 1.0)
     except Exception as exc:
+        # Broad on purpose: whatever stopped the task group is reported as
+        # KitFailed, with every call sent accounted for.
         cause = exc.exceptions[0] if isinstance(exc, ExceptionGroup) else exc
         logger.error("performance kit failed after %d call(s): %r", state["calls"], cause)
         raise KitFailed(state["calls"], state["billed"], call_log) from cause

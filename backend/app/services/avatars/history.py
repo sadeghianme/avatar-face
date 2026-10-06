@@ -24,7 +24,7 @@ from app.models import Avatar
 from app.services import mouth_kit
 from app.services.avatars.derived import rebuild_layers
 from app.services.publishing import mark_dirty
-from app.services.storage import get_storage
+from app.services.storage import STORAGE_ERRORS, get_storage
 
 logger = logging.getLogger("liveface.avatars")
 
@@ -49,7 +49,7 @@ async def snapshot(avatar: Avatar, storage, label: str) -> None:
                 key, await storage.get_bytes(avatar.rig_key), "application/json"
             )
             entry["rig_snapshot_key"] = key
-        except Exception:
+        except STORAGE_ERRORS:
             # A missing rig must not block the edit; undo then restores the
             # image and leaves the rig, which is the lesser wrong.
             logger.exception("rig snapshot failed for avatar %s", avatar.id)
@@ -88,12 +88,12 @@ async def undo(db: AsyncSession, avatar: Avatar) -> None:
         before = restored = None
         try:
             before = json.loads(await storage.get_bytes(avatar.rig_key))
-        except Exception:
+        except STORAGE_ERRORS:
             logger.exception("rig read failed for avatar %s", avatar.id)
         try:
             restored = await storage.get_bytes(snapshot_key)
             await storage.put_bytes(avatar.rig_key, restored, "application/json")
-        except Exception:
+        except STORAGE_ERRORS:
             logger.exception("rig restore failed for avatar %s", avatar.id)
             restored = None
         if restored is not None:

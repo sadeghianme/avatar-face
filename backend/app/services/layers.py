@@ -201,6 +201,8 @@ async def store_layers(avatar, storage, image_bytes: bytes, face_box: list[float
         # the shared CPU thread rather than the event loop.
         built = await run_cpu(build_layers, image_bytes, face_box)
     except Exception:
+        # Broad on purpose: segmentation and matting are optional by
+        # contract; no layers is a working single-photo avatar.
         logger.exception("layer build failed for avatar %s", avatar.id)
         return False
     for name in LAYER_FILES:

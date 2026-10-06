@@ -200,6 +200,8 @@ def shrink_source(data: bytes) -> tuple[bytes, str]:
         image.save(out, format="JPEG", quality=SOURCE_QUALITY, optimize=True)
         return out.getvalue(), "image/jpeg"
     except Exception:
+        # Broad on purpose: Pillow raises many types on a picture it cannot
+        # decode; the source is then sent as it is.
         logger.exception("could not shrink the source; sending it as-is")
         return data, "image/png"
 

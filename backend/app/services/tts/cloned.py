@@ -126,14 +126,15 @@ async def _reference_for(voice: str) -> bytes | None:
     if not org_id or not name:
         return None
     from app.services import clonejobs
-    from app.services.storage import get_storage
+    from app.services.storage import STORAGE_ERRORS, get_storage
 
     storage = get_storage()
     for job in await clonejobs.list_jobs(storage, org_id):
         if job.get("name") == name:
             try:
                 return await storage.get_bytes(clonejobs.reference_key(org_id, job["id"]))
-            except Exception:
+            except STORAGE_ERRORS:
+                logger.warning("the reference of cloned voice %s is unreadable", voice)
                 return None
     return None
 

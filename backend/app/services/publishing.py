@@ -33,6 +33,8 @@ import logging
 import re
 from datetime import datetime, timezone
 
+from app.services.storage import STORAGE_ERRORS
+
 logger = logging.getLogger("liveface.publishing")
 
 LAYER_NAMES = ("background", "body", "head")
@@ -302,7 +304,7 @@ async def _prune(avatar, storage, keep_from: list[dict | None]) -> None:
     root = f"{avatar_root(avatar.org_id, avatar.id)}published/"
     try:
         names = await storage.list_names(root)
-    except Exception:  # pruning is housekeeping, never fatal
+    except STORAGE_ERRORS:  # pruning is housekeeping, never fatal
         logger.exception("could not list %s", root)
         return
     for name in names:
@@ -311,7 +313,7 @@ async def _prune(avatar, storage, keep_from: list[dict | None]) -> None:
             continue
         try:
             await storage.delete_prefix(f"{root}{name}/")
-        except Exception:
+        except STORAGE_ERRORS:
             logger.exception("could not prune %s%s", root, name)
 
 
@@ -342,14 +344,14 @@ async def _sweep_mouth_files(avatar, storage, mouth: dict | None) -> None:
     named = _mouth_keys(mouth)
     try:
         names = await storage.list_names(root)
-    except Exception:
+    except STORAGE_ERRORS:
         logger.exception("could not list %s", root)
         return
     for name in names:
         if _MOUTH_FILE.fullmatch(name) and f"{root}{name}" not in named:
             try:
                 await storage.delete(f"{root}{name}")
-            except Exception:
+            except STORAGE_ERRORS:
                 logger.exception("could not delete %s%s", root, name)
 
 

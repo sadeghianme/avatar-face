@@ -150,6 +150,7 @@ def check_image(data: bytes) -> RigCheck:
     try:
         image = Image.open(io.BytesIO(data)).convert("RGB")
     except Exception:
+        # Broad on purpose: Pillow raises many types on untrusted bytes.
         return RigCheck(False, "not a readable image")
 
     if not get_settings().rig_model_path:
@@ -161,7 +162,7 @@ def check_image(data: bytes) -> RigCheck:
 
     try:
         points = _mediapipe_landmarks(image)
-    except Exception:
+    except (ValueError, RuntimeError):  # no face; no landmarker
         return RigCheck(False, "no face detected", detected=False, code="no_face")
 
     return check_landmarks(points, image.size, detected=True)
@@ -191,13 +192,14 @@ def salvage_portrait(data: bytes) -> bytes | None:
     try:
         image = Image.open(io.BytesIO(data)).convert("RGB")
     except Exception:
+        # Broad on purpose: Pillow raises many types on untrusted bytes.
         return None
 
     from app.services.rig import _mediapipe_landmarks
 
     try:
         points = _mediapipe_landmarks(image)
-    except Exception:
+    except (ValueError, RuntimeError):  # no face; no landmarker
         return None
 
     xs, ys = points[:, 0], points[:, 1]

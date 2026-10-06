@@ -5,6 +5,8 @@ plus the source (db | env | unset), never the value. Gated to org owners.
 """
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -12,6 +14,7 @@ from app.api.deps import DB, OrgOwner
 from app.core.credentials import CREDENTIAL_FIELDS, PROVIDER_KIND, credentials
 from app.core.errors import Validation422
 
+logger = logging.getLogger("liveface.integrations")
 router = APIRouter(prefix="/orgs/{org_id}/integrations", tags=["integrations"])
 
 
@@ -93,4 +96,7 @@ async def test_provider(provider: str, ctx: OrgOwner) -> dict:
         voices = await tts.voices()
         return {"ok": True, "voices": len(voices)}
     except Exception as exc:
+        # Broad on purpose: each provider's client fails in its own types,
+        # and reporting any of them is what this check is for.
+        logger.warning("provider check failed for %s", provider, exc_info=True)
         return {"ok": False, "error": str(exc)[:300]}

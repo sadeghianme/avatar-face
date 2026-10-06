@@ -417,6 +417,9 @@ def fallback_request(data: bytes) -> Request | None:
     try:
         points = pa._detect(image)
     except Exception:
+        # Broad on purpose: the detector's runtime fails in its own types;
+        # then there is no fallback crop to try.
+        logger.exception("teeth fallback: the face could not be detected")
         return None
     if points is None:
         return None
@@ -487,7 +490,8 @@ async def make_teeth(
             try:
                 await on_send()
             except Exception as exc:
-                # Nothing leaves that nothing would say was allowed.
+                # Broad on purpose (the caller's callback). Nothing leaves
+                # that nothing would say was allowed.
                 logger.exception("teeth: the consent could not be recorded")
                 raise TeethFailure(
                     "consent_not_recorded",
@@ -520,6 +524,7 @@ async def make_teeth(
                 "imagegen_unavailable", "AI editing is not configured on this server", 409
             ) from exc
         except Exception as exc:
+            # Broad on purpose: the provider's call fails in many types.
             # Classified as the mouth kit classifies its calls
             # (performance_kit.call_billing, the one classification): a
             # timeout was sent and may have been billed, so it is metered;

@@ -167,6 +167,7 @@ async def lifespan(app: FastAPI):
         try:
             await warm_native()
         except Exception:
+            # Broad on purpose: an optional warm-up must never stop the app.
             logger.exception("Optional lab speech warm-up failed")
 
     lab_warmup = asyncio.create_task(warm_lab())

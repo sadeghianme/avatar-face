@@ -88,6 +88,8 @@ async def _run(job: Job, params: dict) -> None:
         logger.info("job %s (%s) failed: %s", job.id, job.step, exc.detail)
         await _write_job(job, FAILED, params, error_record(exc.code, exc.detail))
     except Exception:
+        # Broad on purpose: the job boundary. Whatever the work raised, the
+        # row says the job failed, and the owner can retry it.
         logger.exception("job %s (%s) crashed", job.id, job.step)
         await _write_job(
             job, FAILED, params, error_record("job_failed", "Something went wrong; try again")

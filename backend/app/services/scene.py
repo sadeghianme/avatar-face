@@ -252,17 +252,19 @@ async def sweep_files(avatar: Any, storage, scene: dict | None) -> None:
     these files does)."""
     import logging
 
+    from app.services.storage import STORAGE_ERRORS
+
     logger = logging.getLogger("liveface.scene")
     root = f"orgs/{avatar.org_id}/avatars/{avatar.id}/"
     named = keys(scene)
     try:
         names = await storage.list_names(root)
-    except Exception:
+    except STORAGE_ERRORS:
         logger.exception("could not list %s", root)
         return
     for name in names:
         if SCENE_FILE.fullmatch(name) and f"{root}{name}" not in named:
             try:
                 await storage.delete(f"{root}{name}")
-            except Exception:
+            except STORAGE_ERRORS:
                 logger.exception("could not delete %s%s", root, name)

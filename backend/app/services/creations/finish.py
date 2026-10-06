@@ -11,6 +11,7 @@ from uuid import uuid4
 
 import numpy as np
 from sqlalchemy import delete, select, update
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.errors import Conflict409, Validation422
 from app.db import execute_dml, get_session_factory
@@ -96,6 +97,8 @@ async def _finish(job: Job, params: dict) -> None:
                 raise RuntimeError("the creation left finishing while it was built")
             await db.commit()
     except Exception:
+        # Broad on purpose, and re-raised: whatever failed, the half-built
+        # avatar goes and the creation is a draft again.
         await _undo_finish_retrying(org_id, creation_id, avatar_id)
         raise
     # The avatar has its own copies now. Deleted after the commit, so a crash
@@ -110,7 +113,8 @@ async def _finish(job: Job, params: dict) -> None:
         try:
             async with get_session_factory()() as db:
                 await record_generated_avatar(db, org_id, generated.get("provider") or "gemini")
-        except Exception:
+        except SQLAlchemyError:
+            # The avatar is finished; a lost usage row must not undo that.
             logger.exception("could not record the kept generation of %s", creation_id)
 
 
@@ -266,6 +270,8 @@ async def _undo_finish_retrying(org_id: str, creation_id: str, avatar_id: str | 
             await _undo_finish(org_id, creation_id, avatar_id)
             return
         except Exception:
+            # Broad on purpose: whatever failed the finish may fail its undo
+            # too; it is tried again, then left to the sweeper.
             if delay is None:
                 logger.exception(
                     "could not put creation %s back to draft; the sweeper will", creation_id

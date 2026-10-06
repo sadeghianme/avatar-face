@@ -62,8 +62,10 @@ async def create_job(
         raise Validation422("Voice name must be short and plain", code="bad_name")
     try:
         parsed = json.loads(lines)
-        assert isinstance(parsed, list) and all(isinstance(l, str) for l in parsed)
-    except Exception:
+    except (ValueError, RecursionError):
+        parsed = None
+    # Checked, not asserted: python -O drops asserts, and this is input.
+    if not (isinstance(parsed, list) and all(isinstance(line, str) for line in parsed)):
         raise Validation422("lines must be a JSON array of strings", code="bad_lines")
     cleaned = [line.strip() for line in parsed if line.strip()]
     if not cleaned:

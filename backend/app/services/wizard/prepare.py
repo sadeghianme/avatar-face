@@ -57,10 +57,13 @@ def cut_out(png: bytes, face_type: str) -> bytes | None:
         except segment.SegmentationUnavailable:
             pass
         except Exception:
+            # Broad on purpose: the segmenter's runtime fails in its own
+            # types; the backdrop keyer is tried instead.
             logger.exception("segmenting a prepared picture failed; keying its backdrop")
     try:
         return backdrop.cut_backdrop(png)
     except Exception:
+        # Broad on purpose: a picture neither can cut is kept as it is.
         logger.exception("keying a prepared picture's backdrop failed")
         return None
 
@@ -237,6 +240,8 @@ async def _ask_ai(
         except AppError:
             raise
         except Exception as exc:
+            # Broad on purpose: the provider's call fails in many types; any
+            # other than those above is provider_error, which may be retried.
             logger.exception("prepare %s: the provider call failed", job.id)
             raise AppError(
                 "The AI service did not return a picture; try again", code="provider_error"

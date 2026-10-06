@@ -46,8 +46,10 @@ async def landmark_depth(avatar_id: str, ctx: OrgMember, db: DB) -> dict:
     image_bytes = await get_storage().get_bytes(avatar.image_key)
     try:
         z_values = _landmark_z(image_bytes)
-    except Exception:
-        logger.info("lab depth: landmarker found nothing for avatar %s", avatar_id)
+    except (RuntimeError, OSError, ValueError) as exc:
+        # No face, or no landmarker (RuntimeError); a picture Pillow cannot
+        # read (OSError, ValueError).
+        logger.info("lab depth: landmarker found nothing for avatar %s (%s)", avatar_id, exc)
         z_values = None
     return {"detected": z_values is not None, "z": z_values or []}
 

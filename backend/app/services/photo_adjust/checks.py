@@ -103,6 +103,8 @@ def _checked(
         try:
             found = detect_anchors(png, line)
         except Exception:
+            # Broad on purpose: the detector's runtime fails in its own
+            # types; a result that cannot be checked is not offered.
             logger.exception("checking a candidate failed")
             candidate.rejected = reason("check_failed", "The result could not be checked")
             return candidate
@@ -145,6 +147,9 @@ def finish_candidate(
         with Image.open(io.BytesIO(answer)) as decoded:
             result = decoded.convert("RGB")
     except Exception:
+        # Broad on purpose: Pillow raises many types on bytes it cannot
+        # decode, and any of them is an unusable answer.
+        logger.warning("an adjust answer is not a readable image", exc_info=True)
         return Candidate(
             None, rejected=reason("unreadable_result", "The AI returned no usable image")
         )
@@ -153,6 +158,7 @@ def finish_candidate(
         try:
             result_points = _detect(result)
         except Exception:
+            # Broad on purpose: the detector's runtime fails in its own types.
             logger.exception("detecting the touch-up answer failed")
             result_points = None
         if result_points is None:
@@ -188,6 +194,9 @@ def finish_candidate(
         try:
             source_points = _detect(source)
         except Exception:
+            # Broad on purpose: the detector's runtime fails in its own types;
+            # the result is then checked without the source's face.
+            logger.exception("detecting the source of an adjust answer failed")
             source_points = None
     return _checked(result, mode, face_type, source, source_points, False)
 

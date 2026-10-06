@@ -105,7 +105,7 @@ async def _own_mouth(
         logger.info("finish %s: no AI mouth (%s)", job.id, exc.code)
         return standard(exc.note())
     except Exception:
-        # Not knowing whether AI may make the mouth (the database, say) is
+        # Broad on purpose. Not knowing whether AI may make the mouth (the database, say) is
         # not a reason to lose the avatar.
         logger.exception("finish %s: could not tell whether AI may make the mouth", job.id)
         return standard(TEETH_FAILED)
@@ -125,7 +125,9 @@ async def _own_mouth(
         logger.info("finish %s: no mouth kit on this server (%s); the teeth alone", job.id, exc)
         return await _single_teeth(job, avatar, image, storage, sending)
     except Exception:
-        # Every call it sent was metered as it ended (mouth_kit.CallGuard).
+        # Broad on purpose: a kit that fails is the standard mouth, never a
+        # failed finish. Every call it sent was metered as it ended
+        # (mouth_kit.CallGuard).
         logger.exception("finish %s: making the mouth kit failed", job.id)
         return standard(TEETH_FAILED)
     job.report(0.87, mouth_kit.FIT_LABEL)
@@ -133,6 +135,8 @@ async def _own_mouth(
     try:
         await mouth_kit.store(avatar, storage, result, source="finish")
     except Exception:
+        # Broad on purpose: a mouth that cannot be stored falls back to the
+        # standard one; it never fails the finish.
         logger.exception("finish %s: storing the mouth kit failed", job.id)
         avatar.ai_edited = ai_edited
         return standard(TEETH_FAILED)
@@ -189,6 +193,8 @@ async def _single_teeth(job: Job, avatar: Avatar, image: bytes, storage, sending
         logger.info("finish %s: standard teeth (%s)", job.id, exc.code)
         note = exc.note()
     except Exception:
+        # Broad on purpose: the provider and the teeth checks fail in many
+        # types; any of them is the standard teeth, never a failed finish.
         logger.exception("finish %s: making the teeth failed", job.id)
         note = TEETH_FAILED
     else:

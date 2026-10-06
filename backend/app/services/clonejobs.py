@@ -24,8 +24,13 @@ customers. If cloning ever becomes customer-facing, this moves to a table.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from uuid import uuid4
+
+from app.services.storage import STORAGE_ERRORS
+
+logger = logging.getLogger("liveface.clonejobs")
 
 STATUSES = ("pending", "processing", "done", "failed")
 # A worker that claimed a job and died must not wedge it forever: past this,
@@ -50,7 +55,8 @@ async def _read_index(storage, org_id: str) -> list[str]:
         return []
     try:
         return json.loads(await storage.get_bytes(_index_key(org_id)))
-    except Exception:
+    except STORAGE_ERRORS:
+        logger.exception("unreadable clone-job index for org %s", org_id)
         return []
 
 
@@ -66,7 +72,8 @@ async def _read_job(storage, org_id: str, job_id: str) -> dict | None:
         return None
     try:
         return json.loads(await storage.get_bytes(key))
-    except Exception:
+    except STORAGE_ERRORS:
+        logger.exception("unreadable clone job %s", key)
         return None
 
 
@@ -169,8 +176,9 @@ async def delete_job(storage, org_id: str, job_id: str) -> bool:
     await storage.delete(_job_key(org_id, job_id))
     try:
         await storage.delete(reference_key(org_id, job_id))
-    except Exception:
-        pass
+    except STORAGE_ERRORS:
+        # The job is gone either way; a reference left behind is swept.
+        logger.warning("could not delete the reference of clone job %s", job_id, exc_info=True)
     ids = [i for i in await _read_index(storage, org_id) if i != job_id]
     await _write_index(storage, org_id, ids)
     return True

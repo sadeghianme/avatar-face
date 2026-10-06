@@ -11,6 +11,7 @@ on third-party origins and must be able to load textures/audio directly.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import time
@@ -19,8 +20,25 @@ from typing import Any
 from urllib.parse import quote, urlencode
 
 import aioboto3
+import aiohttp
+from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import get_settings
+
+#: What a storage call raises when the object, or the service, is not there:
+#: the filesystem's OSError (FileNotFoundError above all) and an invalid key's
+#: ValueError locally; botocore's errors from S3, and aiohttp's or a timeout
+#: when a body read is cut short under aiobotocore. A best-effort read catches
+#: exactly these, so a bug in the code around it is never mistaken for a
+#: missing file.
+STORAGE_ERRORS: tuple[type[Exception], ...] = (
+    OSError,
+    ValueError,
+    BotoCoreError,
+    ClientError,
+    aiohttp.ClientError,
+    asyncio.TimeoutError,
+)
 
 
 class Storage:

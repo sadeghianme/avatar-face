@@ -221,6 +221,8 @@ async def _synthesize_native(
             lab_timing.render_timed, text, voice_id, lang
         )
     except Exception as exc:
+        # Broad on purpose: the ONNX runtime fails in its own types; text no
+        # model can speak is told apart, anything else falls back.
         refused = _unspeakable(exc)
         if refused is not None:
             raise refused from exc

@@ -9,6 +9,8 @@ import logging
 import numpy as np
 from scipy.spatial import Delaunay
 
+from app.services.storage import STORAGE_ERRORS
+
 from app.services.anchor_fit.marks import FaceMarks, marks_to_dict
 from app.services.anchor_fit.scheme import (
     LINE_CORNERS,
@@ -127,7 +129,7 @@ async def read_fit_base(storage, key: str) -> dict | None:
         if not await storage.exists(key):
             return None
         return json.loads(await storage.get_bytes(key))
-    except Exception:
+    except STORAGE_ERRORS:
         # A base is always rebuildable from the photo; an unreadable one is
         # treated as missing rather than blocking the owner's fit.
         logger.exception("unreadable fit base %s", key)
