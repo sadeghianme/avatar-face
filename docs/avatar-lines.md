@@ -171,6 +171,56 @@ choices stay (its steps 3 and 4 read them), and the browser's Back from
 step 3 to step 2 still opens step 2 as it was filled in. The last choices
 are also forgotten when a creation finishes.
 
+### Phones and tablets (2026-10-06)
+
+The dashboard and the public pages, checked on a real local stack at
+360×740, 390×844, 430×932, 844×390 (phones), 768×1024, 1024×1366, 1024×768,
+1180×820 (tablets) and 1440×900 (the desktop, unchanged), light and dark.
+
+```
+breakpoints   below lg (1024)  one column, the drawer, the avatar page's
+                               stage capped: 55% of an upright window
+                               (a 768 tablet got a 736px square that put
+                               Speak a screen down), the window under the
+                               header on a phone on its side; the square
+                               is centred.
+              lg and up        the rail, the avatar page's 60/40 (a 1024
+                               tablet on its side, an iPad Pro upright).
+              sm (640)         tables (API keys, members) are tables from
+                               here; below it each row is stacked, the
+                               name on its own line and cut short
+                               (components/ui/stackTable.ts).
+              max-height 520   a phone on its side: the wizard's progress
+                               scrolls away (as before), the share page's
+                               name and composer take less height.
+touch         (pointer: coarse), the `coarse:` variant (tailwind.config):
+                               44px buttons, fields, header icons, nav
+                               links, row actions, sliders; fields at 16px
+                               (iOS zooms into smaller ones on focus). A
+                               mouse keeps the compact desktop sizes.
+drawer        a modal (role=dialog): focus to the current page's link,
+                               Tab wraps inside, Esc / backdrop / any
+                               route change closes it, the page under it
+                               does not scroll, focus back to the menu
+                               button; it scrolls on a phone on its side.
+fullscreen    an iPhone has no element fullscreen: the stage covers the
+                               window instead (fixed, safe areas padded),
+                               the same button or Esc leaves.
+framing drag  off on a touch screen in one column (TOUCH_ONE_COLUMN): the
+                               stage is most of the screen there, and a
+                               swipe meant to scroll panned the picture
+                               (a draft change). The position pad moves
+                               it; beside the settings (lg) a drag pans.
+wizard bar    a secondary action shows its short words on a phone ("AI",
+                               "Original", "Retry") and its full words
+                               from sm: a finger has no hover for a title.
+```
+
+Reading text is 14px on a phone (the 13px descriptions are `max-lg:text-sm`);
+12px stays for captions, badges, counts and one-line hints. No page scrolls
+sideways at any of the sizes (measured: `scrollWidth - innerWidth` is 0
+everywhere, before and after).
+
 ### The five-step flow (2026-09-25, superseded)
 
 The owner's order (2026-09-25, Step 5 added 2026-09-26): **upload → background
