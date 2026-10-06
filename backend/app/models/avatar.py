@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import enum
-from typing import TYPE_CHECKING
+import json
 
 from sqlalchemy import JSON, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -113,88 +113,10 @@ class Avatar(TimestampedBase):
     # published like framing: changing it marks the draft dirty.
     scene_config: Mapped[dict | None] = mapped_column("scene", JSON, nullable=True)
 
-    if TYPE_CHECKING:
-        # Not columns: set on one instance by the owner API before it is
-        # serialized (api.avatars.routing.sign_motion), read back with a default by
-        # `mouth` and `render_profile` below. Declared for the type checker
-        # only, so the mapper never sees them.
-        signed_motion_url: str | None
-        signed_render_profile: str | None
-
-    @property
-    def scene(self) -> dict | None:
-        """The owner's view of the scene: never the storage key, only
-        whether a background image exists."""
-        from app.services.scene import public_view
-
-        return public_view(self.scene_config)
-
-    @property
-    def mouth(self) -> dict | None:
-        """Public view of the mouth settings — never the storage keys. Its
-        `motion_url` is the presigned URL the owner API signed for this
-        instance (api.avatars: presigning is async, a property is not), or
-        null."""
-        from app.services.mouth import public_view
-
-        return public_view(self.mouth_config, getattr(self, "signed_motion_url", None))
-
-    @property
-    def render_profile(self) -> str | None:
-        """The draft rig's render profile, as the owner API read it off the
-        rig for this instance (api.avatars.routing.sign_motion), or null."""
-        return getattr(self, "signed_render_profile", None)
-
     @property
     def voice(self) -> dict | None:
-        import json
-
+        """`voice_config` decoded: {provider, voice, locale}, or None."""
         try:
             return json.loads(self.voice_config) if self.voice_config else None
         except ValueError:
             return None
-
-    @property
-    def unpublished(self) -> bool:
-        """Has the draft moved ahead of what visitors are served?
-
-        A property rather than something each endpoint computes: the avatar
-        list, the detail page and the publish response must never disagree
-        about whether there is something to publish.
-        """
-        from app.services.publishing import has_unpublished_changes
-
-        return has_unpublished_changes(self)
-
-    @property
-    def published(self) -> bool:
-        """Is a snapshot being served to visitors?
-
-        What embed and share gate on, and not the same question as whether
-        published_at is set: migration 020 gave every avatar live at the
-        time a snapshot with no publish date, and those are live.
-        """
-        from app.services.publishing import config_of
-
-        return config_of(self) is not None
-
-    @property
-    def published_at(self) -> str | None:
-        from app.services.publishing import config_of
-
-        return (config_of(self) or {}).get("published_at")
-
-    @property
-    def undo_label(self) -> str | None:
-        """What an undo would reverse, or None when there is nothing to undo.
-
-        Exposed rather than the raw history so the button can name the change
-        instead of saying "undo" and hoping the user remembers.
-        """
-        import json
-
-        try:
-            history = json.loads(self.edit_history or "[]")
-        except ValueError:
-            return None
-        return history[-1].get("label") if history else None

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from fastapi import BackgroundTasks
 
-from app.api.avatars.routing import one_edit_at_a_time, router, sign_motion
+from app.api.avatars.presenting import avatar_out, signed_view
+from app.api.avatars.routing import one_edit_at_a_time, router
 from app.api.deps import DB, OrgMember
 from app.core.errors import Conflict409
 from app.models import Avatar, AvatarKind
@@ -27,7 +28,7 @@ async def create_avatar(body: AvatarCreate, ctx: OrgMember, db: DB) -> AvatarCre
     avatar, upload_url = await sources.create_for_upload(
         db, ctx.org.id, ctx.membership.user_id, body.name, body.content_type, body.face_type
     )
-    return AvatarCreated(avatar=AvatarOut.model_validate(avatar), upload_url=upload_url)
+    return AvatarCreated(avatar=avatar_out(avatar), upload_url=upload_url)
 
 
 @router.post("/from-url", response_model=AvatarOut, status_code=201)
@@ -129,10 +130,8 @@ async def get_avatar_detail(avatar_id: str, ctx: OrgMember, db: DB) -> AvatarDet
 
     avatar = await repo.require_in_org(db, ctx.org.id, avatar_id)
     storage = get_storage()
-    # Before the model reads `mouth`: the detail is built here, not by the
-    # route class.
-    await sign_motion(avatar)
-    detail = AvatarDetail.model_validate(avatar)
+    # Built here, not by the route class: the detail adds to the view.
+    detail = await signed_view(avatar, AvatarDetail)
     detail.preparing_creation_id = await repo.preparing_creation(db, avatar)
     if avatar.image_key and await storage.exists(avatar.image_key):
         detail.image_url = await storage.presign_get(avatar.image_key)
