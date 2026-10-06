@@ -2,15 +2,17 @@
 // (bundled, IIFE, minified), and liveface.js with the engine's private
 // members renamed to short names: esbuild keeps every property name as
 // written, and the engine's members are most of the bytes its split into
-// modules cost. The names are in mangle-props.json; bundle-mangle.test.ts
-// holds each to never being read under its own name by another bundle, a
-// page, the browser or the network's data.
+// modules cost. The names come from mangle-names.mjs (every private member
+// of the engine's classes, less what mangle-props.json keeps, plus its
+// extras); bundle-mangle.test.ts holds each to never being read under its
+// own name by another bundle, a page, the browser or the network's data.
 import { build } from "esbuild";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { mangledNames } from "./mangle-names.mjs";
+
 const root = fileURLToPath(new URL("..", import.meta.url));
-const { names } = JSON.parse(readFileSync(new URL("mangle-props.json", import.meta.url), "utf8"));
+const names = mangledNames(root);
 
 const bundle = (entry, outfile, extra = {}) =>
   build({
