@@ -1,3 +1,7 @@
+from datetime import timedelta
+
+from app.models import ApiKey, utcnow
+from app.services import api_keys
 from tests.conftest import create_org, create_ready_avatar, register_and_login
 
 
@@ -253,3 +257,36 @@ async def test_simulator_tokens_share_the_embed_rate_limit(client):
     assert statuses.count(429) == 2
     assert response.json()["code"] == "rate_limited"
     assert "retry-after" in response.headers
+
+
+async def test_last_used_is_written_at_most_every_few_minutes(client):
+    """A commit per embed request was a SQLite write on the hottest path."""
+    headers, org_id, avatar_id, created = await _setup(client)
+    key_headers = {"X-Api-Key": created["plaintext"]}
+
+    async def last_used():
+        listing = (await client.get(f"/orgs/{org_id}/api-keys", headers=headers)).json()
+        return listing[0]["last_used_at"]
+
+    assert await last_used() is None
+    await client.get(f"/embed/v1/avatars/{avatar_id}", headers=key_headers)
+    first = await last_used()
+    assert first is not None
+    await client.get(f"/embed/v1/avatars/{avatar_id}", headers=key_headers)
+    assert await last_used() == first
+
+
+async def test_last_used_moves_once_it_is_stale():
+    class Session:
+        commits = 0
+
+        async def commit(self):
+            self.commits += 1
+
+    db = Session()
+    key = ApiKey(org_id="o", name="k", prefix="lf_x", key_hash="h", allowed_domains="")
+    key.last_used_at = (utcnow() - timedelta(minutes=6)).replace(tzinfo=None)
+    await api_keys.mark_used(db, key)  # type: ignore[arg-type]
+    assert db.commits == 1
+    await api_keys.mark_used(db, key)  # type: ignore[arg-type]
+    assert db.commits == 1
