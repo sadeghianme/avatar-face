@@ -80,6 +80,7 @@ const step = (id: StepId, extra: Partial<CreationStep> = {}): CreationStep => ({
   from: null,
   crop: null,
   roll: null,
+  cutout: false,
   ...extra,
 });
 
@@ -108,6 +109,7 @@ function creation(overrides: Partial<WizardCreation> = {}): WizardCreation {
       ai_detections_left: 1,
       last_round: null,
       prepare_rounds_left: 6,
+      free_clears_left: 0,
       last_prepare: null,
     },
     plan: { model: "human", look: "realistic", source: "upload", description: null },

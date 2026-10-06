@@ -8,7 +8,14 @@ import type { Avatar, Org, User } from "@/lib/types";
 export const ORG_ID = "org1";
 
 export function aUser(extra: Partial<User> = {}): User {
-  return { id: "u1", email: "ana@example.com", username: "ana", display_name: "Ana", ...extra };
+  return {
+    id: "u1",
+    email: "ana@example.com",
+    username: "ana",
+    display_name: "Ana",
+    created_at: "2026-09-01T10:00:00Z",
+    ...extra,
+  };
 }
 
 export function anOrg(extra: Partial<Org> = {}): Org {

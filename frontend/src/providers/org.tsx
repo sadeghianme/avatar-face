@@ -4,7 +4,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, u
 import { api } from "@/lib/api";
 import { needsPersonalOrg, settingUpWorkspace } from "@/lib/orgSetup";
 import { queryKeys } from "@/lib/queryKeys";
-import type { Org } from "@/lib/types";
+import type { Org, Schemas, WithDefaults } from "@/lib/types";
 import { useAuth } from "@/providers/auth";
 
 interface OrgState {
@@ -57,7 +57,10 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     setPending(true);
     setSetupFailed(false);
     api
-      .post<Org>("/orgs", { name: `${user.display_name || user.username}'s space`, personal: true })
+      .post<Org>("/orgs", {
+        name: `${user.display_name || user.username}'s space`,
+        personal: true,
+      } satisfies Schemas["OrgCreate"])
       .then(async () => {
         await queryClient.invalidateQueries({ queryKey: queryKeys.orgs() });
         // Made but not listed (a failed refetch): say so, rather than wait forever.
@@ -84,7 +87,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
   const createOrg = useCallback(
     async (name: string) => {
-      const org = await api.post<Org>("/orgs", { name });
+      const org = await api.post<Org>("/orgs", { name } satisfies WithDefaults<Schemas["OrgCreate"], "personal">);
       await queryClient.invalidateQueries({ queryKey: queryKeys.orgs() });
       setCurrent(org);
       return org;

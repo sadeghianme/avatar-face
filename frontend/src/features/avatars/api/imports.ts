@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, uploadWithProgress } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
-import type { Avatar, StockAvatar } from "@/lib/types";
+import type { Avatar, Schemas, StockAvatar, WithDefaults } from "@/lib/types";
 
 /** The ready-made avatars anyone can start from. */
 export function useStockAvatars() {
@@ -25,25 +25,28 @@ export function useImportAvatar(orgId: string) {
   const onSuccess = () => queryClient.invalidateQueries({ queryKey: queryKeys.avatars(orgId) });
   const fromStock = useMutation({
     mutationFn: ({ stockId, name }: { stockId: string; name: string }) =>
-      api.post<Avatar>(`/orgs/${orgId}/avatars/from-stock`, { stock_id: stockId, name }),
+      api.post<Avatar>(`/orgs/${orgId}/avatars/from-stock`, {
+        stock_id: stockId,
+        name,
+      } satisfies Schemas["FromStockRequest"]),
     onSuccess,
   });
   const fromUrl = useMutation({
     mutationFn: ({ url, name }: { url: string; name: string }) =>
-      api.post<Avatar>(`/orgs/${orgId}/avatars/from-url`, { url, name }),
+      api.post<Avatar>(`/orgs/${orgId}/avatars/from-url`, { url, name } satisfies Schemas["AvatarFromUrl"]),
     onSuccess,
   });
   /** The record first, then the file straight to storage, then "uploaded". */
   const fromFile = useMutation({
     mutationFn: async ({ file, name, onProgress }: { file: File; name: string; onProgress: (f: number) => void }) => {
-      const made = await api.post<{ avatar: Avatar; upload_url: string }>(`/orgs/${orgId}/avatars`, {
+      const made = await api.post<Schemas["AvatarCreated"]>(`/orgs/${orgId}/avatars`, {
         name,
         content_type: GLB,
-      });
+      } satisfies WithDefaults<Schemas["AvatarCreate"], "face_type">);
       onProgress(0);
       await uploadWithProgress(made.upload_url, file, onProgress, GLB);
       await api.post(`/orgs/${orgId}/avatars/${made.avatar.id}/uploaded`);
-      return made.avatar;
+      return made.avatar as Avatar;
     },
     onSuccess,
   });

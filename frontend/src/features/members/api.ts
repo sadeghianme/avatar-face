@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
-import type { Invitation, Member, Role } from "@/lib/types";
+import type { Invitation, Member, Role, Schemas } from "@/lib/types";
 
 export function useMembers(orgId: string | undefined) {
   return useQuery({
@@ -35,11 +35,11 @@ function useTeamMutation<T>(orgId: string | undefined, request: (input: T) => Pr
 }
 
 export const useInvite = (orgId: string | undefined) =>
-  useTeamMutation(orgId, (body: { email: string; role: Role }) => api.post(`/orgs/${orgId}/invitations`, body));
+  useTeamMutation(orgId, (body: Schemas["InviteCreate"]) => api.post<Invitation>(`/orgs/${orgId}/invitations`, body));
 
 export const useChangeRole = (orgId: string | undefined) =>
   useTeamMutation(orgId, ({ membershipId, role }: { membershipId: string; role: Role }) =>
-    api.patch(`/orgs/${orgId}/members/${membershipId}`, { role })
+    api.patch<Member>(`/orgs/${orgId}/members/${membershipId}`, { role } satisfies Schemas["RoleUpdate"])
   );
 
 export const useRemoveMember = (orgId: string | undefined) =>

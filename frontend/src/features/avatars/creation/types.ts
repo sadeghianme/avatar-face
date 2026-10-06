@@ -1,7 +1,11 @@
-/** A creation as the creations API returns it: its shapes (see index.ts). */
-import type { FaceStatement } from "@/features/avatars/consent";
+/**
+ * A creation as the creations API returns it: the backend's schemas
+ * (CreationOut, StepOut, JobOut, AnchorsOut, AiOut… in lib/api-types.ts),
+ * with what the server sends as a dict or a plain string said precisely
+ * here (Refine names only fields the schema has). See index.ts.
+ */
 import type { FaceMarks, FitReason } from "@/features/avatars/face-marks";
-import type { FaceType } from "@/lib/types";
+import type { Refine, Schemas } from "@/lib/types";
 
 /** The images of a creation, by opaque id. "adjusted:N" are AI adjust
  * candidates, numbered across rounds (a second round starts after the
@@ -38,28 +42,28 @@ export interface StepAdjust {
   instruction?: string | null;
 }
 
-export interface CreationStep {
-  id: StepId;
-  /** Presigned; a fresh signature on every response (see stabilizeUrls). */
-  url: string;
-  width: number;
-  height: number;
-  from: StepId | null;
-  crop: CropRect | null;
-  roll: number | null;
-  /** On "adjusted:N" only. */
-  adjust?: StepAdjust | null;
-  /** On an original the image model made (POST /creations/generate). */
-  generated?: { model: string; style: AdjustStyle; provider: "gemini" } | null;
-  /** Transparent around the subject: a background removal ("cutout",
-   * "cutout:N"), or a touch-up of one (it keeps the cut-out's alpha). */
-  cutout?: boolean;
-}
+/**
+ * An image of the creation. `url` is presigned, with a fresh signature on
+ * every response (see stabilizeUrls). `cutout`: transparent around the
+ * subject, a background removal ("cutout", "cutout:N") or a touch-up of
+ * one (it keeps the cut-out's alpha).
+ */
+export type CreationStep = Refine<
+  Schemas["StepOut"],
+  {
+    id: StepId;
+    from: StepId | null;
+    crop: CropRect | null;
+    roll: number | null;
+    /** On "adjusted:N" only. */
+    adjust?: StepAdjust | null;
+    /** On an original the image model made (POST /creations/generate). */
+    generated?: { model: string; style: AdjustStyle; provider: "gemini" } | null;
+  }
+>;
 
-export interface PhotoCheck {
-  code: string;
-  detail: string;
-}
+/** A check's or a job's refusal: a code to word, and the server's sentence. */
+export type PhotoCheck = Schemas["JobError"];
 
 export interface CreationAnalysis {
   image_size: [number, number];
@@ -104,161 +108,117 @@ export interface Recommendation {
   reasons: string[];
 }
 
-export interface AnchorValidation {
-  ok: boolean;
-  reasons: FitReason[];
-  warnings: PhotoCheck[];
-  detected: boolean;
-  one_click: boolean;
-}
+export type AnchorValidation = Refine<Schemas["Validation"], { reasons: FitReason[]; warnings: PhotoCheck[] }>;
 
-export interface CreationAnchors {
-  id: string;
-  /** Where the opening marks came from: a detection, the template's guess,
-   * or the vision model's points (a pre-fill the owner still confirms).
-   * Null on anchors made before this was recorded. */
-  source?: "mediapipe" | "template" | "ai" | null;
-  /** The step whose pixels the marks are in; null once that image is gone. */
-  image: StepId | null;
-  image_size: [number, number];
-  detected: boolean;
-  marks: FaceMarks;
-  validation: AnchorValidation;
-}
+/**
+ * The face's points on one image. `source`: where the opening marks came
+ * from (a detection, the template's guess, or the vision model's points, a
+ * pre-fill the owner still confirms); null on anchors made before it was
+ * recorded.
+ */
+export type CreationAnchors = Refine<
+  Schemas["AnchorsOut"],
+  {
+    /** The step whose pixels the marks are in; null once that image is gone. */
+    image: StepId | null;
+    image_size: [number, number];
+    marks: FaceMarks;
+    validation: AnchorValidation;
+  }
+>;
 
-/** A job's step: a creation's, or "mouth_kit", an avatar's mouth made from
- * its photo in the Mouth panel (the same JobOut shape, schemas/job.py). */
-export type JobStep =
-  | "ingest"
-  | "generate"
-  | "adjust"
-  | "background"
-  | "detect"
-  | "finish"
-  | "mouth_kit"
-  // The four-step wizard's step 3 (wizard.ts).
-  | "prepare";
-export type JobState = "queued" | "running" | "done" | "failed" | "interrupted";
+/** A job's step: a creation's, "mouth_kit" (an avatar's mouth made from its
+ * photo in the Mouth panel, the same JobOut shape), or "prepare", the
+ * four-step wizard's step 3 (wizard.ts). */
+export type JobStep = Schemas["JobOut"]["step"];
+export type JobState = Schemas["JobOut"]["state"];
 
 /** How far a counted stage is: "3 of 6" mouth shapes settled (made, or
  * given up on for the standard one). */
-export interface JobCount {
-  done: number;
-  total: number;
-}
+export type JobCount = Schemas["JobCount"];
 
-export interface CreationJob {
-  id: string;
-  step: JobStep;
-  state: JobState;
-  error: PhotoCheck | null;
-  started_at: string;
-  /** Live while queued or running, null once the job has ended. `count`
-   * belongs to its label only (a new label clears it); absent from a
-   * server before it counted anything. */
-  progress: { fraction: number; label: string | null; count?: JobCount | null } | null;
-  retryable: boolean;
-}
+/**
+ * A job. `progress` is live while queued or running, null once it has
+ * ended; its `count` belongs to its label only (a new label clears it).
+ * `error` and `progress` are always sent (null when there is none).
+ */
+export type CreationJob = Refine<
+  Schemas["JobOut"],
+  { error: PhotoCheck | null; progress: Schemas["JobProgress"] | null }
+>;
 
-export type CreationStatus = "draft" | "finishing" | "finished" | "expired";
+export type CreationStatus = Schemas["CreationOut"]["status"];
 
-export interface AdjustCandidate {
-  /** The step holding the image; null when there is none to show (a
-   * safety refusal, a provider error, a result with no face in it). */
-  step: StepId | null;
-  ok: boolean;
-  reason: PhotoCheck | null;
-  generated_eyes: boolean;
-}
+/** One candidate of a round. `step` holds the image; null when there is
+ * none to show (a safety refusal, a provider error, a result with no face
+ * in it). */
+export type AdjustCandidate = Refine<Schemas["AdjustCandidateOut"], { step: StepId | null; reason: PhotoCheck | null }>;
 
-export interface AdjustRound {
-  mode: AdjustMode;
-  style: AdjustStyle | null;
-  /** The image the round was made from. */
-  source: StepId;
-  candidates: AdjustCandidate[];
-  /** The monthly image limit stopped the round before every candidate. */
-  limit_reached: boolean;
-}
+/** An AI adjust round: `source` is the image it was made from;
+ * `limit_reached`, the monthly image limit stopped it before every
+ * candidate. */
+export type AdjustRound = Refine<
+  Schemas["AdjustRoundOut"],
+  { mode: AdjustMode; style: AdjustStyle | null; source: StepId; candidates: AdjustCandidate[] }
+>;
 
-/** The creation's AI step: what is offered, what is left, what happened. */
-export interface CreationAi {
-  /** False when an owner or admin has turned third-party AI off. */
-  enabled: boolean;
-  /** Adjust modes this line offers (empty until the line is known). */
-  modes: AdjustMode[];
-  /** The recommended mode, when the current image needs a fix this line
-   * offers: pre-selected. Empty when nothing needs fixing, so nothing paid
-   * is ever pre-selected on a photo that is fine. */
-  suggested: AdjustMode[];
-  adjust_rounds_left: number;
-  ai_detections_left: number;
-  last_round: AdjustRound | null;
-  /** A touch-up the wizard starts by itself (see autoAdjustToStart); null
-   * otherwise. Absent from a server before it offered one. */
-  auto_adjust?: AutoAdjust | null;
-}
+/**
+ * The creation's AI step: what is offered, what is left, what happened.
+ * `enabled` is false when an owner or admin turned third-party AI off;
+ * `modes`, the adjust modes this line offers (empty until the line is
+ * known); `suggested`, the recommended mode when the current image needs
+ * a fix this line offers (pre-selected; empty when nothing needs fixing,
+ * so nothing paid is ever pre-selected on a photo that is fine);
+ * `auto_adjust`, a touch-up the wizard starts by itself
+ * (autoAdjustToStart). Step 3's tries and free removals left are
+ * `prepare_rounds_left` and `free_clears_left`; its last try,
+ * `last_prepare` (wizard.ts, WizardCreation).
+ */
+export type CreationAi = Refine<
+  Schemas["AiOut"],
+  { modes: AdjustMode[]; suggested: AdjustMode[]; last_round: AdjustRound | null; auto_adjust?: AutoAdjust | null }
+>;
 
 /** The server's offer of a touch-up nobody has to press for: a person whose
  * parted lips show their teeth (they would stay painted on the lips as the
  * avatar talks), and whose eyes the same touch-up fixes when the check
  * found them wanting too (`reasons`). Once per photo; the owner still
  * chooses the result. */
-export interface AutoAdjust {
-  mode: "touchup";
-  image: StepId;
-  reasons: string[];
-}
+export type AutoAdjust = Refine<Schemas["AutoAdjustOut"], { image: StepId }>;
 
-export interface Creation {
-  id: string;
-  /** Null until the owner (or the analysis) has said what the face is. */
-  face_type: FaceType | null;
-  status: CreationStatus;
-  revision: number;
-  current: StepId | null;
-  steps: CreationStep[];
-  analysis: CreationAnalysis | null;
-  anchors: CreationAnchors | null;
-  job: CreationJob | null;
-  avatar_id: string | null;
-  background_removal: {
-    available: boolean;
-    reason: null | "face_type_required" | "not_for_face_type" | "segmentation_unavailable";
-  };
-  /** The step 2 answer; null until given, and again after a change of
-   * line. Choosing an opaque AI result follows "remove" by cutting it out. */
-  background?: "remove" | "keep" | null;
-  ai: CreationAi;
-  /** The uploader's statement finishing needs, recorded for this creation:
-   * "depiction" for a person's photo on whatever line it is on now (a
-   * stylised photo is still that person), "generated_face" for a face made
-   * from words, null for none. Absent from a server before it said so. */
-  statement?: FaceStatement | null;
-  /** The name the wizard proposes, decided once by the server when the
-   * creation was made (the description's words, or a file name that means
-   * something). Null when nothing was worth a name: the plan's own then
-   * (wizard.avatarName). Absent from a server before it said so. */
-  name?: string | null;
-  created_at: string;
-  updated_at: string;
-}
+/**
+ * A creation. From the schema as it is: `face_type` (null until the owner,
+ * or the analysis, said what the face is), `status`, `revision`,
+ * `background` (the step 2 answer; null until given, and again after a
+ * change of line), `statement` (the statement finishing needs, recorded
+ * for it: "depiction" for a person's photo, "generated_face" for a face
+ * made from words), `name` (the one the wizard proposes, decided once by
+ * the server; null when nothing was worth a name, wizard.avatarName) and
+ * `plan`. Said precisely here: its images and its job, the analysis (a
+ * dict on the server), and why a background cannot be removed.
+ */
+export type Creation = Refine<
+  Schemas["CreationOut"],
+  {
+    current: StepId | null;
+    steps: CreationStep[];
+    analysis: CreationAnalysis | null;
+    anchors: CreationAnchors | null;
+    job: CreationJob | null;
+    avatar_id: string | null;
+    background_removal: {
+      available: boolean;
+      reason: null | "face_type_required" | "not_for_face_type" | "segmentation_unavailable";
+    };
+    ai: CreationAi;
+  }
+>;
 
-export interface PreviewRig {
-  rig: unknown;
-  reasons: FitReason[];
-}
+/** The rig the finish would build, fitted and not saved. */
+export type PreviewRig = Refine<Schemas["PreviewRigOut"], { reasons: FitReason[] }>;
 
 /** Something the finished picture still shows around the mouth
  * ("mouth_open", "teeth_showing"): said, not refused. */
-export interface FinishWarning {
-  code: string;
-  detail: string;
-}
+export type FinishWarning = Schemas["FinishWarning"];
 
-export interface FinishResult {
-  avatar_id: string;
-  creation: Creation;
-  /** Absent from a server before it said so. */
-  warnings?: FinishWarning[];
-}
+export type FinishResult = Refine<Schemas["FinishOut"], { creation: Creation }>;

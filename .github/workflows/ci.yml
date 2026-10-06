@@ -185,6 +185,11 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run format:check
+      # lib/api-types.ts is generated from the committed OpenAPI schema
+      # (lib/api-schema.json, refreshed with `npm run api:schema`): a hand
+      # edit, or a schema committed without regenerating, fails here.
+      - name: API types match the committed schema
+        run: npm run check:api
       - run: npm test
       # The kit and the main screens mounted in jsdom (Vitest + Testing
       # Library), against a mocked API: src/test/.

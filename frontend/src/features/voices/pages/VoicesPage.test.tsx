@@ -144,7 +144,7 @@ describe("VoicesPage", () => {
 
   it("lists the voices made, and deletes one", async () => {
     const { user, server } = setup(
-      { voices: [{ voice: "org1:ana", label: "ana", lines: 12, total_ms: 41_000 }] },
+      { voices: [{ voice: "org1:ana", label: "ana", locale: "en-US", lines: 12, total_ms: 41_000 }] },
       (s) => s.on("DELETE", `/orgs/${ORG_ID}/cloned-voices/ana`, () => undefined)
     );
     const yours = await card(t("voicesYours"));

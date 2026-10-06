@@ -2,6 +2,7 @@ import type { StreamedSpeech } from "@liveface/embed/speech-stream/protocol";
 
 import type { VoiceSelection } from "@/features/voices";
 import { api } from "@/lib/api";
+import type { Schemas } from "@/lib/types";
 
 /**
  * The lab's requests. Each is one step of a preview's boot or of a test
@@ -10,15 +11,9 @@ import { api } from "@/lib/api";
  * lab shows come through the avatars feature's hooks.
  */
 
-/** A temporary lab upload (signed storage, the usual face rig; never published). */
-export interface ReferenceUpload {
-  id: string;
-  image_url: string;
-  rig_url: string;
-  quality_note: string | null;
-  retention_hours: number;
-  name: string;
-}
+/** A temporary lab upload (signed storage, the usual face rig; never
+ * published), with the name the page gives it. */
+export type ReferenceUpload = Schemas["ReferencePreview"] & { name: string };
 
 /** A portrait, or a photo of the mouth for the photographic one. */
 export function uploadReferencePhoto(
@@ -26,10 +21,14 @@ export function uploadReferencePhoto(
   purpose: "portrait" | "mouth",
   file: File,
   signal: AbortSignal
-): Promise<Omit<ReferenceUpload, "name">> {
+): Promise<Schemas["ReferencePreview"]> {
   const form = new FormData();
   form.append("file", file);
-  return api.postForm(`/orgs/${orgId}/lab/reference/preview?purpose=${purpose}`, form, signal);
+  return api.postForm<Schemas["ReferencePreview"]>(
+    `/orgs/${orgId}/lab/reference/preview?purpose=${purpose}`,
+    form,
+    signal
+  );
 }
 
 /** A test phrase, synthesized whole (the voices that cannot stream). */

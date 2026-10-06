@@ -9,6 +9,7 @@
  * to agree with the server about which line has what.
  */
 import type { MessageKey } from "@/i18n/types";
+import type { Schemas } from "@/lib/types";
 
 export interface Pt {
   x: number;
@@ -325,11 +326,8 @@ export function marksToSend(marks: FaceMarks, opened: FaceMarks): FaceMarks {
 }
 
 /** What rig-fit refuses a fit for; see services/anchor_fit.validate. */
-export interface FitReason {
-  code: string;
-  detail: string;
-  count?: number | null;
-}
+/** Why a fit was refused: a validator code, its sentence, a count. */
+export type FitReason = Schemas["FitReason"];
 
 /** i18n key per validator code; an unknown code falls back to its prose. */
 export const FIT_REASON_LABELS: Record<string, MessageKey> = {

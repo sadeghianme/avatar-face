@@ -1,134 +1,107 @@
-export type Role = "owner" | "admin" | "member";
+/**
+ * The API's shapes, as the dashboard reads them: the backend's own schemas
+ * (api-types.ts, generated from its OpenAPI document by `npm run gen:api`)
+ * under the names the code uses. Where the server types a field loosely (a
+ * dict, a plain string), `Refine` says it precisely here, and may name only
+ * fields the schema has: a field renamed or dropped on the server fails
+ * tsc instead of reading `undefined`. Hand-written whole: what the server
+ * answers with an untyped dict (Usage).
+ */
+import type { components } from "@/lib/api-types";
 
-export interface User {
-  id: string;
-  email: string;
-  username: string;
-  display_name: string;
-}
+/** Every schema of the API, by name. */
+export type Schemas = components["schemas"];
 
-export interface Org {
-  id: string;
-  name: string;
-  created_at: string;
-  role: Role;
-  /** Owners and admins can switch off every step that sends a picture to
-   * a third-party AI (Google). Every line still works by hand without. */
-  third_party_ai_enabled?: boolean;
-}
+/** `Base` with the fields in `Fields` replaced by their precise types;
+ *  `Fields` must name fields `Base` has. */
+export type Refine<Base, Fields extends { [K in keyof Fields]: K extends keyof Base ? unknown : never }> = Omit<
+  Base,
+  keyof Fields
+> &
+  Fields;
 
-export interface Member {
-  membership_id: string;
-  user_id: string;
-  username: string;
-  email: string;
-  display_name: string;
-  role: Role;
-  joined_at: string;
-}
+/** A request schema whose fields with a server default may be left out
+ *  (the generated types make a defaulted field required, as it is in an
+ *  answer). */
+export type WithDefaults<T, Defaulted extends keyof T> = Omit<T, Defaulted> & Partial<Pick<T, Defaulted>>;
 
-export interface Invitation {
-  id: string;
-  email: string;
-  role: Role;
-  token: string;
-  created_at: string;
-  accepted_at: string | null;
-  revoked_at: string | null;
-}
+export type Role = Schemas["Role"];
+export type User = Schemas["UserOut"];
+/** `third_party_ai_enabled`: owners and admins can switch off every step
+ *  that sends a picture to a third-party AI (Google). */
+export type Org = Schemas["OrgWithRole"];
+export type Member = Schemas["MemberOut"];
+export type Invitation = Schemas["InviteOut"];
 
-export type AvatarStatus = "pending" | "processing" | "ready" | "failed";
-export type AvatarKind = "photo" | "model3d";
+export type AvatarStatus = Schemas["AvatarStatus"];
+export type AvatarKind = Schemas["AvatarKind"];
+export type MouthRenderer = Schemas["MouthUpdate"]["renderer"];
+export type FaceType = NonNullable<Schemas["AvatarUpdate"]["face_type"]>;
+export type Framing = NonNullable<Schemas["AvatarUpdate"]["framing"]>;
 
-export type MouthRenderer = "classic" | "continuous";
+/**
+ * An avatar: the list's fields (AvatarOut), and the detail's signed asset
+ * URLs and draft state (AvatarDetail), which the list leaves out.
+ *
+ * - `quality_note`: a ready avatar that may still look wrong, and why.
+ * - `original_image_key`: set when the background has been removed.
+ * - `framing`: how embedding sites render it, kept in step with the
+ *   scene's zoom; the scene is what is edited now.
+ * - `precrop_image_key`: non-null when the crop can be reset.
+ * - `undo_label`: names the change an undo would reverse.
+ * - `unpublished`: the draft has changes visitors do not see.
+ * - `published`: visitors are served a snapshot. Ask "is it live" with
+ *   this, not `published_at`: snapshots from before explicit publishing are
+ *   live and have no date.
+ * - `render_profile`: the draft rig's render profile ("toon@1", "animal@2",
+ *   the older "animal@1", or none: the classic renderer).
+ * - `share_token`: a public page exists at /s/<token>.
+ * - `preparing_creation_id`: the creation whose finish is still building
+ *   it (the wizard's step 5); its page follows the build there.
+ */
+export type Avatar = Refine<
+  Schemas["AvatarDetail"],
+  {
+    face_type: FaceType;
+    framing: Framing;
+    /** The DRAFT scene (features/avatars/scene): zoom 1 is the face view, 0
+     *  the whole picture; pan moves the view; the background sits behind a
+     *  cut-out. Null for an avatar made before scenes, rendered by its
+     *  framing. */
+    scene?: {
+      zoom: number;
+      pan: { x: number; y: number };
+      background: { kind: "transparent" | "color" | "image"; color?: string; has_image: boolean };
+    } | null;
+    /** The draft voice; published on Publish. */
+    voice?: Schemas["VoiceConfig"] | null;
+    /** Detail only: the draft teeth photo and its rig, presigned. */
+    mouth_photo?: { image_url: string; rig_url: string } | null;
+    /** The DRAFT mouth; null means the classic drawn mouth. */
+    mouth?: AvatarMouth | null;
+    /** An AI made or changed the picture: disclosed with the avatar. */
+    ai_edited?: AiEdited | null;
+  }
+>;
 
-export type FaceType = "human" | "animal" | "cartoon";
-
-export interface Avatar {
-  id: string;
-  org_id: string;
-  name: string;
-  status: AvatarStatus;
-  kind: AvatarKind;
-  content_type: string;
-  error: string | null;
-  /** A ready avatar that may still look wrong, and why. */
-  quality_note?: string | null;
-  created_at: string;
-  updated_at: string;
-  image_url?: string | null;
-  /** Set when the background has been removed — the pre-cut-out photo. */
-  original_image_key?: string | null;
-  /** How embedding sites render it: cropped to the head, or the whole photo.
-   *  Kept in step with the scene's zoom; the scene is what is edited now. */
-  framing?: "face" | "full";
-  /** The DRAFT scene (features/avatars/scene): zoom 1 is the face view, 0
-   *  the whole picture; pan moves the view; the background sits behind a
-   *  cut-out. Null for an avatar made before scenes, which renders by its
-   *  framing. */
-  scene?: {
-    zoom: number;
-    pan: { x: number; y: number };
-    background: { kind: "transparent" | "color" | "image"; color?: string; has_image: boolean };
-  } | null;
-  /** Detail only: presigned URL of the draft's background picture. */
-  scene_image_url?: string | null;
-  /** Non-null means the photo has been cropped and the crop can be reset. */
-  precrop_image_key?: string | null;
-  /** Names the change an undo would reverse; absent when there is nothing. */
-  undo_label?: string | null;
-  /** True when the draft has unpublished changes. */
-  unpublished?: boolean;
-  /** True while visitors are served a snapshot. Use this to ask "is it
-   *  live", not published_at: snapshots from before explicit publishing are
-   *  live and have no date. */
-  published?: boolean;
-  /** When the owner last pressed Publish; null for those older snapshots. */
-  published_at?: string | null;
-  /** Selects the viseme table, and which mouth renderers are allowed. */
-  face_type?: FaceType;
-  /** The avatar's draft voice {provider, voice, locale}; published on Publish. */
-  voice?: { provider: string; voice: string; locale: string } | null;
-  /** The DRAFT mouth; null means the classic drawn mouth. */
-  /** Detail only: presigned draft teeth photo + its rig. */
-  mouth_photo?: { image_url: string; rig_url: string } | null;
-  mouth?: {
-    renderer: MouthRenderer;
-    profile: Record<string, number>;
-    has_oral_photo: boolean;
-    /** Where the teeth photo came from ("ai": made from the avatar's
-     *  picture; "upload": the owner's), or null with the reason a new avatar
-     *  has the standard teeth. Absent from a server before it said so. */
-    teeth?: TeethRecord;
-    /** Presigned: the draft's own performance manifest (its six mouth
-     *  shapes, docs/performance-kit.md). The path changes with every new
-     *  kit, rebase or discard. Null or absent: the bundled motion. */
-    motion_url?: string | null;
-    /** What the mouth kit behind `motion_url` is made of, for the owner
-     *  (never served to visitors); null when none was made. Absent from a
-     *  server before it said so. */
-    kit?: MouthKit | null;
-    /** How an animation's or an animal's character mouth is set (teeth,
-     *  tongue, jaw); absent until the owner has set it. */
-    character?: { style?: "character" | "classic"; teeth?: "upper" | "none"; tongue?: boolean; jaw?: number } | null;
-  } | null;
-  /** Detail only: the draft rig's render profile ("toon@1", "animal@2", the older
-   *  "animal@1", or none: the classic renderer). Which look an animation or an
-   *  animal has. Absent from a server before it said so. */
-  render_profile?: string | null;
-  /** Set means a public page exists at /s/<token>. */
-  share_token?: string | null;
-  /** Background/body/head decomposition for the layered render path. */
-  layer_urls?: Record<string, string> | null;
-  rig_url?: string | null;
-  thumbnail_url?: string | null;
-  model_url?: string | null;
-  /** An AI made or changed the picture: disclosed with the avatar. */
-  ai_edited?: AiEdited | null;
-  /** Detail only: the creation whose finish is still building this avatar
-   *  (the wizard's step 5, "Preparing your avatar"); its page follows the
-   *  build there. Absent from a server before it said so. */
-  preparing_creation_id?: string | null;
+export interface AvatarMouth {
+  renderer: MouthRenderer;
+  profile: Record<string, number>;
+  has_oral_photo: boolean;
+  /** Where the teeth photo came from ("ai": made from the avatar's
+   *  picture; "upload": the owner's), or null with the reason a new avatar
+   *  has the standard teeth. Absent from a server before it said so. */
+  teeth?: TeethRecord;
+  /** Presigned: the draft's own performance manifest (its six mouth
+   *  shapes, docs/performance-kit.md). The path changes with every new
+   *  kit, rebase or discard. Null or absent: the bundled motion. */
+  motion_url?: string | null;
+  /** What the mouth kit behind `motion_url` is made of, for the owner
+   *  (never served to visitors); null when none was made. */
+  kit?: MouthKit | null;
+  /** How an animation's or an animal's character mouth is set (teeth,
+   *  tongue, jaw); absent until the owner has set it. */
+  character?: Partial<Schemas["CharacterUpdate"]> | null;
 }
 
 /** How an AI was involved in an avatar, as it is disclosed. `mode` is what
@@ -181,36 +154,18 @@ export interface MouthKit {
   dropped: Reason | null;
 }
 
-export interface Provider {
-  name: string;
-  display_name: string;
-}
+export type Provider = Schemas["ProviderOut"];
+export type Voice = Schemas["VoiceOut"];
+export type Synthesis = Schemas["SynthesizeResponse"];
+export type ApiKeyInfo = Schemas["ApiKeyOut"];
+export type StockAvatar = Schemas["StockAvatarOut"];
 
-export interface Voice {
-  id: string;
-  name: string;
-  locale: string;
-  gender: string;
-}
+export type IntegrationField = Refine<Schemas["FieldStatus"], { source: "db" | "env" | "unset" }>;
 
-export interface Synthesis {
-  audio_b64: string;
-  audio_mime: string;
-  duration_ms: number;
-  cues: { t: number; viseme: string }[];
-  cached: boolean;
-}
+/** A provider's settings: `kind` decides the section and what Test does. */
+export type Integration = Refine<Schemas["ProviderStatus"], { kind: "voice" | "image"; fields: IntegrationField[] }>;
 
-export interface ApiKeyInfo {
-  id: string;
-  name: string;
-  prefix: string;
-  allowed_domains: string;
-  created_at: string;
-  revoked_at: string | null;
-  last_used_at: string | null;
-}
-
+/** GET /orgs/{id}/usage answers a dict (no response model yet): typed here. */
 export interface Usage {
   /** Attempts this month — what is charged, including rejected candidates. */
   images_generated?: number;
@@ -225,24 +180,4 @@ export interface Usage {
   chars_used: number;
   char_limit: number;
   by_provider: { provider: string; syntheses: number; chars: number }[];
-}
-
-export interface IntegrationField {
-  name: string;
-  masked: string;
-  source: "db" | "env" | "unset";
-}
-
-export interface Integration {
-  provider: string;
-  /** "voice" or "image" — decides the section and what Test does. */
-  kind: "voice" | "image";
-  fields: IntegrationField[];
-  configured: boolean;
-}
-
-export interface StockAvatar {
-  id: string;
-  name: string;
-  image_url: string;
 }

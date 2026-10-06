@@ -15,6 +15,7 @@ import {
 } from "@/features/avatars/mouth-kit";
 import { api, ApiError } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
+import type { Schemas } from "@/lib/types";
 
 function tabStore(): DraftStore | null {
   try {
@@ -100,7 +101,9 @@ export function useMouthKit(orgId: string, avatarId: string, enabled: boolean, o
     async (consentId: string): Promise<void> => {
       lastStage.current = null;
       try {
-        const answer = await api.post<KitJobAnswer>(base, { consent_id: consentId });
+        const answer = await api.post<KitJobAnswer>(base, {
+          consent_id: consentId,
+        } satisfies Schemas["MouthKitRequest"]);
         if (answer.job) {
           hold(answer.job.id);
           queryClient.setQueryData(key, answer);

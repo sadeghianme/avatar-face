@@ -39,6 +39,7 @@ export const step = (id: StepId, extra: Partial<CreationStep> = {}): CreationSte
   from: null,
   crop: null,
   roll: null,
+  cutout: false,
   ...extra,
 });
 export const adjust = (extra: Partial<StepAdjust> = {}): StepAdjust => ({
@@ -89,6 +90,9 @@ export const ai = (extra: Partial<CreationAi> = {}): CreationAi => ({
   adjust_rounds_left: 2,
   ai_detections_left: 1,
   last_round: null,
+  // Step 3's counters: none left unless a case says so.
+  prepare_rounds_left: 0,
+  free_clears_left: 0,
   ...extra,
 });
 export const creation = (extra: Partial<Creation> = {}): Creation => ({

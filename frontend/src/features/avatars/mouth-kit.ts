@@ -16,15 +16,14 @@ import type { CreationJob, DraftStore, Translate } from "@/features/avatars/crea
 import type { TeethView } from "@/features/avatars/teeth";
 import type { MessageKey } from "@/i18n/types";
 import type { Avatar, MouthShape, Reason } from "@/lib/types";
+import type { Refine, Schemas } from "@/lib/types";
 
 /** The panel's job (step "mouth_kit"): a creation job's shape. */
 export type KitJob = CreationJob;
 
 /** What POST and GET …/mouth-kit answer. Null: this server ran none for
  * the avatar since it started. */
-export interface KitJobAnswer {
-  job: KitJob | null;
-}
+export type KitJobAnswer = Refine<Schemas["MouthKitOut"], { job: KitJob | null }>;
 
 /** The six shapes, in the manifest's order, each with its own name for
  * the owner (`mouthShape_<shape>`). */
