@@ -2,7 +2,8 @@
 
 Auth: X-Api-Key header (or ?key=). The key's org is the acting org — never a
 client-supplied org id. Browser calls are origin-checked against the key's
-allowed_domains, and each key is rate-limited per minute.
+allowed_domains, and each key (each organization's Simulator, for its
+tokens) is rate-limited per minute.
 
 CORS for /embed/* is handled by the path-scoped middleware in main.py, which
 reflects any Origin so the widget works from anywhere the key's domain list
@@ -18,12 +19,12 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import DB
 from app.core.config import get_settings
-from app.core.errors import Auth401, Forbidden403, NotFound404, RateLimit429
+from app.core.errors import Auth401, Forbidden403, NotFound404
 from app.models import ApiKey, AvatarStatus
 from app.schemas.tts import CueOut, SynthesizeRequest, SynthesizeResponse
 from app.services import api_keys
 from app.services.avatars import repo as avatars
-from app.services.rate_limit import get_embed_rate_limiter
+from app.services.rate_limit import embed_per_key, enforce
 from app.services.simulator_token import looks_like_one as looks_like_simulator_token
 from app.services.storage import get_storage
 from app.services.tts.registry import synthesize_cached
@@ -81,25 +82,34 @@ def _simulator_key(token: str, request: Request) -> ApiKey:
 
 
 async def _authenticate(request: Request, db: DB) -> ApiKey:
+    """The key a request presents, checked and counted.
+
+    401 missing_api_key / invalid_api_key / simulator_token_invalid, 403
+    origin_not_allowed, 429 rate_limited (with Retry-After) past the per-key
+    limit. A Simulator token is limited like a key, in one bucket per
+    organization: origin binding does not stop a client that forges the
+    Origin header, so the limit is what bounds it.
+    """
     plaintext = request.headers.get("x-api-key") or request.query_params.get("key")
     if not plaintext:
         raise Auth401("Missing API key", code="missing_api_key")
 
-    if looks_like_simulator_token(plaintext):
-        return _simulator_key(plaintext, request)
+    simulator = looks_like_simulator_token(plaintext)
+    if simulator:
+        api_key = _simulator_key(plaintext, request)
+    else:
+        found = await api_keys.by_plaintext(db, plaintext)
+        if found is None or not found.is_active:
+            raise Auth401("Invalid API key", code="invalid_api_key")
+        api_key = found
+        host = _origin_host(request)
+        if api_key.domain_list and host is not None and not _host_allowed(host, api_key.domain_list):
+            raise Forbidden403("Origin not allowed for this key", code="origin_not_allowed")
 
-    api_key = await api_keys.by_plaintext(db, plaintext)
-    if api_key is None or not api_key.is_active:
-        raise Auth401("Invalid API key", code="invalid_api_key")
+    enforce(embed_per_key(), api_key.id, "Embed rate limit exceeded")
 
-    host = _origin_host(request)
-    if api_key.domain_list and host is not None and not _host_allowed(host, api_key.domain_list):
-        raise Forbidden403("Origin not allowed for this key", code="origin_not_allowed")
-
-    if not get_embed_rate_limiter().allow(api_key.id):
-        raise RateLimit429("Embed rate limit exceeded", code="rate_limited")
-
-    await api_keys.mark_used(db, api_key)
+    if not simulator:
+        await api_keys.mark_used(db, api_key)
     return api_key
 
 

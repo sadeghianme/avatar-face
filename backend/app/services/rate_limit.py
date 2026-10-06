@@ -153,10 +153,6 @@ def enforce(
         )
 
 
-def get_embed_rate_limiter() -> SlidingWindowRateLimiter:
-    return limiter_for(embed_per_key())
-
-
 def reset_rate_limiters() -> None:
     """Forget every in-memory limiter (tests: each starts from zero)."""
     _limiters.clear()

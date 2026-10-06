@@ -230,3 +230,26 @@ async def test_cues_endpoint_is_public_and_timed(client) -> None:
 
 async def test_cues_endpoint_rejects_empty_text(client) -> None:
     assert (await client.post("/embed/v1/cues", json={"text": ""})).status_code == 422
+
+
+async def test_simulator_tokens_share_the_embed_rate_limit(client):
+    """Origin binding does not stop a client that forges Origin, so the
+    per-minute limit is what bounds a minted token."""
+    headers = await register_and_login(client, "simlimit")
+    org_id = await create_org(client, headers)
+    avatar_id = await create_ready_avatar(client, headers, org_id)
+    origin = {"origin": "http://testserver"}
+    minted = await client.post(
+        f"/orgs/{org_id}/api-keys/simulator-token", headers={**headers, **origin}
+    )
+    token = minted.json()["token"]
+    statuses = []
+    for _ in range(7):  # conftest sets the embed limit to 5/minute
+        response = await client.get(
+            f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": token, **origin}
+        )
+        statuses.append(response.status_code)
+    assert statuses.count(200) == 5
+    assert statuses.count(429) == 2
+    assert response.json()["code"] == "rate_limited"
+    assert "retry-after" in response.headers
