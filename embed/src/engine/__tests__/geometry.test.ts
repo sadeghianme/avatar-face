@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import type { Rig } from "../../types";
-import { layOutFace, pixelScale, placeHead, refineMesh, validInnerRing, type Point } from "../geometry";
+import { closeSlivers, layOutFace, pixelScale, placeHead, refineMesh, validInnerRing, type Point } from "../geometry";
 import { LANDMARK_COUNT } from "../landmarks";
 
 /**
@@ -165,6 +165,9 @@ describe("placeHead", () => {
     expect(head.pivotX).toBe(300);
     expect(head.pivotY).toBeCloseTo(460 + 260 * 0.85, 9);
     expect(head.faceH).toBe(260);
+    // A cut-out moving as one leans from low on the chest.
+    expect(head.bustPivotY).toBeCloseTo(460 + 260 * 1.9, 9);
+    expect(head.bustReach).toBeCloseTo(460 + 260 * 1.9 - 330, 9);
   });
 
   it("stops at the picture's edge", () => {
@@ -172,6 +175,9 @@ describe("placeHead", () => {
     expect(head.x).toBe(150);
     expect(head.y).toBe(100);
     expect(head.x + head.w).toBe(450);
+    // Never below the picture, and never a lever shorter than the face.
+    expect(head.bustPivotY).toBe(600);
+    expect(head.bustReach).toBe(270);
   });
 
   it("is nothing for a face too small to move", () => {
@@ -184,5 +190,24 @@ describe("placeHead", () => {
         { x: 0, y: 0, w: 100, h: 100 }
       )
     ).toBeNull();
+  });
+});
+
+describe("closeSlivers", () => {
+  // A fan round vertex 0 with one triangle (0, 2, 3) missing: only the
+  // missing triangle comes back.
+  const fan: [number, number, number][] = [
+    [0, 1, 2],
+    [3, 2, 4],
+    [0, 3, 4],
+    [0, 4, 5],
+  ];
+  it("closes a hole of three open edges, and nothing else", () => {
+    // (0, 1, 2) is open on three sides too, and there already.
+    expect(closeSlivers(fan)).toEqual([[0, 2, 3]]);
+  });
+  it("leaves a whole mesh, and a hole at a vertex it skips, as they are", () => {
+    expect(closeSlivers([...fan, [0, 2, 3]])).toEqual([]);
+    expect(closeSlivers(fan, (i) => i === 3)).toEqual([]);
   });
 });

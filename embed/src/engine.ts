@@ -117,6 +117,16 @@ export interface EngineOptions {
    * forces the Canvas 2D path, for tests and for comparing the two.
    */
   warp?: WarpMode;
+  /**
+   * Move a cut-out's head (a picture with a transparent background, no
+   * published layers) as its own feathered layer over the still body,
+   * instead of the whole picture as one (the default). For comparison
+   * only: the layer's feathered band shows as a boundary through the hair,
+   * the neck and the shoulders whenever the head moves (render2d.ts).
+   * `setCutOutHeadLayer` switches it live. Layered avatars and opaque
+   * pictures are unaffected.
+   */
+  cutOutHeadLayer?: boolean;
 }
 
 export class AvatarEngine {
@@ -211,6 +221,7 @@ export class AvatarEngine {
     }));
     this.innerRing = validInnerRing(rig);
     this.classicMouth = new ClassicMouth(ctx, this.profile, this.innerRing);
+    this.picture.useHeadLayer(opts.cutOutHeadLayer ?? false);
     this.picture.lay(this.scene.zoom ?? 1, this.scene.pan, true);
     this.motion.start(performance.now());
     this.frameLoop = new FrameLoop((now) => {
@@ -242,7 +253,7 @@ export class AvatarEngine {
    * then upgrades to the full-resolution image when it lands. Everything
    * sampled or derived from the texture is redone, exactly as loading this
    * texture would have done it (picture.ts): the mesh, the cut-out probe,
-   * the head layer, and what the picture looks like.
+   * the head layer (if opted into), and what the picture looks like.
    */
   setTexture(texture: HTMLImageElement): void {
     if (this.destroyed) return;
@@ -316,6 +327,16 @@ export class AvatarEngine {
   /** Which path the next frame takes: "gl" when the GPU warp is ready. */
   warpPath(): "gl" | "2d" {
     return this.meshWarp.path();
+  }
+
+  /**
+   * Move a cut-out's head as its own layer (true) or the whole picture as
+   * one (false, the default), live: EngineOptions.cutOutHeadLayer, for
+   * comparing the two.
+   */
+  setCutOutHeadLayer(on: boolean): void {
+    if (this.destroyed) return;
+    this.picture.useHeadLayer(on);
   }
 
   // --- Public speech API -----------------------------------------------------

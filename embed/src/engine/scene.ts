@@ -57,9 +57,9 @@ export class Backdrop {
    * reaches, so nothing is drawn for it.
    *
    * Drawn LAST, behind the finished picture (destination-over), not first
-   * under it: a cut-out's frame is composed by erasing and adding back (its
-   * head's feathered layer, the warp replacing the picture under it;
-   * render2d.ts, mesh-warp.ts), and over a backdrop drawn first the erase
+   * under it: a cut-out's frame is composed by erasing and adding back (the
+   * warp replacing the picture under it, the opt-in head layer;
+   * mesh-warp.ts, render2d.ts), and over a backdrop drawn first the erase
    * would cut holes in the backdrop wherever the picture is clear.
    */
   draw(
