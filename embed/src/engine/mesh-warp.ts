@@ -17,6 +17,10 @@ import { LANDMARK_COUNT } from "./landmarks";
  *  always on the Canvas 2D path. See EngineOptions.warp. */
 export type WarpMode = "auto" | "2d";
 
+/** A vertex within this of where it rests, px, has not moved (MeshWarp.draw
+ *  skips a still triangle over a picture with transparency). */
+const STILL_PX = 1e-3;
+
 /** What the warp draws from this frame. The texture and the mesh are
  *  replaced, never edited, so a cache keyed on them by reference sees
  *  every change. */
@@ -27,6 +31,9 @@ export interface WarpSource {
   padEverywhere: boolean;
   /** The lower-face rig: where the mesh moves over the still picture. */
   lowerFace: LowerFaceRig | null;
+  /** The picture has transparency (a cut-out): the mesh REPLACES what is
+   *  under it instead of being laid over it (MeshWarp.draw). */
+  replace: boolean;
 }
 
 export class MeshWarp {
@@ -41,6 +48,8 @@ export class MeshWarp {
   private meshFor: unknown = null;
   private padsFor: unknown = null;
   private pads: Float32Array | null = null;
+  private restFor: unknown = null;
+  private rest: Point[] | null = null;
   private readonly mouth: ReadonlySet<number>;
 
   /** `source` is read whenever the warp draws or checks its path. */
@@ -89,27 +98,110 @@ export class MeshWarp {
    * The GPU canvas is already in canvas pixels (it was drawn through
    * `affine`), so it is drawn under the identity: the picture is resampled
    * once either way.
+   *
+   * The mesh at rest is the picture under it, pixel for pixel, and its
+   * outer edge never moves (the deformation leaves the hull where it is),
+   * so the warp must leave the canvas exactly as it found it there. Laid
+   * over the picture it does wherever the picture is opaque: the edge's
+   * anti-aliased share c gives mesh x c + picture x (1 - c), the picture
+   * again. Where the picture is half transparent (a cut-out's hair strands
+   * and matte fringe, which the neck band reaches at the sides) a pixel
+   * laid over itself comes out alpha x (2 - alpha): the band's corners
+   * showed as a brighter patch of the hair's edge, a step at the temples,
+   * and every overlapping seam pad as a lattice. So over a picture with
+   * transparency the mesh REPLACES what is under it, and only where the
+   * face moved it. A triangle whose corners all rest where they rest is
+   * the picture already under it, pixel for pixel: drawing it could only
+   * add the rim twice (and resample what the picture's own draw already
+   * drew), so it is not drawn, and at rest nothing is. What moved is drawn
+   * on the GPU through its own coverage, which erases the canvas before
+   * the mesh is added back (picture x (1 - c) + mesh x c, along a still
+   * triangle's edge the picture again), and in 2D laid over, triangle by
+   * triangle: no composite operation replaces portably in 2D (a "copy" into
+   * an anti-aliased clip blends its edge on one rasterizer and drops what
+   * was under it on another: Chromium on Linux drew every triangle's
+   * outline as a dark wire), and what moves is the face, opaque.
    */
   draw(ctx: CanvasRenderingContext2D, pts: Point[], affine: Affine): void {
+    const { texture, mesh, replace } = this.source();
+    const rest = replace ? this.restPoints() : null;
+    const moved = (i: number) => {
+      const p = pts[i],
+        r = rest![i];
+      return !r || Math.abs(p.x - r.x) > STILL_PX || Math.abs(p.y - r.y) > STILL_PX;
+    };
+    const still = (a: number, b: number, c: number) => !moved(a) && !moved(b) && !moved(c);
     const gl = this.ready();
-    if (gl && gl.draw(pts, affine)) {
-      // Only the mesh's box is copied: outside it the GPU canvas is clear,
-      // so the drawing is the same, and the copy is the one GPU-path cost
-      // that grows with the canvas rather than with the mesh. Two pixels
-      // of margin for the anti-aliased hull.
-      const box = this.box(pts, affine, 2);
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.drawImage(gl.canvas, box.x, box.y, box.w, box.h, box.x, box.y, box.w, box.h);
-      ctx.restore();
-      return;
-    }
-    const { texture, mesh } = this.source();
+    if (gl && this.drawGL(ctx, gl, pts, affine, rest ? (a, b, c) => !still(a, b, c) : null)) return;
     const pads = this.trianglePads();
     let t = 0;
     for (const [a, b, c] of mesh.triangles) {
-      drawWarpedTriangle(ctx, texture, mesh.texPoints, pts, a, b, c, pads ? pads[t++] : 0);
+      const pad = pads ? pads[t++] : 0;
+      if (rest && still(a, b, c)) continue;
+      drawWarpedTriangle(ctx, texture, mesh.texPoints, pts, a, b, c, pad);
     }
+  }
+
+  /** Does `keep` pass any of the mesh's triangles? */
+  private anyTriangle(keep: (a: number, b: number, c: number) => boolean): boolean {
+    return this.source().mesh.triangles.some(([a, b, c]) => keep(a, b, c));
+  }
+
+  /** Every vertex where it rests, canvas px, in the order the deformation
+   *  gives them (the landmarks, the midpoints, the neck band); once per
+   *  mesh. */
+  private restPoints(): Point[] {
+    const { mesh } = this.source();
+    if (this.restFor !== mesh.triangles || !this.rest) {
+      this.restFor = mesh.triangles;
+      const base = mesh.basePoints;
+      this.rest = [
+        ...base,
+        ...mesh.derivedParents.map(([a, b]) => ({ x: (base[a].x + base[b].x) / 2, y: (base[a].y + base[b].y) / 2 })),
+        ...mesh.neckBand.map((v) => v.base),
+      ];
+    }
+    return this.rest;
+  }
+
+  /**
+   * The mesh on the GPU, composited into `ctx`: all of it laid over, or,
+   * with `only`, the triangles it passes, replacing what is under them.
+   * False when it did not draw, and then `ctx` is as it was, or erased
+   * under exactly the triangles the 2D path then draws.
+   */
+  private drawGL(
+    ctx: CanvasRenderingContext2D,
+    gl: WarpRenderer,
+    pts: Point[],
+    affine: Affine,
+    only: ((a: number, b: number, c: number) => boolean) | null
+  ): boolean {
+    // Only the mesh's box is copied: outside it the GPU canvas is clear,
+    // so the drawing is the same, and the copy is the one GPU-path cost
+    // that grows with the canvas rather than with the mesh. Two pixels
+    // of margin for the anti-aliased hull.
+    const box = this.box(pts, affine, 2);
+    const copy = (op: GlobalCompositeOperation) => {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = op;
+      ctx.drawImage(gl.canvas, box.x, box.y, box.w, box.h, box.x, box.y, box.w, box.h);
+      ctx.restore();
+    };
+    if (only) {
+      // Nothing moved: nothing to draw (and nothing selected for any other
+      // reason: the 2D path draws it).
+      if (!gl.select(only)) return !this.anyTriangle(only);
+      if (!gl.drawCoverage(pts, affine, true)) return false;
+      copy("destination-out");
+      if (!gl.draw(pts, affine, true)) return false;
+      copy("lighter");
+      return true;
+    }
+    if (!gl.draw(pts, affine)) return false;
+    copy("source-over");
+    return true;
   }
 
   /**

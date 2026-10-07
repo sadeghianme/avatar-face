@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AvatarEngine } from "../engine";
+import { MeshWarp } from "../engine/mesh-warp";
 import { engineSeam } from "../engine/seam";
 import {
   IDENTITY,
@@ -232,6 +233,9 @@ class FakeGL {
   }
   useProgram() {}
   uniform1i() {}
+  uniform1f(_at: unknown, value: number) {
+    this.note(`uniform1f(${value})`);
+  }
   uniformMatrix3fv() {}
   createBuffer() {
     return {};
@@ -266,8 +270,9 @@ class FakeGL {
   viewport() {}
   enableVertexAttribArray() {}
   vertexAttribPointer() {}
-  drawElements() {
+  drawElements(_mode: number, count: number) {
     this.note("drawElements");
+    this.note(`drawElements(${count})`);
   }
   isContextLost() {
     return this.lost;
@@ -454,6 +459,66 @@ describe("which path the engine takes", () => {
     engineSeam(engine).render();
     expect(log.filter((l) => l.startsWith("clip(")).length).toBeGreaterThan(1000);
     engine.destroy();
+  });
+
+  it("over a cut-out, draws only what moved, replacing it; over an opaque picture, lays all of it over", () => {
+    stubBrowser(true);
+    const rest = [
+      { x: 10, y: 10 },
+      { x: 90, y: 10 },
+      { x: 50, y: 80 },
+      { x: 95, y: 85 },
+    ];
+    const mesh = {
+      texPoints: rest,
+      basePoints: rest,
+      triangles: [
+        [0, 1, 2],
+        [1, 3, 2],
+      ] as [number, number, number][],
+      derivedParents: [],
+      neckBand: [],
+    };
+    const texture = { naturalWidth: 100, naturalHeight: 100, width: 100, height: 100 } as HTMLImageElement;
+    const canvas = fakeCanvas([], true) as unknown as HTMLCanvasElement;
+    // Each copy of the GL canvas, by the composite operation it was drawn with.
+    const copies: string[] = [];
+    const state = { globalCompositeOperation: "source-over" };
+    const ctx = Object.assign(state, {
+      save() {},
+      restore() {},
+      setTransform() {},
+      drawImage() {
+        copies.push(state.globalCompositeOperation);
+      },
+    }) as unknown as CanvasRenderingContext2D;
+    const frame = (replace: boolean, pts: Point[]) => {
+      copies.length = 0;
+      const warp = new MeshWarp(canvas, "auto", [], () => ({
+        texture,
+        mesh: mesh as never,
+        padEverywhere: false,
+        lowerFace: null,
+        replace,
+      }));
+      const gl = FakeGL.instances[FakeGL.instances.length - 1];
+      warp.draw(ctx, pts, IDENTITY);
+      const draws = gl.calls.filter((c) => c.startsWith("uniform1f") || c.startsWith("drawElements("));
+      warp.destroy();
+      return { draws, copies: [...copies] };
+    };
+    const still = rest.map((p) => ({ ...p }));
+    const moved = rest.map((p, i) => (i === 0 ? { x: p.x + 2, y: p.y + 1 } : { ...p }));
+    // A cut-out at rest: nothing is drawn, the picture stands.
+    expect(frame(true, still)).toEqual({ draws: [], copies: [] });
+    // A corner moved: its triangle alone, its coverage (solid) erased with,
+    // then the triangle added.
+    expect(frame(true, moved)).toEqual({
+      draws: ["uniform1f(1)", "drawElements(3)", "uniform1f(0)", "drawElements(3)"],
+      copies: ["destination-out", "lighter"],
+    });
+    // An opaque picture: the whole mesh, laid over, as ever.
+    expect(frame(false, still)).toEqual({ draws: ["uniform1f(0)", "drawElements(6)"], copies: ["source-over"] });
   });
 
   it("frees the renderer with the engine", () => {
