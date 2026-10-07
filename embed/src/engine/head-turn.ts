@@ -118,6 +118,16 @@ export class HeadTurn {
     this.restArea = new Float64Array(this.tris.length);
     this.tris.forEach(([a, b, c], k) => (this.restArea[k] = area(base[a], base[b], base[c])));
     this.weight = hullFade(mesh, this.tris, FADE_IOD * fit.iod, JAW_FADE_IOD * fit.iod);
+    // Each eye turns as one piece: the fade reaching across an eye
+    // stretched it (a wide, large-eyed face's outer corner sits near the
+    // temple), and a stretched eye reads as a glance, not a turn.
+    for (let e = 0; e < 2; e++) {
+      const [c0, c1] = EYE_CORNERS[e];
+      const [centre, rim] = IRISES[e];
+      const group = [c0, c1, ...UPPER_LIDS[e], ...LOWER_LIDS[e], centre, ...rim].filter((i) => i < n);
+      const w = Math.max(...group.map((i) => this.weight[i]));
+      for (const i of group) this.weight[i] = w;
+    }
     this.browLift = browLift(base, fit.iod);
     this.before = new Float64Array(n * 2);
     this.target = new Float64Array(n * 2);
