@@ -150,6 +150,10 @@ export interface DeformInput {
   traits: CharacterTraits;
   lowerFace: LowerFaceRig | null;
   mouthExtension: MouthExtension | undefined;
+  /** The head's turn in depth (head-turn.ts, the "3d" head motion), run on
+   *  the landmarks after everything else and before the derived vertices
+   *  follow them. Absent: the head moves only as a rigid layer. */
+  turn?: (pts: Point[]) => void;
 }
 
 /** Every vertex of the mesh this frame, canvas px, in vertex order. */
@@ -215,6 +219,8 @@ export function deformFace(f: DeformInput): Point[] {
   // the cheeks follow the jaw and the lip shapes. After the driver, so it
   // reads what the lip actually did, jaw range and all.
   if (f.lowerFace) applyLowerFace(pts, mesh.basePoints, f.lowerFace, w, tuning.mouthOpen);
+
+  f.turn?.(pts);
 
   // Derived midpoint vertices (mouth subdivision) follow their parents
   // through EVERY layer above — computed last, from final positions.

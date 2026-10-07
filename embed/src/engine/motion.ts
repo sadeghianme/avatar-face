@@ -12,7 +12,10 @@
 import { BlinkScheduler } from "./blink";
 import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
 import { HeadMotion } from "./headmotion";
+import { HeadPersonality } from "./head-personality";
+import type { HeadPose3D } from "./head-turn";
 import type { Beat } from "./cues";
+import type { Cue } from "../types";
 import type { HeadGeom, Point } from "./geometry";
 import type { FaceState } from "./state";
 
@@ -74,6 +77,18 @@ export class Motion {
    *  (render2d.ts), never the face's vertices: the first attempt moved face
    *  vertices, and the face slid around inside a stationary head. */
   readonly head = new HeadMotion();
+  /**
+   * "2d" (the default): the head moves as a rigid layer (headOffset), with
+   * the drift above and nods on the beats. "3d" (a prototype,
+   * EngineOptions.headMotion): the head turns in depth inside the face
+   * mesh (head-turn.ts), driven by `personality` instead.
+   */
+  mode: "2d" | "3d" = "2d";
+  /** The tuning's headMotion, which scales the 3D pose and with it how
+   *  far the eyes counter it (the engine sets it every tick). */
+  headScale = 1;
+  /** The 3D mode's pose, gaze and brows (head-personality.ts). */
+  readonly personality = new HeadPersonality(1);
   /** Where the eyes are going: offsets in eye-widths. */
   gazeTarget: Point = { x: 0, y: 0 };
   private nextSaccadeAt = 0;
@@ -98,6 +113,7 @@ export class Motion {
 
   /** The first fixation and nod, timed from `now`. */
   start(now: number): void {
+    this.personality.start(now);
     this.blinks.reset(now);
     this.nextNodAt = now + 2500;
     this.nextSaccadeAt = now + 600 + Math.random() * 1200;
@@ -155,6 +171,7 @@ export class Motion {
   }
 
   endSpeech(now: number): void {
+    if (this.mode === "3d") this.personality.endSpeech(now);
     this.body.endSpeech();
     this.blinks.onSpeechEnd(now);
     this.beats = [];
@@ -200,13 +217,36 @@ export class Motion {
     this.blinks.update(dt, now, { speaking: speech.speaking, wordActive: speech.wordActive });
     this.face.blink = this.blinks.phase;
 
-    this.nod(dt, now, speech);
-
+    // (The order of the 2D branch's calls is kept as it was: each draws on
+    // Math.random.)
+    if (this.mode !== "3d") this.nod(dt, now, speech);
     this.body.update(dt, now);
-    this.head.update(dt, now, speech.speaking);
-    if (this.head.movedAt === now && this.head.moveSize > 0.35) this.blinks.onHeadTurn(now);
+    if (this.mode === "3d") {
+      const p = this.personality;
+      p.update(dt, now, speech.speaking, this.energy, speech.cueTime);
+      // A head move of more than a few degrees carries a blink.
+      if (p.movedAt === now && p.moveSize * this.headScale > 0.06) this.blinks.onHeadTurn(now);
+    } else {
+      this.head.update(dt, now, speech.speaking);
+      if (this.head.movedAt === now && this.head.moveSize > 0.35) this.blinks.onHeadTurn(now);
+    }
 
     this.saccade(dt, now, speech.speaking);
+  }
+
+  /** The 3D mode's cue track: its phrases and accents, from cue ms `ms`. */
+  setSpeechCues(cues: readonly Cue[], ms = 0): void {
+    this.personality.setSpeech(cues, ms);
+  }
+
+  /** The 3D pose now at `scale` (the tuning's headMotion), radians, and
+   *  the brows' raise. */
+  pose3d(scale: number): { pose: HeadPose3D; brow: number } {
+    const p = this.personality.pose;
+    return {
+      pose: { yaw: p.yaw * scale, pitch: p.pitch * scale, roll: p.roll * scale },
+      brow: this.personality.brow * Math.min(1, scale),
+    };
   }
 
   /**
@@ -267,9 +307,15 @@ export class Motion {
       this.blinks.onSaccade(now, Math.hypot(this.gazeTarget.x - gaze.x, this.gazeTarget.y - gaze.y));
     }
     // Saccades are ballistic: fast jump, then a still fixation.
+    // In 3D the eyes also hold the listener against the head's turn and
+    // lead it on a glance (head-personality.ts), the wander halved.
     const saccadeRate = 1 - Math.exp(-dt / SACCADE_MS);
-    gaze.x += (this.gazeTarget.x - gaze.x) * saccadeRate;
-    gaze.y += (this.gazeTarget.y - gaze.y) * saccadeRate;
+    const head3d = this.mode === "3d" ? this.personality.gaze : null;
+    const k = Math.min(1, this.headScale);
+    const tx = head3d ? this.gazeTarget.x * 0.5 + head3d.x * k : this.gazeTarget.x;
+    const ty = head3d ? this.gazeTarget.y * 0.5 + head3d.y * k : this.gazeTarget.y;
+    gaze.x += (tx - gaze.x) * saccadeRate;
+    gaze.y += (ty - gaze.y) * saccadeRate;
   }
 
   /**
