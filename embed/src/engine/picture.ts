@@ -1,9 +1,9 @@
 /**
  * The picture laid on the canvas, and everything built on where it lies:
  * the face mesh over it (geometry.ts), what it looks like (sampling.ts),
- * whether it is a cut-out, the head as a movable unit and, for a cut-out,
- * its own feathered layer (render2d.ts), the character mouth's field and
- * the lower face's rig. All of it is rebuilt whole when the texture or the
+ * whether it is a cut-out, the head as a movable unit and, for a cut-out
+ * that asks for it, its own feathered layer (render2d.ts), the character
+ * mouth's field and the lower face's rig. All of it is rebuilt whole when the texture or the
  * viewport changes, and nothing else changes it.
  */
 import { CharacterField } from "./character-mouth";
@@ -24,8 +24,11 @@ export class FacePicture {
   /** The head as a movable unit: where it sits and how far it may travel. */
   headGeom: HeadGeom | null = null;
   /** A cut-out's head REGION — hair, ears, skull — cut out once with
-   *  feathered edges, which moves over transparency. */
+   *  feathered edges, which moves over transparency; only when asked for
+   *  (headLayerWanted). A cut-out otherwise moves as one picture. */
   headLayer: HeadLayer | null = null;
+  /** Cut the head layer for a cut-out (EngineOptions.cutOutHeadLayer). */
+  private headLayerWanted = false;
   /** The character mouth's jaw field, only for a profile that asks for it. */
   field: CharacterField | null = null;
   /** The jaw, chin and cheeks for every mouth driver (jaw-rig.ts). */
@@ -59,9 +62,23 @@ export class FacePicture {
     this.lowerFace = buildLowerFaceRig(mesh.basePoints);
     if (sample) this.samples.sample(this.texture, mesh.texPoints, this.rig, this.profile);
     refineMesh(mesh, this.rig, this.texture);
-    // After the refinement: the head's mask must be whole over every vertex
-    // the warp draws, the neck band's included.
-    this.headLayer = this.headGeom && this.cutOut ? cutHeadLayer(this.texture, mesh, this.headGeom) : null;
     this.mesh = mesh;
+    this.cutHead();
+  }
+
+  /** Move a cut-out's head as its own layer (true), or the picture as one
+   *  (false, the default). False when that is already so. */
+  useHeadLayer(on: boolean): boolean {
+    if (on === this.headLayerWanted) return false;
+    this.headLayerWanted = on;
+    if (this.mesh) this.cutHead();
+    return true;
+  }
+
+  /** The head layer, after the refinement: the head's mask must be whole
+   *  over every vertex the warp draws, the neck band's included. */
+  private cutHead(): void {
+    const geom = this.headGeom;
+    this.headLayer = this.headLayerWanted && geom && this.cutOut ? cutHeadLayer(this.texture, this.mesh, geom) : null;
   }
 }

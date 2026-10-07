@@ -108,6 +108,64 @@ export function layOutFace(
 export function refineMesh(mesh: FaceMesh, rig: Rig, texture: HTMLImageElement): void {
   subdivideMouthRegion(mesh, rig);
   addNeckBand(mesh, rig, texture);
+  // The mouth subdivision's midpoints sit on their parents' edge: a
+  // T-junction is open on three sides and no hole.
+  const first = mesh.basePoints.length,
+    end = first + mesh.derivedParents.length;
+  mesh.triangles.push(...closeSlivers(mesh.triangles, (i) => i >= first && i < end));
+}
+
+/**
+ * The triangles that close every sliver hole in `triangles`: three edges
+ * each only one triangle has, around a triangle that is not there (none
+ * with a vertex `skip` passes). A rig fitted to an unusual face can come
+ * without a triangle folded at rest (one corner a pixel past the opposite
+ * edge; the backend drops it), and once the neck band is hung from the
+ * jaw line the mesh has a hole inside it there. Its corners move with
+ * the jaw, and a jaw corner's sliver opened into a gap 15 px long while
+ * speaking, the still picture's old jaw line showing through. Closed, the
+ * sliver stretches with the face instead, a pixel of the picture's own
+ * texture at rest.
+ */
+export function closeSlivers(
+  triangles: readonly (readonly [number, number, number])[],
+  skip: (i: number) => boolean = () => false
+): Triangle[] {
+  const n = 1 << 20; // vertex pairs as one number: far more than any mesh's vertices
+  const key = (i: number, j: number) => Math.min(i, j) * n + Math.max(i, j);
+  const count = new Map<number, number>();
+  const have = new Set<string>();
+  for (const t of triangles) {
+    const [a, b, c] = t;
+    for (const k of [key(a, b), key(b, c), key(c, a)]) count.set(k, (count.get(k) ?? 0) + 1);
+    have.add([...t].sort((x, y) => x - y).join(","));
+  }
+  // Each open edge's ends; a sliver is a 3-cycle of open edges.
+  const open = new Map<number, number[]>();
+  const link = (i: number, j: number) => {
+    const list = open.get(i);
+    if (list) list.push(j);
+    else open.set(i, [j]);
+  };
+  for (const [k, times] of count) {
+    if (times !== 1) continue;
+    const i = Math.floor(k / n),
+      j = k % n;
+    if (skip(i) || skip(j)) continue;
+    link(i, j);
+    link(j, i);
+  }
+  const added: Triangle[] = [];
+  for (const [a, near] of open) {
+    for (const b of near) {
+      if (b <= a) continue;
+      for (const c of open.get(b) ?? []) {
+        if (c <= b || !near.includes(c) || have.has(`${a},${b},${c}`)) continue;
+        added.push([a, b, c]);
+      }
+    }
+  }
+  return added;
 }
 
 /**
@@ -242,7 +300,19 @@ export interface HeadGeom extends Rect {
   yawPx: number;
   pitchPx: number;
   faceH: number;
+  /** Where a cut-out moving as one picture pivots (render2d.ts
+   *  applyBustTransform): low on the chest, below the shoulders' line, at
+   *  (pivotX, bustPivotY); canvas px. */
+  bustPivotY: number;
+  /** From the face's centre down to that pivot, px: the lever the head's
+   *  shift is turned into an angle over. */
+  bustReach: number;
 }
+
+/** How far below the chin a cut-out moving as one pivots, in face heights:
+ *  low on the chest, so a nod or a turn of the head carries the shoulders
+ *  only a little, the way a bust leans from its middle. */
+const BUST_PIVOT_DEPTH = 1.9;
 
 /**
  * Where the head sits and how far it may move: a rectangle around the
@@ -252,8 +322,9 @@ export interface HeadGeom extends Rect {
  * The face mesh spans eyebrows to chin — it knows nothing about hair or
  * ears. Warping it moves the face while the rest of the head stands still,
  * which is exactly the failure the first head-motion attempt shipped. So
- * the unit of motion is this rectangle (render2d.ts cuts it out of a
- * cut-out photo as its own layer).
+ * the unit of motion is the head with everything round it: the whole
+ * picture, moved as one (render2d.ts; a cut-out's head can be cut out as
+ * its own layer, opted into).
  */
 export function placeHead(basePoints: readonly Point[], picture: Rect): HeadGeom | null {
   const xs = basePoints.map((p) => p.x);
@@ -274,10 +345,11 @@ export function placeHead(basePoints: readonly Point[], picture: Rect): HeadGeom
   const w = Math.min(pic.x + pic.w, fx1 + faceW * 0.42) - x;
   const h = Math.min(pic.y + pic.h, fy1 + faceH * 0.5) - y;
   if (w < 8 || h < 8) return null;
+  // Never below the picture: nothing of it moves beneath its own edge.
+  const bustPivotY = Math.min(pic.y + pic.h, fy1 + faceH * BUST_PIVOT_DEPTH);
 
-  // The geometry (pivot, travel) serves every picture; the cut-out layer
-  // itself only a cut-out, whose head moves over transparency. An opaque
-  // picture moves as one instead (render), so it needs no copy.
+  // The geometry (pivot, travel) serves every picture, each moving as one
+  // (render2d.ts); the rectangle itself only a cut-out's opt-in head layer.
   return {
     x,
     y,
@@ -294,5 +366,7 @@ export function placeHead(basePoints: readonly Point[], picture: Rect): HeadGeom
     yawPx: faceW * 0.03,
     pitchPx: faceH * 0.025,
     faceH,
+    bustPivotY,
+    bustReach: Math.max(faceH, bustPivotY - (fy0 + fy1) / 2),
   };
 }

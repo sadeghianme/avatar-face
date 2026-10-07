@@ -79,6 +79,8 @@ const geom: HeadGeom = {
   yawPx: 4,
   pitchPx: 3,
   faceH: 60,
+  bustPivotY: 175,
+  bustReach: 110,
 };
 
 type Ctx = CanvasRenderingContext2D;
@@ -92,8 +94,8 @@ function stage(): { ctx: Ctx; read(): Uint8ClampedArray } {
 const drawPicture = (ctx: Ctx) => ctx.drawImage(texture, 0, 0, 200, 160, picture.x, picture.y, picture.w, picture.h);
 
 /** The frame as the engine composes a cut-out's (render2d.ts), the head
- *  moved by (dx, dy), no mesh. */
-function compose(ctx: Ctx, layer: HeadLayer, dx = 0, dy = 0) {
+ *  moved by (dx, dy), no mesh; with its head layer, or (null) as one. */
+function compose(ctx: Ctx, layer: HeadLayer | null, dx = 0, dy = 0, roll = 0) {
   composeFrame({
     ctx,
     picture,
@@ -102,7 +104,7 @@ function compose(ctx: Ctx, layer: HeadLayer, dx = 0, dy = 0) {
     cutOut: true,
     head: geom,
     headLayer: layer,
-    headOffset: { dx, dy, roll: 0, fdx: 0, fdy: 0 },
+    headOffset: { dx, dy, roll, fdx: 0, fdy: 0 },
     bodyLean: null,
     drawMesh: () => undefined,
     drawFeatures: () => undefined,
@@ -121,7 +123,56 @@ function maxDiff(a: Uint8ClampedArray, b: Uint8ClampedArray): number {
   return max;
 }
 
-describe("a cut-out's head layer", () => {
+describe("a cut-out without its head layer (the default)", () => {
+  it("moves as one picture: the bust leans from low on the chest, the face as far as the head", () => {
+    const dx = 2.6,
+      dy = 1.8,
+      roll = 0.01;
+    let drawnWith: DOMMatrix | null = null;
+    const moved = stage();
+    const draw = moved.ctx.drawImage.bind(moved.ctx);
+    let draws = 0;
+    moved.ctx.drawImage = ((...a: Parameters<Ctx["drawImage"]>) => {
+      draws++;
+      drawnWith = moved.ctx.getTransform();
+      return draw(...a);
+    }) as Ctx["drawImage"];
+    compose(moved.ctx, null, dx, dy, roll);
+    // One picture, drawn once: nothing erased, nothing added back.
+    expect(draws).toBe(1);
+    const m = drawnWith!;
+    const at = (x: number, y: number) => ({ x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f });
+    // The pivot stays; the face's centre travels the head's shift (and the
+    // roll's share of the lever), the shoulders' line a fraction of it.
+    const pivot = at(geom.pivotX, geom.bustPivotY);
+    expect(pivot.x).toBeCloseTo(geom.pivotX, 4);
+    expect(pivot.y).toBeCloseTo(geom.bustPivotY, 4);
+    const faceY = geom.bustPivotY - geom.bustReach;
+    const face = at(geom.pivotX, faceY);
+    // Sheared by dx over the reach, foreshortened by dy, rolled.
+    const r = geom.bustReach - dy;
+    expect(face.x - geom.pivotX).toBeCloseTo(dx * (r / geom.bustReach) * Math.cos(roll) + r * Math.sin(roll), 3);
+    expect(face.y - faceY).toBeCloseTo(
+      geom.bustReach - r * Math.cos(roll) + dx * (r / geom.bustReach) * Math.sin(roll),
+      3
+    );
+    expect(face.y - faceY).toBeCloseTo(dy, 0);
+    // The shoulders' line, a third of the reach up: a fraction of the
+    // face's travel, and level but for the roll.
+    const sy = geom.bustPivotY - geom.bustReach * 0.3;
+    const left = at(geom.pivotX - 60, sy),
+      right = at(geom.pivotX + 60, sy);
+    expect(Math.abs((left.x + right.x) / 2 - geom.pivotX)).toBeLessThan(Math.abs(face.x - geom.pivotX) * 0.35);
+    expect(Math.abs(Math.atan2(right.y - left.y, right.x - left.x) - roll)).toBeLessThan(1e-3);
+    // And it is the still picture through that transform, pixel for pixel.
+    const ref = stage();
+    ref.ctx.setTransform(m);
+    drawPicture(ref.ctx);
+    expect(maxDiff(ref.read(), moved.read())).toBe(0);
+  });
+});
+
+describe("a cut-out's head layer (opted into)", () => {
   it("is the texture's own pixels, feathered to nothing at its every edge, and whole over the mesh", () => {
     const mesh = gridMesh();
     const layer = cutHeadLayer(texture, mesh, geom)!;
@@ -232,6 +283,31 @@ describe("the warped mesh over a cut-out, in 2D", () => {
   it("(laid over instead, a half-transparent pixel composites over itself)", () => {
     const { still, framed } = warped(false, rest());
     expect(maxDiff(still, framed)).toBeGreaterThan(30);
+  });
+
+  it("moved, replaces what is under it: no half-transparent pixel composited over itself", () => {
+    // Every vertex shifted alike: inside the mesh the frame is the picture
+    // shifted, its half-transparent rim too. Laid over the picture, the rim
+    // came out alpha x (2 - alpha) wherever the mesh covers it.
+    const shift = { x: 0.6, y: 0.4 };
+    const pts = rest().map((p) => ({ x: p.x + shift.x, y: p.y + shift.y }));
+    const { framed } = warped(true, pts);
+    const want = stage();
+    want.ctx.translate(shift.x, shift.y);
+    drawPicture(want.ctx);
+    const ref = want.read();
+    const mesh = gridMesh();
+    const xs = mesh.basePoints.map((p) => p.x),
+      ys = mesh.basePoints.map((p) => p.y);
+    let worst = 0;
+    for (let y = Math.ceil(Math.min(...ys)) + 3; y < Math.max(...ys) - 3; y++) {
+      for (let x = Math.ceil(Math.min(...xs)) + 3; x < Math.max(...xs) - 3; x++) {
+        const i = (y * W + x) * 4;
+        worst = Math.max(worst, maxDiff(framed.subarray(i, i + 4), ref.subarray(i, i + 4)));
+      }
+    }
+    expect(worst).toBeLessThanOrEqual(6);
+    expect(maxDiff(warped(false, pts).framed, ref)).toBeGreaterThan(30);
   });
 
   it("moved, redraws what moved and leaves every still triangle as the picture", () => {

@@ -116,11 +116,19 @@ export class MeshWarp {
    * drew), so it is not drawn, and at rest nothing is. What moved is drawn
    * on the GPU through its own coverage, which erases the canvas before
    * the mesh is added back (picture x (1 - c) + mesh x c, along a still
-   * triangle's edge the picture again), and in 2D laid over, triangle by
-   * triangle: no composite operation replaces portably in 2D (a "copy" into
-   * an anti-aliased clip blends its edge on one rasterizer and drops what
-   * was under it on another: Chromium on Linux drew every triangle's
-   * outline as a dark wire), and what moves is the face, opaque.
+   * triangle's edge the picture again), and in 2D the same, triangle by
+   * triangle, each through its own (padded) clip: the clip's coverage
+   * erased ("destination-out"), the triangle added ("lighter"). No
+   * composite operation replaces portably in 2D (a "copy" into an
+   * anti-aliased clip blends its edge on one rasterizer and drops what was
+   * under it on another: Chromium on Linux drew every triangle's outline
+   * as a dark wire), and these two draws share one clip, so they share its
+   * coverage exactly. Laid over instead, the neck band, stretched by the
+   * jaw while speaking, drew a light line down a cut-out's hair fringe
+   * where it crosses it. Erasing the whole moved region first and ADDING
+   * the triangles unpadded does not work in 2D: two triangles' coverages
+   * along their shared edge need not sum to one (Chrome's came to 1.2), a
+   * bright wire along every edge.
    */
   draw(ctx: CanvasRenderingContext2D, pts: Point[], affine: Affine): void {
     const { texture, mesh, replace } = this.source();
@@ -138,7 +146,7 @@ export class MeshWarp {
     for (const [a, b, c] of mesh.triangles) {
       const pad = pads ? pads[t++] : 0;
       if (rest && still(a, b, c)) continue;
-      drawWarpedTriangle(ctx, texture, mesh.texPoints, pts, a, b, c, pad);
+      drawWarpedTriangle(ctx, texture, mesh.texPoints, pts, a, b, c, pad, !!rest);
     }
   }
 
@@ -291,6 +299,8 @@ export class MeshWarp {
 /**
  * Draw one texture triangle warped to its deformed destination.
  * Affine solved with Cramer's rule; degenerate triangles are skipped.
+ * `replace`: the triangle replaces what is under it instead of being laid
+ * over it.
  */
 function drawWarpedTriangle(
   ctx: CanvasRenderingContext2D,
@@ -300,7 +310,8 @@ function drawWarpedTriangle(
   i0: number,
   i1: number,
   i2: number,
-  pad = 0
+  pad = 0,
+  replace = false
 ): void {
   const s0 = texPoints[i0],
     s1 = texPoints[i1],
@@ -336,6 +347,21 @@ function drawWarpedTriangle(
   ctx.lineTo(g2.x, g2.y);
   ctx.closePath();
   ctx.clip();
+  if (replace) {
+    // What is under the triangle out by the clip's coverage c, the
+    // triangle added at c: canvas x (1 - c) + triangle x c, the "copy" a
+    // composite operation cannot do portably (MeshWarp.draw). The two
+    // draws share the clip, so they share its coverage, pixel for pixel.
+    // The fill is the clip's own box, a pixel round: a rectangle of a
+    // million pixels a side erased whole boxes round the face on Linux
+    // Chromium's software canvas, clip or no clip.
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.fillStyle = "#fff";
+    const x0 = Math.min(g0.x, g1.x, g2.x) - 1,
+      y0 = Math.min(g0.y, g1.y, g2.y) - 1;
+    ctx.fillRect(x0, y0, Math.max(g0.x, g1.x, g2.x) + 1 - x0, Math.max(g0.y, g1.y, g2.y) + 1 - y0);
+    ctx.globalCompositeOperation = "lighter";
+  }
   ctx.transform(a, b, c, d, e, f);
   ctx.drawImage(texture, 0, 0);
   ctx.restore();

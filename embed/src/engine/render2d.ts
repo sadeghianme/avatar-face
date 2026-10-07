@@ -3,7 +3,7 @@
  * the head as a rigid unit, the body's sway, and the layered path.
  */
 import type { EngineTuning } from "../types";
-import { IDENTITY, rotate, translate, type Affine } from "./warp-gl";
+import { IDENTITY, multiply, rotate, translate, type Affine } from "./warp-gl";
 import type { FaceMesh, HeadGeom, Point, Rect } from "./geometry";
 import type { BodyLean, HeadOffset } from "./motion";
 
@@ -36,8 +36,11 @@ const MASK_MESH_MARGIN = 4;
  * hold the whole face mesh (the neck band included) inside its interior,
  * with feathered edges: soft at the sides and top so a moved head blends
  * into the still body, and a deep fade at the neck, where the cross-fade
- * lands on a collar instead of across a chin. Only a cut-out needs one (its
- * head moves over transparency; an opaque picture moves as one).
+ * lands on a collar instead of across a chin. Only a cut-out can use one
+ * (its head moves over transparency), and only when asked
+ * (EngineOptions.cutOutHeadLayer): by default a cut-out moves as one
+ * picture, as an opaque one does, because the feathered band itself shows
+ * through the hair and the shoulders whenever the head moves.
  *
  * The frame is composed as body x (1 - mask) + head x mask (composePhoto):
  * the mask erases the body's copy, the layer adds the head's. Four rules
@@ -171,12 +174,15 @@ const OPAQUE_BACKGROUND_SCALE = 0.3;
  * How far the head and the body may move for this picture, as multiples
  * of their full travel, with the tuning's own scales applied.
  *
- * Ghosting: a moved layer over an intact photo leaves a sliver of the
- * original behind it. A cut-out has its head punched out of the base, so
- * it can travel further. Layered heads move at full strength: there is
- * real content behind them, so wider travel reveals pixels instead of
- * tearing them. The body likewise: a cut-out has no edge to expose, and a
- * layered picture's background genuinely stays still.
+ * An opaque picture moves as one, its background with it, so the head's
+ * travel is halved and the sway cut to a third: more reads as the camera
+ * wobbling, and drags the photo's own edge into frame. A cut-out has no
+ * background to wobble: its face travels the head's full distance (as
+ * one picture, the bust leaning from low on the chest; or, opted into,
+ * its own head layer over the body) and its body sways in full. Layered
+ * heads move at full strength: there is real content behind them, so
+ * wider travel reveals pixels instead of tearing them, and a layered
+ * picture's background genuinely stays still.
  */
 export function motionTravel(
   layered: boolean,
@@ -198,7 +204,8 @@ export interface FrameParts {
   /** The layered picture, or null for the single photo. */
   layers: Layers | null;
   cutOut: boolean;
-  /** The head's rectangle and pivot, and its feathered layer (a cut-out's). */
+  /** The head's rectangle and pivots, and its feathered layer (a cut-out's,
+   *  when opted into; null otherwise). */
   head: HeadGeom | null;
   headLayer: HeadLayer | null;
   headOffset: HeadOffset;
@@ -238,18 +245,28 @@ function composePhoto(f: FrameParts): void {
   // --- Head motion ------------------------------------------------------
   //
   // The whole head — hair included — moves as one rigid unit, which is
-  // what makes a shift read as a turn. HOW depends on what is behind it.
-  // A cut-out has nothing behind its head but transparency: the head is
-  // cut out as its own feathered layer, erased from the base and drawn
-  // moved, and its edges are the hair's own. A picture with an opaque
-  // background has no such edge: a moved copy of the head over the still
-  // picture leaves a seam wherever the copy's rectangle meets what it
-  // covers, and at the picture's boundary (a scan on white, a portrait
-  // on grey) the rotated copy pokes past the edge as a torn, jagged rim.
-  // So an opaque picture moves AS ONE, picture and mesh together: there
-  // is no second copy, and nothing to seam.
-  const asOne = !f.cutOut;
-  if (asOne && geom) affine = applyHeadTransform(ctx, geom, head, affine);
+  // what makes a shift read as a turn. And the picture moves AS ONE,
+  // picture and mesh together, whatever is behind it: there is no second
+  // copy of anything, so nothing to seam. A moved copy of the head over
+  // the still picture leaves a boundary wherever the copy meets what it
+  // covers: over an opaque background a seam at the copy's rectangle and a
+  // torn rim at the picture's edge; over a cut-out's transparency a
+  // feathered band through the hair, the neck and the shoulders, a cross-
+  // fade of two positions of the same strands, which shows as soon as the
+  // head moves ("we decided not to cut the photo", 2026-10-07).
+  //
+  // An opaque picture takes the head's shift and roll whole, about the
+  // head's own pivot (its travel is halved: motionTravel). A cut-out's
+  // subject is a bust whose edges are all in view, so the same shift
+  // would slide the shoulders as far as the face: it leans from low on
+  // the chest instead (applyBustTransform), the face travelling as far
+  // as the head did and the shoulders a little. The cut-out's own head
+  // layer (cutHeadLayer) is kept as an opt-in, for comparison
+  // (EngineOptions.cutOutHeadLayer).
+  const layered = f.cutOut && geom && headLayer;
+  if (!layered && geom) {
+    affine = f.cutOut ? applyBustTransform(ctx, geom, head, affine) : applyHeadTransform(ctx, geom, head, affine);
+  }
 
   // Base layer: the whole un-warped photo, through the viewport. Triangle
   // seams and sub-pixel gaps in the warp then reveal original pixels
@@ -257,7 +274,6 @@ function composePhoto(f: FrameParts): void {
   // there, as far as the canvas reaches.
   drawFullFrame(ctx, f.texture, f.picture);
 
-  const layered = !asOne && geom && headLayer;
   if (layered) {
     // The head erased from the base first, by its mask (the share of the
     // head's motion, not the picture's alpha), so the moved layer does not
@@ -339,6 +355,45 @@ function applyBodyTransform(ctx: CanvasRenderingContext2D, lean: BodyLean | null
   let m = translate(IDENTITY, pivot.x, pivot.y);
   m = rotate(m, angle);
   return translate(m, -pivot.x, -pivot.y - rise);
+}
+
+/**
+ * A cut-out's head motion on the whole picture: the bust leans from a
+ * pivot low on the chest (HeadGeom.bustPivotY), on the context and on the
+ * affine alike.
+ *
+ * The head's shift (dx, dy) is what the face should travel; the reach
+ * from the face's centre down to the pivot is the lever, and everything
+ * travels in proportion to its height above the pivot. Sideways, a shear:
+ * the face moves by dx, the shoulders (near the pivot) by little, and the
+ * shoulders' line stays level. (A rotation by dx / reach, tried first,
+ * tipped the shoulders up and down by 8 px at their ends on a 960 px
+ * stage while the head turned, a see-saw no body does.) Up and down, a
+ * foreshortening about the pivot, 1 - dy / reach, which is how a nod
+ * looks from in front: the face dips by dy, the chin a little less than
+ * the brow, the shoulders by little, and the picture's lower edge, at or
+ * below the pivot, never rises into view. The roll alone is a rotation,
+ * the head's tilt, which the face must show. A shear, a scale and a
+ * rotation of a few hundredths: the whole picture, nothing torn.
+ */
+function applyBustTransform(
+  ctx: CanvasRenderingContext2D,
+  geom: { pivotX: number; bustPivotY: number; bustReach: number },
+  head: { dx: number; dy: number; roll: number },
+  affine: Affine
+): Affine {
+  const shear = -head.dx / geom.bustReach;
+  const squash = 1 - head.dy / geom.bustReach;
+  // (x, y) about the pivot -> (x + shear * y * squash, y * squash), rolled.
+  const lean: Affine = { a: 1, b: 0, c: shear * squash, d: squash, e: 0, f: 0 };
+  ctx.translate(geom.pivotX, geom.bustPivotY);
+  ctx.rotate(head.roll);
+  ctx.transform(lean.a, lean.b, lean.c, lean.d, lean.e, lean.f);
+  ctx.translate(-geom.pivotX, -geom.bustPivotY);
+  let m = translate(affine, geom.pivotX, geom.bustPivotY);
+  m = rotate(m, head.roll);
+  m = multiply(m, lean);
+  return translate(m, -geom.pivotX, -geom.bustPivotY);
 }
 
 /**
