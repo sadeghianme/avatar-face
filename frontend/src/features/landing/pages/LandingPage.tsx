@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Developers } from "@/features/landing/components/Developers";
 import { Faq } from "@/features/landing/components/Faq";
@@ -13,9 +12,10 @@ import { SiteFooter } from "@/features/landing/components/SiteFooter";
 import { SiteNav } from "@/features/landing/components/SiteNav";
 import { Trust } from "@/features/landing/components/Trust";
 import { UseCases } from "@/features/landing/components/UseCases";
+import { useT } from "@/i18n";
 
 export function LandingPage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   useEffect(() => {
     document.title = t("landingDocTitle");
   }, [t]);

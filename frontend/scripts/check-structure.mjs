@@ -13,6 +13,9 @@
  *  3. All cross-folder imports are absolute (`@/...`). A relative import may
  *     not climb (`../`), so moving a file never silently rewires another.
  *
+ * The rendering tests' helpers (`test/`) are outside rule 1, and only tests
+ * may import them.
+ *
  * Plus one content check: every locale file has the same key set in every
  * language (a key missing on either side is reported), and no key is defined
  * twice.
@@ -33,13 +36,18 @@ function walk(dir) {
   return out;
 }
 
-const files = walk(ROOT).filter((f) => !relative(ROOT, f).startsWith("devtools"));
+const files = walk(ROOT);
 const IMPORT = /(?:from\s+|import\s*\(\s*|^import\s+)["']([^"']+)["']/gm;
 
 for (const file of files) {
   const rel = relative(ROOT, file).split(sep).join("/");
   const feature = rel.match(/^features\/([^/]+)\//)?.[1] ?? null;
   const shared = /^(components|lib|providers|i18n)\//.test(rel);
+  // The rendering tests' helpers (src/test) answer for the server: they may
+  // read the values a feature's requests carry (a consent's wording
+  // version), which no page needs from its public surface. Never imported
+  // by app code (tsconfig.json leaves src/test out of the app's program).
+  const testHelper = rel.startsWith("test/");
   const text = readFileSync(file, "utf8");
   for (const m of text.matchAll(IMPORT)) {
     const spec = m[1];
@@ -47,8 +55,11 @@ for (const file of files) {
       errors.push(`${rel}: relative import climbs out of its folder: "${spec}" — use "@/…"`);
     }
     const deep = spec.match(/^@\/features\/([^/]+)\/(.+)$/);
-    if (deep && deep[1] !== feature) {
+    if (deep && deep[1] !== feature && !testHelper) {
       errors.push(`${rel}: reaches into feature "${deep[1]}" internals: "${spec}" — import "@/features/${deep[1]}"`);
+    }
+    if (spec.startsWith("@/test/") && !testHelper && !/\.test\.tsx?$/.test(rel)) {
+      errors.push(`${rel}: app code imports a test helper: "${spec}"`);
     }
     if (shared && spec.startsWith("@/features")) {
       errors.push(`${rel}: shared layer depends on a feature: "${spec}"`);

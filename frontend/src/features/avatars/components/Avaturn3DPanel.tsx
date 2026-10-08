@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { FieldError } from "@/components/ui/FieldError";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAvaturnSession, useImportAvatar } from "@/features/avatars/api";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 
 /**
@@ -18,7 +19,7 @@ import { ApiError } from "@/lib/api";
  * host), so the result is an avatar like any other.
  */
 export function Avaturn3DPanel({ orgId }: { orgId: string }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const navigate = useNavigate();
   const session = useAvaturnSession(orgId);
   const { mutateAsync: importFromUrl } = useImportAvatar(orgId).fromUrl;
@@ -90,7 +91,7 @@ export function Avaturn3DPanel({ orgId }: { orgId: string }) {
             {t("avaturnImporting")}
           </p>
         )}
-        {error && <p className="field-error p-3">{error}</p>}
+        {error && <FieldError className="p-3">{error}</FieldError>}
       </Card>
     );
   }
@@ -101,7 +102,7 @@ export function Avaturn3DPanel({ orgId }: { orgId: string }) {
       <Button className="shrink-0" onClick={() => void start()} loading={busy}>
         {t("avaturnStart")}
       </Button>
-      {error && <p className="field-error w-full">{error}</p>}
+      {error && <FieldError className="w-full">{error}</FieldError>}
     </Card>
   );
 }

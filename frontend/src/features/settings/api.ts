@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
-import type { Integration, Org, Usage } from "@/lib/types";
+import type { Integration, Org, Schemas, Usage } from "@/lib/types";
 
 /** This month's allowance and what was used of it (the avatars page shows it too). */
 export function useUsage(orgId: string | undefined, options: { staleTime?: number } = {}) {
@@ -17,7 +17,7 @@ export function useUsage(orgId: string | undefined, options: { staleTime?: numbe
 export function useRenameOrg(orgId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) => api.patch(`/orgs/${orgId}`, { name }),
+    mutationFn: (name: string) => api.patch<Org>(`/orgs/${orgId}`, { name } satisfies Schemas["OrgUpdate"]),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.orgs() }),
   });
 }
@@ -30,7 +30,8 @@ export function useRenameOrg(orgId: string | undefined) {
 export function useSetThirdPartyAi(orgId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (enabled: boolean) => api.patch<Org>(`/orgs/${orgId}`, { third_party_ai_enabled: enabled }),
+    mutationFn: (enabled: boolean) =>
+      api.patch<Org>(`/orgs/${orgId}`, { third_party_ai_enabled: enabled } satisfies Schemas["OrgUpdate"]),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.orgs() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.consentTerms(orgId) });
@@ -50,7 +51,8 @@ export function useIntegrations(orgId: string) {
 export function useSaveIntegrations(orgId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (values: Record<string, string>) => api.put(`/orgs/${orgId}/integrations`, { values }),
+    mutationFn: (values: Record<string, string>) =>
+      api.put<Integration[]>(`/orgs/${orgId}/integrations`, { values } satisfies Schemas["IntegrationsUpdate"]),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.integrations(orgId) });
       await queryClient.invalidateQueries({ queryKey: queryKeys.ttsProviders() });
@@ -59,6 +61,7 @@ export function useSaveIntegrations(orgId: string) {
   });
 }
 
+/** What Test found (POST …/test answers a dict: typed here). */
 export interface IntegrationTest {
   ok: boolean;
   voices?: number;

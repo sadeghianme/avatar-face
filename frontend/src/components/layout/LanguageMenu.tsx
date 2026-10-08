@@ -1,6 +1,5 @@
-import { useTranslation } from "react-i18next";
-
 import { MenuButton } from "@/components/ui/MenuButton";
+import { useT } from "@/i18n";
 
 /**
  * Language, in the header beside the theme toggle.
@@ -16,7 +15,7 @@ const LANGUAGES: { code: string; name: string }[] = [
 ];
 
 export function LanguageMenu() {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useT();
   const active = i18n.language.split("-")[0];
   return (
     <MenuButton

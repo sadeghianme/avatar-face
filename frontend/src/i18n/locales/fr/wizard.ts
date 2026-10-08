@@ -1,4 +1,7 @@
 /** fr : l'assistant de création en quatre étapes (features/avatars, wizard.ts). */
+import type { wizard as en } from "@/i18n/locales/en/wizard";
+import type { Locale } from "@/i18n/types";
+
 export const wizard = {
   wzTitle: "Créer un avatar",
   wzStepsLabel: "Progression",
@@ -193,4 +196,4 @@ export const wizard = {
   wzRenameHint: "Entrée pour enregistrer, Échap pour annuler.",
   wzRenameSaved: "Nom enregistré",
   wzRenameFailed: "Le nom n’a pas pu être enregistré. Réessayez.",
-};
+} satisfies Locale<typeof en>;

@@ -1,16 +1,15 @@
-import { useTranslation } from "react-i18next";
-
 import { Icon, type IconName } from "@/components/ui/Icon";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 import { Reveal, SectionHeader } from "./Reveal";
 
-const CASES: { icon: IconName; key: string }[] = [
+const CASES = [
   { icon: "headset", key: "useSupport" },
   { icon: "trending", key: "useSales" },
   { icon: "school", key: "useEdu" },
   { icon: "globe", key: "useGlobal" },
-];
+] as const satisfies readonly { icon: IconName; key: string }[];
 
 /** A use case: lifts and warms under the pointer. */
 const CASE_CARD = cx(
@@ -24,7 +23,7 @@ const CASE_ICON = cx(
 );
 
 export function UseCases() {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <section id="use-cases" className="scroll-mt-20 bg-gray-50/70 py-24 sm:py-32 dark:bg-white/[0.015]">
       <div className="mx-auto max-w-7xl px-5 sm:px-6">

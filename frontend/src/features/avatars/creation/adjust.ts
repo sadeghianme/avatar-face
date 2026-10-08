@@ -191,7 +191,7 @@ export function statementNeeded(creation: Creation): FaceStatement | null {
 }
 
 /** Why a candidate failed, in the owner's words (adjustReason_<code>). */
-export const CANDIDATE_REASONS: ReadonlySet<string> = new Set([
+export const CANDIDATE_REASON_CODES = [
   "safety_refused",
   "no_image",
   "provider_error",
@@ -202,8 +202,11 @@ export const CANDIDATE_REASONS: ReadonlySet<string> = new Set([
   "fit_invalid",
   "skin_tone_changed",
   "check_failed",
-]);
+] as const;
+export const CANDIDATE_REASONS: ReadonlySet<string> = new Set(CANDIDATE_REASON_CODES);
+const isCandidateReason = (code: string): code is (typeof CANDIDATE_REASON_CODES)[number] =>
+  CANDIDATE_REASONS.has(code);
 
 export function candidateReasonText(t: Translate, reason: PhotoCheck): string {
-  return CANDIDATE_REASONS.has(reason.code) ? t(`adjustReason_${reason.code}`) : reason.detail || t("error");
+  return isCandidateReason(reason.code) ? t(`adjustReason_${reason.code}`) : reason.detail || t("error");
 }

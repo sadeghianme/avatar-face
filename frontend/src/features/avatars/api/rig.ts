@@ -4,19 +4,16 @@ import { useAvatarCache } from "@/features/avatars/api/avatars";
 import type { FaceMarks, FitReason } from "@/features/avatars/face-marks";
 import { api } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
-import type { Avatar } from "@/lib/types";
+import type { Avatar, Refine, Schemas } from "@/lib/types";
 
 /** Where the fit put the face's points, and the picture they are on. */
+/** GET …/rig-anchors answers a dict (no response model yet): typed here. */
 export interface AnchorsResponse {
   anchors: FaceMarks;
   image_size: [number, number];
 }
 
-export interface FitResponse {
-  rig: unknown;
-  persisted: boolean;
-  reasons: FitReason[];
-}
+export type FitResponse = Refine<Schemas["RigFitResult"], { reasons: FitReason[] }>;
 
 const rigPath = (orgId: string, avatarId: string) => `/orgs/${orgId}/avatars/${avatarId}`;
 

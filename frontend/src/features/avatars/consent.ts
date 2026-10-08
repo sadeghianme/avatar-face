@@ -1,3 +1,4 @@
+import type { Refine, Schemas } from "@/lib/types";
 /**
  * Consents, as the dashboard asks for them.
  *
@@ -42,30 +43,14 @@ export const CONSENT_TEXT_VERSIONS: Readonly<Record<ConsentScope, string>> = {
 export const AI_PROVIDERS: readonly string[] = ["google"];
 
 /** GET /orgs/{id}/consents/terms. */
-export interface ConsentTerms {
-  third_party_ai: { text_version: string; providers: string[] };
-  depiction: { text_version: string; providers: string[] };
-  generated_face: { text_version: string; providers: string[] };
-  third_party_ai_enabled: boolean;
-}
+export type ConsentTerms = Schemas["ConsentTerms"];
 
 /** POST /orgs/{id}/consents answers with this. */
-export interface ConsentRecord {
-  id: string;
-  scope: ConsentScope;
-  providers: string[];
-  text_version: string;
-  /** The creation a statement about a face is about; null otherwise. */
-  creation_id?: string | null;
-  created_at: string;
-}
+/** A statement recorded; `creation_id`, the creation a statement about a
+ * face is about (null otherwise). */
+export type ConsentRecord = Refine<Schemas["ConsentOut"], { scope: ConsentScope }>;
 
-export interface ConsentBody {
-  scope: ConsentScope;
-  text_version: string;
-  providers?: string[];
-  creation_id?: string;
-}
+export type ConsentBody = Schemas["ConsentCreate"];
 
 /** What POST /consents is sent for `scope`: always this bundle's version,
  * and for a statement about a face, the creation it is about (the server
@@ -117,15 +102,12 @@ export function providerLabel(provider: string): string {
 
 /** GET /orgs/{id}/consents/mine?scope=: the caller's latest consent under
  * the wording in force, or null (never asked, or the wording changed). */
-export interface MyConsent {
-  scope: ConsentScope;
-  text_version: string;
-  consent_id: string | null;
-  created_at: string | null;
-  /** True when consent_id is null because the wording changed: the member
-   * agreed to an earlier version. Absent on servers that predate it. */
-  stale?: boolean;
-}
+/** The member's remembered agreement. `stale`: consent_id is null because
+ * the wording changed (the member agreed to an earlier version). */
+export type MyConsent = Refine<
+  Schemas["MyConsentOut"],
+  { scope: ConsentScope; consent_id: string | null; created_at: string | null }
+>;
 
 /**
  * The consent id to pass to a step without asking again, or null (ask).

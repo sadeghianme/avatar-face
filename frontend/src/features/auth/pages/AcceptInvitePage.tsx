@@ -1,15 +1,16 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
+import { FieldError } from "@/components/ui/FieldError";
 import { useAcceptInvite, useInvite } from "@/features/auth/api";
 import { AuthShell } from "@/features/auth/components/AuthShell";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/providers/auth";
 
 export function AcceptInvitePage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { token } = useParams<{ token: string }>();
   const { user, loading } = useAuth();
   const navigate = useNavigate();
@@ -32,13 +33,13 @@ export function AcceptInvitePage() {
       {isLoading || loading ? (
         <p className="text-gray-500">{t("loading")}</p>
       ) : !invite ? (
-        <p className="field-error">{t("error")}</p>
+        <FieldError>{t("error")}</FieldError>
       ) : (
         <div className="flex flex-col gap-4">
           <p className="text-gray-700 dark:text-gray-300">
             {t("joinOrg", { org: invite.org_name, role: t(`roles.${invite.role}`) })}
           </p>
-          {error && <p className="field-error">{error}</p>}
+          {error && <FieldError>{error}</FieldError>}
           {user ? (
             <Button onClick={() => void accept()}>{t("accept")}</Button>
           ) : (

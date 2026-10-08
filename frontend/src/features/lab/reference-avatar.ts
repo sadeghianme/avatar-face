@@ -22,4 +22,7 @@ export const REFERENCE_AVATAR: Avatar = {
   image_url: "/lab/reference/portrait.png",
   rig_url: "/lab/reference/rig.json",
   framing: "full",
+  face_type: "human",
+  published: false,
+  unpublished: false,
 };

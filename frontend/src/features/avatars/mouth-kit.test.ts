@@ -8,6 +8,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
+import type { CreationJob } from "@/features/avatars/creation";
+import type { Avatar, MouthKit, Reason } from "@/lib/types";
+
 import {
   canCompareShapes,
   droppedText,
@@ -40,11 +43,13 @@ import {
 } from "./mouth-kit.ts";
 import { mouthErrorKey, teethNoteKey, teethView } from "./teeth.ts";
 
+type Mouth = NonNullable<Avatar["mouth"]>;
+
 // A translator that shows what it was asked: the key, and its options.
 const t = (key: string, options?: Record<string, unknown>) => (options ? `${key}${JSON.stringify(options)}` : key);
 const generateKey = (code: string) => mouthErrorKey(code, "generate");
 
-const job = (extra = {}) => ({
+const job = (extra: Partial<CreationJob> = {}): CreationJob => ({
   id: "kit-1",
   step: "mouth_kit",
   state: "running",
@@ -55,16 +60,16 @@ const job = (extra = {}) => ({
   ...extra,
 });
 
-const reason = (code: string, detail = `detail of ${code}`) => ({ code, detail });
+const reason = (code: string, detail = `detail of ${code}`): Reason => ({ code, detail });
 
-const shapeList = (standard: Record<string, string> = {}) =>
+const shapeList = (standard: Record<string, string> = {}): MouthKit["shapes"] =>
   KIT_SHAPES.map((shape) => ({
     shape,
     provenance: shape in standard ? "retargeted" : "generated",
     reason: shape in standard ? reason(standard[shape]) : null,
   }));
 
-const kit = (standard: Record<string, string> = {}, extra = {}) => {
+const kit = (standard: Record<string, string> = {}, extra: Partial<MouthKit> = {}): MouthKit => {
   const shapes = shapeList(standard);
   const generated = shapes.filter((s) => s.provenance === "generated").length;
   return {
@@ -80,7 +85,7 @@ const kit = (standard: Record<string, string> = {}, extra = {}) => {
   };
 };
 
-const mouth = (extra = {}) => ({
+const mouth = (extra: Partial<Mouth> = {}): Mouth => ({
   renderer: "continuous",
   profile: {},
   has_oral_photo: true,

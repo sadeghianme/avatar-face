@@ -1,4 +1,7 @@
 /** fr: auth strings. A key lives in exactly one file; add new ones here. */
+import type { auth as en } from "@/i18n/locales/en/auth";
+import type { Locale } from "@/i18n/types";
+
 export const auth = {
   welcomeBack: "Bon retour",
   loginSubtitle: "Connectez-vous pour gérer vos avatars et vos clés.",
@@ -46,4 +49,4 @@ export const auth = {
   signingIn: "Connexion…",
   identifierRequired: "Saisissez votre nom d'utilisateur ou votre e-mail.",
   passwordRequired: "Saisissez votre mot de passe.",
-} as const;
+} as const satisfies Locale<typeof en>;

@@ -1,4 +1,7 @@
 /** fr: lab strings. A key lives in exactly one file; add new ones here. */
+import type { lab as en } from "@/i18n/locales/en/lab";
+import type { Locale } from "@/i18n/types";
+
 export const lab = {
   speechStreamReady: "Parole à faible latence · prêt à tester",
   speechStarting: "Préparation de la première phrase…",
@@ -164,4 +167,4 @@ export const lab = {
   photofaceHDLayers: "Le fond, le corps et la tête bougent séparément pour un mouvement plus propre.",
   photofaceHDReuse: "Les mêmes voix, phonèmes et files de lecture pilotent le nouveau moteur.",
   photofaceHDIsolation: "Module expérimental : le moteur 2D et le widget actuels restent intacts.",
-} as const;
+} as const satisfies Locale<typeof en>;

@@ -1,9 +1,8 @@
-import { useTranslation } from "react-i18next";
-
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Textarea } from "@/components/ui/Textarea";
 import type { useLipSyncComparison } from "@/features/lab/hooks/useLipSyncComparison";
+import { useT } from "@/i18n";
 
 type Comparison = ReturnType<typeof useLipSyncComparison>;
 
@@ -27,7 +26,7 @@ export function PlaybackButtons({
   onReplay?: () => void;
   onStop?: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <div className="flex flex-wrap gap-2">
       <Button variant="secondary" disabled={!comparison.payload || !ready || comparison.busy} onClick={onReplay}>
@@ -56,7 +55,7 @@ export function ScriptField({
   /** The box's height (min-h-*). */
   className?: string;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <Field id={id} label={t("lipSyncScript")}>
       <Textarea className={className} value={text} maxLength={SCRIPT_MAX} onChange={(e) => onChange(e.target.value)} />

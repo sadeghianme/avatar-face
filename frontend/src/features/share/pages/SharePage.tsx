@@ -1,16 +1,12 @@
-import { AvatarEngine, BrowserTTS, type Rig } from "@liveface/embed";
-import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useRef } from "react";
 import { useParams } from "react-router-dom";
 
-import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
-import { Textarea } from "@/components/ui/Textarea";
-import { useAvatarMouth } from "@/features/avatars";
-import { fetchPublicAvatar, phraseCues, type PublicAvatar, speakPublic } from "@/features/share/api";
-import { loadImage } from "@/lib/image";
-import { useMediaQuery } from "@/lib/useMediaQuery";
+import { ShareComposer } from "@/features/share/components/ShareComposer";
+import { useShareEngine } from "@/features/share/hooks/useShareEngine";
+import { useShareSpeech } from "@/features/share/hooks/useShareSpeech";
+import { useT } from "@/i18n";
 
 /**
  * The page behind a share link: one avatar, full screen, and a box to type in.
@@ -21,131 +17,15 @@ import { useMediaQuery } from "@/lib/useMediaQuery";
  * line to type and a button to press.
  *
  * Speech goes through the public endpoint, which is rate-limited and charges
- * the owner. Nothing here can address anything but this one avatar.
+ * the owner. Nothing here can address anything but this one avatar. The
+ * engine is useShareEngine's, the line and its speech useShareSpeech's.
  */
 export function SharePage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { token } = useParams<{ token: string }>();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<AvatarEngine | null>(null);
-  const [mouthEngine, setMouthEngine] = useState<AvatarEngine | null>(null);
-  const [avatar, setAvatar] = useState<PublicAvatar | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [text, setText] = useState("");
-  // A narrow phone: the one-line box is ~270px, and the long hint would
-  // wrap and be cut in half.
-  const narrow = useMediaQuery("(max-width: 480px)");
-  const [speaking, setSpeaking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Held once: the engine reads canvas.width when it frames the face, so it
-  // must not change under a mounted engine.
-  const [dpr] = useState(() => Math.min(window.devicePixelRatio || 1, 3));
-
-  useEffect(() => {
-    let cancelled = false;
-    let engine: AvatarEngine | null = null;
-
-    const boot = async () => {
-      const info = await fetchPublicAvatar(token);
-      if (cancelled) return;
-      setAvatar(info);
-
-      const [rigResponse, texture] = await Promise.all([
-        fetch(info.rig_url),
-        loadImage(info.image_url || info.thumbnail_url),
-      ]);
-      const rig = (await rigResponse.json()) as Rig;
-      if (cancelled || !canvasRef.current) return;
-      engine = new AvatarEngine(canvasRef.current, rig, texture, {
-        fullPhoto: info.framing === "full",
-        // The owner's published scene: the same zoom, pan and background
-        // the widget and the dashboard show.
-        scene: info.scene ?? undefined,
-        // The published face type: a person's head turns in depth, an
-        // animal's or a cartoon's moves as a layer, whatever its rig names.
-        faceType: info.face_type,
-        // `__liveface` for measuring a live share page (frame cadence, lip
-        // gap); our own page, so the handle is opted into here.
-        debug: true,
-      });
-      engineRef.current = engine;
-      setMouthEngine(engine);
-
-      const layers = info.layer_urls;
-      if (layers?.body && layers.head) {
-        const held = engine;
-        void Promise.all([
-          layers.background ? loadImage(layers.background) : Promise.resolve(undefined),
-          loadImage(layers.body),
-          loadImage(layers.head),
-        ])
-          .then(([background, body, head]) => {
-            if (!cancelled) held.setLayers({ background, body, head });
-          })
-          .catch(() => undefined);
-      }
-    };
-
-    boot().catch(() => !cancelled && setFailed(true));
-    return () => {
-      cancelled = true;
-      setMouthEngine(null);
-      engineRef.current = null;
-      engine?.destroy();
-    };
-  }, [token]);
-
-  useAvatarMouth(mouthEngine, avatar?.mouth ?? null);
-
-  /**
-   * Speak with the server voice, falling back to the visitor's own.
-   *
-   * The server voice is the point of a share link: it sounds identical for
-   * everyone who opens it, where device voices differ by OS so the same
-   * link would sound like a different character on every machine. Kokoro
-   * runs on our own CPU, so this costs the owner no per-character fee —
-   * only their monthly character allowance, and the speech cache means a
-   * phrase asked twice is synthesized once.
-   *
-   * If the instance has no server voice, or the request is throttled, the
-   * visitor's browser voice takes over rather than the page going silent.
-   */
-  const speak = async () => {
-    const spoken = text.trim();
-    if (!spoken || speaking || !engineRef.current) return;
-    setSpeaking(true);
-    setError(null);
-    try {
-      // The avatar's PUBLISHED voice, so what the owner chose (and
-      // published) is what every visitor hears. Browser-voice choices
-      // cannot be synthesised server-side, so they fall through to the
-      // visitor's own speechSynthesis below.
-      const chosen = avatar?.voice;
-      const serverVoice = chosen && chosen.provider !== "browser" ? chosen : null;
-      const served = await speakPublic(token, {
-        text: spoken,
-        provider: serverVoice?.provider ?? "kokoro",
-        voice: serverVoice?.voice ?? "af_heart",
-        locale: serverVoice?.locale ?? "en-US",
-      });
-      if (served) {
-        await new Promise<void>((resolve) => {
-          engineRef.current!.playAudio(served.audio_b64, served.audio_mime, served.cues, resolve);
-        });
-        return;
-      }
-
-      // No server voice on this instance, or throttled: speak locally rather
-      // than leave the visitor looking at a silent face.
-      if (!BrowserTTS.supported()) throw new Error(t("shareNoVoice"));
-      const tts = new BrowserTTS(engineRef.current, phraseCues);
-      await tts.speak(spoken, undefined, "en-US");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("error"));
-    } finally {
-      setSpeaking(false);
-    }
-  };
+  const { avatar, failed, engineRef, dpr } = useShareEngine(token, canvasRef);
+  const speech = useShareSpeech(token, avatar, engineRef);
 
   if (failed) {
     return (
@@ -196,42 +76,7 @@ export function SharePage() {
         />
       </main>
 
-      <footer className="px-4 pb-6 pt-3 [@media(max-height:520px)]:pb-2 [@media(max-height:520px)]:pt-2">
-        <div className="mx-auto flex w-full max-w-2xl items-end gap-2">
-          <Textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              // Enter speaks, Shift+Enter is a newline — the convention every
-              // message box already taught everyone.
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void speak();
-              }
-            }}
-            rows={1}
-            maxLength={600}
-            placeholder={t(narrow ? "sharePlaceholderShort" : "sharePlaceholder")}
-            className="min-h-[46px] resize-none bg-gray-900 text-gray-100 placeholder-gray-500"
-          />
-          {/* On a narrow phone the button is its icon (named for screen
-              readers), so the box keeps the room for its words. */}
-          <Button
-            className="h-[46px] min-w-[46px] shrink-0 px-3 sm:px-5"
-            icon="speaker"
-            loading={speaking}
-            onClick={() => void speak()}
-            disabled={!text.trim() || !avatar}
-            aria-label={t("sharePlay")}
-          >
-            <span className="max-[400px]:sr-only">{t("sharePlay")}</span>
-          </Button>
-        </div>
-        {error && <p className="mx-auto mt-2 max-w-2xl text-xs text-red-400">{error}</p>}
-        <p className="mx-auto mt-3 max-w-2xl text-center text-[11px] text-gray-500 [@media(max-height:520px)]:mt-1">
-          {t("sharePoweredBy")}
-        </p>
-      </footer>
+      <ShareComposer speech={speech} ready={Boolean(avatar)} />
     </div>
   );
 }

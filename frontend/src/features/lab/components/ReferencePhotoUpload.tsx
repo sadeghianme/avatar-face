@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { ButtonLink } from "@/components/ui/ButtonLink";
+import { FieldError } from "@/components/ui/FieldError";
 import { FileInput } from "@/components/ui/FileInput";
 import { type ReferenceUpload, uploadReferencePhoto } from "@/features/lab/api";
 import { REFERENCE_SCRIPT_ID } from "@/features/lab/reference-avatar";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 /** A temporary lab upload, using existing signed storage and face rigging.
@@ -23,7 +24,7 @@ export function ReferencePhotoUpload({
   selectedPhoto?: ReferenceUpload | null;
   onUseSample?: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -157,11 +158,7 @@ export function ReferencePhotoUpload({
           </div>
         </div>
       )}
-      {error && (
-        <p role="alert" className="field-error mt-2">
-          {error}
-        </p>
-      )}
+      {error && <FieldError className="mt-2">{error}</FieldError>}
     </section>
   );
 }

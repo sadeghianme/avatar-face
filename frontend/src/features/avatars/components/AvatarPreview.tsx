@@ -1,6 +1,7 @@
 import { AvatarEngine, type Rig, type Scene } from "@liveface/embed";
 import { useEffect, useRef, useState } from "react";
 
+import { FieldError } from "@/components/ui/FieldError";
 import { cx } from "@/lib/cx";
 import { loadImage } from "@/lib/image";
 import type { FaceType } from "@/lib/types";
@@ -84,10 +85,9 @@ export function AvatarPreview({
         scene: sceneRef.current,
       });
       engineRef.current = engine;
-      // Lets tooling drive poses (gaze, head) for visual checks; harmless in
-      // production, and this file's tsconfig lacks vite/client types for a
-      // clean import.meta.env.DEV gate.
-      (window as unknown as Record<string, unknown>).__lfEngine = engine;
+      // The dev server only: lets tooling drive poses (gaze, head) for
+      // visual checks. Not in a production build (import.meta.env.DEV).
+      if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__lfEngine = engine;
       onEngineRef.current?.(engine);
 
       if (layerUrls?.body && layerUrls.head) {
@@ -120,7 +120,7 @@ export function AvatarPreview({
     engineRef.current?.setScene(sceneRef.current);
   }, [sceneKey]);
 
-  if (error) return <p className="field-error">{error}</p>;
+  if (error) return <FieldError>{error}</FieldError>;
   return (
     <canvas
       ref={canvasRef}

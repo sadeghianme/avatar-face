@@ -1,4 +1,4 @@
-import { useTranslation } from "react-i18next";
+import { useT } from "@/i18n";
 
 export function SpeechStreamStatus({
   mode,
@@ -19,7 +19,7 @@ export function SpeechStreamStatus({
   chunks: number;
   bufferGaps: number;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <div
       className="rounded-lg bg-gray-50 p-3 text-xs leading-relaxed dark:bg-gray-900"

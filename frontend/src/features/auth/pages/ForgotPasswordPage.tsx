@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
@@ -7,9 +6,10 @@ import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { useForgotPassword } from "@/features/auth/api";
 import { AuthShell } from "@/features/auth/components/AuthShell";
+import { useT } from "@/i18n";
 
 export function ForgotPasswordPage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const forgot = useForgotPassword();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);

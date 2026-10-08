@@ -1,15 +1,15 @@
-import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import { DEMO_PORTRAIT } from "@/components/brand/DemoAvatar";
 import { Icon } from "@/components/ui/Icon";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { useAuth } from "@/providers/auth";
 
 import { Reveal } from "./Reveal";
 
 export function FinalCta() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { user } = useAuth();
   return (
     <section className="px-5 pb-24 sm:px-6 sm:pb-32">

@@ -28,11 +28,12 @@ import type {
   DraftStore,
   StepId,
 } from "@/features/avatars/creation";
-import type { FaceType } from "@/lib/types";
+import type { MessageKey } from "@/i18n/types";
+import type { FaceType, Refine, Schemas, WithDefaults } from "@/lib/types";
 
-export type AvatarModel = "human" | "animal";
-export type Look = "realistic" | "animation" | "cartoon";
-export type PhotoSource = "generate" | "upload";
+export type AvatarModel = Schemas["PlanOut"]["model"];
+export type Look = Schemas["PlanOut"]["look"];
+export type PhotoSource = Schemas["PlanOut"]["source"];
 export type Screen = "model" | "photo" | "prepare" | "publish";
 
 export const SCREENS: readonly Screen[] = ["model", "photo", "prepare", "publish"];
@@ -42,12 +43,8 @@ export const SOURCES: readonly PhotoSource[] = ["generate", "upload"];
 /** The server's limit on a description or a change (services.wizard). */
 export const MAX_WORDS = 300;
 
-export interface Plan {
-  model: AvatarModel;
-  look: Look;
-  source: PhotoSource;
-  description: string | null;
-}
+/** What the owner chose on steps 1 and 2 (the creation's `plan`). */
+export type Plan = Refine<Schemas["PlanOut"], { description: string | null }>;
 
 /** What the prepare job last did (`ai.last_prepare`). */
 export interface LastPrepare {
@@ -59,11 +56,12 @@ export interface LastPrepare {
   cut: boolean;
 }
 
-/** The creation fields this module reads beyond creation/types.ts's. */
-export type WizardCreation = Creation & {
-  plan?: Plan | null;
-  ai: Creation["ai"] & { prepare_rounds_left?: number; free_clears_left?: number; last_prepare?: LastPrepare | null };
-};
+/** A creation as the wizard reads it: its plan, and step 3's last try
+ * (`ai.last_prepare`, a dict on the server). */
+export type WizardCreation = Refine<
+  Creation,
+  { plan?: Plan | null; ai: Creation["ai"] & { last_prepare?: LastPrepare | null } }
+>;
 
 /** Model × look → the line the avatar is rigged and rendered on
  * (services.wizard.line_for): a realistic person is the human line (the
@@ -151,7 +149,7 @@ export function statementToAsk(
  * so the same scope and version are recorded (services.consent): the plan
  * on the creation says which form was shown.
  */
-export function statementKey(scope: FaceStatement, plan: Pick<Plan, "model">): string {
+export function statementKey(scope: FaceStatement, plan: Pick<Plan, "model">): MessageKey {
   if (scope === "generated_face") return "createGeneratedFaceStatement";
   return plan.model === "animal" ? "createDepictionStatement_animal" : "createDepictionStatement";
 }
@@ -169,7 +167,7 @@ export interface PhotoForm {
 }
 
 /** Why "Create my avatar" is held, as an i18n key, or null when it may go. */
-export function photoBlocker(form: PhotoForm): string | null {
+export function photoBlocker(form: PhotoForm): MessageKey | null {
   if (!form.aiEnabled && aiRequired(form.source, form.look)) return "wzHoldAiOff";
   if (form.source === "upload" && !form.hasFile) return "wzHoldFile";
   if (form.source === "generate" && !form.description.trim()) return "wzHoldDescription";
@@ -318,16 +316,12 @@ export function preparePhase(creation: Creation): PreparePhase {
   return "waiting";
 }
 
-/** The body of POST /prepare. */
-export interface PrepareBody {
-  mode: "ai" | "change" | "generate" | "original";
-  instruction?: string;
-  /** With `change`: Retry of the last change (from the same base). */
-  again?: boolean;
-  /** With `ai` or `generate`: "Remove this change". Costs no try while the
-   * creation's few free ones last (the server decides), still one image call. */
-  clear?: boolean;
-}
+/** The body of POST /prepare (its consent id is the request's): `again`,
+ * with `change`, is Retry of the last change (from the same base);
+ * `clear`, with `ai` or `generate`, is "Remove this change", which costs no
+ * try while the creation's few free ones last (the server decides), still
+ * one image call. */
+export type PrepareBody = WithDefaults<Omit<Schemas["PrepareRequest"], "consent_id">, "again" | "clear">;
 
 /** The change in effect: the owner's last instruction, when the last try
  * was a change. */
@@ -455,7 +449,7 @@ export function versionsOf(creation: WizardCreation): Version[] {
     .filter((s) => adjustedNumber(s.id) !== null && !s.adjust?.rejected)
     .sort((a, b) => adjustedNumber(a.id)! - adjustedNumber(b.id)!);
   for (const step of made) {
-    const adjust = (step.adjust ?? null) as (CreationStep["adjust"] & { instruction?: string | null }) | null;
+    const adjust = step.adjust ?? null;
     const instruction = adjust?.instruction?.trim() || null;
     out.push({
       id: step.id,
@@ -480,7 +474,7 @@ export function selectedVersion(creation: WizardCreation): StepId | null {
 /** The words that name a version (its alt text), as an i18n key and its
  * values: "Version 3: change “shorter hair”". */
 export function versionLabel(version: Pick<Version, "number" | "kind" | "instruction">): {
-  key: string;
+  key: MessageKey;
   values: Record<string, string | number>;
 } {
   return {

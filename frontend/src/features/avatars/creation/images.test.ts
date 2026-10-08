@@ -6,7 +6,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { FaceMarks } from "@/features/avatars/face-marks";
+
 import { adjustedStep, ai, anchors, creation, job, step } from "./fixtures.ts";
+import type { AdjustRound } from "./index.ts";
 import {
   anchorsCurrent,
   backgroundSource,
@@ -29,7 +32,7 @@ describe("marks and frames", () => {
       anchors: anchors({ image: "framed" }),
     });
     assert.equal(anchorsCurrent(cut), true);
-    assert.equal(backgroundSource(cut).id, "framed");
+    assert.equal(backgroundSource(cut)!.id, "framed");
   });
   it("strands marks placed on another frame, or on an image that is gone", () => {
     const framed = creation({
@@ -42,8 +45,9 @@ describe("marks and frames", () => {
     assert.equal(anchorsCurrent(creation({ anchors: null })), false);
   });
   it("lists the parts the owner moved", () => {
-    const detected = { head: { left: { x: 1, y: 1 } }, chin: { x: 5, y: 5 } };
-    const marks = { head: { left: { x: 2, y: 1 } }, chin: { x: 5, y: 5 } };
+    // Partial marks: movedParts compares only the parts it is asked about.
+    const detected = { head: { left: { x: 1, y: 1 } }, chin: { x: 5, y: 5 } } as unknown as FaceMarks;
+    const marks = { head: { left: { x: 2, y: 1 } }, chin: { x: 5, y: 5 } } as unknown as FaceMarks;
     assert.deepEqual(movedParts(marks, detected, ["head", "chin", "mouth_line"]), ["head"]);
     assert.deepEqual(movedParts(detected, detected, ["head", "chin"]), []);
   });
@@ -73,7 +77,7 @@ describe("which step opens", () => {
   });
   it("resumes on step 3 once the background is answered or AI was asked", () => {
     assert.equal(inferStep(creation({ background: "keep" })), "background");
-    const round = {
+    const round: AdjustRound = {
       mode: "touchup",
       style: null,
       source: "original",
@@ -141,7 +145,7 @@ describe("cut-outs", () => {
     step("framed", { from: "original" }),
     step("cutout", { from: "framed", cutout: true }),
     adjustedStep(0, { from: "cutout", cutout: true }), // a touch-up of the cut-out
-    adjustedStep(1, { from: "cutout", adjust: { ...adjustedStep(1).adjust, mode: "regenerate" } }),
+    adjustedStep(1, { from: "cutout", adjust: { ...adjustedStep(1).adjust!, mode: "regenerate" } }),
     step("cutout:1", { from: "adjusted:1", cutout: true }),
   ];
   it("names the cut-out of each image", () => {

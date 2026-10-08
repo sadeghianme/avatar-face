@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from "react";
 
 import { api, getTokens, setTokens } from "@/lib/api";
-import type { User } from "@/lib/types";
+import type { Schemas, User } from "@/lib/types";
 
 interface AuthState {
   user: User | null;
@@ -32,10 +32,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (usernameOrEmail: string, password: string) => {
-    const tokens = await api.post<{ access_token: string; refresh_token: string }>("/auth/login", {
+    const tokens = await api.post<Schemas["TokenPair"]>("/auth/login", {
       username_or_email: usernameOrEmail,
       password,
-    });
+    } satisfies Schemas["LoginRequest"]);
     setTokens(tokens);
     setUser(await api.get<User>("/auth/me"));
   }, []);
@@ -54,12 +54,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     async (email: string, username: string, password: string, displayName?: string) => {
-      await api.post("/auth/register", {
+      await api.post<User>("/auth/register", {
         email,
         username,
         password,
         display_name: displayName ?? "",
-      });
+      } satisfies Schemas["RegisterRequest"]);
       await login(username, password);
     },
     [login]

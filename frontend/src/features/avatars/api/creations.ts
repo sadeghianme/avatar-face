@@ -2,10 +2,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import type { Creation, FinishResult, PreviewRig } from "@/features/avatars/creation";
-import type { FaceMarks } from "@/features/avatars/face-marks";
 import type { PrepareBody } from "@/features/avatars/wizard";
 import { api, postFormWithProgress } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
+import type { Schemas, WithDefaults } from "@/lib/types";
 
 /**
  * The creation wizard's requests. One creation is read and kept current by
@@ -37,10 +37,8 @@ export function useDeleteCreation(orgId: string) {
 export const startCreation = {
   upload: (orgId: string, form: FormData, onProgress: (fraction: number) => void) =>
     postFormWithProgress<Creation>(`/orgs/${orgId}/creations`, form, onProgress),
-  generate: (
-    orgId: string,
-    body: { model: string; look: string; prompt: string; consent_id?: string }
-  ): Promise<Creation> => api.post<Creation>(`/orgs/${orgId}/creations/generate`, body),
+  generate: (orgId: string, body: WithDefaults<Schemas["GenerateCreationRequest"], "style">): Promise<Creation> =>
+    api.post<Creation>(`/orgs/${orgId}/creations/generate`, body),
 };
 
 /** The requests on one creation, steps 3 to 5. */
@@ -51,13 +49,14 @@ export function creationRequests(orgId: string, creationId: string) {
     prepare: (body: PrepareBody, consentId?: string) =>
       api.post<Creation>(`${base}/prepare`, { ...body, ...withConsent(consentId) }),
     /** The failed job again. */
-    retry: (consentId?: string) => api.post<Creation>(`${base}/retry`, withConsent(consentId)),
+    retry: (consentId?: string) =>
+      api.post<Creation>(`${base}/retry`, withConsent(consentId) satisfies Schemas["RetryRequest"]),
     /** Back to an earlier picture. */
-    version: (versionId: string) => api.post<Creation>(`${base}/version`, { version: versionId }),
+    version: (versionId: string) =>
+      api.post<Creation>(`${base}/version`, { version: versionId } satisfies Schemas["VersionRequest"]),
     /** The rig the finish would build, fitted and not saved. */
-    previewRig: (body: { anchors_id: string; marks?: FaceMarks }) => api.post<PreviewRig>(`${base}/preview-rig`, body),
-    finish: (body: { name: string; anchors_id: string; consent_id?: string; marks?: unknown }) =>
-      api.post<FinishResult>(`${base}/finish`, body),
+    previewRig: (body: Schemas["PreviewRigRequest"]) => api.post<PreviewRig>(`${base}/preview-rig`, body),
+    finish: (body: Schemas["FinishRequest"]) => api.post<FinishResult>(`${base}/finish`, body),
   };
 }
 

@@ -13,9 +13,10 @@ src/
 ├── assets/             media imported by code — hashed names, cached forever
 ├── providers/          React contexts: auth, org, theme
 ├── lib/                framework-free code: api client, query keys, cx,
-│                       types, image, recorder
-├── i18n/               i18next init + locales/<lang>/<feature>.ts
-└── devtools/           console harnesses; imported by nothing
+│                       types (aliases of api-types.ts, generated from the
+│                       backend's OpenAPI: npm run gen:api), image, recorder
+├── i18n/               i18next init, useT (typed keys) + locales/<lang>/<feature>.ts
+└── test/               the rendering tests' helpers (Vitest): API mock, render, jsdom shims
 ```
 
 ## Features

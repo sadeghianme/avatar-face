@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
+import { FieldError } from "@/components/ui/FieldError";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Textarea } from "@/components/ui/Textarea";
 import { buildSnippet } from "@/features/avatars";
 import { useSimulatorToken } from "@/features/simulator/api";
 import { buildDocument, type Entry, needsNewToken, type Parsed, parseSnippet } from "@/features/simulator/snippet";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { useOrg } from "@/providers/org";
 
@@ -32,7 +34,7 @@ const RUN_STATE = {
  * page or the snippet's own, and a log of what the widget reports.
  */
 export function SimulatorPage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   // Arriving from an avatar's "Test in Simulator" prefills the snippet, so
   // the common path involves no copying at all.
   const [params] = useSearchParams();
@@ -129,9 +131,9 @@ export function SimulatorPage() {
       <div className="mt-9 grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
         {/* ---- input ---- */}
         <div>
-          <label htmlFor="snippet" className="mb-2 block text-[13px] font-medium">
+          <Label htmlFor="snippet" look="plain" className="mb-2 block text-[13px] font-medium">
             {t("simPasteLabel")}
-          </label>
+          </Label>
           <Textarea
             id="snippet"
             value={snippet}
@@ -141,9 +143,7 @@ export function SimulatorPage() {
             className={SNIPPET_BOX}
           />
 
-          {snippet.trim() && !parsed && (
-            <p className="mt-2 text-[12.5px] text-red-600 dark:text-red-400">{t("simNoScript")}</p>
-          )}
+          {snippet.trim() && !parsed && <FieldError className="mt-2 text-[12.5px]">{t("simNoScript")}</FieldError>}
 
           {parsed && (
             <div className="mt-4 overflow-hidden rounded-xl border border-black/[0.08] dark:border-white/[0.1]">

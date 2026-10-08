@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { FieldError } from "@/components/ui/FieldError";
 import { Input } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
 import { useAvatarSharing } from "@/features/avatars/api";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
 
@@ -18,7 +19,7 @@ import type { Avatar } from "@/lib/types";
  * discover that after the fact.
  */
 export function SharePanel({ avatar, orgId }: { avatar: Avatar; orgId: string }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const sharing = useAvatarSharing(orgId, avatar.id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +69,7 @@ export function SharePanel({ avatar, orgId }: { avatar: Avatar; orgId: string })
           </ButtonLink>
         </div>
       )}
-      {error && <p className="field-error mt-2">{error}</p>}
+      {error && <FieldError className="mt-2">{error}</FieldError>}
     </div>
   );
 }

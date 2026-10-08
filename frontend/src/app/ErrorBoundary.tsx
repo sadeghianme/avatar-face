@@ -1,11 +1,11 @@
 import { Component, ErrorInfo, ReactNode } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { useT } from "@/i18n";
 
 function Fallback() {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <div
       role="alert"

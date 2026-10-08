@@ -1,0 +1,14 @@
+{
+  // The tests, type-checked with the app's own settings: the node --test
+  // suite (*.test.ts: node:test and node:assert) and the rendering tests
+  // (*.test.tsx, src/test: vitest, Testing Library), with Node's types,
+  // which the app's program keeps out. `npm run typecheck` runs it after
+  // the app's; ESLint's type-aware rules read the same program for the
+  // tests. Never emits.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test", "src/vite-env.d.ts"],
+  "exclude": []
+}

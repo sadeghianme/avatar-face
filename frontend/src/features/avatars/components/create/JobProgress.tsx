@@ -1,7 +1,9 @@
 import { useRef } from "react";
-import { useTranslation } from "react-i18next";
 
+import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { FieldError } from "@/components/ui/FieldError";
 import { Icon } from "@/components/ui/Icon";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Spinner } from "@/components/ui/Spinner";
@@ -15,6 +17,8 @@ import {
   type JobCount,
   jobFailure,
 } from "@/features/avatars/creation";
+import { useT } from "@/i18n";
+import type { MessageKey } from "@/i18n/types";
 import { cx } from "@/lib/cx";
 
 /** A finish row's words, by its state: the current one strongest, a
@@ -51,7 +55,7 @@ export function JobProgress({
   /** Extra actions beside Retry (for a failure nothing can retry). */
   children?: React.ReactNode;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
 
   if (isJobActive(job) && job.step === "finish" && rows) {
     return <FinishProgress job={job} rows={rows} />;
@@ -61,35 +65,37 @@ export function JobProgress({
     const fraction = job.progress?.fraction ?? null;
     const label = job.state === "queued" ? t("createJobQueued") : t(`createJob_${job.step}`);
     return (
-      <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-line dark:bg-white/[0.03]">
+      <Card tone="muted" className="rounded-xl p-4">
         <p className="flex items-center gap-2 text-sm font-medium">
           <Spinner className="h-4 w-4 shrink-0 text-brand-600" />
           {label}
         </p>
         <JobProgressBar fraction={fraction} label={label} />
-      </div>
+      </Card>
     );
   }
 
   const failure = jobFailure(job);
   if (!failure) return null;
   return (
-    <div
-      className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900
-        dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+    <Banner
+      appearance="soft"
+      tone="warning"
+      actions={
+        (job.retryable && onRetry) || children ? (
+          <>
+            {job.retryable && onRetry && (
+              <Button variant="secondary" onClick={onRetry} loading={retrying}>
+                {t("retry")}
+              </Button>
+            )}
+            {children}
+          </>
+        ) : undefined
+      }
     >
       <p>{errorText(t, failure.code, failure.detail)}</p>
-      {(job.retryable && onRetry) || children ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {job.retryable && onRetry && (
-            <Button variant="secondary" onClick={onRetry} loading={retrying}>
-              {t("retry")}
-            </Button>
-          )}
-          {children}
-        </div>
-      ) : null}
-    </div>
+    </Banner>
   );
 }
 
@@ -118,12 +124,12 @@ export function useSeenStages(job: CreationJob | null | undefined): ReadonlySet<
  * was not made after all is shown as such ("skipped"), never ticked.
  */
 function FinishProgress({ job, rows }: { job: CreationJob; rows: FinishRow[] }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const stage = finishStage(job);
   const label = t("createJob_finish");
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-line dark:bg-white/[0.03]">
+    <Card tone="muted" className="rounded-xl p-4">
       {job.state === "queued" && (
         <p className="mb-3 flex items-center gap-2 text-sm font-medium">
           <Spinner className="h-4 w-4 shrink-0 text-brand-600" />
@@ -136,20 +142,20 @@ function FinishProgress({ job, rows }: { job: CreationJob; rows: FinishRow[] }) 
         ))}
       </ol>
       <JobProgressBar fraction={job.progress?.fraction ?? null} label={label} />
-    </div>
+    </Card>
   );
 }
 
 // What the row the build is at says beneath its name: the part of the
 // build under way, or where a person's mouth comes from.
-function currentDetail(row: FinishRow, stage: FinishStage | null): string | null {
+function currentDetail(row: FinishRow, stage: FinishStage | null): MessageKey | null {
   if (row.phase === "build") return stage ? `createFinishStage_${stage}` : null;
   if (row.phase === "shapes" || row.phase === "teeth") return `createFinishPhaseHint_${row.phase}`;
   return null;
 }
 
 function FinishRowItem({ row, stage }: { row: FinishRow; stage: FinishStage | null }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const detail = row.state === "current" ? currentDetail(row, stage) : null;
   return (
     <li className="flex items-start gap-3" aria-current={row.state === "current" ? "step" : undefined}>
@@ -221,9 +227,5 @@ export function JobProgressBar({ fraction, label }: { fraction: number | null; l
 /** An error from one of the wizard's requests. */
 export function ActionErrorNote({ text }: { text: string | null }) {
   if (!text) return null;
-  return (
-    <p role="alert" className="field-error mt-3 text-sm">
-      {text}
-    </p>
-  );
+  return <FieldError className="mt-3 text-sm">{text}</FieldError>;
 }

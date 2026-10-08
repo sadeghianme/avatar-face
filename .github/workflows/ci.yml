@@ -157,6 +157,10 @@ jobs:
       - name: Install embed deps
         run: npm ci --prefix ../embed
       - run: npm ci
+      # The app, then the tests' own program (tsconfig.test.json): a test
+      # that no longer type-checks against the code it tests fails here.
+      - name: Typecheck (app, tests)
+        run: npm run typecheck
       - name: Typecheck and build
         run: npm run build
 
@@ -181,7 +185,16 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run format:check
+      # lib/api-types.ts is generated from the committed OpenAPI schema
+      # (lib/api-schema.json, refreshed with `npm run api:schema`): a hand
+      # edit, or a schema committed without regenerating, fails here.
+      - name: API types match the committed schema
+        run: npm run check:api
       - run: npm test
+      # The kit and the main screens mounted in jsdom (Vitest + Testing
+      # Library), against a mocked API: src/test/.
+      - name: Rendering tests
+        run: npm run test:ui
 
   deploy-script:
     # The release gate itself: shellcheck on every deploy script, then

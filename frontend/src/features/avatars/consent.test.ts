@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { ConsentRecord, MyConsent } from "./consent.ts";
 import {
   CONSENT_TEXT_VERSIONS,
   consentBody,
@@ -63,11 +64,12 @@ describe("recording a consent", () => {
 });
 
 describe("a remembered consent", () => {
-  const mine = (extra = {}) => ({
+  const mine = (extra: Partial<MyConsent> = {}): MyConsent => ({
     scope: "third_party_ai",
     text_version: version,
     consent_id: "c1",
     created_at: "2026-09-25T10:00:00Z",
+    stale: false,
     ...extra,
   });
   it("is used without asking when it is under the words on screen", () => {
@@ -86,7 +88,13 @@ describe("a remembered consent", () => {
     assert.equal(rememberedConsent(undefined, "third_party_ai"), null);
   });
   it("is what a fresh record answers, so the next step does not ask again", () => {
-    const record = { id: "c2", scope: "third_party_ai", providers: ["google"], text_version: version, created_at: "t" };
+    const record: ConsentRecord = {
+      id: "c2",
+      scope: "third_party_ai",
+      providers: ["google"],
+      text_version: version,
+      created_at: "t",
+    };
     assert.equal(rememberedConsent(mineFromRecord(record), "third_party_ai"), "c2");
   });
 });
@@ -128,11 +136,12 @@ describe("a refusal about consent", () => {
 });
 
 describe("telling a returning member the wording changed", () => {
-  const mine = (over = {}) => ({
-    scope: "third_party_ai" as const,
+  const mine = (over: Partial<MyConsent> = {}): MyConsent => ({
+    scope: "third_party_ai",
     text_version: version,
     consent_id: null,
     created_at: null,
+    stale: false,
     ...over,
   });
   it("says so only for an earlier agreement and none for the words in force", () => {
@@ -140,7 +149,9 @@ describe("telling a returning member the wording changed", () => {
   });
   it("stays silent for a member who never agreed, or an older server", () => {
     assert.equal(needsReagree(mine({ stale: false }), "third_party_ai"), false);
-    assert.equal(needsReagree(mine(), "third_party_ai"), false);
+    // A server from before `stale`: the field is absent.
+    const older = { ...mine(), stale: undefined } as unknown as MyConsent;
+    assert.equal(needsReagree(older, "third_party_ai"), false);
   });
   it("stays silent once the current words are agreed", () => {
     assert.equal(needsReagree(mine({ stale: true, consent_id: "c1" }), "third_party_ai"), false);

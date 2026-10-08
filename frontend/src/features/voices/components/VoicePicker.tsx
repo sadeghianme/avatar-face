@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Field } from "@/components/ui/Field";
 import { Select } from "@/components/ui/Select";
@@ -12,6 +11,7 @@ import {
   useSpeechLanguages,
   useSpeechProviders,
 } from "@/features/voices/api";
+import { useT } from "@/i18n";
 import { useOrg } from "@/providers/org";
 
 /** One empty list for "no clones", so the voices query is not re-keyed by a new []. */
@@ -43,7 +43,7 @@ export function VoicePicker({
   value: VoiceSelection;
   onChange: (selection: VoiceSelection) => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { current } = useOrg();
   const orgId = current?.id;
 

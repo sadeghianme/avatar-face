@@ -1,4 +1,7 @@
 /** fr: avatars strings. A key lives in exactly one file; add new ones here. */
+import type { avatars as en } from "@/i18n/locales/en/avatars";
+import type { Locale } from "@/i18n/types";
+
 export const avatars = {
   dashSubtitle: "Créez un avatar, donnez-lui une voix, intégrez-le partout.",
   statReady: "Prêts",
@@ -9,6 +12,7 @@ export const avatars = {
   statUsage: "Usage ce mois-ci",
   emptyTitle: "Aucun avatar pour l'instant",
   emptyBody: "Téléversez un portrait et Liveface construit un visage qui parle.",
+  avatarsLoadFailed: "Impossible de charger vos avatars. Vérifiez votre connexion et réessayez.",
   statTotal: "Avatars",
   statTotalHint: "Dans cette organisation",
   avatarLibrary: "Espace avatars",
@@ -601,7 +605,9 @@ export const avatars = {
   createJob_adjust: "L’IA prépare deux versions…",
   createJobDone_adjust: "Les versions de l’IA sont prêtes. Comparez-les.",
   createJob_prepare: "Préparation de votre avatar…",
+  createJob_mouth_kit: "Création de la bouche…",
   createJobDone_prepare: "Votre avatar est prêt à être vérifié.",
+  createJobDone_mouth_kit: "La bouche est faite.",
   createErr_original_not_for_look: "Votre propre photo ne peut être utilisée telle quelle que pour un avatar réaliste.",
   createErr_instruction_required: "Décrivez d’abord la modification.",
   createErr_generate_not_for_upload: "Seul un personnage décrit en mots peut être recréé à partir de ses mots.",
@@ -839,4 +845,4 @@ export const avatars = {
   sceneSwatchTeal: "Sarcelle",
   sceneSwatchAmber: "Ambre",
   sceneSwatchRose: "Rose",
-} as const;
+} as const satisfies Locale<typeof en>;

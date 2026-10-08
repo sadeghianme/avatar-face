@@ -10,13 +10,45 @@ import tseslint from "typescript-eslint";
 // Raw controls belong to the UI kit (components/ui). Everywhere else a
 // button, field, select or textarea is the kit's, so its look, its touch
 // size and its accessibility come with it.
-const RAW_CONTROLS = ["button", "input", "select", "textarea"].map((tag) => ({
+const RAW_CONTROLS = ["button", "input", "select", "textarea", "label"].map((tag) => ({
   selector: `JSXOpeningElement[name.name='${tag}']`,
-  message: `Use the UI kit (components/ui: Button, IconButton, Input, Select, Textarea, Checkbox, Switch…) instead of a raw <${tag}>.`,
+  message: `Use the UI kit (components/ui: Button, IconButton, Input, Select, Textarea, Checkbox, Switch, Label…) instead of a raw <${tag}>.`,
 }));
 
+// The kit's looks are the kit's: a className (any *ClassName prop, a
+// template, or a cx() call) that spells out one of the component classes
+// in index.css (a button, a card, a field, its label or error text, a
+// badge, a chip, a choice, a range, a progress bar, a code block) is a kit
+// component drawn by hand. Use the component instead.
+const KIT_LOOKS = [
+  "btn-[a-z0-9-]+",
+  "icon-btn(-[a-z]+)?",
+  "card",
+  "label",
+  "field-error",
+  "input",
+  "checkbox",
+  "check-row",
+  "slider",
+  "badge(-[a-z]+)?",
+  "chip-[a-z-]+",
+  "choice-tile(-[a-z]+)?",
+  "progress(-bar)?",
+  "code-block",
+];
+const KIT_CLASS = String.raw`/(^|\s)(${KIT_LOOKS.join("|")})(\s|$)/`;
+const KIT_CLASS_MESSAGE =
+  "A kit look written by hand: use Button/ButtonLink (btn-*), IconButton (icon-btn-*), Card/Banner (card), " +
+  "Label/Field (label), FieldError (field-error), Input (input), Checkbox (checkbox, check-row), Slider (slider), " +
+  "Badge (badge-*), Chip (chip-*), ChoiceCard (choice-tile-*), ProgressBar (progress) or CodeBlock (code-block).";
+const KIT_CLASSES = [
+  `JSXAttribute[name.name=/[cC]lassName$/] Literal[value=${KIT_CLASS}]`,
+  `JSXAttribute[name.name=/[cC]lassName$/] TemplateElement[value.raw=${KIT_CLASS}]`,
+  `CallExpression[callee.name='cx'] Literal[value=${KIT_CLASS}]`,
+].map((selector) => ({ selector, message: KIT_CLASS_MESSAGE }));
+
 export default tseslint.config(
-  { ignores: ["dist", "node_modules", "src/devtools"] },
+  { ignores: ["dist", "node_modules"] },
   // A disable comment that no longer disables anything is an error: the
   // ones left each say why they are there.
   { linterOptions: { reportUnusedDisableDirectives: "error" } },
@@ -48,7 +80,7 @@ export default tseslint.config(
       // Deliberate focus moves (a dialog's safe answer, the sign-in field)
       // are on kit components, which this rule does not see.
       "jsx-a11y/no-autofocus": ["error", { ignoreNonDOM: true }],
-      "no-restricted-syntax": ["error", ...RAW_CONTROLS],
+      "no-restricted-syntax": ["error", ...RAW_CONTROLS, ...KIT_CLASSES],
       // Server calls go through a feature's data hooks (features/<x>/api),
       // which also say what each call refreshes; ApiError, to word a
       // refusal, may be imported anywhere.
@@ -60,6 +92,11 @@ export default tseslint.config(
               name: "@/lib/api",
               importNames: ["api", "fetchStream", "postFormWithProgress", "uploadWithProgress"],
               message: "Call the server through the feature's api module (features/<x>/api), not from a component.",
+            },
+            {
+              name: "react-i18next",
+              importNames: ["useTranslation", "Trans", "withTranslation"],
+              message: "Use useT (or translate) from @/i18n: its t takes only the keys en defines (i18n/types.ts).",
             },
           ],
         },
@@ -90,6 +127,8 @@ export default tseslint.config(
       "src/features/avatars/hooks/useMouthKit.ts",
       "src/providers/**",
       "src/lib/**",
+      // Where react-i18next's own hook is wrapped (useT).
+      "src/i18n/**",
     ],
     rules: { "no-restricted-imports": "off" },
   },
@@ -114,12 +153,24 @@ export default tseslint.config(
     },
   },
   {
-    // Tests run under node --test, which strips their types; tsconfig
-    // leaves them out (Node's test types are not installed), so no
-    // type-aware rules there.
-    files: ["src/**/*.test.ts"],
-    extends: [tseslint.configs.disableTypeChecked],
-    languageOptions: { globals: globals.node },
+    // The tests: node --test (*.test.ts) and the rendering tests (*.test.tsx,
+    // src/test). Their own program (tsconfig.test.json, with Node's types),
+    // so the type-aware rules read them as tsc does. node:test's describe
+    // and it return promises the runner itself awaits.
+    files: ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**"],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+      parserOptions: { projectService: false, project: "./tsconfig.test.json", tsconfigRootDir: import.meta.dirname },
+    },
+    rules: {
+      "@typescript-eslint/no-floating-promises": [
+        "error",
+        { allowForKnownSafeCalls: [{ from: "package", package: "node:test", name: ["describe", "it", "test"] }] },
+      ],
+      // A test mounts its own fixtures: a raw <button> in an action slot is
+      // the caller's markup, not the app's.
+      "no-restricted-syntax": "off",
+    },
   },
   {
     // Build scripts; reference-proof.mjs also runs functions in a browser page.

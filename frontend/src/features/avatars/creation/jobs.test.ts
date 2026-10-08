@@ -6,7 +6,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { ai, creation, job } from "./fixtures.ts";
+import { ai, analysis, creation, job } from "./fixtures.ts";
+import type { AutoAdjust, Creation, CreationJob, FinishRow, FinishStage } from "./index.ts";
 import {
   autoAdjustKey,
   autoAdjustToStart,
@@ -40,7 +41,7 @@ describe("jobs", () => {
     const failed = job({ state: "failed", error: { code: "job_failed", detail: "x" } });
     assert.deepEqual(jobFailure(failed), { code: "job_failed", detail: "x" });
     assert.equal(jobFailure(job({ state: "failed", error: { code: "superseded", detail: "" } })), null);
-    assert.equal(jobFailure(job({ state: "interrupted", error: null })).code, "interrupted");
+    assert.equal(jobFailure(job({ state: "interrupted", error: null }))!.code, "interrupted");
     assert.equal(jobFailure(job({ state: "running" })), null);
     assert.equal(jobFailure(null), null);
   });
@@ -66,8 +67,8 @@ describe("jobs", () => {
 });
 
 describe("the touch-up started without a press", () => {
-  const offer = { mode: "touchup", image: "original", reasons: ["teeth_showing"] };
-  const offered = (extra = {}) => creation({ ai: ai({ auto_adjust: offer }), ...extra });
+  const offer: AutoAdjust = { mode: "touchup", image: "original", reasons: ["teeth_showing"] };
+  const offered = (extra: Partial<Creation> = {}) => creation({ ai: ai({ auto_adjust: offer }), ...extra });
 
   it("starts what the server offers, on the member's own consent", () => {
     assert.deepEqual(autoAdjustToStart(offered(), "consent-1", new Set()), offer);
@@ -83,7 +84,7 @@ describe("the touch-up started without a press", () => {
     );
     const started = new Set([autoAdjustKey(offered(), offer)]);
     assert.equal(autoAdjustToStart(offered(), "c", started), null);
-    const other = { ...offer, image: "cutout" };
+    const other: AutoAdjust = { ...offer, image: "cutout" };
     assert.deepEqual(autoAdjustToStart(creation({ ai: ai({ auto_adjust: other }) }), "c", started), other);
   });
   it("does nothing without an offer, or once the creation is being built", () => {
@@ -93,7 +94,7 @@ describe("the touch-up started without a press", () => {
 });
 
 describe("building the avatar", () => {
-  const running = (label, extra = {}) =>
+  const running = (label: string | null, extra: Partial<CreationJob> = {}) =>
     job({ step: "finish", state: "running", progress: { fraction: 0.65, label }, ...extra });
 
   it("names the stage a finish is at, a person's mouth among them", () => {
@@ -118,7 +119,7 @@ describe("building the avatar", () => {
 });
 
 describe("step 5, counted", () => {
-  const counted = (done, total = 6, extra = {}) =>
+  const counted = (done: number, total = 6, extra: Partial<CreationJob> = {}) =>
     job({
       step: "finish",
       state: "running",
@@ -151,10 +152,10 @@ describe("step 5, counted", () => {
 });
 
 describe("step 5, listed", () => {
-  const at = (label, extra = {}) =>
+  const at = (label: string, extra: Partial<CreationJob> = {}) =>
     job({ step: "finish", state: "running", progress: { fraction: 0.5, label }, ...extra });
-  const rows = (list) => list.map((row) => `${row.phase}:${row.state}`);
-  const seen = (...stages) => new Set(stages);
+  const rows = (list: FinishRow[]) => list.map((row) => `${row.phase}:${row.state}`);
+  const seen = (...stages: FinishStage[]) => new Set(stages);
 
   it("lists a person's mouth ahead of time when it will be made", () => {
     assert.deepEqual(rows(finishRows(at("copying images"), true)), [
@@ -301,8 +302,11 @@ describe("a person's mouth, expected", () => {
 });
 
 describe("the mouth, before finishing", () => {
-  const checked = (reasons, extra = {}) =>
-    creation({ analysis: { checks: [], recommendation: { image: "original", mode: "touchup", reasons } }, ...extra });
+  const checked = (reasons: string[], extra: Partial<Creation> = {}) =>
+    creation({
+      analysis: analysis({ checks: [], recommendation: { image: "original", mode: "touchup", reasons } }),
+      ...extra,
+    });
 
   it("says what the finish answer will warn about", () => {
     assert.deepEqual(expectedMouthWarnings(checked(["eyes_closed", "teeth_showing"])), ["teeth_showing"]);

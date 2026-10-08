@@ -2,13 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
-import type { ApiKeyInfo } from "@/lib/types";
+import type { ApiKeyInfo, Schemas } from "@/lib/types";
 
 /** A new key: its record, and the plaintext this one response carries. */
-export interface CreatedKey {
-  api_key: ApiKeyInfo;
-  plaintext: string;
-}
+/** A new key, with its secret: shown once. */
+export type CreatedKey = Schemas["ApiKeyCreated"];
 
 /** The organization's widget keys (owners and admins only: `enabled`). */
 export function useApiKeys(orgId: string | undefined, enabled: boolean) {
@@ -22,8 +20,7 @@ export function useApiKeys(orgId: string | undefined, enabled: boolean) {
 export function useCreateApiKey(orgId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { name: string; allowed_domains: string[] }) =>
-      api.post<CreatedKey>(`/orgs/${orgId}/api-keys`, body),
+    mutationFn: (body: Schemas["ApiKeyCreate"]) => api.post<CreatedKey>(`/orgs/${orgId}/api-keys`, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.apiKeys(orgId) }),
   });
 }

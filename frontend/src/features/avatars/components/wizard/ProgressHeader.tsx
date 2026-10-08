@@ -1,6 +1,5 @@
-import { useTranslation } from "react-i18next";
-
 import { type Screen, SCREENS } from "@/features/avatars/wizard";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 /**
@@ -12,7 +11,7 @@ import { cx } from "@/lib/cx";
  * Screen readers hear every name, where it is, and which are done.
  */
 export function ProgressHeader({ screen }: { screen: Screen }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const at = SCREENS.indexOf(screen);
   const total = SCREENS.length;
   return (

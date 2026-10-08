@@ -1,3 +1,4 @@
+import type { MessageKey } from "@/i18n/types";
 import type { Avatar, TeethRecord } from "@/lib/types";
 
 /**
@@ -44,6 +45,7 @@ export const TEETH_NOTE_CODES = [
 ] as const;
 
 const KNOWN_NOTES: ReadonlySet<string> = new Set(TEETH_NOTE_CODES);
+const isNoteCode = (code: string): code is (typeof TEETH_NOTE_CODES)[number] => KNOWN_NOTES.has(code);
 
 /** The teeth of the photographic mouth, or null for the classic mouth
  * (whose teeth are drawn, and have nothing to say). */
@@ -56,8 +58,8 @@ export function teethView(mouth: Avatar["mouth"]): TeethView | null {
 }
 
 /** The translation key for a note, or null to show its detail as sent. */
-export function teethNoteKey(code: string): string | null {
-  return KNOWN_NOTES.has(code) ? `mouthTeethNote_${code}` : null;
+export function teethNoteKey(code: string): MessageKey | null {
+  return isNoteCode(code) ? `mouthTeethNote_${code}` : null;
 }
 
 /** Codes of the warnings finishing a creation can return (FinishResult). */
@@ -107,6 +109,8 @@ export const MOUTH_ERROR_CODES = [
 
 const PHOTO_CODES: ReadonlySet<string> = new Set(MOUTH_PHOTO_CODES);
 const ERROR_CODES: ReadonlySet<string> = new Set(MOUTH_ERROR_CODES);
+const isPhotoCode = (code: string): code is (typeof MOUTH_PHOTO_CODES)[number] => PHOTO_CODES.has(code);
+const isErrorCode = (code: string): code is (typeof MOUTH_ERROR_CODES)[number] => ERROR_CODES.has(code);
 
 /** Who made the mouth photo a refusal is about: the owner's upload, or the
  * AI (the teeth alone, in the Mouth panel's job). */
@@ -114,9 +118,9 @@ export type MouthAction = "upload" | "generate";
 
 /** The translation key for a refused mouth photo, or null to show the
  * server's own sentence. */
-export function mouthErrorKey(code: string, action: MouthAction): string | null {
-  if (PHOTO_CODES.has(code)) return `mouthErr_${action}_${code}`;
-  return ERROR_CODES.has(code) ? `mouthErr_${code}` : null;
+export function mouthErrorKey(code: string, action: MouthAction): MessageKey | null {
+  if (isPhotoCode(code)) return `mouthErr_${action}_${code}`;
+  return isErrorCode(code) ? `mouthErr_${code}` : null;
 }
 
 /**
@@ -126,9 +130,9 @@ export function mouthErrorKey(code: string, action: MouthAction): string | null 
  * were (`ai_edited.mouth_shapes`). Each is said once: on its own, it is
  * the mode. Visitors are told the same, from the published snapshot.
  */
-export function aiEditedLabels(edited: Avatar["ai_edited"]): string[] {
+export function aiEditedLabels(edited: Avatar["ai_edited"]): MessageKey[] {
   if (!edited) return [];
-  const keys = [`aiEdited_${edited.mode}`];
+  const keys: MessageKey[] = [`aiEdited_${edited.mode}`];
   if (edited.teeth && edited.mode !== "teeth") keys.push("aiEdited_teeth");
   if (edited.mouth_shapes && edited.mode !== "mouth_shapes") keys.push("aiEdited_mouth_shapes");
   return keys;

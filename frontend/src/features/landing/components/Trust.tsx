@@ -1,18 +1,17 @@
-import { useTranslation } from "react-i18next";
-
 import { Icon, type IconName } from "@/components/ui/Icon";
+import { useT } from "@/i18n";
 
 import { Reveal } from "./Reveal";
 
-const ITEMS: { icon: IconName; key: string }[] = [
+const ITEMS = [
   { icon: "lock", key: "trustKeys" },
   { icon: "users", key: "trustOrg" },
   { icon: "layers", key: "trustPublish" },
   { icon: "shield", key: "trustConsent" },
-];
+] as const satisfies readonly { icon: IconName; key: string }[];
 
 export function Trust() {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <section
       id="security"

@@ -1,4 +1,7 @@
 /** fr: landing strings. A key lives in exactly one file; add new ones here. */
+import type { landing as en } from "@/i18n/locales/en/landing";
+import type { Locale } from "@/i18n/types";
+
 export const landing = {
   landingDocTitle: "Liveface — une photo devient un avatar qui parle sur votre site",
   skipToContent: "Aller au contenu",
@@ -223,4 +226,4 @@ export const landing = {
   footerDevelopers: "Développeurs",
   footerAccount: "Compte",
   footerRights: "Tous droits réservés.",
-} as const;
+} as const satisfies Locale<typeof en>;

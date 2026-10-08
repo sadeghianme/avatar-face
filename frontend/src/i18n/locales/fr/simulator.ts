@@ -1,4 +1,7 @@
 /** fr: simulator strings. A key lives in exactly one file; add new ones here. */
+import type { simulator as en } from "@/i18n/locales/en/simulator";
+import type { Locale } from "@/i18n/types";
+
 export const simulator = {
   simSubtitle:
     "Collez le code d'intégration d'un avatar et exécutez-le ici, sur sa propre page, exactement comme le navigateur d'un visiteur. Si ça marche ici, ça marche sur votre site.",
@@ -23,4 +26,4 @@ export const simulator = {
   simPlaceholderKey: "Remplacez YOUR_API_KEY par une vraie clé, ou utilisez une clé de test.",
   simTokenFailed: "Impossible d'obtenir une clé de test :",
   simRenewed: "Clé de test expirée — renouvelée automatiquement.",
-} as const;
+} as const satisfies Locale<typeof en>;
