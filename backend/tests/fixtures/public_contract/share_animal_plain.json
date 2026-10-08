@@ -1,0 +1,34 @@
+{
+  "disclosure": {
+    "ai_edited": {
+      "mode": "mouth_shapes",
+      "model": "m",
+      "mouth_shapes": {
+        "generated": 2,
+        "model": "m"
+      }
+    },
+    "line": "animal"
+  },
+  "face_type": "animal",
+  "framing": "face",
+  "image_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/55555555555555555555555555555555/published/r3/image.png?expires=1800007200&signature=1b14ea19e7637f3e484660a76a06337006e46a54a2ce61ab3365fe57e1c60c67",
+  "kind": "photo",
+  "layer_urls": null,
+  "model_url": null,
+  "mouth": null,
+  "name": "Golden animal_plain",
+  "rig_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/55555555555555555555555555555555/published/r3/rig.json?expires=1800007200&signature=dd997d380b4a3fc06aeadb20f6ed245c6f336e044afc6b17d000e11392a8e6a8",
+  "scene": {
+    "background": {
+      "kind": "transparent"
+    },
+    "pan": {
+      "x": 0.25,
+      "y": 0.0
+    },
+    "zoom": 1.0
+  },
+  "thumbnail_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/55555555555555555555555555555555/published/r3/thumb.jpg?expires=1800007200&signature=55588d69108e068c5e75bba8ef1eeea55ccc541074f8739a38b237a067cf7a7a",
+  "voice": null
+}
