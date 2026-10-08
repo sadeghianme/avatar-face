@@ -125,5 +125,6 @@ moved: [docs/process.md](docs/process.md).
    process only. More workers need Redis and a real queue.
 2. Refresh tokens cannot be revoked yet (no server-side session table).
 3. Login and register are not rate limited; the embed and share APIs are.
-4. The dashboard's CSP allows inline scripts because of the Simulator's frame
-   ([docs/process.md](docs/process.md#security-headers) has the way out).
+4. The session's tokens are in `localStorage`, not httpOnly cookies. The CSP
+   allows no inline script, and the Simulator runs snippets in a frame of its
+   own origin ([docs/process.md](docs/process.md#security-headers)).

@@ -10,7 +10,16 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Textarea } from "@/components/ui/Textarea";
 import { buildSnippet } from "@/features/avatars";
 import { useSimulatorToken } from "@/features/simulator/api";
-import { buildDocument, type Entry, needsNewToken, type Parsed, parseSnippet } from "@/features/simulator/snippet";
+import {
+  avatarFromQuery,
+  buildDocument,
+  type Entry,
+  frameMessage,
+  invalidFields,
+  needsNewToken,
+  type Parsed,
+  parseSnippet,
+} from "@/features/simulator/snippet";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { useOrg } from "@/providers/org";
@@ -29,6 +38,23 @@ const RUN_STATE = {
 };
 
 /**
+ * The script the customer's page loads first (public/simulator-frame.js):
+ * it reports to the log and passes Speak and Stop on. An absolute URL, so
+ * the frame finds it whatever its own (opaque) origin.
+ */
+const harnessUrl = () => new URL(`${import.meta.env.BASE_URL}simulator-frame.js`, window.location.origin).href;
+
+/**
+ * The customer's page runs in a sandboxed frame. `allow-scripts` and
+ * nothing else: no `allow-same-origin`, so the frame's origin is opaque. A
+ * pasted snippet (or a crafted link's) cannot read this dashboard's
+ * session, cookies or DOM from there, and the widget works exactly as on a
+ * customer's site, where it is cross-origin too (the embed API answers any
+ * origin, "null" included; its keys are what gate it).
+ */
+const FRAME_SANDBOX = "allow-scripts";
+
+/**
  * The page a customer would have: the pasted snippet runs in an iframe
  * (snippet.ts, buildDocument), with a short-lived key minted for this
  * page or the snippet's own, and a log of what the widget reports.
@@ -36,10 +62,12 @@ const RUN_STATE = {
 export function SimulatorPage() {
   const { t } = useT();
   // Arriving from an avatar's "Test in Simulator" prefills the snippet, so
-  // the common path involves no copying at all.
+  // the common path involves no copying at all. Only an avatar id is taken
+  // from the link (avatarFromQuery): anything else, and every other
+  // parameter, is ignored.
   const [params] = useSearchParams();
   const [snippet, setSnippet] = useState(() => {
-    const avatar = params.get("avatar");
+    const avatar = avatarFromQuery(params);
     return avatar ? buildSnippet(avatar) : "";
   });
   const [running, setRunning] = useState<Parsed | null>(null);
@@ -58,12 +86,18 @@ export function SimulatorPage() {
   // run time — so it is not a missing field.
   const required = mode === "own" ? ["src", "avatar", "key"] : ["src", "avatar"];
   const missing = parsed ? required.filter((k) => !parsed[k as keyof Parsed]) : [];
+  const invalid = parsed ? invalidFields(parsed) : [];
   const placeholderKey = mode === "own" && parsed?.key === "YOUR_API_KEY";
+  const runnable = Boolean(parsed) && missing.length === 0 && invalid.length === 0 && !placeholderKey;
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
-      if (!e.data?.lf) return;
-      setLog((prev) => [...prev.slice(-60), { at: Date.now(), level: e.data.level, message: e.data.message }]);
+      // Only the frame this page runs, and only a log line: another window
+      // (a tab that opened this one, another frame) has nothing to say here.
+      if (!frame.current || e.source !== frame.current.contentWindow) return;
+      const entry = frameMessage(e.data);
+      if (!entry) return;
+      setLog((prev) => [...prev.slice(-60), { at: Date.now(), ...entry }]);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -81,7 +115,7 @@ export function SimulatorPage() {
   }, [current, requestToken, t]);
 
   const run = async () => {
-    if (!parsed) return;
+    if (!parsed || !runnable) return;
     setLog([{ at: Date.now(), level: "info", message: t("simStarting") }]);
     if (mode === "own") {
       setRunning({ ...parsed });
@@ -95,9 +129,14 @@ export function SimulatorPage() {
     setRunning({ ...parsed, key: token });
   };
 
+  // To the frame, the target origin can only be "*": its origin is opaque
+  // and has no name to address. It goes to that one window, and says
+  // nothing secret (the line to speak, or stop).
+  const tell = (message: { speak: string } | { stop: true }) => frame.current?.contentWindow?.postMessage(message, "*");
+
   const speak = () => {
     if (!text.trim()) return;
-    frame.current?.contentWindow?.postMessage({ speak: text }, "*");
+    tell({ speak: text });
   };
 
   // Re-mint and re-run when the credential ages out mid-session. This is what
@@ -178,6 +217,10 @@ export function SimulatorPage() {
             </p>
           )}
 
+          {invalid.length > 0 && (
+            <FieldError className="mt-2 text-[12.5px]">{t("simInvalid", { fields: invalid.join(", ") })}</FieldError>
+          )}
+
           <SegmentedControl
             className="mt-4"
             itemClassName="flex-1"
@@ -203,7 +246,7 @@ export function SimulatorPage() {
               className="gap-1.5 rounded-full text-[13px]"
               icon={<Icon name="arrow" className="h-4 w-4" strokeWidth={2} />}
               onClick={() => void run()}
-              disabled={!parsed || missing.length > 0 || placeholderKey}
+              disabled={!runnable}
             >
               {running ? t("simRerun") : t("simRun")}
             </Button>
@@ -235,7 +278,7 @@ export function SimulatorPage() {
                 </Button>
                 <Button
                   variant="secondary"
-                  onClick={() => frame.current?.contentWindow?.postMessage({ stop: true }, "*")}
+                  onClick={() => tell({ stop: true })}
                   className="shrink-0 px-3 py-2 text-[13px]"
                 >
                   {t("stop")}
@@ -276,11 +319,13 @@ export function SimulatorPage() {
               <iframe
                 ref={frame}
                 title="simulator"
-                // Scripts must run — that is the entire point. `allow-scripts`
-                // without `allow-same-origin` would break the widget's fetches;
-                // it loads from our own API, and the snippet is the user's own.
-                sandbox="allow-scripts allow-same-origin"
-                srcDoc={buildDocument(running)}
+                // Scripts must run, which is the entire point, and nothing
+                // more (FRAME_SANDBOX). `autoplay`: the frame is another
+                // origin, so the voice may only play if this page lends it
+                // the permission, as a customer's page would its own.
+                sandbox={FRAME_SANDBOX}
+                allow="autoplay"
+                srcDoc={buildDocument(running, harnessUrl())}
                 className="h-[420px] w-full bg-white dark:bg-well"
               />
             ) : (

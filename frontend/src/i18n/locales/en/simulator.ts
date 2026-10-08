@@ -5,6 +5,7 @@ export const simulator = {
   simPasteLabel: "Embed snippet",
   simNoScript: "No Liveface script tag found in that paste.",
   simMissing: "Missing required attribute: {{fields}}",
+  simInvalid: "Not a valid value: {{fields}}. Copy the snippet again from the avatar's page.",
   simRun: "Run snippet",
   simRerun: "Run again",
   simStarting: "loading the snippet on a blank page…",
@@ -19,7 +20,7 @@ export const simulator = {
   simModeTokenHint:
     "Runs with a short-lived key minted for this page. Proves the avatar, voice and widget work — but not that your own key is configured correctly.",
   simModeOwnHint:
-    "Runs with the key in the snippet. Also proves the key itself works — but it must allow this dashboard's domain.",
+    "Runs with the key in the snippet, so it also proves the key itself works. The test page has no domain of its own, so the key's allowed domains are not checked here.",
   simPlaceholderKey: "Replace YOUR_API_KEY with a real key, or switch to a test key.",
   simTokenFailed: "Could not get a test key:",
   simRenewed: "Test key expired — renewed automatically.",

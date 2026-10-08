@@ -8,7 +8,9 @@
 // It seeds what the pages need through the API itself: a user, a photo
 // avatar (published, with a share link) and a 3D avatar, then visits the
 // public pages, every dashboard page, the share page (and speaks on it), and
-// runs the Simulator's iframe with the real widget for both avatars.
+// runs the Simulator's iframe with the real widget for both avatars (and
+// speaks there). It also replays the Simulator injection (the review's N1)
+// as a link and as a pasted snippet, and fails if the payload ever runs.
 //
 // Use 127.0.0.1, not localhost: the dashboard points snippets at
 // localhost:7002 whenever its origin says "localhost" (the Vite dev setup).
@@ -338,12 +340,63 @@ try {
     eventually(async () => {
       if (!(await page.evaluate(`Boolean(${selector}?.querySelector("canvas"))`))) throw new Error(`no canvas in ${selector}`);
     });
+  // The Simulator's frame has an opaque origin (no allow-same-origin), so
+  // this page cannot look inside it: what the frame reports to the
+  // Simulator's log is how it says it drew and spoke.
+  const logSays = (text, ms) =>
+    eventually(async () => {
+      if (!(await page.evaluate(`document.body.innerText.includes(${JSON.stringify(text)})`)))
+        throw new Error(`the Simulator's log never said "${text}"`);
+    }, ms);
+  const isolated = async () => {
+    const sandbox = await page.evaluate(`document.querySelector('iframe[title="simulator"]')?.getAttribute("sandbox")`);
+    if (sandbox !== "allow-scripts") throw new Error(`the Simulator's frame is sandboxed "${sandbox}", not "allow-scripts"`);
+  };
   const simulate = (avatar) => async (since) => {
     await eventually(() => page.click("Run snippet"));
     // The widget really ran inside the srcdoc frame, under this policy...
     await eventually(() => page.answered(`/api/embed/v1/avatars/${avatar}`, since));
-    await canvasIn(`document.querySelector('iframe[title="simulator"]')?.contentDocument`);
-    await sleep(4000); // ...and had time to load its picture or model, and the 3D bundle
+    await isolated();
+    await logSays("canvas mounted");
+    await sleep(4000); // ...and had time to load its picture or model, and the 3D bundle...
+    // ...and speaks: the line goes to the frame, its widget to the API.
+    await page.type('input[aria-label^="Type something"]', "Hello from the Simulator.");
+    await eventually(() => page.click("Speak"));
+    await eventually(() => page.answered("/api/embed/v1/synthesize", since), 60000);
+    await logSays("finished speaking", 60000);
+  };
+  // The review's N1: a value that closed data-avatar's quotes and the tag,
+  // then ran as an inline script in a frame of the dashboard's origin, with
+  // the session's tokens in reach. Run it as a link and as a paste; if it
+  // ever runs, the log says PWNED or the title does (the word is built from
+  // two halves, so the payload's own text, which the page shows, never
+  // matches).
+  const steal = `parent.postMessage({lf:true,level:"ok",message:"PW"+"NED "+localStorage.getItem("liveface.tokens")},"*");top.document.title="PW"+"NED"`;
+  const poc = `x" data-size='"></script><script>${steal}</script><script x="'`;
+  const notPwned = async () => {
+    if (await page.evaluate(`document.body.innerText.includes("PWNED") || document.title.includes("PWNED")`))
+      throw new Error("the injected script ran");
+  };
+  const linkRefused = async () => {
+    const prefilled = await page.evaluate(`document.querySelector("#snippet")?.value`);
+    if (prefilled !== "") throw new Error(`a crafted ?avatar= was prefilled: ${JSON.stringify(prefilled)?.slice(0, 120)}`);
+    if (await page.evaluate(`[...document.querySelectorAll("button:not([disabled])")].some((b) => b.textContent.includes("Run snippet"))`))
+      throw new Error("Run is enabled for a crafted ?avatar=");
+    await notPwned();
+  };
+  const pasteRefused = (avatar) => async (since) => {
+    // A valid id, and the payload in every other value the frame receives
+    // (the paste's own quotes escaped, so each value IS the payload).
+    const quoted = (value) => `'${value.replace(/&/g, "&amp;").replace(/'/g, "&#39;")}'`;
+    const snippet = `<script src=${quoted(`${BASE}/api/liveface.js?${poc}`)} data-avatar="${avatar}" data-api="${BASE}/api"
+      data-size=${quoted(poc)} data-provider=${quoted(poc)} data-voice=${quoted(poc)} data-locale=${quoted(poc)}></script>`;
+    await page.type("#snippet", snippet);
+    await eventually(() => page.click("Run snippet"));
+    await eventually(() => page.answered(`/api/embed/v1/avatars/${avatar}`, since));
+    await isolated();
+    await logSays("canvas mounted");
+    await sleep(3000);
+    await notPwned();
   };
 
   // Signed out first: the auth pages redirect a signed-in visitor away.
@@ -375,6 +428,8 @@ try {
     ["/settings"],
     [`/simulator?avatar=${seeded.photo}`, simulate(seeded.photo)],
     [`/simulator?avatar=${seeded.model}`, simulate(seeded.model)],
+    [`/simulator?avatar=${encodeURIComponent(poc)}`, linkRefused],
+    ["/simulator", pasteRefused(seeded.photo)],
   ];
   for (const [path, act, options = {}] of visits) {
     const before = {

@@ -127,11 +127,12 @@ newer push to the same branch or pull request cancels the run it supersedes.
 | `frontend` | structure check, type check, production build | <1 min |
 | `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, unit tests | <1 min |
 | `deploy-script` | ShellCheck (pinned) on `deploy/*.sh`; every gate of `deploy.sh` | <1 min |
-| `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 20 pages load in headless Chrome with zero CSP violations | ~10 min |
+| `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 22 page visits load in headless Chrome with zero CSP violations (the Simulator injection replayed among them) | ~10 min |
 
 The `images` job's browser sweep (`deploy/smoke/web-sweep.mjs`) seeds a user, a
 photo avatar, a 3D avatar and a share link through the API, speaks on the share
-page and runs the real widget in the Simulator for both avatars. To run it
+page, runs the real widget in the Simulator for both avatars and speaks there,
+and replays the Simulator injection (N1) as a link and as a paste. To run it
 against images built locally:
 
 ```bash
@@ -270,10 +271,38 @@ The share page (`/s/<token>`) is the one page other sites may frame. The widget
 is not served by nginx: it is `/api/liveface.js` on customers' pages, under
 their own policy. The API's responses (`/api/*`) carry no CSP of their own.
 
-**Known gap: `script-src 'unsafe-inline'`.** The Simulator runs the customer's
-page in an `<iframe srcdoc>` with inline scripts written per run, and a srcdoc
-document inherits the dashboard's policy, so no hash or nonce can cover it. To
-drop `'unsafe-inline'`: serve that page as its own document (for example
-`/simulator-frame.html`, with its own policy from its own nginx location) and
-pass it the snippet by `postMessage`; then allow the theme script in
-`index.html` by its hash. The sweep shows exactly what a stricter policy blocks.
+**No inline script, anywhere.** `script-src` is `'self'` (and
+`'wasm-unsafe-eval'` for the 3D decoders) on every page: no `'unsafe-inline'`,
+so no inline script, event-handler attribute or `javascript:` URL runs. The
+theme script that runs before first paint is a file (`frontend/public/theme.js`).
+
+**The Simulator runs untrusted input, in three layers.** Its "customer page"
+runs whatever snippet was pasted, or the one a `/simulator?avatar=…` link
+prefills, and anyone can send such a link (the review's N1 was a one-click
+session theft through it). So:
+
+1. **Values stay values** (`features/simulator/snippet.ts`). A link prefills
+   only an avatar id (32 hex digits); anything else and every other parameter
+   is ignored. A pasted avatar that is not an id, or a src or API base that is
+   not an http(s) URL, cannot be run. Every value is HTML-escaped into the
+   page (`buildDocument`), and that page has no inline script: it is the
+   harness `frontend/public/simulator-frame.js`, then the widget's tag.
+2. **The frame has its own origin.** It is `sandbox="allow-scripts"` with no
+   `allow-same-origin`, so its origin is opaque. A script in it cannot read the
+   dashboard's `localStorage` (where the session's tokens are), its cookies or
+   its DOM, and the dashboard cannot reach in either. Frame and page talk only
+   by `postMessage`. The frame posts to the dashboard's origin, never `"*"`, and
+   acts only on its parent's messages. The page takes log lines only from that
+   frame's window. The widget works there as on a customer's site: the embed
+   API answers any origin, `null` included (the request's `Origin` is `null`,
+   which the API treats as no browser origin, so neither a key's domain list
+   nor the Simulator token's origin binding applies), and `allow="autoplay"`
+   lends the frame the page's permission to play the voice.
+3. **The policy refuses inline script.** A srcdoc document inherits the
+   dashboard's CSP, so even a value that escaped layer 1 could not run as an
+   inline script there.
+
+The `images` job's sweep replays the N1 proof of concept, as a link and as a
+paste, and fails if it runs. The session's tokens are still in
+`localStorage` (`docs/frontend-ui.md`, "Security notes"); moving them to
+httpOnly cookies is a separate change.

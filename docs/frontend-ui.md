@@ -213,9 +213,13 @@ Formatting is Prettier (`printWidth` 120), applied once in its own commit;
   not a pair of tokens is dropped rather than parsed into every request
   (`getTokens`), and the dashboard's nginx sends a
   Content-Security-Policy (`frontend/nginx-security-headers.conf`: scripts
-  from its own origin only). What would help most next: refresh tokens
-  the server can revoke (the backend's backlog). Revisit this decision
-  when that lands.
+  from its own origin only, no inline script). The one page that writes
+  HTML, the Simulator's customer page, escapes every value, accepts only
+  an avatar id from a link, and runs in a frame without
+  `allow-same-origin`, so nothing in it can read the tokens
+  (`docs/process.md`, "Security headers"). What would help most next:
+  refresh tokens the server can revoke (the backend's backlog). Revisit
+  this decision when that lands.
 - **No debug handles of the dashboard's own in a production build.**
   `window.__queryClient` (main.tsx) and `window.__lfEngine`
   (AvatarPreview, for the visual harnesses) are set only under
