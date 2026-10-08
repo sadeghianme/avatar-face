@@ -12,7 +12,7 @@ branch ──PR──▶ CI green ──merge──▶ CI green on main ──�
 ```
 
 1. **Branch and pull request.** `git switch -c <topic>`, commit, `git push -u
-   origin <topic>`, `gh pr create --fill`. CI runs all six jobs on the pull
+   origin <topic>`, `gh pr create --fill`. CI runs every job on the pull
    request (table below).
 2. **Merge when green.** Branch protection (below) refuses the merge until
    every job passes and the branch is up to date with main.
@@ -137,13 +137,6 @@ restored file, SQLite would replay the newer log onto it.
 `.github/workflows/ci.yml` runs on every push to main and every pull request. A
 newer push to the same branch or pull request cancels the run it supersedes.
 
-| Job | What it proves | Time |
-|---|---|---|
-| `backend` | ruff, pyright, the OpenAPI document exported again and identical to the committed one, pytest against the production pins and the checksummed MediaPipe models | ~12 min |
-| `embed` | lint, type check (tests included), the widget's generated API types match the committed document, vitest with the pixel goldens, build | ~2 min |
-| `frontend` | structure check, type check, production build | <1 min |
-| `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, the dashboard's generated API types match the committed document, unit tests | <1 min |
-
 **The API contract.** `frontend/src/lib/api-schema.json` is the OpenAPI
 document, and `backend/scripts/export_openapi.py` its only generator
 (`python -m scripts.export_openapi` from `backend/`, or `npm run api:schema`).
@@ -151,6 +144,61 @@ The dashboard generates `src/lib/api-types.ts` from it (`npm run gen:api`), the
 widget `embed/src/api-types.ts` (`npm run gen:api` in `embed/`). A change to
 the API is therefore three files in one pull request: export, then generate
 in both packages; CI fails on any of them left behind.
+
+**The backend is three jobs side by side**, and `backend` stands for them:
+
+- `backend-checks`: everything but the tests. That is `ruff check`, `ruff format
+  --check`, `pyright`, the OpenAPI document, and the migrations against the
+  models. The migration check builds an empty SQLite with `alembic upgrade
+  head` and runs `alembic check`, which compares tables, columns, types,
+  nullability, indexes and foreign keys. It then takes the newest migration
+  down and up again and checks once more. Production migrates when the API
+  starts, but the tests build their schema from the models, so this step is
+  the only one that catches a model change committed without its migration.
+- `backend-tests (1)` and `(2)`: the suite in two halves. Each test belongs to
+  exactly one half (`LIVEFACE_TEST_SHARD=<k>/<n>`, a CRC of its id;
+  `tests/conftest.py`), and each half runs on every core of its runner
+  (`pytest -n auto`). Every pytest-xdist worker has its own database and
+  storage, so a test must write only under `tmp_path`.
+- `backend`: the required check. It needs the other three and fails unless
+  all three succeeded. It runs `if: always()`, because a required check that
+  is skipped counts as passed.
+
+The virtualenv is cached, keyed on the Python version, `constraints.txt` and
+`pyproject.toml`. The MediaPipe models are cached, keyed on their checksums,
+and checked with `sha256sum` whether they were fetched or restored. No test
+loads them yet. The one that would rebuild the reference manifest from the
+masters with MediaPipe (`test_performance_kit.py`) runs only when
+`LIVEFACE_FACE_MODEL` names a `face_landmarker.task`. It compares bytes with
+the committed manifest, and the manifest rebuilt on CI's Linux runner does not
+match.
+
+The same checks from `backend/`, before pushing:
+
+```bash
+ruff check . && ruff format --check .    # `ruff format .` fixes the second
+pyright
+rm -f /tmp/m.sqlite3 && DATABASE_URL=sqlite+aiosqlite:////tmp/m.sqlite3 \
+  sh -c 'alembic upgrade head && alembic check && alembic downgrade -1 && alembic upgrade head'
+python -m pytest tests -q -n auto        # or `make test` from the root
+```
+
+Formatting is `ruff format` (`[tool.ruff.format]` in `backend/pyproject.toml`).
+It is Black's style at line length 100, with double quotes, and a trailing
+comma keeps one item per line. Hand-laid data tables stay between `# fmt: off`
+and `# fmt: on`. The commit that formatted the backend is in
+`.git-blame-ignore-revs`; locally, `git config blame.ignoreRevsFile
+.git-blame-ignore-revs`. The dashboard and the widget use Prettier
+(`npm run format:check`).
+
+| Job | What it proves | Time |
+|---|---|---|
+| `backend-checks` | ruff (lint and format), pyright, the OpenAPI document exported again and identical to the committed one, the migrations against the models and the newest one down and up | ~1.5 min |
+| `backend-tests` (×2) | pytest, half of the suite each, on every core, against the production pins, espeak-ng and the checksummed MediaPipe models | ~4 min |
+| `backend` | every backend job above passed (the required check) | seconds |
+| `embed` | lint, type check (tests included), the widget's generated API types match the committed document, vitest with the pixel goldens, build | ~2 min |
+| `frontend` | structure check, type check, production build | <1 min |
+| `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, the dashboard's generated API types match the committed document, unit tests | <1 min |
 | `deploy-script` | ShellCheck (pinned) on `deploy/*.sh`; every gate of `deploy.sh` | <1 min |
 | `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 20 pages load in headless Chrome with zero CSP violations | ~10 min |
 
@@ -209,6 +257,8 @@ EOF
 
 - `checks` are the job ids in `ci.yml`; `app_id` 15368 is GitHub Actions, so
   only a workflow run can satisfy them. Renaming a job means updating this rule.
+- `backend-checks` and `backend-tests` are not in the rule, and do not need to
+  be: `backend` fails unless all of them succeeded ([CI](#ci)).
 - `strict`: a pull request must be up to date with main, so what CI tested is
   what main becomes.
 - `enforce_admins`: the owner is held to it too. With it, a direct `git push`
