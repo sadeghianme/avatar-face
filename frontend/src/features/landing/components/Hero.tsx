@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
-import { DemoAvatar, useDemo, VoiceMeter } from "@/components/brand/DemoAvatar";
+import { DemoAvatar, useDemo } from "@/components/brand/DemoAvatar";
 import { DemoDirector, type DemoSnapshot } from "@/components/brand/demoDirector";
+import { VoiceMeter } from "@/components/brand/VoiceMeter";
 import { Button } from "@/components/ui/Button";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Icon } from "@/components/ui/Icon";
