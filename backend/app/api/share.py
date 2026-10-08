@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 from app.api.deps import DB, client_address
 from app.core.errors import NotFound404
 from app.models import Avatar
+from app.schemas.published import PublishedAvatarOut
 from app.schemas.tts import CueOut
 from app.services.avatars import repo as avatars
 from app.services.publishing import published_view
@@ -56,9 +57,10 @@ async def _resolve(token: str, db: DB) -> Avatar:
     return avatar
 
 
-@router.get("/avatars/{token}")
-async def public_avatar(token: str, db: DB) -> dict:
-    """Everything the widget engine needs to render, and nothing else."""
+@router.get("/avatars/{token}", response_model=PublishedAvatarOut)
+async def public_avatar(token: str, db: DB) -> PublishedAvatarOut:
+    """Everything the widget engine needs to render, and nothing else: the
+    embed answer without its id (schemas.published). 404 share_not_found."""
     avatar = await _resolve(token, db)
     storage = get_storage()
     # Published, like the embed: a share link is a page other people open,
@@ -67,25 +69,7 @@ async def public_avatar(token: str, db: DB) -> dict:
     view = await published_view(avatar, storage)
     if view is None:
         raise NotFound404("This link is not available", code="share_not_found")
-    return {
-        "name": avatar.name,
-        "kind": avatar.kind.value,
-        "framing": view["framing"],
-        # The published face type: how the share page's engine moves the head.
-        "face_type": view["face_type"],
-        "scene": view.get("scene"),
-        "voice": view.get("voice"),
-        "mouth": view.get("mouth"),
-        "rig_url": view["rig_url"],
-        "thumbnail_url": view["thumbnail_url"],
-        "image_url": view["image_url"],
-        "model_url": view["image_url"] if avatar.kind.value == "model3d" else None,
-        "layer_urls": view["layer_urls"],
-        # Only when the published snapshot carries one (see
-        # publishing.publish); a snapshot from before has no key at all,
-        # and its visitors see exactly what they saw before.
-        **({"disclosure": view["disclosure"]} if view.get("disclosure") else {}),
-    }
+    return PublishedAvatarOut.of(avatar, view)
 
 
 class PublicSpeak(BaseModel):
@@ -95,8 +79,17 @@ class PublicSpeak(BaseModel):
     locale: str = "en-US"
 
 
-@router.post("/avatars/{token}/speak")
-async def public_speak(token: str, body: PublicSpeak, request: Request, db: DB) -> dict:
+class PublicSpeech(BaseModel):
+    """A visitor's line, spoken: the audio and its mouth cues."""
+
+    audio_b64: str
+    audio_mime: str
+    duration_ms: int
+    cues: list[CueOut]
+
+
+@router.post("/avatars/{token}/speak", response_model=PublicSpeech)
+async def public_speak(token: str, body: PublicSpeak, request: Request, db: DB) -> PublicSpeech:
     """Synthesise for a visitor, on the owner's quota.
 
     Two limits, because they stop different things: per token bounds what one
@@ -116,9 +109,9 @@ async def public_speak(token: str, body: PublicSpeak, request: Request, db: DB) 
     await record_synthesis(
         db, avatar.org_id, body.provider, len(body.text), cached, source="share"
     )
-    return {
-        "audio_b64": base64.b64encode(result.audio).decode(),
-        "audio_mime": result.audio_mime,
-        "duration_ms": result.duration_ms,
-        "cues": [CueOut(**c).model_dump() for c in result.cues],
-    }
+    return PublicSpeech(
+        audio_b64=base64.b64encode(result.audio).decode(),
+        audio_mime=result.audio_mime,
+        duration_ms=result.duration_ms,
+        cues=[CueOut(**c) for c in result.cues],
+    )

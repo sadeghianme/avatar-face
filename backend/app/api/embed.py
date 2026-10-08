@@ -24,6 +24,7 @@ from app.api.deps import DB, client_address
 from app.core.config import get_settings
 from app.core.errors import Auth401, Forbidden403, NotFound404
 from app.models import ApiKey, AvatarStatus
+from app.schemas.published import EmbedAvatarOut
 from app.schemas.tts import CueOut, SynthesizeRequest, SynthesizeResponse
 from app.services import api_keys
 from app.services.avatars import repo as avatars
@@ -116,8 +117,14 @@ async def _authenticate(request: Request, db: DB) -> ApiKey:
     return api_key
 
 
-@router.get("/avatars/{avatar_id}")
-async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
+@router.get("/avatars/{avatar_id}", response_model=EmbedAvatarOut)
+async def embed_avatar(avatar_id: str, request: Request, db: DB) -> EmbedAvatarOut:
+    """The PUBLISHED avatar, for the widget: its files presigned, its scene,
+    voice, mouth and disclosure (schemas.published, the public contract).
+
+    401 missing_api_key / invalid_api_key; 403 origin_not_allowed; 404
+    avatar_not_found, avatar_not_ready (never published and not ready) or
+    avatar_not_published; 429 rate_limited past the key's limit."""
     api_key = await _authenticate(request, db)
     avatar = await avatars.require_in_org(db, api_key.org_id, avatar_id)
     # The draft's status says nothing about the published snapshot: a
@@ -135,34 +142,12 @@ async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
     view = await published_view(avatar, storage)
     if view is None:
         raise NotFound404("Avatar has not been published", code="avatar_not_published")
-    return {
-        "id": avatar.id,
-        "name": avatar.name,
-        "kind": avatar.kind.value,
-        "framing": view["framing"],
-        # The published face type ("human", "animal", "cartoon"): how the
-        # head moves by default (the widget's faceType; data-head-motion on
-        # the snippet still overrides).
-        "face_type": view["face_type"],
-        # The published scene (zoom, pan, background), or null for a
-        # snapshot from before scenes: the engine then renders by framing.
-        # data-framing / data-zoom on the snippet still override the zoom.
-        "scene": view.get("scene"),
-        # The owner's published voice choice: like framing, it reaches every
-        # embedding site on their next page load. A data-voice attribute on
-        # the snippet still overrides — that is per-site intent.
-        "voice": view.get("voice"),
-        "mouth": view.get("mouth"),
-        "rig_url": view["rig_url"],
-        "thumbnail_url": view["thumbnail_url"],
-        "image_url": view["image_url"],
-        "model_url": view["image_url"] if avatar.kind.value == "model3d" else None,
-        "layer_urls": view["layer_urls"],
-        # Only when the published snapshot carries one (see
-        # publishing.publish); a snapshot from before has no key at all,
-        # and its visitors see exactly what they saw before.
-        **({"disclosure": view["disclosure"]} if view.get("disclosure") else {}),
-    }
+    # Every field is the published snapshot's, so a site keeps what its
+    # owner last published: the face type chooses the head motion's default
+    # (data-head-motion still overrides), the scene the zoom (data-framing
+    # and data-zoom still override), the voice the speech (data-voice still
+    # overrides: that is per-site intent).
+    return EmbedAvatarOut.of(avatar, view)
 
 
 class CueRequest(BaseModel):

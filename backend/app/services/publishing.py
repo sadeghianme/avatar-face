@@ -40,10 +40,10 @@ from app.models.shapes import (
     KitRecord,
     MouthConfig,
     PublishedConfig,
-    PublishedView,
     SceneConfig,
     TeethRecord,
 )
+from app.schemas.published import PublishedView
 from app.services import scene as scene_service
 from app.services.disclosure import (
     with_ai_shapes,
@@ -567,7 +567,11 @@ def _content_type(key: str) -> str:
 
 
 async def published_view(avatar: Avatar, storage: Storage) -> PublishedView | None:
-    """Presigned URLs for the published snapshot, or None if never published."""
+    """Presigned URLs for the published snapshot, or None if never published.
+
+    Validated into the public contract (schemas.published) here, so a
+    snapshot that does not fit it fails in this function, not in a
+    visitor's engine."""
     config = config_of(avatar)
     if config is None:
         return None
@@ -578,7 +582,7 @@ async def published_view(avatar: Avatar, storage: Storage) -> PublishedView | No
     }
     rig_key, thumbnail_key = config.get("rig_key"), config.get("thumbnail_key")
 
-    return {
+    return PublishedView.model_validate({
         "framing": config.get("framing", "face"),
         # What the avatar is, as published: the engine moves a person's head
         # in depth and an animal's or a cartoon's as a layer, which the rig
@@ -595,9 +599,10 @@ async def published_view(avatar: Avatar, storage: Storage) -> PublishedView | No
         "thumbnail_url": await storage.presign_get(thumbnail_key) if thumbnail_key else "",
         "image_url": image_url,
         "layer_urls": layer_urls or None,
-        # Absent from snapshots published before disclosure existed.
-        "disclosure": config.get("disclosure"),
-    }
+        # Absent from snapshots published before disclosure existed (and
+        # left out of the answer then, not sent as null).
+        "disclosure": config.get("disclosure") or None,
+    })
 
 
 async def _mouth_view(mouth: MouthConfig | None, storage: Storage) -> dict | None:
