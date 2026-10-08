@@ -367,3 +367,74 @@ async def test_cues_are_planned_off_the_event_loop(client, monkeypatch) -> None:
     response = await client.post("/embed/v1/cues", json={"text": "Bonjour.", "locale": "fr-FR"})
     assert response.status_code == 200
     assert threads and threads[0] is not threading.main_thread()
+
+
+# --- Opaque origins (Origin: null) ----------------------------------------------
+#
+# A sandboxed frame (no allow-same-origin), a data: page or a file: page sends
+# `Origin: null`. Any website can make one, so it vouches for no domain: taken
+# as "not a browser", it let any site use a key locked to someone's domain.
+
+
+async def test_a_domain_locked_key_is_refused_from_an_opaque_origin(client):
+    _, _, avatar_id, created = await _setup(client, allowed_domains=["example.com"])
+    key = {"X-Api-Key": created["plaintext"]}
+    for origin in (
+        {"Origin": "null"},
+        # The allowed domain in Referer changes nothing: Origin says null.
+        {"Origin": "null", "Referer": "https://example.com/page"},
+    ):
+        response = await client.get(f"/embed/v1/avatars/{avatar_id}", headers={**key, **origin})
+        assert response.status_code == 403
+        assert response.json()["code"] == "origin_not_allowed"
+    speak = await client.post(
+        "/embed/v1/synthesize",
+        json={"text": "Hi", "provider": "offline", "voice": "offline-warm"},
+        headers={**key, "Origin": "null"},
+    )
+    assert speak.status_code == 403
+    assert speak.json()["code"] == "origin_not_allowed"
+
+
+async def test_a_domain_locked_key_still_works_from_its_domain(client):
+    _, _, avatar_id, created = await _setup(client, allowed_domains=["example.com"])
+    response = await client.get(
+        f"/embed/v1/avatars/{avatar_id}",
+        headers={"X-Api-Key": created["plaintext"], "Origin": "https://example.com"},
+    )
+    assert response.status_code == 200
+
+
+async def test_a_key_without_domains_works_from_an_opaque_origin(client):
+    _, _, avatar_id, created = await _setup(client)
+    response = await client.get(
+        f"/embed/v1/avatars/{avatar_id}",
+        headers={"X-Api-Key": created["plaintext"], "Origin": "null"},
+    )
+    assert response.status_code == 200
+
+
+async def test_a_simulator_token_works_from_the_sandboxed_simulator_frame(client):
+    """The Simulator's frame is sandboxed without allow-same-origin, so the
+    widget inside it sends Origin: null with a token minted on the
+    dashboard's own origin."""
+    headers = await register_and_login(client, "sandboxed")
+    org_id = await create_org(client, headers)
+    avatar_id = await create_ready_avatar(client, headers, org_id)
+    minted = await client.post(
+        f"/orgs/{org_id}/api-keys/simulator-token",
+        headers={**headers, "origin": "http://testserver"},
+    )
+    assert minted.status_code == 200, minted.text
+    token = minted.json()["token"]
+    response = await client.get(
+        f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": token, "Origin": "null"}
+    )
+    assert response.status_code == 200, response.text
+    # A page that names a host is still held to the one it was minted for.
+    elsewhere = await client.get(
+        f"/embed/v1/avatars/{avatar_id}",
+        headers={"X-Api-Key": token, "Origin": "https://evil.example.net"},
+    )
+    assert elsewhere.status_code == 401
+    assert elsewhere.json()["code"] == "simulator_token_invalid"
