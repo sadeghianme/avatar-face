@@ -1,16 +1,19 @@
 """Write the API's OpenAPI document to a file, the same bytes every time.
 
-The dashboard and the widget generate their TypeScript types from it
-(openapi-typescript), so the file has to change when the API does and only
-then: keys are sorted, indentation and the trailing newline are fixed, and
-nothing is read from a running server, the database or the network.
+The one generator of frontend/src/lib/api-schema.json, the committed
+contract: the dashboard generates its TypeScript types from it
+(openapi-typescript, `npm run gen:api`) and so does the widget
+(embed/scripts/gen-api-types.mjs). The file has to change when the API does
+and only then: keys are sorted, indentation and the trailing newline are
+fixed, and nothing is read from a running server, the database or the
+network.
 
-    python -m scripts.export_openapi openapi.json   # from backend/
-    python scripts/export_openapi.py openapi.json   # from anywhere
+    python -m scripts.export_openapi                # the committed file, from backend/
+    python scripts/export_openapi.py openapi.json   # anywhere else, from anywhere
     python -m scripts.export_openapi -              # to stdout
 
-A CI step can regenerate it and fail on a diff, which is how the generated
-types are kept current.
+CI's backend job exports it again and fails on any difference, so the
+committed document is always the code's (docs/process.md, "CI").
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 BACKEND = Path(__file__).resolve().parents[1]
+COMMITTED = BACKEND.parent / "frontend" / "src" / "lib" / "api-schema.json"
 # This checkout's `app`, whatever else the interpreter has installed.
 if str(BACKEND) not in sys.path[:1]:
     sys.path.insert(0, str(BACKEND))
@@ -40,7 +44,12 @@ def render(document: dict[str, Any]) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("output", help="where to write the JSON, or - for stdout")
+    parser.add_argument(
+        "output",
+        nargs="?",
+        default=str(COMMITTED),
+        help="where to write the JSON, or - for stdout (default: the committed document)",
+    )
     args = parser.parse_args(argv)
     text = render(openapi_document())
     if args.output == "-":

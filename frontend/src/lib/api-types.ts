@@ -21,10 +21,13 @@ export interface paths {
      *     Anything else turns this into a membership oracle: try an address, read
      *     the response, learn who is a customer. That is why there is no "no such
      *     user" branch and why a delivery failure is not reported either — the
-     *     difference would be just as readable.
+     *     difference would be just as readable. So is the time an answer takes:
+     *     the mail is sent after the answer, never before it.
      *
      *     Rate limited per address so it cannot be used to mail-bomb someone, and
-     *     because Resend charges per message.
+     *     because Resend charges per message. Also per client (FORGOT_PER_CLIENT
+     *     an hour): that one does answer 429 `rate_limited`, which says something
+     *     about the caller, never about the address asked for.
      */
     post: operations["forgot_password_auth_forgot_password_post"];
     delete?: never;
@@ -42,7 +45,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Login */
+    /**
+     * Login
+     * @description Tokens for these credentials. 401 `invalid_credentials`; 429
+     *     `rate_limited` past LOGIN_PER_CLIENT attempts a minute from one address
+     *     or LOGIN_PER_ACCOUNT attempts on one account in ten minutes.
+     */
     post: operations["login_auth_login_post"];
     delete?: never;
     options?: never;
@@ -93,7 +101,11 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Register */
+    /**
+     * Register
+     * @description A new account. 409 `user_exists`; 429 `rate_limited` past
+     *     REGISTER_PER_CLIENT sign-ups an hour from one address.
+     */
     post: operations["register_auth_register_post"];
     delete?: never;
     options?: never;
@@ -117,6 +129,9 @@ export interface paths {
      *     Signing in here is deliberate: the alternative is bouncing someone who has
      *     just proved control of the mailbox back to a login form to type the
      *     password they set four seconds ago.
+     *
+     *     401 `reset_token_invalid` / `reset_token_used`; 429 `rate_limited` past
+     *     RESET_PER_CLIENT attempts in fifteen minutes from one address.
      */
     post: operations["reset_password_auth_reset_password_post"];
     delete?: never;
@@ -132,7 +147,15 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Embed Avatar */
+    /**
+     * Embed Avatar
+     * @description The PUBLISHED avatar, for the widget: its files presigned, its scene,
+     *     voice, mouth and disclosure (schemas.published, the public contract).
+     *
+     *     401 missing_api_key / invalid_api_key; 403 origin_not_allowed; 404
+     *     avatar_not_found, avatar_not_ready (never published and not ready) or
+     *     avatar_not_published; 429 rate_limited past the key's limit.
+     */
     get: operations["embed_avatar_embed_v1_avatars__avatar_id__get"];
     put?: never;
     post?: never;
@@ -162,9 +185,15 @@ export interface paths {
      *     model the server providers use, plus per-word offsets so the widget can
      *     resync exactly on each `onboundary` event.
      *
-     *     Unauthenticated on purpose: it synthesises nothing, touches no org data,
-     *     and costs a text scan. Requiring a key would only add a failure mode to
-     *     a path whose whole point is working without server audio.
+     *     Unauthenticated on purpose: it synthesises nothing and touches no org
+     *     data. Requiring a key would only add a failure mode to a path whose whole
+     *     point is working without server audio. What it does cost — a text scan
+     *     and, outside English, one espeak-ng process for the whole text — runs on
+     *     a worker thread, never on the loop that serves every other widget.
+     *
+     *     Errors: 422 `validation_error` for text over 5,000 characters (or
+     *     empty); 429 `rate_limited`, with Retry-After, past
+     *     `rate_limit.CUES_PER_CLIENT` requests a minute from one address.
      */
     post: operations["embed_cues_embed_v1_cues_post"];
     delete?: never;
@@ -1081,10 +1110,9 @@ export interface paths {
      *     the step it is for (adjust, detect with AI, generate, finish).
      *
      *     A statement about a face names its creation (`creation_id`, one of this
-     *     organization's; 404 otherwise). The address is taken from the proxy's
-     *     X-Forwarded-For when the server runs behind one (uvicorn's
-     *     FORWARDED_ALLOW_IPS, deploy/docker-compose.prod.yml), and only its
-     *     keyed hash is stored.
+     *     organization's; 404 otherwise). The address is the client's, through the
+     *     proxies this server trusts (deps.client_address), and only its keyed
+     *     hash is stored.
      */
     post: operations["give_consent_orgs__org_id__consents_post"];
     delete?: never;
@@ -1393,7 +1421,7 @@ export interface paths {
      *     organization allows third-party AI and this member has agreed to send
      *     photos to Google, is "prepared" before it is published: its own mouth
      *     shapes, its teeth and a mouth profile fitted to it, made by AI from the
-     *     chosen picture and the confirmed points (services.creations._own_mouth,
+     *     chosen picture and the confirmed points (services.creations.mouth.own_mouth,
      *     services.mouth_kit; the job's progress counts the shapes, and the
      *     avatar's `mouth.kit` and `mouth.teeth` say what was made, or why not).
      *     `warnings` names what the picture will still show around the mouth
@@ -1454,7 +1482,7 @@ export interface paths {
      * @description The rig finish would build from these marks, with the validator's
      *     reasons. Nothing is saved.
      *
-     *     Computed inline rather than as a job: a fit is tens of milliseconds, the
+     *     Computed per request rather than as a job: a fit is milliseconds, the
      *     same call the avatar rig-fit preview makes on every drag, and queueing it
      *     behind someone's background removal would make the handles lag.
      */
@@ -1736,7 +1764,8 @@ export interface paths {
     };
     /**
      * Public Avatar
-     * @description Everything the widget engine needs to render, and nothing else.
+     * @description Everything the widget engine needs to render, and nothing else: the
+     *     embed answer without its id (schemas.published). 404 share_not_found.
      */
     get: operations["public_avatar_public_v1_avatars__token__get"];
     put?: never;
@@ -1762,7 +1791,8 @@ export interface paths {
      *
      *     Two limits, because they stop different things: per token bounds what one
      *     shared link can cost its owner in a minute; per client stops a single
-     *     visitor from being the one who spends it.
+     *     visitor from being the one who spends it. Either answers 429
+     *     `rate_limited` with Retry-After.
      */
     post: operations["public_speak_public_v1_avatars__token__speak_post"];
     delete?: never;
@@ -1812,9 +1842,18 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Storage Get */
+    /**
+     * Storage Get
+     * @description The file behind a signed GET URL, streamed. A `Range` header gets a
+     *     206 with that part. 401 `bad_signature`, 404 `object_not_found`.
+     */
     get: operations["storage_get_storage__key__get"];
-    /** Storage Put */
+    /**
+     * Storage Put
+     * @description Store the body at a signed PUT URL's key. 401 `bad_signature`, 422
+     *     `empty_upload`, 413 `upload_too_large` past `upload_limit(key)` (30 MB
+     *     for a GLB, 15 MB for anything else).
+     */
     put: operations["storage_put_storage__key__put"];
     post?: never;
     delete?: never;
@@ -2421,7 +2460,7 @@ export interface components {
     /**
      * CharacterUpdate
      * @description How an animation or an animal's character mouth is set. Ranges mirror
-     *     TRAIT_LIMITS in embed/src/character-mouth.ts; a published config is served
+     *     TRAIT_LIMITS in embed/src/engine/character-mouth.ts; a published config is served
      *     to strangers and must not trust the client's clamp.
      */
     CharacterUpdate: {
@@ -2672,6 +2711,69 @@ export interface components {
        * @default false
        */
       use_ai: boolean;
+    };
+    /**
+     * EmbedAvatarOut
+     * @description A published avatar, as a customer's widget is served it.
+     */
+    EmbedAvatarOut: {
+      /**
+       * Disclosure
+       * @description Absent from snapshots published before disclosures were recorded.
+       */
+      disclosure?: components["schemas"]["PublishedDisclosure"];
+      /**
+       * Face Type
+       * @description How the head moves: a person's in depth, an animal's or a cartoon's as a layer.
+       * @enum {string}
+       */
+      face_type: "human" | "animal" | "cartoon";
+      /**
+       * Framing
+       * @description `face` or `full`: the zoom when there is no scene.
+       */
+      framing: string;
+      /** Id */
+      id: string;
+      /**
+       * Image Url
+       * @description The picture (a GLB for a 3D avatar), presigned.
+       */
+      image_url: string;
+      kind: components["schemas"]["AvatarKind"];
+      /**
+       * Layer Urls
+       * @description `background` (optional), `body` and `head`, presigned, when built.
+       */
+      layer_urls: {
+        [key: string]: string;
+      } | null;
+      /**
+       * Model Url
+       * @description For kind `model3d`: the GLB, presigned.
+       */
+      model_url: string | null;
+      /**
+       * Mouth
+       * @description Null for the classic mouth with nothing of the owner's.
+       */
+      mouth:
+        (components["schemas"]["PublishedClassicMouth"] | components["schemas"]["PublishedContinuousMouth"]) | null;
+      /** Name */
+      name: string;
+      /**
+       * Rig Url
+       * @description The rig, presigned; empty when the snapshot has none.
+       */
+      rig_url: string;
+      /** @description Null for a snapshot from before scenes. */
+      scene: components["schemas"]["PublishedScene"] | null;
+      /**
+       * Thumbnail Url
+       * @description The 256 px thumbnail, presigned; may be empty.
+       */
+      thumbnail_url: string;
+      voice: components["schemas"]["PublishedVoice"] | null;
     };
     /** FailIn */
     FailIn: {
@@ -3181,6 +3283,282 @@ export interface components {
        * Voice
        * @default
        */
+      voice: string;
+    };
+    /**
+     * PublicSpeech
+     * @description A visitor's line, spoken: the audio and its mouth cues.
+     */
+    PublicSpeech: {
+      /** Audio B64 */
+      audio_b64: string;
+      /** Audio Mime */
+      audio_mime: string;
+      /** Cues */
+      cues: components["schemas"]["CueOut"][];
+      /** Duration Ms */
+      duration_ms: number;
+    };
+    /**
+     * PublishedAiEdited
+     * @description What an AI made or changed: the picture (`touchup`, `stylise`,
+     *     `regenerate`, `generate`), or only the mouth (`teeth`, `mouth_shapes`).
+     */
+    PublishedAiEdited: {
+      /** Mode */
+      mode: string;
+      /** Model */
+      model: string | null;
+      /**
+       * Mouth Shapes
+       * @description Present when AI made the mouth shapes played.
+       */
+      mouth_shapes?: components["schemas"]["PublishedAiMouthShapes"];
+      /**
+       * Teeth
+       * @description Present when AI made the teeth photo shown.
+       */
+      teeth?: components["schemas"]["PublishedAiTeeth"];
+    };
+    /** PublishedAiMouthShapes */
+    PublishedAiMouthShapes: {
+      /** Generated */
+      generated: number;
+      /** Model */
+      model: string | null;
+    };
+    /** PublishedAiTeeth */
+    PublishedAiTeeth: {
+      /** Model */
+      model: string | null;
+    };
+    /**
+     * PublishedAvatarOut
+     * @description A published avatar, as a share page is served it: nothing addressable.
+     */
+    PublishedAvatarOut: {
+      /**
+       * Disclosure
+       * @description Absent from snapshots published before disclosures were recorded.
+       */
+      disclosure?: components["schemas"]["PublishedDisclosure"];
+      /**
+       * Face Type
+       * @description How the head moves: a person's in depth, an animal's or a cartoon's as a layer.
+       * @enum {string}
+       */
+      face_type: "human" | "animal" | "cartoon";
+      /**
+       * Framing
+       * @description `face` or `full`: the zoom when there is no scene.
+       */
+      framing: string;
+      /**
+       * Image Url
+       * @description The picture (a GLB for a 3D avatar), presigned.
+       */
+      image_url: string;
+      kind: components["schemas"]["AvatarKind"];
+      /**
+       * Layer Urls
+       * @description `background` (optional), `body` and `head`, presigned, when built.
+       */
+      layer_urls: {
+        [key: string]: string;
+      } | null;
+      /**
+       * Model Url
+       * @description For kind `model3d`: the GLB, presigned.
+       */
+      model_url: string | null;
+      /**
+       * Mouth
+       * @description Null for the classic mouth with nothing of the owner's.
+       */
+      mouth:
+        (components["schemas"]["PublishedClassicMouth"] | components["schemas"]["PublishedContinuousMouth"]) | null;
+      /** Name */
+      name: string;
+      /**
+       * Rig Url
+       * @description The rig, presigned; empty when the snapshot has none.
+       */
+      rig_url: string;
+      /** @description Null for a snapshot from before scenes. */
+      scene: components["schemas"]["PublishedScene"] | null;
+      /**
+       * Thumbnail Url
+       * @description The 256 px thumbnail, presigned; may be empty.
+       */
+      thumbnail_url: string;
+      voice: components["schemas"]["PublishedVoice"] | null;
+    };
+    /**
+     * PublishedCharacter
+     * @description How the owner set a character mouth (an animation's or an animal's).
+     */
+    PublishedCharacter: {
+      /** Jaw */
+      jaw: number;
+      /**
+       * Style
+       * @enum {string}
+       */
+      style: "character" | "classic";
+      /**
+       * Teeth
+       * @enum {string}
+       */
+      teeth: "upper" | "none";
+      /** Tongue */
+      tongue: boolean;
+    };
+    /**
+     * PublishedClassicMouth
+     * @description The classic, drawn mouth, with the owner's character settings.
+     */
+    PublishedClassicMouth: {
+      character: components["schemas"]["PublishedCharacter"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      renderer: "classic";
+    };
+    /**
+     * PublishedContinuousMouth
+     * @description The photographic mouth.
+     */
+    PublishedContinuousMouth: {
+      /**
+       * Character
+       * @description Always null: character settings are the classic mouth's.
+       */
+      character: null;
+      /**
+       * Motion Url
+       * @description The avatar's own performance manifest; null for the bundled Reference motion.
+       */
+      motion_url: string | null;
+      /** @description The avatar's own teeth; null for the standard teeth, served beside the motion. */
+      oral: components["schemas"]["PublishedOralUrls"] | null;
+      profile: components["schemas"]["PublishedMouthProfile"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      renderer: "continuous";
+    };
+    /**
+     * PublishedDisclosure
+     * @description What visitors are told about the face.
+     */
+    PublishedDisclosure: {
+      /** @description Null when no AI made or changed it. */
+      ai_edited: components["schemas"]["PublishedAiEdited"] | null;
+      /**
+       * Line
+       * @enum {string}
+       */
+      line: "human" | "animal" | "cartoon";
+    };
+    /**
+     * PublishedMouthProfile
+     * @description The photographic mouth's fit to this face; a value the snapshot does
+     *     not set is the engine's default.
+     */
+    PublishedMouthProfile: {
+      /**
+       * Jawrange
+       * @description How far the jaw opens.
+       */
+      jawRange?: number;
+      /**
+       * Lipprojection
+       * @description How far the lips project.
+       */
+      lipProjection?: number;
+      /**
+       * Teethscale
+       * @description Scale of the teeth.
+       */
+      teethScale?: number;
+      /**
+       * Teethy
+       * @description Vertical offset of the teeth.
+       */
+      teethY?: number;
+      /**
+       * Warmth
+       * @description Colour warmth of the mouth's inside.
+       */
+      warmth?: number;
+    };
+    /**
+     * PublishedOralUrls
+     * @description The avatar's own teeth photo and its rig, presigned.
+     */
+    PublishedOralUrls: {
+      /** Image Url */
+      image_url: string;
+      /** Rig Url */
+      rig_url: string;
+    };
+    /**
+     * PublishedPan
+     * @description How far the view is moved from the engine's own placement, as
+     *     fractions of the view's size.
+     */
+    PublishedPan: {
+      /** X */
+      x: number;
+      /** Y */
+      y: number;
+    };
+    /**
+     * PublishedScene
+     * @description The owner's framing: zoom 1 is the face view, 0 the whole picture,
+     *     above 1 closer in; the pan moves the view, the background sits behind a
+     *     cut-out.
+     */
+    PublishedScene: {
+      background: components["schemas"]["PublishedSceneBackground"];
+      pan: components["schemas"]["PublishedPan"];
+      /** Zoom */
+      zoom: number;
+    };
+    /**
+     * PublishedSceneBackground
+     * @description What is behind a cut-out: nothing, a colour, or a picture.
+     */
+    PublishedSceneBackground: {
+      /**
+       * Color
+       * @description `#rrggbb`, for kind `color`.
+       */
+      color?: string;
+      /**
+       * Image Url
+       * @description The picture, presigned, for kind `image`.
+       */
+      image_url?: string;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "transparent" | "color" | "image";
+    };
+    /**
+     * PublishedVoice
+     * @description The owner's published voice. A `data-voice` (or provider, locale)
+     *     attribute on the snippet still wins: that is per-site intent.
+     */
+    PublishedVoice: {
+      /** Locale */
+      locale: string;
+      /** Provider */
+      provider: string;
+      /** Voice */
       voice: string;
     };
     /**
@@ -3754,9 +4132,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": components["schemas"]["EmbedAvatarOut"];
         };
       };
       /** @description Validation Error */
@@ -6552,9 +6928,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": components["schemas"]["PublishedAvatarOut"];
         };
       };
       /** @description Validation Error */
@@ -6589,9 +6963,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": components["schemas"]["PublicSpeech"];
         };
       };
       /** @description Validation Error */

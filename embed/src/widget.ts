@@ -36,15 +36,15 @@
  * published face type: the turn in depth for a person, the rigid layer for
  * an animal or a cartoon.
  */
+import type { CueResponse, EmbedAvatarOut, SynthesizeResponse } from "./api-types";
 import { BrowserTTS } from "./browser-tts";
-import { aiLabel, renderAiLabel, type Disclosure } from "./widget/disclosure";
-import { AvatarEngine, type HeadMotionMode, type Scene } from "./engine";
+import { aiLabel, renderAiLabel } from "./widget/disclosure";
+import { AvatarEngine, type HeadMotionMode } from "./engine";
 import type { Avatar3DEngine, Avatar3DOptions } from "./engine3d";
 import { SpeechQueue } from "./speech";
 import { listen, sttSupported, ListenOptions } from "./stt";
-import type { ClassicMouthConfig } from "./engine/character-mouth";
 import type { AvatarMouthConfig } from "./mouth";
-import { EngineTuning, FaceType, Rig, SynthesisPayload } from "./types";
+import { EngineTuning, Rig } from "./types";
 import { showFailure } from "./widget/failure";
 import { asFailure, fetchJson, loadImage, loadScript } from "./widget/load";
 
@@ -74,27 +74,6 @@ declare global {
       attach: (engine: AvatarEngine, config: AvatarMouthConfig, motionUrl: string) => Promise<unknown>;
     };
   }
-}
-
-/** What GET /embed/v1/avatars/{id} answers (backend/app/api/embed.py). */
-interface PublishedAvatar {
-  kind?: string;
-  framing?: string;
-  /** The published scene (zoom, pan, background), or null for a snapshot
-   *  from before scenes existed. */
-  scene?: Scene | null;
-  rig_url: string;
-  thumbnail_url: string;
-  image_url?: string | null;
-  model_url?: string | null;
-  layer_urls?: { background?: string; body: string; head: string } | null;
-  voice?: { provider: string; voice: string; locale: string } | null;
-  mouth?: AvatarMouthConfig | ClassicMouthConfig | null;
-  /** Absent for snapshots published before disclosures were recorded. */
-  disclosure?: Disclosure;
-  /** What the avatar is, as published: it chooses the head motion's
-   *  default. Absent from an API before it said so: the rig's profile does. */
-  face_type?: FaceType | null;
 }
 
 /** A data-* switch: present and not "off", "false" or "0". */
@@ -180,7 +159,9 @@ async function mount(
   const debug = switchedOn(script.dataset.debug) || new URLSearchParams(location.search).has("liveface-debug");
 
   const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
-  const info = await fetchJson<PublishedAvatar>(`${apiBase}/embed/v1/avatars/${avatarId}`, "avatar", {
+  // The published avatar (backend schemas.published, EmbedAvatarOut): its
+  // type is generated from the API's schema (api-types.ts).
+  const info = await fetchJson<EmbedAvatarOut>(`${apiBase}/embed/v1/avatars/${avatarId}`, "avatar", {
     headers: { "X-Api-Key": apiKey },
   });
 
@@ -283,14 +264,14 @@ async function mount(
     }
   }
 
-  const synth = async (text: string): Promise<SynthesisPayload> => {
+  const synth = async (text: string): Promise<SynthesizeResponse> => {
     const response = await fetch(`${apiBase}/embed/v1/synthesize`, {
       method: "POST",
       headers,
       body: JSON.stringify({ text, provider, voice, locale }),
     });
     if (!response.ok) throw new Error(`synthesize failed: ${response.status}`);
-    return response.json();
+    return (await response.json()) as SynthesizeResponse;
   };
   const queue = new SpeechQueue(engine, synth);
   // data-provider="browser": free local speechSynthesis voices.
@@ -304,7 +285,7 @@ async function mount(
       body: JSON.stringify({ text, locale }),
     });
     if (!response.ok) return null;
-    const data = await response.json();
+    const data = (await response.json()) as CueResponse;
     return { cues: data.cues, durationMs: data.duration_ms, wordMarks: data.word_marks };
   };
   const browserTts = useBrowserVoice ? new BrowserTTS(engine, fetchCues) : null;

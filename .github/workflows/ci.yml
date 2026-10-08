@@ -48,6 +48,15 @@ jobs:
         run: ruff check .
       - name: Type check
         run: pyright
+      - name: OpenAPI document matches the code
+        # frontend/src/lib/api-schema.json is the contract the dashboard and
+        # the widget generate their types from, and scripts/export_openapi.py
+        # its one generator. Exported again here and compared: an API change
+        # committed without its document fails (frontend-lint and embed then
+        # hold their generated types to the document).
+        run: |
+          python scripts/export_openapi.py ../frontend/src/lib/api-schema.json
+          git diff --exit-code -- ../frontend/src/lib/api-schema.json
       - name: Fetch MediaPipe models (same URLs the Dockerfile uses)
         run: |
           mkdir -p models
@@ -93,6 +102,11 @@ jobs:
       # against the code it tests fails here, not by passing on stale casts.
       - name: Typecheck (sources, tests)
         run: npm run typecheck
+      # src/api-types.ts (what the widget reads from the API) is generated
+      # from the committed OpenAPI document by scripts/gen-api-types.mjs: a
+      # hand edit, or a document committed without regenerating, fails here.
+      - name: API types match the committed schema
+        run: npm run check:api
       # Tests before build: the engine's motion and cue logic had no
       # automated coverage at all, and every regression in it this far has
       # been invisible in a screenshot. The golden render snapshots are

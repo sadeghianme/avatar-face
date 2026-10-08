@@ -8,7 +8,7 @@ import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SharePage } from "@/features/share";
-import type { PublicAvatar } from "@/features/share/api";
+import type { PublicAvatar, SpokenAudio } from "@/features/share/api";
 import { translate } from "@/i18n";
 import { expectAccessible } from "@/test/axe";
 import { renderScreen } from "@/test/render";
@@ -60,6 +60,7 @@ function published(extra: Partial<PublicAvatar> = {}): PublicAvatar {
     rig_url: "/api/storage/share/rig.json",
     image_url: "/api/storage/share/image.png",
     thumbnail_url: "/api/storage/share/thumb.png",
+    model_url: null,
     layer_urls: null,
     voice: { provider: "kokoro", voice: "am_adam", locale: "en-GB" },
     mouth: null,
@@ -73,9 +74,10 @@ function setup(avatar: PublicAvatar | null = published()) {
   server
     .on("GET", `/public/v1/avatars/${TOKEN}`, () => avatar ?? apiError(404, "not_found"))
     .on("GET", "/storage/share/rig.json", () => ({ version: 1 }))
-    .on("POST", `/public/v1/avatars/${TOKEN}/speak`, () => ({
+    .on("POST", `/public/v1/avatars/${TOKEN}/speak`, (): SpokenAudio => ({
       audio_b64: "UklGRg==",
       audio_mime: "audio/wav",
+      duration_ms: 400,
       cues: [],
     }));
   return renderScreen(<SharePage />, { route: `/s/${TOKEN}`, path: "/s/:token", signedIn: false, server });

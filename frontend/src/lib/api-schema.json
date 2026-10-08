@@ -1340,7 +1340,7 @@
         "type": "object"
       },
       "CharacterUpdate": {
-        "description": "How an animation or an animal's character mouth is set. Ranges mirror\nTRAIT_LIMITS in embed/src/character-mouth.ts; a published config is served\nto strangers and must not trust the client's clamp.",
+        "description": "How an animation or an animal's character mouth is set. Ranges mirror\nTRAIT_LIMITS in embed/src/engine/character-mouth.ts; a published config is served\nto strangers and must not trust the client's clamp.",
         "properties": {
           "jaw": {
             "default": 1.0,
@@ -2039,6 +2039,148 @@
           }
         },
         "title": "DetectRequest",
+        "type": "object"
+      },
+      "EmbedAvatarOut": {
+        "description": "A published avatar, as a customer's widget is served it.",
+        "properties": {
+          "disclosure": {
+            "$ref": "#/components/schemas/PublishedDisclosure",
+            "description": "Absent from snapshots published before disclosures were recorded.",
+            "title": "Disclosure"
+          },
+          "face_type": {
+            "description": "How the head moves: a person's in depth, an animal's or a cartoon's as a layer.",
+            "enum": [
+              "human",
+              "animal",
+              "cartoon"
+            ],
+            "title": "Face Type",
+            "type": "string"
+          },
+          "framing": {
+            "description": "`face` or `full`: the zoom when there is no scene.",
+            "title": "Framing",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "image_url": {
+            "description": "The picture (a GLB for a 3D avatar), presigned.",
+            "title": "Image Url",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AvatarKind"
+          },
+          "layer_urls": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`background` (optional), `body` and `head`, presigned, when built.",
+            "title": "Layer Urls"
+          },
+          "model_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For kind `model3d`: the GLB, presigned.",
+            "title": "Model Url"
+          },
+          "mouth": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "classic": "#/components/schemas/PublishedClassicMouth",
+                    "continuous": "#/components/schemas/PublishedContinuousMouth"
+                  },
+                  "propertyName": "renderer"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PublishedClassicMouth"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PublishedContinuousMouth"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for the classic mouth with nothing of the owner's.",
+            "title": "Mouth"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rig_url": {
+            "description": "The rig, presigned; empty when the snapshot has none.",
+            "title": "Rig Url",
+            "type": "string"
+          },
+          "scene": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishedScene"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for a snapshot from before scenes."
+          },
+          "thumbnail_url": {
+            "description": "The 256 px thumbnail, presigned; may be empty.",
+            "title": "Thumbnail Url",
+            "type": "string"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishedVoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "framing",
+          "face_type",
+          "scene",
+          "voice",
+          "mouth",
+          "rig_url",
+          "thumbnail_url",
+          "image_url",
+          "layer_urls",
+          "name",
+          "kind",
+          "model_url",
+          "id"
+        ],
+        "title": "EmbedAvatarOut",
         "type": "object"
       },
       "FailIn": {
@@ -3291,6 +3433,538 @@
         "title": "PublicSpeak",
         "type": "object"
       },
+      "PublicSpeech": {
+        "description": "A visitor's line, spoken: the audio and its mouth cues.",
+        "properties": {
+          "audio_b64": {
+            "title": "Audio B64",
+            "type": "string"
+          },
+          "audio_mime": {
+            "title": "Audio Mime",
+            "type": "string"
+          },
+          "cues": {
+            "items": {
+              "$ref": "#/components/schemas/CueOut"
+            },
+            "title": "Cues",
+            "type": "array"
+          },
+          "duration_ms": {
+            "title": "Duration Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "audio_b64",
+          "audio_mime",
+          "duration_ms",
+          "cues"
+        ],
+        "title": "PublicSpeech",
+        "type": "object"
+      },
+      "PublishedAiEdited": {
+        "description": "What an AI made or changed: the picture (`touchup`, `stylise`,\n`regenerate`, `generate`), or only the mouth (`teeth`, `mouth_shapes`).",
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "mouth_shapes": {
+            "$ref": "#/components/schemas/PublishedAiMouthShapes",
+            "description": "Present when AI made the mouth shapes played.",
+            "title": "Mouth Shapes"
+          },
+          "teeth": {
+            "$ref": "#/components/schemas/PublishedAiTeeth",
+            "description": "Present when AI made the teeth photo shown.",
+            "title": "Teeth"
+          }
+        },
+        "required": [
+          "mode",
+          "model"
+        ],
+        "title": "PublishedAiEdited",
+        "type": "object"
+      },
+      "PublishedAiMouthShapes": {
+        "properties": {
+          "generated": {
+            "title": "Generated",
+            "type": "integer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "required": [
+          "model",
+          "generated"
+        ],
+        "title": "PublishedAiMouthShapes",
+        "type": "object"
+      },
+      "PublishedAiTeeth": {
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "required": [
+          "model"
+        ],
+        "title": "PublishedAiTeeth",
+        "type": "object"
+      },
+      "PublishedAvatarOut": {
+        "description": "A published avatar, as a share page is served it: nothing addressable.",
+        "properties": {
+          "disclosure": {
+            "$ref": "#/components/schemas/PublishedDisclosure",
+            "description": "Absent from snapshots published before disclosures were recorded.",
+            "title": "Disclosure"
+          },
+          "face_type": {
+            "description": "How the head moves: a person's in depth, an animal's or a cartoon's as a layer.",
+            "enum": [
+              "human",
+              "animal",
+              "cartoon"
+            ],
+            "title": "Face Type",
+            "type": "string"
+          },
+          "framing": {
+            "description": "`face` or `full`: the zoom when there is no scene.",
+            "title": "Framing",
+            "type": "string"
+          },
+          "image_url": {
+            "description": "The picture (a GLB for a 3D avatar), presigned.",
+            "title": "Image Url",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AvatarKind"
+          },
+          "layer_urls": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`background` (optional), `body` and `head`, presigned, when built.",
+            "title": "Layer Urls"
+          },
+          "model_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For kind `model3d`: the GLB, presigned.",
+            "title": "Model Url"
+          },
+          "mouth": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "classic": "#/components/schemas/PublishedClassicMouth",
+                    "continuous": "#/components/schemas/PublishedContinuousMouth"
+                  },
+                  "propertyName": "renderer"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PublishedClassicMouth"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PublishedContinuousMouth"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for the classic mouth with nothing of the owner's.",
+            "title": "Mouth"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rig_url": {
+            "description": "The rig, presigned; empty when the snapshot has none.",
+            "title": "Rig Url",
+            "type": "string"
+          },
+          "scene": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishedScene"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for a snapshot from before scenes."
+          },
+          "thumbnail_url": {
+            "description": "The 256 px thumbnail, presigned; may be empty.",
+            "title": "Thumbnail Url",
+            "type": "string"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishedVoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "framing",
+          "face_type",
+          "scene",
+          "voice",
+          "mouth",
+          "rig_url",
+          "thumbnail_url",
+          "image_url",
+          "layer_urls",
+          "name",
+          "kind",
+          "model_url"
+        ],
+        "title": "PublishedAvatarOut",
+        "type": "object"
+      },
+      "PublishedCharacter": {
+        "description": "How the owner set a character mouth (an animation's or an animal's).",
+        "properties": {
+          "jaw": {
+            "title": "Jaw",
+            "type": "number"
+          },
+          "style": {
+            "enum": [
+              "character",
+              "classic"
+            ],
+            "title": "Style",
+            "type": "string"
+          },
+          "teeth": {
+            "enum": [
+              "upper",
+              "none"
+            ],
+            "title": "Teeth",
+            "type": "string"
+          },
+          "tongue": {
+            "title": "Tongue",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "style",
+          "teeth",
+          "tongue",
+          "jaw"
+        ],
+        "title": "PublishedCharacter",
+        "type": "object"
+      },
+      "PublishedClassicMouth": {
+        "description": "The classic, drawn mouth, with the owner's character settings.",
+        "properties": {
+          "character": {
+            "$ref": "#/components/schemas/PublishedCharacter"
+          },
+          "renderer": {
+            "const": "classic",
+            "title": "Renderer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "renderer",
+          "character"
+        ],
+        "title": "PublishedClassicMouth",
+        "type": "object"
+      },
+      "PublishedContinuousMouth": {
+        "description": "The photographic mouth.",
+        "properties": {
+          "character": {
+            "description": "Always null: character settings are the classic mouth's.",
+            "title": "Character",
+            "type": "null"
+          },
+          "motion_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The avatar's own performance manifest; null for the bundled Reference motion.",
+            "title": "Motion Url"
+          },
+          "oral": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishedOralUrls"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The avatar's own teeth; null for the standard teeth, served beside the motion."
+          },
+          "profile": {
+            "$ref": "#/components/schemas/PublishedMouthProfile"
+          },
+          "renderer": {
+            "const": "continuous",
+            "title": "Renderer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "renderer",
+          "profile",
+          "character",
+          "oral",
+          "motion_url"
+        ],
+        "title": "PublishedContinuousMouth",
+        "type": "object"
+      },
+      "PublishedDisclosure": {
+        "description": "What visitors are told about the face.",
+        "properties": {
+          "ai_edited": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishedAiEdited"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when no AI made or changed it."
+          },
+          "line": {
+            "enum": [
+              "human",
+              "animal",
+              "cartoon"
+            ],
+            "title": "Line",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ai_edited",
+          "line"
+        ],
+        "title": "PublishedDisclosure",
+        "type": "object"
+      },
+      "PublishedMouthProfile": {
+        "description": "The photographic mouth's fit to this face; a value the snapshot does\nnot set is the engine's default.",
+        "properties": {
+          "jawRange": {
+            "description": "How far the jaw opens.",
+            "title": "Jawrange",
+            "type": "number"
+          },
+          "lipProjection": {
+            "description": "How far the lips project.",
+            "title": "Lipprojection",
+            "type": "number"
+          },
+          "teethScale": {
+            "description": "Scale of the teeth.",
+            "title": "Teethscale",
+            "type": "number"
+          },
+          "teethY": {
+            "description": "Vertical offset of the teeth.",
+            "title": "Teethy",
+            "type": "number"
+          },
+          "warmth": {
+            "description": "Colour warmth of the mouth's inside.",
+            "title": "Warmth",
+            "type": "number"
+          }
+        },
+        "title": "PublishedMouthProfile",
+        "type": "object"
+      },
+      "PublishedOralUrls": {
+        "description": "The avatar's own teeth photo and its rig, presigned.",
+        "properties": {
+          "image_url": {
+            "title": "Image Url",
+            "type": "string"
+          },
+          "rig_url": {
+            "title": "Rig Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image_url",
+          "rig_url"
+        ],
+        "title": "PublishedOralUrls",
+        "type": "object"
+      },
+      "PublishedPan": {
+        "description": "How far the view is moved from the engine's own placement, as\nfractions of the view's size.",
+        "properties": {
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "PublishedPan",
+        "type": "object"
+      },
+      "PublishedScene": {
+        "description": "The owner's framing: zoom 1 is the face view, 0 the whole picture,\nabove 1 closer in; the pan moves the view, the background sits behind a\ncut-out.",
+        "properties": {
+          "background": {
+            "$ref": "#/components/schemas/PublishedSceneBackground"
+          },
+          "pan": {
+            "$ref": "#/components/schemas/PublishedPan"
+          },
+          "zoom": {
+            "title": "Zoom",
+            "type": "number"
+          }
+        },
+        "required": [
+          "zoom",
+          "pan",
+          "background"
+        ],
+        "title": "PublishedScene",
+        "type": "object"
+      },
+      "PublishedSceneBackground": {
+        "description": "What is behind a cut-out: nothing, a colour, or a picture.",
+        "properties": {
+          "color": {
+            "description": "`#rrggbb`, for kind `color`.",
+            "title": "Color",
+            "type": "string"
+          },
+          "image_url": {
+            "description": "The picture, presigned, for kind `image`.",
+            "title": "Image Url",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "transparent",
+              "color",
+              "image"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "PublishedSceneBackground",
+        "type": "object"
+      },
+      "PublishedVoice": {
+        "description": "The owner's published voice. A `data-voice` (or provider, locale)\nattribute on the snippet still wins: that is per-site intent.",
+        "properties": {
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "voice": {
+            "title": "Voice",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "voice",
+          "locale"
+        ],
+        "title": "PublishedVoice",
+        "type": "object"
+      },
       "PupilAnchor": {
         "description": "A pupil as the user marked it: center, and one point on the rim.",
         "properties": {
@@ -4113,7 +4787,7 @@
   "paths": {
     "/auth/forgot-password": {
       "post": {
-        "description": "Start a password reset.\n\nAlways answers the same way, whether or not the address has an account.\nAnything else turns this into a membership oracle: try an address, read\nthe response, learn who is a customer. That is why there is no \"no such\nuser\" branch and why a delivery failure is not reported either \u2014 the\ndifference would be just as readable.\n\nRate limited per address so it cannot be used to mail-bomb someone, and\nbecause Resend charges per message.",
+        "description": "Start a password reset.\n\nAlways answers the same way, whether or not the address has an account.\nAnything else turns this into a membership oracle: try an address, read\nthe response, learn who is a customer. That is why there is no \"no such\nuser\" branch and why a delivery failure is not reported either — the\ndifference would be just as readable. So is the time an answer takes:\nthe mail is sent after the answer, never before it.\n\nRate limited per address so it cannot be used to mail-bomb someone, and\nbecause Resend charges per message. Also per client (FORGOT_PER_CLIENT\nan hour): that one does answer 429 `rate_limited`, which says something\nabout the caller, never about the address asked for.",
         "operationId": "forgot_password_auth_forgot_password_post",
         "requestBody": {
           "content": {
@@ -4157,6 +4831,7 @@
     },
     "/auth/login": {
       "post": {
+        "description": "Tokens for these credentials. 401 `invalid_credentials`; 429\n`rate_limited` past LOGIN_PER_CLIENT attempts a minute from one address\nor LOGIN_PER_ACCOUNT attempts on one account in ten minutes.",
         "operationId": "login_auth_login_post",
         "requestBody": {
           "content": {
@@ -4260,6 +4935,7 @@
     },
     "/auth/register": {
       "post": {
+        "description": "A new account. 409 `user_exists`; 429 `rate_limited` past\nREGISTER_PER_CLIENT sign-ups an hour from one address.",
         "operationId": "register_auth_register_post",
         "requestBody": {
           "content": {
@@ -4301,7 +4977,7 @@
     },
     "/auth/reset-password": {
       "post": {
-        "description": "Finish a reset, and sign the user straight in.\n\nSigning in here is deliberate: the alternative is bouncing someone who has\njust proved control of the mailbox back to a login form to type the\npassword they set four seconds ago.",
+        "description": "Finish a reset, and sign the user straight in.\n\nSigning in here is deliberate: the alternative is bouncing someone who has\njust proved control of the mailbox back to a login form to type the\npassword they set four seconds ago.\n\n401 `reset_token_invalid` / `reset_token_used`; 429 `rate_limited` past\nRESET_PER_CLIENT attempts in fifteen minutes from one address.",
         "operationId": "reset_password_auth_reset_password_post",
         "requestBody": {
           "content": {
@@ -4343,6 +5019,7 @@
     },
     "/embed/v1/avatars/{avatar_id}": {
       "get": {
+        "description": "The PUBLISHED avatar, for the widget: its files presigned, its scene,\nvoice, mouth and disclosure (schemas.published, the public contract).\n\n401 missing_api_key / invalid_api_key; 403 origin_not_allowed; 404\navatar_not_found, avatar_not_ready (never published and not ready) or\navatar_not_published; 429 rate_limited past the key's limit.",
         "operationId": "embed_avatar_embed_v1_avatars__avatar_id__get",
         "parameters": [
           {
@@ -4360,9 +5037,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Embed Avatar Embed V1 Avatars  Avatar Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/EmbedAvatarOut"
                 }
               }
             },
@@ -4387,7 +5062,7 @@
     },
     "/embed/v1/cues": {
       "post": {
-        "description": "Viseme cues for text WITHOUT synthesising audio.\n\nThe browser-voice path plays audio through speechSynthesis, which never\nhands back a waveform, so timing cannot be measured from the audio. It\nused to guess a flat 60ms per character \u2014 that mismatch is what made the\nmouth look unrelated to the speech. This serves the same phoneme-duration\nmodel the server providers use, plus per-word offsets so the widget can\nresync exactly on each `onboundary` event.\n\nUnauthenticated on purpose: it synthesises nothing, touches no org data,\nand costs a text scan. Requiring a key would only add a failure mode to\na path whose whole point is working without server audio.",
+        "description": "Viseme cues for text WITHOUT synthesising audio.\n\nThe browser-voice path plays audio through speechSynthesis, which never\nhands back a waveform, so timing cannot be measured from the audio. It\nused to guess a flat 60ms per character — that mismatch is what made the\nmouth look unrelated to the speech. This serves the same phoneme-duration\nmodel the server providers use, plus per-word offsets so the widget can\nresync exactly on each `onboundary` event.\n\nUnauthenticated on purpose: it synthesises nothing and touches no org\ndata. Requiring a key would only add a failure mode to a path whose whole\npoint is working without server audio. What it does cost — a text scan\nand, outside English, one espeak-ng process for the whole text — runs on\na worker thread, never on the loop that serves every other widget.\n\nErrors: 422 `validation_error` for text over 5,000 characters (or\nempty); 429 `rate_limited`, with Retry-After, past\n`rate_limit.CUES_PER_CLIENT` requests a minute from one address.",
         "operationId": "embed_cues_embed_v1_cues_post",
         "requestBody": {
           "content": {
@@ -4828,7 +5503,7 @@
     },
     "/orgs/{org_id}/api-keys/simulator-token": {
       "post": {
-        "description": "A short-lived credential for the in-dashboard Simulator.\n\nAny member, not just an admin: this grants strictly less than the session\nthe caller already holds, and requiring admin would stop most people from\ntesting their own avatars.\n\nDeliberately not an API key. It is signed rather than stored, expires in\nminutes, and only works from the origin that asked for it \u2014 see\napp.services.simulator_token for why a real key cannot be used here.",
+        "description": "A short-lived credential for the in-dashboard Simulator.\n\nAny member, not just an admin: this grants strictly less than the session\nthe caller already holds, and requiring admin would stop most people from\ntesting their own avatars.\n\nDeliberately not an API key. It is signed rather than stored, expires in\nminutes, and only works from the origin that asked for it — see\napp.services.simulator_token for why a real key cannot be used here.",
         "operationId": "create_simulator_token_orgs__org_id__api_keys_simulator_token_post",
         "parameters": [
           {
@@ -5163,7 +5838,7 @@
     },
     "/orgs/{org_id}/avatars/{avatar_id}": {
       "delete": {
-        "description": "Delete the avatar and every file it owns.\n\nBy prefix, not by a list of keys: an avatar accumulates files no column\npoints at any more \u2014 the pre-crop and pre-cut-out photos, undo history,\nlayers, every published revision \u2014 and a hand-kept list is exactly what\nleft the published copies of \"deleted\" avatars in storage.",
+        "description": "Delete the avatar and every file it owns.\n\nBy prefix, not by a list of keys: an avatar accumulates files no column\npoints at any more — the pre-crop and pre-cut-out photos, undo history,\nlayers, every published revision — and a hand-kept list is exactly what\nleft the published copies of \"deleted\" avatars in storage.",
         "operationId": "delete_avatar_orgs__org_id__avatars__avatar_id__delete",
         "parameters": [
           {
@@ -5255,7 +5930,7 @@
         ]
       },
       "patch": {
-        "description": "Change owner-editable settings.\n\nFraming lives here rather than on the embed snippet so that switching it\nreaches sites that already have the snippet pasted in \u2014 they re-read the\navatar on every page load, so the change lands without anyone editing HTML.",
+        "description": "Change owner-editable settings.\n\nFraming lives here rather than on the embed snippet so that switching it\nreaches sites that already have the snippet pasted in — they re-read the\navatar on every page load, so the change lands without anyone editing HTML.",
         "operationId": "update_avatar_orgs__org_id__avatars__avatar_id__patch",
         "parameters": [
           {
@@ -5317,7 +5992,7 @@
     },
     "/orgs/{org_id}/avatars/{avatar_id}/background": {
       "post": {
-        "description": "Cut the subject out of the photo, or put the original back.\n\nThe rig is untouched on purpose. Removing a background does not move a\nsingle landmark \u2014 the face is in exactly the same place \u2014 so re-detecting\nwould only risk a worse fit than the one already there, possibly one the\nuser corrected by hand. The mouth kit stays for the same reason: its\nshapes are the face's movements, and a cut-out moves no pixel of the\nface.",
+        "description": "Cut the subject out of the photo, or put the original back.\n\nThe rig is untouched on purpose. Removing a background does not move a\nsingle landmark — the face is in exactly the same place — so re-detecting\nwould only risk a worse fit than the one already there, possibly one the\nuser corrected by hand. The mouth kit stays for the same reason: its\nshapes are the face's movements, and a cut-out moves no pixel of the\nface.",
         "operationId": "set_background_orgs__org_id__avatars__avatar_id__background_post",
         "parameters": [
           {
@@ -5379,7 +6054,7 @@
     },
     "/orgs/{org_id}/avatars/{avatar_id}/crop": {
       "post": {
-        "description": "Crop the photo, and move the rig with it.\n\nThe rig is in image pixels, so cropping the image without translating the\nlandmarks would leave every point offset by the crop origin \u2014 the mesh\nwould sit beside the face instead of on it. Translating is exact and,\nunlike re-detecting, keeps any correction the user made by hand.",
+        "description": "Crop the photo, and move the rig with it.\n\nThe rig is in image pixels, so cropping the image without translating the\nlandmarks would leave every point offset by the crop origin — the mesh\nwould sit beside the face instead of on it. Translating is exact and,\nunlike re-detecting, keeps any correction the user made by hand.",
         "operationId": "crop_avatar_orgs__org_id__avatars__avatar_id__crop_post",
         "parameters": [
           {
@@ -5655,7 +6330,7 @@
         ]
       },
       "post": {
-        "description": "A second photo of the same person with teeth showing.\n\nIt supplies THEIR enamel to the continuous mouth instead of the\nstandard teeth. Validated exactly as in the lab it graduated from (a real\ndetected face, large enough, mouth actually open) and by the browser's\nown teeth test (422 mouth_teeth_unclear: the upper row too small, or\nonly its tips), through services.mouth_photo, the path AI-made teeth\ntake too. A draft edit like any other \u2014 visitors see it only after\nPublish.",
+        "description": "A second photo of the same person with teeth showing.\n\nIt supplies THEIR enamel to the continuous mouth instead of the\nstandard teeth. Validated exactly as in the lab it graduated from (a real\ndetected face, large enough, mouth actually open) and by the browser's\nown teeth test (422 mouth_teeth_unclear: the upper row too small, or\nonly its tips), through services.mouth_photo, the path AI-made teeth\ntake too. A draft edit like any other — visitors see it only after\nPublish.",
         "operationId": "upload_mouth_photo_orgs__org_id__avatars__avatar_id__mouth_photo_post",
         "parameters": [
           {
@@ -5717,7 +6392,7 @@
     },
     "/orgs/{org_id}/avatars/{avatar_id}/publish": {
       "post": {
-        "description": "Make the current draft what embedded sites and share links serve.\n\nCopies the draft's assets into an immutable snapshot rather than\nrecording which keys were live \u2014 layer files are overwritten in place,\nso pointers would silently drift. See services/publishing.",
+        "description": "Make the current draft what embedded sites and share links serve.\n\nCopies the draft's assets into an immutable snapshot rather than\nrecording which keys were live — layer files are overwritten in place,\nso pointers would silently drift. See services/publishing.",
         "operationId": "publish_avatar_orgs__org_id__avatars__avatar_id__publish_post",
         "parameters": [
           {
@@ -5821,7 +6496,7 @@
     },
     "/orgs/{org_id}/avatars/{avatar_id}/rig-anchors": {
       "get": {
-        "description": "Where each handle of the avatar's line opens.\n\nOn the owner's saved marks where there are some, returned as placed (the\nfitted mesh only passes near a mark, it is not where the handle was\ndropped). Anything never marked opens on the landmark it attaches to, in\nthe mesh those saved marks make from the base \u2014 so a good detection\nmeans dragging nothing, and an eye left unmarked sits where the fit put\nit; a head saved with four points opens with its outline diagonals on\nthe fitted mesh. Always in the line's scheme: an animal marked before\nmouth lines existed opens with a mouth line. Clamped to the image,\nbecause a later crop can leave a saved mark outside it, where no handle\ncould be dragged from.",
+        "description": "Where each handle of the avatar's line opens.\n\nOn the owner's saved marks where there are some, returned as placed (the\nfitted mesh only passes near a mark, it is not where the handle was\ndropped). Anything never marked opens on the landmark it attaches to, in\nthe mesh those saved marks make from the base — so a good detection\nmeans dragging nothing, and an eye left unmarked sits where the fit put\nit; a head saved with four points opens with its outline diagonals on\nthe fitted mesh. Always in the line's scheme: an animal marked before\nmouth lines existed opens with a mouth line. Clamped to the image,\nbecause a later crop can leave a saved mark outside it, where no handle\ncould be dragged from.",
         "operationId": "rig_anchors_orgs__org_id__avatars__avatar_id__rig_anchors_get",
         "parameters": [
           {
@@ -5875,7 +6550,7 @@
     },
     "/orgs/{org_id}/avatars/{avatar_id}/rig-fit": {
       "post": {
-        "description": "Rebuild the rig from hand-placed anchors (services.anchor_fit).\n\nWith `persist` false this computes the fitted rig and returns it without\nwriting, with the validator's reasons, so the client can render and speak\nwith the exact object a save would store \u2014 the preview cannot disagree\nwith the result, because it IS the result. With `persist` true a fit the\nvalidator rejects is refused (422, with the reasons) and nothing changes.",
+        "description": "Rebuild the rig from hand-placed anchors (services.anchor_fit).\n\nWith `persist` false this computes the fitted rig and returns it without\nwriting, with the validator's reasons, so the client can render and speak\nwith the exact object a save would store — the preview cannot disagree\nwith the result, because it IS the result. With `persist` true a fit the\nvalidator rejects is refused (422, with the reasons) and nothing changes.",
         "operationId": "rig_fit_orgs__org_id__avatars__avatar_id__rig_fit_post",
         "parameters": [
           {
@@ -6039,7 +6714,7 @@
         ]
       },
       "post": {
-        "description": "A picture to show behind a cut-out (services.scene): validated,\nre-encoded and stored under a fresh key, and shown from now on. A draft\nedit like any other \u2014 visitors see it only after Publish. An opaque\npicture may have one too (the dashboard says it will not show until the\nbackground is removed).",
+        "description": "A picture to show behind a cut-out (services.scene): validated,\nre-encoded and stored under a fresh key, and shown from now on. A draft\nedit like any other — visitors see it only after Publish. An opaque\npicture may have one too (the dashboard says it will not show until the\nbackground is removed).",
         "operationId": "upload_scene_image_orgs__org_id__avatars__avatar_id__scene_image_post",
         "parameters": [
           {
@@ -6203,7 +6878,7 @@
     },
     "/orgs/{org_id}/avatars/{avatar_id}/undo": {
       "post": {
-        "description": "Step back one edit \u2014 crop, background, framing, whatever it was.",
+        "description": "Step back one edit — crop, background, framing, whatever it was.",
         "operationId": "undo_edit_orgs__org_id__avatars__avatar_id__undo_post",
         "parameters": [
           {
@@ -6351,7 +7026,7 @@
         ]
       },
       "post": {
-        "description": "Queue a clone: reference recording + the lines to render.\n\nConsent is checked at the door as well as at upload time \u2014 refusing\nbefore any audio is stored beats storing a likeness and refusing later.",
+        "description": "Queue a clone: reference recording + the lines to render.\n\nConsent is checked at the door as well as at upload time — refusing\nbefore any audio is stored beats storing a likeness and refusing later.",
         "operationId": "create_job_orgs__org_id__clone_jobs_post",
         "parameters": [
           {
@@ -6406,7 +7081,7 @@
     },
     "/orgs/{org_id}/clone-jobs/claim": {
       "post": {
-        "description": "Worker: take the oldest waiting job. 404 when the queue is empty \u2014\nan empty queue is the steady state, not an error worth logging.",
+        "description": "Worker: take the oldest waiting job. 404 when the queue is empty —\nan empty queue is the steady state, not an error worth logging.",
         "operationId": "claim_orgs__org_id__clone_jobs_claim_post",
         "parameters": [
           {
@@ -6719,7 +7394,7 @@
     },
     "/orgs/{org_id}/clone-jobs/{job_id}/render": {
       "post": {
-        "description": "Render a job inside this backend, if the hardware allows.\n\n202 with the claimed job: rendering takes seconds per line, and the page\nalready polls \u2014 a blocking response would just hold a connection open\nfor a minute to say what the poll says anyway.",
+        "description": "Render a job inside this backend, if the hardware allows.\n\n202 with the claimed job: rendering takes seconds per line, and the page\nalready polls — a blocking response would just hold a connection open\nfor a minute to say what the poll says anyway.",
         "operationId": "render_here_orgs__org_id__clone_jobs__job_id__render_post",
         "parameters": [
           {
@@ -6927,7 +7602,7 @@
     },
     "/orgs/{org_id}/consents": {
       "post": {
-        "description": "Record a statement by the signed-in member. Pass the returned id to\nthe step it is for (adjust, detect with AI, generate, finish).\n\nA statement about a face names its creation (`creation_id`, one of this\norganization's; 404 otherwise). The address is taken from the proxy's\nX-Forwarded-For when the server runs behind one (uvicorn's\nFORWARDED_ALLOW_IPS, deploy/docker-compose.prod.yml), and only its\nkeyed hash is stored.",
+        "description": "Record a statement by the signed-in member. Pass the returned id to\nthe step it is for (adjust, detect with AI, generate, finish).\n\nA statement about a face names its creation (`creation_id`, one of this\norganization's; 404 otherwise). The address is the client's, through the\nproxies this server trusts (deps.client_address), and only its keyed\nhash is stored.",
         "operationId": "give_consent_orgs__org_id__consents_post",
         "parameters": [
           {
@@ -7658,7 +8333,7 @@
     },
     "/orgs/{org_id}/creations/{creation_id}/finish": {
       "post": {
-        "description": "Build the avatar from the confirmed marks and publish it.\n\nPressing Finish is the owner confirming the points, so the avatar goes\nlive. The creation moves draft \u2192 finishing once (atomically); pressing\nagain answers with the same avatar id. Marks placed on another image are\nrefused (409 anchors_stale), as is a fit that would fold (422 with the\nreasons). Follow the creation until `status` is finished; if the job\nfails the creation is a draft again and Finish can be pressed again.\nThe avatar takes `name`, or without one the name kept with the creation\n(`CreationOut.name`, decided when it was made), else \"Avatar\".\n\nWhen `statement` is set, it needs that statement by this user, recorded\nfor this creation (403 consent_required, with its `scope`): a person's\nphoto on any line (\"depiction\"), or a face generated from words\n(\"generated_face\"). The avatar records `ai_edited` when the chosen\nimage came from AI adjust or generation.\n\nA person's avatar starts with the photographic mouth, and, when the\norganization allows third-party AI and this member has agreed to send\nphotos to Google, is \"prepared\" before it is published: its own mouth\nshapes, its teeth and a mouth profile fitted to it, made by AI from the\nchosen picture and the confirmed points (services.creations._own_mouth,\nservices.mouth_kit; the job's progress counts the shapes, and the\navatar's `mouth.kit` and `mouth.teeth` say what was made, or why not).\n`warnings` names what the picture will still show around the mouth\n(mouth_open, teeth_showing): information, not a refusal.",
+        "description": "Build the avatar from the confirmed marks and publish it.\n\nPressing Finish is the owner confirming the points, so the avatar goes\nlive. The creation moves draft → finishing once (atomically); pressing\nagain answers with the same avatar id. Marks placed on another image are\nrefused (409 anchors_stale), as is a fit that would fold (422 with the\nreasons). Follow the creation until `status` is finished; if the job\nfails the creation is a draft again and Finish can be pressed again.\nThe avatar takes `name`, or without one the name kept with the creation\n(`CreationOut.name`, decided when it was made), else \"Avatar\".\n\nWhen `statement` is set, it needs that statement by this user, recorded\nfor this creation (403 consent_required, with its `scope`): a person's\nphoto on any line (\"depiction\"), or a face generated from words\n(\"generated_face\"). The avatar records `ai_edited` when the chosen\nimage came from AI adjust or generation.\n\nA person's avatar starts with the photographic mouth, and, when the\norganization allows third-party AI and this member has agreed to send\nphotos to Google, is \"prepared\" before it is published: its own mouth\nshapes, its teeth and a mouth profile fitted to it, made by AI from the\nchosen picture and the confirmed points (services.creations.mouth.own_mouth,\nservices.mouth_kit; the job's progress counts the shapes, and the\navatar's `mouth.kit` and `mouth.teeth` say what was made, or why not).\n`warnings` names what the picture will still show around the mouth\n(mouth_open, teeth_showing): information, not a refusal.",
         "operationId": "finish_creation_orgs__org_id__creations__creation_id__finish_post",
         "parameters": [
           {
@@ -7782,7 +8457,7 @@
     },
     "/orgs/{org_id}/creations/{creation_id}/preview-rig": {
       "post": {
-        "description": "The rig finish would build from these marks, with the validator's\nreasons. Nothing is saved.\n\nComputed inline rather than as a job: a fit is tens of milliseconds, the\nsame call the avatar rig-fit preview makes on every drag, and queueing it\nbehind someone's background removal would make the handles lag.",
+        "description": "The rig finish would build from these marks, with the validator's\nreasons. Nothing is saved.\n\nComputed per request rather than as a job: a fit is milliseconds, the\nsame call the avatar rig-fit preview makes on every drag, and queueing it\nbehind someone's background removal would make the handles lag.",
         "operationId": "preview_rig_orgs__org_id__creations__creation_id__preview_rig_post",
         "parameters": [
           {
@@ -8268,7 +8943,7 @@
     },
     "/orgs/{org_id}/lab/avatars/{avatar_id}/depth": {
       "get": {
-        "description": "478 per-landmark z values for the avatar's current photo.\n\nMediaPipe's convention: negative toward the camera, scaled like x.\n`detected: false` with an empty list is an answer, not an error \u2014 the\nlab falls back to its dome, exactly as it does for avatars whose photo\nthe landmarker cannot read.",
+        "description": "478 per-landmark z values for the avatar's current photo.\n\nMediaPipe's convention: negative toward the camera, scaled like x.\n`detected: false` with an empty list is an answer, not an error — the\nlab falls back to its dome, exactly as it does for avatars whose photo\nthe landmarker cannot read.",
         "operationId": "landmark_depth_orgs__org_id__lab_avatars__avatar_id__depth_get",
         "parameters": [
           {
@@ -8684,7 +9359,7 @@
     },
     "/public/v1/avatars/{token}": {
       "get": {
-        "description": "Everything the widget engine needs to render, and nothing else.",
+        "description": "Everything the widget engine needs to render, and nothing else: the\nembed answer without its id (schemas.published). 404 share_not_found.",
         "operationId": "public_avatar_public_v1_avatars__token__get",
         "parameters": [
           {
@@ -8702,9 +9377,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Public Avatar Public V1 Avatars  Token  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PublishedAvatarOut"
                 }
               }
             },
@@ -8729,7 +9402,7 @@
     },
     "/public/v1/avatars/{token}/speak": {
       "post": {
-        "description": "Synthesise for a visitor, on the owner's quota.\n\nTwo limits, because they stop different things: per token bounds what one\nshared link can cost its owner in a minute; per client stops a single\nvisitor from being the one who spends it.",
+        "description": "Synthesise for a visitor, on the owner's quota.\n\nTwo limits, because they stop different things: per token bounds what one\nshared link can cost its owner in a minute; per client stops a single\nvisitor from being the one who spends it. Either answers 429\n`rate_limited` with Retry-After.",
         "operationId": "public_speak_public_v1_avatars__token__speak_post",
         "parameters": [
           {
@@ -8757,9 +9430,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Public Speak Public V1 Avatars  Token  Speak Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PublicSpeech"
                 }
               }
             },
@@ -8849,6 +9520,7 @@
     },
     "/storage/{key}": {
       "get": {
+        "description": "The file behind a signed GET URL, streamed. A `Range` header gets a\n206 with that part. 401 `bad_signature`, 404 `object_not_found`.",
         "operationId": "storage_get_storage__key__get",
         "parameters": [
           {
@@ -8905,6 +9577,7 @@
         ]
       },
       "put": {
+        "description": "Store the body at a signed PUT URL's key. 401 `bad_signature`, 422\n`empty_upload`, 413 `upload_too_large` past `upload_limit(key)` (30 MB\nfor a GLB, 15 MB for anything else).",
         "operationId": "storage_put_storage__key__put",
         "parameters": [
           {
@@ -8990,7 +9663,7 @@
     },
     "/tts/orgs/{org_id}/stream": {
       "post": {
-        "description": "Speech in phrases, so the first word plays before the rest exists.\n\nNDJSON frames: `start`, ordered `chunk`s of mono 24 kHz PCM16 with the\nphrase's own cues, then `done` (or `error`). Only Kokoro streams; any\nother provider gets one `recording` frame from the existing path, and the\nclient plays it exactly as before.\n\nSame synthesis as the whole-recording endpoint \u2014 same voice, same measured\ncues, same cache \u2014 cut at clause boundaries. What changes is when the\naudio is heard, not what it sounds like. Metered per phrase, before\ndelivery, once. Never retried after audio has been delivered.",
+        "description": "Speech in phrases, so the first word plays before the rest exists.\n\nNDJSON frames: `start`, ordered `chunk`s of mono 24 kHz PCM16 with the\nphrase's own cues, then `done` (or `error`). Only Kokoro streams; any\nother provider gets one `recording` frame from the existing path, and the\nclient plays it exactly as before.\n\nSame synthesis as the whole-recording endpoint — same voice, same measured\ncues, same cache — cut at clause boundaries. What changes is when the\naudio is heard, not what it sounds like. Metered per phrase, before\ndelivery, once. Never retried after audio has been delivered.",
         "operationId": "stream_tts_orgs__org_id__stream_post",
         "parameters": [
           {

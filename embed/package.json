@@ -11,6 +11,8 @@
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.ts\" \"browser-tests/**/*.ts\" \"scripts/**/*.{ts,mjs,mts}\" \"*.{js,ts}\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"browser-tests/**/*.ts\" \"scripts/**/*.{ts,mjs,mts}\" \"*.{js,ts}\"",
+    "gen:api": "node scripts/gen-api-types.mjs",
+    "check:api": "node scripts/gen-api-types.mjs --check",
     "build": "tsc -b && node scripts/build.mjs && cp assets/mouth-motion.json assets/mouth-teeth.webp assets/mouth-teeth.rig.json dist/",
     "dev": "esbuild src/widget.ts --bundle --format=iife --outfile=dist/liveface.js --watch --servedir=.",
     "build:head3d-bake": "esbuild scripts/head3d-bake.ts --bundle --platform=node --format=esm --outfile=dist/head3d-bake.mjs",
