@@ -20,6 +20,23 @@ export interface Scene {
   background?: SceneBackground | null;
 }
 
+/** The scene an engine starts in: the zoom given directly wins
+ *  (EngineOptions.zoom), then the scene's, then the framing's (the whole
+ *  picture 0, the face 1). */
+export function startingScene(scene: Scene | null | undefined, zoom?: number, fullPhoto?: boolean): Scene {
+  return { ...(scene ?? {}), zoom: zoom ?? scene?.zoom ?? (fullPhoto ? 0 : 1) };
+}
+
+/** `scene` after `prev`, its zoom kept when `scene` names none, and
+ *  whether the viewport moved (the zoom or the pan changed): the picture
+ *  is laid again then. */
+export function nextScene(prev: Scene, scene: Scene | null | undefined): { scene: Scene; moved: boolean } {
+  const next: Scene = { ...(scene ?? {}), zoom: scene?.zoom ?? prev.zoom ?? 1 };
+  const moved =
+    next.zoom !== prev.zoom || (next.pan?.x ?? 0) !== (prev.pan?.x ?? 0) || (next.pan?.y ?? 0) !== (prev.pan?.y ?? 0);
+  return { scene: next, moved };
+}
+
 /** The scene's background as drawn: its picture loads in the background
  *  and is drawn once it has; the avatar never waits for it. */
 export class Backdrop {

@@ -15,6 +15,7 @@ import { buildLowerFaceRig, type LowerFaceRig } from "./jaw-rig";
 import type { KindProfile } from "./kind-profile";
 import type { Rig } from "../types";
 import { layOutFace, placeHead, refineMesh, type FaceMesh, type HeadGeom, type Point } from "./geometry";
+import type { WarpSource } from "./mesh-warp";
 import { cutHeadLayer, type HeadLayer } from "./render2d";
 import { FaceSamples, probeCutOut } from "./sampling";
 
@@ -77,6 +78,20 @@ export class FacePicture {
     this.bare = mesh;
     this.mesh = this.withHeadField(mesh);
     this.cutHead();
+  }
+
+  /** What the mesh warp draws of the picture (mesh-warp.ts). `turned`: the
+   *  face turns in depth this frame, so the outline is left unpadded; a
+   *  face at rest draws as it always did. */
+  warpSource(turned: boolean): WarpSource {
+    return {
+      texture: this.texture,
+      mesh: this.mesh,
+      padEverywhere: !!this.field || this.samples.look.flat,
+      lowerFace: this.lowerFace,
+      replace: this.cutOut,
+      unpadOutline: turned,
+    };
   }
 
   /** Move a cut-out's head as its own layer (true), or the picture as one
