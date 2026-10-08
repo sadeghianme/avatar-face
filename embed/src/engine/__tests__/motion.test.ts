@@ -17,7 +17,19 @@ import { restingFace, type FaceState } from "../state";
 
 const FRAME = 16;
 /** A head that only nods: no drift travel, so dy is the nod alone. */
-const NOD_ONLY: HeadGeom = { x: 0, y: 0, w: 200, h: 260, pivotX: 100, pivotY: 400, yawPx: 0, pitchPx: 0, faceH: 100 };
+const NOD_ONLY: HeadGeom = {
+  x: 0,
+  y: 0,
+  w: 200,
+  h: 260,
+  pivotX: 100,
+  pivotY: 400,
+  yawPx: 0,
+  pitchPx: 0,
+  faceH: 100,
+  bustPivotY: 430,
+  bustReach: 300,
+};
 const BEAT_NOD_MS = 420;
 const AMBIENT_NOD_MS = 1050;
 

@@ -1232,6 +1232,200 @@ drawn mouth, make your own in the Mouth panel).
   not slewed; and the people the owner named (Sakineh, Tareq) were stood
   in for by published people with the same motion, their own published
   assets needing a signed URL this measurement did not have.
+- A cut-out moves as one picture (2026-10-07; `embed/src/engine/render2d.ts`,
+  `mesh-warp.ts`, `geometry.ts`). The owner, after seeing seams on the
+  cut-out cartoon "Sakineh Animesh": "we decided not to cut the photo". A
+  cut-out without published layers used to cut its head out as a feathered
+  layer, erase it from the picture and draw it moved; the feather band is a
+  cross-fade of two positions of the same strands, and it showed through
+  the hair, the neck and the collar whenever the head moved (a doubled
+  collar edge on a turn, a band across the neck at the bottom of a nod),
+  however exactly the two halves summed at rest. Now a cut-out is composed
+  as an opaque picture always was: ONE picture, the body's sway and breath
+  and the head's motion applied to the whole of it, the face mesh's
+  deformation on top with its edge at rest, so there is no second copy and
+  no boundary to show. The head's motion on a whole bust
+  (`applyBustTransform`) is a lean from a pivot low on the chest
+  (`HeadGeom.bustPivotY`: 1.9 face heights below the chin, never below
+  the picture; `bustReach` from the face's centre to it, at least a face
+  height): sideways a shear (the face travels dx, the shoulders' line a
+  fraction of it and stays level; a rotation by dx / reach, tried first,
+  see-sawed the shoulders' ends by 8 px on a 960 stage), up and down a
+  foreshortening about the pivot (1 - dy / reach: the brow dips a little
+  more than the chin, as a pitch looks from in front, and the picture's
+  lower edge never rises into view), the roll a rotation (the head's tilt,
+  which the face must show; it tilts the bust's cut bottom edge by the
+  same angle in the full framing). Measured on Sakineh, full framing, 960
+  stage, at the deepest nod: brow +13, chin +8, shoulders +3 px (the head
+  layer: +9.5, +9.5, +0.5); at a full turn: eyes +13.5, chin +8.5,
+  shoulders +1.5 px (head layer: +11, +10, +2.5). Travel is the cut-out's
+  as before (head 1, body 1). Opaque pictures and layered avatars draw
+  exactly as before (the bita and Reference frames and the human and toon
+  goldens are byte-identical); the layered path stays a deliberately
+  separated rig. The head layer is kept as an opt-in for comparison:
+  `new AvatarEngine(..., { cutOutHeadLayer: true })`, or live
+  `setCutOutHeadLayer(true)` (on the debug handle:
+  `__liveface.setCutOutHeadLayer(true)`). Two seams that were not the head
+  layer's went with it. *The 2D warp over a cut-out* laid moved triangles
+  over the picture, so a half-transparent pixel composited over itself
+  (alpha x (2 - alpha)) wherever the face moved: the neck band, stretched
+  by the jaw while speaking, drew a light line down Sakineh's hair fringe
+  (54 to 115 detector seams on every 2D configuration of her). Each moved
+  triangle now REPLACES what is under it, through its own padded clip:
+  the clip's coverage erased ("destination-out", a fill of the clip's own
+  box) and the triangle added ("lighter"), so both draws share one
+  coverage, the "copy" no composite operation does portably. Erasing the
+  moved region whole and adding unpadded triangles was tried and fails in
+  2D: two triangles' coverages along a shared edge do not sum to one in
+  Chrome (a bright wire along every edge); and a fill of a million pixels
+  a side erased whole boxes round the face on Linux Chromium's software
+  canvas. *A sliver hole*: a rig without one triangle folded at rest (the
+  human-animation fixture lacks (435, 361, 288), a pixel past its
+  opposite edge) has, once the neck band hangs from the jaw line, a hole
+  in the mesh whose corners move with the jaw: a gap 15 px long opened at
+  the jaw corner while speaking, the still picture's old jaw showing
+  through (23 to 30 tears). `refineMesh` closes every 3-cycle of open
+  edges (`closeSlivers`, the mouth subdivision's T-junctions excepted);
+  no whole rig changes. *Measured* with the seam detector (every mesh,
+  neck-band and GL-box boundary, each frame of rest, idle, forced sway,
+  head turn, sway + head, 8 frames of the production cue track, 12 of a
+  nod and 12 of a turn; headless Chrome, Metal, GPU raster), its
+  reference now drawn as the engine's own canvas is (a GPU canvas, then
+  over the stage colour; the old CPU reference flagged 4-6 level
+  "lines" where two rasterizers resample hair differently, at rest too):
+  Sakineh GL and 2D, face 960 and 1440, full 960 and 1440: 0 seams
+  (main 2D 85 to 115); mehdi_avatar without layers, 960 and 1440, both
+  paths: 0; the toon and animal fixtures: 0, but animal-realistic, 1 to 2
+  in one speech frame, a crease where the jaw stretches the fur against
+  the mesh's still edge, the same on main. The layered mehdi_avatar (not
+  changed) keeps its 4 to 5 seams and 6 tears. Goldens: only the cut-out
+  animal's change (every frame, darwin-arm64 and linux-x64, Skia and
+  Chromium): the whole picture now leans where the head layer moved;
+  GPU against 2D 46.3 dB min on macOS, 46.9 on Linux (was 45.1, 45.5).
+  *Still weak*: the roll tilts a full-framed bust's cut edge (0.8 degrees
+  at a forced 0.7 roll); a nod foreshortens the face a few percent rather
+  than pitching it; the animal crease above.
+- The head turns in depth, stage 1 (2026-10-08; `embed/src/engine/head-turn.ts`,
+  `head-personality.ts`, `neck-blend.ts`, `kind-profile.ts`, `render2d.ts`,
+  `mesh-warp.ts`). The owner approved the prototype (the face turned inside
+  the mesh about a pivot between the ears, depth from MediaPipe's canonical
+  face fitted to the rig, a seeded personality) on conservative angles,
+  every seam at 0, on by default for photos only; hair and the outline
+  following the turn is a later stage. *Defaults*, by the avatar's
+  published face type (`kind-profile.ts` `defaultHeadMotion`; the embed
+  and share responses carry `face_type`, the engine takes it as `faceType`): a
+  person ("human") turns in depth ("3d"), whether opaque, layered or cut
+  out; an animal or a cartoon keeps the rigid layer ("2d") whatever its
+  rig names. The rig alone cannot tell: one fitted before profiles existed
+  names none (in production a cat and two cartoons), and so does a
+  cartoon's with the classic mouth. A host that passes no face type (one
+  from before it was served) falls back to the rig: no render profile
+  turns in depth, `toon@1`, `animal@1` and `animal@2` keep the layer. The
+  layer draws exactly what it drew once the cut-out moved as one (every
+  frame of the six character and animal subjects hashes the same on both
+  paths; their goldens are untouched). The engine's `headMotion` option,
+  `setHeadMotion()` live and the widget's `data-head-motion="2d"|"3d"`
+  still choose over the default; `headMotion()` says which runs.
+  *Angles*: at most 7 degrees of yaw, 5 of pitch and 3 of roll, each axis
+  easing into its limit past 70% of it
+  (`softLimit`, a tanh knee) rather than cut off; the personality's drift,
+  postures, glances and nods at about 0.6 of the prototype's. An hour of
+  simulated idle and speech (the production sentence, energy varied) peaks
+  at 5.7, 4.3 and 2.3 degrees (p95 4.1, 1.7, 1.3); the 11 s clips of the
+  sentence reach 3.4, 1.5 and 1.3. *The turn* no longer fades every
+  landmark's displacement to nothing over a band 0.42 IOD inside the mesh's
+  edge: in a real turn the forehead and the temples travel too (at 7
+  degrees the forehead's top a tenth of an IOD), and the band undid all of
+  it, so it sheared and stretched: the temples and the forehead at the
+  larger turns, and the lower face on every nod, where the jaw line was
+  held. Now the outline (the rig's boundary less the jaw line) stays where
+  the rigid motion puts it, and only the outline's own travel is taken out
+  of the turn: its displacement extended inside as the harmonic function of
+  the mesh (inverse-length edge weights; the free landmarks' Laplacian
+  factored once per rig, an envelope Cholesky after a reverse
+  Cuthill-McKee ordering, about 18 ms, the same weights at every viewport).
+  Every difference of the turn between the face's parts is kept (the nose
+  sweeping over the cheeks, the far cheek widening) and the share of the
+  whole face's travel the outline cannot take is spread over the face
+  instead of a band. A 0.3 IOD band still eases out what is left beside the
+  outline (the face's side foreshortening toward its silhouette, which a 2D
+  mesh can only crush). The jaw line is inside the drawn mesh (the neck
+  band hangs from it), so the chin turns and nods with the face and the
+  band's neck skin takes up the difference; only the jaw line's two
+  landmarks below each ear are outline. The roll is the rigid motion's
+  alone: inside a held outline it can only be a shear (3 degrees swung the
+  chin 20 px under a still brow on a 960 stage), so the tilt the face shows
+  is the layer's or the picture's: 40% of the roll on a layered head, 30% on
+  a cut-out's bust, 20% on an opaque photo, which tilts its own edge in the
+  whole framing (0.6 degrees at most, as today's motion does). The rigid
+  motion takes half the skull's travel on a layered head and a cut-out's
+  bust, a third on an opaque photo. Each eye moves as one piece (a
+  stretched eye reads as a glance) and so do the lips, so the mouth the
+  speech shaped keeps its shape. A triangle the turn would crush below a
+  fifth of its area is first eased (its free corners halfway to its own
+  mean move, at most six passes); only a turn that still folds one is
+  scaled back whole. At the corners of the pose box easing happens on
+  mehdi_avatar at -7 degrees of yaw (the nose's side, 3 of 8 corners) and
+  nowhere else; the scale-back never; in the speech clips neither. Turned,
+  the mesh's outer edges are left unpadded in 2D (`unpadOutline`): a seam
+  pad there painted a pixel past the picture the mesh meets, and on a
+  layered collar that pixel stepped the lapel's edge. *A layered avatar's
+  neck*: the collar tear (the neck band, moved with the head, drew the
+  photo's collar a head's shift off the body layer's: 153 detector tears
+  on mehdi_avatar on main, a white wedge of collar over the lapel at a
+  turn, in either head motion) came from the layered picture itself. Its
+  head layer is the head, the neck and the top of the collar, fading out
+  down the neck or cut sharp along a collar, and it moved rigidly over the
+  still body, so below the chin the picture was two positions of the same
+  neck, cross-faded or stepped. Now the head layer and the body layer are
+  drawn through one warp (a grid of triangles, each replacing what is under
+  it on a scratch canvas the stage's size, the scratch then laid over once,
+  pixel for pixel; triangles off the stage skipped): a point resting at
+  (x, y) takes a share s of the head's motion relative to the body, 1 down
+  to the chin, eased to 0 at the band's bottom, level as far out as the
+  band reaches and rising toward the shoulders beyond it; the neck band's
+  vertices are placed by the same map, so band, collar and body agree and
+  nothing is drawn in two positions. *Measured* with the seam detector
+  (rest, idle, forced sway and turn, eight frames of the production
+  sentence, a full nod, a full turn and the six corners of the pose box;
+  headless Chrome on Metal, GPU raster; 960 and 1440 stages), against what
+  the canvas held just before the mesh was drawn (a layered picture is a
+  warp now, which the old references, the still picture through each
+  rigid transform, do not model): sakineh, mehdi_avatar (layered, and as a
+  cut-out), bita and the Reference, both paths, both sizes: 0 seams and 0
+  tears on the face's outline, the neck band's bottom and the GPU copy
+  box. Main, the same detector: sakineh 4 to 23 seams, mehdi_avatar 29 to
+  35 (and 153 to 168 tears against the old references), bita 0 to 3. The
+  layers' warp along each of its rows, against the still picture read
+  where the warp took each sample from, where the layers cover: 0 seams, 0
+  tears (the worst run 3.6 levels of line, 2.7 of step). The prototype's
+  "GPU copy box tears" were the layered picture's own cross-fade under the
+  box's edge, never the copy. Lip-sync on Sakineh, mehdi_avatar and bita:
+  with the head still, every mouth landmark of every frame the same in
+  either mode; turning, the mouth's shape after similarity alignment within
+  0.05% of its width and its opening to its width unchanged to 1e-4 (the
+  prototype: 0.8% and 0.0017). Goldens: the human subject's every frame
+  changes (darwin-arm64 and linux-x64, Skia and Chromium) and it gains two
+  frames, the turn held at two corners of its limits; the draw-call goldens
+  (a frame at rest) are unchanged; toon and animal are byte-identical. GPU
+  against 2D on the human: 45.7 dB min on macOS, 47.3 on Linux. CI holds
+  the seams on the committed photo with a striped collar, opaque and as a
+  layered avatar, at every corner and mid-sentence, on Skia
+  (`seams.test.ts`) and in Chromium on both paths
+  (`browser-tests/seams.test.ts`): no seam, no tear, no run stepped by more
+  than 3 levels (an unpinned band steps it by 10 to 20; freeing the jaw's
+  ends fails both). Frame cost (the tick's and the render's JavaScript,
+  960 stage, headless Metal, the production sentence, median and p95): on
+  the GPU path a layered avatar 0.5 to 1.0 or 1.1 ms (p95 0.7 to 1.3 or
+  1.4; the layers drawn through the warp are most of it; bita, whose
+  picture the face framing mostly crops, 0.4 to 0.6), the Reference 0.2 to
+  0.3, the toon unchanged at 0.3; on the 2D path a layered avatar 2.2 to
+  4.6 or 5.0 ms, the Reference 3.3 to 3.4. *Still weak*: hair and the
+  outline do not turn (a later stage); mehdi_avatar's nose side eases at
+  the largest yaw; bita's shoulders lie within the band's reach and take a
+  share of the head's motion, and her background layer's halo shows along
+  the left shoulder at the largest turns (main shows a darker double edge
+  there); the animal crease above is unchanged, as all animal output is.
 
 ## Data changes
 

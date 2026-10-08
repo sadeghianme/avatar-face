@@ -128,6 +128,10 @@ async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
         "name": avatar.name,
         "kind": avatar.kind.value,
         "framing": view["framing"],
+        # The published face type ("human", "animal", "cartoon"): how the
+        # head moves by default (the widget's faceType; data-head-motion on
+        # the snippet still overrides).
+        "face_type": view["face_type"],
         # The published scene (zoom, pan, background), or null for a
         # snapshot from before scenes: the engine then renders by framing.
         # data-framing / data-zoom on the snippet still override the zoom.

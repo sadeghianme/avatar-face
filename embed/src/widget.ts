@@ -30,16 +30,21 @@
  *
  * data-debug on the snippet (or ?liveface-debug in the page's URL) puts the
  * engine on globalThis.__liveface for the console (engine/debug-handle.ts).
+ *
+ * data-head-motion="2d" or "3d" chooses how the head moves (engine.ts
+ * EngineOptions.headMotion); without it, the avatar's own default, by its
+ * published face type: the turn in depth for a person, the rigid layer for
+ * an animal or a cartoon.
  */
 import { BrowserTTS } from "./browser-tts";
 import { aiLabel, renderAiLabel, type Disclosure } from "./widget/disclosure";
-import { AvatarEngine, type Scene } from "./engine";
+import { AvatarEngine, type HeadMotionMode, type Scene } from "./engine";
 import type { Avatar3DEngine, Avatar3DOptions } from "./engine3d";
 import { SpeechQueue } from "./speech";
 import { listen, sttSupported, ListenOptions } from "./stt";
 import type { ClassicMouthConfig } from "./engine/character-mouth";
 import type { AvatarMouthConfig } from "./mouth";
-import { EngineTuning, Rig, SynthesisPayload } from "./types";
+import { EngineTuning, FaceType, Rig, SynthesisPayload } from "./types";
 import { showFailure } from "./widget/failure";
 import { asFailure, fetchJson, loadImage, loadScript } from "./widget/load";
 
@@ -87,11 +92,20 @@ interface PublishedAvatar {
   mouth?: AvatarMouthConfig | ClassicMouthConfig | null;
   /** Absent for snapshots published before disclosures were recorded. */
   disclosure?: Disclosure;
+  /** What the avatar is, as published: it chooses the head motion's
+   *  default. Absent from an API before it said so: the rig's profile does. */
+  face_type?: FaceType | null;
 }
 
 /** A data-* switch: present and not "off", "false" or "0". */
 function switchedOn(value: string | undefined): boolean {
   return value !== undefined && !["off", "false", "0"].includes(value.trim().toLowerCase());
+}
+
+/** data-head-motion: "2d" or "3d"; anything else leaves the avatar's own. */
+function headMotionAttr(value: string | undefined): HeadMotionMode | undefined {
+  const v = value?.trim().toLowerCase();
+  return v === "2d" || v === "3d" ? v : undefined;
 }
 
 /** window.Liveface for an avatar that could not be shown: the page's calls
@@ -222,6 +236,10 @@ async function mount(
       // data-warp="2d" keeps the mesh on the Canvas 2D path (engine/warp-gl.ts):
       // for a site that must not use WebGL, and for comparing the two.
       warp: script.dataset.warp === "2d" ? "2d" : undefined,
+      // data-head-motion wins; else the published face type's (a person's
+      // turns in depth, an animal's or a cartoon's moves as a layer).
+      headMotion: headMotionAttr(script.dataset.headMotion),
+      faceType: info.face_type,
       debug,
     });
     engine = photoEngine;

@@ -31,7 +31,7 @@ export function LipSyncPreview({
   const [loading, setLoading] = useState(true);
   const [focus, setFocus] = useState({ x: 0.5, y: 0.6, zoom: 3 });
   const [resolution] = useState(() => Math.round(480 * Math.min(devicePixelRatio || 1, 2)));
-  const { rig_url: rigUrl, image_url: imageUrl, framing } = avatar;
+  const { rig_url: rigUrl, image_url: imageUrl, framing, face_type: faceType } = avatar;
   const background = avatar.layer_urls?.background;
   const body = avatar.layer_urls?.body;
   const head = avatar.layer_urls?.head;
@@ -49,6 +49,7 @@ export function LipSyncPreview({
       if (cancelled || !canvas.current) return;
       engine = new AvatarEngine(canvas.current, rig, image, {
         fullPhoto: framing === "full",
+        faceType,
         cueClock: clock,
         mouthExtension,
         pose,
@@ -96,7 +97,21 @@ export function LipSyncPreview({
       onEngine(null);
       engine?.destroy();
     };
-  }, [rigUrl, imageUrl, framing, background, body, head, clock, onEngine, mouthExtension, pose, still, resolution]);
+  }, [
+    rigUrl,
+    imageUrl,
+    framing,
+    faceType,
+    background,
+    body,
+    head,
+    clock,
+    onEngine,
+    mouthExtension,
+    pose,
+    still,
+    resolution,
+  ]);
 
   return (
     <div className="relative aspect-square overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-800">

@@ -6,6 +6,8 @@
  * performance.now reads, and a seeded Math.random (seededRandom).
  */
 import type { AvatarEngine } from "../engine";
+import { POSE_LIMIT_DEG } from "../engine/head-personality";
+import { kindProfile } from "../engine/kind-profile";
 import { engineSeam } from "../engine/seam";
 import type { MouthPose } from "../mouth-extension";
 import { ZERO_WEIGHTS, type Cue, type Rig } from "../types";
@@ -35,6 +37,20 @@ export function subjectRig(name: string, rig: Rig): Rig {
   return structuredClone(profile ? { ...rig, render_profile: profile } : rig);
 }
 
+/** The head turned in depth to the personality's limits, held: the frames
+ *  the script adds for a subject whose head turns so (a person's photo:
+ *  kind-profile.ts headMotion "3d"), each yaw, pitch and roll in units of
+ *  the limits. */
+export const TURNS: readonly [string, number, number, number][] = [
+  ["turned left, chin down", -1, 1, -1],
+  ["turned right, chin up", 1, -1, 1],
+];
+
+/** How many frames the script draws of a subject with this rig. */
+export function frameCount(rig: Rig): number {
+  return 11 + (kindProfile(rig).headMotion === "3d" ? TURNS.length : 0);
+}
+
 /** A seeded Math.random (Park-Miller), the same sequence on every machine. */
 export function seededRandom(seed = 7): () => number {
   return () => {
@@ -45,7 +61,8 @@ export function seededRandom(seed = 7): () => number {
 
 /**
  * The script: at rest, four held shapes, four moments of a real cue track,
- * a blink mid-sweep, the whole picture on a background. `capture(name)`
+ * for a head that turns in depth the turn held at its limits (TURNS), a
+ * blink mid-sweep, the whole picture on a background. `capture(name)`
  * is called once a frame is set up, to draw it (through the seam's render)
  * and read it. `clock.now` is the frame time. Returns the mouth's box at
  * rest (x, y, width, height), widened to the lips' surroundings.
@@ -90,6 +107,18 @@ export async function playFrameScript(
     await capture(`speech ${Math.round(at * 100)}%`);
   }
   engine.stopSpeech();
+  if (engine.headMotion() === "3d") {
+    const DEG = Math.PI / 180;
+    for (const [name, yaw, pitch, roll] of TURNS) {
+      tick(1);
+      // Over the personality's own pose for this frame (the tick set it).
+      const pose = e.motion.personality.pose;
+      pose.yaw = yaw * POSE_LIMIT_DEG.yaw * DEG;
+      pose.pitch = pitch * POSE_LIMIT_DEG.pitch * DEG;
+      pose.roll = roll * POSE_LIMIT_DEG.roll * DEG;
+      await capture(name);
+    }
+  }
   tick(30);
   e.face.blink = 0.5;
   await capture("blink");

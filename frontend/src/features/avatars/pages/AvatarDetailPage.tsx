@@ -370,6 +370,7 @@ export function AvatarDetailPage() {
                 // on a large preview canvas.
                 textureUrl={avatar.image_url ?? avatar.thumbnail_url!}
                 layerUrls={avatar.layer_urls}
+                faceType={avatar.face_type}
                 // The stage is most of a window: a 720-point square (1440
                 // device pixels on a 2× screen) keeps the teeth sharp.
                 size={720}

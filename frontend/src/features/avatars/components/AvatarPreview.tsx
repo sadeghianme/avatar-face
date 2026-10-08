@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { cx } from "@/lib/cx";
 import { loadImage } from "@/lib/image";
+import type { FaceType } from "@/lib/types";
 
 /**
  * Canvas preview that reuses the embed engine. StrictMode-safe: the engine's
@@ -25,6 +26,7 @@ export function AvatarPreview({
   size = 480,
   debugMesh = false,
   fullPhoto = false,
+  faceType,
   scene,
   soft = false,
   fit = "width",
@@ -37,6 +39,10 @@ export function AvatarPreview({
   size?: number;
   debugMesh?: boolean;
   fullPhoto?: boolean;
+  /** What the avatar is: a person's head turns in depth, an animal's or a
+   *  cartoon's moves as a layer, as visitors see it. Omitted, the rig's
+   *  render profile decides (one fitted before profiles names none). */
+  faceType?: FaceType | null;
   /** The scene to show; its zoom wins over `fullPhoto`. */
   scene?: Scene | null;
   /** The dashboard's framing: transparent over the page's backdrop, so a
@@ -71,7 +77,12 @@ export function AvatarPreview({
       if (!rigResponse.ok) throw new Error(`rig fetch: ${rigResponse.status}`);
       const rig = (await rigResponse.json()) as Rig;
       if (cancelled || !canvasRef.current) return;
-      engine = new AvatarEngine(canvasRef.current, rig, texture, { debugMesh, fullPhoto, scene: sceneRef.current });
+      engine = new AvatarEngine(canvasRef.current, rig, texture, {
+        debugMesh,
+        fullPhoto,
+        faceType,
+        scene: sceneRef.current,
+      });
       engineRef.current = engine;
       // Lets tooling drive poses (gaze, head) for visual checks; harmless in
       // production, and this file's tsconfig lacks vite/client types for a
@@ -100,7 +111,7 @@ export function AvatarPreview({
       engineRef.current = null;
       engine?.destroy();
     };
-  }, [rigUrl, textureUrl, debugMesh, fullPhoto, layerUrls]);
+  }, [rigUrl, textureUrl, debugMesh, fullPhoto, faceType, layerUrls]);
 
   // A changed scene moves the running engine; by value, so a parent that
   // builds the object each render does not move it for nothing.

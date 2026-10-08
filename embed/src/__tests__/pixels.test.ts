@@ -4,6 +4,7 @@ import { arch, platform } from "node:process";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { frameCount } from "./frame-script";
 import { SIZE, SKIA_BROWSER, SUBJECTS, drawFrames, drift, grid, seededRandom, type Drawn } from "./pixel-frames";
 
 /**
@@ -109,13 +110,13 @@ describe("the engine's pixels", () => {
       vi.spyOn(performance, "now").mockImplementation(() => clock.now);
       const drawn = await drawFrames(subject, clock);
       const frames = drawn.map(signature);
-      expect(frames).toHaveLength(11);
+      expect(frames).toHaveLength(frameCount(subject.rig));
       // The poses and the scene really changed the picture (a closed mouth
       // may well look like the rest: an animal's does).
       const rest = frames[0].sha256;
-      expect(frames.filter((f) => /held (aa|E|ou)|whole/.test(f.name) && f.sha256 === rest).map((f) => f.name)).toEqual(
-        []
-      );
+      expect(
+        frames.filter((f) => /held (aa|E|ou)|whole|turned/.test(f.name) && f.sha256 === rest).map((f) => f.name)
+      ).toEqual([]);
 
       if (MODE === "1") {
         // What is being blessed, to look at before committing it.

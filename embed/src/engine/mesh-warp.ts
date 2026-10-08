@@ -34,6 +34,9 @@ export interface WarpSource {
   /** The picture has transparency (a cut-out): the mesh REPLACES what is
    *  under it instead of being laid over it (MeshWarp.draw). */
   replace: boolean;
+  /** Leave the mesh's outer boundary unpadded (the head's turn in depth):
+   *  its edges meet the picture around the mesh, not a neighbour. */
+  unpadOutline?: boolean;
 }
 
 export class MeshWarp {
@@ -47,7 +50,11 @@ export class MeshWarp {
   private textureOk = false;
   private meshFor: unknown = null;
   private padsFor: unknown = null;
+  private padsOutline = false;
   private pads: Float32Array | null = null;
+  /** Per triangle, its three edges' pads, where some edge is on the
+   *  outline and the outline is left unpadded; null elsewhere. */
+  private edgePads: ([number, number, number] | null)[] | null = null;
   private restFor: unknown = null;
   private rest: Point[] | null = null;
   private readonly mouth: ReadonlySet<number>;
@@ -116,11 +123,19 @@ export class MeshWarp {
    * drew), so it is not drawn, and at rest nothing is. What moved is drawn
    * on the GPU through its own coverage, which erases the canvas before
    * the mesh is added back (picture x (1 - c) + mesh x c, along a still
-   * triangle's edge the picture again), and in 2D laid over, triangle by
-   * triangle: no composite operation replaces portably in 2D (a "copy" into
-   * an anti-aliased clip blends its edge on one rasterizer and drops what
-   * was under it on another: Chromium on Linux drew every triangle's
-   * outline as a dark wire), and what moves is the face, opaque.
+   * triangle's edge the picture again), and in 2D the same, triangle by
+   * triangle, each through its own (padded) clip: the clip's coverage
+   * erased ("destination-out"), the triangle added ("lighter"). No
+   * composite operation replaces portably in 2D (a "copy" into an
+   * anti-aliased clip blends its edge on one rasterizer and drops what was
+   * under it on another: Chromium on Linux drew every triangle's outline
+   * as a dark wire), and these two draws share one clip, so they share its
+   * coverage exactly. Laid over instead, the neck band, stretched by the
+   * jaw while speaking, drew a light line down a cut-out's hair fringe
+   * where it crosses it. Erasing the whole moved region first and ADDING
+   * the triangles unpadded does not work in 2D: two triangles' coverages
+   * along their shared edge need not sum to one (Chrome's came to 1.2), a
+   * bright wire along every edge.
    */
   draw(ctx: CanvasRenderingContext2D, pts: Point[], affine: Affine): void {
     const { texture, mesh, replace } = this.source();
@@ -134,11 +149,13 @@ export class MeshWarp {
     const gl = this.ready();
     if (gl && this.drawGL(ctx, gl, pts, affine, rest ? (a, b, c) => !still(a, b, c) : null)) return;
     const pads = this.trianglePads();
+    const edges = this.edgePads;
     let t = 0;
     for (const [a, b, c] of mesh.triangles) {
-      const pad = pads ? pads[t++] : 0;
+      const k = t++;
+      const pad = pads ? pads[k] : 0;
       if (rest && still(a, b, c)) continue;
-      drawWarpedTriangle(ctx, texture, mesh.texPoints, pts, a, b, c, pad);
+      drawWarpedTriangle(ctx, texture, mesh.texPoints, pts, a, b, c, edges?.[k] ?? pad, !!rest);
     }
   }
 
@@ -215,15 +232,22 @@ export class MeshWarp {
    * did. Half a pixel where the lips' own drawn line crosses the mesh.
    */
   trianglePads(): Float32Array | null {
-    const { mesh, padEverywhere, lowerFace } = this.source();
-    if (this.padsFor !== mesh.triangles || !this.pads) {
+    const { mesh, padEverywhere, lowerFace, unpadOutline } = this.source();
+    if (this.padsFor !== mesh.triangles || !this.pads || this.padsOutline !== !!unpadOutline) {
       this.padsFor = mesh.triangles;
+      this.padsOutline = !!unpadOutline;
       const rig = lowerFace;
       const moves = (i: number) =>
         i >= LANDMARK_COUNT || (!!rig && (rig.jaw[i] > 0 || rig.weight[i] > 0 || rig.cheek[i] > 0));
       this.pads = Float32Array.from(mesh.triangles, ([a, b, c]) =>
         this.touchesMouth(mesh, a, b, c) ? 0.45 : padEverywhere || moves(a) || moves(b) || moves(c) ? 1 : 0
       );
+      // With the head turning in depth, the outline's edges unpadded: a
+      // pad there drew the triangle a pixel past the picture it meets,
+      // extrapolated, and on a layered avatar's collar, where the picture
+      // around the neck band is the layers through their own warp, that
+      // pixel stepped the lapel's edge (a 4-level line, 2D path only).
+      this.edgePads = unpadOutline ? outlineEdgePads(mesh.triangles, this.pads) : null;
     }
     return this.pads;
   }
@@ -288,11 +312,31 @@ export class MeshWarp {
   }
 }
 
+/** Per triangle, its edges' pads with the mesh's outer boundary's at 0,
+ *  for the triangles with such an edge (null for the rest). */
+function outlineEdgePads(
+  triangles: readonly (readonly [number, number, number])[],
+  pads: Float32Array
+): ([number, number, number] | null)[] {
+  const key = (i: number, j: number) => (i < j ? i * 1048576 + j : j * 1048576 + i);
+  const count = new Map<number, number>();
+  for (const [a, b, c] of triangles)
+    for (const k of [key(a, b), key(b, c), key(c, a)]) count.set(k, (count.get(k) ?? 0) + 1);
+  return triangles.map(([a, b, c], t) => {
+    const outer = [key(a, b), key(b, c), key(c, a)].map((k) => count.get(k) === 1);
+    if (!outer.some(Boolean)) return null;
+    const p = pads[t];
+    return [outer[0] ? 0 : p, outer[1] ? 0 : p, outer[2] ? 0 : p];
+  });
+}
+
 /**
  * Draw one texture triangle warped to its deformed destination.
  * Affine solved with Cramer's rule; degenerate triangles are skipped.
+ * `replace`: the triangle replaces what is under it instead of being laid
+ * over it.
  */
-function drawWarpedTriangle(
+export function drawWarpedTriangle(
   ctx: CanvasRenderingContext2D,
   texture: HTMLImageElement,
   texPoints: readonly Point[],
@@ -300,7 +344,8 @@ function drawWarpedTriangle(
   i0: number,
   i1: number,
   i2: number,
-  pad = 0
+  pad: number | readonly [number, number, number] = 0,
+  replace = false
 ): void {
   const s0 = texPoints[i0],
     s1 = texPoints[i1],
@@ -330,12 +375,27 @@ function drawWarpedTriangle(
   // where the mesh moves over the still picture (seam-pad.ts). Less where
   // a thin drawn line crosses the triangles, as the lips do: a wide
   // overlap would redraw a pixel of it from the wrong triangle.
-  const [g0, g1, g2] = padTriangle(d0, d1, d2, pad);
+  const [g0, g1, g2] = typeof pad === "number" ? padTriangle(d0, d1, d2, pad) : padTriangle(d0, d1, d2, 0, 0.015, pad);
   ctx.moveTo(g0.x, g0.y);
   ctx.lineTo(g1.x, g1.y);
   ctx.lineTo(g2.x, g2.y);
   ctx.closePath();
   ctx.clip();
+  if (replace) {
+    // What is under the triangle out by the clip's coverage c, the
+    // triangle added at c: canvas x (1 - c) + triangle x c, the "copy" a
+    // composite operation cannot do portably (MeshWarp.draw). The two
+    // draws share the clip, so they share its coverage, pixel for pixel.
+    // The fill is the clip's own box, a pixel round: a rectangle of a
+    // million pixels a side erased whole boxes round the face on Linux
+    // Chromium's software canvas, clip or no clip.
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.fillStyle = "#fff";
+    const x0 = Math.min(g0.x, g1.x, g2.x) - 1,
+      y0 = Math.min(g0.y, g1.y, g2.y) - 1;
+    ctx.fillRect(x0, y0, Math.max(g0.x, g1.x, g2.x) + 1 - x0, Math.max(g0.y, g1.y, g2.y) + 1 - y0);
+    ctx.globalCompositeOperation = "lighter";
+  }
   ctx.transform(a, b, c, d, e, f);
   ctx.drawImage(texture, 0, 0);
   ctx.restore();

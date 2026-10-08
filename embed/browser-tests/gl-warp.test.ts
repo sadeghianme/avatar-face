@@ -3,7 +3,7 @@ import { arch, env, platform } from "node:process";
 import type { Browser, Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { GRID, SIZE, SUBJECT_FILES, drift, grid } from "../src/__tests__/frame-script";
+import { GRID, SIZE, SUBJECT_FILES, drift, frameCount, grid, subjectRig } from "../src/__tests__/frame-script";
 import { ROOT, bundle, launch, png, psnr, serve } from "./browser";
 import type { PageFrame } from "./harness";
 
@@ -139,7 +139,8 @@ describe("the GPU warp, in Chromium on SwiftShader", () => {
       }
       const { gl, "2d": flat } = drawn;
       expect(gl.frames.map((f) => f.name)).toEqual(flat.frames.map((f) => f.name));
-      expect(gl.frames).toHaveLength(11);
+      const rig = JSON.parse(readFileSync(`${ROOT}src/__tests__/fixtures/${SUBJECT_FILES[subject].rig}`, "utf8"));
+      expect(gl.frames).toHaveLength(frameCount(subjectRig(subject, rig)));
 
       const failures: string[] = [];
       const keep = (warp: string, frame: PageFrame & { data: Uint8ClampedArray }) => {

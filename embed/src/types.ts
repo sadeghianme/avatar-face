@@ -26,6 +26,10 @@ export interface Rig {
   render_profile?: string | null;
 }
 
+/** What the avatar is, as its owner made it (the backend's `face_type`,
+ *  served with the published avatar): a person, an animal or a cartoon. */
+export type FaceType = "human" | "animal" | "cartoon";
+
 export interface Cue {
   t: number;
   viseme: string;

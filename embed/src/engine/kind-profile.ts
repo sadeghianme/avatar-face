@@ -1,5 +1,5 @@
 import type { CharacterTraits } from "./character-mouth";
-import type { Rig } from "../types";
+import type { FaceType, Rig } from "../types";
 
 /**
  * What a line of faces changes in the renderer, and nothing more.
@@ -8,9 +8,11 @@ import type { Rig } from "../types";
  * chosen by the RIG — `render_profile`, written by the backend when the
  * owner saves a fit and shipped inside the published rig — never by the
  * face type or by anything the embedding page says. A rig without one, or
- * with a name this build does not know, renders exactly as before profiles
- * existed: HUMAN_PROFILE is today's constants, and the golden render tests
- * pin that.
+ * with a name this build does not know, renders as a person's photograph:
+ * HUMAN_PROFILE is the classic mouth's constants (the golden render tests
+ * pin them) and, since 2026-10-08, the head's turn in depth. The head's
+ * motion alone is the published face type's to choose when the host passes
+ * it (defaultHeadMotion): a rig without a profile is not always a person.
  *
  * Deliberately narrow. Each field replaces one constant at one place in the
  * classic mouth; a profile is versioned ("animal@1") so that changing what
@@ -38,6 +40,15 @@ export interface KindProfile {
   /** The character mouth's own defaults, under the owner's mouth settings.
    *  Unused by the classic mouth. */
   readonly traits: CharacterTraits;
+  /**
+   * How the head moves when neither the page nor the avatar's face type
+   * says (defaultHeadMotion): "3d", turning in depth inside the face mesh
+   * (head-turn.ts), for a person's photograph, whether opaque, layered or a
+   * cut-out; "2d", the rigid layer's shift and roll, for a character or an
+   * animal, whose drawn eyes and muzzle the canonical human face does not
+   * fit.
+   */
+  readonly headMotion: "2d" | "3d";
 }
 
 export const HUMAN_PROFILE: KindProfile = {
@@ -48,6 +59,7 @@ export const HUMAN_PROFILE: KindProfile = {
   mouth: "classic",
   blink: "mesh",
   traits: { teeth: "upper", tongue: true, jaw: 1 },
+  headMotion: "3d",
 };
 
 const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
@@ -64,6 +76,7 @@ const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
       mouth: "classic",
       blink: "mesh",
       traits: { teeth: "none", tongue: true, jaw: 1 },
+      headMotion: "2d",
     },
   ],
   [
@@ -79,6 +92,7 @@ const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
       mouth: "character",
       blink: "lid",
       traits: { teeth: "upper", tongue: true, jaw: 1 },
+      headMotion: "2d",
     },
   ],
   [
@@ -93,12 +107,33 @@ const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
       mouth: "character",
       blink: "lid",
       traits: { teeth: "none", tongue: true, jaw: 1.15 },
+      headMotion: "2d",
     },
   ],
 ]);
 
 export function kindProfile(rig: Pick<Rig, "render_profile">): KindProfile {
   return (rig.render_profile && PROFILES.get(rig.render_profile)) || HUMAN_PROFILE;
+}
+
+/**
+ * How the head moves unless the page says (EngineOptions.headMotion).
+ *
+ * The avatar's face type first, when the host passes it (the widget, the
+ * share page and the dashboard do; EngineOptions.faceType): the turn in
+ * depth for a person, the rigid layer for an animal or a cartoon, whatever
+ * its rig. The rig alone cannot tell: one fitted before profiles existed,
+ * and a cartoon's with the classic mouth, names none, and would read as a
+ * person's photograph. Without a face type (a host from before it was
+ * passed), the rig's profile's: "3d" for none or a name this build does not
+ * know, "2d" for toon@1, animal@1 and animal@2.
+ */
+export function defaultHeadMotion(
+  profile: Pick<KindProfile, "headMotion">,
+  faceType?: FaceType | null
+): KindProfile["headMotion"] {
+  if (faceType == null) return profile.headMotion;
+  return faceType === "human" ? "3d" : "2d";
 }
 
 /** The profile names this build knows; the backend writes only these. */

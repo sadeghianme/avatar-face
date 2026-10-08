@@ -91,6 +91,21 @@ export function apply(m: Affine, p: Point): Point {
   return { x: m.a * p.x + m.c * p.y + m.e, y: m.b * p.x + m.d * p.y + m.f };
 }
 
+/** The inverse of `m` (the identity for a singular one, which no head's
+ *  motion is). */
+export function invert(m: Affine): Affine {
+  const det = m.a * m.d - m.b * m.c;
+  if (!det) return { ...IDENTITY };
+  return {
+    a: m.d / det,
+    b: -m.b / det,
+    c: -m.c / det,
+    d: m.a / det,
+    e: (m.c * m.f - m.d * m.e) / det,
+    f: (m.b * m.e - m.a * m.f) / det,
+  };
+}
+
 /**
  * The vertex matrix: canvas pixels through `affine`, then to clip space
  * (-1..1, y up) for a `width` x `height` drawing buffer. Column-major 3x3,
