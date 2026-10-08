@@ -5,6 +5,7 @@ waits while anything runs on it (services.jobs). Each test spies on the
 function that does the work and checks which thread called it.
 """
 
+import gc
 import io
 import json
 import threading
@@ -154,3 +155,23 @@ def test_each_widget_bundle_is_hashed_once(tmp_path, monkeypatch):
     first.write_text("one, rebuilt")
     assert main._bundle_etag(first) != tags[0]
     assert len(reads) == 3
+
+
+async def test_startup_puts_what_it_loaded_out_of_the_collectors_sight(app, monkeypatch):
+    """A full collection of the ~220,000 objects startup loads holds the GIL
+    for about 40 ms, every request on the loop waiting; frozen, they are
+    never walked again (gc.freeze)."""
+
+    async def nothing(*_args) -> None:
+        return None
+
+    monkeypatch.setattr(main, "_ensure_schema", nothing)
+    monkeypatch.setattr(main, "warm_native", nothing)
+    monkeypatch.setattr(main, "verify_at_startup", nothing)
+    monkeypatch.setattr(main, "sweep_forever", nothing)
+    gc.unfreeze()
+    try:
+        async with main.lifespan(app):
+            assert gc.get_freeze_count() > 100_000
+    finally:
+        gc.unfreeze()

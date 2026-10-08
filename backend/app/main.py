@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import gc
 import hashlib
 import logging
 import os
@@ -175,6 +176,16 @@ async def lifespan(app: FastAPI):
     # in the deploy log, not a customer's failed edit, and not a slow boot.
 
     model_check = asyncio.create_task(verify_at_startup())
+
+    # What startup loaded lives as long as the process: modules, settings,
+    # routes, about 220,000 objects. A full collection walked all of them
+    # with the GIL held, 40 ms that every request on the loop waited out,
+    # and a burst of /embed/v1/cues answers (a thousand cue dicts each) set
+    # one off every few requests: /health peaked past 100 ms. Frozen, they
+    # are out of the collector's sight, and a full collection walks only
+    # what requests made since.
+    gc.collect()
+    gc.freeze()
 
     yield
 
