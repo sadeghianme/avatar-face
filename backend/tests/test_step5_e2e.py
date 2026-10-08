@@ -163,8 +163,10 @@ def person_segmenter(monkeypatch):
         height, width = rgb.shape[:2]
         x0, y0, x1, y1 = face_box((width, height))
         ys, xs = np.mgrid[0:height, 0:width]
-        head = (((xs - (x0 + x1) / 2) / (0.65 * (x1 - x0))) ** 2
-                + ((ys - (y0 + y1) / 2) / (0.65 * (y1 - y0))) ** 2) <= 1
+        head = (
+            ((xs - (x0 + x1) / 2) / (0.65 * (x1 - x0))) ** 2
+            + ((ys - (y0 + y1) / 2) / (0.65 * (y1 - y0))) ** 2
+        ) <= 1
         shoulders = (ys >= y1) & (xs >= 0.15 * width) & (xs <= 0.85 * width)
         return rgb, (head | shoulders).astype(np.float32)
 
@@ -178,7 +180,7 @@ def person_segmenter(monkeypatch):
 def _path(url: str) -> str:
     """A signed storage URL as the test client requests it (same origin as
     the API; the widget's page is elsewhere, which its Origin says)."""
-    return url[url.index("/storage/"):]
+    return url[url.index("/storage/") :]
 
 
 def _key(url: str) -> str:
@@ -192,8 +194,11 @@ async def _widget_config(client, avatar_id: str, key: str) -> dict:
     preflighted, with the page's Origin)."""
     preflight = await client.options(
         f"/embed/v1/avatars/{avatar_id}",
-        headers={"Origin": ORIGIN, "Access-Control-Request-Method": "GET",
-                 "Access-Control-Request-Headers": "x-api-key"},
+        headers={
+            "Origin": ORIGIN,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "x-api-key",
+        },
     )
     assert preflight.status_code == 204
     assert preflight.headers["access-control-allow-origin"] == ORIGIN
@@ -240,13 +245,20 @@ def assert_loadable(manifest: dict) -> None:
     own, below, they are still checked)."""
 
     def point(p) -> bool:
-        return (isinstance(p, list) and len(p) == 2
-                and all(isinstance(v, (int, float)) and math.isfinite(v)
-                        and abs(v) < POINT_LIMIT for v in p))
+        return (
+            isinstance(p, list)
+            and len(p) == 2
+            and all(
+                isinstance(v, (int, float)) and math.isfinite(v) and abs(v) < POINT_LIMIT for v in p
+            )
+        )
 
     def ring(indices) -> bool:
-        return (8 <= len(indices) <= 40 and len(set(indices)) == len(indices)
-                and all(isinstance(i, int) and 0 <= i < 478 for i in indices))
+        return (
+            8 <= len(indices) <= 40
+            and len(set(indices)) == len(indices)
+            and all(isinstance(i, int) and 0 <= i < 478 for i in indices)
+        )
 
     jaw = MouthProfile.model_fields["jawRange"].metadata
     low = next(m.ge for m in jaw if hasattr(m, "ge"))
@@ -258,8 +270,10 @@ def assert_loadable(manifest: dict) -> None:
     assert 0.03 <= manifest["mouth_width"] <= 0.6
     assert low <= manifest["jaw_range"] <= high
     assert 0 < len(manifest["triangles"]) <= 2000
-    assert all(len(t) == 3 and len(set(t)) == 3 and all(0 <= i < 478 for i in t)
-               for t in manifest["triangles"])
+    assert all(
+        len(t) == 3 and len(set(t)) == 3 and all(0 <= i < 478 for i in t)
+        for t in manifest["triangles"]
+    )
     assert ring(manifest["inner_ring"]) and ring(manifest["outer_ring"])
     for i, pose in enumerate(manifest["poses"]):
         assert (pose["provenance"] == pk.BASE) == (i == 0), pose["id"]
@@ -271,7 +285,8 @@ def assert_loadable(manifest: dict) -> None:
             assert isinstance(rms, (int, float)) and 0 <= rms <= 0.007, pose["id"]
         assert pose["image"] is None or IMAGE_NAME.fullmatch(pose["image"])
         assert pose["source"] is None or (
-            len(pose["source"]) == 478 and all(map(point, pose["source"])))
+            len(pose["source"]) == 478 and all(map(point, pose["source"]))
+        )
         assert len(pose["points"]) == 478 and all(map(point, pose["points"])), pose["id"]
 
 
@@ -315,16 +330,28 @@ def embed_player(workdir: Path) -> Path | None:
     warning says the embed's own were not run."""
     esbuild = EMBED / "node_modules" / ".bin" / "esbuild"
     if shutil.which("node") is None or not esbuild.exists():
-        warnings.warn("node or embed/node_modules missing: the manifest was checked "
-                      "against validateMotionManifest's rules in Python only", stacklevel=2)
+        warnings.warn(
+            "node or embed/node_modules missing: the manifest was checked "
+            "against validateMotionManifest's rules in Python only",
+            stacklevel=2,
+        )
         return None
     entry = workdir / "player.ts"
     entry.write_text(PLAYER % {"src": (EMBED / "src").as_posix()})
     bundle = workdir / "player.mjs"
     subprocess.run(
-        [str(esbuild), str(entry), "--bundle", "--platform=node", "--format=esm",
-         f"--outfile={bundle}", "--log-level=error"],
-        check=True, capture_output=True, timeout=120,
+        [
+            str(esbuild),
+            str(entry),
+            "--bundle",
+            "--platform=node",
+            "--format=esm",
+            f"--outfile={bundle}",
+            "--log-level=error",
+        ],
+        check=True,
+        capture_output=True,
+        timeout=120,
     )
     return bundle
 
@@ -337,7 +364,9 @@ def play(player: Path, manifest: dict, profile: dict, workdir: Path):
     path.write_text(text)
     return subprocess.run(
         [shutil.which("node"), str(player), str(path), json.dumps(profile)],
-        capture_output=True, text=True, timeout=120,
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
 
 
@@ -370,7 +399,7 @@ def _quantum(manifest: dict) -> float:
     back from it can be where it was. A point is within 0.71 of it (half a
     unit on each axis, turned by the frame's levelling)."""
     frame = np.asarray(manifest["frame"]["to_manifest"], dtype=np.float64)[:, :2]
-    return 10.0 ** -pk.MANIFEST_DECIMALS / math.sqrt(abs(np.linalg.det(frame)))
+    return 10.0**-pk.MANIFEST_DECIMALS / math.sqrt(abs(np.linalg.det(frame)))
 
 
 def _watch_finish(monkeypatch) -> list[tuple[float, str | None, tuple | None]]:
@@ -392,17 +421,21 @@ def _published_files(prefix: str) -> dict[str, str]:
     root = Path(get_storage().root) / prefix / "published"
     return {
         str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in sorted(root.rglob("*")) if p.is_file()
+        for p in sorted(root.rglob("*"))
+        if p.is_file()
     }
 
 
 async def _files_visitors_get(client, config: dict) -> dict[str, bytes]:
     """The bytes behind every URL the widget's config names."""
-    urls = {"image": config["image_url"], "rig": config["rig_url"],
-            "thumbnail": config["thumbnail_url"],
-            "motion": config["mouth"]["motion_url"],
-            "teeth": config["mouth"]["oral"]["image_url"],
-            "teeth_rig": config["mouth"]["oral"]["rig_url"]}
+    urls = {
+        "image": config["image_url"],
+        "rig": config["rig_url"],
+        "thumbnail": config["thumbnail_url"],
+        "motion": config["mouth"]["motion_url"],
+        "teeth": config["mouth"]["oral"]["image_url"],
+        "teeth_rig": config["mouth"]["oral"]["rig_url"],
+    }
     urls.update({f"layer_{name}": url for name, url in (config["layer_urls"] or {}).items()})
     out = {}
     for name, url in urls.items():
@@ -425,7 +458,8 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
     # AI allowed: the organization's switch (on by default; set as an admin
     # would), and the member's agreement to send photos, remembered.
     switched = await client.patch(
-        f"/orgs/{org_id}", json={"third_party_ai_enabled": True}, headers=headers)
+        f"/orgs/{org_id}", json={"third_party_ai_enabled": True}, headers=headers
+    )
     assert switched.status_code == 200 and switched.json()["third_party_ai_enabled"] is True
     consent_id = await ai_consent(client, headers, org_id)
 
@@ -447,7 +481,10 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
     # the wizard starts it itself on the remembered consent.
     assert body["ai"]["suggested"] == ["touchup"]
     assert body["ai"]["auto_adjust"] == {
-        "mode": "touchup", "image": cutout, "reasons": ["teeth_showing"]}
+        "mode": "touchup",
+        "image": cutout,
+        "reasons": ["teeth_showing"],
+    }
     started = await _adjust(client, headers, base, consent_id, auto=True, count=2)
     assert started.status_code == 202, started.text
     body = await _get(client, headers, base)
@@ -458,7 +495,8 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
     assert body["current"] == cutout, "offered, never chosen for the owner"
     # "Use this": the result, a cut-out like its source, its lips closed.
     chosen = await _run(
-        client, headers, "POST", f"{base}/choose", json={"choice": offered[0]["step"]})
+        client, headers, "POST", f"{base}/choose", json={"choice": offered[0]["step"]}
+    )
     assert chosen.status_code == 200, chosen.text
     body = chosen.json()
     assert body["current"] == offered[0]["step"]
@@ -472,8 +510,8 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
     marks = anchors["marks"]
     marks["mouth"]["right"]["x"] += 2
     preview = await client.post(
-        f"{base}/preview-rig", json={"anchors_id": anchors["id"], "marks": marks},
-        headers=headers)
+        f"{base}/preview-rig", json={"anchors_id": anchors["id"], "marks": marks}, headers=headers
+    )
     assert preview.status_code == 200, preview.text
     assert preview.json()["reasons"] == []
     previewed = preview.json()["rig"]
@@ -491,9 +529,16 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
     world.before_answer = hold
     assert body["statement"] == "depiction"
     statement = await depiction(client, headers, base, body["statement"])
-    finish = await client.post(f"{base}/finish", headers=headers, json={
-        "name": "Ada", "anchors_id": anchors["id"], "marks": marks, "consent_id": statement,
-    })
+    finish = await client.post(
+        f"{base}/finish",
+        headers=headers,
+        json={
+            "name": "Ada",
+            "anchors_id": anchors["id"],
+            "marks": marks,
+            "consent_id": statement,
+        },
+    )
     assert finish.status_code == 202, finish.text
     assert finish.json()["warnings"] == [], "the touch-up closed the lips"
     avatar_id = finish.json()["avatar_id"]
@@ -538,8 +583,10 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
     # A customer's page on another site: the widget's config, then what its
     # continuous mouth loads.
     created = await client.post(
-        f"/orgs/{org_id}/api-keys", json={"name": "shop", "allowed_domains": [SITE]},
-        headers=headers)
+        f"/orgs/{org_id}/api-keys",
+        json={"name": "shop", "allowed_domains": [SITE]},
+        headers=headers,
+    )
     assert created.status_code == 201, created.text
     key = created.json()["plaintext"]
     served = await _widget_config(client, avatar_id, key)
@@ -570,7 +617,8 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
     remarked["mouth"]["left"]["x"] -= 3
     remarked["mouth"]["right"]["x"] += 3
     saved = await client.post(
-        f"{url}/rig-fit", json={"mouth": remarked["mouth"], "persist": True}, headers=headers)
+        f"{url}/rig-fit", json={"mouth": remarked["mouth"], "persist": True}, headers=headers
+    )
     assert saved.status_code == 200, saved.text
     avatar = await _get(client, headers, url)
     assert avatar["unpublished"] is True
@@ -591,11 +639,13 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
     assert np.allclose(after["rest"], rig["points"], rtol=0, atol=quantum)
     assert np.abs(after["rest"] - before["rest"]).max() == pytest.approx(3, abs=0.01)
     for shape in pk.SHAPES:
-        assert np.allclose(after[shape] - after["rest"], before[shape] - before["rest"],
-                           rtol=0, atol=3 * quantum), shape
+        assert np.allclose(
+            after[shape] - after["rest"], before[shape] - before["rest"], rtol=0, atol=3 * quantum
+        ), shape
     assert second["character"] == first["character"] and second["kit"] == first["kit"]
     assert [(p["provenance"], p["registration_rms"]) for p in second["poses"]] == [
-        (p["provenance"], p["registration_rms"]) for p in first["poses"]]
+        (p["provenance"], p["registration_rms"]) for p in first["poses"]
+    ]
     assert len(world.requests) == 7, "no AI call"
     # Played, the same movement in pixels, from a mouth marked wider: a
     # smaller part of it.
@@ -615,11 +665,21 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
     visible = await _files_visitors_get(client, served)
     again = (await client.get(f"{url}/rig-anchors", headers=headers)).json()["anchors"]
     again["mouth"]["left"]["x"] -= 2
-    assert (await client.post(f"{url}/rig-fit", json={"mouth": again["mouth"], "persist": True},
-                              headers=headers)).status_code == 200
-    nudged = await client.patch(url, json={"mouth": {
-        "renderer": "continuous", "profile": {**served["mouth"]["profile"], "teethY": 0.03}}},
-        headers=headers)
+    assert (
+        await client.post(
+            f"{url}/rig-fit", json={"mouth": again["mouth"], "persist": True}, headers=headers
+        )
+    ).status_code == 200
+    nudged = await client.patch(
+        url,
+        json={
+            "mouth": {
+                "renderer": "continuous",
+                "profile": {**served["mouth"]["profile"], "teethY": 0.03},
+            }
+        },
+        headers=headers,
+    )
     assert nudged.status_code == 200, nudged.text
     draft = await _get(client, headers, url)
     assert draft["unpublished"] is True
@@ -640,4 +700,5 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
     assert "/published/" not in copy
     assert json.loads(await get_storage().get_bytes(copy)) == second
     assert not await get_storage().exists(_key(draft["mouth"]["motion_url"])), (
-        "the discarded draft's motion is gone")
+        "the discarded draft's motion is gone"
+    )

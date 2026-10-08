@@ -1,6 +1,5 @@
 """In-process rendering: the button appears only where the hardware is."""
 
-
 from tests.conftest import create_org, register_and_login
 
 
@@ -9,9 +8,7 @@ async def test_capability_is_honest_about_this_machine(client):
     the UI shows or hides the button on this alone."""
     headers = await register_and_login(client, "capprobe")
     org_id = await create_org(client, headers)
-    response = await client.get(
-        f"/orgs/{org_id}/clone-jobs/render-capability", headers=headers
-    )
+    response = await client.get(f"/orgs/{org_id}/clone-jobs/render-capability", headers=headers)
     assert response.status_code == 200
     body = response.json()
     assert isinstance(body["available"], bool)
@@ -31,9 +28,7 @@ async def test_render_refuses_cleanly_when_unavailable(client, monkeypatch):
     )
     headers = await register_and_login(client, "caprender")
     org_id = await create_org(client, headers)
-    response = await client.post(
-        f"/orgs/{org_id}/clone-jobs/nope/render", headers=headers
-    )
+    response = await client.post(f"/orgs/{org_id}/clone-jobs/nope/render", headers=headers)
     assert response.status_code == 409
     assert response.json()["code"] == "render_unavailable"
 

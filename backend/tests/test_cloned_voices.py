@@ -91,9 +91,7 @@ async def test_voices_are_scoped_to_the_organisation(client, org):
 
     other_headers = await register_and_login(client, "stranger")
     other_org = await create_org(client, other_headers, name="Other")
-    listed = (
-        await client.get(f"/orgs/{other_org}/cloned-voices", headers=other_headers)
-    ).json()
+    listed = (await client.get(f"/orgs/{other_org}/cloned-voices", headers=other_headers)).json()
     assert listed == []
 
     from app.services.tts.cloned import scoped_voice_id
@@ -115,7 +113,9 @@ async def test_deleting_a_voice_removes_every_line(client, org):
     headers, org_id = org
     await _upload(client, headers, org_id, "sarah", "One")
     await _upload(client, headers, org_id, "sarah", "Two")
-    assert (await client.get(f"/orgs/{org_id}/cloned-voices", headers=headers)).json()[0]["lines"] == 2
+    assert (await client.get(f"/orgs/{org_id}/cloned-voices", headers=headers)).json()[0][
+        "lines"
+    ] == 2
 
     response = await client.delete(f"/orgs/{org_id}/cloned-voices/sarah", headers=headers)
     assert response.status_code == 204

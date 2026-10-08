@@ -40,9 +40,7 @@ async def create_from_url(
     body: AvatarFromUrl, ctx: OrgMember, db: DB, background: BackgroundTasks
 ) -> Avatar:
     """Import a GLB avatar by URL (e.g. https://models.readyplayer.me/<id>.glb)."""
-    avatar = await sources.import_model(
-        db, ctx.org.id, ctx.membership.user_id, body.url, body.name
-    )
+    avatar = await sources.import_model(db, ctx.org.id, ctx.membership.user_id, body.url, body.name)
     background.add_task(process_avatar, avatar.id)
     return avatar
 
@@ -79,9 +77,7 @@ async def confirm_uploaded(
 
 
 @router.post("/{avatar_id}/retry", response_model=AvatarOut)
-async def retry_rig(
-    avatar_id: str, ctx: OrgMember, db: DB, background: BackgroundTasks
-) -> Avatar:
+async def retry_rig(avatar_id: str, ctx: OrgMember, db: DB, background: BackgroundTasks) -> Avatar:
     """Re-enqueue the rig job (used by the stall-detection UI). Not for an
     avatar the creation wizard is still preparing (409 avatar_preparing):
     its finish job builds it, and there is nothing of it to retry yet."""
@@ -93,9 +89,7 @@ async def retry_rig(
 
 @router.patch("/{avatar_id}", response_model=AvatarOut)
 @one_edit_at_a_time
-async def update_avatar(
-    avatar_id: str, body: AvatarUpdate, ctx: OrgMember, db: DB
-) -> Avatar:
+async def update_avatar(avatar_id: str, body: AvatarUpdate, ctx: OrgMember, db: DB) -> Avatar:
     """Change owner-editable settings.
 
     Framing lives here rather than on the embed snippet so that switching it
@@ -109,9 +103,7 @@ async def update_avatar(
 
 @router.post("/{avatar_id}/rig-reset", response_model=AvatarOut)
 @one_edit_at_a_time
-async def rig_reset(
-    avatar_id: str, ctx: OrgMember, db: DB, background: BackgroundTasks
-) -> Avatar:
+async def rig_reset(avatar_id: str, ctx: OrgMember, db: DB, background: BackgroundTasks) -> Avatar:
     """Throw away hand-placed anchors and re-detect from the original photo.
 
     Saving a correction overwrites the rig, so without this a bad marking is

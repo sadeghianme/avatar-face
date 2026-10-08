@@ -35,11 +35,18 @@ def error_record(code: str, detail: str) -> Note:
 # problem, and only the owner can change it.
 NOT_RETRYABLE = frozenset(
     {
-        "unreadable_image", "image_too_large", "anchors_stale", "fit_invalid",
+        "unreadable_image",
+        "image_too_large",
+        "anchors_stale",
+        "fit_invalid",
         # AI: a refusal is never asked again, and a photo the touch-up
         # cannot use stays unusable.
-        "safety_refused", "face_turned", "no_face_for_touchup", "landmarks_unavailable",
-        "imagegen_unavailable", "source_gone",
+        "safety_refused",
+        "face_turned",
+        "no_face_for_touchup",
+        "landmarks_unavailable",
+        "imagegen_unavailable",
+        "source_gone",
         # The organization turned third-party AI off while the job waited.
         "third_party_ai_disabled",
     }
@@ -143,9 +150,7 @@ async def update_ai_usage(job: Job, change: Callable[[AiUsage], None]) -> None:
     async with get_session_factory()() as db:
         row = (
             await db.execute(
-                select(Creation).where(
-                    Creation.id == job.subject_id, Creation.org_id == job.org_id
-                )
+                select(Creation).where(Creation.id == job.subject_id, Creation.org_id == job.org_id)
             )
         ).scalar_one_or_none()
         if row is None:
@@ -184,8 +189,6 @@ async def load_creation(job: Job) -> Creation | None:
     async with get_session_factory()() as db:
         return (
             await db.execute(
-                select(Creation).where(
-                    Creation.id == job.subject_id, Creation.org_id == job.org_id
-                )
+                select(Creation).where(Creation.id == job.subject_id, Creation.org_id == job.org_id)
             )
         ).scalar_one_or_none()

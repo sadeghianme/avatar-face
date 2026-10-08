@@ -90,8 +90,8 @@ async def recent(
     if status is not None:
         query = query.where(Creation.status == status)
     rows = (
-        await db.execute(query.order_by(Creation.updated_at.desc()).limit(limit))
-    ).scalars().all()
+        (await db.execute(query.order_by(Creation.updated_at.desc()).limit(limit))).scalars().all()
+    )
     return list(rows)
 
 

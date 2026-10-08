@@ -170,9 +170,7 @@ async def test_repeated_requests_are_throttled_without_saying_so(client, _captur
     leak that this address had already been asked for."""
     await register_and_login(client, "floody", email="floody@example.com")
     for _ in range(5):
-        response = await client.post(
-            "/auth/forgot-password", json={"email": "floody@example.com"}
-        )
+        response = await client.post("/auth/forgot-password", json={"email": "floody@example.com"})
         assert response.status_code == 202
     assert len(await _delivered(_capture_mail)) == 3
 
@@ -182,17 +180,13 @@ async def test_a_short_password_is_refused(client, _capture_mail):
     await client.post("/auth/forgot-password", json={"email": "shorty@example.com"})
     token = _link_from((await _delivered(_capture_mail))[0]).split("token=")[1]
 
-    response = await client.post(
-        "/auth/reset-password", json={"token": token, "password": "short"}
-    )
+    response = await client.post("/auth/reset-password", json={"token": token, "password": "short"})
     assert response.status_code == 422
 
 
 async def test_the_address_is_matched_case_insensitively(client, _capture_mail):
     await register_and_login(client, "casey", email="casey@example.com")
-    response = await client.post(
-        "/auth/forgot-password", json={"email": "CASEY@Example.COM"}
-    )
+    response = await client.post("/auth/forgot-password", json={"email": "CASEY@Example.COM"})
     assert response.status_code == 202
     assert len(await _delivered(_capture_mail)) == 1, (
         "an address typed with capitals is the same address"

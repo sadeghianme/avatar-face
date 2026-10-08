@@ -91,15 +91,18 @@ async def test_the_standard_teeth_are_served_as_the_motion_is(client):
     from pathlib import Path
 
     assets = Path(__file__).resolve().parents[2] / "embed" / "assets"
-    for path, media_type in (("/mouth-teeth.webp", "image/webp"),
-                             ("/mouth-teeth.rig.json", "application/json")):
+    for path, media_type in (
+        ("/mouth-teeth.webp", "image/webp"),
+        ("/mouth-teeth.rig.json", "application/json"),
+    ):
         response = await client.get(path, headers={"Origin": "https://shop.example"})
         assert response.status_code == 200, f"{path}: {response.text}"
         assert response.headers["content-type"].startswith(media_type), path
         assert response.headers["access-control-allow-origin"] == "*", path
         assert "no-cache" in response.headers["cache-control"], path
         assert response.content == (assets / path.lstrip("/")).read_bytes(), (
-            f"{path} is not the committed file: rebuild the embed (make embed)")
+            f"{path} is not the committed file: rebuild the embed (make embed)"
+        )
         again = await client.get(path, headers={"If-None-Match": response.headers["etag"]})
         assert again.status_code == 304, path
 
@@ -113,8 +116,10 @@ async def test_the_ktx2_transcoder_is_served_beside_the_3d_bundle(client):
     from pathlib import Path
 
     dist = Path(__file__).resolve().parents[2] / "embed" / "dist"
-    for path, media_type in (("/basis_transcoder.js", "application/javascript"),
-                             ("/basis_transcoder.wasm", "application/wasm")):
+    for path, media_type in (
+        ("/basis_transcoder.js", "application/javascript"),
+        ("/basis_transcoder.wasm", "application/wasm"),
+    ):
         response = await client.get(path, headers={"Origin": "https://shop.example"})
         assert response.status_code == 200, f"{path}: {response.text[:80]}"
         assert response.headers["content-type"].startswith(media_type), path

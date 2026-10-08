@@ -100,13 +100,17 @@ class ClonedTTSProvider(TTSProvider):
 async def voices_for_org(db: AsyncSession, org_id: str) -> list[Voice]:
     """Cloned voices this org has uploaded, derived from the cache itself."""
     rows = (
-        await db.execute(
-            select(distinct(SpeechClip.voice)).where(
-                SpeechClip.provider == PROVIDER_NAME,
-                SpeechClip.voice.like(f"{org_id}:%"),
+        (
+            await db.execute(
+                select(distinct(SpeechClip.voice)).where(
+                    SpeechClip.provider == PROVIDER_NAME,
+                    SpeechClip.voice.like(f"{org_id}:%"),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     out = []
     for stored in rows:
         _, _, label = stored.partition(":")
@@ -114,9 +118,7 @@ async def voices_for_org(db: AsyncSession, org_id: str) -> list[Voice]:
     return out
 
 
-def _cues(
-    text: str, duration_ms: int, locale: str, audio: bytes | None = None
-) -> list[dict]:
+def _cues(text: str, duration_ms: int, locale: str, audio: bytes | None = None) -> list[dict]:
     return cues_from_text(text, duration_ms, locale, audio=audio)
 
 
@@ -143,8 +145,13 @@ async def _reference_for(voice: str) -> bytes | None:
 
 
 async def store_line(
-    db: AsyncSession, org_id: str, name: str, locale: str, text: str,
-    audio: bytes, duration_ms: int,
+    db: AsyncSession,
+    org_id: str,
+    name: str,
+    locale: str,
+    text: str,
+    audio: bytes,
+    duration_ms: int,
 ) -> None:
     """Store one rendered line in the speech cache, pinned. Idempotent by
     cache key: a line uploaded again replaces the one before. Commits.
@@ -172,8 +179,13 @@ async def store_line(
 
 
 async def upload_line(
-    db: AsyncSession, org_id: str, name: str, locale: str, text: str,
-    audio: bytes, duration_ms: int,
+    db: AsyncSession,
+    org_id: str,
+    name: str,
+    locale: str,
+    text: str,
+    audio: bytes,
+    duration_ms: int,
 ) -> str:
     """store_line for an upload; the voice's scoped id."""
     await store_line(db, org_id, name, locale, text, audio, duration_ms)

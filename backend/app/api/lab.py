@@ -44,7 +44,11 @@ async def landmark_depth(avatar_id: str, ctx: OrgMember, db: DB) -> dict:
     the landmarker cannot read.
     """
     avatar = await avatars.require_in_org(db, ctx.org.id, avatar_id)
-    if avatar.kind != AvatarKind.photo or avatar.status != AvatarStatus.ready or not avatar.image_key:
+    if (
+        avatar.kind != AvatarKind.photo
+        or avatar.status != AvatarStatus.ready
+        or not avatar.image_key
+    ):
         raise Conflict409("Only ready photo avatars have depth", code="not_a_photo")
 
     image_bytes = await get_storage().get_bytes(avatar.image_key)

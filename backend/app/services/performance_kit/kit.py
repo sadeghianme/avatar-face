@@ -167,9 +167,12 @@ def stop_reason(error: BaseException) -> dict:
         getattr(error, "detail", None) or "AI editing is not configured on this server",
     )
 
+
 def _require_landmarker() -> None:
     if not get_settings().rig_model_path:
-        raise KitUnavailable("landmarks_unavailable", "Face detection is not available on this server")
+        raise KitUnavailable(
+            "landmarks_unavailable", "Face detection is not available on this server"
+        )
 
 
 def _default_detect(image: Image.Image) -> np.ndarray | None:
@@ -230,21 +233,27 @@ def _finish(
     teeth = _teeth_source(answer) if fit.teeth_photo and answer is not None else None
     teeth_refused = None
     if photo is not None and teeth is None:
-        teeth_refused = next({k: v for k, v in r.items() if k != "field"}
-                             for r in fit.reasons if r["field"] == "teethY")
+        teeth_refused = next(
+            {k: v for k, v in r.items() if k != "field"}
+            for r in fit.reasons
+            if r["field"] == "teethY"
+        )
 
     entries: dict[str, PoseEntry] = {}
     for shape in SHAPES:
         if shape in amplitude.targets:
-            entries[shape] = PoseEntry(amplitude.targets[shape], GENERATED,
-                                       registrations[shape].rms)
+            entries[shape] = PoseEntry(
+                amplitude.targets[shape], GENERATED, registrations[shape].rms
+            )
         else:
             entries[shape] = PoseEntry(
-                retarget_reference_pose(shape, base_points, reference), RETARGETED)
+                retarget_reference_pose(shape, base_points, reference), RETARGETED
+            )
     # Every pose is at the Reference's size: the manifest is true where the
     # Reference's motion is.
-    manifest = build_manifest(base_points, image_size, entries, reference,
-                              kit_id=kit_id, jaw_range=REFERENCE_JAW_RANGE)
+    manifest = build_manifest(
+        base_points, image_size, entries, reference, kit_id=kit_id, jaw_range=REFERENCE_JAW_RANGE
+    )
     return _Finished(manifest, fit, teeth, amplitude.refused, teeth_refused)
 
 
@@ -256,7 +265,9 @@ def _finish(
 MAX_BASE_DETECTION_SHIFT = 0.15
 
 
-def _detect_base(detect: Detector, image: Image.Image, base_points: np.ndarray) -> np.ndarray | None:
+def _detect_base(
+    detect: Detector, image: Image.Image, base_points: np.ndarray
+) -> np.ndarray | None:
     """The detector's own landmarks on the base photo (register_answer's
     `base_detected`), or None. CPU work."""
     points = detect(image)
@@ -268,8 +279,11 @@ def _detect_base(detect: Detector, image: Image.Image, base_points: np.ndarray) 
     face = float(np.linalg.norm(base_points[FACE_RIGHT] - base_points[FACE_LEFT]))
     shift = float(np.linalg.norm(points - base_points, axis=1).mean()) / max(face, 1.0)
     if shift > MAX_BASE_DETECTION_SHIFT:
-        logger.warning("performance kit: the base detection is %.3f face widths from the "
-                       "confirmed points; registering on the confirmed points", shift)
+        logger.warning(
+            "performance kit: the base detection is %.3f face widths from the "
+            "confirmed points; registering on the confirmed points",
+            shift,
+        )
         return None
     return points
 
@@ -381,8 +395,12 @@ async def build_kit(
         while True:
             crop = await crop_for(kind)
             if crop is None:
-                entry.update(outcome="refused", reason=_reason(
-                    "safety_refused", "The AI declined this edit, so it was not asked again"))
+                entry.update(
+                    outcome="refused",
+                    reason=_reason(
+                        "safety_refused", "The AI declined this edit, so it was not asked again"
+                    ),
+                )
                 return None, entry
             request = _request(shape, crop)
             async with semaphore:
@@ -403,14 +421,23 @@ async def build_kit(
                         # the same pose asked for (photo_adjust's pattern).
                         kind = HEAD_CROP
                         continue
-                    entry.update(outcome="refused", reason=_reason(
-                        "safety_refused", "The AI declined this edit, so it was not asked again"))
+                    entry.update(
+                        outcome="refused",
+                        reason=_reason(
+                            "safety_refused", "The AI declined this edit, so it was not asked again"
+                        ),
+                    )
                     return None, entry
                 except imagegen.ImageGenNoImage as exc:
                     state["billed"] += 1
                     record.update(outcome="no_image", billed=True, detail=exc.reason)
-                    entry.update(outcome="no_image", reason=_reason(
-                        "no_image", "The AI answered without an image, so it was not asked again"))
+                    entry.update(
+                        outcome="no_image",
+                        reason=_reason(
+                            "no_image",
+                            "The AI answered without an image, so it was not asked again",
+                        ),
+                    )
                     return None, entry
                 except imagegen.ImageGenUnavailable as exc:
                     # Nothing was sent: no provider, or the caller sends no
@@ -438,19 +465,29 @@ async def build_kit(
                         # caller decides how to meter it.
                         logger.warning("performance kit: the %s edit timed out (%r)", shape, exc)
                         record.update(outcome="timeout", billed=None)
-                        entry.update(outcome="timeout", reason=_reason(
-                            "timeout", "The AI did not answer in time"))
+                        entry.update(
+                            outcome="timeout",
+                            reason=_reason("timeout", "The AI did not answer in time"),
+                        )
                         return None, entry
                     logger.exception("performance kit: the %s edit failed", shape)
                     record.update(outcome="provider_error", billed=False)
-                    entry.update(outcome="provider_error", reason=_reason(
-                        "provider_error", "The AI service did not return an image"))
+                    entry.update(
+                        outcome="provider_error",
+                        reason=_reason("provider_error", "The AI service did not return an image"),
+                    )
                     return None, entry
             state["billed"] += 1
             record.update(outcome="image", billed=True, model=getattr(generated, "model", None))
             try:
                 registration = await run_cpu(
-                    register_answer, generated.image, request, base_image, points, frame, detect,
+                    register_answer,
+                    generated.image,
+                    request,
+                    base_image,
+                    points,
+                    frame,
+                    detect,
                     base_detected,
                 )
             except Exception:
@@ -458,10 +495,17 @@ async def build_kit(
                 # not pass: given up, like any rejected one, and the other
                 # requests' paid calls carry on.
                 logger.exception("performance kit: checking the %s answer failed", shape)
-                registration = PoseRegistration(shape, reason=_reason(
-                    "check_failed", "The AI's answer could not be checked, so it was not used"))
-            entry.update(outcome="generated" if registration.ok else "rejected",
-                         reason=registration.reason, checks=registration.checks)
+                registration = PoseRegistration(
+                    shape,
+                    reason=_reason(
+                        "check_failed", "The AI's answer could not be checked, so it was not used"
+                    ),
+                )
+            entry.update(
+                outcome="generated" if registration.ok else "rejected",
+                reason=registration.reason,
+                checks=registration.checks,
+            )
             return registration, entry
 
     async def tracked(shape: str) -> tuple[PoseRegistration | None, dict]:

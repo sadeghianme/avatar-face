@@ -71,15 +71,18 @@ def build(image: Path, rig: Path) -> tuple[bytes, dict]:
         # A clean PNG, as ingest_photo makes: the pixels, no metadata.
         png = png_bytes(source.convert("RGB"))
     if list(size) != list(detected["image_size"]):
-        raise ValueError(f"{image.name} is {size[0]} x {size[1]}, its rig "
-                         f"{detected['image_size']}: not the photo the rig was detected on")
+        raise ValueError(
+            f"{image.name} is {size[0]} x {size[1]}, its rig "
+            f"{detected['image_size']}: not the photo the rig was detected on"
+        )
     points = np.asarray(detected["points"], dtype=np.float64)
     return admit_photo(png, build_rig(points, size))
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--image", type=Path, default=REFERENCE / "oral-detail-v3.webp")
     parser.add_argument("--rig", type=Path, default=REFERENCE / "oral-detail-v3.rig.json")
     parser.add_argument("--out", type=Path, default=ASSETS)
@@ -95,10 +98,14 @@ def main() -> None:
     (args.out / RIG_NAME).write_text(rig_text)
     with Image.open(io.BytesIO(photo)) as written:
         width, height = written.size
-    print(f"{IMAGE_NAME}: {width} x {height} px, {len(photo)} bytes; "
-          f"{RIG_NAME}: {len(rig_text)} bytes")
-    print(f"Teeth test: upper arch {verdict.arch_width} px wide, {verdict.arch_pixels} px of "
-          f"enamel, central crown {verdict.crown_coverage:.3f} mouth widths: accepted")
+    print(
+        f"{IMAGE_NAME}: {width} x {height} px, {len(photo)} bytes; "
+        f"{RIG_NAME}: {len(rig_text)} bytes"
+    )
+    print(
+        f"Teeth test: upper arch {verdict.arch_width} px wide, {verdict.arch_pixels} px of "
+        f"enamel, central crown {verdict.crown_coverage:.3f} mouth widths: accepted"
+    )
 
 
 if __name__ == "__main__":

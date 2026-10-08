@@ -33,6 +33,7 @@ _MULTI = {
     "ɕː": "CH",
 }
 
+# fmt: off
 _SINGLE = {
     # --- consonants, grouped by what the mouth does ---
     "p": "PP", "b": "PP", "m": "PP", "ɱ": "FF",
@@ -57,6 +58,7 @@ _SINGLE = {
     "o": "oh", "ɔ": "oh", "ɵ": "oh", "ɤ": "oh",
     "u": "ou", "ʊ": "ou", "ɯ": "ou", "ʉ": "ou",
 }
+# fmt: on
 
 # Stress, length, syllable and word separators, ties: all timing or structure,
 # none of it a mouth shape. The underscore is espeak's own phoneme separator

@@ -12,6 +12,7 @@ import numpy as np
 class Mesh:
     """Positions (n, 3) in the head frame, UVs (n, 2) with the origin at the
     image's top-left (the glTF convention), triangles (m, 3)."""
+
     positions: np.ndarray
     uvs: np.ndarray
     triangles: np.ndarray

@@ -57,8 +57,11 @@ def enamel_mask(rgb: np.ndarray) -> np.ndarray:
     """dental-texture-model.ts enamelMask, vectorised over (..., 3)."""
     r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
     red = np.maximum(r, 1.0)
-    return (_smooth(70, 130, np.minimum(np.minimum(r, g), b))
-            * _smooth(0.72, 0.86, g / red) * _smooth(0.57, 0.76, b / red))
+    return (
+        _smooth(70, 130, np.minimum(np.minimum(r, g), b))
+        * _smooth(0.72, 0.86, g / red)
+        * _smooth(0.57, 0.76, b / red)
+    )
 
 
 def _js_round(value: float) -> int:
@@ -88,9 +91,13 @@ class Acceptance:
     upper_edge: float | None
 
     def as_dict(self) -> dict:
-        return {"accepted": self.accepted, "arch_width": self.arch_width,
-                "arch_pixels": self.arch_pixels, "crown_coverage": round(self.crown_coverage, 4),
-                "upper_edge": None if self.upper_edge is None else round(self.upper_edge, 4)}
+        return {
+            "accepted": self.accepted,
+            "arch_width": self.arch_width,
+            "arch_pixels": self.arch_pixels,
+            "crown_coverage": round(self.crown_coverage, 4),
+            "upper_edge": None if self.upper_edge is None else round(self.upper_edge, 4),
+        }
 
 
 def _mouth_axes(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, float] | None:
@@ -102,7 +109,9 @@ def _mouth_axes(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, float] | No
     return ux, np.array([-ux[1], ux[0]]), width
 
 
-def extraction_canvas(image: Image.Image, points: np.ndarray, inner_ring: list[int]) -> tuple[np.ndarray, np.ndarray]:
+def extraction_canvas(
+    image: Image.Image, points: np.ndarray, inner_ring: list[int]
+) -> tuple[np.ndarray, np.ndarray]:
     """The canvas DentalOralSurface reads: RGBA (480, 640, 4) uint8, and the
     inner lip ring in canvas pixels.
 
@@ -135,14 +144,22 @@ def extraction_canvas(image: Image.Image, points: np.ndarray, inner_ring: list[i
     py = centre[1] + u * ux[1] + v * uy[1]
     # Photo pixel i covers [i, i + 1): its centre is i + 0.5.
     inside = (px >= 0) & (px <= width_px) & (py >= 0) & (py <= height)
-    sampled = np.stack([
-        map_coordinates(rgb[..., k], [py - 0.5, px - 0.5], order=1, mode="nearest") for k in range(3)
-    ], axis=-1)
+    sampled = np.stack(
+        [
+            map_coordinates(rgb[..., k], [py - 0.5, px - 0.5], order=1, mode="nearest")
+            for k in range(3)
+        ],
+        axis=-1,
+    )
 
     s = _CLIP_SUPERSAMPLE
     mask = Image.new("L", (CANVAS_WIDTH * s, CANVAS_HEIGHT * s), 0)
     ImageDraw.Draw(mask).polygon([(float(x) * s, float(y) * s) for x, y in ring], fill=255)
-    coverage = np.asarray(mask, dtype=np.float64).reshape(CANVAS_HEIGHT, s, CANVAS_WIDTH, s).mean(axis=(1, 3))
+    coverage = (
+        np.asarray(mask, dtype=np.float64)
+        .reshape(CANVAS_HEIGHT, s, CANVAS_WIDTH, s)
+        .mean(axis=(1, 3))
+    )
     alpha = np.where(inside, coverage, 0.0)
 
     canvas = np.zeros((CANVAS_HEIGHT, CANVAS_WIDTH, 4), dtype=np.uint8)
@@ -162,8 +179,9 @@ def _boundary(contour: np.ndarray, x: float) -> float:
     return float(contour[-1, 1])
 
 
-def extract_dental_layers(image: np.ndarray, upper_contour: np.ndarray,
-                          lower_contour: np.ndarray) -> tuple[Layer, Layer]:
+def extract_dental_layers(
+    image: np.ndarray, upper_contour: np.ndarray, lower_contour: np.ndarray
+) -> tuple[Layer, Layer]:
     """dental-texture-model.ts extractDentalLayers, pass for pass.
 
     `image` is RGBA (H, W, 4) uint8; contours are (n, 2) canvas points."""
@@ -242,7 +260,7 @@ def extract_dental_layers(image: np.ndarray, upper_contour: np.ndarray,
                 continue
             y0, y1 = math.ceil(tops[x]), math.floor(bottoms[x])
             if y1 >= y0:
-                filled[y0:y1 + 1, x] = image[y0:y1 + 1, x]
+                filled[y0 : y1 + 1, x] = image[y0 : y1 + 1, x]
 
         # Close short horizontal notches with their original pixels. A
         # filled pixel lies behind the scan, so each row's gaps are those
@@ -260,15 +278,21 @@ def extract_dental_layers(image: np.ndarray, upper_contour: np.ndarray,
         count = int(opaque.sum())
         if count:
             ys, xs = np.nonzero(opaque)
-            box = (int(xs.min()), int(ys.min()), int(xs.max() - xs.min() + 1), int(ys.max() - ys.min() + 1))
+            box = (
+                int(xs.min()),
+                int(ys.min()),
+                int(xs.max() - xs.min() + 1),
+                int(ys.max() - ys.min() + 1),
+            )
         else:
             box = (width, height, 0, 0)
         layers.append(Layer(filled, box, count))
     return layers[0], layers[1]
 
 
-def crown_coverage(layer: Layer, centre: float = CANVAS_ORIGIN[0],
-                   mouth_width: float = CANVAS_MOUTH_WIDTH) -> float:
+def crown_coverage(
+    layer: Layer, centre: float = CANVAS_ORIGIN[0], mouth_width: float = CANVAS_MOUTH_WIDTH
+) -> float:
     """dental-texture-model.ts dentalCrownCoverage: the median height of
     solid (alpha >= 150) enamel over the central 5% of the mouth, in mouth
     widths."""
@@ -298,5 +322,7 @@ def accept_teeth_photo(image: Image.Image, points: np.ndarray, inner_ring: list[
     coverage = crown_coverage(upper)
     x, y, w, h = upper.box
     edge = None if upper.count == 0 else (y + h - CANVAS_ORIGIN[1]) / CANVAS_MOUTH_WIDTH
-    accepted = w >= MIN_ARCH_WIDTH and upper.count >= MIN_ARCH_PIXELS and coverage >= MIN_CROWN_COVERAGE
+    accepted = (
+        w >= MIN_ARCH_WIDTH and upper.count >= MIN_ARCH_PIXELS and coverage >= MIN_CROWN_COVERAGE
+    )
     return Acceptance(accepted, w, upper.count, coverage, edge)

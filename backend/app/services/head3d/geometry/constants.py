@@ -96,16 +96,35 @@ LOWER_TEETH_JAW_SHARE = 1.0
 TONGUE_JAW_SHARE = 0.8
 
 MORPH_NAMES = (
-    "jawOpen", "mouthClose", "mouthPucker", "mouthFunnel",
-    "mouthStretchLeft", "mouthStretchRight", "mouthSmileLeft", "mouthSmileRight",
-    "eyeBlinkLeft", "eyeBlinkRight",
+    "jawOpen",
+    "mouthClose",
+    "mouthPucker",
+    "mouthFunnel",
+    "mouthStretchLeft",
+    "mouthStretchRight",
+    "mouthSmileLeft",
+    "mouthSmileRight",
+    "eyeBlinkLeft",
+    "eyeBlinkRight",
 )
 #: The viseme shapes' target names: the Ready Player Me convention the 3D
 #: engine drives from its cue track (ih/oh/ou are I/O/U there).
 VISEME_MORPH_NAMES = {
-    "sil": "viseme_sil", "PP": "viseme_PP", "FF": "viseme_FF", "TH": "viseme_TH", "DD": "viseme_DD",
-    "kk": "viseme_kk", "CH": "viseme_CH", "SS": "viseme_SS", "nn": "viseme_nn", "RR": "viseme_RR",
-    "aa": "viseme_aa", "E": "viseme_E", "ih": "viseme_I", "oh": "viseme_O", "ou": "viseme_U",
+    "sil": "viseme_sil",
+    "PP": "viseme_PP",
+    "FF": "viseme_FF",
+    "TH": "viseme_TH",
+    "DD": "viseme_DD",
+    "kk": "viseme_kk",
+    "CH": "viseme_CH",
+    "SS": "viseme_SS",
+    "nn": "viseme_nn",
+    "RR": "viseme_RR",
+    "aa": "viseme_aa",
+    "E": "viseme_E",
+    "ih": "viseme_I",
+    "oh": "viseme_O",
+    "ou": "viseme_U",
 }
 #: The 2D rig's six symmetric weights and the targets each one becomes.
 SYMMETRIC_TO_ARKIT = {

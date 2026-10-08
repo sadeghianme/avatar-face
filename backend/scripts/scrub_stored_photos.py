@@ -195,7 +195,11 @@ async def stale_backdrops(avatar, storage) -> list[str]:
             pairs.append((f"{prefix}/image.{ext}", f"{prefix}/layer-background.jpg"))
     stale: list[str] = []
     for image, backdrop in pairs:
-        if backdrop not in stale and await storage.exists(backdrop) and await _is_cutout(storage, image):
+        if (
+            backdrop not in stale
+            and await storage.exists(backdrop)
+            and await _is_cutout(storage, image)
+        ):
             stale.append(backdrop)
     return stale
 
@@ -257,8 +261,9 @@ async def scrub(apply: bool) -> list[tuple[str, str]]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--dry-run", action="store_true", default=True,
-                      help="list what would change (the default)")
+    mode.add_argument(
+        "--dry-run", action="store_true", default=True, help="list what would change (the default)"
+    )
     mode.add_argument("--apply", action="store_true", help="rewrite and delete the files")
     args = parser.parse_args()
 

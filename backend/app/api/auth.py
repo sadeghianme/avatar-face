@@ -43,9 +43,7 @@ async def register(body: RegisterRequest, request: Request, db: DB) -> User:
     """A new account. 409 `user_exists`; 429 `rate_limited` past
     REGISTER_PER_CLIENT sign-ups an hour from one address."""
     enforce(REGISTER_PER_CLIENT, client_address(request), TOO_MANY)
-    return await accounts.register(
-        db, body.email, body.username, body.password, body.display_name
-    )
+    return await accounts.register(db, body.email, body.username, body.password, body.display_name)
 
 
 @router.post("/login", response_model=TokenPair)

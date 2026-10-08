@@ -68,7 +68,7 @@ async def test_the_limit_stops_further_generation(client, monkeypatch):
     monkeypatch.setattr(settings, "image_generation_monthly_limit", 2, raising=False)
 
     async with get_session_factory()() as db:
-        await check_image_limit(db, org_id)          # nothing used yet
+        await check_image_limit(db, org_id)  # nothing used yet
         await record_generation(db, org_id, "gemini")
         await record_generation(db, org_id, "gemini")
         with pytest.raises(RateLimit429):

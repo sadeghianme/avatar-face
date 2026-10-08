@@ -46,7 +46,10 @@ async def run_ingest(job: Job, params: dict) -> None:
         "current": "original",
         "items": {
             "original": {
-                "key": key, "width": width, "height": height, "from": None,
+                "key": key,
+                "width": width,
+                "height": height,
+                "from": None,
                 "check": step_check(analysis),
             }
         },
@@ -117,7 +120,10 @@ async def run_background(job: Job, params: dict) -> None:
     steps = copied(creation.steps)
     previous = steps["items"].get(cut_id)
     steps["items"][cut_id] = {
-        "key": key, "width": source["width"], "height": source["height"], "from": source_id,
+        "key": key,
+        "width": source["width"],
+        "height": source["height"],
+        "from": source_id,
         "cutout": True,
     }
     steps["current"] = cut_id

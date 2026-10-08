@@ -44,7 +44,9 @@ def lip_forward_weights(points: np.ndarray, frame: FaceFrame) -> np.ndarray:
     return out
 
 
-def morph_delta(name: str, dx: np.ndarray, dy: np.ndarray, points: np.ndarray, frame: FaceFrame, scale: float) -> np.ndarray:
+def morph_delta(
+    name: str, dx: np.ndarray, dy: np.ndarray, points: np.ndarray, frame: FaceFrame, scale: float
+) -> np.ndarray:
     """A symmetric target's head-frame delta (478, 3) from the baked image-px
     deltas per unit weight, with z from the rules above."""
     dx = np.asarray(dx, dtype=np.float64)
@@ -53,14 +55,21 @@ def morph_delta(name: str, dx: np.ndarray, dy: np.ndarray, points: np.ndarray, f
     if name == "jawOpen":
         out[:, 2] = -JAW_BACK * np.maximum(0.0, -out[:, 1])
     elif name in LIP_PROTRUSION:
-        out[:, 2] = LIP_PROTRUSION[name] * frame.mouth_width * scale * lip_forward_weights(points, frame)
+        out[:, 2] = (
+            LIP_PROTRUSION[name] * frame.mouth_width * scale * lip_forward_weights(points, frame)
+        )
     elif name in ("mouthStretch", "mouthSmile"):
         out[:, 2] = -CORNER_RECESS * np.abs(out[:, 0])
     return out
 
 
 def viseme_delta(
-    dx: np.ndarray, dy: np.ndarray, weights: dict[str, float], points: np.ndarray, frame: FaceFrame, scale: float,
+    dx: np.ndarray,
+    dy: np.ndarray,
+    weights: dict[str, float],
+    points: np.ndarray,
+    frame: FaceFrame,
+    scale: float,
 ) -> np.ndarray:
     """A whole viseme shape's head-frame delta (478, 3) from its baked
     image-px deltas, with z from the same rules as the symmetric targets,
@@ -94,13 +103,17 @@ def skirt_morph(skull: SkullMesh, face_delta: np.ndarray) -> np.ndarray:
     return out
 
 
-def interior_morphs(part: InteriorPart, face_targets: dict[str, np.ndarray]) -> list[tuple[str, np.ndarray]]:
+def interior_morphs(
+    part: InteriorPart, face_targets: dict[str, np.ndarray]
+) -> list[tuple[str, np.ndarray]]:
     """A mouth part's morph targets: a skin-hugging part takes every face
     target at its own points; a jaw-hung part takes the chin's jawOpen by
     its share; a skull-fixed part none."""
     if part.skin is not None:
         indices, weights = part.skin
-        return [(name, surface_delta(delta, indices, weights)) for name, delta in face_targets.items()]
+        return [
+            (name, surface_delta(delta, indices, weights)) for name, delta in face_targets.items()
+        ]
     if part.jaw_share > 0:
         chin = np.asarray(face_targets["jawOpen"][T.CHIN], dtype=np.float64) * part.jaw_share
         return [("jawOpen", np.tile(chin, (len(part.mesh.positions), 1)))]
@@ -114,9 +127,15 @@ FRAME_HEIGHTS = 2.0
 FRAME_LIFT = 0.12
 
 
-def frame_box(face: np.ndarray, frame: FaceFrame, scale: float) -> tuple[tuple[float, float, float], float]:
+def frame_box(
+    face: np.ndarray, frame: FaceFrame, scale: float
+) -> tuple[tuple[float, float, float], float]:
     """Where a camera should look and how tall the view is, head frame."""
     face_h = frame.height * scale
     middle = (float(face[T.FOREHEAD, 1]) + float(face[T.CHIN, 1])) / 2
-    centre = (float(face[:, 0].mean()), middle + FRAME_LIFT * face_h, float(face[T.NOSE_TIP, 2]) / 2)
+    centre = (
+        float(face[:, 0].mean()),
+        middle + FRAME_LIFT * face_h,
+        float(face[T.NOSE_TIP, 2]) / 2,
+    )
     return centre, FRAME_HEIGHTS * face_h

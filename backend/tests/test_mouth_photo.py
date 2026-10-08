@@ -155,8 +155,9 @@ async def test_a_teeth_call_that_timed_out_is_metered_as_the_kit_meters_it(clien
 
     monkeypatch.setattr(imagegen, "configured", lambda: True)
     monkeypatch.setattr(imagegen, "edit_image", slow)
-    monkeypatch.setattr(mouth_photo, "face_request",
-                        lambda source: mouth_photo.Request(b"x", "image/jpeg"))
+    monkeypatch.setattr(
+        mouth_photo, "face_request", lambda source: mouth_photo.Request(b"x", "image/jpeg")
+    )
     with pytest.raises(mouth_photo.TeethFailure) as failed:
         await mouth_photo.make_teeth(org_id, FULL_CROWNS)
     assert failed.value.code == "timeout"
@@ -184,8 +185,9 @@ async def test_a_consent_that_cannot_be_recorded_sends_nothing(client, monkeypat
 
     monkeypatch.setattr(imagegen, "configured", lambda: True)
     monkeypatch.setattr(imagegen, "edit_image", provider)
-    monkeypatch.setattr(mouth_photo, "face_request",
-                        lambda source: mouth_photo.Request(b"x", "image/jpeg"))
+    monkeypatch.setattr(
+        mouth_photo, "face_request", lambda source: mouth_photo.Request(b"x", "image/jpeg")
+    )
     with pytest.raises(mouth_photo.TeethFailure) as failed:
         await mouth_photo.make_teeth(org_id, FULL_CROWNS, on_send=on_send)
     assert failed.value.code == "consent_not_recorded" and sent == []
@@ -221,8 +223,10 @@ STANDARD_SEAT = {"teethY": pk.REFERENCE_TEETH_Y, "teethScale": pk.REFERENCE_TEET
 def test_only_a_person_starts_with_the_photographic_mouth():
     """With no teeth photo of its own yet: the standard teeth, seated and
     sized as the Reference draws them."""
-    assert mouth_photo.default_config("human") == {"renderer": "continuous",
-                                                   "profile": STANDARD_SEAT}
+    assert mouth_photo.default_config("human") == {
+        "renderer": "continuous",
+        "profile": STANDARD_SEAT,
+    }
     assert mouth_photo.default_config("animal") is None
     assert mouth_photo.default_config("cartoon") is None
 
@@ -230,9 +234,7 @@ def test_only_a_person_starts_with_the_photographic_mouth():
 # --- at finish --------------------------------------------------------------------------
 
 
-async def test_a_person_is_finished_with_their_own_ai_teeth(
-    client, faces, images, mouth_detector
-):
+async def test_a_person_is_finished_with_their_own_ai_teeth(client, faces, images, mouth_detector):
     headers, org_id = await _org(client, "smiler")
     consent_id = await ai_consent(client, headers, org_id)
     images.script = [FULL_CROWNS]
@@ -253,10 +255,15 @@ async def test_a_person_is_finished_with_their_own_ai_teeth(
     # Drawn where the kit's teeth photo is: at the Reference's seat.
     assert config["profile"] == STANDARD_SEAT
     assert published["mouth"]["renderer"] == "continuous"
-    assert published["mouth"]["oral_image_key"].startswith(f"orgs/{org_id}/avatars/{avatar_id}/published/")
+    assert published["mouth"]["oral_image_key"].startswith(
+        f"orgs/{org_id}/avatars/{avatar_id}/published/"
+    )
     # Disclosed to visitors, with the consent that let the photo out.
-    assert avatar.ai_edited == {"mode": "teeth", "model": imagegen.MODEL,
-                                "teeth": {"model": imagegen.MODEL}}
+    assert avatar.ai_edited == {
+        "mode": "teeth",
+        "model": imagegen.MODEL,
+        "teeth": {"model": imagegen.MODEL},
+    }
     assert published["disclosure"]["ai_edited"]["mode"] == "teeth"
     assert consent_id in avatar.consent_ids
 
@@ -306,9 +313,7 @@ async def test_the_monthly_image_limit_holds_the_teeth_back(client, faces, image
     assert json.loads(avatar.mouth_config)["teeth"]["note"]["code"] == "image_limit_reached"
 
 
-async def test_a_refusal_is_asked_once_more_on_the_head_crop(
-    client, faces, images, mouth_detector
-):
+async def test_a_refusal_is_asked_once_more_on_the_head_crop(client, faces, images, mouth_detector):
     headers, org_id = await _org(client, "declined")
     await ai_consent(client, headers, org_id)
     images.script = ["refuse", FULL_CROWNS]
@@ -379,7 +384,10 @@ async def test_an_animal_keeps_the_classic_mouth_and_sends_nothing(client, image
     anchors = await _detect(client, headers, base)
     marks = anchors["marks"]
     response = await _run(
-        client, headers, "POST", f"{base}/finish",
+        client,
+        headers,
+        "POST",
+        f"{base}/finish",
         json={"name": "Rex", "anchors_id": anchors["id"], "marks": marks},
     )
     assert response.status_code == 202, response.text
@@ -404,15 +412,16 @@ async def _generate(client, headers, org_id, avatar_id, consent_id) -> dict:
     return (await client.get(url, headers=headers)).json()["job"]
 
 
-async def test_existing_avatars_get_ai_teeth_as_a_draft_edit(
-    client, faces, images, mouth_detector
-):
+async def test_existing_avatars_get_ai_teeth_as_a_draft_edit(client, faces, images, mouth_detector):
     headers, org_id = await _org(client, "later")
     avatar_id, avatar, published = await _finished_person(client, headers, org_id)
     assert "oral_image_key" not in published["mouth"]
 
-    missing = await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/mouth-kit",
-                                json={"consent_id": "nope"}, headers=headers)
+    missing = await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/mouth-kit",
+        json={"consent_id": "nope"},
+        headers=headers,
+    )
     assert missing.status_code == 403 and missing.json()["code"] == "consent_required"
     assert images.calls == []
 
@@ -463,8 +472,9 @@ async def test_making_teeth_needs_the_server_and_a_person(client, faces, images,
     response = await client.post(url, json={"consent_id": consent_id}, headers=headers)
     assert response.status_code == 409 and response.json()["code"] == "imagegen_unavailable"
 
-    await client.patch(f"/orgs/{org_id}/avatars/{avatar_id}", json={"face_type": "animal"},
-                       headers=headers)
+    await client.patch(
+        f"/orgs/{org_id}/avatars/{avatar_id}", json={"face_type": "animal"}, headers=headers
+    )
     response = await client.post(url, json={"consent_id": consent_id}, headers=headers)
     assert response.status_code == 422 and response.json()["code"] == "mouth_not_for_face_type"
     assert images.calls == []
@@ -481,7 +491,8 @@ async def test_the_owners_own_photo_replaces_ai_teeth_and_their_disclosure(
     url = f"/orgs/{org_id}/avatars/{avatar_id}"
 
     uploaded = await client.post(
-        f"{url}/mouth-photo", files={"file": ("ee.png", FULL_CROWNS, "image/png")},
+        f"{url}/mouth-photo",
+        files={"file": ("ee.png", FULL_CROWNS, "image/png")},
         headers=headers,
     )
     assert uploaded.status_code == 200, uploaded.text
@@ -503,8 +514,9 @@ async def test_removing_ai_teeth_removes_their_disclosure(client, faces, images,
     await ai_consent(client, headers, org_id)
     images.script = [FULL_CROWNS]
     avatar_id, _, _ = await _finished_person(client, headers, org_id)
-    removed = await client.delete(f"/orgs/{org_id}/avatars/{avatar_id}/mouth-photo",
-                                  headers=headers)
+    removed = await client.delete(
+        f"/orgs/{org_id}/avatars/{avatar_id}/mouth-photo", headers=headers
+    )
     assert removed.json()["ai_edited"] is None
     assert removed.json()["mouth"]["has_oral_photo"] is False
 
@@ -586,9 +598,7 @@ async def test_the_teeth_are_made_outside_the_runners_slot(client, faces, images
 # --- stored for visitors -------------------------------------------------------------------
 
 
-async def test_the_mouth_photo_is_stored_and_served_as_webp(
-    client, faces, images, mouth_detector
-):
+async def test_the_mouth_photo_is_stored_and_served_as_webp(client, faces, images, mouth_detector):
     from app.services.storage import get_storage
 
     headers, org_id = await _org(client, "slim")
@@ -603,7 +613,7 @@ async def test_the_mouth_photo_is_stored_and_served_as_webp(
 
     detail = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
     url = detail["mouth_photo"]["image_url"]
-    served = await client.get(url[url.index("/storage/"):])
+    served = await client.get(url[url.index("/storage/") :])
     assert served.status_code == 200
     assert served.headers["content-type"] == "image/webp"
 
@@ -625,7 +635,8 @@ async def _discard(client, headers, url):
 async def _later_edit(client, headers, url):
     """Any edit a visitor would notice, so the next Publish writes a snapshot."""
     response = await client.patch(
-        url, json={"mouth": {"renderer": "continuous", "profile": {"teethY": 0.01}}},
+        url,
+        json={"mouth": {"renderer": "continuous", "profile": {"teethY": 0.01}}},
         headers=headers,
     )
     assert response.status_code == 200, response.text
@@ -650,7 +661,8 @@ async def test_discarding_an_upload_brings_ai_teeth_back_labelled(
     images.script = [FULL_CROWNS]
     avatar_id, url = await _ai_teeth_person(client, headers, org_id)
     uploaded = await client.post(
-        f"{url}/mouth-photo", files={"file": ("ee.png", FULL_CROWNS, "image/png")},
+        f"{url}/mouth-photo",
+        files={"file": ("ee.png", FULL_CROWNS, "image/png")},
         headers=headers,
     )
     assert uploaded.json()["ai_edited"] is None
@@ -737,9 +749,17 @@ async def test_other_ai_edits_stay_disclosed_under_the_classic_mouth():
     storage = get_storage()
     await storage.put_bytes("orgs/o/avatars/a/source.png", _png("oral-detail-v3"), "image/png")
     avatar = SimpleNamespace(
-        id="a", org_id="o", draft_revision=3, image_key="orgs/o/avatars/a/source.png",
-        rig_key=None, thumbnail_key=None, has_layers=False, framing="face",
-        face_type="human", voice=None, published_config=None,
+        id="a",
+        org_id="o",
+        draft_revision=3,
+        image_key="orgs/o/avatars/a/source.png",
+        rig_key=None,
+        thumbnail_key=None,
+        has_layers=False,
+        framing="face",
+        face_type="human",
+        voice=None,
+        published_config=None,
         mouth_config=json.dumps({"renderer": "classic", "profile": {}}),
         ai_edited=disclosure.with_ai_teeth({"mode": "touchup", "model": "m1"}, "m2"),
     )

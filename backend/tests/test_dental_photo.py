@@ -60,7 +60,9 @@ def test_the_tip_only_photo_it_replaced_is_refused():
     assert not acceptance.accepted
     assert acceptance.crown_coverage < dp.MIN_CROWN_COVERAGE
     # Wide and solid enough: only the crown height fails.
-    assert acceptance.arch_width >= dp.MIN_ARCH_WIDTH and acceptance.arch_pixels >= dp.MIN_ARCH_PIXELS
+    assert (
+        acceptance.arch_width >= dp.MIN_ARCH_WIDTH and acceptance.arch_pixels >= dp.MIN_ARCH_PIXELS
+    )
 
 
 def test_the_references_ee_is_refused():
@@ -92,7 +94,8 @@ def test_the_canvas_puts_the_inner_upper_lip_at_its_origin_a_mouth_width_to_512_
     # as 61 and 291 would be, 512 px apart.
     width = float(np.linalg.norm(points[291] - points[61]))
     assert np.linalg.norm(contour[ring.index(308)] - contour[ring.index(78)]) == pytest.approx(
-        np.linalg.norm(points[308] - points[78]) * 512 / width, rel=1e-6)
+        np.linalg.norm(points[308] - points[78]) * 512 / width, rel=1e-6
+    )
     # Clipped to the inner lip ring: transparent outside, opaque well inside.
     assert canvas[5, 5, 3] == 0 and tuple(canvas[5, 5]) == (0, 0, 0, 0)
     assert canvas[int(dp.CANVAS_ORIGIN[1]) + 20, int(dp.CANVAS_ORIGIN[0]), 3] == 255
@@ -101,8 +104,9 @@ def test_the_canvas_puts_the_inner_upper_lip_at_its_origin_a_mouth_width_to_512_
 # --- The extraction, on synthetic arches ---------------------------------------------------------
 
 
-def synthetic(width=200, height=140, *, upper_to=60, gap_to=70, lower_to=110, specks=(),
-              notches=()) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def synthetic(
+    width=200, height=140, *, upper_to=60, gap_to=70, lower_to=110, specks=(), notches=()
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """An opaque RGBA mouth: enamel from the top contour (y 20) down to
     `upper_to`, a dark gap to `gap_to`, lower enamel to `lower_to`, cavity
     below; `specks` (x, y, size) are enamel squares, `notches` x columns of
@@ -110,10 +114,10 @@ def synthetic(width=200, height=140, *, upper_to=60, gap_to=70, lower_to=110, sp
     image = np.zeros((height, width, 4), dtype=np.uint8)
     image[..., 3] = 255
     image[..., :3] = CAVITY
-    image[20:upper_to, 20:width - 20, :3] = ENAMEL
-    image[gap_to:lower_to, 30:width - 30, :3] = ENAMEL
+    image[20:upper_to, 20 : width - 20, :3] = ENAMEL
+    image[gap_to:lower_to, 30 : width - 30, :3] = ENAMEL
     for x, y, size in specks:
-        image[y:y + size, x:x + size, :3] = ENAMEL
+        image[y : y + size, x : x + size, :3] = ENAMEL
     for x in notches:
         image[20:upper_to, x, :3] = CAVITY
     upper = np.array([[0.0, 20.0], [width / 2, 20.0], [width - 1.0, 20.0]])
@@ -203,8 +207,11 @@ def parity_case() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 
 def layer_digest(layer: dp.Layer) -> dict:
-    return {"box": list(layer.box), "count": layer.count,
-            "sha256": hashlib.sha256(layer.pixels.tobytes()).hexdigest()}
+    return {
+        "box": list(layer.box),
+        "count": layer.count,
+        "sha256": hashlib.sha256(layer.pixels.tobytes()).hexdigest(),
+    }
 
 
 def test_the_embed_parity_fixture_is_what_the_port_computes():

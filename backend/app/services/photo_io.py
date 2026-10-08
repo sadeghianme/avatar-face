@@ -164,8 +164,9 @@ def frame_photo(data: bytes, crop: CropRect, roll: float = 0.0) -> Image.Image:
     out_h = max(1, int(round(crop["h"] * height)))
 
     if not roll:
-        return image.crop((int(round(left)), int(round(top)), int(round(left)) + out_w,
-                           int(round(top)) + out_h))
+        return image.crop(
+            (int(round(left)), int(round(top)), int(round(left)) + out_w, int(round(top)) + out_h)
+        )
 
     theta = math.radians(roll)
     cos, sin = math.cos(theta), math.sin(theta)

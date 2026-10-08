@@ -149,7 +149,9 @@ def migrated_teeth_record(day: str) -> TeethRecord:
     """The standard teeth's record for an existing avatar moved from the
     classic mouth on `day` (an ISO date): `default_config`'s mouth is what
     it gets, and this says why it has no teeth of its own."""
-    return generic_teeth_record({
-        "code": MIGRATED_STANDARD,
-        "detail": f"Standard teeth: moved from the classic mouth on {day}",
-    })
+    return generic_teeth_record(
+        {
+            "code": MIGRATED_STANDARD,
+            "detail": f"Standard teeth: moved from the classic mouth on {day}",
+        }
+    )

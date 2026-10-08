@@ -101,5 +101,7 @@ async def verify_at_startup() -> None:
             logger.error(
                 "gemini %s model %s is NOT available (%s); the AI steps that use it will "
                 "fail until app/services/ai_models.py names a current model",
-                role, check["model"], check.get("error"),
+                role,
+                check["model"],
+                check.get("error"),
             )

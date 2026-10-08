@@ -49,7 +49,9 @@ async def send(to: str, subject: str, html: str, text: str) -> bool:
     if not configured():
         # Loud, because in production this means password reset is silently
         # dead — the user sees "check your inbox" and nothing ever arrives.
-        logger.error("email is not configured (RESEND_API_KEY / EMAIL_FROM); not sending %r", subject)
+        logger.error(
+            "email is not configured (RESEND_API_KEY / EMAIL_FROM); not sending %r", subject
+        )
         return False
 
     try:

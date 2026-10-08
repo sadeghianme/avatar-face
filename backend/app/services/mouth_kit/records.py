@@ -21,10 +21,18 @@ from app.services.mouth_kit.calls import (
 # Why the kit's teeth request brought nothing, passed on as its own note
 # (the Mouth panel words each, as for the single "ee" photo's): what
 # stopped the calls, or what the AI answered.
-_TEETH_NOTE_CODES = frozenset({
-    "safety_refused", "no_image", "provider_error", "timeout", "imagegen_unavailable",
-    "image_limit_reached", "third_party_ai_disabled", CONSENT_NOT_RECORDED[0],
-})
+_TEETH_NOTE_CODES = frozenset(
+    {
+        "safety_refused",
+        "no_image",
+        "provider_error",
+        "timeout",
+        "imagegen_unavailable",
+        "image_limit_reached",
+        "third_party_ai_disabled",
+        CONSENT_NOT_RECORDED[0],
+    }
+)
 # The embed's own refusal of a teeth photo that passed every other check.
 _UNCLEAR_CODES = frozenset({"teeth_photo_refused", "no_teeth_visible"})
 
@@ -91,7 +99,7 @@ def kit_record(
     generated = generated_count(result)
     manifest = result.manifest
     return {
-        "id": manifest["character"][len(performance_kit.CHARACTER_PREFIX):],
+        "id": manifest["character"][len(performance_kit.CHARACTER_PREFIX) :],
         "state": "made",
         "made_at": _now(),
         "source": source,

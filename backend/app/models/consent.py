@@ -48,9 +48,7 @@ class Consent(Base):
     org_id: Mapped[str] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
     )
-    user_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     scope: Mapped[str] = mapped_column(String(32), nullable=False)
     # The providers the statement names (["google"]); empty for depiction.
     providers: Mapped[list] = mapped_column(JSON, nullable=False, default=list)

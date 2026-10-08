@@ -52,9 +52,7 @@ async def test_usage_limit_is_per_org(client):
 async def test_embed_usage_shares_org_limit(client):
     headers = await register_and_login(client, "alice")
     org_id = await create_org(client, headers)
-    created = await client.post(
-        f"/orgs/{org_id}/api-keys", json={"name": "k"}, headers=headers
-    )
+    created = await client.post(f"/orgs/{org_id}/api-keys", json={"name": "k"}, headers=headers)
     await _synthesize(client, headers, org_id, "x" * 990)
     response = await client.post(
         "/embed/v1/synthesize",

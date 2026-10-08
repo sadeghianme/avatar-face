@@ -16,6 +16,7 @@ cover, where per-letter shapes are still better than nothing.
 Both the offline synthesizer and the cue builder use this module, so generated
 audio and viseme cues share one clock by construction.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -36,10 +37,10 @@ from app.services.tts.visemes import char_to_viseme
 # Typical articulation duration per viseme class at conversational rate (ms).
 VISEME_DURATION_MS: dict[str, int] = {
     "sil": 45,
-    "PP": 60,   # p, b, m — brief closure
-    "FF": 95,   # f, v — sustained fricative
+    "PP": 60,  # p, b, m — brief closure
+    "FF": 95,  # f, v — sustained fricative
     "TH": 90,
-    "DD": 55,   # t, d — quick stops
+    "DD": 55,  # t, d — quick stops
     "kk": 60,
     "CH": 85,
     "SS": 100,  # s, z — long fricatives
@@ -54,17 +55,24 @@ VISEME_DURATION_MS: dict[str, int] = {
 DEFAULT_DURATION_MS = 80
 
 # Silence bought by punctuation.
+# fmt: off
 PAUSE_MS: dict[str, int] = {
     ",": 180, ";": 200, ":": 200, "—": 160, "–": 160, "-": 70,
     ".": 320, "!": 340, "?": 340, "…": 400,
     "。": 320, "！": 340, "？": 340, "、": 180, "؟": 340, "।": 320,
 }
+# fmt: on
 WORD_GAP_MS = 55
 
 # Articulators reach position before the sound is heard. Rounded and labial
 # shapes lead most visibly (you see the pucker before you hear the vowel).
 ANTICIPATION_MS: dict[str, int] = {
-    "ou": 70, "oh": 60, "PP": 55, "FF": 45, "CH": 40, "RR": 35,
+    "ou": 70,
+    "oh": 60,
+    "PP": 55,
+    "FF": 45,
+    "CH": 40,
+    "RR": 35,
 }
 
 # Which shapes the measured loudness is allowed to scale. Vowels carry the
@@ -117,9 +125,7 @@ def segment_text(text: str) -> list[Segment]:
             segments.append(Segment("sil", WORD_GAP_MS))
             continue
         viseme = char_to_viseme(ch)
-        segments.append(
-            Segment(viseme, VISEME_DURATION_MS.get(viseme, DEFAULT_DURATION_MS))
-        )
+        segments.append(Segment(viseme, VISEME_DURATION_MS.get(viseme, DEFAULT_DURATION_MS)))
     return segments
 
 
@@ -127,9 +133,7 @@ def total_duration_ms(segments: list[Segment]) -> int:
     return sum(s.duration_ms for s in segments)
 
 
-def cues_from_segments(
-    segments: list[Segment], scale: float = 1.0, envelope=None
-) -> list[dict]:
+def cues_from_segments(segments: list[Segment], scale: float = 1.0, envelope=None) -> list[dict]:
     """Viseme cues from timed segments, with anticipatory coarticulation.
 
     `scale` retimes the model onto a known audio duration (real providers);
@@ -151,9 +155,7 @@ def cues_from_segments(
             amplitude = segment.amplitude
             if envelope is not None and segment.viseme in ENVELOPE_VISEMES:
                 loud = envelope.mean(t * scale, (t + segment.duration_ms) * scale)
-                factor = ENVELOPE_MIN_FACTOR + (
-                    ENVELOPE_MAX_FACTOR - ENVELOPE_MIN_FACTOR
-                ) * loud
+                factor = ENVELOPE_MIN_FACTOR + (ENVELOPE_MAX_FACTOR - ENVELOPE_MIN_FACTOR) * loud
                 amplitude = max(MIN_AMPLITUDE, min(1.0, amplitude * factor))
             at = int(round(start * scale))
             # A silence an approaching articulation would reach back through
@@ -212,9 +214,7 @@ def cues_for_duration(
     envelope = None
     if audio:
         envelope = measure(audio)
-    return cues_from_segments(
-        segments, scale=duration_ms / modelled, envelope=envelope
-    )
+    return cues_from_segments(segments, scale=duration_ms / modelled, envelope=envelope)
 
 
 def cues_from_text(
@@ -296,9 +296,7 @@ def _char_segments(text: str) -> list[Segment]:
     segments: list[Segment] = []
     for ch in text:
         viseme = char_to_viseme(ch)
-        segments.append(
-            Segment(viseme, VISEME_DURATION_MS.get(viseme, DEFAULT_DURATION_MS))
-        )
+        segments.append(Segment(viseme, VISEME_DURATION_MS.get(viseme, DEFAULT_DURATION_MS)))
     return segments
 
 
@@ -329,9 +327,7 @@ def _ipa_segments(ipa: str | None) -> list[Segment]:
     if not ipa:
         return []
     visemes = collapse_repeats(ipa_to_visemes(ipa))
-    return [
-        Segment(v, VISEME_DURATION_MS.get(v, DEFAULT_DURATION_MS)) for v in visemes
-    ]
+    return [Segment(v, VISEME_DURATION_MS.get(v, DEFAULT_DURATION_MS)) for v in visemes]
 
 
 def plan_utterance(text: str, locale: str = "en-US") -> tuple[list[Segment], list[dict]]:

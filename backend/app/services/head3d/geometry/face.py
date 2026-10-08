@@ -18,10 +18,11 @@ from app.services.head3d.geometry.constants import (
 @dataclass(frozen=True)
 class FaceFrame:
     """Measurements of the rest face, image pixels."""
-    width: float       # ear-level landmark to landmark
-    height: float      # forehead (10) to chin (152)
-    centre_x: float    # between the ear-level landmarks
-    ear_y: float       # their mean height
+
+    width: float  # ear-level landmark to landmark
+    height: float  # forehead (10) to chin (152)
+    centre_x: float  # between the ear-level landmarks
+    ear_y: float  # their mean height
     chin_y: float
     forehead_y: float
     mouth_width: float  # corner to corner
@@ -46,7 +47,12 @@ def face_frame(points: np.ndarray) -> FaceFrame:
         forehead_y=float(p[T.FOREHEAD, 1]),
         mouth_width=float(max(np.hypot(*(p[T.MOUTH_RIGHT] - p[T.MOUTH_LEFT])), 1.0)),
         seam=(float((p[13, 0] + p[14, 0]) / 2), float((p[13, 1] + p[14, 1]) / 2)),
-        box=(float(p[:, 0].min()), float(p[:, 1].min()), float(p[:, 0].max()), float(p[:, 1].max())),
+        box=(
+            float(p[:, 0].min()),
+            float(p[:, 1].min()),
+            float(p[:, 0].max()),
+            float(p[:, 1].max()),
+        ),
     )
 
 
@@ -98,15 +104,19 @@ def model_scale(frame: FaceFrame) -> float:
     return FACE_WIDTH_M / frame.width
 
 
-def to_model(points: np.ndarray, relief: np.ndarray, pivot: tuple[float, float, float], scale: float) -> np.ndarray:
+def to_model(
+    points: np.ndarray, relief: np.ndarray, pivot: tuple[float, float, float], scale: float
+) -> np.ndarray:
     """Image (x, y) + relief -> head-frame positions (n, 3)."""
     p = np.asarray(points, dtype=np.float64)
     r = np.asarray(relief, dtype=np.float64)
-    return np.column_stack((
-        (p[:, 0] - pivot[0]) * scale,
-        (pivot[1] - p[:, 1]) * scale,
-        (r - pivot[2]) * scale,
-    ))
+    return np.column_stack(
+        (
+            (p[:, 0] - pivot[0]) * scale,
+            (pivot[1] - p[:, 1]) * scale,
+            (r - pivot[2]) * scale,
+        )
+    )
 
 
 def to_image(positions: np.ndarray, pivot: tuple[float, float, float], scale: float) -> np.ndarray:

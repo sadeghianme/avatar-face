@@ -177,9 +177,7 @@ async def _row(creation_id: str) -> Creation:
 
 async def _avatar_row(avatar_id: str) -> Avatar | None:
     async with get_session_factory()() as db:
-        return (
-            await db.execute(select(Avatar).where(Avatar.id == avatar_id))
-        ).scalar_one_or_none()
+        return (await db.execute(select(Avatar).where(Avatar.id == avatar_id))).scalar_one_or_none()
 
 
 # A framing that changes the frame without cutting anything important off.
@@ -223,9 +221,10 @@ async def test_the_upload_is_stored_upright_and_without_its_metadata(client, fac
     _, body = await _create(client, headers, org_id, data=phone_jpeg(), content_type="image/jpeg")
     assert_clean_upright(await _bytes_at(client, body["steps"][0]["url"]))
     # The raw upload (EXIF, GPS) is gone once the clean copy is stored.
-    assert all(not name.startswith("incoming") for name in _files(_creation_prefix(
-        f"/orgs/{org_id}/creations/{body['id']}"
-    )))
+    assert all(
+        not name.startswith("incoming")
+        for name in _files(_creation_prefix(f"/orgs/{org_id}/creations/{body['id']}"))
+    )
 
 
 async def test_no_face_suggests_no_line_and_the_wizard_must_ask(client):
@@ -403,9 +402,7 @@ async def test_framing_is_a_new_step_and_never_touches_the_original(client, face
     again = (await client.patch(base, json={"roll": 4.0}, headers=headers)).json()
     assert again["revision"] == body["revision"]
     # Back to the whole, level photo is the original itself.
-    whole = (
-        await client.patch(base, json={"crop": WHOLE, "roll": 0}, headers=headers)
-    ).json()
+    whole = (await client.patch(base, json={"crop": WHOLE, "roll": 0}, headers=headers)).json()
     assert whole["current"] == "original" and _step(whole, "framed") is None
     assert [n for n in _files(_creation_prefix(base)) if n.startswith("framed")] == []
 
@@ -528,9 +525,7 @@ async def test_choosing_another_frame_clears_the_marks_and_a_cutout_does_not(
     choose = f"{base}/choose"
     to_framed = (await client.post(choose, json={"choice": "framed"}, headers=headers)).json()
     assert to_framed["current"] == "framed" and to_framed["anchors"]["id"] == anchors["id"]
-    to_original = (
-        await client.post(choose, json={"choice": "original"}, headers=headers)
-    ).json()
+    to_original = (await client.post(choose, json={"choice": "original"}, headers=headers)).json()
     assert to_original["current"] == "original" and to_original["anchors"] is None
     assert to_original["revision"] == to_framed["revision"] + 1
 
@@ -568,7 +563,14 @@ async def test_an_animal_is_placed_from_the_template_and_never_one_click(client,
     assert set(anchors["marks"]) == {"head", "left_eye", "right_eye", "mouth_line", "chin"}
     # The head is eight points: its edges, its temples and its jaw corners.
     assert set(anchors["marks"]["head"]) == {
-        "left", "right", "top", "bottom", "upper_left", "upper_right", "lower_right", "lower_left",
+        "left",
+        "right",
+        "top",
+        "bottom",
+        "upper_left",
+        "upper_right",
+        "lower_right",
+        "lower_left",
     }
     assert anchors["validation"]["ok"] is True
     assert anchors["validation"]["one_click"] is False
@@ -826,7 +828,8 @@ async def test_a_cutout_finishes_with_its_original_and_no_room_behind_it(client,
     anchors = await _detect(client, headers, base)
     await _run(client, headers, "POST", f"{base}/background", json={"mode": "remove"})
     finish = {
-        "name": "Cut", "anchors_id": anchors["id"],
+        "name": "Cut",
+        "anchors_id": anchors["id"],
         "consent_id": await depiction(client, headers, base),
     }
     await _run(client, headers, "POST", f"{base}/finish", json=finish)
@@ -905,7 +908,10 @@ async def test_a_fit_that_folds_is_refused_with_its_reasons(client, face):
     anchors = await _detect(client, headers, base)
     marks = anchors["marks"]
     response = await _finish(
-        client, headers, base, anchors["id"],
+        client,
+        headers,
+        base,
+        anchors["id"],
         marks={"left_eye": marks["right_eye"], "right_eye": marks["left_eye"]},
     )
     assert response.status_code == 422
@@ -942,7 +948,10 @@ async def test_an_animal_is_never_finished_on_the_template_guess(client):
 @pytest.mark.parametrize(
     "face_type, parts",
     [
-        ("cartoon", {"head", "left_eye", "right_eye", "mouth_line", "chin", "left_pupil", "right_pupil"}),
+        (
+            "cartoon",
+            {"head", "left_eye", "right_eye", "mouth_line", "chin", "left_pupil", "right_pupil"},
+        ),
         ("human", {"head", "left_eye", "right_eye", "mouth", "left_pupil", "right_pupil"}),
     ],
 )
@@ -1250,7 +1259,8 @@ async def test_finished_rows_do_not_count_as_drafts(client, face, monkeypatch):
     base, _ = await _create(client, headers, org_id)
     anchors = await _detect(client, headers, base)
     finish = {
-        "name": "A", "anchors_id": anchors["id"],
+        "name": "A",
+        "anchors_id": anchors["id"],
         "consent_id": await depiction(client, headers, base),
     }
     await _run(client, headers, "POST", f"{base}/finish", json=finish)

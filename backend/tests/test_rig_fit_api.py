@@ -120,7 +120,8 @@ async def test_a_head_saved_with_four_points_reopens_with_eight_and_resaves_unch
     reopened = await _anchors(client, headers, base)
     assert set(reopened["head"]) == HEAD_POINTS
     assert reopened["head"]["upper_left"] == {
-        "x": round(saved["points"][54][0], 2), "y": round(saved["points"][54][1], 2)
+        "x": round(saved["points"][54][0], 2),
+        "y": round(saved["points"][54][1], 2),
     }
     untouched = {**reopened, "head": {e: reopened["head"][e] for e in EDGES}}
     again = (await _fit(client, headers, base, untouched, True)).json()["rig"]
@@ -256,8 +257,13 @@ async def test_an_animal_marked_the_old_way_is_saved_as_a_line(client):
     working; what is stored is the line's scheme."""
     headers, _, _, base = await _setup(client, "dog", "animal")
     line = (await _anchors(client, headers, base))["mouth_line"]
-    mouth = {"left": line[0], "right": line[4], "top": _moved(line[2], dy=-6),
-             "bottom": _moved(line[2], dy=6), "center": line[2]}
+    mouth = {
+        "left": line[0],
+        "right": line[4],
+        "top": _moved(line[2], dy=-6),
+        "bottom": _moved(line[2], dy=6),
+        "center": line[2],
+    }
     response = await _fit(client, headers, base, {"mouth": mouth}, True)
     assert response.status_code == 200, response.text
     stored = (await _rig(client, headers, base))["user_anchors"]
@@ -384,8 +390,11 @@ async def test_requires_membership(client):
 
     for method, path in (("get", f"{base}/rig-anchors"), ("post", f"{base}/rig-fit")):
         call = getattr(client, method)
-        response = await (call(path, json={}, headers=intruder) if method == "post"
-                          else call(path, headers=intruder))
+        response = await (
+            call(path, json={}, headers=intruder)
+            if method == "post"
+            else call(path, headers=intruder)
+        )
         assert response.status_code in (403, 404), (path, response.status_code)
 
 

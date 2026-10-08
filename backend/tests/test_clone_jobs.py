@@ -53,9 +53,7 @@ async def test_the_full_worker_round_trip(client, org):
     created = (await _create(client, headers, org_id)).json()
     assert created["status"] == "pending"
 
-    claimed = (
-        await client.post(f"/orgs/{org_id}/clone-jobs/claim", headers=headers)
-    ).json()
+    claimed = (await client.post(f"/orgs/{org_id}/clone-jobs/claim", headers=headers)).json()
     assert claimed["id"] == created["id"]
     assert claimed["status"] == "processing"
     # The worker needs the recording; nothing else on the job carries audio.
@@ -103,9 +101,13 @@ async def test_a_dead_workers_claim_expires(client, org, monkeypatch):
 
     headers, org_id = org
     created = (await _create(client, headers, org_id)).json()
-    assert (await client.post(f"/orgs/{org_id}/clone-jobs/claim", headers=headers)).status_code == 200
+    assert (
+        await client.post(f"/orgs/{org_id}/clone-jobs/claim", headers=headers)
+    ).status_code == 200
     # Second claim while fresh: nothing to take.
-    assert (await client.post(f"/orgs/{org_id}/clone-jobs/claim", headers=headers)).status_code == 404
+    assert (
+        await client.post(f"/orgs/{org_id}/clone-jobs/claim", headers=headers)
+    ).status_code == 404
     # After the timeout, the same job is claimable again.
     monkeypatch.setattr(clonejobs, "CLAIM_TIMEOUT_SECONDS", 0)
     reclaimed = await client.post(f"/orgs/{org_id}/clone-jobs/claim", headers=headers)
@@ -131,9 +133,7 @@ async def test_deleting_a_job_removes_it_and_its_recording(client, org):
     headers, org_id = org
     created = (await _create(client, headers, org_id)).json()
     assert await get_storage().exists(reference_key(org_id, created["id"]))
-    response = await client.delete(
-        f"/orgs/{org_id}/clone-jobs/{created['id']}", headers=headers
-    )
+    response = await client.delete(f"/orgs/{org_id}/clone-jobs/{created['id']}", headers=headers)
     assert response.status_code == 204
     assert (await client.get(f"/orgs/{org_id}/clone-jobs", headers=headers)).json() == []
     # The recording is a likeness; deleting the job must delete it too.

@@ -34,23 +34,17 @@ async def test_visitors_hear_the_old_voice_until_publish(client, org):
     a customer's live site until Publish is pressed."""
     headers, org_id, avatar_id = org
     key = (
-        await client.post(
-            f"/orgs/{org_id}/api-keys", json={"name": "site"}, headers=headers
-        )
+        await client.post(f"/orgs/{org_id}/api-keys", json={"name": "site"}, headers=headers)
     ).json()["plaintext"]
 
     await client.patch(
         f"/orgs/{org_id}/avatars/{avatar_id}", json={"voice": VOICE}, headers=headers
     )
-    served = (
-        await client.get(f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": key})
-    ).json()
+    served = (await client.get(f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": key})).json()
     assert served.get("voice") != VOICE  # draft not leaked
 
     await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/publish", headers=headers)
-    served = (
-        await client.get(f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": key})
-    ).json()
+    served = (await client.get(f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": key})).json()
     assert served["voice"] == VOICE  # now it is what visitors get
 
 

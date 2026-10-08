@@ -80,15 +80,25 @@ def item(key: str, source: str | None = None, **extra) -> dict:
 
 def adjust(mode: str, model: str | None) -> dict:
     return {
-        "mode": mode, "style": None, "model": model, "generated_eyes": False,
-        "rejected": None, "checks": {},
+        "mode": mode,
+        "style": None,
+        "model": model,
+        "generated_eyes": False,
+        "rejected": None,
+        "checks": {},
     }
 
 
 def check(detected: bool = True, detector: str | None = "mediapipe", **extra) -> dict:
     return {
-        "detector": detector, "detected": detected, "face_box": None, "roll": 0.0,
-        "face_state": None, "checks": [], "recommendations": {}, **extra,
+        "detector": detector,
+        "detected": detected,
+        "face_box": None,
+        "roll": 0.0,
+        "face_state": None,
+        "checks": [],
+        "recommendations": {},
+        **extra,
     }
 
 
@@ -107,16 +117,17 @@ def wizard_steps(current: str | None = "framed") -> dict:
             ),
             "cutout:1": item("k/cutout-1", "adjusted:1"),
             "adjusted:2": item(
-                "k/adjusted-2", "cutout", cutout=True, adjust=adjust("touchup", "img-2"),
+                "k/adjusted-2",
+                "cutout",
+                cutout=True,
+                adjust=adjust("touchup", "img-2"),
                 check=check(),
             ),
         },
     }
 
 
-def creation(
-    face_type: str | None = "human", steps: dict | None = None, **fields
-) -> Creation:
+def creation(face_type: str | None = "human", steps: dict | None = None, **fields) -> Creation:
     fields.setdefault("status", CreationStatus.draft)
     return Creation(
         org_id="org-1", created_by_id="user-1", face_type=face_type, steps=steps, **fields
@@ -203,15 +214,31 @@ def test_steps_are_ordered_with_each_ai_result_by_number_before_its_own_cutout()
     items = {
         step_id: item(f"k/{step_id}")
         for step_id in (
-            "zzz", "cutout:10", "adjusted:10", "cutout:7", "adjusted:2", "cutout",
-            "cutout:2", "adjusted:5", "framed", "original",
+            "zzz",
+            "cutout:10",
+            "adjusted:10",
+            "cutout:7",
+            "adjusted:2",
+            "cutout",
+            "cutout:2",
+            "adjusted:5",
+            "framed",
+            "original",
         )
     }
     # adjusted:5 has no cut-out; cutout:7's AI result is gone: it still shows,
     # with what is unknown, last.
     assert ordered_step_ids(items) == [
-        "original", "framed", "cutout", "adjusted:2", "cutout:2", "adjusted:5", "adjusted:10",
-        "cutout:10", "cutout:7", "zzz",
+        "original",
+        "framed",
+        "cutout",
+        "adjusted:2",
+        "cutout:2",
+        "adjusted:5",
+        "adjusted:10",
+        "cutout:10",
+        "cutout:7",
+        "zzz",
     ]
     assert ordered_step_ids({}) == []
 
@@ -323,7 +350,10 @@ def test_lineage_is_newest_first_and_empty_for_an_unknown_step():
     steps = wizard_steps()
     items = steps["items"]
     assert lineage(steps, "cutout:1") == [
-        items["cutout:1"], items["adjusted:1"], items["framed"], items["original"]
+        items["cutout:1"],
+        items["adjusted:1"],
+        items["framed"],
+        items["original"],
     ]
     assert lineage(steps, "original") == [items["original"]]
     assert lineage(steps, "adjusted:9") == []
@@ -354,7 +384,9 @@ def test_a_generated_original_is_an_ai_edit_and_an_upload_is_not():
     assert ai_edited_of(steps, "original") is None
     assert ai_edited_of(None, None) is None
     steps["items"]["original"]["generated"] = {
-        "model": "gen-1", "style": "photo", "source_avatar_id": None
+        "model": "gen-1",
+        "style": "photo",
+        "source_avatar_id": None,
     }
     assert ai_edited_of(steps, "cutout") == {"mode": "generate", "model": "gen-1"}
 
@@ -402,9 +434,7 @@ def plan(model: str, look: str, source: str = "generate") -> dict:
 
 
 @pytest.mark.parametrize(("face_type", "statement"), [("human", "depiction"), ("animal", None)])
-def test_a_creation_with_no_image_needs_the_depiction_on_the_human_line_only(
-    face_type, statement
-):
+def test_a_creation_with_no_image_needs_the_depiction_on_the_human_line_only(face_type, statement):
     assert statement_for(creation(face_type, None)) == statement
     assert statement_for(creation(face_type, {"current": None, "items": {}})) == statement
     assert statement_for(creation(None, None)) is None
@@ -510,7 +540,10 @@ def test_a_drawing_the_check_does_not_read_as_a_face_needs_nothing():
 
 def adjust_round(source: str | None, *candidates: str | None) -> dict:
     return {
-        "mode": "touchup", "style": None, "source": source, "limit_reached": False,
+        "mode": "touchup",
+        "style": None,
+        "source": source,
+        "limit_reached": False,
         "candidates": [
             {"step": c, "ok": c is not None, "reason": None, "generated_eyes": False}
             for c in candidates
@@ -639,13 +672,22 @@ def test_copied_is_a_deep_copy_to_edit_and_an_empty_column_for_none():
 
 def test_a_step_keeps_only_the_check_keys_of_an_analysis():
     analysis = {
-        "image_size": [640, 480], "detector": "mediapipe", "detected": True,
-        "face_box": [1.0, 2.0, 3.0, 4.0], "roll": 2.5, "checks": [{"code": "blurry"}],
-        "suggested_face_type": "human", "suggested_framing": None,
+        "image_size": [640, 480],
+        "detector": "mediapipe",
+        "detected": True,
+        "face_box": [1.0, 2.0, 3.0, 4.0],
+        "roll": 2.5,
+        "checks": [{"code": "blurry"}],
+        "suggested_face_type": "human",
+        "suggested_framing": None,
     }
     assert step_check(analysis) == {
-        "detector": "mediapipe", "detected": True, "face_box": [1.0, 2.0, 3.0, 4.0],
-        "roll": 2.5, "face_state": None, "checks": [{"code": "blurry"}],
+        "detector": "mediapipe",
+        "detected": True,
+        "face_box": [1.0, 2.0, 3.0, 4.0],
+        "roll": 2.5,
+        "face_state": None,
+        "checks": [{"code": "blurry"}],
         "recommendations": None,
     }
     assert tuple(step_check({})) == CHECK_KEYS
@@ -684,7 +726,9 @@ def test_a_recommendation_the_check_did_not_store_is_worked_out_from_it():
         ]
     )
     assert recommendation_of(steps, "human") == {
-        "image": "framed", "mode": "regenerate", "reasons": ["blurry", "eyes_closed"]
+        "image": "framed",
+        "mode": "regenerate",
+        "reasons": ["blurry", "eyes_closed"],
     }
     steps["items"]["framed"]["check"] = check(detector=None)
     assert recommendation_of(steps, "cartoon") == {"image": "framed", "mode": "none", "reasons": []}
@@ -728,8 +772,11 @@ def test_the_line_must_be_chosen_first():
 
 def region(x: float, y: float, **extra) -> dict:
     return {
-        "left": {"x": x - 10, "y": y}, "right": {"x": x + 10, "y": y},
-        "top": {"x": x, "y": y - 5}, "bottom": {"x": x, "y": y + 5}, **extra,
+        "left": {"x": x - 10, "y": y},
+        "right": {"x": x + 10, "y": y},
+        "top": {"x": x, "y": y - 5},
+        "bottom": {"x": x, "y": y + 5},
+        **extra,
     }
 
 
@@ -763,7 +810,9 @@ def test_a_mouth_line_and_chin_are_the_marks_of_animals_and_animations(face_type
     )
     # What was not marked (the other regions, the head's diagonals) is left out.
     assert check_marks(marks, face_type, [100, 80]) == {
-        "head": region(50, 40), "mouth_line": LINE, "chin": {"x": 50, "y": 70},
+        "head": region(50, 40),
+        "mouth_line": LINE,
+        "chin": {"x": 50, "y": 70},
     }
 
 
@@ -831,7 +880,10 @@ def test_anchors_named_wrongly_or_of_another_image_are_stale(made, anchors_id):
 
 
 def test_an_error_record_is_a_code_and_a_detail():
-    assert error_record("fit_invalid", "bad marks") == {"code": "fit_invalid", "detail": "bad marks"}
+    assert error_record("fit_invalid", "bad marks") == {
+        "code": "fit_invalid",
+        "detail": "bad marks",
+    }
 
 
 @pytest.mark.parametrize("state", [FAILED, INTERRUPTED])
@@ -855,24 +907,39 @@ def test_a_job_that_did_not_fail_is_not_retryable(state):
 
 def test_a_job_record_keeps_the_retry_params_until_the_job_is_done():
     job = Job(
-        id="job-1", org_id="org-1", subject_id="creation-1", step="detect", revision=3,
+        id="job-1",
+        org_id="org-1",
+        subject_id="creation-1",
+        step="detect",
+        revision=3,
         started_at="2026-10-08T09:00:00+00:00",
     )
     failure = error_record("provider_error", "down")
     assert job_record(job, FAILED, None, failure) == {
-        "id": "job-1", "step": "detect", "state": "failed", "error": failure,
-        "started_at": "2026-10-08T09:00:00+00:00", "params": {},
+        "id": "job-1",
+        "step": "detect",
+        "state": "failed",
+        "error": failure,
+        "started_at": "2026-10-08T09:00:00+00:00",
+        "params": {},
     }
     assert job_record(job, RUNNING, {"use_ai": True})["params"] == {"use_ai": True}
     assert job_record(job, DONE, {"use_ai": True}) == {
-        "id": "job-1", "step": "detect", "state": "done", "error": None,
+        "id": "job-1",
+        "step": "detect",
+        "state": "done",
+        "error": None,
         "started_at": "2026-10-08T09:00:00+00:00",
     }
 
 
 EMPTY_USAGE = {
-    "adjust_rounds": 0, "detections": 0, "next_adjusted": 0, "vision_cache": [],
-    "prepare_rounds": 0, "free_clears": 0,
+    "adjust_rounds": 0,
+    "detections": 0,
+    "next_adjusted": 0,
+    "vision_cache": [],
+    "prepare_rounds": 0,
+    "free_clears": 0,
 }
 
 
@@ -888,13 +955,18 @@ def test_the_ai_usage_keeps_what_the_row_has_and_is_a_copy():
     made = creation(ai_usage=stored)
     usage = ai_usage_of(made)
     assert usage == {
-        **EMPTY_USAGE, "adjust_rounds": 2, "vision_cache": [entry], "last_round": last_round,
+        **EMPTY_USAGE,
+        "adjust_rounds": 2,
+        "vision_cache": [entry],
+        "last_round": last_round,
     }
     usage["vision_cache"][0]["points"]["nose"] = [9, 9]
     usage["vision_cache"].append(entry)
     usage["detections"] = 1
     assert made.ai_usage == {
-        "adjust_rounds": 2, "vision_cache": [entry], "last_round": last_round,
+        "adjust_rounds": 2,
+        "vision_cache": [entry],
+        "last_round": last_round,
     }
     assert entry["points"] == {"nose": [1, 2]}
 

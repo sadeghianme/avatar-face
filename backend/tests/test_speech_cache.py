@@ -106,7 +106,9 @@ def test_pcm_comes_back_with_every_sample():
     back = speech_cache.as_wav(encoded, mime)
     with wave.open(io.BytesIO(back)) as handle:
         assert (handle.getframerate(), handle.getnchannels(), handle.getsampwidth()) == (
-            24000, 1, 2,
+            24000,
+            1,
+            2,
         )
         assert handle.getnframes() == 2 * 24000
     assert speech_cache.as_wav(source, "audio/wav") is source
@@ -183,7 +185,9 @@ async def test_a_line_whose_file_is_gone_is_made_again(app):
         await get_storage().delete(old_file)
         db.expunge_all()
 
-        _, cached = await registry.synthesize_cached(db, "offline", "offline-warm", "en-US", "Gone.")
+        _, cached = await registry.synthesize_cached(
+            db, "offline", "offline-warm", "en-US", "Gone."
+        )
         assert not cached
         row = await _row(db, key)
     assert row is not None and row.audio_key != old_file
@@ -239,8 +243,14 @@ async def test_two_requests_making_one_line_keep_one_file(app, monkeypatch):
     key = cache_key("offline", "offline-warm", "en-US", "Race.")
     async with get_session_factory()() as db:
         await speech_cache.put(
-            db, cache_key=key, provider="offline", voice="offline-warm", locale="en-US",
-            text="Race.", result=_result(), org_id="first",
+            db,
+            cache_key=key,
+            provider="offline",
+            voice="offline-warm",
+            locale="en-US",
+            text="Race.",
+            result=_result(),
+            org_id="first",
         )
         first = await _row(db, key)
         assert first is not None
@@ -255,8 +265,14 @@ async def test_two_requests_making_one_line_keep_one_file(app, monkeypatch):
         monkeypatch.setattr(type(storage), "put_bytes", spying_put)
         db.expunge_all()
         await speech_cache.put(
-            db, cache_key=key, provider="offline", voice="offline-warm", locale="en-US",
-            text="Race.", result=_result(), org_id="second",
+            db,
+            cache_key=key,
+            provider="offline",
+            voice="offline-warm",
+            locale="en-US",
+            text="Race.",
+            result=_result(),
+            org_id="second",
         )
         kept = await _row(db, key)
     assert kept is not None and kept.org_id == "first" and kept.audio_key == first_file
@@ -281,18 +297,30 @@ async def test_the_encoding_runs_off_the_loop(app, monkeypatch):
 # --- Eviction ----------------------------------------------------------------
 
 
-async def _seed(db, name: str, *, org: str | None, size: int, days_ago: float,
-                pinned: bool = False) -> str:
+async def _seed(
+    db, name: str, *, org: str | None, size: int, days_ago: float, pinned: bool = False
+) -> str:
     """A line with a file of `size` bytes, last used `days_ago` days ago."""
     key = cache_key("offline", "v", "en-US", name)
     file_key = speech_cache.storage_key(key, "audio/mpeg")
     await get_storage().put_bytes(file_key, b"x" * size, "audio/mpeg")
-    db.add(SpeechClip(
-        cache_key=key, provider="cloned" if pinned else "offline", voice="v", locale="en-US",
-        char_count=1, duration_ms=100, cues_json=json.dumps(CUES), audio_mime="audio/mpeg",
-        audio_key=file_key, size_bytes=size, org_id=org, pinned=pinned,
-        last_used_at=utcnow() - timedelta(days=days_ago),
-    ))
+    db.add(
+        SpeechClip(
+            cache_key=key,
+            provider="cloned" if pinned else "offline",
+            voice="v",
+            locale="en-US",
+            char_count=1,
+            duration_ms=100,
+            cues_json=json.dumps(CUES),
+            audio_mime="audio/mpeg",
+            audio_key=file_key,
+            size_bytes=size,
+            org_id=org,
+            pinned=pinned,
+            last_used_at=utcnow() - timedelta(days=days_ago),
+        )
+    )
     await db.commit()
     return name
 
@@ -326,9 +354,7 @@ async def test_an_org_over_its_cap_loses_its_least_recently_used_lines(app, caps
             await _seed(db, f"b{i}", org="B", size=100, days_ago=10)
         # Pinned: never evicted, and not counted against the cap.
         await _seed(db, "pin", org="A", size=10_000, days_ago=30, pinned=True)
-        files = dict(
-            (await db.execute(select(SpeechClip.cache_key, SpeechClip.audio_key))).all()
-        )
+        files = dict((await db.execute(select(SpeechClip.cache_key, SpeechClip.audio_key))).all())
         evicted = await speech_cache.evict(db)
         left = await _left(db)
     # 500 bytes against a 300 cap: down to 90% of it, oldest first.
@@ -422,19 +448,39 @@ async def test_the_old_table_and_inline_recordings_are_drained_to_storage(app):
             ("kokoro", "af_heart", "a cache line"),  # made again on request: dropped
             ("cloned", "org9:sarah", "a cloned line"),  # cannot be: moved
         ):
-            db.add(LegacySpeechCache(
-                cache_key=cache_key(provider, voice, "en-US", text), provider=provider,
-                voice=voice, locale="en-US", char_count=len(text), audio_mime="audio/wav",
-                audio=_wav(), cues_json=json.dumps(CUES), duration_ms=1000,
-            ))
+            db.add(
+                LegacySpeechCache(
+                    cache_key=cache_key(provider, voice, "en-US", text),
+                    provider=provider,
+                    voice=voice,
+                    locale="en-US",
+                    char_count=len(text),
+                    audio_mime="audio/wav",
+                    audio=_wav(),
+                    cues_json=json.dumps(CUES),
+                    duration_ms=1000,
+                )
+            )
         # What migration 028 carries over: the recording still inline.
         inline_key = cache_key("cloned", "org9:mark", "en-US", "inline")
-        db.add(SpeechClip(
-            cache_key=inline_key, provider="cloned", voice="org9:mark", locale="en-US",
-            char_count=6, duration_ms=1000, cues_json=json.dumps(CUES), audio_mime="audio/wav",
-            audio_key=None, audio=_wav(), size_bytes=48044, org_id="org9", pinned=True,
-            last_used_at=utcnow(),
-        ))
+        db.add(
+            SpeechClip(
+                cache_key=inline_key,
+                provider="cloned",
+                voice="org9:mark",
+                locale="en-US",
+                char_count=6,
+                duration_ms=1000,
+                cues_json=json.dumps(CUES),
+                audio_mime="audio/wav",
+                audio_key=None,
+                audio=_wav(),
+                size_bytes=48044,
+                org_id="org9",
+                pinned=True,
+                last_used_at=utcnow(),
+            )
+        )
         await db.commit()
         # Served while still inline.
         served = await speech_cache.get(db, inline_key)
@@ -443,10 +489,13 @@ async def test_the_old_table_and_inline_recordings_are_drained_to_storage(app):
         moved = await speech_cache.drain(db)
         db.expunge_all()
         assert moved == 2
-        assert (await db.execute(select(func.count()).select_from(LegacySpeechCache))).scalar_one() == 0
+        assert (
+            await db.execute(select(func.count()).select_from(LegacySpeechCache))
+        ).scalar_one() == 0
         rows = (await db.execute(select(SpeechClip).order_by(SpeechClip.voice))).scalars().all()
         assert [(r.voice, r.org_id, r.pinned) for r in rows] == [
-            ("org9:mark", "org9", True), ("org9:sarah", "org9", True),
+            ("org9:mark", "org9", True),
+            ("org9:sarah", "org9", True),
         ]
         for row in rows:
             assert row.audio_key and row.audio_mime == "audio/mpeg"
@@ -471,7 +520,10 @@ def _alembic(database: Path, action: str, target: str) -> None:
     env = {**os.environ, "DATABASE_URL": f"sqlite+aiosqlite:///{database}"}
     result = subprocess.run(
         [sys.executable, "-c", _ALEMBIC.format(action=action, target=target)],
-        cwd=BACKEND, env=env, capture_output=True, text=True,
+        cwd=BACKEND,
+        env=env,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 0, result.stderr[-3000:]
 
@@ -481,10 +533,14 @@ def test_028_moves_cloned_lines_and_drops_the_rest(tmp_path):
     _alembic(database, "upgrade", "027_scene")
     recording = _wav()
     with closing(sqlite3.connect(database)) as db:
-        for index, (provider, voice) in enumerate((
-            ("kokoro", "af_heart"), ("piper", "fa_amir"), ("cloned", "org1:sarah"),
-            ("cloned", "nameless"),
-        )):
+        for index, (provider, voice) in enumerate(
+            (
+                ("kokoro", "af_heart"),
+                ("piper", "fa_amir"),
+                ("cloned", "org1:sarah"),
+                ("cloned", "nameless"),
+            )
+        ):
             db.execute(
                 "insert into speech_cache (id, created_at, updated_at, cache_key, provider, "
                 "voice, locale, char_count, audio_mime, audio, cues_json, duration_ms) values "
@@ -504,10 +560,28 @@ def test_028_moves_cloned_lines_and_drops_the_rest(tmp_path):
             "last_used_at from speech_clips order by id"
         ).fetchall()
     assert rows == [
-        ("id2", "cloned", "org1:sarah", "org1", 1, len(recording), len(recording), None,
-         "2026-09-02 10:00:00"),
-        ("id3", "cloned", "nameless", None, 1, len(recording), len(recording), None,
-         "2026-09-02 10:00:00"),
+        (
+            "id2",
+            "cloned",
+            "org1:sarah",
+            "org1",
+            1,
+            len(recording),
+            len(recording),
+            None,
+            "2026-09-02 10:00:00",
+        ),
+        (
+            "id3",
+            "cloned",
+            "nameless",
+            None,
+            1,
+            len(recording),
+            len(recording),
+            None,
+            "2026-09-02 10:00:00",
+        ),
     ]
 
     # A rollback to a release before 028 stamps the database back to 027
@@ -534,7 +608,9 @@ def test_028_moves_cloned_lines_and_drops_the_rest(tmp_path):
     with closing(sqlite3.connect(database)) as db:
         assert db.execute("select count(*) from speech_cache").fetchone() == (0,)
         assert db.execute("select id from speech_clips order by id").fetchall() == [
-            ("id2",), ("id3",), ("id9",),
+            ("id2",),
+            ("id3",),
+            ("id9",),
         ]
 
     _alembic(database, "downgrade", "027_scene")

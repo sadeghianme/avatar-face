@@ -79,9 +79,9 @@ class Faces:
         monkeypatch.setattr(landmarks, "detect", self.detect)
         photo = face_template.place(face_box((WIDTH, HEIGHT)))
         box = pa.face_crop_box(photo)
-        self.by_size[(pa.CROP_SIZE, pa.CROP_SIZE)] = (
-            photo - np.array(box[:2])
-        ) * (pa.CROP_SIZE / box[2])
+        self.by_size[(pa.CROP_SIZE, pa.CROP_SIZE)] = (photo - np.array(box[:2])) * (
+            pa.CROP_SIZE / box[2]
+        )
 
     def detect(self, image):
         if image.size in self.none_for:
@@ -187,7 +187,10 @@ async def ai_consent(client, headers, org_id) -> str:
 
 async def _adjust(client, headers, base, consent_id, mode="touchup", **extra):
     return await _run(
-        client, headers, "POST", f"{base}/adjust",
+        client,
+        headers,
+        "POST",
+        f"{base}/adjust",
         json={"mode": mode, "consent_id": consent_id, **extra},
     )
 
@@ -315,6 +318,7 @@ async def test_a_touchup_round_offers_checked_candidates_and_keeps_the_original(
     assert candidate["adjust"]["model"] == imagegen.MODEL
     assert candidate["adjust"]["rejected"] is None
     assert candidate["adjust"]["generated_eyes"] is False
+
     # The same stored image (presigned URLs differ only in their expiry).
     def stored(step):
         return step["url"].split("?", 1)[0]
@@ -329,7 +333,7 @@ async def test_a_touchup_round_offers_checked_candidates_and_keeps_the_original(
 
     # Metered: one image event per provider call, with what it was for.
     assert await _usage(org_id, IMAGE_KIND) == ["adjust_touchup", "adjust_touchup"]
-    row = (await _row(base))
+    row = await _row(base)
     assert row.consent_ids == [consent_id]
 
 
@@ -358,7 +362,8 @@ async def test_choosing_a_touchup_and_finishing_discloses_it_to_visitors(client,
         row = (await db.execute(select(Avatar).where(Avatar.id == avatar_id))).scalar_one()
     config = json.loads(row.published_config)
     assert config["disclosure"] == {
-        "ai_edited": {"mode": "touchup", "model": imagegen.MODEL}, "line": "human",
+        "ai_edited": {"mode": "touchup", "model": imagegen.MODEL},
+        "line": "human",
     }
     assert consent_id in row.consent_ids and len(row.consent_ids) == 2
 
@@ -426,9 +431,13 @@ async def test_a_safety_refusal_is_reported_and_never_retried(client, faces, ima
     assert [s["id"] for s in body["steps"]] == ["original"]
     (candidate,) = body["ai"]["last_round"]["candidates"]
     assert candidate == {
-        "step": None, "ok": False, "generated_eyes": False,
-        "reason": {"code": "safety_refused",
-                   "detail": "The AI declined to edit this photo, so it was not asked again"},
+        "step": None,
+        "ok": False,
+        "generated_eyes": False,
+        "reason": {
+            "code": "safety_refused",
+            "detail": "The AI declined to edit this photo, so it was not asked again",
+        },
     }
     assert body["ai"]["adjust_rounds_left"] == 1, "the provider answered: the round is spent"
     assert await _usage(org_id, IMAGE_KIND) == ["adjust_touchup"]
@@ -462,12 +471,14 @@ async def test_a_candidate_that_fails_its_checks_is_shown_but_cannot_be_chosen(
     recoloured = Image.fromarray(
         np.clip(
             np.asarray(Image.open(io.BytesIO(portrait())), dtype=np.float64) * [0.5, 0.9, 1.6],
-            0, 255,
+            0,
+            255,
         ).astype(np.uint8)
     )
     images.script = [png_of(recoloured)]
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="regenerate", count=1)
+    await _adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), mode="regenerate", count=1
+    )
     body = await _get(client, headers, base)
     step = _step(body, "adjusted:0")
     assert step["adjust"]["rejected"]["code"] == "skin_tone_changed"
@@ -483,8 +494,9 @@ async def test_a_result_without_a_face_is_rejected(client, faces, images):
     base, _ = await _create(client, headers, org_id)
     faces.none_for.add((300, 300))
     images.script = [png_of(Image.new("RGB", (300, 300), (120, 120, 120)))]
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="regenerate", count=1)
+    await _adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), mode="regenerate", count=1
+    )
     body = await _get(client, headers, base)
     assert _step(body, "adjusted:0")["adjust"]["rejected"]["code"] == "no_face_in_result"
 
@@ -494,8 +506,15 @@ async def test_choosing_a_stylised_result_makes_the_creation_an_animation(client
     base, _ = await _create(client, headers, org_id)
     drawn = png_of(Image.new("RGB", (480, 600), (40, 160, 220)))
     images.script = [drawn]
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="stylise", style="anime", count=1)
+    await _adjust(
+        client,
+        headers,
+        base,
+        await ai_consent(client, headers, org_id),
+        mode="stylise",
+        style="anime",
+        count=1,
+    )
     assert "anime" in images.calls[0]["prompt"]
     body = await _get(client, headers, base)
     assert _step(body, "adjusted:0")["adjust"]["style"] == "anime"
@@ -550,7 +569,9 @@ async def test_the_photo_check_recommends_a_fix_only_when_one_is_needed(
         faces.changes[GOOD] = change
     _, body = await _create(client, headers, org_id, data=_good_portrait())
     assert body["analysis"]["recommendation"] == {
-        "image": "original", "mode": mode, "reasons": reasons,
+        "image": "original",
+        "mode": mode,
+        "reasons": reasons,
     }
     # Pre-selected in the wizard; nothing when nothing needs fixing.
     assert body["ai"]["suggested"] == ([] if mode == "none" else [mode])
@@ -568,7 +589,9 @@ async def test_an_animal_is_recommended_a_regenerate_only_for_its_pose(client, f
     faces.none_for.add((WIDTH, HEIGHT))
     _, unseen = await _create(client, headers, org_id, face_type="animal")
     assert unseen["analysis"]["recommendation"] == {
-        "image": "original", "mode": "none", "reasons": [],
+        "image": "original",
+        "mode": "none",
+        "reasons": [],
     }
     assert unseen["ai"]["suggested"] == []
     assert unseen["ai"]["modes"] == ["regenerate"]
@@ -587,14 +610,17 @@ async def test_the_recommendation_follows_the_current_image(client, faces, image
 
     # A regenerated picture, facing the camera, is checked when it is made.
     images.script = [portrait(640, 800)]
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="regenerate", count=1)
+    await _adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), mode="regenerate", count=1
+    )
     body = await _get(client, headers, base)
     assert body["analysis"]["recommendation"]["image"] == "original", "not chosen yet"
     chosen = await client.post(f"{base}/choose", json={"choice": "adjusted:0"}, headers=headers)
     assert chosen.status_code == 200, chosen.text
     assert chosen.json()["analysis"]["recommendation"] == {
-        "image": "adjusted:0", "mode": "none", "reasons": [],
+        "image": "adjusted:0",
+        "mode": "none",
+        "reasons": [],
     }
     assert chosen.json()["ai"]["suggested"] == []
 
@@ -613,7 +639,9 @@ async def test_framing_rechecks_the_photo(client, faces):
         base, json={"crop": {"x": 0.1, "y": 0.1, "w": 0.8, "h": 0.8}}, headers=headers
     )
     assert framed.json()["analysis"]["recommendation"] == {
-        "image": "framed", "mode": "none", "reasons": [],
+        "image": "framed",
+        "mode": "none",
+        "reasons": [],
     }
     # Step 1's pre-fill still describes the upload.
     assert framed.json()["analysis"]["face_state"]["eyes_closed"] is True
@@ -637,14 +665,18 @@ async def _image_at(client, url: str) -> Image.Image:
 
 
 async def test_a_cutout_is_sent_on_grey_never_with_its_background(
-    client, faces, images, segmenter  # noqa: F811
+    client,
+    faces,
+    images,
+    segmenter,  # noqa: F811
 ):
     headers, org_id = await _org(client, "cutter")
     base, _ = await _create(client, headers, org_id)
     await _cut_out(client, headers, base)
 
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="regenerate", count=1)
+    await _adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), mode="regenerate", count=1
+    )
     body = await _get(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     sent = Image.open(io.BytesIO(images.calls[0]["source"]))
@@ -659,14 +691,18 @@ async def test_a_cutout_is_sent_on_grey_never_with_its_background(
 
 
 async def test_choosing_a_regenerated_picture_cuts_it_out_again(
-    client, faces, images, segmenter  # noqa: F811
+    client,
+    faces,
+    images,
+    segmenter,  # noqa: F811
 ):
     headers, org_id = await _org(client, "recutter")
     base, _ = await _create(client, headers, org_id)
     await _cut_out(client, headers, base)
     await _detect(client, headers, base)
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="regenerate", count=1)
+    await _adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), mode="regenerate", count=1
+    )
 
     chosen = await _run(client, headers, "POST", f"{base}/choose", json={"choice": "adjusted:0"})
     assert chosen.status_code == 202, chosen.text
@@ -703,13 +739,18 @@ async def test_choosing_a_regenerated_picture_cuts_it_out_again(
 
 
 async def test_a_choice_whose_cutout_cannot_start_is_not_made(
-    client, faces, images, segmenter, gate  # noqa: F811
+    client,
+    faces,
+    images,
+    segmenter,
+    gate,  # noqa: F811
 ):
     headers, org_id = await _org(client, "atomic")
     base, _ = await _create(client, headers, org_id)
     await _cut_out(client, headers, base)
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="regenerate", count=1)
+    await _adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), mode="regenerate", count=1
+    )
     gate.close()
     busy = await client.post(f"{base}/detect", headers=headers)
     assert busy.status_code == 202
@@ -722,14 +763,18 @@ async def test_a_choice_whose_cutout_cannot_start_is_not_made(
 
 
 async def test_with_the_background_kept_a_regenerated_picture_is_used_as_is(
-    client, faces, images, segmenter  # noqa: F811
+    client,
+    faces,
+    images,
+    segmenter,  # noqa: F811
 ):
     headers, org_id = await _org(client, "keeper")
     base, _ = await _create(client, headers, org_id)
     kept = await client.post(f"{base}/background", json={"mode": "keep"}, headers=headers)
     assert kept.status_code == 200 and kept.json()["background"] == "keep"
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="regenerate", count=1)
+    await _adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), mode="regenerate", count=1
+    )
     chosen = await client.post(f"{base}/choose", json={"choice": "adjusted:0"}, headers=headers)
     assert chosen.status_code == 200, chosen.text
     assert chosen.json()["current"] == "adjusted:0"
@@ -778,14 +823,24 @@ async def test_a_touchup_of_a_cutout_is_a_cutout(client, faces, images, segmente
 
 
 async def test_a_stylised_result_keeps_its_drawn_backdrop(
-    client, faces, images, segmenter  # noqa: F811
+    client,
+    faces,
+    images,
+    segmenter,  # noqa: F811
 ):
     headers, org_id = await _org(client, "drawn")
     base, _ = await _create(client, headers, org_id)
     await _cut_out(client, headers, base)
     images.script = [png_of(Image.new("RGB", (480, 600), (40, 160, 220)))]
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="stylise", style="anime", count=1)
+    await _adjust(
+        client,
+        headers,
+        base,
+        await ai_consent(client, headers, org_id),
+        mode="stylise",
+        style="anime",
+        count=1,
+    )
     chosen = await client.post(f"{base}/choose", json={"choice": "adjusted:0"}, headers=headers)
     assert chosen.status_code == 200, chosen.text
     after = chosen.json()
@@ -798,13 +853,17 @@ async def test_a_stylised_result_keeps_its_drawn_backdrop(
 
 
 async def test_reframing_drops_the_ai_pictures_and_their_cutouts(
-    client, faces, images, segmenter  # noqa: F811
+    client,
+    faces,
+    images,
+    segmenter,  # noqa: F811
 ):
     headers, org_id = await _org(client, "reframer2")
     base, _ = await _create(client, headers, org_id)
     await _cut_out(client, headers, base)
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="regenerate", count=1)
+    await _adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), mode="regenerate", count=1
+    )
     await _run(client, headers, "POST", f"{base}/choose", json={"choice": "adjusted:0"})
     assert (await _get(client, headers, base))["current"] == "cutout:0"
     reframed = await client.patch(
@@ -822,7 +881,7 @@ async def test_a_draft_made_before_checks_were_kept_has_no_recommendation(client
     headers, org_id = await _org(client, "legacydraft")
     base, _ = await _create(client, headers, org_id)
     async with get_session_factory()() as db:
-        row = (await db.execute(select(Creation).where(Creation.id == base.rsplit("/", 1)[1])))
+        row = await db.execute(select(Creation).where(Creation.id == base.rsplit("/", 1)[1]))
         creation = row.scalar_one()
         steps = json.loads(json.dumps(creation.steps))
         steps["items"]["original"].pop("check")
@@ -864,14 +923,18 @@ async def test_a_person_is_finished_only_with_the_uploaders_depiction_statement(
     theirs = await depiction(client, colleague, base)
     borrowed = await client.post(
         f"{base}/finish",
-        json={"name": "A", "anchors_id": anchors["id"], "consent_id": theirs}, headers=headers,
+        json={"name": "A", "anchors_id": anchors["id"], "consent_id": theirs},
+        headers=headers,
     )
     assert borrowed.status_code == 403
     # An AI consent is not a depiction statement either.
     wrong = await client.post(
         f"{base}/finish",
-        json={"name": "A", "anchors_id": anchors["id"],
-              "consent_id": await ai_consent(client, headers, org_id)},
+        json={
+            "name": "A",
+            "anchors_id": anchors["id"],
+            "consent_id": await ai_consent(client, headers, org_id),
+        },
         headers=headers,
     )
     assert wrong.status_code == 403
@@ -879,7 +942,10 @@ async def test_a_person_is_finished_only_with_the_uploaders_depiction_statement(
 
     mine = await depiction(client, headers, base)
     ok = await _run(
-        client, headers, "POST", f"{base}/finish",
+        client,
+        headers,
+        "POST",
+        f"{base}/finish",
         json={"name": "A", "anchors_id": anchors["id"], "consent_id": mine},
     )
     assert ok.status_code == 202
@@ -896,7 +962,10 @@ async def test_an_animal_needs_no_depiction_statement(client):
     base, _ = await _create(client, headers, org_id, face_type="animal")
     anchors = await _detect(client, headers, base)
     response = await _run(
-        client, headers, "POST", f"{base}/finish",
+        client,
+        headers,
+        "POST",
+        f"{base}/finish",
         json={"name": "Rex", "anchors_id": anchors["id"], "marks": anchors["marks"]},
     )
     assert response.status_code == 202, response.text
@@ -959,8 +1028,9 @@ async def test_the_same_pixels_are_answered_from_the_cache(client, vision):
     assert await _usage(org_id, VISION_KIND) == ["detect"]
 
     # New pixels, and the one detection is spent.
-    await client.patch(base, json={"crop": {"x": 0.05, "y": 0.05, "w": 0.9, "h": 0.9}},
-                       headers=headers)
+    await client.patch(
+        base, json={"crop": {"x": 0.05, "y": 0.05, "w": 0.9, "h": 0.9}}, headers=headers
+    )
     spent = await _detect_ai(client, headers, base, consent_id)
     assert spent.status_code == 409 and spent.json()["code"] == "budget_spent"
     # By hand still works.
@@ -1063,7 +1133,9 @@ async def test_a_generated_picture_becomes_the_creations_original(client, faces,
     assert body["face_type"] == "human"
     original = _step(body, "original")
     assert original["generated"] == {
-        "model": imagegen.MODEL, "style": "illustrated", "provider": "gemini",
+        "model": imagegen.MODEL,
+        "style": "illustrated",
+        "provider": "gemini",
         "source_avatar_id": None,
     }
     assert body["analysis"]["detected"] is True
@@ -1082,9 +1154,7 @@ async def test_a_generated_picture_becomes_the_creations_original(client, faces,
     assert await _usage(org_id, GENERATED_AVATAR_KIND) == ["dashboard"]
 
 
-async def test_generation_is_off_with_the_switch_and_a_source_needs_consent(
-    client, faces, images
-):
+async def test_generation_is_off_with_the_switch_and_a_source_needs_consent(client, faces, images):
     from tests.conftest import create_ready_avatar
 
     headers, org_id = await _org(client, "gated")
@@ -1093,12 +1163,13 @@ async def test_generation_is_off_with_the_switch_and_a_source_needs_consent(
     assert no_consent.status_code == 403 and no_consent.json()["code"] == "consent_required"
 
     consent_id = await ai_consent(client, headers, org_id)
-    unknown = await _generate(client, headers, org_id, source_avatar_id="nope", consent_id=consent_id)
+    unknown = await _generate(
+        client, headers, org_id, source_avatar_id="nope", consent_id=consent_id
+    )
     assert unknown.status_code == 404
 
     images.script = [png_of(Image.open(io.BytesIO(portrait())))]
-    ok = await _generate(client, headers, org_id, source_avatar_id=avatar_id,
-                         consent_id=consent_id)
+    ok = await _generate(client, headers, org_id, source_avatar_id=avatar_id, consent_id=consent_id)
     assert ok.status_code == 202, ok.text
     assert images.calls[0]["source"] is not None and images.calls[0]["mime"] == "image/jpeg"
 
@@ -1146,7 +1217,8 @@ async def test_a_snapshot_published_before_disclosure_is_served_without_one(clie
     avatar_id = await create_ready_avatar(client, headers, org_id)
     key = (
         await client.post(
-            f"/orgs/{org_id}/api-keys", json={"name": "site", "allowed_domains": []},
+            f"/orgs/{org_id}/api-keys",
+            json={"name": "site", "allowed_domains": []},
             headers=headers,
         )
     ).json()["plaintext"]
@@ -1179,7 +1251,6 @@ async def test_the_old_generation_and_staging_routes_are_gone(client):
         assert response.status_code in (404, 405), (path, response.status_code)
 
 
-
 # --- the statement follows the pixels, not the line ---------------------------------------
 
 
@@ -1196,8 +1267,15 @@ async def test_a_stylised_person_still_needs_the_depiction_statement(client, fac
     headers, org_id = await _org(client, "styler")
     base, _ = await _create(client, headers, org_id)
     images.script = [png_of(Image.new("RGB", (480, 600), (40, 160, 220)))]
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="stylise", style="anime", count=1)
+    await _adjust(
+        client,
+        headers,
+        base,
+        await ai_consent(client, headers, org_id),
+        mode="stylise",
+        style="anime",
+        count=1,
+    )
     chosen = await client.post(f"{base}/choose", json={"choice": "adjusted:0"}, headers=headers)
     assert chosen.json()["face_type"] == "cartoon"
     assert chosen.json()["statement"] == "depiction"
@@ -1239,7 +1317,7 @@ async def test_a_statement_made_for_another_creation_does_not_count(client, face
 
 
 async def test_a_face_made_from_words_takes_its_own_statement(client, faces, images):
-    """"I am this person" cannot be true of a generated face; the statement
+    """ "I am this person" cannot be true of a generated face; the statement
     for it is that it is no real person, and the other one does not do."""
     images.script = [png_of(Image.open(io.BytesIO(portrait())))]
     headers, org_id = await _org(client, "wordsmith")
@@ -1249,15 +1327,24 @@ async def test_a_face_made_from_words_takes_its_own_statement(client, faces, ima
     anchors = await _detect(client, headers, base)
     wrong = await client.post(
         f"{base}/finish",
-        json={"name": "A", "anchors_id": anchors["id"],
-              "consent_id": await depiction(client, headers, base)},
+        json={
+            "name": "A",
+            "anchors_id": anchors["id"],
+            "consent_id": await depiction(client, headers, base),
+        },
         headers=headers,
     )
     assert wrong.status_code == 403 and wrong.json()["scope"] == "generated_face"
     right = await _run(
-        client, headers, "POST", f"{base}/finish",
-        json={"name": "A", "anchors_id": anchors["id"],
-              "consent_id": await depiction(client, headers, base, "generated_face")},
+        client,
+        headers,
+        "POST",
+        f"{base}/finish",
+        json={
+            "name": "A",
+            "anchors_id": anchors["id"],
+            "consent_id": await depiction(client, headers, base, "generated_face"),
+        },
     )
     assert right.status_code == 202, right.text
     assert (await _get(client, headers, base))["status"] == "finished"
@@ -1267,7 +1354,10 @@ async def test_a_face_made_from_words_takes_its_own_statement(client, faces, ima
 
 
 async def test_keeping_the_photo_after_a_stylise_puts_the_person_back(
-    client, faces, images, segmenter  # noqa: F811
+    client,
+    faces,
+    images,
+    segmenter,  # noqa: F811
 ):
     """Upload, remove the background, stylise, take it, then "Keep my photo":
     the photo is a person's again (the human line, the background removed,
@@ -1276,8 +1366,15 @@ async def test_keeping_the_photo_after_a_stylise_puts_the_person_back(
     base, _ = await _create(client, headers, org_id)
     await _cut_out(client, headers, base)
     images.script = [png_of(Image.new("RGB", (480, 600), (40, 160, 220)))]
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="stylise", style="anime", count=2)
+    await _adjust(
+        client,
+        headers,
+        base,
+        await ai_consent(client, headers, org_id),
+        mode="stylise",
+        style="anime",
+        count=2,
+    )
     taken = await client.post(f"{base}/choose", json={"choice": "adjusted:0"}, headers=headers)
     assert taken.json()["face_type"] == "cartoon"
     # The cut-out the round was made from is gone with the photo line; the
@@ -1303,8 +1400,15 @@ async def test_keeping_the_photo_restores_a_kept_background_at_once(client, face
     base, _ = await _create(client, headers, org_id)
     await client.post(f"{base}/background", json={"mode": "keep"}, headers=headers)
     images.script = [png_of(Image.new("RGB", (480, 600), (40, 160, 220)))]
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="stylise", style="anime", count=1)
+    await _adjust(
+        client,
+        headers,
+        base,
+        await ai_consent(client, headers, org_id),
+        mode="stylise",
+        style="anime",
+        count=1,
+    )
     await client.post(f"{base}/choose", json={"choice": "adjusted:0"}, headers=headers)
     kept = await client.post(f"{base}/choose", json={"choice": "original"}, headers=headers)
     assert kept.status_code == 200
@@ -1316,8 +1420,15 @@ async def test_choosing_a_line_forgets_the_line_before_the_stylise(client, faces
     headers, org_id = await _org(client, "decider")
     base, _ = await _create(client, headers, org_id)
     images.script = [png_of(Image.new("RGB", (480, 600), (40, 160, 220)))]
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="stylise", style="anime", count=1)
+    await _adjust(
+        client,
+        headers,
+        base,
+        await ai_consent(client, headers, org_id),
+        mode="stylise",
+        style="anime",
+        count=1,
+    )
     await client.post(f"{base}/choose", json={"choice": "adjusted:0"}, headers=headers)
     await client.patch(base, json={"face_type": "animal"}, headers=headers)
     await client.patch(base, json={"face_type": "cartoon"}, headers=headers)
@@ -1329,7 +1440,10 @@ async def test_choosing_a_line_forgets_the_line_before_the_stylise(client, faces
 
 
 async def test_a_cutout_avatar_is_sent_on_grey_as_a_generation_source(
-    client, faces, images, segmenter  # noqa: F811
+    client,
+    faces,
+    images,
+    segmenter,  # noqa: F811
 ):
     """The source avatar is a cut-out: the removed room must not reach
     Google, as the consent just given says (a removed background is sent as
@@ -1343,8 +1457,13 @@ async def test_a_cutout_avatar_is_sent_on_grey_as_a_generation_source(
     assert avatar.original_image_key, "the opaque photo is kept for putting the background back"
 
     images.script = [png_of(Image.open(io.BytesIO(portrait())))]
-    made = await _generate(client, headers, org_id, source_avatar_id=avatar.id,
-                           consent_id=await ai_consent(client, headers, org_id))
+    made = await _generate(
+        client,
+        headers,
+        org_id,
+        source_avatar_id=avatar.id,
+        consent_id=await ai_consent(client, headers, org_id),
+    )
     assert made.status_code == 202, made.text
     sent = Image.open(io.BytesIO(images.calls[0]["source"]))
     assert sent.format == "JPEG" and sent.mode == "RGB"
@@ -1407,14 +1526,18 @@ async def _switch_off(org_id: str) -> None:
 
     async with get_session_factory()() as db:
         await db.execute(
-            update(Organization).where(Organization.id == org_id)
+            update(Organization)
+            .where(Organization.id == org_id)
             .values(third_party_ai_enabled=False)
         )
         await db.commit()
 
 
 async def test_a_queued_adjust_sends_nothing_once_ai_is_switched_off(
-    client, faces, images, gate  # noqa: F811
+    client,
+    faces,
+    images,
+    gate,  # noqa: F811
 ):
     headers, org_id = await _org(client, "queued")
     base, _ = await _create(client, headers, org_id)
@@ -1435,9 +1558,7 @@ async def test_a_queued_adjust_sends_nothing_once_ai_is_switched_off(
     assert body["ai"]["adjust_rounds_left"] == 2, "nothing was sent: the round is given back"
 
 
-async def test_switching_ai_off_mid_round_stops_the_second_call(
-    client, faces, images, monkeypatch
-):
+async def test_switching_ai_off_mid_round_stops_the_second_call(client, faces, images, monkeypatch):
     headers, org_id = await _org(client, "midround")
     base, _ = await _create(client, headers, org_id)
     real = images.edit
@@ -1456,7 +1577,9 @@ async def test_switching_ai_off_mid_round_stops_the_second_call(
 
 
 async def test_ai_points_are_not_asked_for_once_ai_is_switched_off(
-    client, vision, gate  # noqa: F811
+    client,
+    vision,
+    gate,  # noqa: F811
 ):
     headers, org_id = await _org(client, "pointsoff")
     base, _ = await _create(client, headers, org_id, face_type="animal")
@@ -1486,8 +1609,13 @@ async def test_a_retried_generation_from_a_photo_needs_the_retrying_members_cons
     owner, org_id = await _org(client, "genowner")
     avatar_id = await create_ready_avatar(client, owner, org_id)
     images.script = ["error"]
-    response = await _generate(client, owner, org_id, source_avatar_id=avatar_id,
-                               consent_id=await ai_consent(client, owner, org_id))
+    response = await _generate(
+        client,
+        owner,
+        org_id,
+        source_avatar_id=avatar_id,
+        consent_id=await ai_consent(client, owner, org_id),
+    )
     base = f"/orgs/{org_id}/creations/{response.json()['id']}"
     body = await _get(client, owner, base)
     assert body["job"]["retryable"] is True and len(images.calls) == 1
@@ -1519,8 +1647,9 @@ async def test_a_declined_whole_photo_edit_is_asked_once_more_on_the_head_crop(
     faces.by_size[(WIDTH, HEIGHT)] = face_template.place((150, 150, 250, 270))
     headers, org_id = await _org(client, "crop-retry")
     base, _ = await _create(client, headers, org_id)
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="regenerate", count=1)
+    await _adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), mode="regenerate", count=1
+    )
     body = await _get(client, headers, base)
     assert len(images.calls) == 2
     full, crop = (Image.open(io.BytesIO(c["source"])) for c in images.calls)
@@ -1530,24 +1659,21 @@ async def test_a_declined_whole_photo_edit_is_asked_once_more_on_the_head_crop(
     assert await _usage(org_id, IMAGE_KIND) == ["adjust_regen", "adjust_regen"], "both asks metered"
 
 
-async def test_a_head_crop_that_is_declined_too_is_not_asked_a_third_time(
-    client, faces, images
-):
+async def test_a_head_crop_that_is_declined_too_is_not_asked_a_third_time(client, faces, images):
     images.script = ["refuse"]
     faces.by_size[(WIDTH, HEIGHT)] = face_template.place((150, 150, 250, 270))
     headers, org_id = await _org(client, "crop-refused")
     base, _ = await _create(client, headers, org_id)
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="regenerate", count=2)
+    await _adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), mode="regenerate", count=2
+    )
     body = await _get(client, headers, base)
     assert len(images.calls) == 2, "the photo, then its head crop; never a third time"
     (candidate,) = body["ai"]["last_round"]["candidates"]
     assert candidate["reason"]["code"] == "safety_refused"
 
 
-async def test_a_photo_that_is_already_head_and_shoulders_is_not_asked_again(
-    client, faces, images
-):
+async def test_a_photo_that_is_already_head_and_shoulders_is_not_asked_again(client, faces, images):
     """When the face fills the frame the head crop is the same picture, so a
     refusal stands: asking again would be the same request."""
     images.script = ["refuse"]
@@ -1555,6 +1681,7 @@ async def test_a_photo_that_is_already_head_and_shoulders_is_not_asked_again(
     faces.by_size[(WIDTH, HEIGHT)] = face_template.place((20, 20, 380, 480))
     headers, org_id = await _org(client, "crop-same")
     base, _ = await _create(client, headers, org_id)
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  mode="regenerate", count=1)
+    await _adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), mode="regenerate", count=1
+    )
     assert len(images.calls) == 1

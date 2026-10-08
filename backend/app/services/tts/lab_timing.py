@@ -7,6 +7,7 @@ stretched to the audio's length. The lab keeps its own uncached comparison
 path (`synthesize_native`), which also returns the stretched baseline.
 Never changes a stored avatar.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -47,12 +48,16 @@ def native_cues(spans: list[PhoneSpan], duration_ms: int, audio: bytes) -> list[
     previous_end = 0.0
     stress_start: float | None = None
     for span in spans:
-        if (not math.isfinite(span.start) or not math.isfinite(span.end)
-                or span.start < 0 or span.end < span.start
-                or span.start < previous_end - 0.002
-                or span.end * 1000 > duration_ms + 2):
+        if (
+            not math.isfinite(span.start)
+            or not math.isfinite(span.end)
+            or span.start < 0
+            or span.end < span.start
+            or span.start < previous_end - 0.002
+            or span.end * 1000 > duration_ms + 2
+        ):
             raise ValueError("Invalid native phoneme timestamps")
-        contiguous = abs(span.start - previous_end) <= .002
+        contiguous = abs(span.start - previous_end) <= 0.002
         previous_end = span.end
         if span.phoneme in {"ˈ", "ˌ"}:
             if stress_start is None or not contiguous:
@@ -74,19 +79,34 @@ def native_cues(spans: list[PhoneSpan], duration_ms: int, audio: bytes) -> list[
     while i < len(spans):
         span = spans[i]
         start, end = span.start, span.end
-        if (not math.isfinite(start) or not math.isfinite(end)
-                or start < 0 or end < start or start < previous_end - 0.002
-                or end * 1000 > duration_ms + 2):
+        if (
+            not math.isfinite(start)
+            or not math.isfinite(end)
+            or start < 0
+            or end < start
+            or start < previous_end - 0.002
+            or end * 1000 > duration_ms + 2
+        ):
             raise ValueError("Invalid native phoneme timestamps")
         previous_end = end
         symbol = span.phoneme
         # Validate each original span even when combining an affricate.
-        if i + 1 < len(spans) and symbol + spans[i + 1].phoneme in {"tʃ", "dʒ", "ts", "dz", "tɕ", "dʑ"}:
+        if i + 1 < len(spans) and symbol + spans[i + 1].phoneme in {
+            "tʃ",
+            "dʒ",
+            "ts",
+            "dz",
+            "tɕ",
+            "dʑ",
+        }:
             following = spans[i + 1]
-            if (math.isfinite(following.start) and math.isfinite(following.end)
-                    and abs(following.start - end) <= 0.002
-                    and following.end >= following.start
-                    and following.end * 1000 <= duration_ms + 2):
+            if (
+                math.isfinite(following.start)
+                and math.isfinite(following.end)
+                and abs(following.start - end) <= 0.002
+                and following.end >= following.start
+                and following.end * 1000 <= duration_ms + 2
+            ):
                 symbol += following.phoneme
                 end = following.end
                 previous_end = end
@@ -135,10 +155,12 @@ _semaphore: asyncio.Semaphore | None = None
 def configured() -> bool:
     """Are the timestamped model and the voices installed?"""
     settings = get_settings()
-    return bool(settings.kokoro_lipsync_model_path
-                and Path(settings.kokoro_lipsync_model_path).is_file()
-                and settings.kokoro_voices_path
-                and Path(settings.kokoro_voices_path).is_file())
+    return bool(
+        settings.kokoro_lipsync_model_path
+        and Path(settings.kokoro_lipsync_model_path).is_file()
+        and settings.kokoro_voices_path
+        and Path(settings.kokoro_voices_path).is_file()
+    )
 
 
 def _get_engine():
@@ -147,6 +169,7 @@ def _get_engine():
         if _engine is None:
             # The ONNX runtime and its model: heavy, loaded on first speech.
             from kokoro_onnx import Kokoro
+
             settings = get_settings()
             model, voices = settings.kokoro_lipsync_model_path, settings.kokoro_voices_path
             assert model and voices  # callers check is_configured() first
@@ -171,7 +194,10 @@ def render_timed(text: str, voice_id: str, lang: str) -> tuple[bytes, int, list[
 
     with _render_lock:
         samples, rate, timings = _get_engine().create_timed(
-            text, voice=voice_id, speed=1.0, lang=lang,
+            text,
+            voice=voice_id,
+            speed=1.0,
+            lang=lang,
         )
     buffer = io.BytesIO()
     sf.write(buffer, np.asarray(samples), rate, format="WAV", subtype="PCM_16")
@@ -180,7 +206,9 @@ def render_timed(text: str, voice_id: str, lang: str) -> tuple[bytes, int, list[
 
 
 def _render(text: str, voice: str) -> tuple[bytes, int, list[dict], list[dict]]:
-    chosen = next((v for v in VOICES if v.id == voice), next(v for v in VOICES if v.id == DEFAULT_VOICE))
+    chosen = next(
+        (v for v in VOICES if v.id == voice), next(v for v in VOICES if v.id == DEFAULT_VOICE)
+    )
     audio, duration, spans = render_timed(text, chosen.id, LANG_BY_PREFIX[chosen.id[0]])
     cues = native_cues(spans, duration, audio)
     baseline = cues_from_text(text, duration, chosen.locale, audio=audio)
@@ -203,10 +231,12 @@ async def synthesize_native(text: str, voice: str):
         if task.done():
             semaphore.release()
         else:
+
             def release(finished):
                 semaphore.release()
                 if not finished.cancelled():
                     finished.exception()  # consume a failed abandoned inference
+
             task.add_done_callback(release)
 
 

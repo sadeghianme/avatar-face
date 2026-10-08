@@ -36,8 +36,12 @@ async def test_a_failed_write_leaves_the_previous_file_whole(local, tmp_path, mo
 
 
 async def test_delete_prefix_takes_a_folder_and_nothing_beside_it(local):
-    for key in ("orgs/o/avatars/1/source.png", "orgs/o/avatars/1/published/r3/rig.json",
-                "orgs/o/avatars/10/source.png", "orgs/o/candidates/x.png"):
+    for key in (
+        "orgs/o/avatars/1/source.png",
+        "orgs/o/avatars/1/published/r3/rig.json",
+        "orgs/o/avatars/10/source.png",
+        "orgs/o/candidates/x.png",
+    ):
         await local.put_bytes(key, b"x", "image/png")
     assert await local.delete_prefix("orgs/o/avatars/1/") == 2
     assert not await local.exists("orgs/o/avatars/1/source.png")
@@ -93,8 +97,12 @@ async def test_s3_delete_prefix_lists_and_deletes_in_batches(monkeypatch):
 
 
 async def test_list_names_is_one_level_of_a_folder(local):
-    for key in ("orgs/o/avatars/1/published/r3/rig.json", "orgs/o/avatars/1/published/r7/a.png",
-                "orgs/o/avatars/1/mouth-1.webp", "orgs/o/avatars/10/source.png"):
+    for key in (
+        "orgs/o/avatars/1/published/r3/rig.json",
+        "orgs/o/avatars/1/published/r7/a.png",
+        "orgs/o/avatars/1/mouth-1.webp",
+        "orgs/o/avatars/10/source.png",
+    ):
         await local.put_bytes(key, b"x", "application/octet-stream")
     assert sorted(await local.list_names("orgs/o/avatars/1/")) == ["mouth-1.webp", "published"]
     assert sorted(await local.list_names("orgs/o/avatars/1/published/")) == ["r3", "r7"]
@@ -111,8 +119,10 @@ async def test_s3_list_names_asks_for_one_level(monkeypatch):
             asked.append(kwargs)
 
             async def gen():
-                yield {"CommonPrefixes": [{"Prefix": "orgs/o/avatars/1/published/r3/"}],
-                       "Contents": [{"Key": "orgs/o/avatars/1/published/stray.json"}]}
+                yield {
+                    "CommonPrefixes": [{"Prefix": "orgs/o/avatars/1/published/r3/"}],
+                    "Contents": [{"Key": "orgs/o/avatars/1/published/stray.json"}],
+                }
                 yield {"CommonPrefixes": [{"Prefix": "orgs/o/avatars/1/published/r7/"}]}
 
             return gen()
@@ -131,8 +141,9 @@ async def test_s3_list_names_asks_for_one_level(monkeypatch):
     monkeypatch.setattr(storage, "_client", lambda: Client())
     names = await storage.list_names("orgs/o/avatars/1/published/")
     assert sorted(names) == ["r3", "r7", "stray.json"]
-    assert asked == [{"Bucket": "bucket", "Prefix": "orgs/o/avatars/1/published/",
-                      "Delimiter": "/"}]
+    assert asked == [
+        {"Bucket": "bucket", "Prefix": "orgs/o/avatars/1/published/", "Delimiter": "/"}
+    ]
 
 
 async def test_a_published_files_url_is_the_same_for_every_page_view_of_the_hour(
@@ -173,8 +184,9 @@ async def test_deleting_an_avatar_removes_every_file_it_ever_had(client, monkeyp
     org_id = await create_org(client, headers)
     avatar_id = await create_ready_avatar(client, headers, org_id)
     base = f"/orgs/{org_id}/avatars/{avatar_id}"
-    await client.post(f"{base}/crop", json={"x": 0.1, "y": 0.1, "width": 0.8, "height": 0.8},
-                      headers=headers)
+    await client.post(
+        f"{base}/crop", json={"x": 0.1, "y": 0.1, "width": 0.8, "height": 0.8}, headers=headers
+    )
     await client.post(f"{base}/publish", headers=headers)
     await client.patch(base, json={"framing": "full"}, headers=headers)
     await client.post(f"{base}/publish", headers=headers)

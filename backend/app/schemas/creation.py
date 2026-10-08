@@ -97,8 +97,6 @@ class DetectRequest(BaseModel):
     consent_id: str | None = Field(default=None, max_length=64)
 
 
-
-
 class GenerateCreationRequest(BaseModel):
     """A creation whose original is made by the image model.
 

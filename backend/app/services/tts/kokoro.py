@@ -41,6 +41,7 @@ Speech cache: rows made on one path are keyed apart from the other's
 with stretched cues; a recording made by the fallback is not cached at all
 (the next request tries the timed model again).
 """
+
 from __future__ import annotations
 
 import asyncio

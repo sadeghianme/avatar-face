@@ -89,9 +89,7 @@ async def test_an_edit_does_not_reach_the_embed_until_published(client):
     during = (await client.get(f"/embed/v1/avatars/{avatar_id}", headers=key)).json()
     assert during["framing"] == "face"
 
-    published = await client.post(
-        f"/orgs/{org_id}/avatars/{avatar_id}/publish", headers=headers
-    )
+    published = await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/publish", headers=headers)
     assert published.status_code == 200, published.text
     assert published.json()["unpublished"] is False
 
@@ -121,9 +119,7 @@ async def test_a_key_in_the_query_string_is_not_accepted(client):
     in_url = await client.get(f"/embed/v1/avatars/{avatar_id}", params={"key": key})
     assert in_url.status_code == 401
     assert in_url.json()["code"] == "missing_api_key"
-    spoken = await client.post(
-        "/embed/v1/synthesize", params={"key": key}, json={"text": "Hello"}
-    )
+    spoken = await client.post("/embed/v1/synthesize", params={"key": key}, json={"text": "Hello"})
     assert spoken.status_code == 401
     assert spoken.json()["code"] == "missing_api_key"
     # The same key in the header is still accepted.
@@ -133,17 +129,13 @@ async def test_a_key_in_the_query_string_is_not_accepted(client):
 
 async def test_embed_invalid_key(client):
     _, _, avatar_id, _ = await _setup(client)
-    response = await client.get(
-        f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": "lf_wrong"}
-    )
+    response = await client.get(f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": "lf_wrong"})
     assert response.status_code == 401
 
 
 async def test_revoked_key_rejected(client):
     headers, org_id, avatar_id, created = await _setup(client)
-    await client.delete(
-        f"/orgs/{org_id}/api-keys/{created['api_key']['id']}", headers=headers
-    )
+    await client.delete(f"/orgs/{org_id}/api-keys/{created['api_key']['id']}", headers=headers)
     response = await client.get(
         f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": created["plaintext"]}
     )
@@ -238,9 +230,7 @@ async def test_member_cannot_manage_api_keys(client):
     )
     bob = await register_and_login(client, "bob")
     await client.post(f"/invitations/{invite.json()['token']}/accept", headers=bob)
-    response = await client.post(
-        f"/orgs/{org_id}/api-keys", json={"name": "nope"}, headers=bob
-    )
+    response = await client.post(f"/orgs/{org_id}/api-keys", json={"name": "nope"}, headers=bob)
     assert response.status_code == 403
 
 
@@ -326,8 +316,7 @@ async def test_cues_are_rate_limited_per_client(client, monkeypatch) -> None:
     """Unauthenticated, so the client address is what is counted."""
     monkeypatch.setattr(embed, "CUES_PER_CLIENT", Limit("cues-test", 3, 60))
     statuses = [
-        (await client.post("/embed/v1/cues", json={"text": "Hello."})).status_code
-        for _ in range(4)
+        (await client.post("/embed/v1/cues", json={"text": "Hello."})).status_code for _ in range(4)
     ]
     assert statuses == [200, 200, 200, 429]
     refused = await client.post("/embed/v1/cues", json={"text": "Hello."})

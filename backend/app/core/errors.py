@@ -4,6 +4,7 @@ Every error response has the shape {"detail": str, "code": str} so clients
 (dashboard, widget, third-party integrators) can branch on `code` without
 parsing prose.
 """
+
 from __future__ import annotations
 
 from fastapi import FastAPI, Request
@@ -88,9 +89,7 @@ def install_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(StarletteHTTPException)
-    async def http_error_handler(
-        request: Request, exc: StarletteHTTPException
-    ) -> JSONResponse:
+    async def http_error_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": str(exc.detail), "code": f"http_{exc.status_code}"},

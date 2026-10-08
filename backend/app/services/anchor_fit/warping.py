@@ -75,7 +75,9 @@ def _polyline_frame(line: np.ndarray, t: float) -> tuple[np.ndarray, np.ndarray]
     seg_len = np.linalg.norm(seg_vec, axis=1)
     # A zero-length segment (two marks dropped on the same pixel) has no
     # direction; it contributes a zero normal and its neighbours decide.
-    seg_normal = np.stack((seg_vec[:, 1], -seg_vec[:, 0]), axis=1) / np.maximum(seg_len, 1e-9)[:, None]
+    seg_normal = (
+        np.stack((seg_vec[:, 1], -seg_vec[:, 0]), axis=1) / np.maximum(seg_len, 1e-9)[:, None]
+    )
     seg_normal[seg_len <= 1e-9] = 0.0
     vertex_normal = np.vstack((seg_normal[:1], seg_normal[:-1] + seg_normal[1:], seg_normal[-1:]))
     vertex_normal /= np.maximum(np.linalg.norm(vertex_normal, axis=1, keepdims=True), 1e-9)
@@ -213,9 +215,7 @@ def _iris_pairs(
     return [(j, center + (base[j] - base_center) * scale) for j in ring]
 
 
-def pupil_pairs(
-    base: np.ndarray, marks: FaceMarks, face_type: str
-) -> list[tuple[int, np.ndarray]]:
+def pupil_pairs(base: np.ndarray, marks: FaceMarks, face_type: str) -> list[tuple[int, np.ndarray]]:
     """Where the marked pupils put the iris rings. Applied AFTER the warp,
     not through it (see the module docstring): an unmarked pupil is simply
     carried by the warp, like the skin around it."""
@@ -370,7 +370,10 @@ def warp(base: np.ndarray, pairs: list[tuple[int, np.ndarray]]) -> np.ndarray:
     origin = base.min(axis=0)
     scale = max(float(np.ptp(base, axis=0).max()), 1.0)
     spline = RBFInterpolator(
-        (src - origin) / scale, (dst - origin) / scale,
-        kernel="thin_plate_spline", smoothing=SMOOTHING, degree=1,
+        (src - origin) / scale,
+        (dst - origin) / scale,
+        kernel="thin_plate_spline",
+        smoothing=SMOOTHING,
+        degree=1,
     )
     return spline((base - origin) / scale) * scale + origin

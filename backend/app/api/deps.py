@@ -4,6 +4,7 @@ Org scoping rule: the org is ALWAYS derived from the path (or the resource
 being accessed), never from a client-supplied org_id in a body or query —
 that would let any authenticated user act inside someone else's org.
 """
+
 from __future__ import annotations
 
 from typing import Annotated

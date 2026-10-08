@@ -10,6 +10,7 @@ whole file is one binary buffer. Nothing else: no animation, no skins.
 numpy only. Written rather than installed (pygltflib/trimesh are not in the
 venv) so the builder has no dependency the server image lacks.
 """
+
 from __future__ import annotations
 
 import json
@@ -45,7 +46,9 @@ class GlbBuilder:
         self.accessors: list[dict] = []
         self.images: list[dict] = []
         self.textures: list[dict] = []
-        self.samplers: list[dict] = [{"magFilter": 9729, "minFilter": 9987, "wrapS": 33071, "wrapT": 33071}]
+        self.samplers: list[dict] = [
+            {"magFilter": 9729, "minFilter": 9987, "wrapS": 33071, "wrapT": 33071}
+        ]
         self.materials: list[dict] = []
         self.meshes: list[dict] = []
         self.nodes: list[dict] = []
@@ -62,9 +65,16 @@ class GlbBuilder:
         self.buffer_views.append(view)
         return len(self.buffer_views) - 1
 
-    def _accessor(self, array: np.ndarray, component: int, kind: str, target: int | None, minmax: bool = False) -> int:
+    def _accessor(
+        self, array: np.ndarray, component: int, kind: str, target: int | None, minmax: bool = False
+    ) -> int:
         view = self._view(array.tobytes(), target)
-        accessor: dict = {"bufferView": view, "componentType": component, "count": int(array.shape[0]), "type": kind}
+        accessor: dict = {
+            "bufferView": view,
+            "componentType": component,
+            "count": int(array.shape[0]),
+            "type": kind,
+        }
         if minmax:
             flat = array.reshape(array.shape[0], -1)
             accessor["min"] = [float(v) for v in flat.min(axis=0)]
@@ -94,13 +104,28 @@ class GlbBuilder:
         return len(self.textures) - 1
 
     def add_material(
-        self, name: str, texture: int | None = None, colour: tuple[float, float, float, float] = (1, 1, 1, 1),
-        alpha_mode: str = "OPAQUE", double_sided: bool = False, unlit: bool = False, roughness: float = 1.0,
+        self,
+        name: str,
+        texture: int | None = None,
+        colour: tuple[float, float, float, float] = (1, 1, 1, 1),
+        alpha_mode: str = "OPAQUE",
+        double_sided: bool = False,
+        unlit: bool = False,
+        roughness: float = 1.0,
     ) -> int:
-        pbr: dict = {"baseColorFactor": [float(c) for c in colour], "metallicFactor": 0.0, "roughnessFactor": float(roughness)}
+        pbr: dict = {
+            "baseColorFactor": [float(c) for c in colour],
+            "metallicFactor": 0.0,
+            "roughnessFactor": float(roughness),
+        }
         if texture is not None:
             pbr["baseColorTexture"] = {"index": texture}
-        material: dict = {"name": name, "pbrMetallicRoughness": pbr, "alphaMode": alpha_mode, "doubleSided": double_sided}
+        material: dict = {
+            "name": name,
+            "pbrMetallicRoughness": pbr,
+            "alphaMode": alpha_mode,
+            "doubleSided": double_sided,
+        }
         if unlit:
             material["extensions"] = {"KHR_materials_unlit": {}}
             self.extensions_used.add("KHR_materials_unlit")
@@ -110,8 +135,14 @@ class GlbBuilder:
     # --- meshes and nodes ---------------------------------------------------------
 
     def add_mesh(
-        self, name: str, positions: np.ndarray, uvs: np.ndarray, triangles: np.ndarray, material: int,
-        normals: np.ndarray | None = None, targets: list[tuple[str, np.ndarray]] | None = None,
+        self,
+        name: str,
+        positions: np.ndarray,
+        uvs: np.ndarray,
+        triangles: np.ndarray,
+        material: int,
+        normals: np.ndarray | None = None,
+        targets: list[tuple[str, np.ndarray]] | None = None,
     ) -> int:
         """One primitive of triangles; `targets` are (ARKit name, (n, 3)
         position deltas). Returns the mesh index."""
@@ -133,10 +164,17 @@ class GlbBuilder:
                 raise ValueError("normals must be (n, 3)")
             attributes["NORMAL"] = self._accessor(normals, FLOAT, "VEC3", ARRAY_BUFFER)
         if n <= 65535:
-            index_accessor = self._accessor(indices.astype(np.uint16), UNSIGNED_SHORT, "SCALAR", ELEMENT_ARRAY_BUFFER)
+            index_accessor = self._accessor(
+                indices.astype(np.uint16), UNSIGNED_SHORT, "SCALAR", ELEMENT_ARRAY_BUFFER
+            )
         else:
             index_accessor = self._accessor(indices, UNSIGNED_INT, "SCALAR", ELEMENT_ARRAY_BUFFER)
-        primitive: dict = {"attributes": attributes, "indices": index_accessor, "material": material, "mode": TRIANGLES}
+        primitive: dict = {
+            "attributes": attributes,
+            "indices": index_accessor,
+            "material": material,
+            "mode": TRIANGLES,
+        }
         mesh: dict = {"name": name, "primitives": [primitive]}
         if targets:
             primitive["targets"] = []
@@ -145,7 +183,9 @@ class GlbBuilder:
                 delta = np.ascontiguousarray(delta, dtype=np.float32)
                 if delta.shape != (n, 3):
                     raise ValueError(f"target {target_name} must be (n, 3)")
-                primitive["targets"].append({"POSITION": self._accessor(delta, FLOAT, "VEC3", ARRAY_BUFFER, minmax=True)})
+                primitive["targets"].append(
+                    {"POSITION": self._accessor(delta, FLOAT, "VEC3", ARRAY_BUFFER, minmax=True)}
+                )
                 names.append(target_name)
             mesh["weights"] = [0.0] * len(names)
             mesh["extras"] = {"targetNames": names}
@@ -153,8 +193,12 @@ class GlbBuilder:
         return len(self.meshes) - 1
 
     def add_node(
-        self, name: str, mesh: int | None = None, children: list[int] | None = None,
-        translation: tuple[float, float, float] | None = None, extras: dict | None = None,
+        self,
+        name: str,
+        mesh: int | None = None,
+        children: list[int] | None = None,
+        translation: tuple[float, float, float] | None = None,
+        extras: dict | None = None,
     ) -> int:
         node: dict = {"name": name}
         if mesh is not None:
@@ -170,7 +214,9 @@ class GlbBuilder:
 
     # --- the file -------------------------------------------------------------------
 
-    def document(self, scene_nodes: list[int], scene_name: str, scene_extras: dict | None = None) -> dict:
+    def document(
+        self, scene_nodes: list[int], scene_name: str, scene_extras: dict | None = None
+    ) -> dict:
         scene: dict = {"name": scene_name, "nodes": list(scene_nodes)}
         if scene_extras:
             scene["extras"] = scene_extras
@@ -191,19 +237,27 @@ class GlbBuilder:
             doc["samplers"] = self.samplers
         if self.extensions_used:
             doc["extensionsUsed"] = sorted(self.extensions_used)
-            doc["extensionsRequired"] = sorted(e for e in self.extensions_used if e == "EXT_texture_webp")
+            doc["extensionsRequired"] = sorted(
+                e for e in self.extensions_used if e == "EXT_texture_webp"
+            )
         return doc
 
-    def build(self, scene_nodes: list[int], scene_name: str = "Liveface", scene_extras: dict | None = None) -> bytes:
+    def build(
+        self, scene_nodes: list[int], scene_name: str = "Liveface", scene_extras: dict | None = None
+    ) -> bytes:
         doc = self.document(scene_nodes, scene_name, scene_extras)
         json_chunk = _pad(json.dumps(doc, separators=(",", ":")).encode("utf-8"), fill=b" ")
         bin_chunk = _pad(bytes(self.buffer))
         total = 12 + 8 + len(json_chunk) + 8 + len(bin_chunk)
-        return b"".join((
-            struct.pack("<III", GLB_MAGIC, GLB_VERSION, total),
-            struct.pack("<II", len(json_chunk), CHUNK_JSON), json_chunk,
-            struct.pack("<II", len(bin_chunk), CHUNK_BIN), bin_chunk,
-        ))
+        return b"".join(
+            (
+                struct.pack("<III", GLB_MAGIC, GLB_VERSION, total),
+                struct.pack("<II", len(json_chunk), CHUNK_JSON),
+                json_chunk,
+                struct.pack("<II", len(bin_chunk), CHUNK_BIN),
+                bin_chunk,
+            )
+        )
 
 
 def read_glb(data: bytes) -> tuple[dict, bytes]:
@@ -231,7 +285,9 @@ def read_accessor(doc: dict, binary: bytes, index: int) -> np.ndarray:
     """An accessor's data as a numpy array (count, components)."""
     accessor = doc["accessors"][index]
     view = doc["bufferViews"][accessor["bufferView"]]
-    dtype = {FLOAT: np.float32, UNSIGNED_INT: np.uint32, UNSIGNED_SHORT: np.uint16}[accessor["componentType"]]
+    dtype = {FLOAT: np.float32, UNSIGNED_INT: np.uint32, UNSIGNED_SHORT: np.uint16}[
+        accessor["componentType"]
+    ]
     components = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}[accessor["type"]]
     start = view.get("byteOffset", 0)
     count = accessor["count"] * components

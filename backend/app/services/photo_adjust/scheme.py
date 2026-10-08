@@ -50,6 +50,7 @@ SKIN_L_WEIGHT = 0.5
 
 # MediaPipe indices. Eyes are named by the side of the IMAGE they are on
 # (as in anchor_fit: 33 is the image-left eye's outer corner).
+# fmt: off
 EYE_IMAGE_LEFT = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246,
                   468, 469, 470, 471, 472]
 EYE_IMAGE_RIGHT = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384,
@@ -71,6 +72,7 @@ CHIN = [152, 148, 377, 176, 400]
 # closes.
 STABLE = [168, 6, 197, 195, 5,
           10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 93, 234, 127, 162, 21, 54, 103, 67, 109]
+# fmt: on
 CHEEK_IMAGE_LEFT = [50, 101, 118, 117, 116, 123, 147, 187, 205, 36]
 CHEEK_IMAGE_RIGHT = [280, 330, 347, 346, 345, 352, 376, 411, 425, 266]
 NOSE_TIP = 1

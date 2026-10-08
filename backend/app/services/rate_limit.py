@@ -169,9 +169,7 @@ def enforce(
     """Count a hit on `limit` for `key`, or raise 429 with Retry-After."""
     wait = limiter_for(limit).hit(key)
     if wait > 0:
-        raise RateLimit429(
-            detail, code=code, headers={"Retry-After": str(max(1, math.ceil(wait)))}
-        )
+        raise RateLimit429(detail, code=code, headers={"Retry-After": str(max(1, math.ceil(wait)))})
 
 
 def reset_rate_limiters() -> None:
@@ -187,9 +185,7 @@ RESET_LIMIT = 3
 RESET_WINDOW_SECONDS = 3600
 
 
-async def allow_persistent(
-    db: AsyncSession, key: str, *, limit: int, window_seconds: int
-) -> bool:
+async def allow_persistent(db: AsyncSession, key: str, *, limit: int, window_seconds: int) -> bool:
     """Sliding-window limit counted in the database.
 
     For limits where surviving a restart matters: the in-memory limiter

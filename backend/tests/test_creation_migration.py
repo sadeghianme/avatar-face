@@ -28,7 +28,10 @@ def _alembic(database: Path, action: str, target: str) -> None:
     env = {**os.environ, "DATABASE_URL": f"sqlite+aiosqlite:///{database}"}
     result = subprocess.run(
         [sys.executable, "-c", SCRIPT.format(action=action, target=target)],
-        cwd=BACKEND, env=env, capture_output=True, text=True,
+        cwd=BACKEND,
+        env=env,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 0, result.stderr[-3000:]
 
@@ -47,8 +50,19 @@ def test_023_upgrades_and_downgrades(tmp_path):
     database = tmp_path / "migrate.sqlite3"
     _alembic(database, "upgrade", "head")
     assert {
-        "id", "org_id", "created_by_id", "face_type", "status", "revision", "steps",
-        "analysis", "anchors", "job", "avatar_id", "created_at", "updated_at",
+        "id",
+        "org_id",
+        "created_by_id",
+        "face_type",
+        "status",
+        "revision",
+        "steps",
+        "analysis",
+        "anchors",
+        "job",
+        "avatar_id",
+        "created_at",
+        "updated_at",
     } <= _columns(database, "creations")
     assert "ix_creations_org_status_updated" in _indexes(database, "creations")
     assert "upload_image_key" in _columns(database, "avatars")
@@ -76,7 +90,14 @@ def test_024_upgrades_and_downgrades(tmp_path):
 
     _alembic(database, "upgrade", "head")
     assert {
-        "id", "created_at", "org_id", "user_id", "scope", "providers", "text_version", "ip_hash",
+        "id",
+        "created_at",
+        "org_id",
+        "user_id",
+        "scope",
+        "providers",
+        "text_version",
+        "ip_hash",
         "subject_id",
     } == _columns(database, "consents")
     assert "ix_consents_org_user_scope" in _indexes(database, "consents")

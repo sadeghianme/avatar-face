@@ -22,8 +22,10 @@ frontend:
 embed:
 	cd embed && npm run build
 
+# The backend suite on every core (pytest-xdist). Without `-n`, pytest runs
+# in one process, as a debugger needs.
 test:
-	cd backend && .venv/bin/python -m pytest -q
+	cd backend && .venv/bin/python -m pytest -q -n auto
 
 typecheck:
 	cd frontend && npx tsc -b

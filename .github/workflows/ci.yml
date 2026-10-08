@@ -17,35 +17,54 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Every job below is a required check on main (docs/process.md, "Branch
-# protection"), named by its job id: rename one only together with that rule.
+# The required checks on main (docs/process.md, "Branch protection") are the
+# job ids backend, embed, frontend, frontend-lint, deploy-script and images:
+# rename one only together with that rule. backend-checks and backend-tests
+# are not required themselves: `backend` passes only when they all do.
 jobs:
-  backend:
+  # The backend is three jobs side by side: its static checks, and its test
+  # suite in two halves. Each restores the same virtualenv.
+  backend-checks:
+    # Everything but the tests: lint, formatting, types, the API document,
+    # and the migrations against the models. No system libraries: nothing
+    # here loads mediapipe or espeak (tests/test_layering.py keeps them lazy).
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        id: python
         with:
           python-version: "3.12"
-          cache: pip
-      - name: Install system libraries (as the Dockerfile does)
-        # espeak-ng for multilingual phonemes; libegl1/libgles2 because
-        # mediapipe 1.x loads a C library needing them at its first task, and
-        # without them face detection silently falls back (backend/Dockerfile).
-        run: >
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends
-          espeak-ng libgl1 libglib2.0-0 libegl1 libgles2
+      - name: Restore the virtualenv
+        # The whole environment, keyed on everything that decides it: the
+        # Python, the production pins and the project's own requirements. A
+        # hit skips the install; a miss installs, and the job saves it.
+        id: venv
+        uses: actions/cache@v6
+        with:
+          path: backend/.venv
+          key: venv-${{ runner.os }}-python${{ steps.python.outputs.python-version }}-${{ hashFiles('backend/constraints.txt', 'backend/pyproject.toml') }}
       - name: Install backend
         # With the production pins (constraints.txt, as the Dockerfile
         # installs): the tests and the type check see the library versions
         # that run in production, and a new release upstream cannot turn
         # this job red on its own.
-        run: pip install -c constraints.txt -e ".[rig,dev]"
+        if: steps.venv.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -c constraints.txt -e ".[rig,dev]"
+      - name: Use the virtualenv
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Lint
         run: ruff check .
+      - name: Formatting
+        # ruff's formatter, configured in pyproject.toml ([tool.ruff.format]).
+        # To fix: `ruff format .` from backend/.
+        run: ruff format --check .
       - name: Type check
         run: pyright
       - name: OpenAPI document matches the code
@@ -57,14 +76,93 @@ jobs:
         run: |
           python scripts/export_openapi.py ../frontend/src/lib/api-schema.json
           git diff --exit-code -- ../frontend/src/lib/api-schema.json
-      - name: Fetch MediaPipe models (same URLs the Dockerfile uses)
+      - name: Migrations match the models
+        # A fresh SQLite built by the migrations alone, compared with the
+        # models (`alembic check`: tables, columns, types, nullability,
+        # indexes, foreign keys); then the newest migration down, up again,
+        # and compared once more. Production runs the migrations when the API
+        # starts, while the tests build their schema from the models: a model
+        # change without its migration, or a downgrade that leaves something
+        # behind, fails here and nowhere else.
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///${{ runner.temp }}/migrations.sqlite3
+        run: |
+          alembic upgrade head
+          alembic check
+          alembic downgrade -1
+          alembic upgrade head
+          alembic check
+
+  backend-tests:
+    # The suite in two halves side by side (LIVEFACE_TEST_SHARD, read by
+    # tests/conftest.py: each test belongs to exactly one), each half on
+    # every core of its runner (pytest-xdist, -n auto).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # One half failing must not cancel the other: both sets of failures.
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # The two MediaPipe models, as backend/Dockerfile pins them. No test
+      # loads them yet: the one that would (the reference manifest rebuilt
+      # from the masters, test_performance_kit.py) is opt-in through
+      # LIVEFACE_FACE_MODEL, and compares bytes with the committed manifest,
+      # which the one rebuilt on this runner does not match.
+      FACE_MODEL_URL: https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+      FACE_MODEL_SHA256: 64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff
+      SEGMENT_MODEL_URL: https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite
+      SEGMENT_MODEL_SHA256: 191ac9529ae506ee0beefa6b2c945a172dab9d07d1e802a290a4e4038226658b
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        id: python
+        with:
+          python-version: "3.12"
+      - name: Restore the virtualenv
+        # As in backend-checks: the same key, so the same environment.
+        id: venv
+        uses: actions/cache@v6
+        with:
+          path: backend/.venv
+          key: venv-${{ runner.os }}-python${{ steps.python.outputs.python-version }}-${{ hashFiles('backend/constraints.txt', 'backend/pyproject.toml') }}
+      - name: Install backend
+        if: steps.venv.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -c constraints.txt -e ".[rig,dev]"
+      - name: Use the virtualenv
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Install system libraries (as the Dockerfile does)
+        # espeak-ng for multilingual phonemes; libegl1/libgles2 because
+        # mediapipe 1.x loads a C library needing them at its first task, and
+        # without them face detection silently falls back (backend/Dockerfile).
+        run: >
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends
+          espeak-ng libgl1 libglib2.0-0 libegl1 libgles2
+      - name: Restore the MediaPipe models
+        # Keyed on their checksums: a new model is a new key.
+        id: models
+        uses: actions/cache@v6
+        with:
+          path: backend/models
+          key: mediapipe-${{ env.FACE_MODEL_SHA256 }}-${{ env.SEGMENT_MODEL_SHA256 }}
+      - name: Fetch the MediaPipe models
+        if: steps.models.outputs.cache-hit != 'true'
         run: |
           mkdir -p models
-          curl -fsSL -o models/face_landmarker.task \
-            https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
-          echo "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff  models/face_landmarker.task" | sha256sum -c -
-          curl -fsSL -o models/selfie_segmenter.tflite \
-            https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite
+          curl -fsSL --retry 5 --retry-all-errors -o models/face_landmarker.task "$FACE_MODEL_URL"
+          curl -fsSL --retry 5 --retry-all-errors -o models/selfie_segmenter.tflite "$SEGMENT_MODEL_URL"
+      - name: Check the MediaPipe models
+        # Fetched or restored, the bytes the Dockerfile pins.
+        run: |
+          printf '%s  %s\n' \
+            "$FACE_MODEL_SHA256" models/face_landmarker.task \
+            "$SEGMENT_MODEL_SHA256" models/selfie_segmenter.tflite | sha256sum -c -
       - name: Stub widget bundles
         # The bundle-serving tests assert caching/CORS headers, which only
         # exist when the file does; any content works, so stubs beat pulling
@@ -78,8 +176,28 @@ jobs:
           echo "// ci stub" > ../embed/dist/basis_transcoder.js
           printf '\0asm\1\0\0\0' > ../embed/dist/basis_transcoder.wasm
           cp ../embed/assets/mouth-teeth.webp ../embed/assets/mouth-teeth.rig.json ../embed/dist/
-      - name: Tests
-        run: python -m pytest tests -q
+      - name: Tests (half ${{ matrix.shard }} of 2)
+        env:
+          LIVEFACE_TEST_SHARD: ${{ matrix.shard }}/2
+        run: python -m pytest tests -q -n auto
+
+  backend:
+    # The required check (branch protection names it): green only when
+    # backend-checks and both halves of backend-tests are. `always()`: a
+    # required check that is skipped counts as passed, so this one never
+    # skips; it runs whatever happened before it and fails unless all passed.
+    if: always()
+    needs: [backend-checks, backend-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every backend job passed
+        env:
+          CHECKS: ${{ needs.backend-checks.result }}
+          TESTS: ${{ needs.backend-tests.result }}
+        run: |
+          echo "backend-checks: $CHECKS, backend-tests: $TESTS"
+          test "$CHECKS" = success && test "$TESTS" = success
 
   embed:
     runs-on: ubuntu-latest
@@ -87,8 +205,8 @@ jobs:
       run:
         working-directory: embed
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -119,7 +237,7 @@ jobs:
       - run: npm test
       - name: Upload the frames that failed the pixel goldens
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pixel-diffs
           path: embed/dist/pixel-diffs/
@@ -136,7 +254,7 @@ jobs:
         run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Cache Chromium
         id: chromium
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: chromium-${{ runner.os }}-${{ steps.playwright.outputs.version }}
@@ -150,7 +268,7 @@ jobs:
         run: npm run test:browser
       - name: Upload the frames that failed the browser goldens
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: browser-diffs
           path: embed/dist/browser-diffs/
@@ -162,8 +280,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -189,8 +307,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm

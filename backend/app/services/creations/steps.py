@@ -43,7 +43,7 @@ def adjusted_index(step_id: str) -> int | None:
     """N of "adjusted:N", or None for any other step id."""
     if not step_id.startswith(ADJUSTED_PREFIX):
         return None
-    tail = step_id[len(ADJUSTED_PREFIX):]
+    tail = step_id[len(ADJUSTED_PREFIX) :]
     return int(tail) if tail.isdigit() else None
 
 
@@ -201,7 +201,10 @@ def statement_for(creation: Creation) -> Literal["depiction", "generated_face"] 
     generated = root.get("generated")
     if generated:
         plan = (steps or {}).get("plan") or {}
-        drawn_animal = plan.get("model") == "animal" and plan.get("look") in ("animation", "cartoon")
+        drawn_animal = plan.get("model") == "animal" and plan.get("look") in (
+            "animation",
+            "cartoon",
+        )
         found_person = detected_a_person(root) and not drawn_animal
         if not (human_line or found_person):
             return None

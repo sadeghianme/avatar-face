@@ -46,13 +46,26 @@ ORG = "org1"
 AVATAR_ID = "avatar1"
 PREFIX = f"orgs/{ORG}/avatars/{AVATAR_ID}/"
 MODEL = "fake-image-model"
-REFUSED = {"code": "safety_refused", "detail": "The AI declined this edit, so it was not asked again"}
+REFUSED = {
+    "code": "safety_refused",
+    "detail": "The AI declined this edit, so it was not asked again",
+}
 # What a kit fits: its own teeth seated and sized as the Reference's, and
 # values for everything else that are not the owner's to take.
-KIT_PROFILE = {"teethY": 0.016, "teethScale": 1.0, "warmth": 0.7, "lipProjection": 0.4,
-               "jawRange": 1.0}
-DEFAULTS = {"teethScale": 1.0, "teethY": 0.0, "warmth": 0.5, "lipProjection": 0.55,
-            "jawRange": 0.85}
+KIT_PROFILE = {
+    "teethY": 0.016,
+    "teethScale": 1.0,
+    "warmth": 0.7,
+    "lipProjection": 0.4,
+    "jawRange": 1.0,
+}
+DEFAULTS = {
+    "teethScale": 1.0,
+    "teethY": 0.0,
+    "warmth": 0.5,
+    "lipProjection": 0.55,
+    "jawRange": 0.85,
+}
 POINTS = [[1.0, 2.0], [3.0, 4.0]]
 
 
@@ -85,7 +98,7 @@ class MemoryStorage(Storage):
         return key in self.files
 
     async def list_names(self, prefix):
-        return sorted({k[len(prefix):].split("/")[0] for k in self.files if k.startswith(prefix)})
+        return sorted({k[len(prefix) :].split("/")[0] for k in self.files if k.startswith(prefix)})
 
     async def delete(self, key):
         self.files.pop(key, None)
@@ -165,10 +178,20 @@ async def _until(condition, tries: int = 2000) -> None:
 
 def _avatar(**changes) -> Avatar:
     fields = {
-        "id": AVATAR_ID, "org_id": ORG, "created_by_id": "user1", "name": "Ada",
-        "content_type": "image/png", "kind": AvatarKind.photo, "status": AvatarStatus.ready,
-        "face_type": "human", "image_key": f"{PREFIX}source.png", "rig_key": f"{PREFIX}rig.json",
-        "draft_revision": 0, "mouth_config": None, "ai_edited": None, "published_config": None,
+        "id": AVATAR_ID,
+        "org_id": ORG,
+        "created_by_id": "user1",
+        "name": "Ada",
+        "content_type": "image/png",
+        "kind": AvatarKind.photo,
+        "status": AvatarStatus.ready,
+        "face_type": "human",
+        "image_key": f"{PREFIX}source.png",
+        "rig_key": f"{PREFIX}rig.json",
+        "draft_revision": 0,
+        "mouth_config": None,
+        "ai_edited": None,
+        "published_config": None,
     }
     return Avatar(**{**fields, **changes})
 
@@ -178,8 +201,13 @@ def _config(avatar: Avatar) -> dict:
 
 
 def _result(
-    *, generated: int = 6, model: str | None = MODEL, teeth_source=None, teeth_report=None,
-    profile: dict | None = None, profile_fit: dict | None = None,
+    *,
+    generated: int = 6,
+    model: str | None = MODEL,
+    teeth_source=None,
+    teeth_report=None,
+    profile: dict | None = None,
+    profile_fit: dict | None = None,
 ) -> pk.KitResult:
     """A KitResult as build_kit reports one: the first `generated` shapes
     made, the rest refused and retargeted."""
@@ -195,13 +223,16 @@ def _result(
         }
     return pk.KitResult(
         manifest={
-            "version": 2, "character": f"{pk.CHARACTER_PREFIX}kit123",
+            "version": 2,
+            "character": f"{pk.CHARACTER_PREFIX}kit123",
             "kit": {"version": pk.KIT_VERSION, "prompts": pk.PROMPTS_VERSION},
-            "frame": {"image_size": [400, 500]}, "poses": [{"id": "rest"}],
+            "frame": {"image_size": [400, 500]},
+            "poses": [{"id": "rest"}],
         },
         profile=dict(profile or KIT_PROFILE),
         profile_fit={"reasons": [{"field": "teethY", "code": "x", "detail": "y"}]}
-        if profile_fit is None else profile_fit,
+        if profile_fit is None
+        else profile_fit,
         teeth_source=teeth_source,
         report=report,
         calls=7,
@@ -213,8 +244,13 @@ def _result(
 
 
 def _failed_teeth(reason: dict | None) -> dict:
-    return {"status": "failed", "outcome": "rejected", "reason": reason,
-            "attempts": ["face_crop"], "checks": {}}
+    return {
+        "status": "failed",
+        "outcome": "rejected",
+        "reason": reason,
+        "attempts": ["face_crop"],
+        "checks": {},
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -233,8 +269,13 @@ def _fresh_jobs():
 @pytest.mark.parametrize(
     ("switched_off", "limit", "code", "detail", "reads"),
     [
-        (True, 100, "third_party_ai_disabled",
-         "Your organization turned off third-party AI, so nothing more was sent", []),
+        (
+            True,
+            100,
+            "third_party_ai_disabled",
+            "Your organization turned off third-party AI, so nothing more was sent",
+            [],
+        ),
         (False, 0, "image_limit_reached", "Monthly image generation limit reached (0/0)", [1]),
     ],
     ids=["switch", "limit"],
@@ -369,8 +410,11 @@ def test_progress_maps_the_kits_requests_onto_the_jobs_bar_then_the_fit():
     job = Job(id="job1", org_id=ORG, subject_id=AVATAR_ID, step="mouth_kit", revision=0)
     report = calls.progress_to(job, 0.05, 0.85)
     report(0.5, "aa generated", 3, 7)
-    assert job.progress() == {"fraction": 0.45, "label": calls.SHAPES_LABEL,
-                              "count": {"done": 3, "total": 7}}
+    assert job.progress() == {
+        "fraction": 0.45,
+        "label": calls.SHAPES_LABEL,
+        "count": {"done": 3, "total": 7},
+    }
     report(1.0, "mouth kit ready", 7, 7)
     assert job.progress() == {"fraction": 0.85, "label": calls.FIT_LABEL, "count": None}
     # Without a job (a finish's kit reports elsewhere) it reports nothing.
@@ -392,15 +436,21 @@ async def test_make_runs_the_kit_through_a_guard_for_the_organization(monkeypatc
     def on_progress(*args):
         return None
 
-    made = await calls.make(ORG, b"picture", POINTS, teeth=False, on_first_send=on_send,
-                            on_progress=on_progress)
+    made = await calls.make(
+        ORG, b"picture", POINTS, teeth=False, on_first_send=on_send, on_progress=on_progress
+    )
     assert made == "the kit"
     guard = captured.pop("edit_image")
     assert isinstance(guard, calls.CallGuard) and guard.org_id == ORG
     assert guard._on_first_send is on_send
-    assert captured == {"picture": b"picture", "points": POINTS, "teeth": False,
-                        "concurrency": calls.CONCURRENCY, "bound_calls": False,
-                        "on_progress": on_progress}
+    assert captured == {
+        "picture": b"picture",
+        "points": POINTS,
+        "teeth": False,
+        "concurrency": calls.CONCURRENCY,
+        "bound_calls": False,
+        "on_progress": on_progress,
+    }
 
 
 def test_the_kits_model_is_the_first_call_that_names_one_and_its_count_its_own_shapes():
@@ -417,8 +467,15 @@ def test_the_kits_model_is_the_first_call_that_names_one_and_its_count_its_own_s
 
 
 def test_a_kit_with_its_teeth_photo_or_not_asked_for_one_gives_no_reason():
-    assert records.teeth_reason(_result(teeth_source=pk.TeethSource(b"png", {}),
-                                        teeth_report={"status": "ok", "reason": None})) is None
+    assert (
+        records.teeth_reason(
+            _result(
+                teeth_source=pk.TeethSource(b"png", {}),
+                teeth_report={"status": "ok", "reason": None},
+            )
+        )
+        is None
+    )
     assert records.teeth_reason(_result(teeth_report=None)) is None
 
 
@@ -435,7 +492,7 @@ def test_teeth_the_embed_would_not_draw_are_unclear():
         assert records.teeth_reason(_result(teeth_report=_failed_teeth(reason))) == {
             "code": "mouth_teeth_unclear",
             "detail": "The AI's teeth photo shows too little of the upper teeth for the "
-                      "photographic mouth, so it was not used",
+            "photographic mouth, so it was not used",
         }, code
 
 
@@ -444,14 +501,14 @@ def test_any_other_failed_check_is_rejected_and_names_the_check():
     assert records.teeth_reason(_result(teeth_report=_failed_teeth(reason))) == {
         "code": "teeth_photo_rejected",
         "detail": "The AI's teeth photo did not pass its checks "
-                  "(The AI zoomed or tilted the head), so it was not used",
+        "(The AI zoomed or tilted the head), so it was not used",
         "reason": reason,
     }
     # With no reason at all, or one that does not say why.
     assert records.teeth_reason(_result(teeth_report=_failed_teeth(None))) == {
         "code": "teeth_photo_rejected",
         "detail": "The AI's teeth photo did not pass its checks (no reason given), "
-                  "so it was not used",
+        "so it was not used",
         "reason": None,
     }
     wordless = {"code": "check_failed"}
@@ -461,40 +518,75 @@ def test_any_other_failed_check_is_rejected_and_names_the_check():
 
 def test_the_kit_record_keeps_each_shapes_provenance_and_what_the_kit_took():
     teeth = {"used": False, "reason": REFUSED}
-    record = records.kit_record(_result(generated=4), source="mouth_panel", teeth=teeth,
-                                fitted={"teethY": 0.016})
+    record = records.kit_record(
+        _result(generated=4), source="mouth_panel", teeth=teeth, fitted={"teethY": 0.016}
+    )
     made_at = record.pop("made_at")
     assert isinstance(made_at, str) and made_at.endswith("+00:00")
     assert record == {
-        "id": "kit123", "state": "made", "source": "mouth_panel",
+        "id": "kit123",
+        "state": "made",
+        "source": "mouth_panel",
         "recipe": {"version": pk.KIT_VERSION, "prompts": pk.PROMPTS_VERSION},
         "model": MODEL,
         "shapes": {
-            **{shape: {"provenance": "generated", "outcome": "generated", "reason": None,
-                       "attempts": ["face_crop"]} for shape in ("aa", "ee", "oo", "oh")},
-            **{shape: {"provenance": "retargeted", "outcome": "refused", "reason": REFUSED,
-                       "attempts": ["face_crop", "head_crop"]} for shape in ("fv", "th")},
+            **{
+                shape: {
+                    "provenance": "generated",
+                    "outcome": "generated",
+                    "reason": None,
+                    "attempts": ["face_crop"],
+                }
+                for shape in ("aa", "ee", "oo", "oh")
+            },
+            **{
+                shape: {
+                    "provenance": "retargeted",
+                    "outcome": "refused",
+                    "reason": REFUSED,
+                    "attempts": ["face_crop", "head_crop"],
+                }
+                for shape in ("fv", "th")
+            },
         },
-        "generated": 4, "retargeted": 2, "teeth": teeth, "fitted": {"teethY": 0.016},
+        "generated": 4,
+        "retargeted": 2,
+        "teeth": teeth,
+        "fitted": {"teethY": 0.016},
         "fit_reasons": [{"field": "teethY", "code": "x", "detail": "y"}],
-        "calls": 7, "billed_calls": 7, "base_detected": True,
-        "rebased_at": None, "dropped": None,
+        "calls": 7,
+        "billed_calls": 7,
+        "base_detected": True,
+        "rebased_at": None,
+        "dropped": None,
     }
-    bare = records.kit_record(_result(model=None, profile_fit={}), source="finish",
-                              teeth=teeth, fitted={})
+    bare = records.kit_record(
+        _result(model=None, profile_fit={}), source="finish", teeth=teeth, fitted={}
+    )
     assert bare["fit_reasons"] == [] and bare["model"] is None
 
 
 def test_the_public_kit_lists_the_shapes_in_the_manifests_order():
     assert records.public_kit(None) is None
     assert records.public_kit({}) is None
-    legacy = {"shapes": {"th": {"provenance": "retargeted", "reason": REFUSED, "outcome": "x"},
-                         "aa": {"provenance": "generated", "reason": None}}}
+    legacy = {
+        "shapes": {
+            "th": {"provenance": "retargeted", "reason": REFUSED, "outcome": "x"},
+            "aa": {"provenance": "generated", "reason": None},
+        }
+    }
     assert records.public_kit(legacy) == {
-        "state": "made", "made_at": None, "model": None, "generated": 0, "retargeted": 0,
-        "shapes": [{"shape": "aa", "provenance": "generated", "reason": None},
-                   {"shape": "th", "provenance": "retargeted", "reason": REFUSED}],
-        "teeth": None, "dropped": None,
+        "state": "made",
+        "made_at": None,
+        "model": None,
+        "generated": 0,
+        "retargeted": 0,
+        "shapes": [
+            {"shape": "aa", "provenance": "generated", "reason": None},
+            {"shape": "th", "provenance": "retargeted", "reason": REFUSED},
+        ],
+        "teeth": None,
+        "dropped": None,
     }
 
 
@@ -513,22 +605,32 @@ async def test_a_new_avatars_kit_stores_its_motion_its_teeth_fit_and_the_disclos
     assert storage.files == {key: json.dumps(result.manifest, separators=(",", ":")).encode()}
     assert storage.types[key] == calls.MOTION_TYPE
     assert config["profile"] == {**DEFAULTS, "teethY": 0.016, "teethScale": 1.0}
-    assert config["teeth"] == {"source": None, "note": {
-        "code": "safety_refused", "detail": f"{REFUSED['detail']}; this avatar uses standard teeth"}}
+    assert config["teeth"] == {
+        "source": None,
+        "note": {
+            "code": "safety_refused",
+            "detail": f"{REFUSED['detail']}; this avatar uses standard teeth",
+        },
+    }
     assert "oral_image_key" not in config
     kit = config["kit"]
     assert (kit["source"], kit["generated"], kit["retargeted"]) == ("finish", 6, 0)
     assert kit["teeth"] == {"used": False, "reason": REFUSED}
     assert kit["fitted"] == {"teethY": 0.016, "teethScale": 1.0}
-    assert avatar.ai_edited == {"mode": "mouth_shapes", "model": MODEL,
-                                "mouth_shapes": {"model": MODEL, "generated": 6}}
+    assert avatar.ai_edited == {
+        "mode": "mouth_shapes",
+        "model": MODEL,
+        "mouth_shapes": {"model": MODEL, "generated": 6},
+    }
 
 
 async def test_standard_teeth_with_no_reason_from_the_kit_still_say_why():
     avatar = _avatar()
     await storing.store(avatar, MemoryStorage(), _result(), source="finish")
     assert _config(avatar)["teeth"]["note"] == {
-        "code": "teeth_failed", "detail": "The teeth could not be made; this avatar uses standard teeth"}
+        "code": "teeth_failed",
+        "detail": "The teeth could not be made; this avatar uses standard teeth",
+    }
     assert _config(avatar)["kit"]["teeth"] == {"used": False, "reason": None}
 
 
@@ -541,14 +643,18 @@ async def test_the_owners_own_teeth_photo_is_never_replaced(monkeypatch, record)
         raise AssertionError("the owner's photo must not be replaced")
 
     monkeypatch.setattr(mouth_photo, "admit_photo", never)
-    before = {"renderer": "continuous",
-              "profile": {**DEFAULTS, "teethY": 0.03, "teethScale": 1.05},
-              "oral_image_key": f"{PREFIX}mouth-own.webp", "oral_rig_key": f"{PREFIX}mouth-own.json"}
+    before = {
+        "renderer": "continuous",
+        "profile": {**DEFAULTS, "teethY": 0.03, "teethScale": 1.05},
+        "oral_image_key": f"{PREFIX}mouth-own.webp",
+        "oral_rig_key": f"{PREFIX}mouth-own.json",
+    }
     if record is not None:
         before["teeth"] = record
     avatar, storage = _avatar(mouth_config=json.dumps(before)), MemoryStorage()
-    result = _result(teeth_source=pk.TeethSource(b"png", {}),
-                     teeth_report={"status": "ok", "reason": None})
+    result = _result(
+        teeth_source=pk.TeethSource(b"png", {}), teeth_report={"status": "ok", "reason": None}
+    )
     assert await storing.store(avatar, storage, result, source="mouth_panel") == []
     config = _config(avatar)
     assert config["oral_image_key"] == before["oral_image_key"]
@@ -558,28 +664,48 @@ async def test_the_owners_own_teeth_photo_is_never_replaced(monkeypatch, record)
     assert config["kit"]["teeth"] == {"used": False, "reason": calls.OWNER_PHOTO}
     assert config["kit"]["fitted"] == {}
     assert [k for k in storage.files if "mouth-motion-" not in k] == []
-    assert avatar.ai_edited == {"mode": "mouth_shapes", "model": MODEL,
-                                "mouth_shapes": {"model": MODEL, "generated": 6}}
+    assert avatar.ai_edited == {
+        "mode": "mouth_shapes",
+        "model": MODEL,
+        "mouth_shapes": {"model": MODEL, "generated": 6},
+    }
 
 
 async def test_the_kits_teeth_photo_replaces_earlier_ai_teeth_and_motion(monkeypatch):
     """Earlier AI teeth and an earlier kit's motion are replaced; their
     keys are returned for deletion after the commit, not deleted here."""
-    monkeypatch.setattr(mouth_photo, "admit_photo",
-                        lambda png, rig: (b"webp:" + png, {**rig, "admitted": True}))
-    old = {"image": f"{PREFIX}mouth-old.webp", "rig": f"{PREFIX}mouth-old.json",
-           "motion": f"{PREFIX}mouth-motion-old.json"}
-    before = {"renderer": "continuous", "profile": {**DEFAULTS, "teethScale": 1.1, "jawRange": 0.95},
-              "oral_image_key": old["image"], "oral_rig_key": old["rig"],
-              "teeth": {"source": "ai", "model": "older"}, "motion_key": old["motion"]}
-    avatar = _avatar(mouth_config=json.dumps(before), ai_edited={
-        "mode": "teeth", "model": "older", "teeth": {"model": "older"},
-        "mouth_shapes": {"model": "older", "generated": 3}})
+    monkeypatch.setattr(
+        mouth_photo, "admit_photo", lambda png, rig: (b"webp:" + png, {**rig, "admitted": True})
+    )
+    old = {
+        "image": f"{PREFIX}mouth-old.webp",
+        "rig": f"{PREFIX}mouth-old.json",
+        "motion": f"{PREFIX}mouth-motion-old.json",
+    }
+    before = {
+        "renderer": "continuous",
+        "profile": {**DEFAULTS, "teethScale": 1.1, "jawRange": 0.95},
+        "oral_image_key": old["image"],
+        "oral_rig_key": old["rig"],
+        "teeth": {"source": "ai", "model": "older"},
+        "motion_key": old["motion"],
+    }
+    avatar = _avatar(
+        mouth_config=json.dumps(before),
+        ai_edited={
+            "mode": "teeth",
+            "model": "older",
+            "teeth": {"model": "older"},
+            "mouth_shapes": {"model": "older", "generated": 3},
+        },
+    )
     storage = MemoryStorage()
     for key in old.values():
         storage.files[key] = b"old"
-    result = _result(teeth_source=pk.TeethSource(b"png", {"points": []}),
-                     teeth_report={"status": "ok", "reason": None})
+    result = _result(
+        teeth_source=pk.TeethSource(b"png", {"points": []}),
+        teeth_report={"status": "ok", "reason": None},
+    )
     previous = await storing.store(avatar, storage, result, source="mouth_panel")
     assert previous == [old["image"], old["rig"], old["motion"]]
     assert all(key in storage.files for key in old.values())
@@ -593,8 +719,12 @@ async def test_the_kits_teeth_photo_replaces_earlier_ai_teeth_and_motion(monkeyp
     assert config["kit"]["teeth"] == {"used": True, "reason": None}
     assert config["kit"]["fitted"] == {"teethY": 0.016, "teethScale": 1.0}
     assert config["motion_key"] != old["motion"]
-    assert avatar.ai_edited == {"mode": "teeth", "model": MODEL, "teeth": {"model": MODEL},
-                                "mouth_shapes": {"model": MODEL, "generated": 6}}
+    assert avatar.ai_edited == {
+        "mode": "teeth",
+        "model": MODEL,
+        "teeth": {"model": MODEL},
+        "mouth_shapes": {"model": MODEL, "generated": 6},
+    }
 
 
 async def test_a_teeth_photo_refused_as_webp_leaves_the_standard_teeth_seated_as_the_references(
@@ -609,9 +739,11 @@ async def test_a_teeth_photo_refused_as_webp_leaves_the_standard_teeth_seated_as
 
     monkeypatch.setattr(mouth_photo, "admit_photo", refuse)
     avatar, storage = _avatar(), MemoryStorage()
-    result = _result(teeth_source=pk.TeethSource(b"png", {}),
-                     teeth_report={"status": "ok", "reason": None},
-                     profile={**KIT_PROFILE, "teethY": -0.01, "teethScale": 1.1})
+    result = _result(
+        teeth_source=pk.TeethSource(b"png", {}),
+        teeth_report={"status": "ok", "reason": None},
+        profile={**KIT_PROFILE, "teethY": -0.01, "teethScale": 1.1},
+    )
     await storing.store(avatar, storage, result, source="finish")
     config = _config(avatar)
     seat = {"teethY": pk.REFERENCE_TEETH_Y, "teethScale": pk.REFERENCE_TEETH_SCALE}
@@ -619,38 +751,62 @@ async def test_a_teeth_photo_refused_as_webp_leaves_the_standard_teeth_seated_as
     assert config["kit"]["fitted"] == seat
     unclear = {"code": "mouth_teeth_unclear", "detail": "too little crown"}
     assert config["kit"]["teeth"] == {"used": False, "reason": unclear}
-    assert config["teeth"] == {"source": None, "note": {
-        "code": "mouth_teeth_unclear", "detail": "too little crown; this avatar uses standard teeth"}}
+    assert config["teeth"] == {
+        "source": None,
+        "note": {
+            "code": "mouth_teeth_unclear",
+            "detail": "too little crown; this avatar uses standard teeth",
+        },
+    }
     assert list(storage.files) == [config["motion_key"]]
     assert "teeth" not in avatar.ai_edited
 
 
 async def test_earlier_ai_teeth_stay_with_their_fit_when_the_new_kit_brings_none():
     timeout = {"code": "timeout", "detail": "The AI did not answer in time"}
-    before = {"renderer": "continuous", "profile": {**DEFAULTS, "teethY": 0.02},
-              "oral_image_key": f"{PREFIX}mouth-ai.webp", "oral_rig_key": f"{PREFIX}mouth-ai.json",
-              "teeth": {"source": "ai", "model": "older"}}
-    avatar = _avatar(mouth_config=json.dumps(before),
-                     ai_edited={"mode": "teeth", "model": "older", "teeth": {"model": "older"}})
-    previous = await storing.store(avatar, MemoryStorage(),
-                                   _result(teeth_report=_failed_teeth(timeout)), source="mouth_panel")
+    before = {
+        "renderer": "continuous",
+        "profile": {**DEFAULTS, "teethY": 0.02},
+        "oral_image_key": f"{PREFIX}mouth-ai.webp",
+        "oral_rig_key": f"{PREFIX}mouth-ai.json",
+        "teeth": {"source": "ai", "model": "older"},
+    }
+    avatar = _avatar(
+        mouth_config=json.dumps(before),
+        ai_edited={"mode": "teeth", "model": "older", "teeth": {"model": "older"}},
+    )
+    previous = await storing.store(
+        avatar, MemoryStorage(), _result(teeth_report=_failed_teeth(timeout)), source="mouth_panel"
+    )
     assert previous == []
     config = _config(avatar)
     for key in ("oral_image_key", "oral_rig_key", "teeth", "profile"):
         assert config[key] == before[key], key
     assert config["kit"]["teeth"] == {"used": False, "reason": timeout}
     assert config["kit"]["fitted"] == {}
-    assert avatar.ai_edited == {"mode": "teeth", "model": "older", "teeth": {"model": "older"},
-                                "mouth_shapes": {"model": MODEL, "generated": 6}}
+    assert avatar.ai_edited == {
+        "mode": "teeth",
+        "model": "older",
+        "teeth": {"model": "older"},
+        "mouth_shapes": {"model": MODEL, "generated": 6},
+    }
 
 
 @pytest.mark.parametrize(
     ("before", "after"),
     [
-        ({"mode": "mouth_shapes", "model": "older",
-          "mouth_shapes": {"model": "older", "generated": 6}}, None),
-        ({"mode": "touchup", "model": "pic", "mouth_shapes": {"model": "older", "generated": 6}},
-         {"mode": "touchup", "model": "pic"}),
+        (
+            {
+                "mode": "mouth_shapes",
+                "model": "older",
+                "mouth_shapes": {"model": "older", "generated": 6},
+            },
+            None,
+        ),
+        (
+            {"mode": "touchup", "model": "pic", "mouth_shapes": {"model": "older", "generated": 6}},
+            {"mode": "touchup", "model": "pic"},
+        ),
     ],
     ids=["shapes-only", "picture-mode"],
 )
@@ -658,8 +814,12 @@ async def test_a_kit_with_no_shape_of_its_own_stores_no_motion_and_drops_the_dis
     before, after
 ):
     old_motion = f"{PREFIX}mouth-motion-old.json"
-    avatar = _avatar(ai_edited=before, mouth_config=json.dumps(
-        {"renderer": "continuous", "profile": DEFAULTS, "motion_key": old_motion}))
+    avatar = _avatar(
+        ai_edited=before,
+        mouth_config=json.dumps(
+            {"renderer": "continuous", "profile": DEFAULTS, "motion_key": old_motion}
+        ),
+    )
     storage = MemoryStorage()
     previous = await storing.store(avatar, storage, _result(generated=0), source="finish")
     assert previous == [old_motion]
@@ -670,11 +830,22 @@ async def test_a_kit_with_no_shape_of_its_own_stores_no_motion_and_drops_the_dis
 
 
 async def test_the_stored_profile_is_held_to_mouth_profiles_fields_and_keeps_the_owners_jaw():
-    avatar = _avatar(mouth_config=json.dumps({"renderer": "continuous", "profile": {
-        "teethY": 0.0, "teethScale": 1.0, "jawRange": 0.95, "legacyKnob": 3}}))
+    avatar = _avatar(
+        mouth_config=json.dumps(
+            {
+                "renderer": "continuous",
+                "profile": {"teethY": 0.0, "teethScale": 1.0, "jawRange": 0.95, "legacyKnob": 3},
+            }
+        )
+    )
     await storing.store(avatar, MemoryStorage(), _result(), source="finish")
-    assert _config(avatar)["profile"] == {"teethScale": 1.0, "teethY": 0.016, "warmth": 0.5,
-                                          "lipProjection": 0.55, "jawRange": 0.95}
+    assert _config(avatar)["profile"] == {
+        "teethScale": 1.0,
+        "teethY": 0.016,
+        "warmth": 0.5,
+        "lipProjection": 0.55,
+        "jawRange": 0.95,
+    }
 
 
 async def test_a_profile_outside_mouth_profiles_ranges_is_refused_before_the_draft_changes():
@@ -692,17 +863,27 @@ async def test_a_profile_outside_mouth_profiles_ranges_is_refused_before_the_dra
 
 
 def _kit_config(profile: dict, fitted: dict | None, teeth: dict | None = None) -> dict:
-    kit = {"id": "kit123", "state": "made", "shapes": {"aa": {"provenance": "generated"}},
-           "teeth": teeth if teeth is not None else {"used": True, "reason": None}}
+    kit = {
+        "id": "kit123",
+        "state": "made",
+        "shapes": {"aa": {"provenance": "generated"}},
+        "teeth": teeth if teeth is not None else {"used": True, "reason": None},
+    }
     if fitted is not None:
         kit["fitted"] = fitted
-    return {"renderer": "continuous", "profile": profile, "motion_key": f"{PREFIX}m.json",
-            "kit": kit}
+    return {
+        "renderer": "continuous",
+        "profile": profile,
+        "motion_key": f"{PREFIX}m.json",
+        "kit": kit,
+    }
 
 
 def test_an_upload_refits_only_the_teeth_values_the_owner_did_not_move():
-    config = _kit_config({**DEFAULTS, "teethY": 0.03, "teethScale": 1.1, "jawRange": 0.95},
-                         {"teethY": 0.016, "teethScale": 1.1})
+    config = _kit_config(
+        {**DEFAULTS, "teethY": 0.03, "teethScale": 1.1, "jawRange": 0.95},
+        {"teethY": 0.016, "teethScale": 1.1},
+    )
     avatar = _avatar(mouth_config=json.dumps(config))
     storing.teeth_changed(avatar, calls.OWNER_PHOTO)
     after = _config(avatar)
@@ -726,8 +907,9 @@ def test_removed_teeth_refit_a_record_from_before_fitted_was_kept_for_the_standa
 
 def test_a_kit_whose_teeth_were_never_used_keeps_saying_why():
     timeout = {"code": "timeout", "detail": "The AI did not answer in time"}
-    config = _kit_config(dict(DEFAULTS), {"teethY": 0.0, "teethScale": 1.0},
-                         {"used": False, "reason": timeout})
+    config = _kit_config(
+        dict(DEFAULTS), {"teethY": 0.0, "teethScale": 1.0}, {"used": False, "reason": timeout}
+    )
     avatar = _avatar(mouth_config=json.dumps(config))
     storing.teeth_changed(avatar, calls.OWNER_PHOTO)
     assert _config(avatar)["kit"]["teeth"] == {"used": False, "reason": timeout}
@@ -741,8 +923,9 @@ def test_teeth_changed_without_a_kit_changes_nothing(raw):
 
 
 def test_a_teeth_value_the_owner_moved_survives_a_second_teeth_change():
-    config = _kit_config({**DEFAULTS, "teethY": 0.03, "teethScale": 1.0},
-                         {"teethY": 0.016, "teethScale": 1.0})
+    config = _kit_config(
+        {**DEFAULTS, "teethY": 0.03, "teethScale": 1.0}, {"teethY": 0.016, "teethScale": 1.0}
+    )
     avatar = _avatar(mouth_config=json.dumps(config))
     storing.teeth_changed(avatar, calls.OWNER_PHOTO)  # their own photo
     assert _config(avatar)["profile"]["teethY"] == 0.03
@@ -754,13 +937,24 @@ def test_a_teeth_value_the_owner_moved_survives_a_second_teeth_change():
 
 
 def test_drop_removes_the_motion_and_its_disclosure_and_keeps_the_teeth_and_profile():
-    config = {"renderer": "continuous", "profile": {**DEFAULTS, "jawRange": 0.95},
-              "oral_image_key": "t.webp", "oral_rig_key": "t.json",
-              "teeth": {"source": "ai", "model": "m"}, "motion_key": "motion.json",
-              "kit": {"state": "made", "dropped": None, "generated": 6}}
-    avatar = _avatar(mouth_config=json.dumps(config), ai_edited={
-        "mode": "teeth", "model": "m", "teeth": {"model": "m"},
-        "mouth_shapes": {"model": "m", "generated": 6}})
+    config = {
+        "renderer": "continuous",
+        "profile": {**DEFAULTS, "jawRange": 0.95},
+        "oral_image_key": "t.webp",
+        "oral_rig_key": "t.json",
+        "teeth": {"source": "ai", "model": "m"},
+        "motion_key": "motion.json",
+        "kit": {"state": "made", "dropped": None, "generated": 6},
+    }
+    avatar = _avatar(
+        mouth_config=json.dumps(config),
+        ai_edited={
+            "mode": "teeth",
+            "model": "m",
+            "teeth": {"model": "m"},
+            "mouth_shapes": {"model": "m", "generated": 6},
+        },
+    )
     assert storing.drop(avatar, calls.REBASE_FAILED) == ["motion.json"]
     after = _config(avatar)
     assert "motion_key" not in after
@@ -776,8 +970,11 @@ def test_drop_without_a_motion_does_nothing_and_without_a_kit_records_none():
     assert storing.drop(avatar, calls.REBASE_FAILED) == []
     assert avatar.mouth_config == still and avatar.ai_edited == {"mode": "touchup", "model": "pic"}
     assert storing.drop(_avatar(), calls.REBASE_FAILED) == []
-    bare = _avatar(mouth_config=json.dumps(
-        {"renderer": "continuous", "profile": {}, "motion_key": "motion.json"}))
+    bare = _avatar(
+        mouth_config=json.dumps(
+            {"renderer": "continuous", "profile": {}, "motion_key": "motion.json"}
+        )
+    )
     assert storing.drop(bare, calls.REBASE_FAILED) == ["motion.json"]
     assert _config(bare) == {"renderer": "continuous", "profile": {}}
 
@@ -785,8 +982,11 @@ def test_drop_without_a_motion_does_nothing_and_without_a_kit_records_none():
 def _following(storage: MemoryStorage, kit: bool = True) -> Avatar:
     manifest = {"version": 2, "character": f"{pk.CHARACTER_PREFIX}kit123", "poses": []}
     storage.files[f"{PREFIX}mouth-motion-old.json"] = json.dumps(manifest).encode()
-    config = {"renderer": "continuous", "profile": {},
-              "motion_key": f"{PREFIX}mouth-motion-old.json"}
+    config = {
+        "renderer": "continuous",
+        "profile": {},
+        "motion_key": f"{PREFIX}mouth-motion-old.json",
+    }
     if kit:
         config["kit"] = {"state": "made", "rebased_at": None}
     return _avatar(mouth_config=json.dumps(config))
@@ -832,7 +1032,8 @@ async def test_a_kit_whose_motion_file_is_gone_is_dropped_rather_than_left_on_ol
     avatar = _following(storage)
     storage.files.clear()
     assert await storing.follow_points(avatar, storage, POINTS) == [
-        f"{PREFIX}mouth-motion-old.json"]
+        f"{PREFIX}mouth-motion-old.json"
+    ]
     config = _config(avatar)
     assert "motion_key" not in config
     assert config["kit"]["state"] == "dropped" and config["kit"]["dropped"] == calls.REBASE_FAILED
@@ -857,7 +1058,8 @@ async def test_follow_rig_moves_the_kit_only_for_another_rig(monkeypatch):
     assert seen == []
     moved = {**rig, "points": [[9.0, 9.0], [8.0, 8.0]]}
     assert await storing.follow_rig(avatar, storage, rig, moved) == [
-        f"{PREFIX}mouth-motion-old.json"]
+        f"{PREFIX}mouth-motion-old.json"
+    ]
     assert seen == [(moved["points"], None)]
 
 
@@ -881,8 +1083,11 @@ def test_only_a_ready_photo_of_a_person_with_its_picture_takes_a_kit():
         ({"image_key": None}, Conflict409, "source_gone"),
         ({"rig_key": None}, Conflict409, "source_gone"),
         # The first that applies: a failed animal with no picture is "not a photo".
-        ({"status": AvatarStatus.failed, "face_type": "animal", "image_key": None},
-         Conflict409, "not_a_photo"),
+        (
+            {"status": AvatarStatus.failed, "face_type": "animal", "image_key": None},
+            Conflict409,
+            "not_a_photo",
+        ),
     ],
 )
 def test_the_person_a_kit_is_for_is_checked_in_order(changes, error, code):
@@ -940,10 +1145,15 @@ async def test_an_accepted_start_forgets_the_last_ending_and_runs_on_its_consent
     panel._ended[AVATAR_ID] = {"id": "old", "state": FAILED}
     started = panel.start(_avatar(), "consent1")
     assert AVATAR_ID not in panel._ended
-    assert started == {"id": started["id"], "step": panel.JOB_STEP, "state": QUEUED,
-                       "error": None, "started_at": started["started_at"],
-                       "progress": {"fraction": 0.0, "label": None, "count": None},
-                       "retryable": False}
+    assert started == {
+        "id": started["id"],
+        "step": panel.JOB_STEP,
+        "state": QUEUED,
+        "error": None,
+        "started_at": started["started_at"],
+        "progress": {"fraction": 0.0, "label": None, "count": None},
+        "retryable": False,
+    }
     await runner.drain()
     assert ran == [(started["id"], {"consent_id": "consent1"})]
 
@@ -966,7 +1176,11 @@ def test_the_job_view_is_the_live_kit_job_else_how_the_last_one_ended():
     live = runner.reserve(ORG, AVATAR_ID, panel.JOB_STEP, 0)
     view = panel.job_view(AVATAR_ID)
     assert (view["id"], view["state"], view["error"], view["retryable"]) == (
-        live.id, QUEUED, None, False)
+        live.id,
+        QUEUED,
+        None,
+        False,
+    )
     assert view["progress"] == {"fraction": 0.0, "label": None, "count": None}
 
 
@@ -989,8 +1203,10 @@ def test_an_ended_job_says_whether_asking_again_could_help(state, error, retryab
 def test_only_the_most_recent_endings_are_kept(monkeypatch):
     monkeypatch.setattr(panel, "ENDED_KEPT", 2)
     for subject in ("a1", "a2", "a1", "a3"):
-        panel._end(Job(id=f"j-{subject}", org_id=ORG, subject_id=subject, step=panel.JOB_STEP,
-                       revision=0), DONE)
+        panel._end(
+            Job(id=f"j-{subject}", org_id=ORG, subject_id=subject, step=panel.JOB_STEP, revision=0),
+            DONE,
+        )
     assert list(panel._ended) == ["a1", "a3"], "a1 ended again, so a2 is the oldest"
 
 
@@ -1012,13 +1228,15 @@ def test_a_kit_that_made_nothing_fails_with_what_stopped_it_first():
     assert type(failure) is AppError and failure.status_code == 500
     assert failure.code == "image_limit_reached"
     assert failure.detail == f"None of the mouth shapes could be made: {limit['detail']}"
-    checks = panel._nothing_made(_with_reasons(
-        [None, rejected, {"code": "registration", "detail": "r"}, None, None, None]))
+    checks = panel._nothing_made(
+        _with_reasons([None, rejected, {"code": "registration", "detail": "r"}, None, None, None])
+    )
     assert checks.code == "pose_not_reached"
     silent = panel._nothing_made(_with_reasons([None] * 6))
     assert (silent.code, silent.detail) == (
-        "provider_error", "None of the mouth shapes could be made: "
-        "The AI service did not return an image")
+        "provider_error",
+        "None of the mouth shapes could be made: The AI service did not return an image",
+    )
 
 
 # --- panel: the job, faked around ---------------------------------------------------------
@@ -1038,7 +1256,8 @@ class PanelWorld:
         self.storage = MemoryStorage()
         self.storage.files[self.avatar.image_key] = b"picture"
         self.storage.files[self.avatar.rig_key] = json.dumps(
-            {"points": POINTS, "image_size": [400, 500]}).encode()
+            {"points": POINTS, "image_size": [400, 500]}
+        ).encode()
         self.switched_off = False
         self.configured = True
         self.limit_error: Exception | None = None
@@ -1076,8 +1295,10 @@ class PanelWorld:
     [
         (lambda w: setattr(w, "switched_off", True), "third_party_ai_disabled"),
         (lambda w: setattr(w, "configured", False), "imagegen_unavailable"),
-        (lambda w: setattr(w, "limit_error", RateLimit429("limit", code="image_limit_reached")),
-         "image_limit_reached"),
+        (
+            lambda w: setattr(w, "limit_error", RateLimit429("limit", code="image_limit_reached")),
+            "image_limit_reached",
+        ),
         (lambda w: w.storage.files.pop(w.avatar.image_key), "source_gone"),
         (lambda w: w.storage.files.pop(w.avatar.rig_key), "source_gone"),
         (lambda w: setattr(w.avatar, "face_type", "animal"), "mouth_not_for_face_type"),
@@ -1106,8 +1327,14 @@ async def test_the_job_boundary_says_how_the_kit_ended(monkeypatch):
     monkeypatch.setattr(panel, "_make_for_avatar", fine)
     await panel._run(job, {"consent_id": "consent1"})
     assert panel.job_view(AVATAR_ID) == {
-        "id": "job1", "step": panel.JOB_STEP, "state": DONE, "error": None,
-        "started_at": job.started_at, "progress": None, "retryable": False}
+        "id": "job1",
+        "step": panel.JOB_STEP,
+        "state": DONE,
+        "error": None,
+        "started_at": job.started_at,
+        "progress": None,
+        "retryable": False,
+    }
 
     async def crash(job, params):
         raise KeyError("points")
@@ -1135,7 +1362,8 @@ async def test_a_face_re_marked_while_the_kit_was_made_gets_the_kit_moved_onto_i
 
     async def made_while_re_marked():
         world.storage.files[world.avatar.rig_key] = json.dumps(
-            {"points": moved, "image_size": [400, 500]}).encode()
+            {"points": moved, "image_size": [400, 500]}
+        ).encode()
         return _result()
 
     world.answer = made_while_re_marked
@@ -1160,9 +1388,15 @@ async def test_malformed_points_with_the_owners_teeth_fail_as_kit_unavailable(mo
     """With the owner's own teeth the single teeth photo could bring
     nothing, so the kit's refusal is the job's."""
     world = PanelWorld(monkeypatch)
-    world.avatar.mouth_config = json.dumps({
-        "renderer": "continuous", "profile": {}, "oral_image_key": "t.webp",
-        "oral_rig_key": "t.json", "teeth": {"source": "upload"}})
+    world.avatar.mouth_config = json.dumps(
+        {
+            "renderer": "continuous",
+            "profile": {},
+            "oral_image_key": "t.webp",
+            "oral_rig_key": "t.json",
+            "teeth": {"source": "upload"},
+        }
+    )
     message = "base_points must be 478 finite (x, y) pixel positions"
     world.answer = ValueError(message)
     with pytest.raises(Conflict409) as refused:
@@ -1185,7 +1419,9 @@ async def test_teeth_made_alone_that_fail_fail_the_job_with_their_own_reason(mon
     with pytest.raises(AppError) as failed:
         await panel._make_for_avatar(job, {"consent_id": "consent1"})
     assert (failed.value.code, failed.value.detail) == (
-        "safety_refused", "The AI declined to make the teeth")
+        "safety_refused",
+        "The AI declined to make the teeth",
+    )
     assert asked == [(ORG, b"picture")]
     assert job.label == calls.TEETH_LABEL and world.db.commits == 0
 
@@ -1272,7 +1508,9 @@ def test_every_pose_shares_the_mean_poses_topology():
     shared = pk.shared_triangles(poses, base, (0.0, 0.0), 10.0)
     assert _triangles(shared) == {frozenset({0, 2, 3}), frozenset({1, 2, 3})}
     assert _triangles(pk.shared_triangles(poses[:1], base, (0.0, 0.0), 10.0)) == {
-        frozenset({0, 1, 2}), frozenset({0, 1, 3})}
+        frozenset({0, 1, 2}),
+        frozenset({0, 1, 3}),
+    }
 
 
 def test_triangles_away_from_the_mouth_are_left_out():
@@ -1286,8 +1524,11 @@ def test_triangles_away_from_the_mouth_are_left_out():
 
 
 def _reference_manifest(**changes) -> dict:
-    manifest = {"version": 1, "character": pk.REFERENCE_CHARACTER,
-                "poses": [{"id": pose, "points": [[0.5, 0.5]] * 478} for pose in pk.POSES]}
+    manifest = {
+        "version": 1,
+        "character": pk.REFERENCE_CHARACTER,
+        "poses": [{"id": pose, "points": [[0.5, 0.5]] * 478} for pose in pk.POSES],
+    }
     manifest.update(changes)
     return manifest
 
@@ -1297,13 +1538,23 @@ def _reference_manifest(**changes) -> dict:
     [
         ({"version": 2}, "not the Reference's motion manifest"),
         ({"character": f"{pk.CHARACTER_PREFIX}kit123"}, "not the Reference's motion manifest"),
-        ({"poses": [{"id": p, "points": [[0.5, 0.5]] * 478} for p in pk.POSES[:-1]]},
-         "the Reference manifest is incomplete"),
-        ({"poses": [{"id": p, "points": [[0.5, 0.5]] * 478} for p in reversed(pk.POSES)]},
-         "the Reference manifest is incomplete"),
-        ({"poses": [{"id": p, "points": [[0.5, 0.5]] * (468 if p == "oh" else 478)}
-                    for p in pk.POSES]},
-         "the Reference manifest is incomplete"),
+        (
+            {"poses": [{"id": p, "points": [[0.5, 0.5]] * 478} for p in pk.POSES[:-1]]},
+            "the Reference manifest is incomplete",
+        ),
+        (
+            {"poses": [{"id": p, "points": [[0.5, 0.5]] * 478} for p in reversed(pk.POSES)]},
+            "the Reference manifest is incomplete",
+        ),
+        (
+            {
+                "poses": [
+                    {"id": p, "points": [[0.5, 0.5]] * (468 if p == "oh" else 478)}
+                    for p in pk.POSES
+                ]
+            },
+            "the Reference manifest is incomplete",
+        ),
     ],
     ids=["version", "character", "missing-pose", "reordered", "short-pose"],
 )
@@ -1334,10 +1585,18 @@ def test_a_base_face_with_no_width_has_no_manifest_frame():
     ("shape", "opened", "width", "missed"),
     [
         ("oo", 0.04, 0.7, "the lips parted 0.04 mouth widths, less than 0.06"),
-        ("oo", 0.30, 0.7,
-         "the lips parted 0.30 mouth widths, more than 0.244 (2.0 times the Reference's)"),
-        ("aa", 0.41, 1.0,
-         "the lips parted 0.41 mouth widths, more than 0.406 (1.4 times the Reference's)"),
+        (
+            "oo",
+            0.30,
+            0.7,
+            "the lips parted 0.30 mouth widths, more than 0.244 (2.0 times the Reference's)",
+        ),
+        (
+            "aa",
+            0.41,
+            1.0,
+            "the lips parted 0.41 mouth widths, more than 0.406 (1.4 times the Reference's)",
+        ),
         ("ee", 0.10, 0.90, "the mouth is 0.90 of its rest width, narrower than 0.94"),
         ("oo", 0.10, 0.90, "the mouth is 0.90 of its rest width, wider than 0.85"),
         ("oh", 0.13, 0.95, "the mouth is 0.95 of its rest width, wider than 0.92"),
@@ -1363,8 +1622,8 @@ def _lips(gap: float, width: float) -> np.ndarray:
 def test_a_teeth_answer_must_part_its_lips_as_far_as_an_upload_must():
     assert pk._teeth_shown(_lips(8.0, 100.0)) is None, "exactly the threshold passes"
     assert pk._teeth_shown(_lips(5.0, 100.0)) == (
-        "the lips parted 0.05 of their mouth width, too little to show the teeth "
-        "(at least 0.08)")
+        "the lips parted 0.05 of their mouth width, too little to show the teeth (at least 0.08)"
+    )
     # A mouth under a pixel wide is measured against one pixel, not divided by zero.
     assert pk._teeth_shown(_lips(0.5, 0.0)) is None
     assert pk._teeth_shown(_lips(0.05, 0.0)) is not None
@@ -1388,10 +1647,18 @@ def test_an_answer_whose_face_was_not_fully_found_is_refused():
     request = pk.PoseRequest("aa", pk.FACE_CROP, "p", b"", "image/jpeg", (0.0, 0.0, 64.0, 64.0))
     frame = pk.ManifestFrame(np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]), (64, 64))
     for detected in (np.full((478, 2), np.nan), np.zeros((468, 2)), np.full((478, 2), np.inf)):
-        registration = pk.register_answer(_png(), request, Image.new("RGB", (64, 64)),
-                                          np.zeros((478, 2)), frame, lambda image, d=detected: d)
-        assert registration.reason == {"code": "no_face_in_result",
-                                       "detail": "The answer's face was not fully found"}
+        registration = pk.register_answer(
+            _png(),
+            request,
+            Image.new("RGB", (64, 64)),
+            np.zeros((478, 2)),
+            frame,
+            lambda image, d=detected: d,
+        )
+        assert registration.reason == {
+            "code": "no_face_in_result",
+            "detail": "The answer's face was not fully found",
+        }
         assert registration.checks == {"aspect": 1.0}
         assert registration.ok is False and registration.answer_points is None
     # A registration is ok only with targets and no reason.

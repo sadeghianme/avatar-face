@@ -6,6 +6,7 @@ its JSON. The bundle (embed/dist/head3d-bake.mjs) is built by
 `npm run build:head3d-bake` in embed/, or here on demand when esbuild is
 installed beside it.
 """
+
 from __future__ import annotations
 
 import json
@@ -21,7 +22,15 @@ BUNDLE = EMBED / "dist/head3d-bake.mjs"
 ENTRY = EMBED / "scripts/head3d-bake.ts"
 ESBUILD = EMBED / "node_modules/.bin/esbuild"
 
-BAKED_SYMMETRIC = ("jawOpen", "mouthClose", "mouthPucker", "mouthFunnel", "mouthStretch", "mouthSmile", "eyeBlink")
+BAKED_SYMMETRIC = (
+    "jawOpen",
+    "mouthClose",
+    "mouthPucker",
+    "mouthFunnel",
+    "mouthStretch",
+    "mouthSmile",
+    "eyeBlink",
+)
 
 
 class BakeUnavailable(RuntimeError):
@@ -49,9 +58,17 @@ def ensure_bundle() -> Path:
         raise BakeUnavailable(f"no bake bundle at {BUNDLE} and no esbuild at {ESBUILD}")
     BUNDLE.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
-        [str(ESBUILD), str(ENTRY), "--bundle", "--platform=node", "--format=esm",
-         f"--outfile={BUNDLE}", "--log-level=warning"],
-        check=True, cwd=str(EMBED),
+        [
+            str(ESBUILD),
+            str(ENTRY),
+            "--bundle",
+            "--platform=node",
+            "--format=esm",
+            f"--outfile={BUNDLE}",
+            "--log-level=warning",
+        ],
+        check=True,
+        cwd=str(EMBED),
     )
     return BUNDLE
 
@@ -84,6 +101,10 @@ def bake_rig(rig: dict, node: str | None = None) -> dict:
         rig_path = Path(tmp) / "rig.json"
         out_path = Path(tmp) / "bake.json"
         rig_path.write_text(json.dumps(rig))
-        subprocess.run([node_bin, str(bundle), str(rig_path), str(out_path)], check=True,
-                       env={**os.environ, "NODE_NO_WARNINGS": "1"}, capture_output=True)
+        subprocess.run(
+            [node_bin, str(bundle), str(rig_path), str(out_path)],
+            check=True,
+            env={**os.environ, "NODE_NO_WARNINGS": "1"},
+            capture_output=True,
+        )
         return validate(json.loads(out_path.read_text()))

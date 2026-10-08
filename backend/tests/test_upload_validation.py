@@ -6,7 +6,6 @@ marked ready, with a mouth moving somewhere near the middle of the picture and
 nothing to explain it.
 """
 
-
 from app.models import AvatarStatus
 from app.services.avatars.build import process_avatar
 from tests.conftest import create_org, register_and_login, sample_png
@@ -19,7 +18,9 @@ async def _pending_avatar(client, headers, org_id) -> str:
         headers=headers,
     )
     body = created.json()
-    await client.put(body["upload_url"], content=sample_png(), headers={"content-type": "image/png"})
+    await client.put(
+        body["upload_url"], content=sample_png(), headers={"content-type": "image/png"}
+    )
     return body["avatar"]["id"]
 
 

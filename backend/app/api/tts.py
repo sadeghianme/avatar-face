@@ -36,9 +36,7 @@ MAX_STREAMS = 4
 
 @router.get("/providers", response_model=list[ProviderOut])
 async def list_providers() -> list[ProviderOut]:
-    return [
-        ProviderOut(name=p.name, display_name=p.display_name) for p in available_providers()
-    ]
+    return [ProviderOut(name=p.name, display_name=p.display_name) for p in available_providers()]
 
 
 @router.get("/languages")
@@ -100,7 +98,9 @@ async def stream(body: SynthesizeRequest, ctx: OrgMember, db: DB):
     org_id = ctx.org.id
     await check_usage_limit(db, org_id, len(body.text))
     if org_id in _streams or len(_streams) >= MAX_STREAMS:
-        raise RateLimit429("Speech is already being prepared. Stop it or try again shortly.", code="speech_busy")
+        raise RateLimit429(
+            "Speech is already being prepared. Stop it or try again shortly.", code="speech_busy"
+        )
     streams = body.provider == "kokoro"
     # No request-scoped connection is held while synthesis runs.
     await db.rollback()
@@ -116,16 +116,28 @@ async def stream(body: SynthesizeRequest, ctx: OrgMember, db: DB):
 
     async def events():
         try:
-            yield line({"type": "start", "version": 1, "mode": "phrases" if streams else "recording"})
+            yield line(
+                {"type": "start", "version": 1, "mode": "phrases" if streams else "recording"}
+            )
             if not streams:
                 async with get_session_factory()() as session:
                     result, cached = await synthesize_cached(
                         session, body.provider, body.voice, body.locale, body.text, org_id=org_id
                     )
-                    await record_synthesis(session, org_id, body.provider, len(body.text), cached, source="dashboard")
-                yield line({"type": "recording", "audio_b64": base64.b64encode(result.audio).decode(),
-                            "audio_mime": result.audio_mime, "duration_ms": result.duration_ms,
-                            "cues": result.cues, "baseline_cues": result.cues, "timing_source": "existing_provider"})
+                    await record_synthesis(
+                        session, org_id, body.provider, len(body.text), cached, source="dashboard"
+                    )
+                yield line(
+                    {
+                        "type": "recording",
+                        "audio_b64": base64.b64encode(result.audio).decode(),
+                        "audio_mime": result.audio_mime,
+                        "duration_ms": result.duration_ms,
+                        "cues": result.cues,
+                        "baseline_cues": result.cues,
+                        "timing_source": "existing_provider",
+                    }
+                )
                 yield line({"type": "done", "chunks": 0})
                 return
             phrases = speech_phrases(body.text)
@@ -134,7 +146,11 @@ async def stream(body: SynthesizeRequest, ctx: OrgMember, db: DB):
             first_delivery: float | None = None
             seconds_per_char: float | None = None
             while phrases:
-                buffered = max(0.0, sample_offset / 24000 - (time.monotonic() - first_delivery)) if first_delivery else 0.0
+                buffered = (
+                    max(0.0, sample_offset / 24000 - (time.monotonic() - first_delivery))
+                    if first_delivery
+                    else 0.0
+                )
                 batch = phrase_batch_size(phrases, buffered, seconds_per_char)
                 phrase = "".join(phrases[:batch])
                 phrases = phrases[batch:]
@@ -144,31 +160,56 @@ async def stream(body: SynthesizeRequest, ctx: OrgMember, db: DB):
                         await check_usage_limit(session, org_id, len(phrase))
                         # PCM: the packet carries samples, not a file.
                         result, cached = await synthesize_cached(
-                            session, body.provider, body.voice, body.locale, phrase,
-                            org_id=org_id, pcm=True,
+                            session,
+                            body.provider,
+                            body.voice,
+                            body.locale,
+                            phrase,
+                            org_id=org_id,
+                            pcm=True,
                         )
-                        await record_synthesis(session, org_id, body.provider, len(phrase), cached, source="dashboard")
+                        await record_synthesis(
+                            session, org_id, body.provider, len(phrase), cached, source="dashboard"
+                        )
                 packet = pcm_packet(result.audio, sequence, sample_offset, result.cues, result.cues)
                 sample_offset += packet["sample_count"]
                 elapsed = time.monotonic() - started
                 # A cache hit is not evidence about inference speed.
                 if not cached:
-                    seconds_per_char = max(elapsed / max(1, len(phrase)), (seconds_per_char or 0) * 0.8)
+                    seconds_per_char = max(
+                        elapsed / max(1, len(phrase)), (seconds_per_char or 0) * 0.8
+                    )
                 packet["generation_ms"] = round(elapsed * 1000)
                 first_delivery = first_delivery or time.monotonic()
                 sequence += 1
                 yield line(packet)
-            yield line({"type": "done", "chunks": sequence, "total_samples": sample_offset, "sample_rate": 24000})
+            yield line(
+                {
+                    "type": "done",
+                    "chunks": sequence,
+                    "total_samples": sample_offset,
+                    "sample_rate": 24000,
+                }
+            )
         except asyncio.CancelledError:
             raise
         except Exception:
             # Broad on purpose: the headers are sent, so any failure is said
             # in the stream itself, where the client shows it.
             logger.exception("speech stream failed")
-            yield line({"type": "error", "code": "speech_stream_failed",
-                        "detail": "Speech preparation was interrupted. Please try again."})
+            yield line(
+                {
+                    "type": "error",
+                    "code": "speech_stream_failed",
+                    "detail": "Speech preparation was interrupted. Please try again.",
+                }
+            )
         finally:
             release()
 
-    return StreamingResponse(events(), media_type="application/x-ndjson", background=BackgroundTask(release),
-                             headers={"Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no"})
+    return StreamingResponse(
+        events(),
+        media_type="application/x-ndjson",
+        background=BackgroundTask(release),
+        headers={"Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no"},
+    )

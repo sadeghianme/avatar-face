@@ -58,8 +58,10 @@ def answer_for(face: dict, face_type: str, size=SIZE) -> dict[str, list[int]]:
 def body_with(answer: dict, found: bool = True) -> dict:
     return {
         "candidates": [
-            {"content": {"parts": [{"text": json.dumps({"face_found": found, **answer})}]},
-             "finishReason": "STOP"}
+            {
+                "content": {"parts": [{"text": json.dumps({"face_found": found, **answer})}]},
+                "finishReason": "STOP",
+            }
         ]
     }
 
@@ -245,7 +247,11 @@ def test_a_good_answer_becomes_anchors_that_fit(face_type):
     # A pre-fill, never a detection: finishing still wants every part.
     assert anchors["detected"] is False
     assert anchors["validation"] == {
-        "ok": True, "reasons": [], "warnings": [], "detected": False, "one_click": False,
+        "ok": True,
+        "reasons": [],
+        "warnings": [],
+        "detected": False,
+        "one_click": False,
     }
     assert len(anchors["base"]) == 478
     assert ("left_pupil" in anchors["marks"]) is (face_type == "cartoon")

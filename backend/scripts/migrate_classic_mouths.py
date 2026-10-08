@@ -58,7 +58,7 @@ BACKUP_VERSION = 1
 
 
 def classic_renderer(avatar) -> str | None:
-    """"null" for an avatar whose mouth was never set (the classic mouth,
+    """ "null" for an avatar whose mouth was never set (the classic mouth,
     as every avatar had before the photographic one), "classic" for one
     that names it; None for anything else, which this leaves alone: the
     photographic mouth already, a config this server cannot read, the
@@ -170,16 +170,20 @@ async def make_plans(day: str | None = None) -> list[Plan]:
     plans: list[Plan] = []
     async with get_session_factory()() as db:
         rows = (
-            await db.execute(
-                select(Avatar)
-                .where(
-                    Avatar.kind == AvatarKind.photo,
-                    Avatar.face_type == "human",
-                    Avatar.status == AvatarStatus.ready,
+            (
+                await db.execute(
+                    select(Avatar)
+                    .where(
+                        Avatar.kind == AvatarKind.photo,
+                        Avatar.face_type == "human",
+                        Avatar.status == AvatarStatus.ready,
+                    )
+                    .order_by(Avatar.created_at, Avatar.id)
                 )
-                .order_by(Avatar.created_at, Avatar.id)
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         # Detached: whatever plan_for does to them never reaches the database.
         db.expunge_all()
     for avatar in rows:
@@ -302,7 +306,9 @@ async def revert(path: Path, force: bool = False) -> Outcome:
                     and avatar.published_config == entry["after"]["published_config"]
                 )
                 if not as_written and not force:
-                    raise Changed("edited since the migration; not reverted (use --force to insist)")
+                    raise Changed(
+                        "edited since the migration; not reverted (use --force to insist)"
+                    )
                 avatar.mouth_config = entry["before"]["mouth_config"]
                 avatar.published_config = entry["before"]["published_config"]
                 await db.commit()
@@ -324,8 +330,10 @@ def table(plans: list[Plan]) -> str:
     rows = [("id", "name", "renderer", "published", "change")]
     for plan in plans:
         published = (
-            "no" if not plan.published
-            else "yes, unpublished edits" if plan.unpublished_changes
+            "no"
+            if not plan.published
+            else "yes, unpublished edits"
+            if plan.unpublished_changes
             else "yes"
         )
         rows.append((plan.id, plan.name, plan.current, published, plan.change()))
@@ -340,16 +348,25 @@ def table(plans: list[Plan]) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--dry-run", action="store_true", default=True,
-                      help="list what would change (the default)")
+    mode.add_argument(
+        "--dry-run", action="store_true", default=True, help="list what would change (the default)"
+    )
     mode.add_argument("--apply", action="store_true", help="write the draft and the snapshot")
-    mode.add_argument("--revert", metavar="BACKUP", type=Path,
-                      help="restore the values a backup holds")
+    mode.add_argument(
+        "--revert", metavar="BACKUP", type=Path, help="restore the values a backup holds"
+    )
     parser.add_argument("--yes", action="store_true", help="required with --apply")
-    parser.add_argument("--backup-dir", type=Path, metavar="DIR",
-                        help="where --apply writes its backup first (required)")
-    parser.add_argument("--force", action="store_true",
-                        help="with --revert: restore avatars edited since the migration too")
+    parser.add_argument(
+        "--backup-dir",
+        type=Path,
+        metavar="DIR",
+        help="where --apply writes its backup first (required)",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="with --revert: restore avatars edited since the migration too",
+    )
     args = parser.parse_args(argv)
 
     if args.revert is not None:
@@ -377,7 +394,9 @@ async def run(args: argparse.Namespace) -> int:
     plans = await make_plans()
     print(table(plans))
     if not args.apply:
-        print(f"{len(plans)} avatar(s) would move; run with --apply --yes --backup-dir DIR to write")
+        print(
+            f"{len(plans)} avatar(s) would move; run with --apply --yes --backup-dir DIR to write"
+        )
         return 0
     if not plans:
         return 0

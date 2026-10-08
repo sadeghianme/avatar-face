@@ -120,9 +120,7 @@ def _ground_truth_scene(offset=3):
     backdrop = np.repeat(ramp[None, :, None], h, axis=0).repeat(3, axis=2)
     subject = np.tile(SUBJECT, (h, w, 1))
     composite = truth[:, :, None] * subject + (1 - truth[:, :, None]) * backdrop
-    coarse = np.tile(
-        np.clip((x - 48 - offset) / 8.0 + 0.5, 0, 1).astype(np.float32), (h, 1)
-    )
+    coarse = np.tile(np.clip((x - 48 - offset) / 8.0 + 0.5, 0, 1).astype(np.float32), (h, 1))
     return composite.clip(0, 255).astype(np.uint8), coarse, truth
 
 
@@ -173,9 +171,7 @@ def _previous_algorithm(rgb, mask):
         pixels = rgb[alpha < 0.02]
         backdrop = pixels.mean(axis=0) if pixels.size else np.zeros(3)
         a = alpha[edge][:, None]
-        colour[edge] = np.clip(
-            (colour[edge] - backdrop * (1 - a)) / np.maximum(a, 0.15), 0, 255
-        )
+        colour[edge] = np.clip((colour[edge] - backdrop * (1 - a)) / np.maximum(a, 0.15), 0, 255)
     return alpha, colour
 
 

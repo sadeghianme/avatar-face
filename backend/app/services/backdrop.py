@@ -108,10 +108,15 @@ def _smooth_backdrop(lab: np.ndarray, backdrop: np.ndarray) -> np.ndarray:
     coef, *_ = np.linalg.lstsq(design, lab[ys, xs], rcond=None)
     gu = (np.arange(width) / max(1, width - 1) * 2 - 1)[None, :]
     gv = (np.arange(height) / max(1, height - 1) * 2 - 1)[:, None]
-    terms = (np.ones((height, width)), gu + 0 * gv, gv + 0 * gu, gu * gu + 0 * gv, gv * gv + 0 * gu, gu * gv)
-    return np.stack(
-        [sum(coef[k, c] * terms[k] for k in range(6)) for c in range(3)], axis=2
+    terms = (
+        np.ones((height, width)),
+        gu + 0 * gv,
+        gv + 0 * gu,
+        gu * gu + 0 * gv,
+        gv * gv + 0 * gu,
+        gu * gv,
     )
+    return np.stack([sum(coef[k, c] * terms[k] for k in range(6)) for c in range(3)], axis=2)
 
 
 def backdrop_mask(rgb: np.ndarray) -> np.ndarray | None:
@@ -145,7 +150,9 @@ def backdrop_mask(rgb: np.ndarray) -> np.ndarray | None:
     model = _smooth_backdrop(lab, backdrop)
     distance = np.linalg.norm(lab - model, axis=2)
     residual = distance[backdrop]
-    sigma = 1.4826 * float(np.median(np.abs(residual - np.median(residual)))) + float(np.median(residual))
+    sigma = 1.4826 * float(np.median(np.abs(residual - np.median(residual)))) + float(
+        np.median(residual)
+    )
     limit = float(np.clip(SIGMAS * max(sigma, 1.0), MIN_DISTANCE, MAX_DISTANCE))
     backdrop = _connected(distance < limit, edge)
     # Specks of the subject that happen to be backdrop-coloured next to the
@@ -163,7 +170,7 @@ def backdrop_mask(rgb: np.ndarray) -> np.ndarray | None:
         return None
     cy, cx = height // 2, width // 2
     dy, dx = int(height * CENTRE_BOX / 2), int(width * CENTRE_BOX / 2)
-    if float(subject[cy - dy:cy + dy + 1, cx - dx:cx + dx + 1].mean()) < MIN_CENTRE_SUBJECT:
+    if float(subject[cy - dy : cy + dy + 1, cx - dx : cx + dx + 1].mean()) < MIN_CENTRE_SUBJECT:
         logger.info("backdrop cut leaves the middle of the frame empty")
         return None
     return ~subject

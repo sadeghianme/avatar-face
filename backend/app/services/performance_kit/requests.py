@@ -87,8 +87,9 @@ def _crop(image: Image.Image, points: np.ndarray, kind: str) -> _Crop | None:
     None when the head crop would be the whole photo (head_square)."""
     if kind == FACE_CROP:
         x0, y0, side = photo_adjust.face_crop_box(points)
-        payload = photo_adjust._jpeg(photo_adjust.crop_face(image, (x0, y0, side)),
-                                     photo_adjust.CROP_QUALITY)
+        payload = photo_adjust._jpeg(
+            photo_adjust.crop_face(image, (x0, y0, side)), photo_adjust.CROP_QUALITY
+        )
         return _Crop(kind, payload, (x0, y0, x0 + side, y0 + side))
     square = head_square(image.size, points)
     if square is None:
@@ -98,8 +99,9 @@ def _crop(image: Image.Image, points: np.ndarray, kind: str) -> _Crop | None:
     # enlarged, at most the edge a source is sent at.
     edge = min(int(round(side)), photo_adjust.SOURCE_MAX_EDGE)
     crop = photo_adjust.crop_face(image, square, size=edge)
-    return _Crop(kind, photo_adjust._jpeg(crop, imagegen.SOURCE_QUALITY),
-                 (x0, y0, x0 + side, y0 + side))
+    return _Crop(
+        kind, photo_adjust._jpeg(crop, imagegen.SOURCE_QUALITY), (x0, y0, x0 + side, y0 + side)
+    )
 
 
 def prepare_pose_request(
@@ -116,8 +118,9 @@ def prepare_pose_request(
 
 
 def _request(shape: str, crop: _Crop) -> PoseRequest:
-    return PoseRequest(shape, crop.kind, request_prompt(shape), crop.payload, "image/jpeg",
-                       crop.box)
+    return PoseRequest(
+        shape, crop.kind, request_prompt(shape), crop.payload, "image/jpeg", crop.box
+    )
 
 
 def _checked_points(points) -> np.ndarray:

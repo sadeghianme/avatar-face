@@ -34,7 +34,13 @@ CUTOUT = "cutout"
 CUTOUT_PREFIX = "cutout:"
 # The keys of photo_analysis.check_photo kept on each step.
 CHECK_KEYS = (
-    "detector", "detected", "face_box", "roll", "face_state", "checks", "recommendations",
+    "detector",
+    "detected",
+    "face_box",
+    "roll",
+    "face_state",
+    "checks",
+    "recommendations",
 )
 FULL_FRAME: CropRect = {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}
 # In `steps`: {face_type, background} as they were before a stylised

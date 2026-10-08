@@ -3,6 +3,7 @@
 pydantic-settings JSON-decodes list fields from env BEFORE validators run;
 without NoDecode, `CORS_ORIGINS=a,b` crashes settings construction.
 """
+
 import os
 from unittest import mock
 

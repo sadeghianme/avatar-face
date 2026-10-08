@@ -73,8 +73,11 @@ def main() -> int:
     timed = os.environ.get("KOKORO_LIPSYNC_MODEL_PATH")
     voices = os.environ.get("KOKORO_VOICES_PATH")
     if not all(path and Path(path).is_file() for path in (original, timed, voices)):
-        print("Set KOKORO_MODEL_PATH, KOKORO_LIPSYNC_MODEL_PATH and KOKORO_VOICES_PATH "
-              "to existing files.", file=sys.stderr)
+        print(
+            "Set KOKORO_MODEL_PATH, KOKORO_LIPSYNC_MODEL_PATH and KOKORO_VOICES_PATH "
+            "to existing files.",
+            file=sys.stderr,
+        )
         return 2
 
     from kokoro_onnx import Kokoro
@@ -94,14 +97,18 @@ def main() -> int:
         served_a, _ = first.create(sentence, voice=args.voice, lang=args.lang)
         served_b, _ = second.create(sentence, voice=args.voice, lang=args.lang)
         print(f"\n{sentence!r}")
-        print(f"  raw    samples {len(raw_a)} vs {len(raw_b)}  "
-              f"corr {_correlation(raw_a, raw_b):.4f}  env {_envelope_correlation(raw_a, raw_b):.4f}  "
-              f"(same model twice: corr {_correlation(raw_a, raw_again):.4f}, "
-              f"identical {np.array_equal(raw_a, raw_again)})")
-        print(f"  served samples {len(served_a)} vs {len(served_b)}  "
-              f"({(len(served_b) - len(served_a)) / 24:.0f} ms longer)  "
-              f"env {_envelope_correlation(served_a, served_b):.4f}  "
-              f"identical {np.array_equal(served_a, served_b)}")
+        print(
+            f"  raw    samples {len(raw_a)} vs {len(raw_b)}  "
+            f"corr {_correlation(raw_a, raw_b):.4f}  env {_envelope_correlation(raw_a, raw_b):.4f}  "
+            f"(same model twice: corr {_correlation(raw_a, raw_again):.4f}, "
+            f"identical {np.array_equal(raw_a, raw_again)})"
+        )
+        print(
+            f"  served samples {len(served_a)} vs {len(served_b)}  "
+            f"({(len(served_b) - len(served_a)) / 24:.0f} ms longer)  "
+            f"env {_envelope_correlation(served_a, served_b):.4f}  "
+            f"identical {np.array_equal(served_a, served_b)}"
+        )
     return 0
 
 

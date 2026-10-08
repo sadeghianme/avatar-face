@@ -97,7 +97,10 @@ def test_a_plan_without_words_has_no_description(args):
 def test_an_old_drafts_plan_is_read_off_its_line(face_type, generated, expected):
     model, look, source = expected
     assert inferred_plan(face_type, generated) == {
-        "model": model, "look": look, "source": source, "description": None,
+        "model": model,
+        "look": look,
+        "source": source,
+        "description": None,
     }
 
 
@@ -256,7 +259,10 @@ def test_the_owners_words_are_quoted_on_one_line_and_cut_at_max_words(words, quo
 def test_the_requirements_are_framing_light_backdrop_avoid_then_the_look():
     assert prompts._requirements("animal", "animation") == " ".join(
         (
-            prompts.FRAMING["animal"], prompts.LIGHT, prompts.BACKDROP, prompts.AVOID,
+            prompts.FRAMING["animal"],
+            prompts.LIGHT,
+            prompts.BACKDROP,
+            prompts.AVOID,
             prompts.LOOK_WORDS[("animal", "animation")],
         )
     )
@@ -267,14 +273,14 @@ def test_a_character_without_a_description_is_the_models_default_subject(descrip
     text = prompts.character_prompt("human", "cartoon", description)
     assert text.startswith(
         "Create a portrait of a character for a talking avatar. The character, in the "
-        "owner's words: \"a friendly, approachable adult\"."
+        'owner\'s words: "a friendly, approachable adult".'
     )
     assert text.endswith(prompts._requirements("human", "cartoon"))
 
 
 def test_an_animals_character_is_asked_for_as_an_animal_character():
     text = prompts.character_prompt("animal", "realistic", "  a grey cat  ")
-    assert "The animal character, in the owner's words: \"a grey cat\"." in text
+    assert 'The animal character, in the owner\'s words: "a grey cat".' in text
     assert "a friendly dog" not in text
 
 
@@ -302,7 +308,7 @@ def test_a_change_keeps_the_same_person_or_animal(model, noun):
     text = prompts.change_prompt(model, "animation", "a red scarf")
     assert text.startswith(
         "Edit this avatar portrait. Apply only this change, in the owner's words: "
-        f"\"a red scarf\". Keep everything else exactly as it is: the same {noun} and identity"
+        f'"a red scarf". Keep everything else exactly as it is: the same {noun} and identity'
     )
     assert text.endswith(prompts._requirements(model, "animation"))
 
@@ -315,8 +321,13 @@ def _item(key: str, source: str | None, **extra) -> dict:
 
 
 def _adjust(**extra) -> dict:
-    return {"mode": "regenerate", "look": "realistic", "instruction": None, "rejected": None,
-            **extra}
+    return {
+        "mode": "regenerate",
+        "look": "realistic",
+        "instruction": None,
+        "rejected": None,
+        **extra,
+    }
 
 
 def _made() -> dict:
@@ -410,8 +421,13 @@ def test_an_upload_never_framed_nor_cut_out_is_not_prepared_yet():
 
 def test_a_framed_upload_goes_back_to_the_cutout_of_its_framing():
     steps = _made()
-    record = {"mode": "original", "look": "realistic", "instruction": None, "step": "framed",
-              "cut": True}
+    record = {
+        "mode": "original",
+        "look": "realistic",
+        "instruction": None,
+        "step": "framed",
+        "cut": True,
+    }
     anchors = {"id": "f1", "frame": "k/framed", "marks": {"left_eye": {"x": 1, "y": 2}}}
     steps["items"]["framed"][KEPT_RECORD] = record
     steps["items"]["framed"][KEPT_ANCHORS] = anchors
@@ -434,14 +450,22 @@ def test_an_upload_cut_out_without_framing_is_prepared_and_its_record_rebuilt():
     assert (out["current"], out["background"]) == ("cutout", "remove")
     assert kept is None
     assert record == {
-        "mode": "original", "look": "realistic", "instruction": None, "step": "original",
+        "mode": "original",
+        "look": "realistic",
+        "instruction": None,
+        "step": "original",
         "cut": True,
     }
 
 
 def test_an_upload_nothing_could_cut_is_prepared_by_its_record_and_kept_opaque():
-    record = {"mode": "original", "look": "realistic", "instruction": None, "step": "original",
-              "cut": False}
+    record = {
+        "mode": "original",
+        "look": "realistic",
+        "instruction": None,
+        "step": "original",
+        "cut": False,
+    }
     steps = {
         "current": "adjusted:0",
         "items": {
@@ -469,8 +493,9 @@ def test_a_generated_characters_picture_is_a_version_in_any_look():
     steps = {
         "current": "adjusted:0",
         "items": {
-            "original": _item("k/original", None, generated={"model": "m", "style": "s",
-                                                             "source_avatar_id": None}),
+            "original": _item(
+                "k/original", None, generated={"model": "m", "style": "s", "source_avatar_id": None}
+            ),
             "adjusted:0": _item("k/a0", "original", adjust=_adjust(mode="generate")),
         },
     }
@@ -478,7 +503,10 @@ def test_a_generated_characters_picture_is_a_version_in_any_look():
     assert (out["current"], out["background"]) == ("original", "keep")
     assert kept is None
     assert record == {
-        "mode": "generate", "look": "cartoon", "instruction": None, "step": "original",
+        "mode": "generate",
+        "look": "cartoon",
+        "instruction": None,
+        "step": "original",
         "cut": False,
     }
 
@@ -487,7 +515,11 @@ def test_an_ai_result_goes_back_to_its_cutout():
     out, _, record = use_version(_made(), "adjusted:0", UPLOAD)
     assert (out["current"], out["background"]) == ("cutout:0", "remove")
     assert record == {
-        "mode": "ai", "look": "realistic", "instruction": None, "step": "adjusted:0", "cut": True,
+        "mode": "ai",
+        "look": "realistic",
+        "instruction": None,
+        "step": "adjusted:0",
+        "cut": True,
     }
 
 
@@ -495,7 +527,10 @@ def test_an_ai_result_that_was_never_cut_out_is_shown_opaque():
     out, _, record = use_version(_made(), "adjusted:1", UPLOAD)
     assert (out["current"], out["background"]) == ("adjusted:1", "keep")
     assert record == {
-        "mode": "change", "look": "realistic", "instruction": "a hat", "step": "adjusted:1",
+        "mode": "change",
+        "look": "realistic",
+        "instruction": "a hat",
+        "step": "adjusted:1",
         "cut": False,
     }
 
@@ -520,15 +555,23 @@ def test_an_old_versions_record_is_read_off_its_adjust(adjust, mode, look):
     }
     _, _, record = use_version(steps, "adjusted:3", make_plan("human", "animation", "upload"))
     assert record == {
-        "mode": mode, "look": look, "instruction": adjust["instruction"], "step": "adjusted:3",
+        "mode": mode,
+        "look": look,
+        "instruction": adjust["instruction"],
+        "step": "adjusted:3",
         "cut": False,
     }
 
 
 def test_a_kept_record_is_copied_and_says_whether_the_cutout_is_shown_now():
     steps = _made()
-    kept = {"mode": "change", "look": "animation", "instruction": "smile", "step": "adjusted:0",
-            "cut": False}
+    kept = {
+        "mode": "change",
+        "look": "animation",
+        "instruction": "smile",
+        "step": "adjusted:0",
+        "cut": False,
+    }
     steps["items"]["adjusted:0"][KEPT_RECORD] = kept
     _, _, record = use_version(steps, "adjusted:0", UPLOAD)
     assert record == {**kept, "cut": True}
@@ -691,8 +734,13 @@ def _found(detected: bool) -> dict:
         "detected": detected,
         "base": [[1.0, 2.0, 0.0]],
         "marks": {"left_eye": {"x": 1.0, "y": 2.0}},
-        "validation": {"ok": True, "reasons": [], "warnings": [], "detected": detected,
-                       "one_click": detected},
+        "validation": {
+            "ok": True,
+            "reasons": [],
+            "warnings": [],
+            "detected": detected,
+            "one_click": detected,
+        },
     }
 
 
@@ -762,7 +810,11 @@ async def test_settle_stores_the_cutout_makes_it_current_and_finds_the_face_on_i
     assert key.startswith("orgs/org1/creations/cr1/cutout2-") and key.endswith(".png")
     assert settling.storage.files == {key: (b"CUT", "image/png")}
     assert steps["items"]["cutout:2"] == {
-        "key": key, "width": 600, "height": 750, "from": "adjusted:2", "cutout": True,
+        "key": key,
+        "width": 600,
+        "height": 750,
+        "from": "adjusted:2",
+        "cutout": True,
     }
     assert (steps["current"], steps["background"]) == ("cutout:2", "remove")
     assert settling.cut_calls == [(b"PNG", "human")]
@@ -842,13 +894,19 @@ async def test_settle_takes_the_vision_models_points_for_an_animal_with_consent(
     settling.ai = (ai, None)
     settling.detected = False
     anchors, _ = await prepare.settle(
-        _job(), Creation(face_type="animal"), _settle_steps(), "adjusted:2", b"PNG", "consent1",
+        _job(),
+        Creation(face_type="animal"),
+        _settle_steps(),
+        "adjusted:2",
+        b"PNG",
+        "consent1",
         [],
     )
     assert anchors["source"] == "ai" and anchors["base"] == [[5.0, 6.0, 0.0]]
     digest = hashlib.sha256(b"CUT").hexdigest()
-    assert settling.ai_calls == [({"sha256": digest, "charged": False}, b"CUT", "animal",
-                                  (600, 750))]
+    assert settling.ai_calls == [
+        ({"sha256": digest, "charged": False}, b"CUT", "animal", (600, 750))
+    ]
 
 
 async def test_settle_shows_why_the_vision_models_points_were_not_used(settling):
@@ -856,7 +914,12 @@ async def test_settle_shows_why_the_vision_models_points_were_not_used(settling)
     settling.ai = (None, warning)
     settling.detected = False
     anchors, _ = await prepare.settle(
-        _job(), Creation(face_type="cartoon"), _settle_steps(), "adjusted:2", b"PNG", "consent1",
+        _job(),
+        Creation(face_type="cartoon"),
+        _settle_steps(),
+        "adjusted:2",
+        b"PNG",
+        "consent1",
         [],
     )
     assert anchors["source"] == "template"
@@ -866,7 +929,12 @@ async def test_settle_shows_why_the_vision_models_points_were_not_used(settling)
 async def test_settle_without_points_or_warning_keeps_what_the_detector_found(settling):
     settling.ai = (None, None)
     anchors, _ = await prepare.settle(
-        _job(), Creation(face_type="animal"), _settle_steps(), "adjusted:2", b"PNG", "consent1",
+        _job(),
+        Creation(face_type="animal"),
+        _settle_steps(),
+        "adjusted:2",
+        b"PNG",
+        "consent1",
         [],
     )
     assert anchors["source"] == "mediapipe" and anchors["validation"]["warnings"] == []
@@ -886,7 +954,12 @@ async def test_settle_does_not_ask_the_vision_model_when_it_is_not_wanted(
 ):
     settling.detected = detected
     await prepare.settle(
-        _job(), Creation(face_type=face_type), _settle_steps(), "adjusted:2", b"PNG", consent_id,
+        _job(),
+        Creation(face_type=face_type),
+        _settle_steps(),
+        "adjusted:2",
+        b"PNG",
+        consent_id,
         [],
     )
     assert settling.ai_calls == []

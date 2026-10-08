@@ -5,6 +5,7 @@ their credentials are configured. Synthesis results are cached
 (services.tts.speech_cache: the recording in storage as MP3, a row each in
 speech_clips) keyed on sha256(provider, voice, locale, text).
 """
+
 from __future__ import annotations
 
 import asyncio

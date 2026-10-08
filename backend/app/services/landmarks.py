@@ -75,9 +75,7 @@ def detect(image: Image.Image) -> FaceLandmarks | None:
 
     rgb = np.asarray(image.convert("RGB"))
     with _lock:
-        result = _landmarker_for(path).detect(
-            mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        )
+        result = _landmarker_for(path).detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
     if not result.face_landmarks:
         return None
     width, height = image.size

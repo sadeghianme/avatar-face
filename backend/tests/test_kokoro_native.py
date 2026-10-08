@@ -147,9 +147,14 @@ async def test_a_stretched_row_is_never_served_once_native_timing_is_on(app, mon
         await speech_cache.put(
             db,
             cache_key=registry.cache_key("kokoro", DEFAULT_VOICE, "en-US", "pa"),
-            provider="kokoro", voice=DEFAULT_VOICE, locale="en-US", text="pa",
+            provider="kokoro",
+            voice=DEFAULT_VOICE,
+            locale="en-US",
+            text="pa",
             result=SynthesisResult(
-                audio=_wav(1000), audio_mime="audio/wav", duration_ms=1000,
+                audio=_wav(1000),
+                audio_mime="audio/wav",
+                duration_ms=1000,
                 cues=[{"t": 0, "viseme": "sil"}, {"t": 999, "viseme": "sil"}],
             ),
             org_id=None,
@@ -161,7 +166,9 @@ async def test_a_stretched_row_is_never_served_once_native_timing_is_on(app, mon
 
         monkeypatch.setattr(lab_timing, "configured", lambda: True)
         monkeypatch.setattr(lab_timing, "render_timed", lambda *_: (_wav(1000), 1000, list(SPANS)))
-        result, cached = await registry.synthesize_cached(db, "kokoro", DEFAULT_VOICE, "en-US", "pa")
+        result, cached = await registry.synthesize_cached(
+            db, "kokoro", DEFAULT_VOICE, "en-US", "pa"
+        )
         assert not cached
         assert any(c["viseme"] == "PP" for c in result.cues)
         # And the native recording is cached under its own key.
@@ -208,10 +215,13 @@ async def test_streamed_phrases_are_timed_natively_too(client, monkeypatch, time
 # --- text no model can speak ------------------------------------------------------------
 
 
-@pytest.mark.parametrize("error", [
-    "Nothing to synthesize, '...' produced no phonemes",
-    "No phonemes of '…' are in the model vocabulary",
-])
+@pytest.mark.parametrize(
+    "error",
+    [
+        "Nothing to synthesize, '...' produced no phonemes",
+        "No phonemes of '…' are in the model vocabulary",
+    ],
+)
 async def test_text_no_model_can_speak_is_the_callers_error(timed, monkeypatch, error):
     """Both models share the phonemizer and the vocabulary, so the original
     would fail the same way, after loading a second ~1 GB session for the

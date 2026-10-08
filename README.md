@@ -65,14 +65,16 @@ What CI runs, per package (`.github/workflows/ci.yml`):
 
 | Package | Commands (from the package directory) |
 |---|---|
-| backend | `ruff check .` · `pyright` · the OpenAPI document re-exported and compared (`python -m scripts.export_openapi`) · `python -m pytest tests -q` (or `make test` from the root) |
+| backend | `ruff check .` · `ruff format --check .` (`ruff format .` fixes it) · `pyright` · the OpenAPI document re-exported and compared (`python -m scripts.export_openapi`) · migrations against the models (`alembic upgrade head` then `alembic check`, on an empty SQLite) · `python -m pytest tests -q -n auto` (or `make test` from the root) |
 | embed | `npm run lint` · `npm run format:check` · `npm run typecheck` (sources and tests) · `npm run check:api` (generated API types) · `npm test` (vitest, pixel goldens included) · `npm run build` · `npm run test:browser` (Chromium) |
 | frontend | `npm run check` (feature boundaries, en/fr parity) · `npm run lint` · `npm run format:check` · `npm run typecheck` (app and tests) · `npm run check:api` (generated API types) · `npm test` (`node --test`, Node 22+) · `npm run test:ui` (rendering tests) · `npm run build` (type check + bundle) |
 | deploy | `deploy/test-deploy.sh` (every gate of `deploy.sh`) · ShellCheck on `deploy/*.sh` |
 | images | both Dockerfiles build, boot and pass `deploy/smoke/web-sweep.mjs`: every page in headless Chrome, zero CSP violations ([docs/process.md](docs/process.md#ci)) |
 
 CI runs on every push to main and every pull request; a newer push cancels the
-run it supersedes.
+run it supersedes. The backend runs as three parallel jobs: its checks, and
+its tests in two halves. The required `backend` check passes only when all
+three do ([docs/process.md](docs/process.md#ci)).
 
 ## Embedding on any site
 

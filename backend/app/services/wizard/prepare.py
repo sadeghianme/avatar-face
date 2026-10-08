@@ -102,7 +102,10 @@ async def settle(
         new_keys.append(key)
         item = items[opaque_id]
         items[cut_id] = {
-            "key": key, "width": item["width"], "height": item["height"], "from": opaque_id,
+            "key": key,
+            "width": item["width"],
+            "height": item["height"],
+            "from": opaque_id,
             "cutout": True,
         }
         current = cut_id
@@ -118,7 +121,10 @@ async def settle(
     if consent_id and svc.wants_ai_points(face_type, found["detected"]):
         digest = await run_cpu(lambda: hashlib.sha256(shown).hexdigest())
         ai, warning = await detect.ai_points(
-            job, {"sha256": digest, "charged": False}, shown, face_type,
+            job,
+            {"sha256": digest, "charged": False},
+            shown,
+            face_type,
             tuple(found["image_size"]),
         )
         if ai is not None:
@@ -169,9 +175,7 @@ def head_crop_source(data: bytes) -> tuple[bytes, str] | None:
     return photo_adjust._jpeg(crop, imagegen.SOURCE_QUALITY), "image/jpeg"
 
 
-async def _ask_ai(
-    job: Job, prompt: str, source: bytes | None, mode: str
-) -> tuple[bytes, str]:
+async def _ask_ai(job: Job, prompt: str, source: bytes | None, mode: str) -> tuple[bytes, str]:
     """The call to the image model, metered as it is answered. Raises the
     wizard's own errors: safety_refused (never asked a third time), no_image,
     imagegen_unavailable, provider_error, third_party_ai_disabled, and the
@@ -216,16 +220,15 @@ async def _ask_ai(
                 if crop is not None:
                     logger.info(
                         "prepare %s refused (%s); asking once more on the head crop",
-                        job.id, exc.reason,
+                        job.id,
+                        exc.reason,
                     )
                     sends.append(crop)
             continue
         except imagegen.ImageGenNoImage as exc:
             async with session() as db:
                 await record_generation(db, job.org_id, "gemini", mode)
-            raise AppError(
-                "The AI answered without a picture; try again", code="no_image"
-            ) from exc
+            raise AppError("The AI answered without a picture; try again", code="no_image") from exc
         except imagegen.ImageGenUnavailable as exc:
             raise Conflict409(
                 "AI image making is not configured on this server", code="imagegen_unavailable"
@@ -281,6 +284,7 @@ async def prepare_job(job: Job, params: dict) -> None:
         framing = (creation.analysis or {}).get("suggested_framing")
         opaque_id, png = "original", data
         if framing:
+
             def frame() -> tuple[bytes, tuple[int, int], StepCheck]:
                 image = frame_photo(data, framing["crop"], framing.get("roll") or 0.0)
                 return png_bytes(image), image.size, svc.step_check(check_photo(image))
@@ -290,12 +294,20 @@ async def prepare_job(job: Job, params: dict) -> None:
             await storage.put_bytes(key, png, "image/png")
             new_keys.append(key)
             steps["items"]["framed"] = {
-                "key": key, "width": width, "height": height, "from": "original",
-                "crop": framing["crop"], "roll": framing.get("roll") or 0.0, "check": check,
+                "key": key,
+                "width": width,
+                "height": height,
+                "from": "original",
+                "crop": framing["crop"],
+                "roll": framing.get("roll") or 0.0,
+                "check": check,
             }
             opaque_id = "framed"
         record: PrepareRecord = {
-            "mode": ORIGINAL, "look": look, "instruction": None, "step": opaque_id,
+            "mode": ORIGINAL,
+            "look": look,
+            "instruction": None,
+            "step": opaque_id,
         }
     else:
         instruction = (params.get("instruction") or "").strip() or None
@@ -304,7 +316,9 @@ async def prepare_job(job: Job, params: dict) -> None:
             base_id = "original"
             call = "generate"
         elif mode == CHANGE:
-            base_id = creation_steps.through_cutouts(creation.steps, svc.current_step(creation.steps))
+            base_id = creation_steps.through_cutouts(
+                creation.steps, svc.current_step(creation.steps)
+            )
             if params.get("again"):
                 # Retry of the last change: from what that try started from,
                 # so the change is not applied on top of its own result.
@@ -314,12 +328,11 @@ async def prepare_job(job: Job, params: dict) -> None:
             if base_id is None or base_id not in items:
                 base_id = "original"
             source = await storage.get_bytes(items[base_id]["key"])
-            made = svc.adjusted_index(base_id) is not None or bool(
-                items[base_id].get("generated")
-            )
+            made = svc.adjusted_index(base_id) is not None or bool(items[base_id].get("generated"))
             prompt = (
                 change_prompt(model, look, instruction or "")
-                if made else prepare_prompt(model, look, instruction)
+                if made
+                else prepare_prompt(model, look, instruction)
             )
             call = "prepare"
         else:
@@ -333,7 +346,9 @@ async def prepare_job(job: Job, params: dict) -> None:
             answer, made_by = await _ask_ai(job, prompt, source, call)
         except AppError as exc:
             if exc.code in (
-                "imagegen_unavailable", "third_party_ai_disabled", "image_limit_reached",
+                "imagegen_unavailable",
+                "third_party_ai_disabled",
+                "image_limit_reached",
                 "provider_error",
             ):
                 # Nothing was sent, or nothing answered: the try is given back.
@@ -351,12 +366,16 @@ async def prepare_job(job: Job, params: dict) -> None:
         await storage.put_bytes(key, png, "image/png")
         new_keys.append(key)
         steps["items"][opaque_id] = {
-            "key": key, "width": width, "height": height, "from": base_id, "cutout": False,
+            "key": key,
+            "width": width,
+            "height": height,
+            "from": base_id,
+            "cutout": False,
             "check": check,
             "adjust": {
-                "mode": "generate" if mode == GENERATE else (
-                    "regenerate" if look == "realistic" else "stylise"
-                ),
+                "mode": "generate"
+                if mode == GENERATE
+                else ("regenerate" if look == "realistic" else "stylise"),
                 "style": STYLE_OF_LOOK[look],
                 "model": made_by,
                 "generated_eyes": False,

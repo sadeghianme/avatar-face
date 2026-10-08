@@ -28,42 +28,81 @@ from app.services.tts.registry import all_providers
 @dataclass(frozen=True)
 class Language:
     locale: str
-    name: str          # English, for the picker's secondary label
-    native_name: str   # Its own script, for the primary label
-    sample: str        # A line to demonstrate the voice
+    name: str  # English, for the picker's secondary label
+    native_name: str  # Its own script, for the primary label
+    sample: str  # A line to demonstrate the voice
 
 
 # Ordered as the picker shows them: English first because it is the default,
 # then everything else alphabetically by English name.
 LANGUAGES: tuple[Language, ...] = (
-    Language("en-US", "English (US)", "English (US)",
-             "Hi, I'm your virtual assistant. How can I help you today?"),
-    Language("en-GB", "English (UK)", "English (UK)",
-             "Hello, I'm your virtual assistant. How can I help you today?"),
-    Language("ar-JO", "Arabic", "العربية",
-             "مرحباً، أنا مساعدك الافتراضي. كيف يمكنني مساعدتك اليوم؟"),
-    Language("nl-NL", "Dutch", "Nederlands",
-             "Hallo, ik ben je virtuele assistent. Waarmee kan ik je helpen?"),
-    Language("fr-FR", "French", "Français",
-             "Bonjour, je suis votre assistant virtuel. Comment puis-je vous aider ?"),
-    Language("de-DE", "German", "Deutsch",
-             "Hallo, ich bin Ihr virtueller Assistent. Wie kann ich Ihnen helfen?"),
-    Language("hi-IN", "Hindi", "हिन्दी",
-             "नमस्ते, मैं आपका वर्चुअल असिस्टेंट हूँ। मैं आपकी कैसे मदद कर सकता हूँ?"),
-    Language("it-IT", "Italian", "Italiano",
-             "Ciao, sono il tuo assistente virtuale. Come posso aiutarti oggi?"),
-    Language("fa-IR", "Persian", "فارسی",
-             "سلام، من دستیار مجازی شما هستم. چطور می‌توانم کمکتان کنم؟"),
-    Language("pl-PL", "Polish", "Polski",
-             "Cześć, jestem twoim wirtualnym asystentem. W czym mogę pomóc?"),
-    Language("pt-BR", "Portuguese (Brazil)", "Português",
-             "Olá, sou seu assistente virtual. Como posso ajudar você hoje?"),
-    Language("ru-RU", "Russian", "Русский",
-             "Здравствуйте, я ваш виртуальный помощник. Чем я могу вам помочь?"),
-    Language("es-ES", "Spanish", "Español",
-             "Hola, soy tu asistente virtual. ¿En qué puedo ayudarte hoy?"),
-    Language("tr-TR", "Turkish", "Türkçe",
-             "Merhaba, ben sanal asistanınızım. Size bugün nasıl yardımcı olabilirim?"),
+    Language(
+        "en-US",
+        "English (US)",
+        "English (US)",
+        "Hi, I'm your virtual assistant. How can I help you today?",
+    ),
+    Language(
+        "en-GB",
+        "English (UK)",
+        "English (UK)",
+        "Hello, I'm your virtual assistant. How can I help you today?",
+    ),
+    Language(
+        "ar-JO", "Arabic", "العربية", "مرحباً، أنا مساعدك الافتراضي. كيف يمكنني مساعدتك اليوم؟"
+    ),
+    Language(
+        "nl-NL",
+        "Dutch",
+        "Nederlands",
+        "Hallo, ik ben je virtuele assistent. Waarmee kan ik je helpen?",
+    ),
+    Language(
+        "fr-FR",
+        "French",
+        "Français",
+        "Bonjour, je suis votre assistant virtuel. Comment puis-je vous aider ?",
+    ),
+    Language(
+        "de-DE",
+        "German",
+        "Deutsch",
+        "Hallo, ich bin Ihr virtueller Assistent. Wie kann ich Ihnen helfen?",
+    ),
+    Language("hi-IN", "Hindi", "हिन्दी", "नमस्ते, मैं आपका वर्चुअल असिस्टेंट हूँ। मैं आपकी कैसे मदद कर सकता हूँ?"),
+    Language(
+        "it-IT",
+        "Italian",
+        "Italiano",
+        "Ciao, sono il tuo assistente virtuale. Come posso aiutarti oggi?",
+    ),
+    Language(
+        "fa-IR", "Persian", "فارسی", "سلام، من دستیار مجازی شما هستم. چطور می‌توانم کمکتان کنم؟"
+    ),
+    Language(
+        "pl-PL", "Polish", "Polski", "Cześć, jestem twoim wirtualnym asystentem. W czym mogę pomóc?"
+    ),
+    Language(
+        "pt-BR",
+        "Portuguese (Brazil)",
+        "Português",
+        "Olá, sou seu assistente virtual. Como posso ajudar você hoje?",
+    ),
+    Language(
+        "ru-RU",
+        "Russian",
+        "Русский",
+        "Здравствуйте, я ваш виртуальный помощник. Чем я могу вам помочь?",
+    ),
+    Language(
+        "es-ES", "Spanish", "Español", "Hola, soy tu asistente virtual. ¿En qué puedo ayudarte hoy?"
+    ),
+    Language(
+        "tr-TR",
+        "Turkish",
+        "Türkçe",
+        "Merhaba, ben sanal asistanınızım. Size bugün nasıl yardımcı olabilirim?",
+    ),
 )
 
 BY_LOCALE = {language.locale: language for language in LANGUAGES}
@@ -92,9 +131,7 @@ async def resolve(locale: str) -> tuple[str, str] | None:
         exact = next((v for v in voices if v.locale.lower() == wanted), None)
         if exact:
             return name, exact.id
-        loose = next(
-            (v for v in voices if v.locale.split("-")[0].lower() == language_only), None
-        )
+        loose = next((v for v in voices if v.locale.split("-")[0].lower() == language_only), None)
         if loose:
             return name, loose.id
     return None

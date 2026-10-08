@@ -1,4 +1,5 @@
 """Liveface application factory."""
+
 from __future__ import annotations
 
 import asyncio
@@ -337,9 +338,7 @@ def create_app() -> FastAPI:
         """
         bundle = Path(__file__).resolve().parents[2] / "embed" / "dist" / filename
         if not bundle.is_file():
-            return PlainTextResponse(
-                f"// {filename} not built — run `make embed`", status_code=404
-            )
+            return PlainTextResponse(f"// {filename} not built — run `make embed`", status_code=404)
 
         etag = _bundle_etag(bundle)
         headers = {

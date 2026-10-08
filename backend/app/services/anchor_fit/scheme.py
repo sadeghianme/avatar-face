@@ -12,10 +12,12 @@ NUM_POINTS = 478
 # left, which is the subject's right eye.
 HEAD = {"left": 234, "right": 454, "top": 10, "bottom": 152}
 # MediaPipe's face oval, clockwise on screen from the top of the forehead.
+# fmt: off
 FACE_OVAL = [
     10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377,
     152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
 ]
+# fmt: on
 # The head's outline between its four edges: the temples above, the jaw
 # corners below. Four edges alone drew the head as a diamond, and a warp
 # pinned only there was free to bulge or pinch the cheeks and the jaw
@@ -32,7 +34,14 @@ DIAGONALS = tuple(HEAD_DIAGONALS)
 # The eight head marks in order around the face, clockwise on screen from
 # the top: the order the outline is drawn in, and checked in.
 HEAD_OUTLINE_EDGES = (
-    "top", "upper_right", "right", "lower_right", "bottom", "lower_left", "left", "upper_left",
+    "top",
+    "upper_right",
+    "right",
+    "lower_right",
+    "bottom",
+    "lower_left",
+    "left",
+    "upper_left",
 )
 HEAD_OUTLINE = [{**HEAD, **HEAD_DIAGONALS}[edge] for edge in HEAD_OUTLINE_EDGES]
 LEFT_EYE = {"left": 33, "right": 133, "top": 159, "bottom": 145}

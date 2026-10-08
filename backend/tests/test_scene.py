@@ -60,13 +60,20 @@ async def test_a_scene_is_a_draft_edit_published_by_value(client, setup):
     headers, org_id, avatar_id, key = setup
     patched = await client.patch(
         f"/orgs/{org_id}/avatars/{avatar_id}",
-        json={"scene": {"zoom": 1.2, "pan": {"x": -0.25, "y": 0.1}, "background": {"kind": "color", "color": "#1E3A8A"}}},
+        json={
+            "scene": {
+                "zoom": 1.2,
+                "pan": {"x": -0.25, "y": 0.1},
+                "background": {"kind": "color", "color": "#1E3A8A"},
+            }
+        },
         headers=headers,
     )
     assert patched.status_code == 200, patched.text
     body = patched.json()
     assert body["scene"] == {
-        "zoom": 1.2, "pan": {"x": -0.25, "y": 0.1},
+        "zoom": 1.2,
+        "pan": {"x": -0.25, "y": 0.1},
         "background": {"kind": "color", "has_image": False, "color": "#1e3a8a"},
     }
     assert body["unpublished"] is True
@@ -77,7 +84,9 @@ async def test_a_scene_is_a_draft_edit_published_by_value(client, setup):
     assert published.status_code == 200, published.text
     served = await client.get(f"/embed/v1/avatars/{avatar_id}", headers=key)
     assert served.json()["scene"] == {
-        "zoom": 1.2, "pan": {"x": -0.25, "y": 0.1}, "background": {"kind": "color", "color": "#1e3a8a"},
+        "zoom": 1.2,
+        "pan": {"x": -0.25, "y": 0.1},
+        "background": {"kind": "color", "color": "#1e3a8a"},
     }
     # The share page serves the same scene.
     shared = await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/share", headers=headers)
@@ -100,19 +109,25 @@ async def test_a_scene_is_a_draft_edit_published_by_value(client, setup):
 )
 async def test_the_ranges_are_the_engines(client, setup, scene):
     headers, org_id, avatar_id, _ = setup
-    patched = await client.patch(f"/orgs/{org_id}/avatars/{avatar_id}", json={"scene": scene}, headers=headers)
+    patched = await client.patch(
+        f"/orgs/{org_id}/avatars/{avatar_id}", json={"scene": scene}, headers=headers
+    )
     assert patched.status_code == 422, patched.text
 
 
 async def test_a_colour_needs_a_colour_and_an_image_needs_a_picture(client, setup):
     headers, org_id, avatar_id, _ = setup
     no_colour = await client.patch(
-        f"/orgs/{org_id}/avatars/{avatar_id}", json={"scene": {"background": {"kind": "color"}}}, headers=headers
+        f"/orgs/{org_id}/avatars/{avatar_id}",
+        json={"scene": {"background": {"kind": "color"}}},
+        headers=headers,
     )
     assert no_colour.status_code == 422
     assert no_colour.json()["code"] == "scene_invalid"
     no_picture = await client.patch(
-        f"/orgs/{org_id}/avatars/{avatar_id}", json={"scene": {"background": {"kind": "image"}}}, headers=headers
+        f"/orgs/{org_id}/avatars/{avatar_id}",
+        json={"scene": {"background": {"kind": "image"}}},
+        headers=headers,
     )
     assert no_picture.status_code == 422
     assert no_picture.json()["code"] == "scene_image_missing"
@@ -120,12 +135,18 @@ async def test_a_colour_needs_a_colour_and_an_image_needs_a_picture(client, setu
 
 async def test_the_framing_column_follows_the_zoom_both_ways(client, setup):
     headers, org_id, avatar_id, _ = setup
-    full = await client.patch(f"/orgs/{org_id}/avatars/{avatar_id}", json={"scene": {"zoom": 0}}, headers=headers)
+    full = await client.patch(
+        f"/orgs/{org_id}/avatars/{avatar_id}", json={"scene": {"zoom": 0}}, headers=headers
+    )
     assert full.json()["framing"] == "full"
-    face = await client.patch(f"/orgs/{org_id}/avatars/{avatar_id}", json={"scene": {"zoom": 0.8}}, headers=headers)
+    face = await client.patch(
+        f"/orgs/{org_id}/avatars/{avatar_id}", json={"scene": {"zoom": 0.8}}, headers=headers
+    )
     assert face.json()["framing"] == "face"
     # An old client setting the framing moves the scene's zoom with it.
-    legacy = await client.patch(f"/orgs/{org_id}/avatars/{avatar_id}", json={"framing": "full"}, headers=headers)
+    legacy = await client.patch(
+        f"/orgs/{org_id}/avatars/{avatar_id}", json={"framing": "full"}, headers=headers
+    )
     assert legacy.json()["scene"]["zoom"] == 0.0
 
 
@@ -178,7 +199,9 @@ async def test_a_background_picture_is_stored_shown_published_and_removed(client
     assert served.json()["scene"]["background"]["kind"] == "image"
 
     # Removing: transparent again, the file gone; visitors keep theirs.
-    removed = await client.delete(f"/orgs/{org_id}/avatars/{avatar_id}/scene-image", headers=headers)
+    removed = await client.delete(
+        f"/orgs/{org_id}/avatars/{avatar_id}/scene-image", headers=headers
+    )
     assert removed.status_code == 200
     assert removed.json()["scene"]["background"] == {"kind": "transparent", "has_image": False}
     names = await storage.list_names(f"orgs/{org_id}/avatars/{avatar_id}/")
@@ -195,7 +218,9 @@ async def test_discard_puts_the_published_picture_back_into_a_fresh_draft_file(c
     await _upload(client, org_id, avatar_id, headers)
     await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/publish", headers=headers)
     await client.delete(f"/orgs/{org_id}/avatars/{avatar_id}/scene-image", headers=headers)
-    discarded = await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/discard-draft", headers=headers)
+    discarded = await client.post(
+        f"/orgs/{org_id}/avatars/{avatar_id}/discard-draft", headers=headers
+    )
     assert discarded.status_code == 200, discarded.text
     assert discarded.json()["scene"]["background"] == {"kind": "image", "has_image": True}
     assert discarded.json()["unpublished"] is False
@@ -231,7 +256,9 @@ async def test_a_picture_is_checked_before_it_is_stored(client, setup):
     not_a_picture = await _upload(client, org_id, avatar_id, headers, data=b"not a picture at all")
     assert not_a_picture.status_code == 422
     assert not_a_picture.json()["code"] == "scene_image_invalid"
-    too_large = await _upload(client, org_id, avatar_id, headers, data=b"\x89PNG" + bytes(15 * 1024 * 1024))
+    too_large = await _upload(
+        client, org_id, avatar_id, headers, data=b"\x89PNG" + bytes(15 * 1024 * 1024)
+    )
     assert too_large.status_code == 422
     assert too_large.json()["code"] == "image_too_large"
 

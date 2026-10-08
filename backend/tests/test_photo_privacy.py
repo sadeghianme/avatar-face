@@ -233,7 +233,9 @@ async def test_cropping_an_older_leaky_cutout_scrubs_it(client):
 # --- the presigned upload path ----------------------------------------------
 
 
-async def _create(client, headers, org_id, data: bytes, mime: str = "image/jpeg") -> tuple[str, str]:
+async def _create(
+    client, headers, org_id, data: bytes, mime: str = "image/jpeg"
+) -> tuple[str, str]:
     """(avatar id, presigned upload URL), with `data` already PUT through it."""
     created = await client.post(
         f"/orgs/{org_id}/avatars",
@@ -303,7 +305,8 @@ async def test_uploads_are_stored_no_larger_than_the_stored_size(client, monkeyp
     from app.services.jobs import runner
 
     created = await client.post(
-        f"/orgs/{org_id}/creations", files={"file": ("p", phone_jpeg(), "image/jpeg")},
+        f"/orgs/{org_id}/creations",
+        files={"file": ("p", phone_jpeg(), "image/jpeg")},
         headers=headers,
     )
     assert created.status_code == 202, created.text
@@ -328,7 +331,9 @@ async def test_a_second_put_through_the_upload_url_cannot_replace_the_live_image
     assert b"PhoneMaker" not in clean
     assert_scrubbed(clean)
 
-    again = await client.put(upload_url, content=png_with_metadata(), headers={"content-type": "image/png"})
+    again = await client.put(
+        upload_url, content=png_with_metadata(), headers={"content-type": "image/png"}
+    )
     assert again.status_code == 200
     detail = (await client.get(base, headers=headers)).json()
     assert await _stored(client, detail["image_url"]) == clean

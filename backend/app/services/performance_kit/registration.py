@@ -73,7 +73,9 @@ def similarity_on_anchors(
     return Similarity(rotation, float(scale), ac, bc)
 
 
-def register(source: np.ndarray, target: np.ndarray, anchors: Sequence[int] = ANCHORS) -> np.ndarray:
+def register(
+    source: np.ndarray, target: np.ndarray, anchors: Sequence[int] = ANCHORS
+) -> np.ndarray:
     """Every point of `source`, carried onto `target` by the anchors' similarity."""
     return similarity_on_anchors(source, target, anchors).apply(source)
 
@@ -140,8 +142,10 @@ def _reference_paths() -> list[Path]:
     # The repository root (the image's /): this file is
     # backend/app/services/performance_kit/registration.py.
     root = Path(__file__).resolve().parents[4]
-    return [root / "embed" / "assets" / "mouth-motion.json",
-            root / "embed" / "dist" / "mouth-motion.json"]
+    return [
+        root / "embed" / "assets" / "mouth-motion.json",
+        root / "embed" / "dist" / "mouth-motion.json",
+    ]
 
 
 def load_reference(path: Path | None = None) -> ReferenceMotion:

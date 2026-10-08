@@ -61,9 +61,7 @@ async def _read_index(storage, org_id: str) -> list[str]:
 
 
 async def _write_index(storage, org_id: str, ids: list[str]) -> None:
-    await storage.put_bytes(
-        _index_key(org_id), json.dumps(ids).encode(), "application/json"
-    )
+    await storage.put_bytes(_index_key(org_id), json.dumps(ids).encode(), "application/json")
 
 
 async def _read_job(storage, org_id: str, job_id: str) -> dict | None:
@@ -154,9 +152,7 @@ async def update_progress(storage, org_id: str, job_id: str, done_lines: int) ->
     return job
 
 
-async def finish_job(
-    storage, org_id: str, job_id: str, *, error: str | None = None
-) -> dict | None:
+async def finish_job(storage, org_id: str, job_id: str, *, error: str | None = None) -> dict | None:
     job = await _read_job(storage, org_id, job_id)
     if job is None:
         return None

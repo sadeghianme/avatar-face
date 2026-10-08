@@ -173,7 +173,6 @@ def prepare(data: bytes, mode: str, face_type: str, style: str | None = None) ->
     return Prepared(prompt=prompt, payload=_jpeg(whole, imagegen.SOURCE_QUALITY), mime="image/jpeg")
 
 
-
 # A whole-photo edit the provider declines can pass as a head-and-shoulders
 # crop of the same photo. Measured on 2026-09-25 against gemini-3.1-flash-image:
 # every prompt on one full-frame portrait was blocked at the prompt

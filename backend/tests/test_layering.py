@@ -128,7 +128,7 @@ def test_no_module_level_import_cycles():
         state[name] = 1
         for dep in sorted(graph[name]):
             if state.get(dep) == 1:
-                cycles.append(" -> ".join(path[path.index(dep):] + [dep]))
+                cycles.append(" -> ".join(path[path.index(dep) :] + [dep]))
             elif dep not in state:
                 visit(dep, [*path, dep])
         state[name] = 2

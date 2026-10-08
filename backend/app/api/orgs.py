@@ -42,9 +42,7 @@ def _member_out(membership: Membership, user: User) -> MemberOut:
 
 
 @router.post("/orgs", response_model=OrgWithRole, status_code=201)
-async def create_org(
-    body: OrgCreate, user: CurrentUser, db: DB, response: Response
-) -> OrgWithRole:
+async def create_org(body: OrgCreate, user: CurrentUser, db: DB, response: Response) -> OrgWithRole:
     """Create an organization, the caller its owner.
 
     `personal: true` is the account's own organization, made automatically on
@@ -92,9 +90,7 @@ async def list_members(ctx: OrgMember, db: DB) -> list[MemberOut]:
 
 
 @router.patch("/orgs/{org_id}/members/{membership_id}", response_model=MemberOut)
-async def change_role(
-    membership_id: str, body: RoleUpdate, ctx: OrgAdmin, db: DB
-) -> MemberOut:
+async def change_role(membership_id: str, body: RoleUpdate, ctx: OrgAdmin, db: DB) -> MemberOut:
     membership, user = await orgs.change_role(db, ctx.org.id, membership_id, body.role, ctx.role)
     return _member_out(membership, user)
 

@@ -90,9 +90,7 @@ def _box_mean(a, r: int):
     x0 = np.clip(cols - r, 0, width)
     x1 = np.clip(cols + r + 1, 0, width)
 
-    total = (
-        integral[y1][:, x1] - integral[y0][:, x1] - integral[y1][:, x0] + integral[y0][:, x0]
-    )
+    total = integral[y1][:, x1] - integral[y0][:, x1] - integral[y1][:, x0] + integral[y0][:, x0]
     count = ((y1 - y0)[:, None] * (x1 - x0)[None, :])[:, :, None]
     out = (total / count).astype(np.float32)
     return out[:, :, 0] if single else out
@@ -112,9 +110,7 @@ def guided_filter(guide, src, radius: int, eps: float = GUIDE_EPS):
     cov_cross = mean_cross - mean_guide * mean_src[:, :, None]
 
     r_, g_, b_ = guide[:, :, 0], guide[:, :, 1], guide[:, :, 2]
-    products = np.stack(
-        [r_ * r_, r_ * g_, r_ * b_, g_ * g_, g_ * b_, b_ * b_], axis=-1
-    )
+    products = np.stack([r_ * r_, r_ * g_, r_ * b_, g_ * g_, g_ * b_, b_ * b_], axis=-1)
     m = _box_mean(products, radius)
     mr, mg, mb = mean_guide[:, :, 0], mean_guide[:, :, 1], mean_guide[:, :, 2]
 
@@ -192,9 +188,7 @@ def refine_matte(rgb, mask):
     colour = rgb.astype(np.float32)
     edge = (alpha > 0.01) & (alpha < 0.99)
     if edge.any():
-        bg_radius = max(
-            radius * 2, int(round(min(height, width) * BACKGROUND_RADIUS_FRACTION))
-        )
+        bg_radius = max(radius * 2, int(round(min(height, width) * BACKGROUND_RADIUS_FRACTION)))
         background = estimate_background(rgb.astype(np.float32), alpha, bg_radius)
         a = alpha[:, :, None]
         unmixed = (colour - background * (1.0 - a)) / np.maximum(a, UNMIX_FLOOR)

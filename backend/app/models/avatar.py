@@ -18,7 +18,7 @@ class AvatarStatus(str, enum.Enum):
 
 
 class AvatarKind(str, enum.Enum):
-    photo = "photo"      # 2D photo, rigged with face landmarks
+    photo = "photo"  # 2D photo, rigged with face landmarks
     model3d = "model3d"  # GLB with ARKit/Oculus morph targets
 
 

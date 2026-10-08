@@ -10,6 +10,7 @@ interior from the lips' own colour and a teeth photograph.
 Images are numpy RGBA float arrays in 0..1 here (h, w, 4); Pillow at the
 edges. Pure functions of their inputs.
 """
+
 from __future__ import annotations
 
 import io
@@ -108,7 +109,11 @@ def hair_top(array: np.ndarray, frame: G.FaceFrame) -> float | None:
 
 
 def silhouette_reach(
-    array: np.ndarray, face: np.ndarray, frame: G.FaceFrame, pivot: tuple[float, float, float], scale: float,
+    array: np.ndarray,
+    face: np.ndarray,
+    frame: G.FaceFrame,
+    pivot: tuple[float, float, float],
+    scale: float,
 ) -> np.ndarray | None:
     """How far the cut-out reaches from the pivot along each oval column's
     equator direction, head units (36,): the last opaque pixel before the
@@ -182,17 +187,21 @@ def encode(image: Image.Image, fmt: str, quality: int = 88) -> tuple[bytes, str]
 # --- The face -----------------------------------------------------------------
 
 
-def face_crop(array: np.ndarray, frame: G.FaceFrame, pad: float = 0.12) -> tuple[Image.Image, tuple[int, int, int, int]]:
+def face_crop(
+    array: np.ndarray, frame: G.FaceFrame, pad: float = 0.12
+) -> tuple[Image.Image, tuple[int, int, int, int]]:
     """The face box grown by `pad` of its size, as an opaque RGB image, and
     the crop box (x0, y0, x1, y1) its UVs are relative to."""
     x0, y0, x1, y1 = frame.box
     w, h = x1 - x0, y1 - y0
     H, W = array.shape[:2]
     box = (
-        int(max(0, math.floor(x0 - w * pad))), int(max(0, math.floor(y0 - h * pad))),
-        int(min(W, math.ceil(x1 + w * pad))), int(min(H, math.ceil(y1 + h * pad))),
+        int(max(0, math.floor(x0 - w * pad))),
+        int(max(0, math.floor(y0 - h * pad))),
+        int(min(W, math.ceil(x1 + w * pad))),
+        int(min(H, math.ceil(y1 + h * pad))),
     )
-    crop = array[box[1]:box[3], box[0]:box[2]]
+    crop = array[box[1] : box[3], box[0] : box[2]]
     return to_image(crop, "RGB"), box
 
 
@@ -207,8 +216,11 @@ def crop_uvs(points: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
 
 
 def skull_texture(
-    array: np.ndarray, fit: G.SkullFit,
-    pivot: tuple[float, float, float], scale: float, size: tuple[int, int] = SKULL_TEXTURE,
+    array: np.ndarray,
+    fit: G.SkullFit,
+    pivot: tuple[float, float, float],
+    scale: float,
+    size: tuple[int, int] = SKULL_TEXTURE,
 ) -> Image.Image:
     """Columns follow the skull's oval columns (interpolated between them),
     rows the surface from the face edge (0) to the back pole (1).
@@ -225,7 +237,10 @@ def skull_texture(
     s_equator = G.SKIRT_RINGS / (G.SKIRT_RINGS + G.BACK_RINGS)
     skirt_rows = [r for r in range(rows) if (r + 0.5) / rows <= s_equator]
     # The skirt rings this texture's rows lie on, projected into the image.
-    ring_px = {r: G.to_image(G.skirt_ring(fit, min(1.0, (r + 0.5) / rows / s_equator)), pivot, scale) for r in skirt_rows}
+    ring_px = {
+        r: G.to_image(G.skirt_ring(fit, min(1.0, (r + 0.5) / rows / s_equator)), pivot, scale)
+        for r in skirt_rows
+    }
     # A column whose face edge already lies outside the picture (a template
     # face placed by guess) takes the subject's mean colour, not black.
     opaque = array[..., 3] > 0.5
@@ -249,7 +264,9 @@ def skull_texture(
                 t = s / s_equator
                 shade = 1 - (1 - SKULL_SHADE_EQUATOR) * t
             else:
-                shade = SKULL_SHADE_EQUATOR - (SKULL_SHADE_EQUATOR - SKULL_SHADE_POLE) * (s - s_equator) / (1 - s_equator)
+                shade = SKULL_SHADE_EQUATOR - (SKULL_SHADE_EQUATOR - SKULL_SHADE_POLE) * (
+                    s - s_equator
+                ) / (1 - s_equator)
             out[r, c] = (held if held is not None else np.zeros(3)) * shade
     return to_image(out, "RGB")
 
@@ -258,7 +275,11 @@ def skull_texture(
 
 
 def neck_texture(
-    array: np.ndarray, frame: G.FaceFrame, neck: G.Mesh, pivot: tuple[float, float, float], scale: float,
+    array: np.ndarray,
+    frame: G.FaceFrame,
+    neck: G.Mesh,
+    pivot: tuple[float, float, float],
+    scale: float,
     size: tuple[int, int] = NECK_TEXTURE,
 ) -> Image.Image:
     """The picture's neck, wrapped: column u maps to the picture's x at
@@ -286,7 +307,10 @@ def neck_texture(
         # The picture's own neck column, never its edges or what lies beside
         # it (hair, a collar): the outer fifth of the cylinder repeats the
         # last sample.
-        xl, xr = max(xl, frame.centre_x - 0.8 * radius_px), min(xr, frame.centre_x + 0.8 * radius_px)
+        xl, xr = (
+            max(xl, frame.centre_x - 0.8 * radius_px),
+            min(xr, frame.centre_x + 0.8 * radius_px),
+        )
         u = (np.arange(columns) + 0.5) / columns
         angle = (u - 0.5) * 2 * math.pi
         px = np.clip(frame.centre_x + radius_px * np.sin(angle), xl, xr)
@@ -316,7 +340,9 @@ def _feather(box_w: int, box_h: int) -> np.ndarray:
     return fy[:, None] * fx[None, :]
 
 
-def _oval_hole(shape: tuple[int, ...], oval_px: np.ndarray, feather: float, dilate: float = 0.0) -> np.ndarray:
+def _oval_hole(
+    shape: tuple[int, ...], oval_px: np.ndarray, feather: float, dilate: float = 0.0
+) -> np.ndarray:
     """0 inside the oval (grown by `dilate` px), rising to 1 over `feather`
     px outside it."""
     mask = Image.new("L", (shape[1], shape[0]), 0)
@@ -325,23 +351,33 @@ def _oval_hole(shape: tuple[int, ...], oval_px: np.ndarray, feather: float, dila
     # The distances alone: scipy's stub also allows the indices it returns
     # only when asked for them.
     outside_distance = cast(np.ndarray, distance_transform_edt(~inside))
-    return np.asarray(G.smoothstep((outside_distance - dilate) / max(feather, 1e-6)), dtype=np.float32)
+    return np.asarray(
+        G.smoothstep((outside_distance - dilate) / max(feather, 1e-6)), dtype=np.float32
+    )
 
 
 def hair_card_image(
-    array: np.ndarray, frame: G.FaceFrame, box: tuple[float, float, float, float], oval_px: np.ndarray,
+    array: np.ndarray,
+    frame: G.FaceFrame,
+    box: tuple[float, float, float, float],
+    oval_px: np.ndarray,
 ) -> Image.Image:
     """The head region of the cut-out, feathered as the 2D head layer is,
     with the face oval cut out (feathered outward)."""
     x0, y0, x1, y1 = (int(round(v)) for v in box)
     crop = array[y0:y1, x0:x1].copy()
-    hole = _oval_hole(crop.shape[:2], oval_px - np.array((x0, y0)), G.OVAL_HOLE_FEATHER * frame.width)
+    hole = _oval_hole(
+        crop.shape[:2], oval_px - np.array((x0, y0)), G.OVAL_HOLE_FEATHER * frame.width
+    )
     crop[..., 3] *= _feather(x1 - x0, y1 - y0) * hole
     return to_image(crop)
 
 
 def body_card_image(
-    array: np.ndarray, frame: G.FaceFrame, box: tuple[float, float, float, float], oval_px: np.ndarray,
+    array: np.ndarray,
+    frame: G.FaceFrame,
+    box: tuple[float, float, float, float],
+    oval_px: np.ndarray,
 ) -> tuple[Image.Image, tuple[int, int, int, int]]:
     """What the head layer leaves of the cut-out, with a wider face hole,
     cropped to its opaque box; (image, crop box)."""
@@ -349,7 +385,9 @@ def body_card_image(
     whole = array.copy()
     head = np.zeros(whole.shape[:2], dtype=np.float32)
     head[y0:y1, x0:x1] = _feather(x1 - x0, y1 - y0)
-    hole = _oval_hole(whole.shape[:2], oval_px, G.OVAL_HOLE_FEATHER * frame.width, BODY_HOLE_DILATE * frame.width)
+    hole = _oval_hole(
+        whole.shape[:2], oval_px, G.OVAL_HOLE_FEATHER * frame.width, BODY_HOLE_DILATE * frame.width
+    )
     whole[..., 3] *= (1 - head) * hole
     rows = np.flatnonzero((whole[..., 3] > 0.02).any(axis=1))
     cols = np.flatnonzero((whole[..., 3] > 0.02).any(axis=0))
@@ -357,13 +395,17 @@ def body_card_image(
         crop = (0, 0, 1, 1)
     else:
         crop = (int(cols[0]), int(rows[0]), int(cols[-1]) + 1, int(rows[-1]) + 1)
-    return to_image(whole[crop[1]:crop[3], crop[0]:crop[2]]), crop
+    return to_image(whole[crop[1] : crop[3], crop[0] : crop[2]]), crop
 
 
 # --- The mouth interior -------------------------------------------------------
 
 
-def cavity_texture(lip: tuple[float, float, float], shades: tuple[float, float, float], size: tuple[int, int] = (8, 32)) -> Image.Image:
+def cavity_texture(
+    lip: tuple[float, float, float],
+    shades: tuple[float, float, float],
+    size: tuple[int, int] = (8, 32),
+) -> Image.Image:
     """A vertical gradient of the lip colour at the three shades."""
     w, h = size
     v = (np.arange(h) + 0.5) / h
@@ -386,7 +428,9 @@ def _row_y(points: np.ndarray, row: list[int], x: np.ndarray) -> np.ndarray:
     return np.interp(x, p[order, 0], p[order, 1])
 
 
-def teeth_textures(teeth: np.ndarray, rig_points: np.ndarray, size: tuple[int, int] = TEETH_TEXTURE) -> tuple[Image.Image, Image.Image]:
+def teeth_textures(
+    teeth: np.ndarray, rig_points: np.ndarray, size: tuple[int, int] = TEETH_TEXTURE
+) -> tuple[Image.Image, Image.Image]:
     """Upper and lower teeth bands from a teeth photograph and its rig: for
     each column between the inner mouth corners, the band between the inner
     upper lip and the dark inter-arch gap, and between the gap and the inner
@@ -437,7 +481,7 @@ def flat_teeth_texture(size: tuple[int, int] = TEETH_TEXTURE, teeth: int = 8) ->
     out[..., 3] = 1.0
     for k in range(1, teeth):
         x = int(columns * k / teeth)
-        out[:, max(0, x - 1):x + 1, :3] = np.asarray(FLAT_TOOTH_LINE) / 255.0
+        out[:, max(0, x - 1) : x + 1, :3] = np.asarray(FLAT_TOOTH_LINE) / 255.0
     v = (np.arange(rows) + 0.5) / rows
     edge = np.minimum(np.clip(v * rows / 3, 0, 1), np.clip((1 - v) * rows / 3, 0, 1))
     u = (np.arange(columns) + 0.5) / columns

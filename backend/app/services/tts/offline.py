@@ -5,6 +5,7 @@ viseme) plus per-character viseme cues, so preview and embed work with zero
 API keys. Not meant to sound human — meant to be free, instant, and to drive
 the lip-sync exactly like a real provider would.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -20,9 +21,21 @@ SAMPLE_RATE = 22050
 
 # Rough formant frequency per viseme: vowels low+loud, fricatives noisy-ish.
 VISEME_PITCH: dict[str, float] = {
-    "sil": 0.0, "PP": 130, "FF": 480, "TH": 420, "DD": 300, "kk": 260,
-    "CH": 380, "SS": 520, "nn": 200, "RR": 240, "aa": 140, "E": 200,
-    "ih": 260, "oh": 160, "ou": 150,
+    "sil": 0.0,
+    "PP": 130,
+    "FF": 480,
+    "TH": 420,
+    "DD": 300,
+    "kk": 260,
+    "CH": 380,
+    "SS": 520,
+    "nn": 200,
+    "RR": 240,
+    "aa": 140,
+    "E": 200,
+    "ih": 260,
+    "oh": 160,
+    "ou": 150,
 }
 
 VOICES = [
@@ -80,9 +93,7 @@ def _render(text: str, voice: str, locale: str) -> SynthesisResult:
         wav.setnchannels(1)
         wav.setsampwidth(2)
         wav.setframerate(SAMPLE_RATE)
-        frames = b"".join(
-            struct.pack("<h", int(max(-1.0, min(1.0, s)) * 32767)) for s in samples
-        )
+        frames = b"".join(struct.pack("<h", int(max(-1.0, min(1.0, s)) * 32767)) for s in samples)
         wav.writeframes(frames)
 
     return SynthesisResult(

@@ -86,17 +86,13 @@ async def start_mouth_kit(
     avatar's picture is gone (409 source_gone).
     """
     require_teeth_photo_allowed(avatar)
-    agreed = await consent.require(
-        db, consent_id, org, user_id, consent.THIRD_PARTY_AI, PROVIDER
-    )
+    agreed = await consent.require(db, consent_id, org, user_id, consent.THIRD_PARTY_AI, PROVIDER)
     if not imagegen.configured():
-        raise Conflict409("AI editing is not configured on this server", code="imagegen_unavailable")
+        raise Conflict409(
+            "AI editing is not configured on this server", code="imagegen_unavailable"
+        )
     await check_image_limit(db, org.id)
     storage = get_storage()
-    if (
-        not avatar.image_key
-        or not avatar.rig_key
-        or not await storage.exists(avatar.image_key)
-    ):
+    if not avatar.image_key or not avatar.rig_key or not await storage.exists(avatar.image_key):
         raise Conflict409("The avatar's picture is gone", code="source_gone")
     return mouth_kit.start(avatar, agreed.id)
