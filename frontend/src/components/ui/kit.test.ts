@@ -8,7 +8,7 @@ import { describe, it } from "node:test";
 
 import { buttonClass, iconButtonClass, pressState } from "./button-styles.ts";
 import { fieldIds, joinDescribedBy } from "./field-ids.ts";
-import { rovingMove, rovingTarget } from "./roving.ts";
+import { menuMove, rovingMove, rovingTarget, typeaheadTarget } from "./roving.ts";
 import { switchClasses } from "./switch-styles.ts";
 
 describe("Button classes", () => {
@@ -112,5 +112,52 @@ describe("radio group keyboard", () => {
       rovingTarget(sizes, "s", { step: 1 }, () => true),
       undefined
     );
+  });
+});
+
+describe("menu keyboard", () => {
+  it("steps with Down and Up, jumps with Home and End, whatever the page's direction", () => {
+    assert.deepEqual(menuMove("ArrowDown"), { step: 1 });
+    assert.deepEqual(menuMove("ArrowUp"), { step: -1 });
+    assert.deepEqual(menuMove("Home"), { to: "first" });
+    assert.deepEqual(menuMove("End"), { to: "last" });
+    assert.equal(menuMove("ArrowLeft"), null);
+    assert.equal(menuMove("ArrowRight"), null);
+  });
+
+  it("chooses with Enter and Space, closes with Escape and Tab", () => {
+    assert.deepEqual(menuMove("Enter"), { choose: true });
+    assert.deepEqual(menuMove(" "), { choose: true });
+    assert.deepEqual(menuMove("Escape"), { close: "escape" });
+    assert.deepEqual(menuMove("Tab"), { close: "tab" });
+    assert.equal(menuMove("f"), null);
+  });
+
+  const labels = ["English", "Français", "Deutsch", "Español", "Føroyskt"];
+
+  it("type-ahead: the next item after the focused one that starts with the letters, wrapping", () => {
+    assert.equal(typeaheadTarget(labels, 0, "d"), 2);
+    assert.equal(typeaheadTarget(labels, 2, "e"), 3);
+    assert.equal(typeaheadTarget(labels, 3, "e"), 0);
+    assert.equal(typeaheadTarget(labels, -1, "e"), 0);
+  });
+
+  it("type-ahead: the same letter again and again cycles through the items that start with it", () => {
+    assert.equal(typeaheadTarget(labels, 1, "f"), 4);
+    assert.equal(typeaheadTarget(labels, 4, "ff"), 1);
+    assert.equal(typeaheadTarget(labels, 1, "fff"), 4);
+  });
+
+  it("type-ahead: a word stays on the item being spelled; case and accents do not count", () => {
+    assert.equal(typeaheadTarget(labels, 0, "FRAN"), 1);
+    assert.equal(typeaheadTarget(labels, 1, "fra"), 1);
+    assert.equal(typeaheadTarget(labels, 2, "de"), 2);
+    assert.equal(typeaheadTarget(labels, 0, "espa"), 3);
+  });
+
+  it("type-ahead: nothing that matches, nothing typed or no items is undefined", () => {
+    assert.equal(typeaheadTarget(labels, 0, "z"), undefined);
+    assert.equal(typeaheadTarget(labels, 0, ""), undefined);
+    assert.equal(typeaheadTarget([], 0, "e"), undefined);
   });
 });

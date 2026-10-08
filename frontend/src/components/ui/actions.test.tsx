@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { CodeBlock } from "@/components/ui/CodeBlock";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { expectAccessible } from "@/test/axe";
 
 const labels = { label: "Delete", question: "Delete this avatar?", confirmLabel: "Delete it", cancelLabel: "Cancel" };
 
@@ -48,6 +49,15 @@ describe("ConfirmButton", () => {
     expect(action.querySelector("svg.animate-spin")).toBeInTheDocument();
   });
 
+  it("busy, the action keeps its name for a screen reader and says it is busy; axe agrees", async () => {
+    const { container, rerender } = render(<ConfirmButton {...labels} onConfirm={() => undefined} />);
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    rerender(<ConfirmButton {...labels} busy onConfirm={() => undefined} />);
+    const action = within(screen.getByRole("group")).getByRole("button", { name: "Delete it" });
+    expect(action).toHaveAttribute("aria-busy", "true");
+    await expectAccessible(container);
+  });
+
   it("names its trigger by triggerLabel when the words need context, and can be disabled", () => {
     render(<ConfirmButton {...labels} triggerLabel="Delete the draft of 3 Oct" disabled onConfirm={() => undefined} />);
     expect(screen.getByRole("button", { name: "Delete the draft of 3 Oct" })).toBeDisabled();
@@ -68,6 +78,23 @@ describe("CopyButton", () => {
       vi.advanceTimersByTime(1600);
     });
     expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+  });
+
+  it("tells a screen reader it copied, in a polite status there from the start; axe agrees", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { container } = render(<CopyButton text="lf_live_123" label="Copy" copiedLabel="Copied" />);
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
+    await expectAccessible(container);
+    await user.click(screen.getByRole("button", { name: "Copy" }));
+    await vi.waitFor(() => expect(status).toHaveTextContent("Copied"));
+    await expectAccessible(container);
+    act(() => {
+      vi.advanceTimersByTime(1600);
+    });
+    expect(status).toBeEmptyDOMElement();
+    vi.useRealTimers();
   });
 });
 

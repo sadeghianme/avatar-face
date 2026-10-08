@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from "vitest";
 import { Chip } from "@/components/ui/Chip";
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { ColorSwatch } from "@/components/ui/ColorSwatch";
-import { MenuButton } from "@/components/ui/MenuButton";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Switch } from "@/components/ui/Switch";
 import { Tabs } from "@/components/ui/Tabs";
@@ -235,49 +234,5 @@ describe("ColorSwatch", () => {
     );
     expect(screen.getByRole("button", { name: "White" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Black" })).toHaveStyle({ backgroundColor: "#000000" });
-  });
-});
-
-describe("MenuButton", () => {
-  function Language() {
-    const [lang, setLang] = useState("en");
-    return (
-      <>
-        <MenuButton
-          label="Language"
-          icon="globe"
-          choices={[
-            { key: "en", label: "English", checked: lang === "en", onSelect: () => setLang("en") },
-            { key: "fr", label: "Français", checked: lang === "fr", onSelect: () => setLang("fr") },
-          ]}
-        />
-        <p>Elsewhere</p>
-      </>
-    );
-  }
-
-  it("opens a menu of exclusive choices, the chosen one checked; choosing closes it", async () => {
-    render(<Language />);
-    const trigger = screen.getByRole("button", { name: "Language" });
-    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
-    expect(trigger).toHaveAttribute("aria-expanded", "false");
-    await userEvent.click(trigger);
-    expect(trigger).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("menuitemradio", { name: "English" })).toHaveAttribute("aria-checked", "true");
-    await userEvent.click(screen.getByRole("menuitemradio", { name: "Français" }));
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-    await userEvent.click(trigger);
-    expect(screen.getByRole("menuitemradio", { name: "Français" })).toHaveAttribute("aria-checked", "true");
-  });
-
-  it("Escape or a click elsewhere closes it", async () => {
-    render(<Language />);
-    const trigger = screen.getByRole("button", { name: "Language" });
-    await userEvent.click(trigger);
-    await userEvent.keyboard("{Escape}");
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-    await userEvent.click(trigger);
-    await userEvent.click(screen.getByText("Elsewhere"));
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 });

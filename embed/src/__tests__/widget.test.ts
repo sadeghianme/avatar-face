@@ -2,16 +2,18 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AvatarEngine } from "../engine";
-import { NoopPath, fakeCanvas, stubNetwork, type FakeNetwork, type Resource } from "./browser-fakes";
+import type { LivefaceHandle, LivefacePage } from "../widget/handles";
+import { FakeAudio, NoopPath, fakeCanvas, stubNetwork, type FakeNetwork, type Resource } from "./browser-fakes";
 
 /**
  * liveface.js on a customer's page, booted as its script tag boots it: how
  * it fails (visibly under the canvas, with a console warning and a
  * `liveface:error` event, never an unhandled rejection or an error thrown
  * into the page), where the API key goes (a header, never a URL), when the
- * engine's console handle is set (only when the snippet asks), and two 3D
- * widgets sharing one liveface-3d.js. Everything but the network, the DOM
- * and the canvas is the real widget and engine.
+ * engine's console handle is set (only when the snippet asks), two 3D
+ * widgets sharing one liveface-3d.js, and several widgets on one page, each
+ * with its own handle (widget/handles.ts). Everything but the network, the
+ * DOM and the canvas is the real widget and engine.
  */
 
 const API = "https://api.example";
@@ -90,12 +92,12 @@ function widgetCanvas(): Canvas {
 }
 
 interface Page {
-  window: Record<string, unknown> & {
-    Liveface?: { speak(t: string): Promise<void>; isSpeaking(): boolean; engine: unknown };
-  };
+  window: Record<string, unknown> & { Liveface?: LivefacePage };
   network: FakeNetwork;
   canvases: Canvas[];
   scripts: FakeElement[];
+  /** The widgets' own script tags, in the order they were booted. */
+  tags: FakeElement[];
   warnings: string[];
   errors: string[];
   /** Boot one more widget, as another script tag on the same page. */
@@ -108,6 +110,7 @@ function page(resources: Record<string, Resource>, { search = "" } = {}): Page {
   const win: Page["window"] = { devicePixelRatio: 2 };
   const canvases: Canvas[] = [];
   const scripts: FakeElement[] = [];
+  const tags: FakeElement[] = [];
   const warnings: string[] = [];
   const errors: string[] = [];
   vi.spyOn(console, "warn").mockImplementation((...args) => void warnings.push(args.join(" ")));
@@ -132,17 +135,20 @@ function page(resources: Record<string, Resource>, { search = "" } = {}): Page {
     network,
     canvases,
     scripts,
+    tags,
     warnings,
     errors,
     async embed(dataset) {
       // The widget's canvas is the one it places right after its script tag
       // (the engine makes canvases of its own).
       let placed: Canvas | undefined;
-      doc.currentScript = {
+      const tag = Object.assign(new FakeElement(), {
         dataset: { key: KEY, api: API, ...dataset },
         src: `${API}/liveface.js`,
         insertAdjacentElement: (_where: string, canvas: Canvas) => void (placed = canvas),
-      };
+      });
+      tags.push(tag);
+      doc.currentScript = tag;
       vi.resetModules();
       await import("../widget");
       await vi.waitFor(() => expect(placed).toBeDefined());
@@ -386,6 +392,154 @@ describe("liveface.js on a customer's page", () => {
       const third = await p.embed({ avatar: "m_1" });
       await settled(third);
       expect(events(third)).toEqual(["liveface:error"]);
+    });
+  });
+
+  describe("several widgets on one page", () => {
+    const SYNTH = `${API}/embed/v1/synthesize`;
+    const cues = JSON.parse(readFileSync(new URL("./fixtures/native-cues-hello.json", import.meta.url), "utf8")).cues;
+    const resources = {
+      [meta("av_1")]: { json: photoAvatar },
+      [meta("av_2")]: { json: { ...photoAvatar, voice: { provider: "kokoro", voice: "am_adam", locale: "en-US" } } },
+      [meta("m_1")]: { json: { ...photoAvatar, kind: "model3d", model_url: "https://storage.example/m_1.glb" } },
+      [meta("gone")]: { status: 404, error: { detail: "Avatar has not been published", code: "avatar_not_published" } },
+      [RIG]: { json: rig },
+      [THUMB]: { image: [182, 128, 110, 255] },
+      [SYNTH]: { json: { audio_b64: "AAAA", audio_mime: "audio/wav", duration_ms: 1200, cues, cached: false } },
+    } as Record<string, Resource>;
+
+    /** Every engine of the page's widgets, given back. */
+    const destroyAll = (p: Page) => {
+      for (const handle of p.window.Liveface?.all() ?? []) (handle.engine as AvatarEngine | null)?.destroy?.();
+    };
+
+    it("gives each its own handle: Liveface.get by avatar, canvas or script tag, Liveface.all in order", async () => {
+      const p = page(resources);
+      const first = await p.embed({ avatar: "av_1" });
+      await settled(first);
+      const second = await p.embed({ avatar: "av_2" });
+      await settled(second);
+      const Liveface = p.window.Liveface!;
+      const all = Liveface.all();
+      expect(all.map((h) => h.avatar)).toEqual(["av_1", "av_2"]);
+      const [one, other] = all;
+      expect(one.canvas).toBe(first);
+      expect(other.canvas).toBe(second);
+      expect(one.engine).not.toBe(other.engine);
+      expect(Liveface.get("av_2")).toBe(other);
+      expect(Liveface.get(second)).toBe(other);
+      expect(Liveface.get(p.tags[1] as unknown as Element)).toBe(other);
+      expect(Liveface.get(p.tags[0] as unknown as Element)).toBe(one);
+      expect(Liveface.get("av_9")).toBeNull();
+      expect(Liveface.get(null)).toBeNull();
+      // window.Liveface's own calls are the first widget's, as with one.
+      expect(Liveface.engine).toBe(one.engine);
+      destroyAll(p);
+    });
+
+    it("hands each widget's handle to the page in liveface:ready: on its canvas, bubbling, and its script tag, not", async () => {
+      const p = page(resources);
+      const canvas = await p.embed({ avatar: "av_2" });
+      await settled(canvas);
+      const handle = p.window.Liveface!.get("av_2")!;
+      const onCanvas = canvas.events.find((e) => e.type === "liveface:ready")!;
+      expect(onCanvas.detail).toBe(handle);
+      expect(onCanvas.bubbles).toBe(true);
+      const onTag = p.tags[0].events.find((e) => e.type === "liveface:ready")!;
+      expect(onTag.detail).toBe(handle);
+      expect(onTag.bubbles).toBe(false);
+      destroyAll(p);
+    });
+
+    it("tunes one widget without the other; Liveface.tune is the first's", async () => {
+      const p = page(resources);
+      await settled(await p.embed({ avatar: "av_1" }));
+      await settled(await p.embed({ avatar: "av_2" }));
+      const Liveface = p.window.Liveface!;
+      const [one, other] = Liveface.all() as LivefaceHandle[];
+      other.tune({ mouthOpen: 1.4 });
+      expect(other.engine!.tuning.mouthOpen).toBe(1.4);
+      expect(one.engine!.tuning.mouthOpen).toBe(1);
+      Liveface.tune({ mouthOpen: 0.7 });
+      expect(one.engine!.tuning.mouthOpen).toBe(0.7);
+      expect(other.engine!.tuning.mouthOpen).toBe(1.4);
+      destroyAll(p);
+    });
+
+    it("speaks with each widget's own key and voice, and stops one while the other speaks on", async () => {
+      vi.stubGlobal("Audio", FakeAudio);
+      const p = page(resources);
+      await settled(await p.embed({ avatar: "av_1", key: "lf_first" }));
+      await settled(await p.embed({ avatar: "av_2", key: "lf_second" }));
+      const Liveface = p.window.Liveface!;
+      const one = Liveface.get("av_1")!;
+      const other = Liveface.get("av_2")!;
+
+      void one.speak("Bonjour à tous.");
+      await vi.waitFor(() => expect(one.isSpeaking()).toBe(true));
+      expect(other.isSpeaking()).toBe(false);
+      void other.speak("Hello everyone.");
+      await vi.waitFor(() => expect(other.engine!.isSpeaking()).toBe(true));
+      expect(one.engine!.isSpeaking()).toBe(true);
+      // Each through its own snippet's key.
+      const synths = p.network.fetches.filter((f) => f.url === SYNTH).map((f) => f.headers["X-Api-Key"]);
+      expect(synths).toEqual(["lf_first", "lf_second"]);
+
+      one.stop();
+      expect(one.isSpeaking()).toBe(false);
+      expect(one.engine!.isSpeaking()).toBe(false);
+      expect(other.isSpeaking()).toBe(true);
+      expect(other.engine!.isSpeaking()).toBe(true);
+      // window.Liveface's own calls stay the first widget's.
+      expect(Liveface.isSpeaking()).toBe(false);
+      other.stop();
+      expect(other.isSpeaking()).toBe(false);
+      destroyAll(p);
+    });
+
+    it("a photo and a 3D avatar side by side: each its own engine, in the order they came up", async () => {
+      const p = page(resources);
+      const model = await p.embed({ avatar: "m_1" });
+      await vi.waitFor(() => expect(p.scripts).toHaveLength(1));
+      const photo = await p.embed({ avatar: "av_1" });
+      await settled(photo);
+      // The photo comes up first: the 3D bundle is still loading.
+      expect(p.window.Liveface!.all().map((h) => h.avatar)).toEqual(["av_1"]);
+      const engine3d = { tuning: { mouthOpen: 1 }, playAudio() {}, stopSpeech() {}, isSpeaking: () => false };
+      p.window.__Liveface3D = { load: async () => engine3d };
+      p.scripts[0].fire("load");
+      await settled(model);
+      const Liveface = p.window.Liveface!;
+      expect(Liveface.all().map((h) => h.avatar)).toEqual(["av_1", "m_1"]);
+      expect(Liveface.get("m_1")!.engine).toBe(engine3d);
+      expect(Liveface.get(model)!.engine).toBe(engine3d);
+      expect(Liveface.get("av_1")!.engine).not.toBe(engine3d);
+      // The first to come up is window.Liveface's, whatever the page's order.
+      expect(Liveface.engine).toBe(Liveface.get("av_1")!.engine);
+      Liveface.get("m_1")!.tune({ mouthOpen: 1.5 });
+      expect(engine3d.tuning.mouthOpen).toBe(1.5);
+      (Liveface.get("av_1")!.engine as AvatarEngine).destroy();
+    });
+
+    it("leaves a widget that failed out of Liveface.all and Liveface.get, and tells its script tag", async () => {
+      const p = page(resources);
+      const broken = await p.embed({ avatar: "gone" });
+      await settled(broken);
+      // Up before any widget is: window.Liveface answers quietly.
+      expect(p.window.Liveface!.all()).toEqual([]);
+      expect(p.window.Liveface!.engine).toBeNull();
+      expect(p.tags[0].events.map((e) => [e.type, e.bubbles, e.detail?.stage])).toEqual([
+        ["liveface:error", false, "avatar"],
+      ]);
+      const working = await p.embed({ avatar: "av_1" });
+      await settled(working);
+      const Liveface = p.window.Liveface!;
+      expect(Liveface.all().map((h) => h.avatar)).toEqual(["av_1"]);
+      expect(Liveface.get("gone")).toBeNull();
+      expect(Liveface.get(broken)).toBeNull();
+      // The working one is window.Liveface's now.
+      expect(Liveface.engine).toBe(Liveface.get("av_1")!.engine);
+      destroyAll(p);
     });
   });
 });
