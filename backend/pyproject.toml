@@ -38,6 +38,8 @@ clone = ["chatterbox-tts>=0.1", "resemble-perth>=1.0", "setuptools<81"]
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
+    # `pytest -n auto`: the suite on every core (CI runs it so).
+    "pytest-xdist>=3.6",
     # Both pinned: a new release of either can add diagnostics, and CI should
     # not turn red on an upgrade nobody made. Bump them deliberately.
     "ruff==0.15.16",

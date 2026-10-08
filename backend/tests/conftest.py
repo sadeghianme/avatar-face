@@ -3,6 +3,10 @@
 Determinism rule: tests must behave the same regardless of a developer's
 .env — so storage is forced to the local-filesystem fallback (R2_* nulled,
 storage cache cleared) and the DB is a throwaway SQLite file per session.
+
+Parallel rule: every pytest process (each pytest-xdist worker is one) has
+its own TMP below, so its own database and storage, and a test writes
+nowhere else but tmp_path. `pytest -n auto` runs the suite on every core.
 """
 
 from __future__ import annotations
@@ -10,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import os
 import tempfile
+import zlib
 from pathlib import Path
 
 import pytest
@@ -57,11 +62,30 @@ from app.services.rate_limit import reset_rate_limiters  # noqa: E402
 from app.services.storage import reset_storage  # noqa: E402
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """LIVEFACE_TEST_SHARD=<k>/<n> keeps the k-th of n shares of the suite.
+
+    CI runs the suite as n jobs side by side (`backend-tests` in
+    .github/workflows/ci.yml). A test's share is fixed by its id alone, so
+    every xdist worker of a job collects the same share, no two shares
+    overlap, and together they are the whole suite. Unset: every test.
+    """
+    shard = os.environ.get("LIVEFACE_TEST_SHARD")
+    if not shard:
+        return
+    try:
+        index, total = (int(part) for part in shard.split("/"))
+    except ValueError:
+        index = total = 0
+    if not 1 <= index <= total:
+        raise pytest.UsageError(f"LIVEFACE_TEST_SHARD={shard!r}: expected <k>/<n>, 1 <= k <= n")
+    kept: list[pytest.Item] = []
+    others: list[pytest.Item] = []
+    for item in items:
+        mine = zlib.crc32(item.nodeid.encode()) % total == index - 1
+        (kept if mine else others).append(item)
+    items[:] = kept
+    config.hook.pytest_deselected(items=others)
 
 
 @pytest_asyncio.fixture()
