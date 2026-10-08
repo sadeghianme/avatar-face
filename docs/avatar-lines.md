@@ -1570,8 +1570,10 @@ drawn mouth, make your own in the Mouth panel).
   `creations.ai_usage` (AI budget, last adjust round, point-finder cache).
 - Migration 025 (M4): `consents.subject_id`, the creation a statement about
   a face was made for. The address hash needs the visitor's address:
-  production sets uvicorn's `FORWARDED_ALLOW_IPS` to the docker ranges, so
-  Caddy's X-Forwarded-For is trusted.
+  `backend/app/core/client_ip.py` takes it from Cloudflare's
+  CF-Connecting-IP when the request came through Caddy (TRUSTED_PROXIES)
+  and Cloudflare's published ranges (TRUST_CLOUDFLARE), as production
+  configures it; see docs/process.md, "Client addresses".
 
 ## Fixes to ship first (existing bugs)
 

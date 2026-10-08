@@ -39,17 +39,21 @@ services:
       APP_BASE_URL: https://avatar.mehdisadeghian.com
       CORS_ORIGINS: https://avatar.mehdisadeghian.com
       ENVIRONMENT: production
-      # The API is reached only through Caddy on the web_proxy network (no
-      # published port), so every request's peer is Caddy's container.
-      # Trusting X-Forwarded-For from the private ranges docker assigns lets
-      # uvicorn report the address Caddy saw instead: what the consent
-      # record's keyed address hash and the share page's rate limit use.
-      # Caddy sets that header itself and ignores one sent by its client, so
-      # it cannot be forged from outside. With Cloudflare in front, that
-      # address is Cloudflare's edge, not the visitor (the visitor is in
-      # CF-Connecting-IP, which nothing reads yet): coarser than per visitor,
-      # but no longer one address for everyone.
-      FORWARDED_ALLOW_IPS: "172.16.0.0/12,10.0.0.0/8,192.168.0.0/16"
+      # The client's address, which every per-client rate limit and the
+      # consent record's keyed address hash use (backend/app/core/client_ip.py).
+      # Requests arrive Cloudflare -> Caddy -> here. The API is reached only
+      # through Caddy on the web_proxy network (no published port), so the
+      # peer is Caddy's container, in one of the private ranges docker
+      # assigns: from there, the X-Forwarded-For entry Caddy wrote, the
+      # rightmost, is believed, and nothing a client put to its left (one
+      # hop). That entry is a Cloudflare edge, from Cloudflare's
+      # published ranges (backend/app/core/cloudflare_ranges.py), so the
+      # visitor is taken from CF-Connecting-IP. A request that reaches Caddy
+      # without Cloudflare is keyed on its own address, whatever headers it
+      # sends. Uvicorn's own proxy-header handling is off (backend/Dockerfile).
+      TRUSTED_PROXIES: "172.16.0.0/12,10.0.0.0/8,192.168.0.0/16"
+      TRUSTED_PROXY_HOPS: "1"
+      TRUST_CLOUDFLARE: "true"
     volumes:
       - liveface_data:/data
     networks:

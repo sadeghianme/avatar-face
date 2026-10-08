@@ -147,4 +147,9 @@ LABEL org.opencontainers.image.revision=$LIVEFACE_VERSION \
       org.opencontainers.image.source=https://github.com/sadeghianme/avatar-face
 
 EXPOSE 7002
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7002"]
+# --no-proxy-headers: uvicorn must not rewrite the peer from X-Forwarded-For.
+# The application works out the client's address itself, from the peer
+# outward through the proxies it is told to trust (app/core/client_ip.py,
+# TRUSTED_PROXIES and TRUST_CLOUDFLARE in deploy/docker-compose.prod.yml),
+# and needs the real peer to start from.
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7002", "--no-proxy-headers"]

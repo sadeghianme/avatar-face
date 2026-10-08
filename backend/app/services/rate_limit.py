@@ -110,10 +110,11 @@ class Limit:
 
 # --- The limits ------------------------------------------------------------
 #
-# Keyed by client address, the address is the one Caddy saw (uvicorn trusts
-# its X-Forwarded-For, deploy/docker-compose.prod.yml). Behind Cloudflare
-# that is an edge address many visitors share, so the per-address numbers
-# are generous on purpose: they stop a script, not a busy office.
+# Keyed by client address: the visitor's own, through the proxies the server
+# trusts (core.client_ip; CF-Connecting-IP behind Cloudflare and Caddy in
+# production), never a header a client could pick. An office or a mobile
+# carrier still puts many people behind one address, so the per-address
+# numbers are generous on purpose: they stop a script, not a busy office.
 
 # /embed/v1/cues: unauthenticated, called once per sentence the browser
 # voice speaks. Two a second per address is far beyond a person listening.

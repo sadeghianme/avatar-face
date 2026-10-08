@@ -209,6 +209,7 @@ green CI (the `images` job rebuilds both images from scratch), merge, deploy.
 | Base images | `FROM <tag>@sha256:<digest>` in both Dockerfiles | below; Dependabot proposes new digests monthly |
 | GitHub Actions | major tags in `ci.yml` | Dependabot proposes them monthly |
 | ShellCheck | image tag and digest in `ci.yml` | `docker buildx imagetools inspect koalaman/shellcheck:<tag>` |
+| Cloudflare's edge ranges | `backend/app/core/cloudflare_ranges.py` (generated) | `python -m scripts.refresh_cloudflare_ranges` from `backend/` (`--check` only compares); see [Client addresses](#client-addresses) |
 
 **Python libraries.** Change the pin in `backend/constraints.txt` (and the range
 in `pyproject.toml` if it forbids it), run the backend tests locally
@@ -251,6 +252,37 @@ A new line (Node 24, Python 3.13, nginx 1.32) is a deliberate upgrade: change
 the tag, and the matching `node-version` / `python-version` in `ci.yml`, in one
 pull request. The images use Node 22 (Node 20 is past its end of life); the
 `embed` and `frontend` CI jobs still set Node 20 and should follow.
+
+## Client addresses
+
+Every per-client rate limit (sign-in, sign-up, password reset, `/embed/v1/cues`,
+share pages) and the consent record's keyed address hash use one function,
+`backend/app/core/client_ip.py`. Nothing else reads `request.client` or a
+forwarding header.
+
+Production is Cloudflare, then Caddy on the `web_proxy` docker network, then
+the API. The function starts at the TCP peer, which nobody can forge, and
+walks outward only through hops it trusts:
+
+1. From a peer in `TRUSTED_PROXIES` (the docker ranges: Caddy), the rightmost
+   `X-Forwarded-For` entry is believed, at most `TRUSTED_PROXY_HOPS` (1)
+   entries in all. Entries a client wrote further left are never read.
+2. From an address in Cloudflare's published ranges (`TRUST_CLOUDFLARE`),
+   `CF-Connecting-IP` is the client.
+3. The first address that is neither is the client.
+
+So a visitor through Cloudflare is keyed on their own address, not on the
+edge that thousands share, and a client that reaches Caddy without Cloudflare
+is keyed on its own address whatever headers it sends. Uvicorn runs with
+`--no-proxy-headers` (`backend/Dockerfile`) so that the peer reaches the
+application unchanged. With none of the three settings (development, tests),
+the client is the peer.
+
+Cloudflare's ranges are pinned in the repository, never fetched at startup.
+They change rarely and Cloudflare announces it: refresh them then, and with the
+monthly dependency review (`--check` exits 1 when the pinned list is stale).
+A stale list fails safe: a visitor behind a new edge is keyed on that edge
+until the refresh, as every visitor was before.
 
 ## Security headers
 
