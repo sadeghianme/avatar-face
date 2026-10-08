@@ -12,6 +12,9 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from alembic.util import CommandError
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -99,12 +102,20 @@ async def _ensure_schema(engine) -> None:
 
     Fresh database  -> create_all, then stamp head, so later migrations apply.
     Managed database -> upgrade head.
+    Managed by a newer release -> serve on it as it is (a rollback): this
+    release's migrations do not know its revision, and `upgrade` would stop
+    the server from starting at all. Migrations are written so that the
+    release before them still runs on the schema they leave (docs/process.md,
+    "Rollback").
     Existing but unstamped -> refuse to guess. Stamping head would mark
     pending migrations as done and hide exactly the failure above; log it and
     let a human run `alembic stamp <rev>` once.
     """
     async with engine.begin() as conn:
         tables = await conn.run_sync(lambda c: set(inspect(c).get_table_names()))
+        current = await conn.run_sync(
+            lambda c: MigrationContext.configure(c).get_current_revision()
+        )
 
     fresh = "users" not in tables
     stamped = "alembic_version" in tables
@@ -113,12 +124,19 @@ async def _ensure_schema(engine) -> None:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
+    cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+
     def run_alembic(action: str) -> None:
-        cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
         (command.stamp if action == "stamp" else command.upgrade)(cfg, "head")
 
     if fresh:
         await asyncio.to_thread(run_alembic, "stamp")
+    elif stamped and current is not None and not _known_revision(cfg, current):
+        logger.warning(
+            "database is at revision %s, which this release does not know: a newer "
+            "release migrated it (a rollback?). Serving on it as it is.",
+            current,
+        )
     elif stamped:
         await asyncio.to_thread(run_alembic, "upgrade")
     else:
@@ -126,6 +144,15 @@ async def _ensure_schema(engine) -> None:
             "database has tables but no alembic_version; migrations are NOT being "
             "applied. Run `alembic stamp <current-revision>` once to adopt it."
         )
+
+
+def _known_revision(cfg: Config, revision: str) -> bool:
+    """Whether this release's migrations include `revision`."""
+    try:
+        ScriptDirectory.from_config(cfg).get_revision(revision)
+    except CommandError:
+        return False
+    return True
 
 
 @asynccontextmanager

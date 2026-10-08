@@ -948,7 +948,7 @@ drawn mouth, make your own in the Mouth panel).
   `--revert <backup.json>` puts the exact previous values back, skipping an
   avatar edited since unless `--force`. Idempotent: a moved avatar is not
   selected again. The operator takes a database backup first
-  (`deploy/backup_db.py`, the online backup through the WAL).
+  (`deploy/backup_db.py`, a consistent copy through the WAL).
 
 ## Embed engine
 
