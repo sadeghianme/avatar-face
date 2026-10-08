@@ -26,8 +26,8 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -87,8 +87,8 @@ jobs:
       run:
         working-directory: embed
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -119,7 +119,7 @@ jobs:
       - run: npm test
       - name: Upload the frames that failed the pixel goldens
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pixel-diffs
           path: embed/dist/pixel-diffs/
@@ -136,7 +136,7 @@ jobs:
         run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Cache Chromium
         id: chromium
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: chromium-${{ runner.os }}-${{ steps.playwright.outputs.version }}
@@ -150,7 +150,7 @@ jobs:
         run: npm run test:browser
       - name: Upload the frames that failed the browser goldens
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: browser-diffs
           path: embed/dist/browser-diffs/
@@ -162,8 +162,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -189,8 +189,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -240,7 +240,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
       - name: Build the API image
