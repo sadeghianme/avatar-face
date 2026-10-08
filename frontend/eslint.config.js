@@ -16,12 +16,31 @@ const RAW_CONTROLS = ["button", "input", "select", "textarea", "label"].map((tag
 }));
 
 // The kit's looks are the kit's: a className (any *ClassName prop, a
-// template, or a cx() call) that spells out a button, a card, a field
-// label or error text is a kit component drawn by hand. Use Button /
-// ButtonLink, Card / Banner, Label / Field, FieldError instead.
-const KIT_CLASS = String.raw`/(^|\s)(btn-[a-z0-9-]+|card|label|field-error)(\s|$)/`;
+// template, or a cx() call) that spells out one of the component classes
+// in index.css (a button, a card, a field, its label or error text, a
+// badge, a chip, a choice, a range, a progress bar, a code block) is a kit
+// component drawn by hand. Use the component instead.
+const KIT_LOOKS = [
+  "btn-[a-z0-9-]+",
+  "icon-btn(-[a-z]+)?",
+  "card",
+  "label",
+  "field-error",
+  "input",
+  "checkbox",
+  "check-row",
+  "slider",
+  "badge(-[a-z]+)?",
+  "chip-[a-z-]+",
+  "choice-tile(-[a-z]+)?",
+  "progress(-bar)?",
+  "code-block",
+];
+const KIT_CLASS = String.raw`/(^|\s)(${KIT_LOOKS.join("|")})(\s|$)/`;
 const KIT_CLASS_MESSAGE =
-  "A kit look written by hand: use Button/ButtonLink (btn-*), Card/Banner (card), Label/Field (label) or FieldError (field-error).";
+  "A kit look written by hand: use Button/ButtonLink (btn-*), IconButton (icon-btn-*), Card/Banner (card), " +
+  "Label/Field (label), FieldError (field-error), Input (input), Checkbox (checkbox, check-row), Slider (slider), " +
+  "Badge (badge-*), Chip (chip-*), ChoiceCard (choice-tile-*), ProgressBar (progress) or CodeBlock (code-block).";
 const KIT_CLASSES = [
   `JSXAttribute[name.name=/[cC]lassName$/] Literal[value=${KIT_CLASS}]`,
   `JSXAttribute[name.name=/[cC]lassName$/] TemplateElement[value.raw=${KIT_CLASS}]`,
