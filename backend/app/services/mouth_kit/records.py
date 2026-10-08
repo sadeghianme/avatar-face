@@ -3,6 +3,9 @@ of it, and the AI disclosure of the shapes it made."""
 
 from __future__ import annotations
 
+from typing import Literal, cast
+
+from app.models.shapes import KitRecord, KitShape, KitTeeth, Note, TeethNote
 from app.services import performance_kit
 from app.services.mouth_kit.calls import (
     CONSENT_NOT_RECORDED,
@@ -26,7 +29,7 @@ _TEETH_NOTE_CODES = frozenset({
 _UNCLEAR_CODES = frozenset({"teeth_photo_refused", "no_teeth_visible"})
 
 
-def teeth_reason(result: performance_kit.KitResult) -> dict | None:
+def teeth_reason(result: performance_kit.KitResult) -> Note | None:
     """Why the kit brings no teeth photo, as a note the Mouth panel words
     (mouth.teeth.note, kit.teeth.reason), or None when it brings one (or
     was not asked for any). The request stopped or the AI did not answer
@@ -47,22 +50,28 @@ def teeth_reason(result: performance_kit.KitResult) -> dict | None:
             "The AI's teeth photo shows too little of the upper teeth for the photographic "
             "mouth, so it was not used",
         )
-    return {
-        **_note("teeth_photo_rejected",
-                "The AI's teeth photo did not pass its checks "
-                f"({reason.get('detail') or 'no reason given'}), so it was not used"),
-        "reason": reason or None,
+    rejected: TeethNote = {
+        "code": "teeth_photo_rejected",
+        "detail": "The AI's teeth photo did not pass its checks "
+        f"({reason.get('detail') or 'no reason given'}), so it was not used",
+        # The check's own {code, detail} (performance_kit's teeth report).
+        "reason": cast(Note, reason) if reason else None,
     }
+    return rejected
 
 
-def _standard_teeth(reason: dict) -> dict:
+def _standard_teeth(reason: Note) -> Note:
     """The teeth note for a mouth left with the standard teeth."""
     return {**reason, "detail": f"{reason['detail']}; this avatar uses standard teeth"}
 
 
 def kit_record(
-    result: performance_kit.KitResult, *, source: str, teeth: dict, fitted: dict
-) -> dict:
+    result: performance_kit.KitResult,
+    *,
+    source: Literal["finish", "mouth_panel"],
+    teeth: KitTeeth,
+    fitted: dict[str, float],
+) -> KitRecord:
     """What `mouth_config.kit` keeps of a kit, for the owner: its id and
     recipe, the model, each shape's provenance with why a shape was
     retargeted, whether its teeth photo is the avatar's (`teeth`: {used,
@@ -70,7 +79,7 @@ def kit_record(
     when the teeth change and the owner has not moved them), what the fit
     could not measure, and what it took. `source` says where it was made:
     "finish" or "mouth_panel"."""
-    shapes = {}
+    shapes: dict[str, KitShape] = {}
     for shape in performance_kit.SHAPES:
         entry = result.report[shape]
         shapes[shape] = {
@@ -102,8 +111,8 @@ def kit_record(
     }
 
 
-def public_kit(record: dict | None) -> dict | None:
-    """The kit as AvatarOut.mouth.kit tells the owner (mouth.public_view):
+def public_kit(record: KitRecord | None) -> dict | None:
+    """The kit as AvatarOut.mouth.kit tells the owner (api.avatars.presenting.mouth_view):
     {state: "made" | "dropped", made_at, model, generated, retargeted,
     shapes: [{shape, provenance, reason}] in the manifest's order, teeth:
     {used, reason}, dropped: {code, detail} | null}. None without a kit."""
@@ -128,30 +137,3 @@ def public_kit(record: dict | None) -> dict | None:
         "teeth": record.get("teeth"),
         "dropped": record.get("dropped"),
     }
-
-
-# --- Disclosure ---------------------------------------------------------------------
-
-
-def with_ai_shapes(ai_edited: dict | None, model: str | None, generated: int) -> dict:
-    """The disclosure once AI made `generated` of the mouth's shapes (a new
-    dict: JSON columns are replaced, never mutated)."""
-    from app.services.mouth_photo import mouth_disclosure
-
-    entry = {"model": model, "generated": generated}
-    if not ai_edited:
-        return {"mode": "mouth_shapes", "model": model, "mouth_shapes": entry}
-    disclosed = mouth_disclosure({**ai_edited, "mouth_shapes": entry})
-    assert disclosed is not None  # a shapes entry is always disclosed
-    return disclosed
-
-
-def without_ai_shapes(ai_edited: dict | None) -> dict | None:
-    """The disclosure once no AI-made shape is shown (the kit dropped, a
-    kit with none, the published mouth without its motion): whatever else
-    AI made stays disclosed."""
-    from app.services.mouth_photo import mouth_disclosure
-
-    if not ai_edited:
-        return None
-    return mouth_disclosure({k: v for k, v in ai_edited.items() if k != "mouth_shapes"})

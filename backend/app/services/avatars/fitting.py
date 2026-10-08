@@ -6,6 +6,7 @@ avatar's line and mouth style.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -34,8 +35,15 @@ from app.services.anchor_fit import (
     with_head_outline,
     write_fit_base,
 )
+from app.services.mouth import character_style
 from app.services.publishing import mark_dirty
-from app.services.storage import STORAGE_ERRORS, get_storage
+from app.services.rig import (
+    VISEME_BLENDSHAPES,
+    VISEME_PROFILES,
+    fit_base_mesh,
+    landmarks_from_image,
+)
+from app.services.storage import STORAGE_ERRORS, Storage, get_storage
 
 logger = logging.getLogger("liveface.avatars")
 
@@ -46,8 +54,6 @@ logger = logging.getLogger("liveface.avatars")
 def honour_mouth_style(rig: dict, avatar: Avatar, face_type: str) -> None:
     """A fit names the line's current render profile; an avatar whose owner
     chose the classic mouth keeps the classic one through a re-fit."""
-    from app.services.mouth import character_style
-
     profile = render_profile_for(face_type, character_style(avatar.mouth_config))
     if profile:
         rig["render_profile"] = profile
@@ -73,9 +79,6 @@ async def reprofile_visemes(avatar: Avatar, visemes: bool = True) -> None:
     """Swap the stored rig's viseme table (unless `visemes` is False) and
     render profile to match the avatar's face type and the owner's mouth
     style. The draft only: visitors see it once published."""
-    from app.services.mouth import character_style
-    from app.services.rig import VISEME_BLENDSHAPES, VISEME_PROFILES
-
     if not avatar.rig_key or avatar.kind != AvatarKind.photo:
         return
     storage = get_storage()
@@ -100,7 +103,7 @@ async def reprofile_visemes(avatar: Avatar, visemes: bool = True) -> None:
 # --- The fit base ----------------------------------------------------------------
 
 
-async def fit_base(avatar: Avatar, storage, rig: dict) -> tuple[np.ndarray, bool]:
+async def fit_base(avatar: Avatar, storage: Storage, rig: dict) -> tuple[np.ndarray, bool]:
     """The mesh this rig's fits start from — the detection, else the
     template — and whether the rig's own points number their landmarks as
     it does (see anchor_fit.saved_marks): true of a detection, which the rig
@@ -111,8 +114,6 @@ async def fit_base(avatar: Avatar, storage, rig: dict) -> tuple[np.ndarray, bool
     draft put back an older rig) gets it rebuilt the way a first build makes
     it — detection, else the template — which is deterministic, and stored.
     """
-    from app.services.rig import fit_base_mesh, landmarks_from_image
-
     key = fit_base_key(avatar.org_id, avatar.id)
     stored = await read_fit_base(storage, key)
     points = fit_base_points(stored, rig)
@@ -123,6 +124,7 @@ async def fit_base(avatar: Avatar, storage, rig: dict) -> tuple[np.ndarray, bool
         found, _, size, detected = landmarks_from_image(data)
         return fit_base_mesh(found, size, detected), size, detected
 
+    assert avatar.image_key is not None  # every caller fits a photo avatar's rig
     image = await storage.get_bytes(avatar.image_key)
     found, size, detected = await run_in_threadpool(detect, image)
     if list(size) != list(rig["image_size"]):
@@ -177,7 +179,8 @@ async def rig_anchors(avatar: Avatar) -> dict:
         raise Conflict409("Avatar rig is not adjustable", code="not_adjustable")
     base, rig_on_base = await fit_base(avatar, storage, rig)
     saved = saved_marks(rig, avatar.face_type, rig_on_base)
-    fitted, _ = fit_rig(rig, base, saved, avatar.face_type)
+    # A mesh and a warp, on every panel open: a thread's work.
+    fitted, _ = await asyncio.to_thread(fit_rig, rig, base, saved, avatar.face_type)
     # A head saved before it had diagonals opens with them where its fit put
     # them, so all eight handles are there, and the panel, which sends a head
     # it did not touch without them, saves it exactly as it was.
@@ -235,7 +238,8 @@ async def fit(avatar: Avatar, marks: dict) -> tuple[dict, list[FitProblem]]:
 
     base, rig_on_base = await fit_base(avatar, storage, rig)
     merged = merge(saved_marks(rig, face_type, rig_on_base), marks_from_dict(marks, face_type))
-    adjusted, problems = fit_rig(rig, base, merged, face_type)
+    # On every drag of a handle: a thread's work, off the loop.
+    adjusted, problems = await asyncio.to_thread(fit_rig, rig, base, merged, face_type)
     honour_mouth_style(adjusted, avatar, face_type)
     return adjusted, problems
 

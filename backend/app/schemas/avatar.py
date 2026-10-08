@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -144,7 +145,7 @@ class AvatarOut(BaseModel):
     share_token: str | None = None
     face_type: str = "human"
     # The DRAFT voice; what visitors hear is the published snapshot's copy.
-    voice: dict | None = None
+    voice: Mapping[str, Any] | None = None
     # The DRAFT mouth, null for the classic one: {renderer, profile,
     # has_oral_photo, teeth: {source: "ai" | "upload" | null, note: {code,
     # detail} | null}, motion_url: the presigned draft motion manifest (the
@@ -152,7 +153,7 @@ class AvatarOut(BaseModel):
     # kit: services.mouth_kit.public_kit, or null}. Every route of the owner
     # API that returns one avatar signs its motion_url; the list (GET
     # /avatars) leaves it null.
-    mouth: dict | None = None
+    mouth: Mapping[str, Any] | None = None
     # The render profile the DRAFT rig names ("toon@1", "animal@2", "animal@1",
     # or null: the classic renderer). Set by the routes that return one avatar
     # (they read the rig); null on the list. The Mouth panel's character
@@ -161,7 +162,7 @@ class AvatarOut(BaseModel):
     # The DRAFT scene (services.scene): {zoom, pan: {x, y}, background:
     # {kind, color, has_image}}; null for an avatar made before scenes
     # existed, which renders by `framing`. Published on Publish.
-    scene: dict | None = None
+    scene: Mapping[str, Any] | None = None
     # True when the draft has moved ahead of the published snapshot — the
     # dashboard shows a Publish bar on this.
     unpublished: bool = False
@@ -173,7 +174,7 @@ class AvatarOut(BaseModel):
     # {mode, model} when an AI made or changed the picture (creation
     # wizard: adjust or generate); null otherwise. Visitors see it through
     # the published snapshot's disclosure.
-    ai_edited: dict | None = None
+    ai_edited: Mapping[str, Any] | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -197,7 +198,7 @@ class MouthUpdate(BaseModel):
 
 class CharacterUpdate(BaseModel):
     """How an animation or an animal's character mouth is set. Ranges mirror
-    TRAIT_LIMITS in embed/src/character-mouth.ts; a published config is served
+    TRAIT_LIMITS in embed/src/engine/character-mouth.ts; a published config is served
     to strangers and must not trust the client's clamp."""
 
     style: Literal["character", "classic"] = "character"
@@ -265,7 +266,7 @@ class AvatarCreated(BaseModel):
 
 class AvatarDetail(AvatarOut):
     # Presigned {image_url, rig_url} of the draft mouth photo, when one exists.
-    mouth_photo: dict | None = None
+    mouth_photo: Mapping[str, Any] | None = None
     # Presigned URL of the draft scene's background picture, when one is stored.
     scene_image_url: str | None = None
     image_url: str | None = None

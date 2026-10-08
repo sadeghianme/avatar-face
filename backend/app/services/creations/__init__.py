@@ -40,7 +40,7 @@ becomes an avatar, it is atomic (draft → finishing happens once), repeatable
 has just looked at the points and said they are right, which is exactly the
 confirmation a first build otherwise waits for. Before it publishes a
 person, it prepares their mouth from the picture and those points (the
-wizard's step 5, "Preparing your avatar": `_own_mouth`).
+wizard's step 5, "Preparing your avatar": `own_mouth`).
 
 The package, by what each part does:
 
@@ -69,8 +69,12 @@ anything is written or a job admitted:
     requests  face detection, AI adjust, step 3 and its versions, Finish,
               and a retry of whichever job failed
 
-The job side is re-exported here, so `services.creations.X` keeps working;
-the request side is imported by module.
+What other packages use of the job side is re-exported here, so
+`services.creations.X` keeps working (not the job runner, `runs`, nor the
+works, which load the wizard: importing this package must not); the request side, and everything the
+modules share among themselves (records.write_job, records.store_result,
+steps.through_cutouts, …), is imported from its module. Nothing private is
+re-exported: a test patches a name in the module that looks it up.
 """
 
 from __future__ import annotations
@@ -78,16 +82,12 @@ from __future__ import annotations
 from app.services.creations.adjust import (
     ADJUST_CALLS,
     AUTO_ADJUST_REASON,
-    _adjust,
-    _refund_round,
     auto_adjust_of,
     mouth_warnings,
     source_photo_key,
 )
 from app.services.creations.detect import (
     VISION_CACHE_SIZE,
-    _ai_points,
-    _detect,
     anchors_are_current,
     detect_anchors,
     fit_from_anchors,
@@ -95,42 +95,9 @@ from app.services.creations.detect import (
     vision_cache_hit,
     wants_ai_points,
 )
-from app.services.creations.finish import (
-    UNDO_FINISH_BACKOFF_SECONDS,
-    _build_avatar,
-    _finish,
-    _over,
-    _undo_finish,
-    _undo_finish_retrying,
-)
-from app.services.creations.generate import (
-    _generate,
-)
-from app.services.creations.ingest import (
-    _background,
-    _ingest,
-    _stored_analysis,
-)
-from app.services.creations.mouth import (
-    PUBLISH_LABEL,
-    PUBLISH_STANDARD_LABEL,
-    TEETH_FAILED,
-    _ai_allowed,
-    _animal_character_mouth,
-    _own_mouth,
-    _record_finish_consent,
-    _single_teeth,
-    _teeth_consent,
-)
 from app.services.creations.records import (
     NOT_RETRYABLE,
     SUPERSEDED,
-    _ai_disabled_error,
-    _ai_switched_off,
-    _load,
-    _store_result,
-    _update_ai_usage,
-    _write_job,
     ai_usage_of,
     error_record,
     job_record,
@@ -166,17 +133,7 @@ from app.services.creations.rules import (
     rules_for,
     step_key,
 )
-from app.services.creations.runs import (
-    WORKS,
-    _prepare,
-    _run,
-    launch,
-    start_job,
-)
 from app.services.creations.steps import (
-    _detected_a_person,
-    _remove_steps,
-    _through_cutouts,
     adjusted_index,
     ai_edited_of,
     background_source,
@@ -200,26 +157,18 @@ from app.services.creations.steps import (
 )
 
 __all__ = [
-    "_adjust",
     "ADJUST_CALLS",
     "adjusted_index",
     "ADJUSTED_PREFIX",
-    "_ai_allowed",
     "AI_DETECTIONS_PER_CREATION",
-    "_ai_disabled_error",
     "ai_edited_of",
-    "_ai_points",
-    "_ai_switched_off",
     "ai_usage_of",
     "anchors_are_current",
-    "_animal_character_mouth",
     "auto_adjust_of",
     "AUTO_ADJUST_REASON",
     "avatar_prefix",
-    "_background",
     "background_source",
     "BEFORE_STYLISE",
-    "_build_avatar",
     "CHECK_KEYS",
     "check_of",
     "copied",
@@ -228,31 +177,24 @@ __all__ = [
     "CUTOUT",
     "cutout_id_for",
     "CUTOUT_PREFIX",
-    "_detect",
     "detect_anchors",
-    "_detected_a_person",
     "drop_adjusted",
     "drop_cutouts",
     "ENDED_RETENTION",
     "error_record",
     "expire_idle",
-    "_finish",
     "fit_from_anchors",
     "frame_key",
     "FULL_FRAME",
-    "_generate",
     "IDLE_EXPIRY",
     "incoming_key",
-    "_ingest",
     "INTERRUPTED_ERROR",
     "is_cut_out",
     "is_cutout_id",
     "job_record",
-    "launch",
     "lineage",
     "LineRules",
     "LINES",
-    "_load",
     "MAX_DRAFTS_PER_ORG",
     "MAX_ROLL_DEGREES",
     "MAX_UPLOAD_BYTES",
@@ -260,45 +202,23 @@ __all__ = [
     "mouth_warnings",
     "NOT_RETRYABLE",
     "ordered_step_ids",
-    "_over",
-    "_own_mouth",
-    "_prepare",
-    "PUBLISH_LABEL",
-    "PUBLISH_STANDARD_LABEL",
     "recommendation_of",
-    "_record_finish_consent",
     "recover_interrupted",
     "recover_stranded",
-    "_refund_round",
-    "_remove_steps",
     "required_marks",
     "retryable",
     "round_source",
     "rules_for",
-    "_run",
-    "_single_teeth",
     "source_on_backdrop",
     "source_photo_key",
-    "start_job",
     "statement_for",
     "step_check",
     "step_items",
     "step_key",
     "STEP_ORDER",
-    "_store_result",
-    "_stored_analysis",
     "stylised",
     "SUPERSEDED",
-    "_teeth_consent",
-    "TEETH_FAILED",
-    "_through_cutouts",
-    "_undo_finish",
-    "UNDO_FINISH_BACKOFF_SECONDS",
-    "_undo_finish_retrying",
-    "_update_ai_usage",
     "vision_cache_hit",
     "VISION_CACHE_SIZE",
     "wants_ai_points",
-    "WORKS",
-    "_write_job",
 ]

@@ -141,7 +141,6 @@ from app.services.photo_adjust.scheme import (
     MAX_CANDIDATES,
     MAX_JAW_SHIFT,
     MAX_SKIN_DELTA_E,
-    MAX_TOUCHUP_YAW,
     MODES,
     MODES_BY_LINE,
     NOSE_TIP,
@@ -174,8 +173,11 @@ from app.services.photo_adjust.sending import (
     head_crop_box,
     head_crop_fallback,
     prepare,
-    yaw_offset,
 )
+
+# Measured on the face, so they live with the photo check (photo_analysis);
+# re-exported because a touch-up is refused by them.
+from app.services.photo_analysis import MAX_TOUCHUP_YAW, yaw_offset
 
 __all__ = [
     "AdjustSkipped",

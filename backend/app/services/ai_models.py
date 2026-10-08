@@ -21,6 +21,8 @@ import logging
 
 import httpx
 
+from app.core.credentials import credentials
+
 logger = logging.getLogger("liveface.ai_models")
 
 API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -51,8 +53,6 @@ def generate_url(model: str) -> str:
 
 def api_key() -> str | None:
     """The Gemini key: the dashboard's if set there, else the environment."""
-    from app.core.credentials import credentials
-
     return credentials.get("gemini_api_key")
 
 

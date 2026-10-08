@@ -7,6 +7,7 @@ the lip-sync exactly like a real provider would.
 """
 from __future__ import annotations
 
+import asyncio
 import io
 import math
 import struct
@@ -41,45 +42,52 @@ class OfflineTTSProvider(TTSProvider):
         return VOICES
 
     async def synthesize(self, text: str, voice: str, locale: str) -> SynthesisResult:
-        pitch_mul = 1.25 if voice == "offline-bright" else 1.0
-        # Audio and cues are generated from ONE segment list, so the mouth
-        # can never drift from the sound.
-        segments, _ = plan_utterance(text, locale)
-        samples: list[float] = []
-        phase = 0.0
+        """Rendered on a worker thread: the audio is made one sample at a
+        time in Python (half a second of CPU for 600 characters), which on
+        the event loop would stall every other request for as long."""
+        return await asyncio.to_thread(_render, text, voice, locale)
 
-        for segment in segments:
-            n = int(SAMPLE_RATE * segment.duration_ms / 1000)
-            freq = VISEME_PITCH.get(segment.viseme, 180) * pitch_mul
-            if freq <= 0 or segment.viseme == "sil":
-                samples.extend([0.0] * n)
-                continue
-            for i in range(n):
-                # Envelope per articulation so syllables pulse audibly.
-                env = math.sin(math.pi * i / n) * 0.35
-                phase += 2 * math.pi * freq / SAMPLE_RATE
-                # Base tone + a quiet octave for timbre.
-                samples.append(env * (math.sin(phase) + 0.35 * math.sin(2 * phase)))
 
-        t_ms = total_duration_ms(segments)
-        if not samples:  # empty text still returns valid audio
-            samples = [0.0] * int(SAMPLE_RATE * 0.2)
-            t_ms = 200
-        cues = cues_from_segments(segments)
+def _render(text: str, voice: str, locale: str) -> SynthesisResult:
+    pitch_mul = 1.25 if voice == "offline-bright" else 1.0
+    # Audio and cues are generated from ONE segment list, so the mouth
+    # can never drift from the sound.
+    segments, _ = plan_utterance(text, locale)
+    samples: list[float] = []
+    phase = 0.0
 
-        buf = io.BytesIO()
-        with wave.open(buf, "wb") as wav:
-            wav.setnchannels(1)
-            wav.setsampwidth(2)
-            wav.setframerate(SAMPLE_RATE)
-            frames = b"".join(
-                struct.pack("<h", int(max(-1.0, min(1.0, s)) * 32767)) for s in samples
-            )
-            wav.writeframes(frames)
+    for segment in segments:
+        n = int(SAMPLE_RATE * segment.duration_ms / 1000)
+        freq = VISEME_PITCH.get(segment.viseme, 180) * pitch_mul
+        if freq <= 0 or segment.viseme == "sil":
+            samples.extend([0.0] * n)
+            continue
+        for i in range(n):
+            # Envelope per articulation so syllables pulse audibly.
+            env = math.sin(math.pi * i / n) * 0.35
+            phase += 2 * math.pi * freq / SAMPLE_RATE
+            # Base tone + a quiet octave for timbre.
+            samples.append(env * (math.sin(phase) + 0.35 * math.sin(2 * phase)))
 
-        return SynthesisResult(
-            audio=buf.getvalue(),
-            audio_mime="audio/wav",
-            duration_ms=t_ms,
-            cues=cues,
+    t_ms = total_duration_ms(segments)
+    if not samples:  # empty text still returns valid audio
+        samples = [0.0] * int(SAMPLE_RATE * 0.2)
+        t_ms = 200
+    cues = cues_from_segments(segments)
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(SAMPLE_RATE)
+        frames = b"".join(
+            struct.pack("<h", int(max(-1.0, min(1.0, s)) * 32767)) for s in samples
         )
+        wav.writeframes(frames)
+
+    return SynthesisResult(
+        audio=buf.getvalue(),
+        audio_mime="audio/wav",
+        duration_ms=t_ms,
+        cues=cues,
+    )

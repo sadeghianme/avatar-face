@@ -10,8 +10,12 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 from app.core.errors import AppError
+from app.db import get_session_factory
+from app.models.shapes import Note
 from app.services import imagegen, performance_kit
+from app.services.consent import ai_switched_off
 from app.services.jobs import Job, runner
+from app.services.usage import check_image_limit, record_generation
 
 logger = logging.getLogger("liveface.mouth_kit")
 
@@ -42,21 +46,21 @@ RETARGETED = performance_kit.RETARGETED
 FITTED_WITH_TEETH = ("teethY", "teethScale")
 FITTED_WITHOUT_TEETH: tuple[str, ...] = ()
 
-REBASE_FAILED = {
+REBASE_FAILED: Note = {
     "code": "rebase_failed",
     "detail": "The mouth shapes could not follow the new points",
 }
 # Why the kit's teeth photo is not the avatar's (kit.teeth.reason), besides
 # what the kit itself says (teeth_reason).
-OWNER_PHOTO = {"code": "owner_photo", "detail": "Your own teeth photo is used"}
-TEETH_REMOVED = {"code": "teeth_removed", "detail": "The teeth photo was removed"}
+OWNER_PHOTO: Note = {"code": "owner_photo", "detail": "Your own teeth photo is used"}
+TEETH_REMOVED: Note = {"code": "teeth_removed", "detail": "The teeth photo was removed"}
 
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _note(code: str, detail: str) -> dict:
+def _note(code: str, detail: str) -> Note:
     return {"code": code, "detail": detail}
 
 
@@ -132,10 +136,6 @@ class CallGuard:
             await asyncio.shield(self._settle(error))
 
     async def _admit(self) -> None:
-        from app.db import get_session_factory
-        from app.services.consent import ai_switched_off
-        from app.services.usage import check_image_limit
-
         if await ai_switched_off(self.org_id):
             raise _Stopped(
                 "third_party_ai_disabled",
@@ -148,9 +148,6 @@ class CallGuard:
             raise _Stopped(exc.code, exc.detail) from exc
 
     async def _settle(self, error: BaseException | None) -> None:
-        from app.db import get_session_factory
-        from app.services.usage import record_generation
-
         billed = performance_kit.call_billing(error)
         async with self._lock:
             try:

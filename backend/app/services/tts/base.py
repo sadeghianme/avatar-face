@@ -5,6 +5,7 @@ Oculus visemes, regardless of what the upstream API natively emits.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 
 
@@ -50,3 +51,11 @@ class TTSProvider:
         returns for the same text changes meaning (new timing, new model),
         so an old row is never served as a new one. Empty for most."""
         return ""
+
+
+def cache_key(provider: str, voice: str, locale: str, text: str, version: str = "") -> str:
+    """The speech cache row for this text. `version` is the provider's
+    cache_version(); empty keeps the key every older row was stored under."""
+    parts = (provider, voice, locale, text) + ((version,) if version else ())
+    payload = "\x1f".join(parts)
+    return hashlib.sha256(payload.encode()).hexdigest()

@@ -96,21 +96,3 @@ def char_to_viseme(ch: str) -> str:
         # Unknown alphabetic script: still animate.
         return SYLLABIC_ROTATION[ord(ch) % len(SYLLABIC_ROTATION)]
     return "sil"  # punctuation, digits, whitespace
-
-
-def cues_from_text(
-    text: str, duration_ms: int, locale: str = "en-US", audio: bytes | None = None
-) -> list[dict]:
-    """Viseme cues for audio of a known duration.
-
-    Delegates to the phoneme-class timing model (vowels hold longer than
-    stops, punctuation buys silence, rounded shapes lead the sound) rather
-    than spreading characters evenly, which reads as off-beat.
-
-    Pass `audio` (the rendered WAV) to measure vowel openness from the
-    voice instead of predicting it from spelling stress.
-    """
-    # Imported here: timing depends on char_to_viseme above.
-    from app.services.tts.timing import cues_for_duration
-
-    return cues_for_duration(text, duration_ms, locale, audio=audio)

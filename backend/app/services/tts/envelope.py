@@ -33,6 +33,8 @@ import io
 import logging
 import wave
 
+import numpy as np
+
 logger = logging.getLogger("liveface.tts.envelope")
 
 # Analysis window. Short enough to separate neighbouring syllables (a fast
@@ -81,11 +83,6 @@ class Envelope:
 
 def measure(audio: bytes, window_ms: float = WINDOW_MS) -> Envelope | None:
     """Loudness curve for WAV audio, or None if it cannot be measured."""
-    try:
-        import numpy as np
-    except ImportError:  # pragma: no cover - numpy ships with the image
-        return None
-
     try:
         with wave.open(io.BytesIO(audio), "rb") as handle:
             channels = handle.getnchannels()

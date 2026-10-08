@@ -488,7 +488,7 @@ def test_only_an_animals_plan_turns_the_character_teeth_off():
     import json
     from types import SimpleNamespace
 
-    from app.services.creations import _animal_character_mouth
+    from app.services.creations.mouth import animal_character_mouth
 
     def avatar(config=None):
         return SimpleNamespace(
@@ -498,16 +498,16 @@ def test_only_an_animals_plan_turns_the_character_teeth_off():
         return SimpleNamespace(steps={"plan": {"model": model, "look": "cartoon"}})
 
     person = avatar()
-    _animal_character_mouth(creation("human"), person)
+    animal_character_mouth(creation("human"), person)
     assert person.mouth_config is None
     dog = avatar()
-    _animal_character_mouth(creation("animal"), dog)
+    animal_character_mouth(creation("animal"), dog)
     assert json.loads(dog.mouth_config)["character"]["teeth"] == "none"
     set_already = avatar({"renderer": "classic", "profile": {}, "character": {"teeth": "upper"}})
-    _animal_character_mouth(creation("animal"), set_already)
+    animal_character_mouth(creation("animal"), set_already)
     assert json.loads(set_already.mouth_config)["character"] == {"teeth": "upper"}
     human_line = SimpleNamespace(face_type="human", mouth_config=None)
-    _animal_character_mouth(creation("animal"), human_line)
+    animal_character_mouth(creation("animal"), human_line)
     assert human_line.mouth_config is None
 
 

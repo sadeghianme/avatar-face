@@ -7,6 +7,8 @@ the request that made it.
 
 from __future__ import annotations
 
+from datetime import UTC, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -62,6 +64,21 @@ async def by_plaintext(db: AsyncSession, plaintext: str) -> ApiKey | None:
     ).scalar_one_or_none()
 
 
+# How fresh "last used" is kept. Every widget load and every sentence is an
+# authenticated embed request; a commit for each was a SQLite write on the
+# hottest public path, to move a timestamp the dashboard shows by the day.
+LAST_USED_RESOLUTION = timedelta(minutes=5)
+
+
 async def mark_used(db: AsyncSession, api_key: ApiKey) -> None:
-    api_key.last_used_at = utcnow()
+    """Record that `api_key` was used, at most once per LAST_USED_RESOLUTION."""
+    now = utcnow()
+    last = api_key.last_used_at
+    if last is not None:
+        # SQLite hands timestamps back without their zone; they are UTC.
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=UTC)
+        if now - last < LAST_USED_RESOLUTION:
+            return
+    api_key.last_used_at = now
     await db.commit()

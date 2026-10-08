@@ -15,6 +15,9 @@ import httpx
 import numpy as np
 from PIL import Image
 
+from app.core.config import get_settings
+from app.services import imagegen, photo_adjust
+from app.services.jobs import run_cpu
 from app.services.performance_kit.answers import (
     Detector,
     PoseRegistration,
@@ -56,6 +59,8 @@ from app.services.performance_kit.requests import (
     _crop,
     _request,
 )
+from app.services.photo_io import png_bytes
+from app.services.rig import build_rig
 
 logger = logging.getLogger("liveface.performance_kit")
 
@@ -143,8 +148,6 @@ def call_billing(error: BaseException | None) -> bool | None:
 
     The one classification the kit's call_log and a caller metering its
     calls as they end (services.mouth_kit) both use, so they agree."""
-    from app.services import imagegen
-
     if error is None or isinstance(error, (imagegen.ImageGenRefused, imagegen.ImageGenNoImage)):
         return True
     if isinstance(error, (httpx.ConnectTimeout, httpx.PoolTimeout)):
@@ -165,27 +168,19 @@ def stop_reason(error: BaseException) -> dict:
     )
 
 def _require_landmarker() -> None:
-    from app.core.config import get_settings
-
     if not get_settings().rig_model_path:
         raise KitUnavailable("landmarks_unavailable", "Face detection is not available on this server")
 
 
 def _default_detect(image: Image.Image) -> np.ndarray | None:
-    from app.services import photo_adjust
-
     return photo_adjust._detect(image)
 
 
 def _png(image: Image.Image) -> bytes:
-    from app.services.photo_io import png_bytes
-
     return png_bytes(image)
 
 
 def _teeth_source(registration: PoseRegistration) -> TeethSource:
-    from app.services.rig import build_rig
-
     points, image = registration.answer_points, registration.answer_image
     assert points is not None and image is not None  # a registered answer has both
     return TeethSource(_png(image), build_rig(points, image.size))
@@ -334,9 +329,6 @@ async def build_kit(
     no detector. Any other failure cancels and awaits every call still in
     flight and raises KitFailed, which accounts for every call sent.
     """
-    from app.services import imagegen
-    from app.services.jobs import run_cpu
-
     points = _checked_points(base_points)
     if detect is None:
         _require_landmarker()

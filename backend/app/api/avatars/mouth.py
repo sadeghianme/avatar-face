@@ -12,8 +12,9 @@ from app.core.errors import Validation422
 from app.models import Avatar
 from app.schemas.avatar import AvatarOut, MouthKitOut, MouthKitRequest
 from app.schemas.job import JobOut
-from app.services import mouth_kit
+from app.services import mouth_kit, mouth_photo
 from app.services.avatars import mouth_edits, repo
+from app.services.portrait_photo import MAX_BYTES
 
 
 @router.post("/{avatar_id}/mouth-photo", response_model=AvatarOut)
@@ -29,9 +30,6 @@ async def upload_mouth_photo(avatar_id: str, file: UploadFile, ctx: OrgMember, d
     take too. A draft edit like any other — visitors see it only after
     Publish.
     """
-    from app.services import mouth_photo
-    from app.services.portrait_photo import MAX_BYTES
-
     avatar = await repo.require_in_org(db, ctx.org.id, avatar_id)
     mouth_edits.require_teeth_photo_allowed(avatar)
     if file.content_type not in get_settings().allowed_image_types:

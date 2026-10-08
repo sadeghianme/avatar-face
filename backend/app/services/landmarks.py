@@ -45,6 +45,7 @@ def _landmarker_for(path: str):
     """The shared landmarker; caller holds the lock."""
     global _landmarker, _loaded_path
     if _landmarker is None or _loaded_path != path:
+        # MediaPipe: the optional [rig] extra, and heavy; loaded on first use.
         from mediapipe.tasks import python as mp_python
         from mediapipe.tasks.python import vision
 
@@ -70,7 +71,7 @@ def detect(image: Image.Image) -> FaceLandmarks | None:
     if not path:
         raise LandmarkerUnavailable("rig_model_path is not set")
 
-    import mediapipe as mp
+    import mediapipe as mp  # the optional [rig] extra: first use only
 
     rgb = np.asarray(image.convert("RGB"))
     with _lock:
@@ -85,3 +86,12 @@ def detect(image: Image.Image) -> FaceLandmarks | None:
         points=np.array([[lm.x * width, lm.y * height] for lm in marks], dtype=np.float64),
         z=np.array([lm.z * width for lm in marks], dtype=np.float64),
     )
+
+
+def detect_points(image: Image.Image) -> np.ndarray:
+    """The 478 detected points, or ValueError when the image has no face
+    (LandmarkerUnavailable, a RuntimeError, when there is no model)."""
+    found = detect(image)
+    if found is None:
+        raise ValueError("no face detected")
+    return found.points

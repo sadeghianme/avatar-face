@@ -51,7 +51,7 @@ from app.db import get_engine, reset_engine  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import Base  # noqa: E402
 from app.services.jobs import runner  # noqa: E402
-from app.services.rate_limit import reset_embed_rate_limiter  # noqa: E402
+from app.services.rate_limit import reset_rate_limiters  # noqa: E402
 from app.services.storage import reset_storage  # noqa: E402
 
 
@@ -66,7 +66,7 @@ def event_loop():
 async def app():
     reset_engine()
     reset_storage()
-    reset_embed_rate_limiter()
+    reset_rate_limiters()
     credentials.clear()
     engine = get_engine()
     async with engine.begin() as conn:
@@ -135,7 +135,7 @@ async def create_ready_avatar(
 
     Tests run without a landmark model, so no face is ever detected and the
     first build waits for its owner instead of publishing itself (see
-    rig.process_avatar). `publish` presses Publish, as that owner would, so
+    avatars.build.process_avatar). `publish` presses Publish, as that owner would, so
     tests about embedding and sharing start from a live avatar.
     """
     response = await client.post(

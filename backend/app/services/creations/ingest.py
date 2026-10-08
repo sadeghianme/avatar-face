@@ -3,11 +3,16 @@ the creation's original, and a background removal's cut-out."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any, cast
+
 from sqlalchemy import func
 
 from app.core.errors import Conflict409, Validation422
 from app.models import Creation
-from app.services.creations.records import SUPERSEDED, _load, _store_result, _write_job
+from app.models.shapes import CreationAnalysis, CreationSteps
+from app.services import photo_io, segment
+from app.services.creations.records import SUPERSEDED, load_creation, store_result, write_job
 from app.services.creations.rules import incoming_key, step_key
 from app.services.creations.steps import copied, cutout_id_for, step_check, step_items
 from app.services.jobs import (
@@ -15,19 +20,18 @@ from app.services.jobs import (
     Job,
     run_cpu,
 )
+from app.services.photo_analysis import analyse
+from app.services.photo_io import ingest_photo
 from app.services.storage import get_storage
 
 
-async def _ingest(job: Job, params: dict) -> None:
-    from app.services.photo_analysis import analyse
-    from app.services.photo_io import STORED_MAX_EDGE, ingest_photo
-
+async def run_ingest(job: Job, params: dict) -> None:
     storage = get_storage()
     incoming = incoming_key(job.org_id, job.subject_id)
     raw = await storage.get_bytes(incoming)
     job.report(0.1, "reading")
     try:
-        clean = await run_cpu(ingest_photo, raw, STORED_MAX_EDGE)
+        clean = await run_cpu(ingest_photo, raw, photo_io.STORED_MAX_EDGE)
     except Validation422:
         # The file itself is the problem; retrying cannot help, and the raw
         # upload (EXIF and all) has no reason to stay.
@@ -38,7 +42,7 @@ async def _ingest(job: Job, params: dict) -> None:
     width, height = analysis["image_size"]
     key = step_key(job.org_id, job.subject_id, "original")
     await storage.put_bytes(key, clean, "image/png")
-    steps = {
+    steps: CreationSteps = {
         "current": "original",
         "items": {
             "original": {
@@ -49,17 +53,18 @@ async def _ingest(job: Job, params: dict) -> None:
     }
     # The four-step wizard's plan, and the name it proposes (services.wizard),
     # both given at upload.
-    creation = await _load(job)
-    given = (creation.steps or {}) if creation is not None else {}
-    for kept in ("plan", "name"):
-        if given.get(kept):
-            steps[kept] = given[kept]
-    stored = await _store_result(
+    creation = await load_creation(job)
+    given = creation.steps if creation is not None else None
+    if given and (plan := given.get("plan")):
+        steps["plan"] = plan
+    if given and (name := given.get("name")):
+        steps["name"] = name
+    stored = await store_result(
         job,
         params,
         {
             "steps": steps,
-            "analysis": _stored_analysis(analysis),
+            "analysis": stored_analysis(analysis),
             # The owner's choice at upload stands; otherwise the suggestion,
             # which is null when no face was found (the wizard then asks).
             "face_type": func.coalesce(Creation.face_type, analysis["suggested_face_type"]),
@@ -70,29 +75,27 @@ async def _ingest(job: Job, params: dict) -> None:
         await storage.delete(incoming)
 
 
-def _stored_analysis(analysis: dict) -> dict:
+def stored_analysis(analysis: Mapping[str, Any]) -> CreationAnalysis:
     """The upload's analysis as the creation keeps it: what step 1 reads.
     The per-line recommendations live on each step's check, so the one the
     wizard shows is always the current image's (api.creations)."""
-    return {k: v for k, v in analysis.items() if k != "recommendations"}
+    return cast(CreationAnalysis, {k: v for k, v in analysis.items() if k != "recommendations"})
 
 
 # --- Background -------------------------------------------------------------------
 
 
-async def _background(job: Job, params: dict) -> None:
+async def run_background(job: Job, params: dict) -> None:
     """Cut the subject out of `params["source"]` and make the cut-out the
     current image. Also what choosing an AI result runs, chained, when the
     owner chose to remove the background: the new picture is opaque."""
-    from app.services import segment
-
-    creation = await _load(job)
+    creation = await load_creation(job)
     if creation is None:
         return
     source_id = params["source"]
     source = step_items(creation.steps).get(source_id)
     if source is None:
-        await _write_job(job, FAILED, params, SUPERSEDED)
+        await write_job(job, FAILED, params, SUPERSEDED)
         return
     storage = get_storage()
     data = await storage.get_bytes(source["key"])
@@ -120,5 +123,5 @@ async def _background(job: Job, params: dict) -> None:
     steps["current"] = cut_id
     # The owner's step 2 answer, which choosing an AI result later follows.
     steps["background"] = "remove"
-    if await _store_result(job, params, {"steps": steps}, [key]) and previous:
+    if await store_result(job, params, {"steps": steps}, [key]) and previous:
         await storage.delete(previous["key"])

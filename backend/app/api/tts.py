@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 import base64
+import json
+import logging
+import time
 
 from fastapi import APIRouter
+from starlette.background import BackgroundTask
+from starlette.responses import StreamingResponse
 
 from app.api.deps import DB, OrgMember
+from app.core.errors import RateLimit429
+from app.db import get_session_factory
 from app.schemas.tts import (
     CueOut,
     ProviderOut,
@@ -12,7 +20,9 @@ from app.schemas.tts import (
     SynthesizeResponse,
     VoiceOut,
 )
+from app.services.tts.languages import available_languages
 from app.services.tts.registry import available_providers, get_provider, synthesize_cached
+from app.services.tts.stream import pcm_packet, phrase_batch_size, speech_phrases
 from app.services.usage import check_usage_limit, record_synthesis
 
 router = APIRouter(prefix="/tts", tags=["tts"])
@@ -45,8 +55,6 @@ async def list_languages() -> list[dict]:
     Unauthenticated for the same reason /cues is: it synthesises nothing,
     touches no org data, and the share page needs it too.
     """
-    from app.services.tts.languages import available_languages
-
     return await available_languages()
 
 
@@ -88,18 +96,6 @@ async def stream(body: SynthesizeRequest, ctx: OrgMember, db: DB):
     audio is heard, not what it sounds like. Metered per phrase, before
     delivery, once. Never retried after audio has been delivered.
     """
-    import asyncio
-    import json
-    import logging
-    import time
-
-    from starlette.background import BackgroundTask
-    from starlette.responses import StreamingResponse
-
-    from app.core.errors import RateLimit429
-    from app.db import get_session_factory
-    from app.services.tts.stream import pcm_packet, phrase_batch_size, speech_phrases
-
     logger = logging.getLogger("liveface.tts.stream")
     org_id = ctx.org.id
     await check_usage_limit(db, org_id, len(body.text))

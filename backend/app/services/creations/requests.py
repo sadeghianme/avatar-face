@@ -13,12 +13,14 @@ so is a retry of one (on the retrying member's consent).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import Conflict409, Validation422
 from app.models import Avatar, AvatarKind, AvatarStatus, Creation, CreationStatus, Organization
 from app.models.base import new_id
+from app.schemas.avatar import FitReason
 from app.schemas.creation import (
     AdjustRequest,
     DetectRequest,
@@ -26,7 +28,8 @@ from app.schemas.creation import (
     PrepareRequest,
     PreviewRigRequest,
 )
-from app.services import wizard
+from app.services import consent, imagegen, photo_adjust, vision_points, wizard
+from app.services.ai_models import PROVIDER
 from app.services.creations.adjust import auto_adjust_of, source_photo_key
 from app.services.creations.detect import (
     anchors_are_current,
@@ -60,6 +63,7 @@ from app.services.creations.steps import (
 )
 from app.services.jobs import ACTIVE_STATES, run_cpu
 from app.services.storage import get_storage
+from app.services.usage import check_image_limit
 
 # --- Finding the face --------------------------------------------------------------
 
@@ -67,8 +71,6 @@ from app.services.storage import get_storage
 async def _image_digest(creation: Creation) -> str:
     """SHA-256 of the current image's pixels file: the point finder's cache
     key. Hashed off the loop (a 2048 px PNG is several MB)."""
-    import hashlib
-
     current = current_step(creation.steps)
     assert current is not None  # detection runs on a creation with an image
     key = step_items(creation.steps)[current]["key"]
@@ -83,8 +85,6 @@ async def start_detect(
     third_party_ai consent, with the point finder configured (409) and the
     creation's AI detection unspent unless the answer is cached (409
     budget_spent); the budget is taken with the job."""
-    from app.services import consent, vision_points
-
     require_draft(creation)
     require_image(creation)
     face_type = require_face_type(creation)
@@ -135,10 +135,6 @@ async def start_adjust(
     auto_adjust_not_applicable), a third_party_ai consent, the image model
     (409), a round left (409 budget_spent) and the image limit (429). The
     round is taken with the job."""
-    from app.services import consent, imagegen, photo_adjust
-    from app.services.ai_models import PROVIDER
-    from app.services.usage import check_image_limit
-
     require_draft(creation)
     require_image(creation)
     face_type = require_face_type(creation)
@@ -215,10 +211,6 @@ async def start_prepare(
     the AI modes need a third_party_ai consent, the image model (409), a try
     left (409 budget_spent; a free one for "remove this change" while they
     last) and the image limit (429). The try is taken with the job."""
-    from app.services import consent, imagegen
-    from app.services.ai_models import PROVIDER
-    from app.services.usage import check_image_limit
-
     require_draft(creation)
     require_image(creation)
     face_type = require_face_type(creation)
@@ -326,6 +318,7 @@ async def use_version(db: AsyncSession, creation: Creation, version: str) -> boo
         return False
     steps, anchors, record = wizard.use_version(creation.steps, version, plan)
     current = steps["current"]
+    assert current is not None  # use_version made one of the version's steps current
     if not (
         anchors
         and anchors.get("face_type") == face_type
@@ -349,14 +342,19 @@ async def use_version(db: AsyncSession, creation: Creation, version: str) -> boo
 # --- Finishing ---------------------------------------------------------------------
 
 
-def preview_rig(creation: Creation, body: PreviewRigRequest):
+async def preview_rig(creation: Creation, body: PreviewRigRequest):
     """(rig, problems): the rig finish would build from these marks. Nothing
-    is saved."""
+    is saved.
+
+    The fit (a Delaunay mesh and a thin-plate warp, several milliseconds on
+    every drag) runs on a worker thread: off the loop, and not queued behind
+    someone's upload on the CPU thread, which would make the handles lag.
+    """
     require_draft(creation)
     face_type = require_face_type(creation)
     anchors = anchors_for(creation, body.anchors_id)
     marks = check_marks(body.marks, face_type, anchors["image_size"])
-    return fit_from_anchors(anchors, marks, face_type)
+    return await asyncio.to_thread(fit_from_anchors, anchors, marks, face_type)
 
 
 def finished_avatar(creation: Creation) -> str | None:
@@ -380,9 +378,6 @@ async def start_finish(
     detector did not find (422 marks_required), and a fit that does not
     fold (422 fit_invalid, with the reasons).
     """
-    from app.schemas.avatar import FitReason
-    from app.services import consent
-
     repeated = finished_avatar(creation)
     if repeated:
         return creation, repeated
@@ -421,7 +416,7 @@ async def start_finish(
             code="marks_required",
             extra={"missing": missing},
         )
-    _, problems = fit_from_anchors(anchors, marks, face_type)
+    _, problems = await asyncio.to_thread(fit_from_anchors, anchors, marks, face_type)
     if problems:
         reasons = [FitReason(code=p.code, detail=p.detail, count=p.count) for p in problems]
         raise Validation422(
@@ -496,7 +491,7 @@ async def retry(
     the one the job was started with if it is theirs), and the
     organization's switch on."""
     given = consent_id
-    record = creation.job or {}
+    record = creation.job
     if not record or not retryable(record):
         raise Conflict409("There is nothing to retry", code="nothing_to_retry")
     params = record.get("params") or {}
@@ -513,8 +508,6 @@ async def retry(
         require_draft(creation)
         if "original" in step_items(creation.steps):
             raise Conflict409("There is nothing to retry", code="nothing_to_retry")
-        from app.services import consent
-        from app.services.ai_models import PROVIDER
 
         consent.require_ai_enabled(org)
         values: dict = {}

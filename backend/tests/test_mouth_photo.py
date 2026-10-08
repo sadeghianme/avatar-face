@@ -32,7 +32,7 @@ from sqlalchemy import select
 
 from app.db import get_session_factory
 from app.models import Avatar, Creation
-from app.services import face_template, imagegen, mouth_photo, portrait_photo
+from app.services import disclosure, face_template, imagegen, mouth_photo, portrait_photo
 from app.services import performance_kit as pk
 from app.services import photo_adjust as pa
 from app.services.usage import IMAGE_KIND
@@ -202,14 +202,14 @@ def test_a_tips_only_photo_is_refused_as_the_browser_would(mouth_detector):
 
 def test_the_teeth_disclosure_is_added_and_removed_without_touching_the_rest():
     touched = {"mode": "touchup", "model": "m1"}
-    both = mouth_photo.with_ai_teeth(touched, "m2")
+    both = disclosure.with_ai_teeth(touched, "m2")
     assert both == {"mode": "touchup", "model": "m1", "teeth": {"model": "m2"}}
     assert touched == {"mode": "touchup", "model": "m1"}, "a new dict"
-    assert mouth_photo.without_ai_teeth(both) == touched
-    only = mouth_photo.with_ai_teeth(None, "m2")
+    assert disclosure.without_ai_teeth(both) == touched
+    only = disclosure.with_ai_teeth(None, "m2")
     assert only["mode"] == "teeth"
-    assert mouth_photo.without_ai_teeth(only) is None
-    assert mouth_photo.without_ai_teeth(None) is None
+    assert disclosure.without_ai_teeth(only) is None
+    assert disclosure.without_ai_teeth(None) is None
 
 
 # How a mouth without a teeth photo of its own seats and sizes its teeth:
@@ -741,7 +741,7 @@ async def test_other_ai_edits_stay_disclosed_under_the_classic_mouth():
         rig_key=None, thumbnail_key=None, has_layers=False, framing="face",
         face_type="human", voice=None, published_config=None,
         mouth_config=json.dumps({"renderer": "classic", "profile": {}}),
-        ai_edited=mouth_photo.with_ai_teeth({"mode": "touchup", "model": "m1"}, "m2"),
+        ai_edited=disclosure.with_ai_teeth({"mode": "touchup", "model": "m1"}, "m2"),
     )
     config = await publishing.publish(avatar, storage)
     assert config["disclosure"]["ai_edited"] == {"mode": "touchup", "model": "m1"}
@@ -752,7 +752,7 @@ def test_a_snapshot_from_before_the_teeth_record_is_restored_from_its_disclosure
 
     from app.services import publishing
 
-    ai = mouth_photo.with_ai_teeth(None, "m")
+    ai = disclosure.with_ai_teeth(None, "m")
     labelled = {"disclosure": {"ai_edited": ai}}
     assert publishing._restored_teeth(None, labelled, True) == {"source": "ai", "model": "m"}
     assert publishing._restored_teeth(None, {"disclosure": {"ai_edited": None}}, True) == {

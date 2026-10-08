@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from PIL import Image
 
+from app.services import photo_adjust
 from app.services.performance_kit.constants import (
     FACE_LEFT,
     FACE_RIGHT,
@@ -232,8 +233,6 @@ def register_answer(
     the registered answer when nothing was corrected. Without a detection
     of the base (none found) the confirmed points stand in for it.
     """
-    from app.services import photo_adjust
-
     base_view = base_points if base_detected is None else base_detected
     result = PoseRegistration(request.shape)
     try:

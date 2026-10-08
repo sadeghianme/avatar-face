@@ -71,15 +71,37 @@ def pose_prompt(shape: str) -> str:
     )
 
 
+# The teeth photo, as services.mouth_photo asks for it.
+# Modelled on photo_adjust.TOUCHUP_PROMPT (change one thing, keep every
+# other pixel) and on the oral-detail-v3 prompt of the Reference avatar
+# (docs/dental-rendering-repair-2026-09-07.md), whose teeth the renderer was
+# tuned on: whole upper crowns from the gum to the edge, one continuous
+# arch, a dark gap between the rows, soft light with no stripe across them.
+TEETH_PROMPT = (
+    "Edit this close-up portrait photograph. Make exactly one change: the person "
+    "says a long, broad \"ee\", lips drawn back and slightly apart, so that the "
+    "ENTIRE upper front teeth are clearly visible from the gumline to the biting "
+    "edge, with a thin band of gum above them, all the upper front teeth in one "
+    "continuous natural arch, a small dark gap between the upper and lower teeth, "
+    "and the top edge of the lower front teeth just visible. These are this "
+    "person's own natural teeth: natural shape, spacing and shade for them, with "
+    "no whitening, veneers or brightening beyond their natural tone. Change "
+    "NOTHING else: keep the same person, the same face shape, skin, skin texture, "
+    "pores, makeup, eyes, eye colour, eyebrows, hair, lighting, colours, framing, "
+    "head position, head angle and image size. Do not beautify, smooth, sharpen, "
+    "relight, restyle or crop. Soft, even light on the teeth with no dark stripe "
+    "across them. Photorealistic, indistinguishable from the original photo "
+    "except for the mouth."
+)
+
+
 def teeth_prompt() -> str:
-    """The teeth photo's edit: services.mouth_photo.TEETH_PROMPT, the
-    recipe of the photo the Reference renders its teeth from
+    """The teeth photo's edit (TEETH_PROMPT, which services.mouth_photo
+    asks for on its own too): the recipe of the photo the Reference renders its teeth from
     (oral-detail-v3): the whole upper crowns from the gum to the edge in one
     arch, a dark gap between the rows, even light, nothing else changed.
     What the embed needs of a teeth photo is not a shape of speech, so it
     is asked for apart from the six."""
-    from app.services.mouth_photo import TEETH_PROMPT
-
     return TEETH_PROMPT
 
 

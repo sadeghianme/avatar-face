@@ -6,6 +6,9 @@ from __future__ import annotations
 import copy
 
 from app.core.errors import Conflict409, Validation422
+from app.models.shapes import CreationAnchors, CreationSteps, Plan, PrepareRecord
+from app.services import creations as svc
+from app.services.creations import steps as creation_steps
 from app.services.wizard.plan import (
     AI,
     CHANGE,
@@ -21,17 +24,17 @@ from app.services.wizard.plan import (
 # is not better for being newest.
 
 
-def version_of(steps: dict | None, step_id: str | None) -> str | None:
+def version_of(steps: CreationSteps | None, step_id: str | None) -> str | None:
     """The version the image `step_id` belongs to: "original" for the
     upload, its framing and their cut-out; "adjusted:N" for an AI result
     and its cut-out."""
-    from app.services import creations as svc
-
-    source = svc._through_cutouts(steps, step_id)
+    source = creation_steps.through_cutouts(steps, step_id)
     return "original" if source == "framed" else source
 
 
-def use_version(steps: dict | None, version: str, plan: dict) -> tuple[dict, dict | None, dict]:
+def use_version(
+    steps: CreationSteps | None, version: str, plan: Plan
+) -> tuple[CreationSteps, CreationAnchors | None, PrepareRecord]:
     """The steps with `version` current (its cut-out when it has one), the
     anchors kept with it (None when it has none: they are found again), and
     the record of the try that made it, for `ai.last_prepare`, so Retry and
@@ -42,8 +45,6 @@ def use_version(steps: dict | None, version: str, plan: dict) -> tuple[dict, dic
     version_not_prepared (an upload never framed and cut out: "use my
     original photo" makes it).
     """
-    from app.services import creations as svc
-
     items = svc.step_items(steps)
     if version not in items or version_of(steps, version) != version:
         raise Validation422("There is no such version", code="unknown_version")
@@ -74,8 +75,10 @@ def use_version(steps: dict | None, version: str, plan: dict) -> tuple[dict, dic
         out["current"], out["background"] = cut, "remove"
     else:
         out["current"], out["background"] = opaque, "keep"
-    record = dict(items[opaque].get(KEPT_RECORD) or {})
-    if not record:
+    kept_record = items[opaque].get(KEPT_RECORD)
+    if kept_record:
+        record: PrepareRecord = kept_record.copy()
+    else:
         # A version made before records were kept: read off the step.
         if version == "original":
             mode = GENERATE if plan["source"] == GENERATE else ORIGINAL

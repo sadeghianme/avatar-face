@@ -48,7 +48,7 @@ shapes are made at the Reference's size (performance_kit
 
 **Who is told.** AI-made shapes are disclosed as `ai_edited.mouth_shapes`
 {model, generated}, with mode "mouth_shapes" when nothing else was
-AI-made (mouth_photo.mouth_disclosure). Retargeted shapes are the
+AI-made (disclosure.mouth_disclosure). Retargeted shapes are the
 Reference's movement, not pixels an AI drew, and are not counted.
 
 **Later edits.** The kit follows its face with no AI call (`follow_points`,
@@ -124,8 +124,6 @@ from app.services.mouth_kit.records import (
     kit_record,
     public_kit,
     teeth_reason,
-    with_ai_shapes,
-    without_ai_shapes,
 )
 from app.services.mouth_kit.storing import (
     _load_avatar,
@@ -192,6 +190,4 @@ __all__ = [
     "teeth_reason",
     "TEETH_REMOVED",
     "_UNCLEAR_CODES",
-    "with_ai_shapes",
-    "without_ai_shapes",
 ]

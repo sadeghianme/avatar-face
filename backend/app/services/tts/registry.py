@@ -6,7 +6,6 @@ speech_cache table keyed on sha256(provider, voice, locale, text).
 """
 from __future__ import annotations
 
-import hashlib
 import json
 
 from sqlalchemy import select
@@ -14,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFound404, Validation422
 from app.models import SpeechCache
-from app.services.tts.base import SynthesisResult, TTSProvider
+from app.services.tts.base import SynthesisResult, TTSProvider, cache_key
 from app.services.tts.cloned import ClonedTTSProvider
 from app.services.tts.kokoro import KokoroTTSProvider
 from app.services.tts.offline import OfflineTTSProvider
@@ -38,6 +37,11 @@ _ALL_PROVIDERS: list[TTSProvider] = [
 ]
 
 
+def all_providers() -> list[TTSProvider]:
+    """Every provider, configured or not, in registration order."""
+    return list(_ALL_PROVIDERS)
+
+
 def available_providers() -> list[TTSProvider]:
     return [p for p in _ALL_PROVIDERS if p.listed and p.is_configured()]
 
@@ -51,14 +55,6 @@ def get_provider(name: str) -> TTSProvider:
                 )
             return provider
     raise NotFound404(f"Unknown TTS provider '{name}'", code="unknown_provider")
-
-
-def cache_key(provider: str, voice: str, locale: str, text: str, version: str = "") -> str:
-    """The speech cache row for this text. `version` is the provider's
-    cache_version(); empty keeps the key every older row was stored under."""
-    parts = (provider, voice, locale, text) + ((version,) if version else ())
-    payload = "\x1f".join(parts)
-    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def _cache_version(provider_name: str) -> str:

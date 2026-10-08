@@ -9,7 +9,9 @@ from dataclasses import dataclass
 from typing import cast
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
+from scipy.ndimage import distance_transform_edt, gaussian_filter
+from scipy.spatial import ConvexHull, QhullError
 
 from app.services.photo_adjust.scheme import (
     BROW_GUARD,
@@ -122,8 +124,6 @@ def align(result_points: np.ndarray, source_points: np.ndarray) -> tuple[np.ndar
 
 def _hull_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray:
     """Union of the convex hulls of `polygons` (pixel coords of the window)."""
-    from scipy.spatial import ConvexHull, QhullError
-
     hulls = []
     for pts in polygons:
         try:
@@ -136,8 +136,6 @@ def _hull_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray
 def _polygon_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray:
     """Union of `polygons` as drawn, in their point order (a contour, not
     its hull)."""
-    from PIL import ImageDraw
-
     canvas = Image.new("L", (shape[1], shape[0]), 0)
     draw = ImageDraw.Draw(canvas)
     for pts in polygons:
@@ -165,8 +163,6 @@ def _grain(luma: np.ndarray, where: np.ndarray) -> float:
     grain, and white noise of that size would then speckle the whole patch.
     Sensor grain is the bulk of the distribution, which the median keeps.
     """
-    from scipy.ndimage import gaussian_filter
-
     if where.sum() < 16:
         return 0.0
     detail = (luma - gaussian_filter(luma, 1.0))[where]
@@ -185,8 +181,6 @@ def _antialiased(result: Image.Image, to_result: np.ndarray) -> Image.Image:
     (a Gaussian of half a destination pixel, less the half a source pixel
     the answer already has).
     """
-    from scipy.ndimage import gaussian_filter
-
     scale = math.sqrt(abs(float(np.linalg.det(to_result[:, :2]))))
     if scale <= 1.0:
         return result
@@ -221,8 +215,6 @@ def _paste_region(
     rng: np.random.Generator,
 ) -> None:
     """Blend one region of the aligned answer into `out`, in place."""
-    from scipy.ndimage import distance_transform_edt
-
     both = np.vstack((region.source, region.result))
     size = float(max(np.ptp(both[:, 0]), np.ptp(both[:, 1]), 1.0))
     dilate, feather = region.dilate * size, max(region.feather * size, 1.0)

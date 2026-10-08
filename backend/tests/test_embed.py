@@ -1,3 +1,13 @@
+import json
+import threading
+from datetime import timedelta
+
+from app.api import embed
+from app.models import ApiKey, utcnow
+from app.schemas.tts import CueOut
+from app.services import api_keys
+from app.services.rate_limit import Limit
+from app.services.tts import timing
 from tests.conftest import create_org, create_ready_avatar, register_and_login
 
 
@@ -101,6 +111,24 @@ async def test_embed_requires_key(client):
     _, _, avatar_id, _ = await _setup(client)
     response = await client.get(f"/embed/v1/avatars/{avatar_id}")
     assert response.status_code == 401
+
+
+async def test_a_key_in_the_query_string_is_not_accepted(client):
+    """Only the X-Api-Key header authenticates: a key in the URL lands in
+    access logs, proxies and Referer headers. The widget sends the header."""
+    _, _, avatar_id, created = await _setup(client)
+    key = created["plaintext"]
+    in_url = await client.get(f"/embed/v1/avatars/{avatar_id}", params={"key": key})
+    assert in_url.status_code == 401
+    assert in_url.json()["code"] == "missing_api_key"
+    spoken = await client.post(
+        "/embed/v1/synthesize", params={"key": key}, json={"text": "Hello"}
+    )
+    assert spoken.status_code == 401
+    assert spoken.json()["code"] == "missing_api_key"
+    # The same key in the header is still accepted.
+    in_header = await client.get(f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": key})
+    assert in_header.status_code == 200
 
 
 async def test_embed_invalid_key(client):
@@ -230,3 +258,112 @@ async def test_cues_endpoint_is_public_and_timed(client) -> None:
 
 async def test_cues_endpoint_rejects_empty_text(client) -> None:
     assert (await client.post("/embed/v1/cues", json={"text": ""})).status_code == 422
+
+
+async def test_simulator_tokens_share_the_embed_rate_limit(client):
+    """Origin binding does not stop a client that forges Origin, so the
+    per-minute limit is what bounds a minted token."""
+    headers = await register_and_login(client, "simlimit")
+    org_id = await create_org(client, headers)
+    avatar_id = await create_ready_avatar(client, headers, org_id)
+    origin = {"origin": "http://testserver"}
+    minted = await client.post(
+        f"/orgs/{org_id}/api-keys/simulator-token", headers={**headers, **origin}
+    )
+    token = minted.json()["token"]
+    statuses = []
+    for _ in range(7):  # conftest sets the embed limit to 5/minute
+        response = await client.get(
+            f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": token, **origin}
+        )
+        statuses.append(response.status_code)
+    assert statuses.count(200) == 5
+    assert statuses.count(429) == 2
+    assert response.json()["code"] == "rate_limited"
+    assert "retry-after" in response.headers
+
+
+async def test_last_used_is_written_at_most_every_few_minutes(client):
+    """A commit per embed request was a SQLite write on the hottest path."""
+    headers, org_id, avatar_id, created = await _setup(client)
+    key_headers = {"X-Api-Key": created["plaintext"]}
+
+    async def last_used():
+        listing = (await client.get(f"/orgs/{org_id}/api-keys", headers=headers)).json()
+        return listing[0]["last_used_at"]
+
+    assert await last_used() is None
+    await client.get(f"/embed/v1/avatars/{avatar_id}", headers=key_headers)
+    first = await last_used()
+    assert first is not None
+    await client.get(f"/embed/v1/avatars/{avatar_id}", headers=key_headers)
+    assert await last_used() == first
+
+
+async def test_last_used_moves_once_it_is_stale():
+    class Session:
+        commits = 0
+
+        async def commit(self):
+            self.commits += 1
+
+    db = Session()
+    key = ApiKey(org_id="o", name="k", prefix="lf_x", key_hash="h", allowed_domains="")
+    key.last_used_at = (utcnow() - timedelta(minutes=6)).replace(tzinfo=None)
+    await api_keys.mark_used(db, key)  # type: ignore[arg-type]
+    assert db.commits == 1
+    await api_keys.mark_used(db, key)  # type: ignore[arg-type]
+    assert db.commits == 1
+
+
+async def test_cues_text_is_capped(client) -> None:
+    response = await client.post("/embed/v1/cues", json={"text": "a" * 5001})
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+
+
+async def test_cues_are_rate_limited_per_client(client, monkeypatch) -> None:
+    """Unauthenticated, so the client address is what is counted."""
+    monkeypatch.setattr(embed, "CUES_PER_CLIENT", Limit("cues-test", 3, 60))
+    statuses = [
+        (await client.post("/embed/v1/cues", json={"text": "Hello."})).status_code
+        for _ in range(4)
+    ]
+    assert statuses == [200, 200, 200, 429]
+    refused = await client.post("/embed/v1/cues", json={"text": "Hello."})
+    assert refused.json()["code"] == "rate_limited"
+    assert 1 <= int(refused.headers["retry-after"]) <= 60
+
+
+async def test_cues_answer_is_byte_for_byte_what_fastapi_rendered(client) -> None:
+    """Serialised on the planning thread now; the bytes must not change."""
+    text = "Bonjour, tout le monde! L'économie va bien."
+    response = await client.post("/embed/v1/cues", json={"text": text, "locale": "fr-FR"})
+    cues, duration_ms, marks = timing.cue_track(text, "fr-FR")
+    model = embed.CueResponse(
+        cues=[CueOut(**c) for c in cues],
+        duration_ms=duration_ms,
+        word_marks=[embed.WordMark(**m) for m in marks],
+    )
+    # What FastAPI's JSONResponse does with a response_model's output.
+    rendered = json.dumps(
+        model.model_dump(mode="json"), ensure_ascii=False, allow_nan=False, separators=(",", ":")
+    ).encode()
+    assert response.content == rendered
+    assert response.headers["content-type"] == "application/json"
+
+
+async def test_cues_are_planned_off_the_event_loop(client, monkeypatch) -> None:
+    """Outside English, planning waits on espeak-ng: on the loop, that wait
+    stalls every other widget the process serves."""
+    real = timing.plan_utterance
+    threads = []
+
+    def spy(text, locale="en-US"):
+        threads.append(threading.current_thread())
+        return real(text, locale)
+
+    monkeypatch.setattr(timing, "plan_utterance", spy)
+    response = await client.post("/embed/v1/cues", json={"text": "Bonjour.", "locale": "fr-FR"})
+    assert response.status_code == 200
+    assert threads and threads[0] is not threading.main_thread()

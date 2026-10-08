@@ -50,7 +50,9 @@ async def test_render_claims_synchronously_so_double_clicks_are_safe(client, mon
         local_render, "_probe_result", {"available": True, "device": "mps", "reason": None}
     )
     started = []
-    monkeypatch.setattr(local_render, "render_job", lambda org, job: started.append(job))
+    from app.api import clone_jobs
+
+    monkeypatch.setattr(clone_jobs, "render_job", lambda org, job: started.append(job))
 
     buffer = io.BytesIO()
     with wave.open(buffer, "wb") as handle:

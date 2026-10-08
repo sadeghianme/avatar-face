@@ -29,6 +29,7 @@ from sqlalchemy import JSON, Enum, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import TimestampedBase
+from app.models.shapes import AiUsage, CreationAnalysis, CreationAnchors, CreationSteps, JobRecord
 
 
 class CreationStatus(str, enum.Enum):
@@ -60,10 +61,10 @@ class Creation(TimestampedBase):
         Enum(CreationStatus), default=CreationStatus.draft, nullable=False
     )
     revision: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    steps: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    analysis: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    anchors: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    job: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    steps: Mapped[CreationSteps | None] = mapped_column(JSON, nullable=True)
+    analysis: Mapped[CreationAnalysis | None] = mapped_column(JSON, nullable=True)
+    anchors: Mapped[CreationAnchors | None] = mapped_column(JSON, nullable=True)
+    job: Mapped[JobRecord | None] = mapped_column(JSON, nullable=True)
     # Set when finishing starts, so a repeated Finish answers with the same
     # avatar instead of making a second one.
     avatar_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -76,4 +77,4 @@ class Creation(TimestampedBase):
     # round's outcome, and the point finder's answers cached by image hash.
     # Written at job admission (the budget, atomically with the job) and
     # by the job itself; see services.creations.
-    ai_usage: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    ai_usage: Mapped[AiUsage | None] = mapped_column(JSON, nullable=True)

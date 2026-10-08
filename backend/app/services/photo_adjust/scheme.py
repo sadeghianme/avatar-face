@@ -4,6 +4,8 @@ skipped."""
 
 from __future__ import annotations
 
+from app.models.shapes import Note
+
 TOUCHUP = "touchup"
 STYLISE = "stylise"
 REGENERATE = "regenerate"
@@ -34,12 +36,6 @@ CROP_QUALITY = 94
 SOURCE_MAX_EDGE = 1024
 # Where a whole-image result is stored at most (as for uploads).
 STORED_MAX_EDGE = 2048
-
-# How far the nose tip may sit from the middle of the cheeks, as a fraction
-# of half the face width, for a touch-up. Beyond it one eye is foreshortened
-# and partly hidden, the model redraws it frontal, and no 2D paste can put a
-# frontal eye into a turned face.
-MAX_TOUCHUP_YAW = 0.3
 
 # A similarity fit whose landmarks miss by more than this (fraction of the
 # face width, RMS) did not find the same face: the model moved or reshaped
@@ -149,5 +145,5 @@ class AdjustSkipped(Exception):
         super().__init__(detail)
 
 
-def reason(code: str, detail: str) -> dict:
+def reason(code: str, detail: str) -> Note:
     return {"code": code, "detail": detail}

@@ -29,6 +29,8 @@ Three stages, each fixing a distinct failure:
 
 from __future__ import annotations
 
+import numpy as np
+
 # Radius of the guided filter, as a fraction of the smaller image side. Big
 # enough to span a few strands of hair, small enough not to smear the jaw.
 GUIDE_RADIUS_FRACTION = 0.008
@@ -71,8 +73,6 @@ def _box_mean(a, r: int):
     edge of the frame does not darken towards zero the way a zero-padded
     filter would. Uses a summed-area table, so cost is independent of r.
     """
-    import numpy as np
-
     single = a.ndim == 2
     if single:
         a = a[:, :, None]
@@ -106,8 +106,6 @@ def guided_filter(guide, src, radius: int, eps: float = GUIDE_EPS):
     with barely any luminance step — exactly the case a greyscale guide
     cannot see, and exactly where cut-outs look worst.
     """
-    import numpy as np
-
     mean_guide = _box_mean(guide, radius)
     mean_src = _box_mean(src, radius)
     mean_cross = _box_mean(guide * src[:, :, None], radius)
@@ -163,8 +161,6 @@ def estimate_background(rgb, alpha, radius: int):
     middle of the subject — it falls back to the global average, which is
     harmless because nothing there gets un-mixed.
     """
-    import numpy as np
-
     weight = (alpha < BACKGROUND_ALPHA).astype(np.float32)
     weighted = _box_mean(rgb * weight[:, :, None], radius)
     support = _box_mean(weight, radius)[:, :, None]
@@ -184,8 +180,6 @@ def refine_matte(rgb, mask):
     Returns the alpha matte and the colour with the backdrop un-mixed out of
     the partially transparent pixels.
     """
-    import numpy as np
-
     height, width = mask.shape
     radius = max(MIN_GUIDE_RADIUS, int(round(min(height, width) * GUIDE_RADIUS_FRACTION)))
 

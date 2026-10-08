@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from scipy.spatial import Delaunay
 
 from app.services.performance_kit.constants import (
     FACE_LEFT,
@@ -98,8 +99,6 @@ def shared_triangles(
     """One topology for every pose: Delaunay of the mean pose (the neutral
     one has extremely thin mouth triangles), kept to the lips and the cheek
     and chin next to them."""
-    from scipy.spatial import Delaunay
-
     cx, cy = center
     mean = np.mean(pose_points, axis=0)
     triangles = Delaunay(mean).simplices
