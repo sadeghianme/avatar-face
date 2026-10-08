@@ -60,9 +60,11 @@ repository with a stub `gh`).
    excludes (`.env`, databases, `backend/local_storage`, …) only protect
    server-side files from `--delete`; `deploy/.env` exists only there.
 2. Refuse to continue if `deploy/.env` is missing or empty.
-3. Back up the live SQLite database with SQLite's online backup
-   (`deploy/backup_db.py`, safe under WAL) to `/data/liveface.sqlite3.bak-<stamp>`
-   and keep the newest 10 (`BACKUP_KEEP=<n>` to change).
+3. Back up the live SQLite database with `VACUUM INTO` (`deploy/backup_db.py`:
+   one consistent snapshot through the WAL, compacted, so free pages are not
+   copied) to `/data/liveface.sqlite3.bak-<stamp>` and keep the newest 10
+   (`BACKUP_KEEP=<n>` to change). The backups hold the database only: the
+   files in storage (pictures, rigs, the speech cache) are not in them.
 4. Tag the last verified release (`:release`) as `:previous`, for `--rollback`.
 5. `LIVEFACE_VERSION=<commit> docker compose -f docker-compose.prod.yml up -d --build`.
    The commit is baked into both images: `ENV LIVEFACE_VERSION` and the
@@ -98,8 +100,23 @@ step back only: for anything older, deploy that commit again with
 `deploy/deploy.sh --ref <commit>` (it rebuilds; the model layers are cached).
 
 The database is not touched. If the release being undone ran a migration, the
-older code now runs on the newer schema. If it cannot, restore the backup the
-deploy took just before that release (its path is in that deploy's summary):
+older code now runs on the newer schema, which migrations are written to allow
+(028 keeps the old speech table for this). A release from backend round 3 on
+starts on a database a newer release migrated: it logs that it does not know
+the revision and serves (`app/main.py`, `_ensure_schema`). A release before it
+runs `alembic upgrade` at startup and stops on the unknown revision, so stamp
+the database back to that release's last migration first, while the newer
+release is still running. Rolling back over 028 to the release before it:
+
+```bash
+ssh personal_server "docker exec -w /app/backend -e PYTHONPATH=/app/backend \
+  liveface-liveface-api-1 alembic stamp 027_scene"
+deploy/deploy.sh --rollback
+```
+
+The next deploy runs 028 again (it is written to be re-run). If the older code
+cannot run on the newer schema at all, restore the backup the deploy took
+just before that release (its path is in that deploy's summary):
 
 ```bash
 ssh personal_server
@@ -152,8 +169,10 @@ Use `127.0.0.1`, not `localhost`: the dashboard points snippets at
 
 ## Branch protection
 
-Not set yet; the owner runs this once (it needs admin rights on the
-repository, which is why it is not automated):
+Set on main: the six checks below are required, `strict` and
+`enforce_admins` are on, force pushes and deletions are refused. It was set
+once by the owner with this call (it needs admin rights on the repository,
+which is why it is not automated); run it again to restore the rule:
 
 ```bash
 gh api --method PUT repos/sadeghianme/avatar-face/branches/main/protection \
@@ -283,6 +302,61 @@ They change rarely and Cloudflare announces it: refresh them then, and with the
 monthly dependency review (`--check` exits 1 when the pinned list is stale).
 A stale list fails safe: a visitor behind a new edge is keyed on that edge
 until the refresh, as every visitor was before.
+
+## Database size and the speech cache
+
+Every line a widget, a share page or the dashboard speaks is cached, so it is
+synthesised once. Until migration 028 the recording was a WAV blob in the
+main SQLite file, never evicted, and copied into all ten deploy backups.
+Now (`backend/app/services/tts/speech_cache.py`):
+
+- The recording is a file in storage under `speech/`, as MP3 (VBR, about
+  50 kbit/s for 24 kHz speech). libsndfile writes the LAME header, so
+  Chromium, Safari's CoreAudio and libsndfile decode it to exactly the WAV's
+  samples and the cues stay on time; a line that would not is kept as WAV.
+  The dashboard's phrase stream gets PCM back (`pcm=True`).
+- `speech_clips` holds one small row per line: key, cues, duration, file,
+  size, the organization whose request made it, last use (recorded at most
+  hourly).
+- The sweeper (hourly, and at startup) evicts lines unused for
+  `SPEECH_CACHE_MAX_IDLE_DAYS` (90), then the least recently used past an
+  organization's `SPEECH_CACHE_ORG_MAX_BYTES` (256 MiB), then past
+  `SPEECH_CACHE_MAX_BYTES` (2 GiB) in all, each down to 90% of its cap. A
+  cloned voice's lines are pinned: never evicted, not counted. Between
+  sweeps the cache can run over by an hour of speech, which the monthly
+  character allowance bounds.
+- Migration 028 empties the old `speech_cache` table, keeping a cloned
+  voice's lines (copied inline into `speech_clips`, moved to storage at
+  startup). The empty table stays so that a rollback over 028 works (with
+  the stamp described under [Rollback](#rollback)): the older release reads
+  and writes it, every line is a miss once, and cloned voices are
+  unavailable until the next deploy carries them back.
+
+**The file.** SQLite does not give freed pages back to the disk: after 028
+the live file keeps its size, and its free pages are reused by new rows, so
+it stops growing rather than shrinking. The backups shrink at once:
+`deploy/backup_db.py` copies with `VACUUM INTO`, which writes only live
+pages (the online backup API it replaces copied the free ones too). To give
+the space back to the disk, compact the live file once, with the API
+stopped for a few seconds (`VACUUM` needs the database to itself):
+
+```bash
+ssh personal_server
+docker stop liveface-liveface-api-1
+docker run --rm -v liveface_liveface_data:/data liveface-liveface-api \
+  python -c "import sqlite3; db = sqlite3.connect('/data/liveface.sqlite3'); db.execute('VACUUM'); db.close()"
+docker start liveface-liveface-api-1
+```
+
+Measured on a scratch database built by the migrations and filled with
+synthetic rows (25 organizations, 200 avatars, 2,000 usage events, 1,540
+cached lines cut from real speech, 40 of them a cloned voice's): before 028
+the file and each backup were 473.6 MB, 466 MB of it WAV. After 028 and the
+startup drain the live file kept 485.7 MB (484 MB of it free pages) and a
+backup was 1.2 MB, with the cloned lines in storage as 1.7 MB of MP3. Filling
+the cache again with 1,500 lines put 64.7 MB of MP3 in storage (6.9 times
+less than their 445 MB of WAV, 13 ms a line including the encoding), reused
+5.7 MB of the free pages for their rows, and left a 6.9 MB backup.
 
 ## Security headers
 
