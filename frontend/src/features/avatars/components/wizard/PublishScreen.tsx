@@ -346,7 +346,14 @@ function Editor({
       )}
     >
       {rigUrl && texture ? (
-        <AvatarPreview rigUrl={rigUrl} textureUrl={texture} size={640} soft onEngine={setEngine} />
+        <AvatarPreview
+          rigUrl={rigUrl}
+          textureUrl={texture}
+          faceType={creation.face_type}
+          size={640}
+          soft
+          onEngine={setEngine}
+        />
       ) : (
         <div className="grid aspect-square place-items-center p-6 text-center text-sm text-gray-500 dark:text-gray-400">
           {previewError ?? (

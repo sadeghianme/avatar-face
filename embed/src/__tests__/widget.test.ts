@@ -308,6 +308,26 @@ describe("liveface.js on a customer's page", () => {
       engine.destroy();
     });
 
+    // The rig in these is a person's with no render profile, as a cat's or a
+    // cartoon's fitted before profiles existed is: only the published face
+    // type tells them apart.
+    it.each([
+      ["a person's", "human", {}, "3d"],
+      ["an animal's", "animal", {}, "2d"],
+      ["a cartoon's", "cartoon", {}, "2d"],
+      ['an animal\'s, with data-head-motion="3d"', "animal", { headMotion: "3d" }, "3d"],
+      ['a person\'s, with data-head-motion="2d"', "human", { headMotion: "2d" }, "2d"],
+    ])("moves the head by the published face type: %s", async (_, faceType, dataset, mode) => {
+      const p = page({
+        ...resources,
+        [meta("av_1")]: { json: { ...photoAvatar, face_type: faceType } },
+      } as Record<string, Resource>);
+      await settled(await p.embed({ avatar: "av_1", ...dataset }));
+      const engine = p.window.Liveface!.engine as AvatarEngine;
+      expect(engine.headMotion()).toBe(mode);
+      engine.destroy();
+    });
+
     it('keeps the handle off for data-debug="off"', async () => {
       const p = page(resources as Record<string, Resource>);
       await settled(await p.embed({ avatar: "av_1", debug: "off" }));

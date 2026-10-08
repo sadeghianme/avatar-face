@@ -176,7 +176,13 @@ export function MarkFacePanel({ avatar, orgId, onClose }: { avatar: Avatar; orgI
           </p>
           {previewUrl ? (
             <>
-              <AvatarPreview rigUrl={previewUrl} textureUrl={avatar.image_url} size={280} onEngine={setEngine} />
+              <AvatarPreview
+                rigUrl={previewUrl}
+                textureUrl={avatar.image_url}
+                faceType={avatar.face_type}
+                size={280}
+                onEngine={setEngine}
+              />
               <div className="mt-3">
                 <SpeakPanel engine={engine} orgId={orgId} />
               </div>

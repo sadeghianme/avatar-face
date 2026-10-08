@@ -313,6 +313,57 @@ async def test_share_pages_serve_published_too(client, setup):
     assert (await client.get(f"/public/v1/avatars/{token}")).json()["framing"] == "full"
 
 
+async def _served_face_types(client, avatar_id, key, token) -> tuple[str, str]:
+    embed = await client.get(f"/embed/v1/avatars/{avatar_id}", headers=key)
+    public = await client.get(f"/public/v1/avatars/{token}")
+    assert embed.status_code == 200 and public.status_code == 200
+    return embed.json()["face_type"], public.json()["face_type"]
+
+
+@pytest.mark.parametrize("face_type", ["animal", "cartoon"])
+async def test_visitors_are_told_the_published_face_type(client, setup, face_type):
+    """The embed and the share page carry what the avatar is: the engine
+    turns a person's head in depth and moves an animal's or a cartoon's as
+    a layer, which the rig cannot tell it (one fitted before render
+    profiles names none, whatever the face). The dashboard shows the
+    draft's; visitors get the published one, changed on Publish."""
+    headers, org_id, avatar_id, key = setup
+    base = f"/orgs/{org_id}/avatars/{avatar_id}"
+    token = (await client.post(f"{base}/share", headers=headers)).json()["share_token"]
+    assert await _served_face_types(client, avatar_id, key, token) == ("human", "human")
+
+    patched = (await client.patch(base, json={"face_type": face_type}, headers=headers)).json()
+    assert patched["face_type"] == face_type and patched["unpublished"] is True
+    assert (await client.get(base, headers=headers)).json()["face_type"] == face_type
+    assert await _served_face_types(client, avatar_id, key, token) == ("human", "human")
+
+    await client.post(f"{base}/publish", headers=headers)
+    assert await _served_face_types(client, avatar_id, key, token) == (face_type, face_type)
+
+
+async def test_a_snapshot_without_a_face_type_is_served_as_a_person(client, setup):
+    """Every snapshot has carried its face type since publishing began
+    (migration 020's backfill too); one that somehow does not is served as
+    the line every avatar had before there were others."""
+    from sqlalchemy import select
+
+    from app.db import get_session_factory
+    from app.models import Avatar
+
+    headers, org_id, avatar_id, key = setup
+    base = f"/orgs/{org_id}/avatars/{avatar_id}"
+    token = (await client.post(f"{base}/share", headers=headers)).json()["share_token"]
+    async with get_session_factory()() as db:
+        avatar = (await db.execute(select(Avatar).where(Avatar.id == avatar_id))).scalar_one()
+        avatar.face_type = "animal"
+        config = json.loads(avatar.published_config)
+        config.pop("face_type")
+        avatar.published_config = json.dumps(config)
+        await db.commit()
+
+    assert await _served_face_types(client, avatar_id, key, token) == ("human", "human")
+
+
 async def test_renaming_is_not_an_unpublished_change(client, setup):
     """Only things a VISITOR could notice mark the draft dirty. A rename is
     dashboard bookkeeping; flagging it would train people to ignore the bar."""

@@ -60,9 +60,17 @@
  * StrictMode: the loop and every async callback bail once it is set.
  */
 import { mergeTraits, type CharacterTraits } from "./engine/character-mouth";
-import { kindProfile, type KindProfile } from "./engine/kind-profile";
+import { defaultHeadMotion, kindProfile, type KindProfile } from "./engine/kind-profile";
 import type { MouthExtension, MouthPose } from "./mouth-extension";
-import { DEFAULT_TUNING, ZERO_WEIGHTS, type BlendWeights, type Cue, type EngineTuning, type Rig } from "./types";
+import {
+  DEFAULT_TUNING,
+  ZERO_WEIGHTS,
+  type BlendWeights,
+  type Cue,
+  type EngineTuning,
+  type FaceType,
+  type Rig,
+} from "./types";
 import { emphasisBeats, utteranceMs } from "./engine/cues";
 import { drawDebugMesh } from "./engine/debug";
 import { NO_DEBUG_HANDLE, exposeDebugHandle } from "./engine/debug-handle";
@@ -134,19 +142,28 @@ export interface EngineOptions {
    */
   cutOutHeadLayer?: boolean;
   /**
-   * How the head moves. "3d", the default for a person's photograph (the
-   * rig's render profile, kind-profile.ts: none or human): the face turns
-   * in depth inside the mesh, about a pivot between the ears
+   * How the head moves. "3d", the default for a person (faceType "human"):
+   * the face turns in depth inside the mesh, about a pivot between the ears
    * (engine/head-turn.ts), at most 7 degrees of yaw, 5 of pitch and 3 of
    * roll, with a procedural personality (engine/head-personality.ts); the
    * head's rigid motion (the layer, the whole picture, a cut-out's bust)
-   * carries a share of it. "2d", the default for a character or an animal
-   * (toon@1, animal@1, animal@2): as a rigid layer, shifted and rolled a
-   * few pixels (render2d.ts), with nods on the speech's beats. Either may
-   * be asked for; `setHeadMotion` switches it live, and the widget's
-   * `data-head-motion` sets it.
+   * carries a share of it. "2d", the default for an animal or a cartoon: as
+   * a rigid layer, shifted and rolled a few pixels (render2d.ts), with nods
+   * on the speech's beats. Without a faceType the rig's render profile
+   * decides (kind-profile.ts defaultHeadMotion: none, "3d"; toon@1,
+   * animal@1, animal@2, "2d"). Either may be asked for; `setHeadMotion`
+   * switches it live, and the widget's `data-head-motion` sets it.
    */
   headMotion?: HeadMotionMode;
+  /**
+   * What the avatar is: its owner's face type, as the API serves it with
+   * the avatar ("human", "animal" or "cartoon"). It chooses the head
+   * motion's default (headMotion above), which the rig alone cannot: a rig
+   * fitted before render profiles existed names none, an animal's or a
+   * cartoon's included. Omitted (a host from before it was passed), the
+   * rig's profile chooses, as it always did.
+   */
+  faceType?: FaceType | null;
 }
 
 /** EngineOptions.headMotion. */
@@ -261,7 +278,7 @@ export class AvatarEngine {
     this.classicMouth = new ClassicMouth(ctx, this.profile, this.innerRing);
     this.picture.useHeadLayer(opts.cutOutHeadLayer ?? false);
     this.picture.lay(this.scene.zoom ?? 1, this.scene.pan, true);
-    this.motion.mode = opts.headMotion ?? this.profile.headMotion;
+    this.motion.mode = opts.headMotion ?? defaultHeadMotion(this.profile, opts.faceType);
     this.motion.start(performance.now());
     this.frameLoop = new FrameLoop((now) => {
       this.tick(now);
@@ -393,7 +410,7 @@ export class AvatarEngine {
   }
 
   /** Which head motion is running: EngineOptions.headMotion, else the
-   *  rig's profile's. */
+   *  face type's, else the rig's profile's (defaultHeadMotion). */
   headMotion(): HeadMotionMode {
     return this.motion.mode;
   }

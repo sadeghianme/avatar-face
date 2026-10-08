@@ -98,6 +98,7 @@ export function PhotofaceHDPage() {
                   textureUrl={avatar.image_url ?? avatar.thumbnail_url ?? ""}
                   layerUrls={avatar.layer_urls}
                   fullPhoto={avatar.framing === "full"}
+                  faceType={avatar.face_type}
                   onEngine={(instance) => setStableEngine(instance)}
                 />
               </figure>

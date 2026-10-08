@@ -1311,16 +1311,23 @@ drawn mouth, make your own in the Mouth panel).
   the mesh about a pivot between the ears, depth from MediaPipe's canonical
   face fitted to the rig, a seeded personality) on conservative angles,
   every seam at 0, on by default for photos only; hair and the outline
-  following the turn is a later stage. *Defaults*: a rig without a render
-  profile (a person's photograph, opaque, layered or cut out, and a legacy
-  animal rig fitted before profiles) turns in depth ("3d"); `toon@1`,
-  `animal@1` and `animal@2` keep the rigid layer ("2d") and draw exactly
-  what they drew once the cut-out moved as one (every frame of the six
-  character and animal subjects hashes the same on both paths; their
-  goldens are untouched). The engine's `headMotion` option, `setHeadMotion()`
-  live and the widget's `data-head-motion="2d"|"3d"` still choose;
-  `headMotion()` says which runs. *Angles*: at most 7 degrees of yaw, 5 of
-  pitch and 3 of roll, each axis easing into its limit past 70% of it
+  following the turn is a later stage. *Defaults*, by the avatar's
+  published face type (`kind-profile.ts` `defaultHeadMotion`; the embed
+  and share responses carry `face_type`, the engine takes it as `faceType`): a
+  person ("human") turns in depth ("3d"), whether opaque, layered or cut
+  out; an animal or a cartoon keeps the rigid layer ("2d") whatever its
+  rig names. The rig alone cannot tell: one fitted before profiles existed
+  names none (in production a cat and two cartoons), and so does a
+  cartoon's with the classic mouth. A host that passes no face type (one
+  from before it was served) falls back to the rig: no render profile
+  turns in depth, `toon@1`, `animal@1` and `animal@2` keep the layer. The
+  layer draws exactly what it drew once the cut-out moved as one (every
+  frame of the six character and animal subjects hashes the same on both
+  paths; their goldens are untouched). The engine's `headMotion` option,
+  `setHeadMotion()` live and the widget's `data-head-motion="2d"|"3d"`
+  still choose over the default; `headMotion()` says which runs.
+  *Angles*: at most 7 degrees of yaw, 5 of pitch and 3 of roll, each axis
+  easing into its limit past 70% of it
   (`softLimit`, a tanh knee) rather than cut off; the personality's drift,
   postures, glances and nods at about 0.6 of the prototype's. An hour of
   simulated idle and speech (the production sentence, energy varied) peaks

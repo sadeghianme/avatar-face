@@ -1,6 +1,8 @@
 import type { Cue, Scene } from "@liveface/embed";
 import type { AvatarMouthConfig, ClassicMouthConfig } from "@liveface/embed/mouth";
 
+import type { FaceType } from "@/lib/types";
+
 /**
  * The share page's requests: the PUBLIC endpoints, with no account and no
  * token (so not the dashboard's client, which signs every call). One-shot
@@ -12,6 +14,10 @@ export interface PublicAvatar {
   name: string;
   kind: string;
   framing: string;
+  /** What the avatar is, as PUBLISHED: how the engine moves its head (a
+   *  person's in depth, an animal's or a cartoon's as a layer). Absent from
+   *  a server before it said so: the rig decides. */
+  face_type?: FaceType;
   /** The PUBLISHED scene; null for a snapshot from before scenes existed,
    *  which renders by its framing. */
   scene?: Scene | null;

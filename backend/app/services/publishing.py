@@ -552,6 +552,12 @@ async def published_view(avatar, storage) -> dict | None:
 
     return {
         "framing": config.get("framing", "face"),
+        # What the avatar is, as published: the engine moves a person's head
+        # in depth and an animal's or a cartoon's as a layer, which the rig
+        # cannot tell it (one fitted before render profiles names none,
+        # whatever the face). Every snapshot carries it, migration 020's
+        # backfill included; "human" covers one that somehow does not.
+        "face_type": config.get("face_type") or "human",
         # Null for a snapshot from before scenes existed: the engine renders
         # by the framing, as it always did.
         "scene": await scene_service.visitor_view(config.get("scene"), storage),
