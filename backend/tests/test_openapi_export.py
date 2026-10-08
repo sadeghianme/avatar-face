@@ -43,8 +43,8 @@ def test_it_runs_as_a_script_from_anywhere(tmp_path):
 
 def test_the_committed_document_is_the_codes(tmp_path):
     """frontend/src/lib/api-schema.json, which the dashboard and the widget
-    generate their types from, is what this code exports (CI's backend job
-    checks the same). Re-export it with `python -m scripts.export_openapi`."""
+    generate their types from, is what this code exports (CI's backend-checks
+    job checks the same). Re-export it with `python -m scripts.export_openapi`."""
     out = tmp_path / "openapi.json"
     export_openapi.main([str(out)])
     assert out.read_bytes() == export_openapi.COMMITTED.read_bytes(), (

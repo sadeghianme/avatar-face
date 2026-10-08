@@ -1,7 +1,7 @@
 // The widget's types for the API answers it reads, generated from the
 // committed OpenAPI document: frontend/src/lib/api-schema.json, which
 // backend/scripts/export_openapi.py writes and CI holds to the backend
-// (the backend job). One generator for the schema, one contract for the
+// (the backend-checks job). One generator for the schema, one contract for the
 // dashboard (openapi-typescript) and the widget (this script).
 //
 //   node scripts/gen-api-types.mjs           # write src/api-types.ts

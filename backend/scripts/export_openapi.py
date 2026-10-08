@@ -12,7 +12,7 @@ network.
     python scripts/export_openapi.py openapi.json   # anywhere else, from anywhere
     python -m scripts.export_openapi -              # to stdout
 
-CI's backend job exports it again and fails on any difference, so the
+CI's backend-checks job exports it again and fails on any difference, so the
 committed document is always the code's (docs/process.md, "CI").
 """
 
