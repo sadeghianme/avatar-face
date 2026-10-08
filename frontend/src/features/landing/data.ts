@@ -65,6 +65,6 @@ Liveface.tune({ mouthOpen: 1.2 });`,
   -d '{"text": "Hello!", "provider": "kokoro",
        "voice": "af_heart", "locale": "en-US"}'
 
-# → { "audio_b64": "…", "audio_mime": "audio/wav",
+# → { "audio_b64": "…", "audio_mime": "audio/mpeg",
 #     "duration_ms": 1240, "cues": [{ "t": 0, "viseme": "sil" }, …] }`,
 } as const;

@@ -139,10 +139,18 @@ newer push to the same branch or pull request cancels the run it supersedes.
 
 | Job | What it proves | Time |
 |---|---|---|
-| `backend` | ruff, pyright, pytest against the production pins and the checksummed MediaPipe models | ~12 min |
-| `embed` | lint, type check (tests included), vitest with the pixel goldens, build | ~2 min |
+| `backend` | ruff, pyright, the OpenAPI document exported again and identical to the committed one, pytest against the production pins and the checksummed MediaPipe models | ~12 min |
+| `embed` | lint, type check (tests included), the widget's generated API types match the committed document, vitest with the pixel goldens, build | ~2 min |
 | `frontend` | structure check, type check, production build | <1 min |
-| `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, unit tests | <1 min |
+| `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, the dashboard's generated API types match the committed document, unit tests | <1 min |
+
+**The API contract.** `frontend/src/lib/api-schema.json` is the OpenAPI
+document, and `backend/scripts/export_openapi.py` its only generator
+(`python -m scripts.export_openapi` from `backend/`, or `npm run api:schema`).
+The dashboard generates `src/lib/api-types.ts` from it (`npm run gen:api`), the
+widget `embed/src/api-types.ts` (`npm run gen:api` in `embed/`). A change to
+the API is therefore three files in one pull request: export, then generate
+in both packages; CI fails on any of them left behind.
 | `deploy-script` | ShellCheck (pinned) on `deploy/*.sh`; every gate of `deploy.sh` | <1 min |
 | `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 20 pages load in headless Chrome with zero CSP violations | ~10 min |
 
