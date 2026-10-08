@@ -1,7 +1,9 @@
 """Password hashing and JWT issuing/validation."""
 from __future__ import annotations
 
+import asyncio
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
@@ -22,6 +24,39 @@ def hash_password(plain: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
+
+
+# bcrypt is slow on purpose (about a quarter of a second at cost 12), and
+# on the event loop that quarter second is every widget on every customer's
+# site waiting. It runs on threads of its own, two of them: bcrypt releases
+# the GIL, so the loop keeps serving, and a burst of sign-ins queues here
+# instead of taking every core from speech synthesis.
+_hashing = ThreadPoolExecutor(max_workers=2, thread_name_prefix="liveface-bcrypt")
+
+# A bcrypt hash of a random password nobody knows, at the cost new hashes
+# get. Checking a password against it when no account matches makes "no
+# such user" take as long as "wrong password", so response time does not
+# tell an attacker which usernames exist.
+_DUMMY_HASH = "$2b$12$x3/4aDHIb0RTc6fytEX28.Y.HGctK4NEhtR3VVzyOTyDWK.Q.4rla"
+
+
+async def hash_password_async(plain: str) -> str:
+    """`hash_password`, off the event loop."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_hashing, hash_password, plain)
+
+
+async def verify_password_async(plain: str, hashed: str | None) -> bool:
+    """`verify_password`, off the event loop.
+
+    `hashed` None means no account matched: the password is still checked,
+    against a dummy hash, and the answer is False either way.
+    """
+    loop = asyncio.get_running_loop()
+    matched = await loop.run_in_executor(
+        _hashing, verify_password, plain, hashed if hashed is not None else _DUMMY_HASH
+    )
+    return matched and hashed is not None
 
 
 def _create_token(subject: str, token_type: TokenType, expires: timedelta) -> str:

@@ -9,23 +9,34 @@ Clients name steps by id ("original", "framed", "cutout", "adjusted:N",
 from __future__ import annotations
 
 import copy
-from typing import Literal
+from collections.abc import Mapping
+from typing import Any, Literal, cast
 
 from app.models import Creation
+from app.models.shapes import AdjustRound, AiEdited, CreationSteps, Plan, StepCheck, StepItem
+from app.services import consent
 from app.services.creations.rules import (
     ADJUSTED_PREFIX,
     CHECK_KEYS,
     CUTOUT,
     CUTOUT_PREFIX,
 )
+from app.services.photo_analysis import recommend
 
 
-def step_items(steps: dict | None) -> dict[str, dict]:
-    return (steps or {}).get("items") or {}
+def plan_of(steps: CreationSteps | None) -> Plan | None:
+    """The four-step wizard's plan (services.wizard.plan), or None for a
+    creation made without one."""
+    plan = steps.get("plan") if steps else None
+    return plan.copy() if isinstance(plan, dict) else None
 
 
-def current_step(steps: dict | None) -> str | None:
-    return (steps or {}).get("current")
+def step_items(steps: CreationSteps | None) -> dict[str, StepItem]:
+    return (steps.get("items") if steps else None) or {}
+
+
+def current_step(steps: CreationSteps | None) -> str | None:
+    return steps.get("current") if steps else None
 
 
 def adjusted_index(step_id: str) -> int | None:
@@ -47,13 +58,14 @@ def cutout_id_for(source_id: str) -> str:
     return CUTOUT if index is None else f"{CUTOUT_PREFIX}{index}"
 
 
-def is_cut_out(items: dict, step_id: str | None) -> bool:
+def is_cut_out(items: dict[str, StepItem], step_id: str | None) -> bool:
     """Is the image transparent around the subject? A background removal's
     output, and a touch-up made from one (it keeps the cut-out's alpha)."""
-    return is_cutout_id(step_id) or bool((items.get(step_id) or {}).get("cutout"))
+    item = items.get(step_id) if step_id else None
+    return is_cutout_id(step_id) or bool(item and item.get("cutout"))
 
 
-def ordered_step_ids(items: dict) -> list[str]:
+def ordered_step_ids(items: dict[str, StepItem]) -> list[str]:
     """The steps in the wizard's order: original, framed, cut-out, then each
     AI result followed by its own cut-out."""
     indexed = {i: n for i in items if (n := adjusted_index(i)) is not None}
@@ -68,7 +80,7 @@ def ordered_step_ids(items: dict) -> list[str]:
     return ordered + sorted(i for i in items if i not in ordered)
 
 
-def _remove_steps(steps: dict, doomed: set[str]) -> list[str]:
+def remove_steps(steps: CreationSteps, doomed: set[str]) -> list[str]:
     """Remove the steps `doomed` (in place); their keys, to delete.
 
     A surviving step made from a removed one now names what that one was
@@ -86,7 +98,9 @@ def _remove_steps(steps: dict, doomed: set[str]) -> list[str]:
         while step_id in doomed and step_id not in seen:
             seen.add(step_id)
             step_id = items[step_id].get("from")
-        return step_id if step_id in items else None
+        # A walk that ends on a step already seen went round a cycle of
+        # removed steps: nothing of it survives.
+        return step_id if step_id in items and step_id not in doomed else None
 
     current = steps.get("current")
     if current in doomed:
@@ -97,27 +111,27 @@ def _remove_steps(steps: dict, doomed: set[str]) -> list[str]:
     return [items.pop(i)["key"] for i in sorted(doomed)]
 
 
-def drop_adjusted(steps: dict) -> list[str]:
+def drop_adjusted(steps: CreationSteps) -> list[str]:
     """Remove every AI adjust candidate and its cut-out (the frame they were
     made from changed); their keys, to delete."""
     items = steps["items"]
-    return _remove_steps(
+    return remove_steps(
         steps,
         {i for i in items if adjusted_index(i) is not None or i.startswith(CUTOUT_PREFIX)},
     )
 
 
-def drop_cutouts(steps: dict) -> list[str]:
+def drop_cutouts(steps: CreationSteps) -> list[str]:
     """Remove every cut-out, a touch-up of one included (the line changed,
     so the segmenter that made them no longer applies); their keys."""
     items = steps["items"]
-    return _remove_steps(steps, {i for i in items if is_cut_out(items, i)})
+    return remove_steps(steps, {i for i in items if is_cut_out(items, i)})
 
 
-def lineage(steps: dict | None, step_id: str | None) -> list[dict]:
+def lineage(steps: CreationSteps | None, step_id: str | None) -> list[StepItem]:
     """The step `step_id` and every step it was made from, newest first."""
     items = step_items(steps)
-    chain: list[dict] = []
+    chain: list[StepItem] = []
     seen: set[str] = set()
     while step_id in items and step_id not in seen:
         seen.add(step_id)
@@ -126,7 +140,7 @@ def lineage(steps: dict | None, step_id: str | None) -> list[dict]:
     return chain
 
 
-def ai_edited_of(steps: dict | None, step_id: str | None) -> dict | None:
+def ai_edited_of(steps: CreationSteps | None, step_id: str | None) -> AiEdited | None:
     """{mode, model} when an AI made or changed the image `step_id` shows:
     the latest adjust in its lineage, else a generated original. None for
     a photo as its owner gave it (framing and cut-outs are not AI edits)."""
@@ -140,7 +154,7 @@ def ai_edited_of(steps: dict | None, step_id: str | None) -> dict | None:
     return None
 
 
-def _detected_a_person(item: dict) -> bool:
+def detected_a_person(item: StepItem) -> bool:
     """Did the photo check find a human face on this image? MediaPipe's
     face landmarker is trained on people: a detection is a person's face,
     or a drawing close enough to one to be a likeness."""
@@ -178,8 +192,6 @@ def statement_for(creation: Creation) -> Literal["depiction", "generated_face"] 
     - otherwise (an animal, a drawing the detector does not read as a
       face) nothing.
     """
-    from app.services import consent
-
     steps = creation.steps
     chain = lineage(steps, current_step(steps))
     human_line = creation.face_type == "human"
@@ -190,12 +202,12 @@ def statement_for(creation: Creation) -> Literal["depiction", "generated_face"] 
     if generated:
         plan = (steps or {}).get("plan") or {}
         drawn_animal = plan.get("model") == "animal" and plan.get("look") in ("animation", "cartoon")
-        found_person = _detected_a_person(root) and not drawn_animal
+        found_person = detected_a_person(root) and not drawn_animal
         if not (human_line or found_person):
             return None
         return consent.DEPICTION if generated.get("source_avatar_id") else consent.GENERATED_FACE
     photographed = [item for item in chain if not item.get("adjust")]
-    if human_line or any(_detected_a_person(item) for item in photographed):
+    if human_line or any(detected_a_person(item) for item in photographed):
         return consent.DEPICTION
     # A draft made before checks were kept per step: the upload's analysis.
     if all(item.get("check") is None for item in photographed) and (
@@ -205,7 +217,7 @@ def statement_for(creation: Creation) -> Literal["depiction", "generated_face"] 
     return None
 
 
-def round_source(steps: dict | None, last_round: dict | None) -> str | None:
+def round_source(steps: CreationSteps | None, last_round: AdjustRound | None) -> str | None:
     """The image the last adjust round was made from, as a step that still
     exists.
 
@@ -213,7 +225,7 @@ def round_source(steps: dict | None, last_round: dict | None) -> str | None:
     stylised version drops the cut-outs (the animation line keeps its drawn
     backdrop), and the round may have been made from one. The candidates'
     `from` links were moved to the nearest surviving ancestor then
-    (_remove_steps), so the first surviving candidate says where the round
+    (remove_steps), so the first surviving candidate says where the round
     now comes from; without one, the original.
     """
     if not last_round:
@@ -229,7 +241,7 @@ def round_source(steps: dict | None, last_round: dict | None) -> str | None:
     return "original" if "original" in items else None
 
 
-def stylised(steps: dict | None, step_id: str | None) -> bool:
+def stylised(steps: CreationSteps | None, step_id: str | None) -> bool:
     """Is the image `step_id` shows a stylised version (a drawing made by
     AI adjust from the photo), or made from one?"""
     return any(
@@ -237,7 +249,7 @@ def stylised(steps: dict | None, step_id: str | None) -> bool:
     )
 
 
-def _through_cutouts(steps: dict | None, step_id: str | None) -> str | None:
+def through_cutouts(steps: CreationSteps | None, step_id: str | None) -> str | None:
     """`step_id`, or when it is a background removal's output, the image it
     was cut from (repeatedly): the step whose pixels it shows."""
     items = step_items(steps)
@@ -251,23 +263,23 @@ def _through_cutouts(steps: dict | None, step_id: str | None) -> str | None:
     return step_id if step_id in items else None
 
 
-def frame_key(steps: dict | None, step_id: str | None) -> str | None:
+def frame_key(steps: CreationSteps | None, step_id: str | None) -> str | None:
     """The key of the image whose pixel grid `step_id` shares. A cut-out
     shares its source's (no pixel moved); every other step is its own, an
     AI result included (the model redrew it)."""
-    source = _through_cutouts(steps, step_id)
+    source = through_cutouts(steps, step_id)
     return step_items(steps)[source]["key"] if source else None
 
 
-def check_of(steps: dict | None, step_id: str | None) -> dict | None:
+def check_of(steps: CreationSteps | None, step_id: str | None) -> StepCheck | None:
     """The photo check of the image `step_id` shows (a cut-out shows its
     source's face, so it has its source's check). None for images made
     before checks were kept per step."""
-    source = _through_cutouts(steps, step_id)
+    source = through_cutouts(steps, step_id)
     return step_items(steps)[source].get("check") if source else None
 
 
-def background_source(steps: dict | None) -> str | None:
+def background_source(steps: CreationSteps | None) -> str | None:
     """The opaque image behind the current one: the current image, or when
     that is a cut-out (a touch-up of one included), the image it was cut
     from. What "keep the background" goes back to."""
@@ -283,22 +295,21 @@ def background_source(steps: dict | None) -> str | None:
     return step_id
 
 
-def copied(steps: dict | None) -> dict:
+def copied(steps: CreationSteps | None) -> CreationSteps:
     """A deep copy to edit: JSON columns are replaced, never mutated."""
     return copy.deepcopy(steps or {"current": None, "items": {}})
 
 
-def step_check(check: dict) -> dict:
+def step_check(check: Mapping[str, Any]) -> StepCheck:
     """The part of a photo check (or of an analysis) a step keeps."""
-    return {k: check.get(k) for k in CHECK_KEYS}
+    # Read off a check or an analysis, both written by photo_analysis.
+    return cast(StepCheck, {k: check.get(k) for k in CHECK_KEYS})
 
 
-def recommendation_of(steps: dict | None, face_type: str | None) -> dict | None:
+def recommendation_of(steps: CreationSteps | None, face_type: str | None) -> dict | None:
     """{image, mode, reasons}: what step 3 recommends for the CURRENT image
     on the creation's line (photo_analysis.recommend). None until the line
     is known, and for an image made before checks were kept per step."""
-    from app.services.photo_analysis import recommend
-
     current = current_step(steps)
     check = check_of(steps, current)
     if face_type is None or check is None:

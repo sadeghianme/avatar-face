@@ -48,9 +48,9 @@ def test_a_small_but_detected_face_is_salvaged_by_cropping(monkeypatch):
     face = np.zeros((478, 2))
     face[:, 0] = np.linspace(650, 880, 478)
     face[:, 1] = np.linspace(300, 590, 478)
-    import app.services.rig as rig_module
+    from app.services import landmarks
 
-    monkeypatch.setattr(rig_module, "_mediapipe_landmarks", lambda image: face)
+    monkeypatch.setattr(landmarks, "detect_points", lambda image: face)
 
     out = salvage_portrait(_wide_shot())
     assert out is not None
@@ -65,12 +65,12 @@ def test_no_face_means_nothing_to_salvage(monkeypatch):
     from app.core import config
 
     monkeypatch.setattr(config.get_settings(), "rig_model_path", "/x.task", raising=False)
-    import app.services.rig as rig_module
+    from app.services import landmarks
 
     def boom(image):
         raise ValueError("no face detected")
 
-    monkeypatch.setattr(rig_module, "_mediapipe_landmarks", boom)
+    monkeypatch.setattr(landmarks, "detect_points", boom)
     assert salvage_portrait(_wide_shot()) is None
 
 

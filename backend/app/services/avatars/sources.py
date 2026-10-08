@@ -1,6 +1,6 @@
 """New avatars from a file: a photo or GLB the client uploads straight to
 storage, or a GLB imported from an allowed host by URL. The rig job
-(services.rig.process_avatar) takes over once the file is there.
+(services.avatars.build.process_avatar) takes over once the file is there.
 """
 
 from __future__ import annotations

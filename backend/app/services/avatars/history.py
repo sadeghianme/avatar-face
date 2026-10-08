@@ -24,14 +24,14 @@ from app.models import Avatar
 from app.services import mouth_kit
 from app.services.avatars.derived import rebuild_layers
 from app.services.publishing import mark_dirty
-from app.services.storage import STORAGE_ERRORS, get_storage
+from app.services.storage import STORAGE_ERRORS, Storage, get_storage
 
 logger = logging.getLogger("liveface.avatars")
 
 MAX_HISTORY = 12
 
 
-async def snapshot(avatar: Avatar, storage, label: str) -> None:
+async def snapshot(avatar: Avatar, storage: Storage, label: str) -> None:
     """Record the current state so the change about to happen can be undone."""
     entry = {
         "label": label,

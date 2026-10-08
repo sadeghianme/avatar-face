@@ -12,7 +12,19 @@ from uuid import uuid4
 from PIL import Image
 
 from app.core.errors import AppError, Conflict409, Validation422
+from app.db import get_session_factory
+from app.models import Creation
+from app.models.shapes import AiUsage, CreationAnchors, CreationSteps, PrepareRecord, StepCheck
+from app.services import backdrop, imagegen, landmarks, photo_adjust, photo_io, segment
+from app.services import creations as svc
+from app.services.creations import detect, records
+from app.services.creations import steps as creation_steps
+from app.services.creations.guards import require_face_type
 from app.services.jobs import FAILED, Job, run_cpu, runner
+from app.services.photo_analysis import check_photo, check_png
+from app.services.photo_io import frame_photo, ingest_photo, on_backdrop, png_bytes
+from app.services.storage import get_storage
+from app.services.usage import check_image_limit, record_generation
 from app.services.wizard.plan import (
     CHANGE,
     GENERATE,
@@ -35,11 +47,7 @@ logger = logging.getLogger("liveface.wizard")
 def _png(data: bytes) -> tuple[bytes, int, int]:
     """An answer as the creation stores images: upright PNG, no metadata,
     long edge at most photo_io.STORED_MAX_EDGE."""
-    from PIL import Image
-
-    from app.services.photo_io import STORED_MAX_EDGE, ingest_photo
-
-    clean = ingest_photo(data, STORED_MAX_EDGE)
+    clean = ingest_photo(data, photo_io.STORED_MAX_EDGE)
     with Image.open(io.BytesIO(clean)) as image:
         return clean, image.width, image.height
 
@@ -49,8 +57,6 @@ def cut_out(png: bytes, face_type: str) -> bytes | None:
     cleanly (the picture is then kept as it is). A person goes through the
     person segmenter when this server has one; everything, and a person the
     segmenter cannot take, through the backdrop keyer. CPU work."""
-    from app.services import backdrop, segment
-
     if face_type == "human":
         try:
             return segment.remove_background(png)
@@ -70,23 +76,20 @@ def cut_out(png: bytes, face_type: str) -> bytes | None:
 
 async def settle(
     job: Job,
-    creation,
-    steps: dict,
+    creation: Creation,
+    steps: CreationSteps,
     opaque_id: str,
     png: bytes,
     consent_id: str | None,
     new_keys: list[str],
-) -> tuple[dict, bool]:
+) -> tuple[CreationAnchors, bool]:
     """Cut out the opaque step `opaque_id` (already in `steps`, its bytes
     `png`), make the cut-out current, and find the face on it.
 
     Returns (anchors, cut). `steps` is edited in place; every key written
     is added to `new_keys` (deleted if the result is discarded).
     """
-    from app.services import creations as svc
-    from app.services.storage import get_storage
-
-    face_type = creation.face_type
+    face_type = require_face_type(creation)
     storage = get_storage()
     items = steps["items"]
     job.report(0.72, "removing the background")
@@ -114,7 +117,7 @@ async def settle(
     source = "mediapipe" if found["detected"] else "template"
     if consent_id and svc.wants_ai_points(face_type, found["detected"]):
         digest = await run_cpu(lambda: hashlib.sha256(shown).hexdigest())
-        ai, warning = await svc._ai_points(
+        ai, warning = await detect.ai_points(
             job, {"sha256": digest, "charged": False}, shown, face_type,
             tuple(found["image_size"]),
         )
@@ -122,7 +125,7 @@ async def settle(
             found, source = ai, "ai"
         elif warning is not None:
             found["validation"]["warnings"].append(warning)
-    anchors = {
+    anchors: CreationAnchors = {
         "id": uuid4().hex,
         "frame": svc.frame_key(steps, current),
         "face_type": face_type,
@@ -135,11 +138,11 @@ async def settle(
     return anchors, cut is not None
 
 
-def _refund(usage: dict) -> None:
+def _refund(usage: AiUsage) -> None:
     usage["prepare_rounds"] = max(0, int(usage.get("prepare_rounds") or 0) - 1)
 
 
-def _refund_free(usage: dict) -> None:
+def _refund_free(usage: AiUsage) -> None:
     usage["free_clears"] = max(0, int(usage.get("free_clears") or 0) - 1)
 
 
@@ -153,9 +156,6 @@ def head_crop_source(data: bytes) -> tuple[bytes, str] | None:
     and the same face cropped to 2.2 face widths is edited under the same
     prompt. So a declined edit is asked once more on this: a different
     input, never the same request repeated (photo_adjust.head_crop)."""
-    from app.services import imagegen, landmarks, photo_adjust
-    from app.services.photo_io import on_backdrop
-
     image = on_backdrop(Image.open(io.BytesIO(data)))
     try:
         points = photo_adjust._detect(image)
@@ -183,11 +183,6 @@ async def _ask_ai(
     included, is metered, and the switch and the monthly limit are read
     again before the second. A character made from words has no picture to
     crop and is asked once."""
-    from app.db import get_session_factory
-    from app.services import creations as svc
-    from app.services import imagegen
-    from app.services.usage import check_image_limit, record_generation
-
     session = get_session_factory()
     sends: list[tuple[bytes, str] | None] = (
         [None] if source is None else [await run_cpu(svc.source_on_backdrop, source)]
@@ -196,8 +191,8 @@ async def _ask_ai(
     refusal: imagegen.ImageGenRefused | None = None
     index = 0
     while index < len(sends):
-        if await svc._ai_switched_off(job.org_id):
-            raise svc._ai_disabled_error()
+        if await records.ai_switched_off_now(job.org_id):
+            raise records.ai_disabled_error()
         async with session() as db:
             await check_image_limit(db, job.org_id)
         send = sends[index]
@@ -257,10 +252,7 @@ async def _ask_ai(
 async def prepare_job(job: Job, params: dict) -> None:
     """Step 3: make the picture the avatar is built from (see the module
     docstring), cut it out and find its face, in one write."""
-    from app.services import creations as svc
-    from app.services.storage import get_storage
-
-    creation = await svc._load(job)
+    creation = await records.load_creation(job)
     if creation is None:
         return
     mode = params["mode"]
@@ -269,7 +261,7 @@ async def prepare_job(job: Job, params: dict) -> None:
     items = svc.step_items(creation.steps)
     original = items.get("original")
     if original is None or creation.face_type is None:
-        await svc._write_job(job, FAILED, params, svc.SUPERSEDED)
+        await records.write_job(job, FAILED, params, records.SUPERSEDED)
         return
     storage = get_storage()
     steps = svc.copied(creation.steps)
@@ -280,18 +272,16 @@ async def prepare_job(job: Job, params: dict) -> None:
     if mode == ORIGINAL:
         # The photo itself, framed on its face when the check found one,
         # cut out: no AI. Replaces an earlier framing and its cut-out.
-        from app.services.photo_analysis import check_photo
-        from app.services.photo_io import frame_photo, png_bytes
 
         job.report(0.1, "preparing the photo")
         # The photo's own framing and cut-out, from an earlier "use my
         # original photo": made again (AI results made since stay).
-        old_keys.extend(svc._remove_steps(steps, {"framed", svc.CUTOUT}))
+        old_keys.extend(creation_steps.remove_steps(steps, {"framed", svc.CUTOUT}))
         data = await storage.get_bytes(original["key"])
         framing = (creation.analysis or {}).get("suggested_framing")
         opaque_id, png = "original", data
         if framing:
-            def frame() -> tuple[bytes, tuple[int, int], dict]:
+            def frame() -> tuple[bytes, tuple[int, int], StepCheck]:
                 image = frame_photo(data, framing["crop"], framing.get("roll") or 0.0)
                 return png_bytes(image), image.size, svc.step_check(check_photo(image))
 
@@ -304,17 +294,17 @@ async def prepare_job(job: Job, params: dict) -> None:
                 "crop": framing["crop"], "roll": framing.get("roll") or 0.0, "check": check,
             }
             opaque_id = "framed"
-        record = {"mode": ORIGINAL, "look": look, "instruction": None, "step": opaque_id}
+        record: PrepareRecord = {
+            "mode": ORIGINAL, "look": look, "instruction": None, "step": opaque_id,
+        }
     else:
-        from app.services.photo_analysis import check_png
-
         instruction = (params.get("instruction") or "").strip() or None
         if mode == GENERATE:
             source, prompt = None, character_prompt(model, look, plan.get("description"))
             base_id = "original"
             call = "generate"
         elif mode == CHANGE:
-            base_id = svc._through_cutouts(creation.steps, svc.current_step(creation.steps))
+            base_id = creation_steps.through_cutouts(creation.steps, svc.current_step(creation.steps))
             if params.get("again"):
                 # Retry of the last change: from what that try started from,
                 # so the change is not applied on top of its own result.
@@ -349,7 +339,7 @@ async def prepare_job(job: Job, params: dict) -> None:
                 # Nothing was sent, or nothing answered: the try is given back.
                 # (A refusal or an answer without a picture was billed.)
                 give_back = _refund_free if params.get("free") else _refund
-                await svc._update_ai_usage(job, give_back)
+                await records.update_ai_usage(job, give_back)
             raise
         job.report(0.6, "checking the picture")
         png, width, height = await run_cpu(_png, answer)
@@ -377,21 +367,21 @@ async def prepare_job(job: Job, params: dict) -> None:
             },
         }
 
-        def advance(u: dict) -> None:
+        def advance(u: AiUsage) -> None:
             u["next_adjusted"] = max(int(u.get("next_adjusted") or 0), number + 1)
 
-        await svc._update_ai_usage(job, advance)
+        await records.update_ai_usage(job, advance)
         record = {"mode": mode, "look": look, "instruction": instruction, "step": opaque_id}
 
     anchors, cut = await settle(job, creation, steps, opaque_id, png, consent_id, new_keys)
     record["cut"] = cut
-    steps["items"][opaque_id][KEPT_RECORD] = dict(record)
+    steps["items"][opaque_id][KEPT_RECORD] = record.copy()
 
-    def remember(u: dict) -> None:
+    def remember(u: AiUsage) -> None:
         u["last_prepare"] = record
 
     job.report(0.95, "saving")
-    await svc._update_ai_usage(job, remember)
-    if await svc._store_result(job, params, {"steps": steps, "anchors": anchors}, new_keys):
+    await records.update_ai_usage(job, remember)
+    if await records.store_result(job, params, {"steps": steps, "anchors": anchors}, new_keys):
         for key in old_keys:
             await storage.delete(key)

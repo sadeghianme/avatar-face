@@ -1,14 +1,21 @@
 """Liveface application factory."""
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import gc
+import hashlib
 import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, Response
+from sqlalchemy import inspect
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import PlainTextResponse
 
@@ -38,6 +45,12 @@ from app.core.errors import install_error_handlers
 from app.core.logging import RequestIdMiddleware, configure_logging
 from app.db import get_engine, get_session_factory
 from app.models import Base
+from app.services.ai_models import verify_at_startup
+from app.services.avatars.build import fail_interrupted
+from app.services.creations import recover_interrupted
+from app.services.jobs import runner
+from app.services.sweeper import run_forever as sweep_forever
+from app.services.tts.lab_timing import warm_native
 
 # Paths that third-party pages call directly: CORS must reflect ANY origin
 # (key-level allowed_domains does the actual gating).
@@ -89,10 +102,6 @@ async def _ensure_schema(engine) -> None:
     pending migrations as done and hide exactly the failure above; log it and
     let a human run `alembic stamp <rev>` once.
     """
-    import asyncio
-
-    from sqlalchemy import inspect
-
     async with engine.begin() as conn:
         tables = await conn.run_sync(lambda c: set(inspect(c).get_table_names()))
 
@@ -104,9 +113,6 @@ async def _ensure_schema(engine) -> None:
             await conn.run_sync(Base.metadata.create_all)
 
     def run_alembic(action: str) -> None:
-        from alembic import command
-        from alembic.config import Config
-
         cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
         (command.stamp if action == "stamp" else command.upgrade)(cfg, "head")
 
@@ -123,10 +129,6 @@ async def _ensure_schema(engine) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    import asyncio
-
-    from app.services.sweeper import run_forever as sweep_forever
-
     engine = get_engine()
     await _ensure_schema(engine)
     # Load dashboard-managed provider credentials over env settings.
@@ -138,8 +140,6 @@ async def lifespan(app: FastAPI):
     # their owners watching a spinner that will never finish. Creations
     # first: one caught finishing loses the half-built avatar it was making,
     # which the avatar pass would otherwise report as a failed avatar.
-    from app.services.creations import recover_interrupted
-    from app.services.rig import fail_interrupted
 
     async with get_session_factory()() as db:
         interrupted_creations = await recover_interrupted(db)
@@ -161,7 +161,6 @@ async def lifespan(app: FastAPI):
     # with when it is installed (and the lab too): keep model loading and the
     # first inference out of the first visitor's speech request, without
     # delaying the rest of the application.
-    from app.services.tts.lab_timing import warm_native
 
     async def warm_lab():
         try:
@@ -175,9 +174,18 @@ async def lifespan(app: FastAPI):
     # Every Gemini model id this server calls still exists? Logged, never
     # fatal, and off the startup path: a retired id should be a loud line
     # in the deploy log, not a customer's failed edit, and not a slow boot.
-    from app.services.ai_models import verify_at_startup
 
     model_check = asyncio.create_task(verify_at_startup())
+
+    # What startup loaded lives as long as the process: modules, settings,
+    # routes, about 220,000 objects. A full collection walked all of them
+    # with the GIL held, 40 ms that every request on the loop waited out,
+    # and a burst of /embed/v1/cues answers (a thousand cue dicts each) set
+    # one off every few requests: /health peaked past 100 ms. Frozen, they
+    # are out of the collector's sight, and a full collection walks only
+    # what requests made since.
+    gc.collect()
+    gc.freeze()
 
     yield
 
@@ -194,7 +202,6 @@ async def lifespan(app: FastAPI):
         await sweeper
     # Jobs still running are cancelled; the next startup marks them
     # interrupted (above), which is where a deploy lands anyway.
-    from app.services.jobs import runner
 
     await runner.shutdown()
     await engine.dispose()
@@ -207,20 +214,19 @@ def _bundle_etag(path) -> str:
     even when the bundle is byte-identical, and hashing the mtime would throw
     away every visitor's cached copy for no reason.
     """
-    import hashlib
-
     stat = path.stat()
-    key = (str(path), stat.st_mtime_ns, stat.st_size)
-    cached = _ETAG_CACHE.get(key)
-    if cached is None:
+    version = (stat.st_mtime_ns, stat.st_size)
+    cached = _ETAG_CACHE.get(str(path))
+    if cached is None or cached[0] != version:
         digest = hashlib.sha256(path.read_bytes()).hexdigest()[:32]
-        # Keyed by mtime and size, so a rebuild replaces rather than grows it.
-        _ETAG_CACHE.clear()
-        cached = _ETAG_CACHE[key] = f'"{digest}"'
-    return cached
+        # One entry per bundle, replaced when it is rebuilt. (A single entry
+        # for all of them re-hashed a bundle whenever another was asked for
+        # in between, which a page loading two of them always does.)
+        cached = _ETAG_CACHE[str(path)] = (version, f'"{digest}"')
+    return cached[1]
 
 
-_ETAG_CACHE: dict[tuple, str] = {}
+_ETAG_CACHE: dict[str, tuple[tuple[int, int], str]] = {}
 
 
 def _etag_matches(if_none_match: str | None, etag: str) -> bool:
@@ -299,10 +305,6 @@ def create_app() -> FastAPI:
         body every time, so without this, revalidation would mean
         re-downloading the bundle on every single page load.
         """
-        from pathlib import Path
-
-        from fastapi.responses import FileResponse, PlainTextResponse, Response
-
         bundle = Path(__file__).resolve().parents[2] / "embed" / "dist" / filename
         if not bundle.is_file():
             return PlainTextResponse(

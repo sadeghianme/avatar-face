@@ -13,6 +13,7 @@ import io
 import json
 import logging
 
+import numpy as np
 from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,9 +30,12 @@ from app.services.anchor_fit import (
 )
 from app.services.avatars.derived import rebuild_layers, rebuild_thumbnail
 from app.services.avatars.history import snapshot
+from app.services.jobs import run_cpu
+from app.services.photo_io import has_alpha, png_bytes, scrub_transparent
 from app.services.publishing import mark_dirty
+from app.services.rig import build_rig, fit_base_mesh, landmarks_from_image, starting_mesh
 from app.services.segment import SegmentationUnavailable, remove_background
-from app.services.storage import STORAGE_ERRORS, get_storage
+from app.services.storage import STORAGE_ERRORS, Storage, get_storage
 
 logger = logging.getLogger("liveface.avatars")
 
@@ -70,8 +74,10 @@ async def set_background(db: AsyncSession, avatar: Avatar, remove: bool) -> None
     if avatar.original_image_key:
         return  # already cut out
 
+    photo = await storage.get_bytes(avatar.image_key)
     try:
-        cut_out = remove_background(await storage.get_bytes(avatar.image_key))
+        # Seconds of decoding, segmenting and encoding: the CPU thread's work.
+        cut_out = await run_cpu(remove_background, photo)
     except SegmentationUnavailable as exc:
         raise Conflict409(
             "Background removal is not configured on this server",
@@ -146,22 +152,15 @@ async def crop(
             code="crop_too_small",
         )
 
-    from app.services.photo_io import has_alpha, png_bytes
-
-    source = Image.open(io.BytesIO(await storage.get_bytes(avatar.image_key)))
-    # Preserve alpha: cropping a cut-out must not paste the background back.
-    source = source.convert("RGBA" if has_alpha(source) else "RGB")
-    image_width, image_height = source.size
-
-    left = int(round(x * image_width))
-    top = int(round(y * image_height))
-    right = int(round((x + width) * image_width))
-    bottom = int(round((y + height) * image_height))
-    cropped = source.crop((left, top, right, bottom))
+    # Decoding, cropping and PNG-encoding a phone photo is up to seconds of
+    # CPU: the CPU thread's work, never the loop's.
+    png, (left, top), cropped_size = await run_cpu(
+        _crop_png, await storage.get_bytes(avatar.image_key), x, y, width, height
+    )
 
     await snapshot(avatar, storage, "crop")
     key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/source-crop.png"
-    await storage.put_bytes(key, png_bytes(cropped), "image/png")
+    await storage.put_bytes(key, png, "image/png")
     first_crop = not avatar.precrop_image_key
     # Only the first crop records the pre-crop image, so cropping twice still
     # resets all the way back rather than to the previous crop.
@@ -181,7 +180,7 @@ async def crop(
         base = await read_fit_base(storage, base_key)
         if fit_base_points(base, rig) is None:
             base = None  # not this rig's base: it does not follow the crop
-        rig = _move_rig(rig, left, top, cropped.size)
+        rig = _move_rig(rig, left, top, cropped_size)
         if origin is not None:
             rig["crop_origin"] = [origin[0] + left, origin[1] + top]
         await storage.put_bytes(avatar.rig_key, json.dumps(rig).encode(), "application/json")
@@ -201,7 +200,24 @@ async def crop(
         await storage.delete(key)
 
 
-async def _kit_follows_rig(avatar: Avatar, storage) -> list[str]:
+def _crop_png(
+    data: bytes, x: float, y: float, width: float, height: float
+) -> tuple[bytes, tuple[int, int], tuple[int, int]]:
+    """The photo cut to a rectangle given in fractions of it, as a PNG; and
+    the crop's top-left and size in the photo's pixels."""
+    source = Image.open(io.BytesIO(data))
+    # Preserve alpha: cropping a cut-out must not paste the background back.
+    source = source.convert("RGBA" if has_alpha(source) else "RGB")
+    image_width, image_height = source.size
+    left = int(round(x * image_width))
+    top = int(round(y * image_height))
+    right = int(round((x + width) * image_width))
+    bottom = int(round((y + height) * image_height))
+    cropped = source.crop((left, top, right, bottom))
+    return png_bytes(cropped), (left, top), cropped.size
+
+
+async def _kit_follows_rig(avatar: Avatar, storage: Storage) -> list[str]:
     """The mouth kit moved onto the rig now in place after a crop or its
     reset (mouth_kit.follow_points): a crop cuts the same pixels at whole
     pixels, so the kit is the face's still, only elsewhere in the picture.
@@ -244,7 +260,7 @@ def _move_anchors(anchors, left: float, top: float):
     return anchors
 
 
-async def _uncrop_rig(avatar: Avatar, storage, cropped_keys: list[str]) -> None:
+async def _uncrop_rig(avatar: Avatar, storage: Storage, cropped_keys: list[str]) -> None:
     """Put the rig back into the pre-crop photo's coordinates.
 
     A translation, not a re-detection: the rig keeps its viseme table, its
@@ -261,27 +277,28 @@ async def _uncrop_rig(avatar: Avatar, storage, cropped_keys: list[str]) -> None:
     if fit_base_points(base, rig) is None:
         base = None  # not this rig's base: it does not follow the reset
     precrop_bytes = await storage.get_bytes(avatar.image_key)
-    precrop = Image.open(io.BytesIO(precrop_bytes))
+    precrop_size = Image.open(io.BytesIO(precrop_bytes)).size  # the header only
 
     origin = rig.get("crop_origin")
     if origin is None:
         for key in cropped_keys:
             try:
-                cropped = Image.open(io.BytesIO(await storage.get_bytes(key)))
-            except STORAGE_ERRORS:  # Pillow's unreadable file is an OSError too
+                cropped_bytes = await storage.get_bytes(key)
+            except STORAGE_ERRORS:
                 logger.warning("crop candidate %s of avatar %s unreadable", key, avatar.id)
                 continue
-            origin = _locate_crop(precrop, cropped)
+            # Two full decodes and a pixel search: the CPU thread's work.
+            origin = await run_cpu(_locate_crop_in, precrop_bytes, cropped_bytes)
             if origin is not None:
                 break
 
     if origin is not None:
-        restored = _move_rig(rig, -origin[0], -origin[1], precrop.size)
+        restored = _move_rig(rig, -origin[0], -origin[1], precrop_size)
         restored.pop("crop_origin", None)
         if base is not None:
             base = move_fit_base(base, -origin[0], -origin[1], restored)
     else:
-        redetected = _redetect_rig(avatar, precrop_bytes, rig)
+        redetected = await run_cpu(_redetect_rig, avatar, precrop_bytes, rig)
         if redetected is None:
             return
         restored, base = redetected
@@ -290,14 +307,20 @@ async def _uncrop_rig(avatar: Avatar, storage, cropped_keys: list[str]) -> None:
         await write_fit_base(storage, base_key, base)
 
 
+def _locate_crop_in(outer: bytes, inner: bytes) -> tuple[int, int] | None:
+    """`_locate_crop` for two encoded pictures; None when either cannot be
+    read (Pillow's unreadable file is an OSError)."""
+    try:
+        return _locate_crop(Image.open(io.BytesIO(outer)), Image.open(io.BytesIO(inner)))
+    except OSError:
+        logger.warning("a crop candidate could not be decoded")
+        return None
+
+
 def _locate_crop(outer, inner) -> tuple[int, int] | None:
     """Where `inner` sits in `outer` pixel for pixel, or None when it does
     not sit anywhere exactly once (not a crop of it, or a flat image where
     every position matches and the origin is unknowable)."""
-    import numpy as np
-
-    from app.services.photo_io import scrub_transparent
-
     # Compared as scrubbed RGBA: an older cut-out still holds colour under
     # alpha 0, and cropping it now blanks that colour.
     big = np.ascontiguousarray(np.asarray(scrub_transparent(outer))).view(np.uint32)[:, :, 0]
@@ -331,8 +354,6 @@ def _redetect_rig(
     they are in the cropped photo's coordinates and nothing says where that
     crop was.
     """
-    from app.services.rig import build_rig, fit_base_mesh, landmarks_from_image, starting_mesh
-
     try:
         points, blendshapes, size, detected = landmarks_from_image(image_bytes)
     except Exception:

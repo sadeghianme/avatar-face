@@ -9,16 +9,18 @@ import logging
 from app.core.errors import AppError, Conflict409, Validation422
 from app.db import get_session_factory
 from app.models import Creation
+from app.models.shapes import AdjustCandidate, AdjustRound, AiUsage, CreationSteps, Note, StepItem
+from app.services import imagegen, photo_adjust
 from app.services.creations.records import (
     SUPERSEDED,
-    _ai_disabled_error,
-    _ai_switched_off,
-    _load,
-    _store_result,
-    _update_ai_usage,
-    _write_job,
+    ai_disabled_error,
+    ai_switched_off_now,
     ai_usage_of,
     error_record,
+    load_creation,
+    store_result,
+    update_ai_usage,
+    write_job,
 )
 from app.services.creations.rules import ADJUSTED_PREFIX, step_key
 from app.services.creations.steps import (
@@ -38,7 +40,10 @@ from app.services.jobs import (
     Job,
     run_cpu,
 )
+from app.services.photo_adjust import ROUNDS_PER_CREATION, TOUCHUP
+from app.services.photo_analysis import check_png
 from app.services.storage import get_storage
+from app.services.usage import check_image_limit, record_generation
 
 logger = logging.getLogger("liveface.creations")
 
@@ -60,7 +65,7 @@ ADJUST_CALLS = {
 AUTO_ADJUST_REASON = "teeth_showing"
 
 
-def source_photo_key(steps: dict | None, step_id: str | None) -> str | None:
+def source_photo_key(steps: CreationSteps | None, step_id: str | None) -> str | None:
     """The key of the photo `step_id` comes from, through every framing
     and cut-out of it: the root of its lineage (the upload, or the
     generated original). The same for a photo re-cropped any number of
@@ -87,8 +92,6 @@ def auto_adjust_of(creation: Creation) -> dict | None:
     ran on), however it is re-cropped since. The organization's switch, the
     server's image model and the member's consent are the caller's to check.
     """
-    from app.services.photo_adjust import ROUNDS_PER_CREATION, TOUCHUP
-
     if creation.face_type != "human":
         return None
     steps = creation.steps
@@ -116,7 +119,7 @@ def auto_adjust_of(creation: Creation) -> dict | None:
     return {"mode": TOUCHUP, "image": current, "reasons": list(recommendation["reasons"])}
 
 
-def mouth_warnings(creation: Creation) -> list[dict]:
+def mouth_warnings(creation: Creation) -> list[Note]:
     """What finishing the current image will look like around the mouth, as
     {code, detail} warnings: an open mouth rests open, and parted lips keep
     the photo's teeth painted on them. Empty when the check found neither,
@@ -145,11 +148,11 @@ def mouth_warnings(creation: Creation) -> list[dict]:
     return []
 
 
-def _refund_round(usage: dict) -> None:
+def refund_round(usage: AiUsage) -> None:
     usage["adjust_rounds"] = max(0, usage["adjust_rounds"] - 1)
 
 
-async def _adjust(job: Job, params: dict) -> None:
+async def run_adjust(job: Job, params: dict) -> None:
     """One AI adjust round on the current image (params["source"], a cut-out
     more often than not): up to `count` candidates from the provider, each
     checked, stored as "adjusted:N" steps for the owner to compare, each
@@ -160,17 +163,13 @@ async def _adjust(job: Job, params: dict) -> None:
     It is given back when no provider call was answered, so a photo that
     cannot be touched up, or a provider that is down, costs nothing.
     """
-    from app.services import imagegen, photo_adjust
-    from app.services.photo_analysis import check_png
-    from app.services.usage import check_image_limit, record_generation
-
-    creation = await _load(job)
+    creation = await load_creation(job)
     if creation is None:
         return
     source_id = params["source"]
     source = step_items(creation.steps).get(source_id)
     if source is None or creation.face_type is None:
-        await _write_job(job, FAILED, params, SUPERSEDED)
+        await write_job(job, FAILED, params, SUPERSEDED)
         return
     mode, face_type = params["mode"], creation.face_type
     storage = get_storage()
@@ -180,7 +179,7 @@ async def _adjust(job: Job, params: dict) -> None:
     try:
         prepared = await run_cpu(photo_adjust.prepare, data, mode, face_type, params.get("style"))
     except photo_adjust.AdjustSkipped as exc:
-        await _update_ai_usage(job, _refund_round)
+        await update_ai_usage(job, refund_round)
         raise Validation422(exc.detail, code=exc.code) from exc
 
     count = int(params.get("count") or photo_adjust.MAX_CANDIDATES)
@@ -192,10 +191,10 @@ async def _adjust(job: Job, params: dict) -> None:
     while attempt + 1 < count:
         attempt += 1
         job.report(0.1 + 0.8 * attempt / count, "asking the AI")
-        if await _ai_switched_off(job.org_id):
+        if await ai_switched_off_now(job.org_id):
             if answered == 0:
-                await _update_ai_usage(job, _refund_round)
-                raise _ai_disabled_error()
+                await update_ai_usage(job, refund_round)
+                raise ai_disabled_error()
             # One answer is in, and paid for: the owner keeps it, and
             # nothing more is sent.
             break
@@ -254,7 +253,7 @@ async def _adjust(job: Job, params: dict) -> None:
             break
         except imagegen.ImageGenUnavailable as exc:
             if answered == 0:
-                await _update_ai_usage(job, _refund_round)
+                await update_ai_usage(job, refund_round)
             raise Conflict409(
                 "AI editing is not configured on this server", code="imagegen_unavailable"
             ) from exc
@@ -279,7 +278,7 @@ async def _adjust(job: Job, params: dict) -> None:
         outcomes.append((candidate, generated.model))
 
     if answered == 0:
-        await _update_ai_usage(job, _refund_round)
+        await update_ai_usage(job, refund_round)
         if limit_error is not None:
             raise limit_error
         raise AppError("The AI service did not answer; try again", code="provider_error")
@@ -290,9 +289,9 @@ async def _adjust(job: Job, params: dict) -> None:
     number = usage["next_adjusted"]
     steps = copied(creation.steps)
     new_keys: list[str] = []
-    report: list[dict] = []
+    report: list[AdjustCandidate] = []
     for candidate, model in outcomes:
-        entry = {
+        entry: AdjustCandidate = {
             "step": None,
             "ok": candidate.rejected is None,
             "reason": candidate.rejected,
@@ -311,7 +310,7 @@ async def _adjust(job: Job, params: dict) -> None:
                 step_check(await run_cpu(check_png, candidate.png))
                 if candidate.rejected is None else None
             )
-            steps["items"][step_id] = {
+            item: StepItem = {
                 "key": key,
                 "width": candidate.width,
                 "height": candidate.height,
@@ -327,9 +326,10 @@ async def _adjust(job: Job, params: dict) -> None:
                     "checks": candidate.checks,
                 },
             }
+            steps["items"][step_id] = item
             entry["step"] = step_id
         report.append(entry)
-    last_round = {
+    last_round: AdjustRound = {
         "mode": mode,
         "style": params.get("style"),
         "source": source_id,
@@ -337,9 +337,9 @@ async def _adjust(job: Job, params: dict) -> None:
         "limit_reached": limit_error is not None,
     }
 
-    def settle(u: dict) -> None:
+    def settle(u: AiUsage) -> None:
         u["next_adjusted"] = number
         u["last_round"] = last_round
 
-    await _update_ai_usage(job, settle)
-    await _store_result(job, params, {"steps": steps}, new_keys)
+    await update_ai_usage(job, settle)
+    await store_result(job, params, {"steps": steps}, new_keys)

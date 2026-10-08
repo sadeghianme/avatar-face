@@ -8,7 +8,7 @@ nothing to explain it.
 
 
 from app.models import AvatarStatus
-from app.services.rig import process_avatar
+from app.services.avatars.build import process_avatar
 from tests.conftest import create_org, register_and_login, sample_png
 
 

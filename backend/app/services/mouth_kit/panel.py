@@ -8,8 +8,13 @@ import json
 import logging
 from collections import OrderedDict
 
-from app.core.errors import AppError, Conflict409, Forbidden403, NotFound404
-from app.services import imagegen, mouth, performance_kit
+from app.core.errors import AppError, Conflict409, Forbidden403, NotFound404, Validation422
+from app.db import get_session_factory
+from app.models import AvatarKind, AvatarStatus
+from app.services import consent, disclosure, imagegen, mouth, mouth_photo, performance_kit
+from app.services import mouth as mouth_config
+from app.services.consent import ai_switched_off
+from app.services.edit_locks import avatar_edits
 from app.services.jobs import DONE, FAILED, QUEUED, Job, run_cpu, runner
 from app.services.mouth_kit.calls import (
     FIT_LABEL,
@@ -24,6 +29,9 @@ from app.services.mouth_kit.calls import (
 )
 from app.services.mouth_kit.records import _TEETH_NOTE_CODES
 from app.services.mouth_kit.storing import _load_avatar, store
+from app.services.publishing import mark_dirty
+from app.services.storage import get_storage
+from app.services.usage import check_image_limit
 
 logger = logging.getLogger("liveface.mouth_kit")
 
@@ -108,9 +116,6 @@ async def _run(job: Job, params: dict) -> None:
 def _require_person(avatar) -> None:
     """What the panel's action needs of the avatar, again at run time: a
     ready photo avatar of a person, with its picture and rig."""
-    from app.core.errors import Validation422
-    from app.models import AvatarKind, AvatarStatus
-
     if avatar is None:
         raise NotFound404("Avatar not found", code="avatar_not_found")
     if avatar.kind != AvatarKind.photo or avatar.status != AvatarStatus.ready:
@@ -132,14 +137,6 @@ async def _make_for_avatar(job: Job, params: dict) -> None:
     instead (unless the owner has their own teeth: then there is nothing it
     could bring). A kit with no shape of the person's own fails: the owner
     asked for their mouth shapes, and the draft keeps the ones it has."""
-    from app.db import get_session_factory
-    from app.services import consent
-    from app.services.consent import ai_switched_off
-    from app.services.edit_locks import avatar_edits
-    from app.services.publishing import mark_dirty
-    from app.services.storage import get_storage
-    from app.services.usage import check_image_limit
-
     org_id, avatar_id, consent_id = job.org_id, job.subject_id, params["consent_id"]
     storage = get_storage()
     # Read again now: the job may have waited behind others.
@@ -229,8 +226,6 @@ def _require_mouth(avatar) -> None:
     a face the photographic mouth is for, with its picture and rig. Its
     picture may have been cropped meanwhile, or its points re-marked or
     re-detected: the kit follows the face, which is the same."""
-    from app.core.errors import Validation422
-
     if not mouth.renderer_allowed("continuous", avatar.face_type):
         raise Validation422(
             "The photographic mouth draws human teeth, so it is only for human faces",
@@ -258,12 +253,6 @@ async def _teeth_alone(job: Job, org_id: str, avatar_id: str, picture: bytes, se
     the panel can still make where the kit cannot be made. The photo is
     registered by its own landmarks, so whatever happened to the portrait
     meanwhile, it is the person's teeth."""
-    from app.db import get_session_factory
-    from app.services import mouth_photo
-    from app.services.edit_locks import avatar_edits
-    from app.services.publishing import mark_dirty
-    from app.services.storage import get_storage
-
     storage = get_storage()
     job.report(0.1, TEETH_LABEL)
     try:
@@ -278,9 +267,9 @@ async def _teeth_alone(job: Job, org_id: str, avatar_id: str, picture: bytes, se
             return
         _require_mouth(avatar)
         previous = await mouth_photo.store(
-            avatar, storage, made.photo, made.rig, mouth_photo.ai_teeth_record(made.model)
+            avatar, storage, made.photo, made.rig, mouth_config.ai_teeth_record(made.model)
         )
-        avatar.ai_edited = mouth_photo.with_ai_teeth(avatar.ai_edited, made.model)
+        avatar.ai_edited = disclosure.with_ai_teeth(avatar.ai_edited, made.model)
         mark_dirty(avatar)
         await db.commit()
     job.report(1.0, SAVE_LABEL)

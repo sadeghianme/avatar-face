@@ -35,6 +35,11 @@ from typing import cast
 
 import numpy as np
 from PIL import Image
+from scipy import ndimage
+
+from app.services.matting import refine_matte
+from app.services.photo_adjust import rgb_to_lab
+from app.services.photo_io import png_bytes
 
 logger = logging.getLogger("liveface.backdrop")
 
@@ -61,8 +66,6 @@ MIN_CENTRE_SUBJECT = 0.6
 
 
 def _lab(rgb: np.ndarray) -> np.ndarray:
-    from app.services.photo_adjust import rgb_to_lab
-
     return rgb_to_lab(rgb.astype(np.float64))
 
 
@@ -79,8 +82,6 @@ def _edge_band(height: int, width: int) -> np.ndarray:
 
 def _connected(candidate: np.ndarray, edge: np.ndarray) -> np.ndarray:
     """The candidate pixels connected to the frame's edge band."""
-    from scipy import ndimage
-
     # scipy types label() as returning a count alone, which it does only
     # when given an output array; without one it is (labels, count).
     labels, _ = cast(tuple[np.ndarray, int], ndimage.label(candidate))
@@ -116,8 +117,6 @@ def _smooth_backdrop(lab: np.ndarray, backdrop: np.ndarray) -> np.ndarray:
 def backdrop_mask(rgb: np.ndarray) -> np.ndarray | None:
     """HxW bool, True on the backdrop; None when there is no plain backdrop
     to cut, or cutting it would not leave a subject."""
-    from scipy import ndimage
-
     height, width = rgb.shape[:2]
     lab = _lab(rgb)
     edge = _edge_band(height, width)
@@ -173,15 +172,11 @@ def backdrop_mask(rgb: np.ndarray) -> np.ndarray | None:
 def cut_backdrop(data: bytes) -> bytes | None:
     """A PNG of `data` with its plain backdrop made transparent, or None
     when it has no plain backdrop to cut (the caller keeps the picture)."""
-    from app.services.matting import refine_matte
-    from app.services.photo_io import png_bytes
-
     with Image.open(io.BytesIO(data)) as opened:
         rgb = np.asarray(opened.convert("RGB"))
     backdrop = backdrop_mask(rgb)
     if backdrop is None:
         return None
-    from scipy import ndimage
 
     subject = ~backdrop
     alpha, colour = refine_matte(rgb, subject.astype(np.float32))

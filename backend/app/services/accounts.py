@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.errors import Auth401, Conflict409
-from app.core.security import hash_password, verify_password
+from app.core.security import hash_password_async, verify_password_async
 from app.models import User
 from app.services.email import reset_email
 from app.services.email import send as send_email
@@ -55,7 +55,7 @@ async def register(
     user = User(
         email=email.lower(),
         username=username,
-        password_hash=hash_password(password),
+        password_hash=await hash_password_async(password),
         display_name=display_name or username,
     )
     db.add(user)
@@ -64,14 +64,19 @@ async def register(
 
 
 async def login(db: AsyncSession, username_or_email: str, password: str) -> User:
-    """The user these credentials sign in; one 401 for every way they do not."""
+    """The user these credentials sign in; one 401 for every way they do not.
+
+    An unknown name costs a password check too (against a dummy hash), so
+    the time an answer takes does not say whether the account exists.
+    """
     identifier = username_or_email.strip()
     user = (
         await db.execute(
             select(User).where(or_(User.email == identifier.lower(), User.username == identifier))
         )
     ).scalar_one_or_none()
-    if user is None or not verify_password(password, user.password_hash):
+    matched = await verify_password_async(password, user.password_hash if user else None)
+    if user is None or not matched:
         raise Auth401("Invalid credentials", code="invalid_credentials")
     return user
 
@@ -128,6 +133,6 @@ async def reset_password(db: AsyncSession, token: str, password: str) -> User:
     if not hmac.compare_digest(token_fingerprint, hash_fingerprint(user.password_hash)):
         raise Auth401("This reset link has already been used", code="reset_token_used")
 
-    user.password_hash = hash_password(password)
+    user.password_hash = await hash_password_async(password)
     await db.commit()
     return user

@@ -30,7 +30,7 @@ The routes do HTTP only: what each request does is services.creations
 
 from __future__ import annotations
 
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Form, Response, UploadFile
 
@@ -38,6 +38,7 @@ from app.api.deps import DB, OrgMember
 from app.core.config import get_settings
 from app.core.errors import Validation422
 from app.models import Creation, CreationStatus, Organization
+from app.models.shapes import CropRect, JobRecord
 from app.schemas.avatar import FaceType, FitReason
 from app.schemas.creation import (
     AdjustRequest,
@@ -58,6 +59,7 @@ from app.schemas.creation import (
     FinishRequest,
     FinishWarning,
     GenerateCreationRequest,
+    JobError,
     JobOut,
     JobProgress,
     PlanOut,
@@ -66,12 +68,14 @@ from app.schemas.creation import (
     PreviewRigRequest,
     RetryRequest,
     StepOut,
+    Validation,
     VersionRequest,
 )
 from app.services import creations as svc
-from app.services import orgs, wizard
-from app.services.creations import edits, new, repo, requests
+from app.services import imagegen, orgs, wizard
+from app.services.creations import edits, new, repo, requests, rules
 from app.services.jobs import ACTIVE_STATES, runner
+from app.services.photo_adjust import MODES_BY_LINE, ROUNDS_PER_CREATION
 from app.services.storage import get_storage
 
 router = APIRouter(prefix="/orgs/{org_id}/creations", tags=["creations"])
@@ -82,16 +86,18 @@ LIST_LIMIT = 50
 # --- Output ---------------------------------------------------------------------
 
 
-def _job_out(record: dict | None) -> JobOut | None:
+def _job_out(record: JobRecord | None) -> JobOut | None:
     if not record:
         return None
     live = runner.get(record["id"])
     progress = live.progress() if live and record["state"] in ACTIVE_STATES else None
+    error = record.get("error")
     return JobOut(
         id=record["id"],
-        step=record["step"],
+        # One of JobOut's steps: the job runner keeps it as a str.
+        step=cast("Any", record["step"]),
         state=record["state"],
-        error=record.get("error"),
+        error=JobError(**error) if error else None,
         started_at=record["started_at"],
         progress=JobProgress.model_validate(progress) if progress is not None else None,
         retryable=svc.retryable(record),
@@ -103,8 +109,6 @@ def _background_offer(creation: Creation) -> BackgroundOffer:
 
 
 def _ai_out(creation: Creation, org: Organization | None, recommendation: dict | None) -> AiOut:
-    from app.services.photo_adjust import MODES_BY_LINE, ROUNDS_PER_CREATION
-
     usage = svc.ai_usage_of(creation)
     face_type = creation.face_type
     modes = list(MODES_BY_LINE.get(face_type, ())) if face_type else []
@@ -136,8 +140,6 @@ def _ai_out(creation: Creation, org: Organization | None, recommendation: dict |
 def _auto_adjust(creation: Creation) -> AutoAdjustOut | None:
     """services.creations.auto_adjust_of, while nothing else runs and the
     server can make it."""
-    from app.services import imagegen
-
     if (creation.job or {}).get("state") in ACTIVE_STATES or creation.status != CreationStatus.draft:
         return None
     offer = svc.auto_adjust_of(creation)
@@ -178,7 +180,7 @@ async def _out(db: DB, creation: Creation) -> CreationOut:
             image_size=creation.anchors["image_size"],
             detected=bool(creation.anchors.get("detected")),
             marks=creation.anchors.get("marks") or {},
-            validation=creation.anchors["validation"],
+            validation=Validation.model_validate(creation.anchors["validation"]),
         )
     plan = wizard.plan_of(creation.steps)
     return CreationOut(
@@ -248,8 +250,8 @@ async def create_creation(
     line_or_given = line if line is not None else face_type
     if file.content_type not in get_settings().allowed_image_types:
         raise Validation422("Choose a JPEG, PNG or WebP photo", code="unsupported_image_type")
-    data = await file.read(svc.MAX_UPLOAD_BYTES + 1)
-    if len(data) > svc.MAX_UPLOAD_BYTES:
+    data = await file.read(rules.MAX_UPLOAD_BYTES + 1)
+    if len(data) > rules.MAX_UPLOAD_BYTES:
         raise Validation422("Photo must be 15 MB or smaller", code="image_too_large")
     creation = await new.create_from_upload(
         db, ctx.org.id, ctx.membership.user_id, data, file.content_type, line_or_given, steps
@@ -304,7 +306,9 @@ async def update_creation(
     the AI results (made from the old frame) and the marks.
     """
     creation = await repo.get(db, ctx.org.id, creation_id)
-    crop = body.crop.model_dump() if body.crop else None
+    crop: CropRect | None = None
+    if body.crop:
+        crop = {"x": body.crop.x, "y": body.crop.y, "w": body.crop.w, "h": body.crop.h}
     if not await edits.frame_or_line(db, creation, crop, body.roll, body.face_type):
         return await _out(db, creation)
     return await _reloaded(db, creation)
@@ -456,12 +460,12 @@ async def preview_rig(
     """The rig finish would build from these marks, with the validator's
     reasons. Nothing is saved.
 
-    Computed inline rather than as a job: a fit is tens of milliseconds, the
+    Computed per request rather than as a job: a fit is milliseconds, the
     same call the avatar rig-fit preview makes on every drag, and queueing it
     behind someone's background removal would make the handles lag.
     """
     creation = await repo.get(db, ctx.org.id, creation_id)
-    rig, problems = requests.preview_rig(creation, body)
+    rig, problems = await requests.preview_rig(creation, body)
     return PreviewRigOut(
         rig=rig,
         reasons=[FitReason(code=p.code, detail=p.detail, count=p.count) for p in problems],
@@ -493,7 +497,7 @@ async def finish_creation(
     organization allows third-party AI and this member has agreed to send
     photos to Google, is "prepared" before it is published: its own mouth
     shapes, its teeth and a mouth profile fitted to it, made by AI from the
-    chosen picture and the confirmed points (services.creations._own_mouth,
+    chosen picture and the confirmed points (services.creations.mouth.own_mouth,
     services.mouth_kit; the job's progress counts the shapes, and the
     avatar's `mouth.kit` and `mouth.teeth` say what was made, or why not).
     `warnings` names what the picture will still show around the mouth

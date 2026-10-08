@@ -9,7 +9,8 @@ again or chooses.
 
 import json
 
-from app.services.mouth import character_style, clean_character, public_view
+from app.api.avatars.presenting import mouth_view
+from app.services.mouth import character_style, clean_character
 from tests.test_rig_fit_api import _anchors, _fit, _rig, _setup
 
 CHARACTER = {"style": "character", "teeth": "none", "tongue": False, "jaw": 1.3}
@@ -28,8 +29,8 @@ def test_settings_are_clamped_and_unknown_keys_dropped():
 
 def test_the_owner_is_told_their_settings_and_the_style_defaults_to_the_character_mouth():
     raw = json.dumps({"renderer": "classic", "profile": {}, "character": CHARACTER})
-    assert public_view(raw)["character"] == CHARACTER
-    assert public_view(json.dumps({"renderer": "classic", "profile": {}}))["character"] is None
+    assert mouth_view(raw)["character"] == CHARACTER
+    assert mouth_view(json.dumps({"renderer": "classic", "profile": {}}))["character"] is None
     assert character_style(None) == "character"
     assert character_style(json.dumps({"renderer": "classic", "character": {"style": "classic"}})) == "classic"
 

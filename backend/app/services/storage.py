@@ -14,11 +14,15 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import os
+import shutil
 import time
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from stat import S_ISREG
 from typing import Any
 from urllib.parse import quote, urlencode
+from uuid import uuid4
 
 import aioboto3
 import aiohttp
@@ -151,6 +155,11 @@ class LocalStorage(Storage):
     async def presign_get(self, key: str) -> str:
         return self._url("GET", key)
 
+    # Every filesystem call below runs on a worker thread (asyncio.to_thread):
+    # in production this class serves every texture, rig and audio file a
+    # visitor loads, and a disk that stalls must stall that one request, not
+    # the event loop every other widget is waiting on.
+
     async def put_bytes(self, key: str, data: bytes, content_type: str) -> None:
         """Write via a temporary file and an atomic rename.
 
@@ -161,8 +170,9 @@ class LocalStorage(Storage):
         the same directory because a rename is only atomic within one
         filesystem.
         """
-        from uuid import uuid4
+        await asyncio.to_thread(self._write, key, data)
 
+    def _write(self, key: str, data: bytes) -> None:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         # Opened by name rather than through mkstemp, whose 0600 mode would
@@ -177,24 +187,47 @@ class LocalStorage(Storage):
             raise
 
     async def get_bytes(self, key: str) -> bytes:
-        return self._path(key).read_bytes()
+        return await asyncio.to_thread(lambda: self._path(key).read_bytes())
 
     async def exists(self, key: str) -> bool:
-        return self._path(key).is_file()
+        return await asyncio.to_thread(lambda: self._path(key).is_file())
+
+    async def file(self, key: str) -> tuple[Path, os.stat_result] | None:
+        """The file behind `key` and its stat, or None when there is none.
+
+        For serving it in chunks (api.storage_routes) rather than reading it
+        whole: the path is checked once, here, and the stat handed on so the
+        response does not take it again.
+        """
+
+        def find() -> tuple[Path, os.stat_result] | None:
+            path = self._path(key)
+            try:
+                stat = path.stat()
+            except FileNotFoundError:
+                return None
+            return (path, stat) if S_ISREG(stat.st_mode) else None
+
+        return await asyncio.to_thread(find)
 
     async def list_names(self, prefix: str) -> list[str]:
         _check_prefix(prefix)
-        folder = self._path(prefix)
-        if not folder.is_dir():
-            return []
-        # A write in progress is a hidden temporary file (put_bytes).
-        return [entry.name for entry in folder.iterdir() if not entry.name.startswith(".")]
+
+        def names() -> list[str]:
+            folder = self._path(prefix)
+            if not folder.is_dir():
+                return []
+            # A write in progress is a hidden temporary file (put_bytes).
+            return [entry.name for entry in folder.iterdir() if not entry.name.startswith(".")]
+
+        return await asyncio.to_thread(names)
 
     async def sweep(self, prefix: str, older_than_seconds: int, must_contain: str) -> int:
-        import time
-
         if not must_contain:
             raise ValueError("must_contain is required — see Storage.sweep")
+        return await asyncio.to_thread(self._sweep, prefix, older_than_seconds, must_contain)
+
+    def _sweep(self, prefix: str, older_than_seconds: int, must_contain: str) -> int:
         root = (self.root / prefix).resolve()
         if not root.is_relative_to(self.root.resolve()) or not root.exists():
             return 0
@@ -212,20 +245,25 @@ class LocalStorage(Storage):
         return removed
 
     async def delete(self, key: str) -> None:
-        path = self._path(key)
-        if path.is_file():
-            path.unlink()
+        def remove() -> None:
+            path = self._path(key)
+            if path.is_file():
+                path.unlink()
+
+        await asyncio.to_thread(remove)
 
     async def delete_prefix(self, prefix: str) -> int:
-        import shutil
-
         _check_prefix(prefix)
-        folder = self._path(prefix)
-        if folder == self.root.resolve() or not folder.is_dir():
-            return 0
-        removed = sum(1 for path in folder.rglob("*") if path.is_file())
-        shutil.rmtree(folder)
-        return removed
+
+        def remove() -> int:
+            folder = self._path(prefix)
+            if folder == self.root.resolve() or not folder.is_dir():
+                return 0
+            removed = sum(1 for path in folder.rglob("*") if path.is_file())
+            shutil.rmtree(folder)
+            return removed
+
+        return await asyncio.to_thread(remove)
 
 
 class S3Storage(Storage):
@@ -309,8 +347,6 @@ class S3Storage(Storage):
         return removed
 
     async def sweep(self, prefix: str, older_than_seconds: int, must_contain: str) -> int:
-        from datetime import datetime, timedelta
-
         if not must_contain:
             raise ValueError("must_contain is required — see Storage.sweep")
         cutoff = datetime.now(UTC) - timedelta(seconds=older_than_seconds)

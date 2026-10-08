@@ -63,6 +63,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.errors import Forbidden403, NotFound404, Validation422
+from app.db import get_session_factory
 from app.models import Consent, Creation, Organization
 from app.services.ai_models import PROVIDER as GOOGLE
 
@@ -119,8 +120,6 @@ async def ai_switched_off(org_id: str) -> bool:
     """Has the organization turned third-party AI off? Read in a session of
     its own, so work that waited (a queued job, a provider call 90 s after
     the last) asks the database as it is now, not as its request saw it."""
-    from app.db import get_session_factory
-
     async with get_session_factory()() as db:
         enabled = (
             await db.execute(

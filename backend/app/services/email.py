@@ -18,6 +18,8 @@ import logging
 
 import httpx
 
+from app.core.config import get_settings
+
 logger = logging.getLogger("liveface.email")
 
 API_URL = "https://api.resend.com/emails"
@@ -25,8 +27,6 @@ TIMEOUT_SECONDS = 10
 
 
 def configured() -> bool:
-    from app.core.config import get_settings
-
     settings = get_settings()
     return bool(settings.resend_api_key and settings.email_from)
 
@@ -37,8 +37,6 @@ async def send(to: str, subject: str, html: str, text: str) -> bool:
     Both a text and an HTML part: some clients show the text, and a reset mail
     with no plain-text alternative is more likely to be filtered.
     """
-    from app.core.config import get_settings
-
     settings = get_settings()
     if not configured():
         # Loud, because in production this means password reset is silently

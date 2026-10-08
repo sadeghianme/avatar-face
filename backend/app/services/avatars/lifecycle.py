@@ -1,7 +1,7 @@
 """An avatar's way through processing, publishing and sharing: the state
 changes the owner asks for, each refused where it does not apply.
 
-Building the rig itself is a background task (services.rig.process_avatar)
+Building the rig itself is a background task (services.avatars.build.process_avatar)
 the route schedules once these say it may run.
 """
 

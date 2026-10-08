@@ -19,11 +19,13 @@ transparent PNG we write, so a cut-out holds nothing but the cut-out.
 from __future__ import annotations
 
 import io
+import math
 
 import numpy as np
 from PIL import Image, ImageOps
 
 from app.core.errors import Validation422
+from app.models.shapes import CropRect
 
 # Header-checked before decode: a guard against decompression bombs, not a
 # photo-size policy. It sits above every camera a customer is likely to hold
@@ -139,7 +141,7 @@ def ingest_photo(data: bytes, max_edge: int | None = None) -> bytes:
         raise Validation422("That file is not a readable photo", code="unreadable_image") from exc
 
 
-def frame_photo(data: bytes, crop: dict[str, float], roll: float = 0.0) -> Image.Image:
+def frame_photo(data: bytes, crop: CropRect, roll: float = 0.0) -> Image.Image:
     """The crop of a stored photo, levelled by `roll` degrees.
 
     `crop` is {x, y, w, h} in fractions of the photo. `roll` is the tilt to
@@ -153,8 +155,6 @@ def frame_photo(data: bytes, crop: dict[str, float], roll: float = 0.0) -> Image
     corner would be a new edge for the rig to tear on); a transparent one
     stays transparent there, which is what its edge already is.
     """
-    import math
-
     with Image.open(io.BytesIO(data)) as source:
         transparent = has_alpha(source)
         image = source.convert("RGBA" if transparent else "RGB")

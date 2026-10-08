@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 from PIL import Image
 
+from app.services import imagegen, photo_adjust
 from app.services.performance_kit.constants import TEETH
 from app.services.performance_kit.prompts import POSE_PROMPTS, request_prompt
 
@@ -54,8 +55,6 @@ class _Crop:
 def _base_image(base_png: bytes) -> Image.Image:
     """What the model and the detector are shown: a cut-out on the neutral
     grey (photo_adjust's own decoding, so a kit sees what AI adjust sees)."""
-    from app.services import photo_adjust
-
     return photo_adjust._rgb(base_png)
 
 
@@ -75,8 +74,6 @@ def head_square(
     (PoseRequest.to_base) and put the mouth 0.1-0.2 mouth widths off while
     passing every guard. A square is answered as a square, and an answer
     that is not is refused (register_answer, aspect_changed)."""
-    from app.services import photo_adjust
-
     x0, y0, x1, y1 = (float(int(round(v))) for v in photo_adjust.head_crop_box(image_size, points))
     if (x0, y0, x1, y1) == (0.0, 0.0, float(image_size[0]), float(image_size[1])):
         return None
@@ -88,8 +85,6 @@ def head_square(
 def _crop(image: Image.Image, points: np.ndarray, kind: str) -> _Crop | None:
     """The picture sent for `kind`, reusing AI adjust's crops, both square.
     None when the head crop would be the whole photo (head_square)."""
-    from app.services import imagegen, photo_adjust
-
     if kind == FACE_CROP:
         x0, y0, side = photo_adjust.face_crop_box(points)
         payload = photo_adjust._jpeg(photo_adjust.crop_face(image, (x0, y0, side)),

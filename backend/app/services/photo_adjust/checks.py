@@ -11,6 +11,9 @@ from dataclasses import dataclass, field
 import numpy as np
 from PIL import Image
 
+from app.models.shapes import AdjustChecks, Note
+from app.services import imagegen
+from app.services.anchors import detect_anchors
 from app.services.photo_adjust.paste import (
     _hull_mask,
     delta_e,
@@ -35,6 +38,7 @@ from app.services.photo_adjust.sending import (
     _own_rgb,
     _rgb,
 )
+from app.services.photo_io import on_backdrop, png_bytes
 
 logger = logging.getLogger("liveface.photo_adjust")
 
@@ -71,16 +75,14 @@ class Candidate:
     png: bytes | None
     width: int = 0
     height: int = 0
-    rejected: dict | None = None
+    rejected: Note | None = None
     generated_eyes: bool = False
-    checks: dict = field(default_factory=dict)
+    checks: AdjustChecks = field(default_factory=lambda: AdjustChecks())
     # A touch-up of a cut-out is a cut-out: transparent where the source was.
     cutout: bool = False
 
 
 def _png(image: Image.Image) -> bytes:
-    from app.services.photo_io import png_bytes
-
     return png_bytes(image)
 
 
@@ -93,8 +95,6 @@ def _checked(
     generated_eyes: bool,
 ) -> Candidate:
     """Run the checks on a candidate image and package it."""
-    from app.services.creations import detect_anchors
-
     png = _png(image)
     candidate = Candidate(png, image.width, image.height, generated_eyes=generated_eyes)
     # The line the result will be rigged on: a stylised person is animation.
@@ -121,8 +121,6 @@ def _checked(
             )
             return candidate
         if line == "human":
-            from app.services.photo_io import on_backdrop
-
             # Like with like: the source is judged on the grey the model
             # saw, so a cut-out candidate is too (not on the black under
             # its alpha 0).
@@ -208,8 +206,6 @@ def generation_prompt(style: str, face_type: str | None, prompt: str, has_source
     An animal or a character is asked for in the same terms, since the rig
     needs the same things of them: frontal, both eyes, mouth closed.
     """
-    from app.services import imagegen
-
     if face_type == "human":
         return imagegen.build_prompt(style, has_source, prompt)
     look = imagegen.STYLES.get(style, imagegen.STYLES["photoreal"])

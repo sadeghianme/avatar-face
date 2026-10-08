@@ -31,6 +31,16 @@ from __future__ import annotations
 import io
 import logging
 
+import numpy as np
+from PIL import Image
+
+from app.models import Avatar
+from app.services import segment
+from app.services.jobs import run_cpu
+from app.services.matting import _box_mean
+from app.services.photo_io import png_bytes
+from app.services.storage import Storage
+
 logger = logging.getLogger("liveface.layers")
 
 LAYER_FILES = ("background", "body", "head")
@@ -51,12 +61,6 @@ def build_layers(image_bytes: bytes, face_box: list[float]) -> dict[str, bytes]:
     renderer places them with the exact transform it uses for the photo.
     Raises on any failure — the caller treats layers as strictly optional.
     """
-    import numpy as np
-    from PIL import Image
-
-    from app.services.photo_io import png_bytes
-    from app.services.segment import person_matte
-
     source = Image.open(io.BytesIO(image_bytes))
     had_alpha = source.mode in ("RGBA", "LA", "PA")
 
@@ -99,7 +103,7 @@ def build_layers(image_bytes: bytes, face_box: list[float]) -> dict[str, bytes]:
         # paints a dark ellipse into the picture. That ring was visible around
         # the head on the first real photo tested.
         raw = np.asarray(source.convert("RGB")).astype(np.float32)
-        unmixed, fill_alpha = person_matte(image_bytes)
+        unmixed, fill_alpha = segment.person_matte(image_bytes)
         alpha = np.maximum(fill_alpha, prior)
         # Un-mixed colour only inside the true silhouette, where it is what
         # makes a cut-out edge clean. Where only the prior says "person" —
@@ -162,10 +166,6 @@ def _diffuse_fill(rgb, alpha):
     not the global-average grey a single wide pass degrades to (which read
     as a dark smudge whenever the head moved).
     """
-    import numpy as np
-
-    from app.services.matting import _box_mean
-
     height, width = alpha.shape
     known = (alpha < 0.02).astype(np.float32)
     filled = rgb.copy()
@@ -187,15 +187,15 @@ def layer_key(org_id: str, avatar_id: str, name: str) -> str:
     return f"orgs/{org_id}/avatars/{avatar_id}/layers/{name}.{ext}"
 
 
-async def store_layers(avatar, storage, image_bytes: bytes, face_box: list[float]) -> bool:
+async def store_layers(
+    avatar: Avatar, storage: Storage, image_bytes: bytes, face_box: list[float]
+) -> bool:
     """Build and upload the layer set; True on success.
 
     Failures are logged and swallowed: layers are an enhancement, and every
     caller must be correct without them (no segmenter model, seg failure,
     weird geometry). has_layers is the caller's to set from the result.
     """
-    from app.services.jobs import run_cpu
-
     try:
         # Segmentation, matting and the backdrop fill: seconds of CPU, on
         # the shared CPU thread rather than the event loop.
@@ -219,7 +219,7 @@ async def store_layers(avatar, storage, image_bytes: bytes, face_box: list[float
     return True
 
 
-async def draft_layer_urls(avatar, storage) -> dict[str, str] | None:
+async def draft_layer_urls(avatar: Avatar, storage: Storage) -> dict[str, str] | None:
     """Presigned URLs of the background/body/head decomposition, if built.
 
     The background is absent for cut-outs (nothing behind them); the widget

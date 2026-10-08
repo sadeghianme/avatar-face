@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, BackgroundTasks, Response
 from pydantic import BaseModel, Field
 
+from app.api.avatars.presenting import avatar_out
 from app.api.deps import DB, OrgMember
 from app.core.config import get_settings
 from app.core.errors import NotFound404
-from app.models import Avatar
 from app.schemas.avatar import AvatarOut
 from app.services.avatars import repo as avatars
-from app.services.rig import process_avatar
+from app.services.avatars.build import process_avatar
 from app.services.stock import STOCK_STYLES, get_stock_image
 
 router = APIRouter(tags=["stock"])
@@ -37,7 +39,8 @@ async def list_stock_avatars() -> list[StockAvatarOut]:
 
 @router.get("/stock-avatars/{style_id}.png")
 async def stock_avatar_image(style_id: str) -> Response:
-    data = get_stock_image(style_id)
+    # Drawn and PNG-encoded on first use per style, then cached: a thread.
+    data = await asyncio.to_thread(get_stock_image, style_id)
     if data is None:
         raise NotFound404("Unknown stock avatar", code="stock_not_found")
     return Response(
@@ -50,8 +53,8 @@ async def stock_avatar_image(style_id: str) -> Response:
 @router.post("/orgs/{org_id}/avatars/from-stock", response_model=AvatarOut, status_code=201)
 async def create_from_stock(
     body: FromStockRequest, ctx: OrgMember, db: DB, background: BackgroundTasks
-) -> Avatar:
-    data = get_stock_image(body.stock_id)
+) -> AvatarOut:
+    data = await asyncio.to_thread(get_stock_image, body.stock_id)
     if data is None:
         raise NotFound404("Unknown stock avatar", code="stock_not_found")
     style = next(s for s in STOCK_STYLES if s.id == body.stock_id)
@@ -65,4 +68,4 @@ async def create_from_stock(
         content_type="image/png",
     )
     background.add_task(process_avatar, avatar.id)
-    return avatar
+    return avatar_out(avatar)

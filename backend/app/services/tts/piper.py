@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING
 
 from app.core.config import get_settings
 from app.services.tts.base import SynthesisResult, TTSProvider, Voice
-from app.services.tts.visemes import cues_from_text
+from app.services.tts.timing import cues_from_text
 
 if TYPE_CHECKING:
     from piper import PiperVoice
@@ -78,6 +78,7 @@ def _get_voice(stem: str):
     only the handful in CATALOGUE are ever loadable."""
     with _load_lock:
         if stem not in _voices:
+            # Piper's runtime (onnx, espeak data): loaded with the first voice.
             from piper import PiperVoice
 
             _voices[stem] = PiperVoice.load(_model_path(stem))
@@ -124,7 +125,9 @@ class PiperTTSProvider(TTSProvider):
             # The voice's own locale, not the caller's: the phonemes that
             # produced this audio are that language's, so the visemes must be
             # derived the same way or the mouth drifts from the sound.
-            cues=cues_from_text(text, duration_ms, voice_locale, audio=audio),
+            cues=await asyncio.to_thread(
+                cues_from_text, text, duration_ms, voice_locale, audio=audio
+            ),
         )
 
 

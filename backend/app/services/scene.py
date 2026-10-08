@@ -29,10 +29,25 @@ back by Discard, and swept with the draft's other orphans.
 from __future__ import annotations
 
 import io
+import logging
 import re
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, cast
+from uuid import uuid4
+
+from PIL import Image, UnidentifiedImageError
 
 from app.core.errors import Validation422
+from app.models.shapes import (
+    OwnerScene,
+    OwnerSceneBackground,
+    SceneBackground,
+    SceneConfig,
+    SceneKind,
+    VisitorScene,
+    VisitorSceneBackground,
+)
+from app.services.storage import STORAGE_ERRORS, Storage
 
 ZOOM_MAX = 1.3
 KINDS = ("transparent", "color", "image")
@@ -47,7 +62,7 @@ IMAGE_QUALITY = 82
 SCENE_FILE = re.compile(r"scene-[A-Za-z0-9-]+\.webp")
 
 
-def from_framing(framing: str | None) -> dict:
+def from_framing(framing: str | None) -> SceneConfig:
     """The scene an avatar without one renders by: its framing, nothing
     behind it."""
     return {
@@ -57,20 +72,21 @@ def from_framing(framing: str | None) -> dict:
     }
 
 
-def framing_of(scene: dict) -> str:
+def framing_of(scene: SceneConfig) -> str:
     """The `framing` a scene amounts to, for clients that read only that."""
     return "full" if float(scene.get("zoom", 1.0)) < 0.5 else "face"
 
 
-def load(avatar: Any) -> dict | None:
+def load(avatar: Any) -> SceneConfig | None:
     """The avatar's stored scene, or None for one made before scenes."""
     value = getattr(avatar, "scene_config", None)
     if not isinstance(value, dict) or "zoom" not in value:
         return None
-    return value
+    # As `clean` stored it.
+    return cast(SceneConfig, value)
 
 
-def effective(avatar: Any) -> dict:
+def effective(avatar: Any) -> SceneConfig:
     """The scene the avatar renders by: its own, or its framing's."""
     return load(avatar) or from_framing(getattr(avatar, "framing", "face"))
 
@@ -85,7 +101,7 @@ def _number(value: Any, lo: float, hi: float, name: str) -> float:
     return round(n, 4)
 
 
-def clean(value: dict, image_key: str | None) -> dict:
+def clean(value: Mapping[str, Any], image_key: str | None) -> SceneConfig:
     """A scene as the owner sent it (zoom, pan, background kind and colour),
     checked and tidied for storage. `image_key` is the picture the draft
     already holds, if any: the owner never names keys, only the kind, and a
@@ -102,79 +118,87 @@ def clean(value: dict, image_key: str | None) -> dict:
     kind = background.get("kind", "transparent")
     if kind not in KINDS:
         raise ValueError("background kind must be transparent, color or image")
-    cleaned: dict = {
+    kept: SceneBackground = {"kind": cast(SceneKind, kind)}  # one of KINDS, checked above
+    cleaned: SceneConfig = {
         "zoom": zoom,
         "pan": {
             "x": _number(pan.get("x", 0.0), -1.0, 1.0, "pan.x"),
             "y": _number(pan.get("y", 0.0), -1.0, 1.0, "pan.y"),
         },
-        "background": {"kind": kind},
+        "background": kept,
     }
     if kind == "color":
         color = str(background.get("color", "")).strip().lower()
         if not _HEX.match(color):
             raise ValueError("color must be #rrggbb")
-        cleaned["background"]["color"] = color
+        kept["color"] = color
     if kind == "image":
         if not image_key:
             raise ValueError("no background picture has been uploaded")
-        cleaned["background"]["image_key"] = image_key
+        kept["image_key"] = image_key
     elif image_key:
         # The picture stays stored while another kind is shown, so choosing
         # "image" again needs no new upload; removing it is its own action.
-        cleaned["background"]["image_key"] = image_key
+        kept["image_key"] = image_key
     return cleaned
 
 
-def with_zoom(scene: dict, zoom: float) -> dict:
-    return {**scene, "zoom": _number(zoom, 0.0, ZOOM_MAX, "zoom")}
+def with_zoom(scene: SceneConfig, zoom: float) -> SceneConfig:
+    zoomed = scene.copy()
+    zoomed["zoom"] = _number(zoom, 0.0, ZOOM_MAX, "zoom")
+    return zoomed
 
 
-def image_key_of(scene: dict | None) -> str | None:
+def image_key_of(scene: SceneConfig | None) -> str | None:
     return ((scene or {}).get("background") or {}).get("image_key") or None
 
 
-def shows_image(scene: dict | None) -> bool:
+def shows_image(scene: SceneConfig | None) -> bool:
     background = (scene or {}).get("background") or {}
     return background.get("kind") == "image" and bool(background.get("image_key"))
 
 
-def public_view(scene: dict | None) -> dict | None:
+def public_view(scene: SceneConfig | None) -> OwnerScene | None:
     """The owner's view: the numbers, the kind and the colour, and whether a
     picture is stored, never where."""
     if not isinstance(scene, dict) or "zoom" not in scene:
         return None
-    background = scene.get("background") or {}
-    view: dict = {
-        "zoom": scene.get("zoom", 1.0),
-        "pan": dict(scene.get("pan") or {"x": 0.0, "y": 0.0}),
-        "background": {"kind": background.get("kind", "transparent"), "has_image": bool(background.get("image_key"))},
+    background = scene.get("background")
+    pan = scene.get("pan")
+    shown: OwnerSceneBackground = {
+        "kind": background.get("kind", "transparent") if background else "transparent",
+        "has_image": bool(background and background.get("image_key")),
     }
-    if background.get("color"):
-        view["background"]["color"] = background["color"]
-    return view
+    if background and (color := background.get("color")):
+        shown["color"] = color
+    return {
+        "zoom": scene.get("zoom", 1.0),
+        "pan": pan.copy() if pan else {"x": 0.0, "y": 0.0},
+        "background": shown,
+    }
 
 
-async def visitor_view(scene: dict | None, storage) -> dict | None:
+async def visitor_view(scene: SceneConfig | None, storage: Storage) -> VisitorScene | None:
     """What an engine renders: the numbers, and for a picture its presigned
     URL (a kind "image" whose file is gone shows as transparent, which is
     what the engine does with a picture that fails to load)."""
     if not isinstance(scene, dict) or "zoom" not in scene:
         return None
-    background = scene.get("background") or {}
-    kind = background.get("kind", "transparent")
-    out: dict = {"kind": kind}
+    background = scene.get("background")
+    pan = scene.get("pan")
+    kind = background.get("kind", "transparent") if background else "transparent"
+    out: VisitorSceneBackground = {"kind": kind}
     if kind == "color":
-        out["color"] = background.get("color", "#000000")
+        out["color"] = background.get("color", "#000000") if background else "#000000"
     if kind == "image":
-        key = background.get("image_key")
+        key = background.get("image_key") if background else None
         if key and await storage.exists(key):
             out["image_url"] = await storage.presign_get(key)
         else:
             out["kind"] = "transparent"
     return {
         "zoom": scene.get("zoom", 1.0),
-        "pan": dict(scene.get("pan") or {"x": 0.0, "y": 0.0}),
+        "pan": pan.copy() if pan else {"x": 0.0, "y": 0.0},
         "background": out,
     }
 
@@ -187,8 +211,6 @@ def prepare_image(data: bytes) -> bytes:
     """`data` (an upload) as the WebP a background is stored as: decoded and
     checked, scaled to at most MAX_SIDE a side, alpha kept, metadata
     dropped. Validation422 for anything that is not a picture. CPU work."""
-    from PIL import Image, UnidentifiedImageError
-
     try:
         with Image.open(io.BytesIO(data)) as probe:
             probe.verify()
@@ -217,12 +239,10 @@ def _has_alpha(image) -> bool:
     return bool(alpha and alpha[0] < 255)
 
 
-async def store_image(avatar: Any, storage, image: bytes) -> list[str]:
+async def store_image(avatar: Any, storage: Storage, image: bytes) -> list[str]:
     """Make `image` the draft's background and show it (the caller commits
     and marks the draft dirty). Returns the keys it replaced, to delete
     after the commit: the published snapshot has its own copy."""
-    from uuid import uuid4
-
     scene = effective(avatar)
     previous = [k for k in (image_key_of(scene),) if k]
     key = image_key(avatar.org_id, avatar.id, uuid4().hex[:8])
@@ -240,20 +260,16 @@ def without_image(avatar: Any) -> list[str]:
     return previous
 
 
-def keys(scene: dict | None) -> set[str]:
+def keys(scene: SceneConfig | None) -> set[str]:
     key = image_key_of(scene)
     return {key} if key else set()
 
 
-async def sweep_files(avatar: Any, storage, scene: dict | None) -> None:
+async def sweep_files(avatar: Any, storage: Storage, scene: SceneConfig | None) -> None:
     """Delete the draft's background files the draft no longer names: a
     process that died between replacing one and deleting the old one leaves
     it behind for good (publishing holds the edit lock, as every writer of
     these files does)."""
-    import logging
-
-    from app.services.storage import STORAGE_ERRORS
-
     logger = logging.getLogger("liveface.scene")
     root = f"orgs/{avatar.org_id}/avatars/{avatar.id}/"
     named = keys(scene)

@@ -43,7 +43,11 @@ from dataclasses import dataclass
 import httpx
 import numpy as np
 
-from app.services import ai_models
+from app.models.shapes import FoundAnchors
+from app.services import ai_models, face_template
+from app.services.anchor_fit import fit_rig, marks_from_dict, marks_to_dict, with_head_outline
+from app.services.imagegen import refusal_reason
+from app.services.rig import build_rig
 
 logger = logging.getLogger("liveface.vision_points")
 
@@ -193,8 +197,6 @@ def build_request(face_type: str, payload: bytes, mime: str) -> dict:
 def parse_answer(body: dict, face_type: str) -> dict[str, list[float]]:
     """The named [y, x] points from a generateContent response. Raises
     VisionRefused on a safety refusal, VisionError on anything unusable."""
-    from app.services.imagegen import refusal_reason
-
     refused = refusal_reason(body)
     if refused:
         raise VisionRefused(f"The AI declined this picture ({refused})")
@@ -381,7 +383,7 @@ def check_geometry(marks: dict, size: tuple[int, int]) -> list[str]:
 
 @dataclass
 class PointsResult:
-    anchors: dict | None
+    anchors: FoundAnchors | None
     problems: list[str]
 
 
@@ -396,15 +398,6 @@ def anchors_from_points(
     other exactly as it would a hand-placed set, so the validator here is
     the one the owner's marks will face.
     """
-    from app.services import face_template
-    from app.services.anchor_fit import (
-        fit_rig,
-        marks_from_dict,
-        marks_to_dict,
-        with_head_outline,
-    )
-    from app.services.rig import build_rig
-
     marks = to_marks(points, size, face_type)
     problems = check_geometry(marks, size)
     if problems:

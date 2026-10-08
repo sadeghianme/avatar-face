@@ -7,12 +7,15 @@ from __future__ import annotations
 import copy
 import logging
 from collections.abc import Callable
+from typing import cast
 
 from sqlalchemy import select, update
 
-from app.core.errors import AppError
+from app.core.errors import AppError, Forbidden403
 from app.db import execute_dml, get_session_factory
 from app.models import Creation, CreationStatus
+from app.models.shapes import AiUsage, JobRecord, JobState, Note
+from app.services.consent import ai_switched_off
 from app.services.jobs import (
     DONE,
     FAILED,
@@ -24,7 +27,7 @@ from app.services.storage import get_storage
 logger = logging.getLogger("liveface.creations")
 
 
-def error_record(code: str, detail: str) -> dict:
+def error_record(code: str, detail: str) -> Note:
     return {"code": code, "detail": detail}
 
 
@@ -43,7 +46,7 @@ NOT_RETRYABLE = frozenset(
 )
 
 
-def retryable(record: dict) -> bool:
+def retryable(record: JobRecord) -> bool:
     """Would POST /retry run this job record's job again? A failed or
     interrupted one, unless it failed in a way a retry would repeat."""
     return (
@@ -53,11 +56,11 @@ def retryable(record: dict) -> bool:
 
 
 def job_record(
-    job: Job, state: str, params: dict | None = None, error: dict | None = None
-) -> dict:
+    job: Job, state: JobState, params: dict | None = None, error: Note | None = None
+) -> JobRecord:
     """What the row keeps of a job: its state transitions, and the
     parameters a retry needs while it may still be retried."""
-    record = {
+    record: JobRecord = {
         "id": job.id,
         "step": job.step,
         "state": state,
@@ -69,7 +72,7 @@ def job_record(
     return record
 
 
-async def _write_job(job: Job, state: str, params: dict, error: dict | None = None) -> None:
+async def write_job(job: Job, state: JobState, params: dict, error: Note | None = None) -> None:
     """A state transition. Never touches the revision: a job must not
     invalidate its own result by reporting that it runs."""
     async with get_session_factory()() as db:
@@ -86,7 +89,7 @@ SUPERSEDED = error_record(
 )
 
 
-async def _store_result(job: Job, params: dict, values: dict, new_keys: list[str]) -> bool:
+async def store_result(job: Job, params: dict, values: dict, new_keys: list[str]) -> bool:
     """Store a job's result if the creation is still the one it started
     from; otherwise delete what the job wrote and say so. See the module
     docstring for why the revision decides."""
@@ -108,14 +111,15 @@ async def _store_result(job: Job, params: dict, values: dict, new_keys: list[str
     storage = get_storage()
     for key in new_keys:
         await storage.delete(key)
-    await _write_job(job, FAILED, params, SUPERSEDED)
+    await write_job(job, FAILED, params, SUPERSEDED)
     logger.info("job %s (%s) discarded: creation %s changed", job.id, job.step, job.subject_id)
     return False
 
 
-def ai_usage_of(creation: Creation) -> dict:
+def ai_usage_of(creation: Creation) -> AiUsage:
     """A copy of the creation's AI budget and cache, with every field."""
-    usage = copy.deepcopy(creation.ai_usage or {})
+    # A row written before a counter existed lacks it: every one is filled.
+    usage = cast(AiUsage, copy.deepcopy(creation.ai_usage or {}))
     usage.setdefault("adjust_rounds", 0)
     usage.setdefault("detections", 0)
     usage.setdefault("next_adjusted", 0)
@@ -127,7 +131,7 @@ def ai_usage_of(creation: Creation) -> dict:
     return usage
 
 
-async def _update_ai_usage(job: Job, change: Callable[[dict], None]) -> None:
+async def update_ai_usage(job: Job, change: Callable[[AiUsage], None]) -> None:
     """Apply `change` to the stored AI usage, outside the revision rule.
 
     The budget and the cache record money already spent, which stays spent
@@ -156,7 +160,7 @@ async def _update_ai_usage(job: Job, change: Callable[[dict], None]) -> None:
         await db.commit()
 
 
-async def _ai_switched_off(org_id: str) -> bool:
+async def ai_switched_off_now(org_id: str) -> bool:
     """Has the organization turned third-party AI off since the job was
     admitted?
 
@@ -166,21 +170,17 @@ async def _ai_switched_off(org_id: str) -> bool:
     on, not from the next request. So it is read again before every
     provider call, next to the image limit.
     """
-    from app.services.consent import ai_switched_off
-
     return await ai_switched_off(org_id)
 
 
-def _ai_disabled_error() -> AppError:
-    from app.core.errors import Forbidden403
-
+def ai_disabled_error() -> AppError:
     return Forbidden403(
         "Your organization turned off third-party AI, so nothing was sent",
         code="third_party_ai_disabled",
     )
 
 
-async def _load(job: Job) -> Creation | None:
+async def load_creation(job: Job) -> Creation | None:
     async with get_session_factory()() as db:
         return (
             await db.execute(

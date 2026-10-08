@@ -9,37 +9,37 @@ from sqlalchemy import select
 from app.core.errors import AppError, Conflict409, Validation422
 from app.db import get_session_factory
 from app.models import Avatar
+from app.models.shapes import AiUsage, CreationSteps, PrepareRecord
+from app.services import imagegen, photo_adjust, photo_io, wizard
 from app.services.creations.detect import source_on_backdrop
-from app.services.creations.ingest import _stored_analysis
+from app.services.creations.ingest import stored_analysis
 from app.services.creations.records import (
-    _ai_disabled_error,
-    _ai_switched_off,
-    _load,
-    _store_result,
-    _update_ai_usage,
+    ai_disabled_error,
+    ai_switched_off_now,
+    load_creation,
+    store_result,
+    update_ai_usage,
 )
 from app.services.creations.rules import step_key
-from app.services.creations.steps import step_check
+from app.services.creations.steps import plan_of, step_check
 from app.services.jobs import (
     Job,
     run_cpu,
 )
+from app.services.photo_analysis import analyse
+from app.services.photo_io import ingest_photo
 from app.services.storage import get_storage
+from app.services.usage import check_image_limit, record_generation
 
 logger = logging.getLogger("liveface.creations")
 
 
-async def _generate(job: Job, params: dict) -> None:
+async def run_generate(job: Job, params: dict) -> None:
     """Make the creation's original with the image model, from a text
     description (and optionally one of the org's avatars as the source),
     then analyse it like an upload. The wizard carries on from there: the
     generated picture passes the same points and the same confirmation."""
-    from app.services import imagegen, photo_adjust
-    from app.services.photo_analysis import analyse
-    from app.services.photo_io import STORED_MAX_EDGE, ingest_photo
-    from app.services.usage import check_image_limit, record_generation
-
-    creation = await _load(job)
+    creation = await load_creation(job)
     if creation is None:
         return
     storage = get_storage()
@@ -62,16 +62,15 @@ async def _generate(job: Job, params: dict) -> None:
             raise Conflict409("The source avatar's photo is gone", code="source_gone")
         source = await storage.get_bytes(key)
 
-    if await _ai_switched_off(job.org_id):
-        raise _ai_disabled_error()
+    if await ai_switched_off_now(job.org_id):
+        raise ai_disabled_error()
     async with get_session_factory()() as db:
         await check_image_limit(db, job.org_id)
     job.report(0.1, "generating")
-    plan = (creation.steps or {}).get("plan")
+    plan = plan_of(creation.steps)
     if plan and source is None:
         # The four-step wizard: its own prompt for the model and look, a
         # plain backdrop, and the cut-out and the face found in this job.
-        from app.services import wizard
 
         prompt = wizard.character_prompt(plan["model"], plan["look"], plan.get("description"))
     else:
@@ -114,12 +113,12 @@ async def _generate(job: Job, params: dict) -> None:
         await record_generation(db, job.org_id, "gemini", "generate")
 
     job.report(0.6, "analysing")
-    clean = await run_cpu(ingest_photo, generated.image, STORED_MAX_EDGE)
+    clean = await run_cpu(ingest_photo, generated.image, photo_io.STORED_MAX_EDGE)
     analysis = await run_cpu(analyse, clean)
     width, height = analysis["image_size"]
     key = step_key(job.org_id, job.subject_id, "original")
     await storage.put_bytes(key, clean, "image/png")
-    steps = {
+    steps: CreationSteps = {
         "current": "original",
         "items": {
             "original": {
@@ -136,27 +135,25 @@ async def _generate(job: Job, params: dict) -> None:
             }
         },
     }
-    values: dict = {"steps": steps, "analysis": _stored_analysis(analysis)}
+    values: dict = {"steps": steps, "analysis": stored_analysis(analysis)}
     new_keys = [key]
     if plan and source is None:
-        from app.services import wizard
-
         steps["plan"] = plan
         # The name the wizard proposed from the description, given with the plan.
-        if name := (creation.steps or {}).get("name"):
+        if name := (creation.steps.get("name") if creation.steps else None):
             steps["name"] = name
         values["anchors"], cut = await wizard.settle(
             job, creation, steps, "original", clean, params.get("consent_id"), new_keys
         )
 
-        record = {
+        record: PrepareRecord = {
             "mode": wizard.GENERATE, "look": plan["look"], "instruction": None,
             "step": "original", "cut": cut,
         }
-        steps["items"]["original"][wizard.KEPT_RECORD] = dict(record)
+        steps["items"]["original"][wizard.KEPT_RECORD] = record.copy()
 
-        def remember(usage: dict) -> None:
+        def remember(usage: AiUsage) -> None:
             usage["last_prepare"] = record
 
-        await _update_ai_usage(job, remember)
-    await _store_result(job, params, values, new_keys)
+        await update_ai_usage(job, remember)
+    await store_result(job, params, values, new_keys)

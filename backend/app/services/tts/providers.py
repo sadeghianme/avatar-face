@@ -6,6 +6,8 @@ normalized to SynthesisResult with 15-viseme cue tracks.
 """
 from __future__ import annotations
 
+import asyncio
+import base64
 import io
 import json
 import time
@@ -13,10 +15,12 @@ import wave
 from pathlib import Path
 
 import httpx
+from jose import jwt as jose_jwt
 
 from app.core.credentials import credentials
 from app.services.tts.base import SynthesisResult, TTSProvider, Voice
-from app.services.tts.visemes import char_to_viseme, cues_from_text
+from app.services.tts.timing import cues_from_text
+from app.services.tts.visemes import char_to_viseme
 
 HTTP_TIMEOUT = 30.0
 
@@ -70,8 +74,6 @@ class AzureTTSProvider(TTSProvider):
             return await self._synthesize_rest(text, voice, locale)
 
     async def _synthesize_sdk(self, text: str, voice: str, locale: str) -> SynthesisResult:
-        import asyncio
-
         # An optional dependency, absent where the REST path is used instead.
         import azure.cognitiveservices.speech as speechsdk  # pyright: ignore[reportMissingImports]
 
@@ -126,7 +128,7 @@ class AzureTTSProvider(TTSProvider):
             audio=audio,
             audio_mime="audio/wav",
             duration_ms=duration,
-            cues=cues_from_text(text, duration, locale),
+            cues=await asyncio.to_thread(cues_from_text, text, duration, locale),
         )
 
 
@@ -152,7 +154,6 @@ class ElevenLabsTTSProvider(TTSProvider):
     async def synthesize(self, text: str, voice: str, locale: str) -> SynthesisResult:
         # with-timestamps returns base64 audio + per-character alignment,
         # which maps 1:1 onto viseme cues.
-        import base64
 
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice}/with-timestamps"
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -178,7 +179,7 @@ class ElevenLabsTTSProvider(TTSProvider):
         duration = int((ends[-1] if ends else 0) * 1000)
         if duration == 0:
             duration = len(text) * 75
-            cues = cues_from_text(text, duration, locale)
+            cues = await asyncio.to_thread(cues_from_text, text, duration, locale)
         else:
             cues.append({"t": duration, "viseme": "sil"})
         return SynthesisResult(audio=audio, audio_mime="audio/mpeg", duration_ms=duration, cues=cues)
@@ -200,8 +201,6 @@ class GoogleTTSProvider(TTSProvider):
             return json.load(f)
 
     async def _access_token(self) -> str:
-        from jose import jwt as jose_jwt
-
         sa = self._service_account()
         now = int(time.time())
         assertion = jose_jwt.encode(
@@ -245,8 +244,6 @@ class GoogleTTSProvider(TTSProvider):
         ][:200]
 
     async def synthesize(self, text: str, voice: str, locale: str) -> SynthesisResult:
-        import base64
-
         token = await self._access_token()
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -266,7 +263,7 @@ class GoogleTTSProvider(TTSProvider):
             audio=audio,
             audio_mime="audio/wav",
             duration_ms=duration,
-            cues=cues_from_text(text, duration, locale),
+            cues=await asyncio.to_thread(cues_from_text, text, duration, locale),
         )
 
 
@@ -297,5 +294,5 @@ class OpenAITTSProvider(TTSProvider):
             audio=audio,
             audio_mime="audio/wav",
             duration_ms=duration,
-            cues=cues_from_text(text, duration, locale),
+            cues=await asyncio.to_thread(cues_from_text, text, duration, locale),
         )

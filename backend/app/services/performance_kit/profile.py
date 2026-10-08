@@ -8,8 +8,11 @@ from dataclasses import dataclass, field
 from typing import cast
 
 import numpy as np
+from annotated_types import Ge, Le
 from PIL import Image
 
+from app.schemas.avatar import MouthProfile
+from app.services import dental_photo
 from app.services.performance_kit.answers import (
     MAX_OVER_REFERENCE,
     _down,
@@ -99,10 +102,6 @@ REFERENCE_TEETH_SCALE = 1.0
 def _profile_defaults() -> tuple[dict, dict[str, tuple[float, float]]]:
     """Defaults and ranges: the API's MouthProfile, which mirrors the embed's
     DEFAULT_REFERENCE_PROFILE and PROFILE_LIMITS."""
-    from annotated_types import Ge, Le
-
-    from app.schemas.avatar import MouthProfile
-
     limits = {}
     for name, info in MouthProfile.model_fields.items():
         low = next(m.ge for m in info.metadata if isinstance(m, Ge))
@@ -204,8 +203,6 @@ def fit_profile(
     at the Reference's jaw range and the owner's slider means what it means
     for every avatar.
     """
-    from app.services import dental_photo
-
     defaults, _ = _profile_defaults()
     fit = ProfileFit(profile=for_standard_teeth(defaults))
     acceptance = None

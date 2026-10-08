@@ -1,5 +1,6 @@
 from app.services.rig import OCULUS_VISEMES
-from app.services.tts.visemes import char_to_viseme, cues_from_text
+from app.services.tts.timing import cues_from_text
+from app.services.tts.visemes import char_to_viseme
 
 
 def test_latin_vowels():

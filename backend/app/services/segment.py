@@ -19,6 +19,13 @@ import io
 import logging
 from functools import lru_cache
 
+import numpy as np
+from PIL import Image
+
+from app.core.config import get_settings
+from app.services.matting import refine_matte
+from app.services.photo_io import png_bytes
+
 logger = logging.getLogger("liveface.segment")
 
 # Thresholds and the edge treatment live in matting.py, which turns this
@@ -32,10 +39,9 @@ class SegmentationUnavailable(RuntimeError):
 @lru_cache(maxsize=1)
 def _segmenter():
     """Built once. Model load dominates the cost, and the object is reusable."""
+    # MediaPipe: the optional [rig] extra, and heavy; loaded on first use.
     from mediapipe.tasks import python as mp_python
     from mediapipe.tasks.python import vision
-
-    from app.core.config import get_settings
 
     path = get_settings().segment_model_path
     if not path:
@@ -64,11 +70,7 @@ def person_matte(image_bytes: bytes, prior_mask=None):
     which subtracts the backdrop colour out of skin and leaves literal black.
     A confident prior keeps those pixels out of the edge band entirely.
     """
-    import mediapipe as mp
-    import numpy as np
-    from PIL import Image
-
-    from app.services.matting import refine_matte
+    import mediapipe as mp  # the optional [rig] extra: first use only
 
     segmenter = _segmenter()  # raises SegmentationUnavailable if not configured
 
@@ -95,11 +97,6 @@ def remove_background(image_bytes: bytes) -> bytes:
     Through photo_io.png_bytes, which blanks the colour under alpha 0: the
     background is removed from the file, not merely hidden in it.
     """
-    import numpy as np
-    from PIL import Image
-
-    from app.services.photo_io import png_bytes
-
     out, alpha = person_matte(image_bytes)
     rgba = np.dstack([out.astype(np.uint8), (alpha * 255).astype(np.uint8)])
     return png_bytes(Image.fromarray(rgba, mode="RGBA"))

@@ -18,11 +18,16 @@ audio and viseme cues share one clock by construction.
 """
 from __future__ import annotations
 
+import asyncio
 import re
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from typing import Any
 
+from app.services.tts.envelope import measure
 from app.services.tts.espeak import supports as espeak_supports
-from app.services.tts.espeak import text_to_ipa
+from app.services.tts.espeak import words_to_ipa
 from app.services.tts.g2p import word_to_phonemes_stressed
 from app.services.tts.ipa import collapse_repeats, ipa_to_visemes
 from app.services.tts.phonemes import UnknownPhone, plan
@@ -206,12 +211,25 @@ def cues_for_duration(
         return [{"t": 0, "viseme": "sil", "a": 1.0}]
     envelope = None
     if audio:
-        from app.services.tts.envelope import measure
-
         envelope = measure(audio)
     return cues_from_segments(
         segments, scale=duration_ms / modelled, envelope=envelope
     )
+
+
+def cues_from_text(
+    text: str, duration_ms: int, locale: str = "en-US", audio: bytes | None = None
+) -> list[dict]:
+    """Viseme cues for audio of a known duration.
+
+    Delegates to the phoneme-class timing model (vowels hold longer than
+    stops, punctuation buys silence, rounded shapes lead the sound) rather
+    than spreading characters evenly, which reads as off-beat.
+
+    Pass `audio` (the rendered WAV) to measure vowel openness from the
+    voice instead of predicting it from spelling stress.
+    """
+    return cues_for_duration(text, duration_ms, locale, audio=audio)
 
 
 def _char_word_marks(text: str) -> list[dict]:
@@ -301,14 +319,13 @@ def uses_phonemes(locale: str) -> bool:
     return espeak_supports(locale)
 
 
-def _ipa_segments(word: str, locale: str) -> list[Segment]:
-    """Segments for one word, via espeak-ng.
+def _ipa_segments(ipa: str | None) -> list[Segment]:
+    """Segments for one word from its IPA (espeak-ng's, see `plan_utterance`).
 
     Repeats are collapsed before timing: adjacent identical visemes are one
     mouth position held longer, not two movements, and emitting both makes a
     doubled consonant look like a stutter.
     """
-    ipa = text_to_ipa(word, locale)
     if not ipa:
         return []
     visemes = collapse_repeats(ipa_to_visemes(ipa))
@@ -324,6 +341,10 @@ def plan_utterance(text: str, locale: str = "en-US") -> tuple[list[Segment], lis
     character index (`onboundary`) and needs to convert that into a position
     on this clock. They are produced HERE, alongside the segments, so the two
     cannot drift apart.
+
+    Outside English this waits on espeak-ng (once for the whole text, see
+    services.tts.espeak), so it BLOCKS: on the event loop, run it on a
+    thread (`on_planner_thread`).
     """
     segments: list[Segment] = []
     marks: list[dict] = []
@@ -346,13 +367,16 @@ def plan_utterance(text: str, locale: str = "en-US") -> tuple[list[Segment], lis
 
     english = is_english(locale)
     word_re = _WORD_RE if english else _ANY_WORD_RE
-    for match in word_re.finditer(text) if phonemic else []:
+    matches = list(word_re.finditer(text)) if phonemic else []
+    # Every word's IPA in one espeak call, not one call per word.
+    ipa = {} if english or not matches else words_to_ipa((m.group() for m in matches), locale)
+    for match in matches:
         gap(text[cursor : match.start()])
         marks.append({"char": match.start(), "t": elapsed})
         word = match.group()
         # English keeps its own rules — they encode this orthography's
         # irregularities better than a general phonemiser does.
-        segs = _phoneme_segments(word) if english else _ipa_segments(word, locale)
+        segs = _phoneme_segments(word) if english else _ipa_segments(ipa.get(word))
         emit(segs or _char_segments(word))
         cursor = match.end()
 
@@ -367,3 +391,26 @@ def plan_utterance(text: str, locale: str = "en-US") -> tuple[list[Segment], lis
         return segment_text(text), _char_word_marks(text)
     gap(text[cursor:])
     return segments, marks
+
+
+# Planning for requests on the event loop runs on these threads. Not the
+# CPU thread (services.jobs.run_cpu): planning is milliseconds of Python and
+# a wait on espeak, and queueing a visitor's sentence behind someone's photo
+# upload would cost seconds of silence. Two of them, not the default pool:
+# planning is Python, which holds the GIL, and every thread that wants it
+# is one more the loop thread waits behind (at 5 ms a turn). Twenty
+# requests at once queue here instead.
+_planner = ThreadPoolExecutor(max_workers=2, thread_name_prefix="liveface-speech")
+
+
+def cue_track(text: str, locale: str = "en-US") -> tuple[list[dict], int, list[dict]]:
+    """Cues, total duration and word offsets for `text` at the model's own
+    pace: what the browser voice is driven by (api.embed /cues)."""
+    segments, marks = plan_utterance(text, locale)
+    return cues_from_segments(segments), total_duration_ms(segments), marks
+
+
+async def on_planner_thread[T](fn: Callable[..., T], /, *args: Any) -> T:
+    """`fn(*args)` on a planning thread: for work built on `plan_utterance`
+    (or `cue_track`) that a caller on the event loop needs."""
+    return await asyncio.get_running_loop().run_in_executor(_planner, fn, *args)

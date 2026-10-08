@@ -20,8 +20,12 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import tempfile
 import threading
 import wave
+from collections.abc import AsyncGenerator
+
+import numpy as np
 
 logger = logging.getLogger("liveface.local_render")
 
@@ -91,8 +95,6 @@ def _get_engine():
 
 
 def _clone_reference(engine, reference: bytes) -> None:
-    import tempfile
-
     with tempfile.NamedTemporaryFile(suffix=".wav") as handle:
         handle.write(reference)
         handle.flush()
@@ -100,8 +102,6 @@ def _clone_reference(engine, reference: bytes) -> None:
 
 
 def _render_one(engine, text: str) -> tuple[bytes, int]:
-    import numpy as np
-
     tensor = engine.generate(text)
     samples = tensor.squeeze().detach().cpu().numpy()
     pcm = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
@@ -131,47 +131,15 @@ async def render_text(reference: bytes, text: str) -> tuple[bytes, int]:
         return await asyncio.to_thread(_render_one, engine, text)
 
 
-async def render_job(org_id: str, job_id: str) -> None:
-    """Background task: render one claimed job and store its lines.
-
-    Opens its own database sessions — a BackgroundTask outlives the request
-    session that scheduled it. Every failure lands in the job's error field,
-    because the person watching is looking at the dashboard, not at logs.
-    """
+async def render_lines(reference: bytes, lines: list[str]) -> AsyncGenerator[tuple[bytes, int]]:
+    """Clone from `reference` once, then render each line in turn:
+    (audio, duration_ms) per line, in order. Serialised with every other
+    render; the engine is held for the whole run."""
     global _render_semaphore
     if _render_semaphore is None:
         _render_semaphore = asyncio.Semaphore(1)
-
-    from app.db import get_session_factory
-    from app.services import clonejobs
-    from app.services.storage import get_storage
-    from app.services.tts.cloned import store_line
-
-    storage = get_storage()
-    try:
-        async with _render_semaphore:
-            job = await clonejobs.get_job(storage, org_id, job_id)
-            if job is None or job["status"] not in ("pending", "processing"):
-                return
-            reference = await storage.get_bytes(
-                clonejobs.reference_key(org_id, job_id)
-            )
-
-            engine = await asyncio.to_thread(_get_engine)
-            await asyncio.to_thread(_clone_reference, engine, reference)
-
-            for index, text in enumerate(job["lines"], start=1):
-                audio, duration_ms = await asyncio.to_thread(_render_one, engine, text)
-                async with get_session_factory()() as db:
-                    await store_line(
-                        db, org_id, job["name"], job["locale"], text, audio, duration_ms
-                    )
-                    await db.commit()
-                await clonejobs.update_progress(storage, org_id, job_id, index)
-            await clonejobs.finish_job(storage, org_id, job_id)
-            logger.info("rendered clone job %s in-process", job_id)
-    except Exception as exc:
-        # Broad on purpose: the background job's boundary; the job records
-        # how it failed.
-        logger.exception("in-process render failed for job %s", job_id)
-        await clonejobs.finish_job(storage, org_id, job_id, error=f"{type(exc).__name__}: {exc}"[:900])
+    async with _render_semaphore:
+        engine = await asyncio.to_thread(_get_engine)
+        await asyncio.to_thread(_clone_reference, engine, reference)
+        for text in lines:
+            yield await asyncio.to_thread(_render_one, engine, text)
