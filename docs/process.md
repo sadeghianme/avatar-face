@@ -193,8 +193,8 @@ and `# fmt: on`. The commit that formatted the backend is in
 
 | Job | What it proves | Time |
 |---|---|---|
-| `backend-checks` | ruff (lint and format), pyright, the OpenAPI document exported again and identical to the committed one, the migrations against the models and the newest one down and up | ~1.5 min |
-| `backend-tests` (×2) | pytest, half of the suite each, on every core, against the production pins, espeak-ng and the checksummed MediaPipe models | ~4 min |
+| `backend-checks` | ruff (lint and format), pyright, the OpenAPI document exported again and identical to the committed one, the migrations against the models and the newest one down and up | ~1 min |
+| `backend-tests` (×2) | pytest, half of the suite each, on every core, against the production pins, espeak-ng and the checksummed MediaPipe models | 3–4 min |
 | `backend` | every backend job above passed (the required check) | seconds |
 | `embed` | lint, type check (tests included), the widget's generated API types match the committed document, vitest with the pixel goldens, build | ~2 min |
 | `frontend` | structure check, type check, production build | <1 min |
