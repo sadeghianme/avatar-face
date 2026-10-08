@@ -44,8 +44,10 @@ MAX_SCALE_CHANGE = 0.10
 MAX_ROTATION_DEGREES = 4.0
 NOSE_GUARD = [1, 4, 5, 6, 168, 195, 197, 45, 275]
 MAX_NOSE_SHIFT = 0.03
+# fmt: off
 EYE_GUARD = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246,
              362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398]
+# fmt: on
 MAX_EYE_SHIFT = 0.015
 MAX_YAW_CHANGE = 0.08
 # Tighter than a regenerate's 12: a pose asks for no relighting at all.

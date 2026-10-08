@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import unicodedata
 
+# fmt: off
 LATIN_MAP: dict[str, str] = {
     "a": "aa", "e": "E", "i": "ih", "o": "oh", "u": "ou", "y": "ih",
     "b": "PP", "p": "PP", "m": "PP",
@@ -47,6 +48,7 @@ ARABIC_MAP: dict[str, str] = {
     "ن": "nn", "ل": "nn",
     "ر": "RR", "ي": "ih", "ى": "aa", "ء": "sil",
 }
+# fmt: on
 
 # Visemes rotated through for syllabic scripts (CJK, Devanagari ...):
 # every glyph is roughly a syllable, so cycle open/varied mouth shapes.

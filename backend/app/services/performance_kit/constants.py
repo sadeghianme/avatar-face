@@ -46,10 +46,12 @@ POSES = ("rest",) + SHAPES
 TEETH = "teeth"
 
 # MediaPipe indices, as rig.OUTER_LIP_RING / INNER_LIP_RING.
+# fmt: off
 OUTER_LIP_RING = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291,
                   409, 270, 269, 267, 0, 37, 39, 40, 185]
 INNER_LIP_RING = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308,
                   415, 310, 311, 312, 13, 82, 81, 80, 191]
+# fmt: on
 MOUTH_LEFT, MOUTH_RIGHT = 61, 291
 UPPER_INNER, LOWER_INNER = 13, 14
 FACE_LEFT, FACE_RIGHT = 234, 454

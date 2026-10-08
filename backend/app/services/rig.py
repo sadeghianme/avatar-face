@@ -62,6 +62,7 @@ OCULUS_VISEMES = [
 
 # Per-viseme ARKit blendshape weights (rig v3) — drives the 2D deformation
 # basis in the canvas engine.
+# fmt: off
 VISEME_BLENDSHAPES: dict[str, dict[str, float]] = {
     "sil": {"jawOpen": 0.0, "mouthClose": 0.1, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.0, "mouthSmile": 0.02},
     "PP":  {"jawOpen": 0.05, "mouthClose": 0.9, "mouthPucker": 0.25, "mouthFunnel": 0.0, "mouthStretch": 0.0, "mouthSmile": 0.0},
@@ -79,6 +80,7 @@ VISEME_BLENDSHAPES: dict[str, dict[str, float]] = {
     "oh":  {"jawOpen": 0.6, "mouthClose": 0.0, "mouthPucker": 0.5, "mouthFunnel": 0.55, "mouthStretch": 0.0, "mouthSmile": 0.0},
     "ou":  {"jawOpen": 0.35, "mouthClose": 0.05, "mouthPucker": 0.85, "mouthFunnel": 0.6, "mouthStretch": 0.0, "mouthSmile": 0.0},
 }
+# fmt: on
 
 # A muzzle is a jaw, not a pair of lips.
 #
@@ -93,6 +95,7 @@ VISEME_BLENDSHAPES: dict[str, dict[str, float]] = {
 #
 # Same keys, same engine, different numbers: nothing downstream knows which
 # table it was handed.
+# fmt: off
 ANIMAL_VISEME_BLENDSHAPES: dict[str, dict[str, float]] = {
     "sil": {"jawOpen": 0.0, "mouthClose": 0.1, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.0, "mouthSmile": 0.0},
     "PP":  {"jawOpen": 0.02, "mouthClose": 0.95, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.0, "mouthSmile": 0.0},
@@ -110,6 +113,7 @@ ANIMAL_VISEME_BLENDSHAPES: dict[str, dict[str, float]] = {
     "oh":  {"jawOpen": 0.7, "mouthClose": 0.0, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.05, "mouthSmile": 0.0},
     "ou":  {"jawOpen": 0.45, "mouthClose": 0.05, "mouthPucker": 0.0, "mouthFunnel": 0.0, "mouthStretch": 0.0, "mouthSmile": 0.0},
 }
+# fmt: on
 
 # Human is the default and its table is the original, untouched: an existing
 # avatar must animate exactly as it did before face types existed.
@@ -121,10 +125,12 @@ VISEME_PROFILES: dict[str, dict[str, dict[str, float]]] = {
 
 
 # Canonical MediaPipe FaceMesh lip landmark indices.
+# fmt: off
 OUTER_LIP_RING = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291,
                   409, 270, 269, 267, 0, 37, 39, 40, 185]
 INNER_LIP_RING = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308,
                   415, 310, 311, 312, 13, 82, 81, 80, 191]
+# fmt: on
 MOUTH_INDICES = sorted(set(OUTER_LIP_RING + INNER_LIP_RING))
 
 
@@ -254,9 +260,11 @@ def synthetic_face_mesh(width: int, height: int) -> np.ndarray:
     put(2, cx, cy + fh * 0.36)
 
     # Face oval (canonical 36-point silhouette).
+    # fmt: off
     oval = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365,
             379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93,
             234, 127, 162, 21, 54, 103, 67, 109]
+    # fmt: on
     for i, idx in enumerate(oval):
         angle = -math.pi / 2 + 2 * math.pi * i / len(oval)
         put(idx, cx + fw * math.sin(angle + math.pi), cy + fh * math.cos(angle + math.pi) * -1)

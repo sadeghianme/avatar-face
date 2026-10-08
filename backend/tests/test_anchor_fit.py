@@ -486,8 +486,10 @@ def test_an_animal_marked_before_mouth_lines_reads_as_a_line_without_pupils():
 
 
 # The rings the panel this fit replaced measured an eye by: lids and iris.
+# fmt: off
 OLD_LEFT_EYE = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246, *LEFT_IRIS]
 OLD_RIGHT_EYE = [263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466, *RIGHT_IRIS]
+# fmt: on
 
 
 def old_panel_anchors(rig: dict) -> dict:

@@ -54,11 +54,13 @@ VISEME_DURATION_MS: dict[str, int] = {
 DEFAULT_DURATION_MS = 80
 
 # Silence bought by punctuation.
+# fmt: off
 PAUSE_MS: dict[str, int] = {
     ",": 180, ";": 200, ":": 200, "—": 160, "–": 160, "-": 70,
     ".": 320, "!": 340, "?": 340, "…": 400,
     "。": 320, "！": 340, "？": 340, "、": 180, "؟": 340, "।": 320,
 }
+# fmt: on
 WORD_GAP_MS = 55
 
 # Articulators reach position before the sound is heard. Rounded and labial

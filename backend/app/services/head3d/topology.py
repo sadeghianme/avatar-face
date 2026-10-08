@@ -31,10 +31,12 @@ NUM_MESH_VERTICES = 468
 
 # MediaPipe's face oval, from the forehead clockwise in the image (the same
 # order the 2D engine's jaw rig walks it).
+# fmt: off
 FACE_OVAL = [
     10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377,
     152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
 ]
+# fmt: on
 # The lip rows, corner to corner, inner row first (jaw-rig.ts).
 UPPER_LIP_ROWS = [
     [191, 80, 81, 82, 13, 312, 311, 310, 415],
