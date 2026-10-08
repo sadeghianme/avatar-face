@@ -113,6 +113,24 @@ async def test_embed_requires_key(client):
     assert response.status_code == 401
 
 
+async def test_a_key_in_the_query_string_is_not_accepted(client):
+    """Only the X-Api-Key header authenticates: a key in the URL lands in
+    access logs, proxies and Referer headers. The widget sends the header."""
+    _, _, avatar_id, created = await _setup(client)
+    key = created["plaintext"]
+    in_url = await client.get(f"/embed/v1/avatars/{avatar_id}", params={"key": key})
+    assert in_url.status_code == 401
+    assert in_url.json()["code"] == "missing_api_key"
+    spoken = await client.post(
+        "/embed/v1/synthesize", params={"key": key}, json={"text": "Hello"}
+    )
+    assert spoken.status_code == 401
+    assert spoken.json()["code"] == "missing_api_key"
+    # The same key in the header is still accepted.
+    in_header = await client.get(f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": key})
+    assert in_header.status_code == 200
+
+
 async def test_embed_invalid_key(client):
     _, _, avatar_id, _ = await _setup(client)
     response = await client.get(

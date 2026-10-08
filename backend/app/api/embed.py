@@ -1,7 +1,9 @@
 """Public embed API (key-authenticated, used by the widget on third-party sites).
 
-Auth: X-Api-Key header (or ?key=). The key's org is the acting org — never a
-client-supplied org id. Browser calls are origin-checked against the key's
+Auth: the X-Api-Key header only. A key in the query string (`?key=`, once
+accepted) would be written to access logs, proxies and Referer headers;
+the widget has always sent the header. The key's org is the acting org —
+never a client-supplied org id. Browser calls are origin-checked against the key's
 allowed_domains, and each key (each organization's Simulator, for its
 tokens) is rate-limited per minute. The one unauthenticated route, /cues, is
 rate-limited per client address instead.
@@ -91,7 +93,7 @@ async def _authenticate(request: Request, db: DB) -> ApiKey:
     organization: origin binding does not stop a client that forges the
     Origin header, so the limit is what bounds it.
     """
-    plaintext = request.headers.get("x-api-key") or request.query_params.get("key")
+    plaintext = request.headers.get("x-api-key")
     if not plaintext:
         raise Auth401("Missing API key", code="missing_api_key")
 
