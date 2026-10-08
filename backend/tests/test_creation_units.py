@@ -280,12 +280,6 @@ def test_removing_a_cycle_of_steps_ends_and_returns_their_keys():
     assert steps == {"current": "original", "items": {"original": item("k/original")}}
 
 
-@pytest.mark.xfail(
-    reason="remove_steps: walking a cycle of removed steps, surviving() stops on a step it "
-    "has seen and returns it because it is still in `items` (it never checks `doomed`), so "
-    "the current image and a survivor's `from` are left naming a removed step",
-    strict=True,
-)
 def test_a_cycle_of_removed_steps_leaves_no_reference_to_them():
     steps = {
         "current": "a",

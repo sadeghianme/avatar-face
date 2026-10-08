@@ -98,7 +98,9 @@ def remove_steps(steps: CreationSteps, doomed: set[str]) -> list[str]:
         while step_id in doomed and step_id not in seen:
             seen.add(step_id)
             step_id = items[step_id].get("from")
-        return step_id if step_id in items else None
+        # A walk that ends on a step already seen went round a cycle of
+        # removed steps: nothing of it survives.
+        return step_id if step_id in items and step_id not in doomed else None
 
     current = steps.get("current")
     if current in doomed:
