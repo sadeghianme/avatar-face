@@ -777,10 +777,12 @@ async def test_a_bare_snapshot_is_served_as_a_person_with_empty_urls(fields):
     view = await publishing.published_view(
         _avatar(published_config=json.dumps(config)), FakeStorage()
     )
-    assert view == {
+    assert view is not None
+    # No disclosure in the snapshot: none in the answer, not even a null.
+    assert view.model_dump(mode="json") == {
         "framing": "face", "face_type": "human", "scene": None, "voice": None, "mouth": None,
         "rig_url": "", "thumbnail_url": "", "image_url": f"{SIGNED}k/image.png",
-        "layer_urls": None, "disclosure": None,
+        "layer_urls": None,
     }
 
 
@@ -796,7 +798,8 @@ async def test_a_full_snapshot_is_served_with_presigned_urls_and_nothing_interna
     )
     storage = FakeStorage({f"{P3}/scene.webp": b"bg"})
     view = await publishing.published_view(_avatar(published_config=json.dumps(snapshot)), storage)
-    assert view == {
+    assert view is not None
+    assert view.model_dump(mode="json") == {
         "framing": "full", "face_type": "animal",
         "scene": {"zoom": 1.2, "pan": {"x": -0.25, "y": 0.1},
                   "background": {"kind": "image", "image_url": f"{SIGNED}{P3}/scene.webp"}},

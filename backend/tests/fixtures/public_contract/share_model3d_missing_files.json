@@ -1,0 +1,43 @@
+{
+  "disclosure": {
+    "ai_edited": {
+      "mode": "generate",
+      "model": null
+    },
+    "line": "human"
+  },
+  "face_type": "human",
+  "framing": "face",
+  "image_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/44444444444444444444444444444444/published/r3/image.glb?expires=1800007200&signature=f392b4dbe868af1ecce6031ed4f7aee3176762ee89488aa0fe137aeca79810cb",
+  "kind": "model3d",
+  "layer_urls": {
+    "body": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/44444444444444444444444444444444/published/r3/layer-body.png?expires=1800007200&signature=94ad028347444d29e13ad1b687c1323be66c90aff9889f7d66d65f9eb2264f62",
+    "head": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/44444444444444444444444444444444/published/r3/layer-head.png?expires=1800007200&signature=312dc5b847ea68eb6b90f1cf83fdc24b6395683d837dbf8991b164a7b45ed0c0"
+  },
+  "model_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/44444444444444444444444444444444/published/r3/image.glb?expires=1800007200&signature=f392b4dbe868af1ecce6031ed4f7aee3176762ee89488aa0fe137aeca79810cb",
+  "mouth": {
+    "character": null,
+    "motion_url": null,
+    "oral": null,
+    "profile": {},
+    "renderer": "continuous"
+  },
+  "name": "Golden model3d_missing_files",
+  "rig_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/44444444444444444444444444444444/published/r3/rig.json?expires=1800007200&signature=b96a9107d10bb631c9496ad83f66aa7092b122b8ecc970f5637d89fd5164314c",
+  "scene": {
+    "background": {
+      "kind": "transparent"
+    },
+    "pan": {
+      "x": 0.0,
+      "y": 0.0
+    },
+    "zoom": 1.0
+  },
+  "thumbnail_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/44444444444444444444444444444444/published/r3/thumb.jpg?expires=1800007200&signature=634f42dbd7ddc9e6b6fa25a59c82b611a9ad7f92b2458edc0d766ca279b5b0ba",
+  "voice": {
+    "locale": "fr-FR",
+    "provider": "offline",
+    "voice": "offline-warm"
+  }
+}

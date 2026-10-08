@@ -11,6 +11,7 @@ from typing import Annotated
 from fastapi import Depends, Path, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.client_ip import client_ip
 from app.core.errors import Auth401, Forbidden403, NotFound404
 from app.core.security import decode_token
 from app.db import get_db
@@ -21,13 +22,13 @@ DB = Annotated[AsyncSession, Depends(get_db)]
 
 
 def client_address(request: Request) -> str:
-    """The caller's address, as the proxy saw it.
-
-    Behind Caddy, uvicorn reads it from X-Forwarded-For (FORWARDED_ALLOW_IPS,
-    deploy/docker-compose.prod.yml); "unknown" only for a transport that has
-    no peer at all.
+    """The caller's address, through the proxies this server trusts
+    (core.client_ip: Cloudflare's CF-Connecting-IP behind Caddy in
+    production). Every per-client limit and every recorded address uses
+    this, never `request.client` directly; "unknown" only for a transport
+    that has no peer at all.
     """
-    return request.client.host if request.client else "unknown"
+    return client_ip(request)
 
 
 async def get_current_user(request: Request, db: DB) -> User:

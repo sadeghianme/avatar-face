@@ -500,22 +500,6 @@ class PublishedConfig(TypedDict):
     disclosure: NotRequired[Disclosure]
 
 
-class PublishedView(TypedDict):
-    """A published snapshot with presigned URLs: what embed and share serve."""
-
-    framing: str
-    # "human", "animal" or "cartoon": how the engine moves the head.
-    face_type: str
-    scene: VisitorScene | None
-    voice: VoiceChoice | None
-    mouth: dict | None
-    rig_url: str
-    thumbnail_url: str
-    image_url: str
-    layer_urls: dict[str, str] | None
-    disclosure: Disclosure | None
-
-
 # --- The rig file (services.rig) -------------------------------------------------------------
 
 

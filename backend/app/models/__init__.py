@@ -6,7 +6,7 @@ from app.models.creation import Creation, CreationStatus
 from app.models.org import ROLE_RANK, Invitation, Membership, Organization, Role
 from app.models.provider_credential import ProviderCredential
 from app.models.rate_hit import RateHit
-from app.models.speech import SpeechCache
+from app.models.speech import LegacySpeechCache, SpeechClip
 from app.models.usage import UsageEvent
 from app.models.user import User
 
@@ -25,7 +25,8 @@ __all__ = [
     "ProviderCredential",
     "ROLE_RANK",
     "Role",
-    "SpeechCache",
+    "LegacySpeechCache",
+    "SpeechClip",
     "TimestampedBase",
     "RateHit",
     "UsageEvent",

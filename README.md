@@ -65,9 +65,9 @@ What CI runs, per package (`.github/workflows/ci.yml`):
 
 | Package | Commands (from the package directory) |
 |---|---|
-| backend | `ruff check .` · `pyright` · `python -m pytest tests -q` (or `make test` from the root) |
-| embed | `npm run lint` · `npm run typecheck` (sources and tests) · `npm test` (vitest, pixel goldens included) · `npm run build` |
-| frontend | `npm run check` (feature boundaries, en/fr parity) · `npm run lint` · `npm run format:check` · `npm test` (`node --test`, Node 22+) · `npm run build` (type check + bundle) |
+| backend | `ruff check .` · `pyright` · the OpenAPI document re-exported and compared (`python -m scripts.export_openapi`) · `python -m pytest tests -q` (or `make test` from the root) |
+| embed | `npm run lint` · `npm run format:check` · `npm run typecheck` (sources and tests) · `npm run check:api` (generated API types) · `npm test` (vitest, pixel goldens included) · `npm run build` · `npm run test:browser` (Chromium) |
+| frontend | `npm run check` (feature boundaries, en/fr parity) · `npm run lint` · `npm run format:check` · `npm run typecheck` (app and tests) · `npm run check:api` (generated API types) · `npm test` (`node --test`, Node 22+) · `npm run test:ui` (rendering tests) · `npm run build` (type check + bundle) |
 | deploy | `deploy/test-deploy.sh` (every gate of `deploy.sh`) · ShellCheck on `deploy/*.sh` |
 | images | both Dockerfiles build, boot and pass `deploy/smoke/web-sweep.mjs`: every page in headless Chrome, zero CSP violations ([docs/process.md](docs/process.md#ci)) |
 
@@ -138,6 +138,8 @@ moved: [docs/process.md](docs/process.md).
 1. In-memory state (credential overlay, rate limiters, job runner): one API
    process only. More workers need Redis and a real queue.
 2. Refresh tokens cannot be revoked yet (no server-side session table).
-3. Login and register are not rate limited; the embed and share APIs are.
+3. Rate limits are kept per process (item 1), keyed on the visitor's own
+   address behind Cloudflare ([docs/process.md](docs/process.md#client-addresses)):
+   everyone behind one carrier-grade NAT shares a bucket.
 4. The dashboard's CSP allows inline scripts because of the Simulator's frame
    ([docs/process.md](docs/process.md#security-headers) has the way out).

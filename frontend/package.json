@@ -15,7 +15,7 @@
     "preview": "vite preview",
     "test:ui": "vitest run",
     "gen:api": "openapi-typescript src/lib/api-schema.json -o src/lib/api-types.ts && prettier --write src/lib/api-types.ts",
-    "api:schema": "cd ../backend && .venv/bin/python -c \"import json; from app.main import app; print(json.dumps(app.openapi(), sort_keys=True, indent=2))\" > ../frontend/src/lib/api-schema.json",
+    "api:schema": "../backend/.venv/bin/python ../backend/scripts/export_openapi.py src/lib/api-schema.json",
     "check:api": "npm run gen:api && git diff --exit-code -- src/lib/api-types.ts"
   },
   "dependencies": {

@@ -50,6 +50,7 @@ from app.core.credentials import credentials  # noqa: E402
 from app.db import get_engine, reset_engine  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import Base  # noqa: E402
+from app.services import email  # noqa: E402
 from app.services.jobs import runner  # noqa: E402
 from app.services.rate_limit import reset_rate_limiters  # noqa: E402
 from app.services.storage import reset_storage  # noqa: E402
@@ -75,8 +76,10 @@ async def app():
     runner.reset()
     application = create_app()
     yield application
-    # A job a test left running must not outlive the database it writes to.
+    # A job a test left running must not outlive the database it writes to,
+    # and a mail it left sending must not land in the next test.
     await runner.drain()
+    await email.drain()
     await engine.dispose()
     reset_engine()
 

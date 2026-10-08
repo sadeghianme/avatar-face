@@ -68,7 +68,7 @@ async def list_voices(provider: str) -> list[VoiceOut]:
 async def synthesize(body: SynthesizeRequest, ctx: OrgMember, db: DB) -> SynthesizeResponse:
     await check_usage_limit(db, ctx.org.id, len(body.text))
     result, cached = await synthesize_cached(
-        db, body.provider, body.voice, body.locale, body.text
+        db, body.provider, body.voice, body.locale, body.text, org_id=ctx.org.id
     )
     await record_synthesis(
         db, ctx.org.id, body.provider, len(body.text), cached, source="dashboard"
@@ -119,7 +119,9 @@ async def stream(body: SynthesizeRequest, ctx: OrgMember, db: DB):
             yield line({"type": "start", "version": 1, "mode": "phrases" if streams else "recording"})
             if not streams:
                 async with get_session_factory()() as session:
-                    result, cached = await synthesize_cached(session, body.provider, body.voice, body.locale, body.text)
+                    result, cached = await synthesize_cached(
+                        session, body.provider, body.voice, body.locale, body.text, org_id=org_id
+                    )
                     await record_synthesis(session, org_id, body.provider, len(body.text), cached, source="dashboard")
                 yield line({"type": "recording", "audio_b64": base64.b64encode(result.audio).decode(),
                             "audio_mime": result.audio_mime, "duration_ms": result.duration_ms,
@@ -140,7 +142,11 @@ async def stream(body: SynthesizeRequest, ctx: OrgMember, db: DB):
                 async with asyncio.timeout(90):
                     async with get_session_factory()() as session:
                         await check_usage_limit(session, org_id, len(phrase))
-                        result, cached = await synthesize_cached(session, body.provider, body.voice, body.locale, phrase)
+                        # PCM: the packet carries samples, not a file.
+                        result, cached = await synthesize_cached(
+                            session, body.provider, body.voice, body.locale, phrase,
+                            org_id=org_id, pcm=True,
+                        )
                         await record_synthesis(session, org_id, body.provider, len(phrase), cached, source="dashboard")
                 packet = pcm_packet(result.audio, sequence, sample_offset, result.cues, result.cues)
                 sample_offset += packet["sample_count"]
