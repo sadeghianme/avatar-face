@@ -49,10 +49,6 @@ import { DEFAULT_TUNING, type Cue, type EngineTuning } from "./types";
 
 export type { HeadPose, HeadPoseDriver } from "./engine3d/head";
 
-// KTX2 texture transcoding needs WASM binaries; loaded from CDN on demand
-// (only models with KTX2 textures pay this cost).
-const BASIS_TRANSCODER_PATH = "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/basis/";
-
 /** What a model may ask of the engine beyond its geometry. Every field is
  *  optional and its absence is exactly the engine as it was: Ready Player
  *  Me and Avaturn models pass nothing. A head3d GLB (head3d/load.ts)
@@ -71,6 +67,15 @@ export interface Avatar3DOptions {
   /** Put the engine on `globalThis.__liveface3d` for the console, until
    *  `destroy()`; off by default (engine/debug-handle.ts). */
   debug?: boolean;
+  /**
+   * The directory (a URL ending in "/") with three's Basis Universal
+   * transcoder, basis_transcoder.js and .wasm, which a model's KTX2
+   * textures are decoded with; only such a model fetches them. Never a
+   * CDN: liveface-3d.js passes its own directory, where the build puts them
+   * (scripts/build.mjs) and the API serves them; the dashboard passes the
+   * API's. Without it, the page's own directory.
+   */
+  transcoderPath?: string;
 }
 
 const DEFAULT_LIGHTS = { hemisphere: 1.4, key: 1.6, groundColor: 0x8888aa };
@@ -120,7 +125,7 @@ export class Avatar3DEngine {
     options: Avatar3DOptions = {}
   ): Promise<Avatar3DEngine> {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-    const ktx2 = new KTX2Loader().setTranscoderPath(BASIS_TRANSCODER_PATH).detectSupport(renderer);
+    const ktx2 = new KTX2Loader().setTranscoderPath(options.transcoderPath ?? "").detectSupport(renderer);
     const loader = new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
     try {
       const gltf = await loader.loadAsync(modelUrl);

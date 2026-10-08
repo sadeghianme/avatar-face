@@ -84,6 +84,6 @@ export function engineSeam(engine: AvatarEngine): EngineSeam {
     tick: (now) => engine["tick"](now),
     render: () => engine["render"](),
     deformedPoints: () => engine["deformedPoints"](),
-    blendedCueWeights: (now) => engine["blendedCueWeights"](now),
+    blendedCueWeights: (now) => engine["animation"].blendedCueWeights(now, engine.tuning.smoothness),
   };
 }

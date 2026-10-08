@@ -223,7 +223,7 @@ green CI (the `images` job rebuilds both images from scratch), merge, deploy.
 | Python libraries | `backend/constraints.txt` (the production `pip freeze`), used by the Dockerfile and CI; `mediapipe==1.0.1` in `backend/Dockerfile` | below |
 | Python dev tools | `ruff`, `pyright` exact versions in `backend/pyproject.toml` | change the version; fix what the new one reports in the same pull request |
 | npm packages | `embed/package-lock.json`, `frontend/package-lock.json` (`npm ci` everywhere) | in the package: `npm install <pkg>@<version>`, commit the lockfile |
-| three.js | `embed/package.json`, and its version in the KTX2 transcoder URL (`embed/src/engine3d.ts`) and in the CSP's `connect-src` (`frontend/nginx-security-headers.conf`) | change all three together |
+| three.js | `embed/package.json` (the lockfile); its KTX2 transcoder is copied from the installed three into `embed/dist` by the build (`embed/scripts/build.mjs`) and served by the API beside `liveface-3d.js` | as any npm package: the transcoder moves with it |
 | Models | URL and SHA-256 of every file in `backend/Dockerfile` | below |
 | Base images | `FROM <tag>@sha256:<digest>` in both Dockerfiles | below; Dependabot proposes new digests monthly |
 | GitHub Actions | major tags in `ci.yml` | Dependabot proposes them monthly |
