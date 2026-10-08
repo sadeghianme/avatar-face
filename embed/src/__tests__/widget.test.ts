@@ -295,6 +295,19 @@ describe("liveface.js on a customer's page", () => {
       expect("__liveface" in globalThis).toBe(false);
     });
 
+    it.each([
+      ["without data-head-motion, the avatar's own (a photo's: the turn in depth)", {}, "3d"],
+      ['with data-head-motion="2d", the rigid layer', { headMotion: "2d" }, "2d"],
+      ['with data-head-motion=" 3D ", the turn in depth', { headMotion: " 3D " }, "3d"],
+      ["with a data-head-motion it does not know, the avatar's own", { headMotion: "wobble" }, "3d"],
+    ])("moves the head %s", async (_, dataset, mode) => {
+      const p = page(resources as Record<string, Resource>);
+      await settled(await p.embed({ avatar: "av_1", ...dataset }));
+      const engine = p.window.Liveface!.engine as AvatarEngine;
+      expect(engine.headMotion()).toBe(mode);
+      engine.destroy();
+    });
+
     it('keeps the handle off for data-debug="off"', async () => {
       const p = page(resources as Record<string, Resource>);
       await settled(await p.embed({ avatar: "av_1", debug: "off" }));

@@ -38,6 +38,8 @@ const SACCADE_MS = 35;
 const BEAT_NOD_MS = 420;
 /** Ambient nods, when a cue track carries no usable emphasis. */
 const AMBIENT_NOD_MS = 1050;
+/** A 3D head move (yaw and pitch, radians) this large carries a blink. */
+const HEAD_TURN_BLINK_RAD = 0.035;
 
 /** How the head is displaced this frame, canvas px and radians, plus the
  *  face's parallax share (always none: see headOffset). */
@@ -78,10 +80,11 @@ export class Motion {
    *  vertices, and the face slid around inside a stationary head. */
   readonly head = new HeadMotion();
   /**
-   * "2d" (the default): the head moves as a rigid layer (headOffset), with
-   * the drift above and nods on the beats. "3d" (a prototype,
-   * EngineOptions.headMotion): the head turns in depth inside the face
-   * mesh (head-turn.ts), driven by `personality` instead.
+   * "2d": the head moves as a rigid layer (headOffset), with the drift
+   * above and nods on the beats (a character's and an animal's, and any
+   * face asked for it). "3d" (EngineOptions.headMotion, a person's photo's
+   * default): the head turns in depth inside the face mesh (head-turn.ts),
+   * driven by `personality` instead. The engine sets it.
    */
   mode: "2d" | "3d" = "2d";
   /** The tuning's headMotion, which scales the 3D pose and with it how
@@ -224,8 +227,8 @@ export class Motion {
     if (this.mode === "3d") {
       const p = this.personality;
       p.update(dt, now, speech.speaking, this.energy, speech.cueTime);
-      // A head move of more than a few degrees carries a blink.
-      if (p.movedAt === now && p.moveSize * this.headScale > 0.06) this.blinks.onHeadTurn(now);
+      // A head move of more than two degrees carries a blink.
+      if (p.movedAt === now && p.moveSize * this.headScale > HEAD_TURN_BLINK_RAD) this.blinks.onHeadTurn(now);
     } else {
       this.head.update(dt, now, speech.speaking);
       if (this.head.movedAt === now && this.head.moveSize > 0.35) this.blinks.onHeadTurn(now);

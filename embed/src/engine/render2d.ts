@@ -3,9 +3,11 @@
  * the head as a rigid unit, the body's sway, and the layered path.
  */
 import type { EngineTuning } from "../types";
-import { IDENTITY, multiply, rotate, translate, type Affine } from "./warp-gl";
+import { IDENTITY, apply, multiply, rotate, translate, type Affine } from "./warp-gl";
 import type { FaceMesh, HeadGeom, Point, Rect } from "./geometry";
+import { drawWarpedTriangle } from "./mesh-warp";
 import type { BodyLean, HeadOffset } from "./motion";
+import type { NeckWarp } from "./neck-blend";
 
 /**
  * A cut-out's head as its own layer (cutHeadLayer): the share of the head's
@@ -210,6 +212,10 @@ export interface FrameParts {
   headLayer: HeadLayer | null;
   headOffset: HeadOffset;
   bodyLean: BodyLean | null;
+  /** A layered avatar's neck warp (neck-blend.ts), updated to this frame's
+   *  head motion, and a canvas the stage's size to draw the layers through
+   *  it on; null while the head is still on its body (or not layered). */
+  neck?: { warp: NeckWarp; scratch: HTMLCanvasElement } | null;
   /** Draw the warped mesh through `affine`, the context's transform as an
    *  affine (mesh-warp.ts). */
   drawMesh(affine: Affine): void;
@@ -322,15 +328,78 @@ function composeLayered(f: FrameParts, layers: Layers): void {
 
   ctx.save();
   let affine = applyBodyTransform(ctx, f.bodyLean);
-  drawFullFrame(ctx, layers.body, f.picture);
+  const neck = geom ? f.neck : null;
+  if (neck) {
+    // The body and the head layer through the neck's warp (neck-blend.ts):
+    // the head's motion down to the chin, the body's below the neck.
+    drawThroughNeck(ctx, layers.body, f.picture, neck.warp, affine, neck.scratch);
+    drawThroughNeck(ctx, layers.head, f.picture, neck.warp, affine, neck.scratch);
+  } else {
+    drawFullFrame(ctx, layers.body, f.picture);
+  }
 
   ctx.save();
   if (geom) affine = applyHeadTransform(ctx, geom, head, affine);
-  drawFullFrame(ctx, layers.head, f.picture);
+  if (!neck) drawFullFrame(ctx, layers.head, f.picture);
 
   f.drawMesh(affine);
   f.drawFeatures();
   ctx.restore();
+  ctx.restore();
+}
+
+/**
+ * A full-frame layer drawn through the neck's warp (neck-blend.ts), body
+ * frame, then through `body` (the body's sway and breath) onto the canvas.
+ * Triangle by triangle onto `scratch`, each REPLACING what is under it
+ * there (mesh-warp.ts drawWarpedTriangle: its padded clip's coverage
+ * erased, the triangle added), so the overlap that closes the seams
+ * between them draws no half-transparent pixel twice (the layers' hair and
+ * feathered edges); then the scratch, once, over the canvas.
+ */
+function drawThroughNeck(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  picture: Rect,
+  warp: NeckWarp,
+  body: Affine,
+  scratch: HTMLCanvasElement
+): void {
+  const g = scratch.getContext("2d");
+  if (!g) return;
+  if (scratch.width !== ctx.canvas.width || scratch.height !== ctx.canvas.height) {
+    scratch.width = ctx.canvas.width;
+    scratch.height = ctx.canvas.height;
+  }
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, scratch.width, scratch.height);
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = "high";
+  const sx = img.naturalWidth / picture.w,
+    sy = img.naturalHeight / picture.h;
+  const src = (p: Point): Point => ({ x: (p.x - picture.x) * sx, y: (p.y - picture.y) * sy });
+  const W = scratch.width,
+    H = scratch.height;
+  for (const t of warp.triangles()) {
+    const dst = t.moved.map((p) => apply(body, p));
+    // Off the stage (a face framing leaves most of a picture outside it):
+    // nothing to draw.
+    if (
+      Math.max(dst[0].x, dst[1].x, dst[2].x) < -2 ||
+      Math.min(dst[0].x, dst[1].x, dst[2].x) > W + 2 ||
+      Math.max(dst[0].y, dst[1].y, dst[2].y) < -2 ||
+      Math.min(dst[0].y, dst[1].y, dst[2].y) > H + 2
+    )
+      continue;
+    drawWarpedTriangle(g, img, t.rest.map(src), dst, 0, 1, 2, 1, true);
+  }
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // Pixel for pixel: a "high" smoothing filter is no identity at 1:1 (a
+  // cubic blurs a pixel's width), and on Skia's CPU raster it fringed the
+  // picture's edge and dimmed its last column.
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(scratch, 0, 0);
   ctx.restore();
 }
 
@@ -394,6 +463,33 @@ function applyBustTransform(
   m = rotate(m, head.roll);
   m = multiply(m, lean);
   return translate(m, -geom.pivotX, -geom.bustPivotY);
+}
+
+/**
+ * The head's rigid motion relative to the body, as composeFrame draws it:
+ * the bust's lean for a cut-out moving as one picture (`bust`), the shift
+ * and roll about the head's pivot otherwise (an opaque photo, a layered
+ * avatar's head, a cut-out's own head layer). Canvas px to canvas px. The
+ * same steps as applyBustTransform and applyHeadTransform put on the
+ * affine, for what must follow the head exactly: the 3D turn undoes it
+ * (head-turn.ts), a layered neck's warp (neck-blend.ts).
+ */
+export function headMotionAffine(
+  geom: { pivotX: number; pivotY: number; bustPivotY: number; bustReach: number },
+  head: { dx: number; dy: number; roll: number },
+  bust: boolean
+): Affine {
+  if (bust) {
+    const shear = -head.dx / geom.bustReach;
+    const squash = 1 - head.dy / geom.bustReach;
+    let m = translate(IDENTITY, geom.pivotX, geom.bustPivotY);
+    m = rotate(m, head.roll);
+    m = multiply(m, { a: 1, b: 0, c: shear * squash, d: squash, e: 0, f: 0 });
+    return translate(m, -geom.pivotX, -geom.bustPivotY);
+  }
+  let m = translate(IDENTITY, geom.pivotX + head.dx, geom.pivotY + head.dy);
+  m = rotate(m, head.roll);
+  return translate(m, -geom.pivotX, -geom.pivotY);
 }
 
 /**

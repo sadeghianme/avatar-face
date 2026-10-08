@@ -4,9 +4,13 @@
  * character profile's own), the lids, a smile reaching the eyes, the brows,
  * a mouth extension's own pass, the lower face, then the derived vertices.
  *
- * Head pose is not here: it is applied at render time as a rigid layer
- * transform (render2d.ts). Warping vertices for it is how the face ended
- * up sliding around inside a stationary head.
+ * The head's rigid motion is not here: it is applied at render time as a
+ * transform of the layer or the picture (render2d.ts). Warping vertices
+ * for all of it is how the face once ended up sliding around inside a
+ * stationary head. What is here is what a rigid transform cannot do: the
+ * turn in depth (head-turn.ts, `turn`), which keeps the face's outline
+ * where the rigid motion puts it, and the neck band's pin to a layered
+ * avatar's body (neck-blend.ts, `pin`).
  */
 import { blinkEase } from "./blink";
 import type { CharacterField, CharacterTraits } from "./character-mouth";
@@ -15,6 +19,7 @@ import type { KindProfile } from "./kind-profile";
 import type { MouthExtension } from "../mouth-extension";
 import type { BlendWeights, EngineTuning, Rig } from "../types";
 import type { FaceMesh, Point } from "./geometry";
+import { neckPinOffset, type NeckPin } from "./neck-blend";
 import { EYE_CORNERS, LEFT_BROW, LOWER_LIDS, RIGHT_BROW, UPPER_LIDS } from "./landmarks";
 import type { FaceState } from "./state";
 
@@ -154,6 +159,9 @@ export interface DeformInput {
    *  the landmarks after everything else and before the derived vertices
    *  follow them. Absent: the head moves only as a rigid layer. */
   turn?: (pts: Point[]) => void;
+  /** A layered avatar's neck band, placed where the neck's warp puts the
+   *  layers under it (neck-blend.ts). Absent: it moves with the head. */
+  pin?: NeckPin | null;
 }
 
 /** Every vertex of the mesh this frame, canvas px, in vertex order. */
@@ -227,11 +235,17 @@ export function deformFace(f: DeformInput): Point[] {
   for (const [a, b] of mesh.derivedParents) {
     pts.push({ x: (pts[a].x + pts[b].x) / 2, y: (pts[a].y + pts[b].y) / 2 });
   }
-  // The neck band follows the jaw line by each vertex's share.
+  // The neck band follows the jaw line by each vertex's share, and on a
+  // layered avatar where the neck's warp puts the layers under it.
+  const pin = f.pin;
   for (const v of mesh.neckBand) {
     const p = pts[v.parent],
       b = mesh.basePoints[v.parent];
-    pts.push({ x: v.base.x + (p.x - b.x) * v.share, y: v.base.y + (p.y - b.y) * v.share });
+    const o = pin ? neckPinOffset(pin, v.base) : null;
+    pts.push({
+      x: v.base.x + (p.x - b.x) * v.share + (o ? o.x : 0),
+      y: v.base.y + (p.y - b.y) * v.share + (o ? o.y : 0),
+    });
   }
 
   return pts;

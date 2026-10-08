@@ -16,13 +16,25 @@ import type { Pt } from "./jaw-rig";
  * (a mitre at the corners, cut short on a very sharp one so a sliver does
  * not grow a spike), after the small proportional growth that hides
  * sub-pixel gaps on every triangle.
+ *
+ * `edges`, when given, pads each edge (d0-d1, d1-d2, d2-d0) by its own
+ * amount instead: an edge on the mesh's outer boundary has no neighbour
+ * to overlap, and a pad there only paints the triangle a pixel past the
+ * picture it should meet (MeshWarp.trianglePads).
  */
-export function padTriangle(d0: Pt, d1: Pt, d2: Pt, pad: number, scale = 0.015): [Pt, Pt, Pt] {
+export function padTriangle(
+  d0: Pt,
+  d1: Pt,
+  d2: Pt,
+  pad: number,
+  scale = 0.015,
+  edges?: readonly [number, number, number]
+): [Pt, Pt, Pt] {
   const cx = (d0.x + d1.x + d2.x) / 3,
     cy = (d0.y + d1.y + d2.y) / 3;
   const v = [d0, d1, d2];
   const grown = v.map((p) => ({ x: p.x + (p.x - cx) * scale, y: p.y + (p.y - cy) * scale }));
-  if (!pad) return grown as [Pt, Pt, Pt];
+  if (!pad && !edges) return grown as [Pt, Pt, Pt];
   // Outward unit normal of each edge k, from v[k] to v[k+1].
   const normals = [0, 1, 2].map((k) => {
     const a = v[k],
@@ -38,6 +50,32 @@ export function padTriangle(d0: Pt, d1: Pt, d2: Pt, pad: number, scale = 0.015):
     }
     return [nx, ny];
   });
+  if (edges) {
+    return [0, 1, 2].map((k) => {
+      // The corner where edge k (offset by edges[k]) meets edge k-1: the
+      // point that lies that far out from each.
+      const [ax, ay] = normals[k],
+        [bx, by] = normals[(k + 2) % 3];
+      const pa = edges[k],
+        pb = edges[(k + 2) % 3];
+      const det = ax * by - ay * bx;
+      let mx: number, my: number;
+      if (Math.abs(det) < 1e-3) {
+        mx = ((ax + bx) / 2) * Math.max(pa, pb);
+        my = ((ay + by) / 2) * Math.max(pa, pb);
+      } else {
+        mx = (pa * by - ay * pb) / det;
+        my = (ax * pb - pa * bx) / det;
+      }
+      const len = Math.hypot(mx, my),
+        most = MITRE_LIMIT * Math.max(pa, pb);
+      if (len > most) {
+        mx *= most / len;
+        my *= most / len;
+      }
+      return { x: grown[k].x + mx, y: grown[k].y + my };
+    }) as [Pt, Pt, Pt];
+  }
   return [0, 1, 2].map((k) => {
     // The corner between edge k (leaving it) and edge k-1 (arriving).
     const [ax, ay] = normals[k],

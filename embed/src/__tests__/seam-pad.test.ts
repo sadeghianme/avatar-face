@@ -69,6 +69,30 @@ describe("padTriangle", () => {
     expect(edgeDistance(thin[2], thin[0], grown[2], c)).toBeCloseTo(1, 9);
   });
 
+  it("pads each edge by its own amount when asked: an outline's edge not at all", () => {
+    const plump: [Pt, Pt, Pt] = [
+      { x: 0, y: 0 },
+      { x: 40, y: 0 },
+      { x: 20, y: 35 },
+    ];
+    const c = { x: 20, y: 35 / 3 };
+    const pads: [number, number, number] = [0, 1, 0.5];
+    const grown = padTriangle(plump[0], plump[1], plump[2], 0, 0, pads);
+    for (let k = 0; k < 3; k++) {
+      const a = plump[k],
+        b = plump[(k + 1) % 3];
+      expect(edgeDistance(a, b, grown[k], c)).toBeCloseTo(pads[k], 9);
+      expect(edgeDistance(a, b, grown[(k + 1) % 3], c)).toBeCloseTo(pads[k], 9);
+    }
+    // All edges alike, it is the uniform pad.
+    const even = padTriangle(plump[0], plump[1], plump[2], 0, 0, [1, 1, 1]);
+    const uniform = padTriangle(plump[0], plump[1], plump[2], 1, 0);
+    even.forEach((p, k) => {
+      expect(p.x).toBeCloseTo(uniform[k].x, 9);
+      expect(p.y).toBeCloseTo(uniform[k].y, 9);
+    });
+  });
+
   it("cuts a sharp corner's mitre short instead of growing a spike", () => {
     const needle: [Pt, Pt, Pt] = [
       { x: 0, y: 0 },

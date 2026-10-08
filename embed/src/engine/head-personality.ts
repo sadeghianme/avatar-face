@@ -1,7 +1,9 @@
 /**
  * The head's "personality" for the 3D turn (EngineOptions.headMotion "3d",
- * a prototype): a pose in degrees-of-a-real-head rather than pixels of a
- * layer, from a small procedural model.
+ * a person's photo's default): a pose in degrees of a real head rather than
+ * pixels of a layer, from a small procedural model. Conservative: at most
+ * 7 degrees of yaw, 5 of pitch and 3 of roll (POSE_LIMIT_DEG), the
+ * envelope's peaks easing into those limits rather than cut off at them.
  *
  *  - Drift: band-limited noise, three incommensurate sines per axis between
  *    0.1 and 0.6 Hz with seeded phases, small, livelier while speaking.
@@ -23,8 +25,10 @@ import { VOWEL_VISEMES } from "./cues";
 import type { HeadPose3D } from "./head-turn";
 
 const DEG = Math.PI / 180;
-/** Most of the pose, before the tuning's scale: the spec's ±12/8/5°. */
-export const POSE_LIMIT_DEG = { yaw: 12, pitch: 8, roll: 5 };
+/** The most of the pose, degrees, before the tuning's scale. */
+export const POSE_LIMIT_DEG = { yaw: 7, pitch: 5, roll: 3 };
+/** Past this share of its limit an axis eases into it (softLimit). */
+const KNEE = 0.7;
 /** The eyes go first: a head turn starts this long after the saccade. */
 const EYE_LEAD_MS = 150;
 /** Silence inside a cue track longer than this separates phrases. */
@@ -140,7 +144,7 @@ export class HeadPersonality {
         p: r() * Math.PI * 2,
         a: (amp * [1, 0.6, 0.3][k]) / 1.4,
       }));
-    this.sines = { yaw: make(1.6 * DEG), pitch: make(1.1 * DEG), roll: make(0.7 * DEG) };
+    this.sines = { yaw: make(1.0 * DEG), pitch: make(0.7 * DEG), roll: make(0.45 * DEG) };
   }
 
   start(now: number): void {
@@ -165,7 +169,7 @@ export class HeadPersonality {
     this.phrases = [];
     this.accents = [];
     // The settle after the last word, and a pause before the next glance.
-    this.turnTo({ yaw: this.posture.yaw * 0.4, pitch: 1.2 * DEG, roll: this.posture.roll * 0.4 }, now, 1.1, false);
+    this.turnTo({ yaw: this.posture.yaw * 0.4, pitch: 0.7 * DEG, roll: this.posture.roll * 0.4 }, now, 1.1, false);
     this.nextShiftAt = now + 1800 + this.random() * 1500;
   }
 
@@ -179,11 +183,11 @@ export class HeadPersonality {
       while (this.nextPhrase < this.phrases.length && this.phrases[this.nextPhrase].start - EYE_LEAD_MS <= t) {
         const k = this.nextPhrase++;
         const side = r() < 0.5 ? -1 : 1;
-        const yaw = side * (2 + r() * 4.5) * DEG;
+        const yaw = side * (1.2 + r() * 2.6) * DEG;
         // Mostly the eyes stay on the listener; sometimes they go with it.
         const look = r() < 0.3;
         this.turnTo(
-          { yaw, pitch: -(0.6 + r() * 1.2) * DEG, roll: yaw * 0.25 + (r() - 0.5) * 1.5 * DEG },
+          { yaw, pitch: -(0.4 + r() * 0.7) * DEG, roll: yaw * 0.25 + (r() - 0.5) * 0.9 * DEG },
           now,
           0.55,
           look
@@ -195,7 +199,7 @@ export class HeadPersonality {
         if (this.phrases[k].end <= t) {
           this.phraseEnded = k;
           this.turnTo(
-            { yaw: this.posture.yaw * 0.45, pitch: 1.0 * DEG, roll: this.posture.roll * 0.4 },
+            { yaw: this.posture.yaw * 0.45, pitch: 0.6 * DEG, roll: this.posture.roll * 0.4 },
             now,
             0.9,
             false
@@ -217,9 +221,9 @@ export class HeadPersonality {
         return Math.sign(v) * v * v;
       };
       const away = r() < 0.55;
-      const yaw = away ? draw() * 8 * DEG : this.posture.yaw * 0.3;
-      const pitch = away ? draw() * 3.5 * DEG + 0.8 * DEG : 0;
-      this.turnTo({ yaw, pitch, roll: yaw * 0.3 + draw() * 1.5 * DEG }, now, 0.8, away);
+      const yaw = away ? draw() * 4.8 * DEG : this.posture.yaw * 0.3;
+      const pitch = away ? draw() * 2.2 * DEG + 0.5 * DEG : 0;
+      this.turnTo({ yaw, pitch, roll: yaw * 0.3 + draw() * 0.9 * DEG }, now, 0.8, away);
     }
     // The pending head move, once the eyes have led it.
     if (this.pending && now >= this.pending.at) {
@@ -246,7 +250,7 @@ export class HeadPersonality {
     for (const n of this.nods) {
       const u = (now - n.at) / 520;
       const env = u < 0.3 ? Math.sin((u / 0.3) * (Math.PI / 2)) ** 2 : Math.cos(((u - 0.3) / 0.7) * (Math.PI / 2)) ** 2;
-      nod += env * n.strength * (1.6 + 1.2 * energy) * DEG;
+      nod += env * n.strength * (1.0 + 0.8 * energy) * DEG;
     }
     let brow = 0;
     this.brows = this.brows.filter((b) => now - b < 700);
@@ -259,9 +263,9 @@ export class HeadPersonality {
     }
     this.pose.pitch += nod;
     const lim = POSE_LIMIT_DEG;
-    this.pose.yaw = clamp(this.pose.yaw, lim.yaw * DEG);
-    this.pose.pitch = clamp(this.pose.pitch, lim.pitch * DEG);
-    this.pose.roll = clamp(this.pose.roll, lim.roll * DEG);
+    this.pose.yaw = softLimit(this.pose.yaw, lim.yaw * DEG);
+    this.pose.pitch = softLimit(this.pose.pitch, lim.pitch * DEG);
+    this.pose.roll = softLimit(this.pose.roll, lim.roll * DEG);
     // The eyes: on the attention, less the head's own turn (they hold the
     // listener while the head moves), and ahead of it on a glance.
     this.gaze.x = clamp((this.attention.yaw - this.pose.yaw) * GAZE_PER_RAD, 0.6);
@@ -278,4 +282,17 @@ export class HeadPersonality {
 
 function clamp(v: number, m: number): number {
   return Math.max(-m, Math.min(m, v));
+}
+
+/**
+ * `v` as it is up to KNEE of `limit`, then eased toward the limit (a tanh
+ * knee, the slope continuous): never past it, and a peak that would have
+ * gone past it rounds off instead of flattening against it.
+ */
+export function softLimit(v: number, limit: number): number {
+  const knee = KNEE * limit;
+  const a = Math.abs(v);
+  if (a <= knee) return v;
+  const room = limit - knee;
+  return Math.sign(v) * (knee + room * Math.tanh((a - knee) / room));
 }

@@ -8,9 +8,9 @@ import type { Rig } from "../types";
  * chosen by the RIG — `render_profile`, written by the backend when the
  * owner saves a fit and shipped inside the published rig — never by the
  * face type or by anything the embedding page says. A rig without one, or
- * with a name this build does not know, renders exactly as before profiles
- * existed: HUMAN_PROFILE is today's constants, and the golden render tests
- * pin that.
+ * with a name this build does not know, renders as a person's photograph:
+ * HUMAN_PROFILE is the classic mouth's constants (the golden render tests
+ * pin them) and, since 2026-10-08, the head's turn in depth.
  *
  * Deliberately narrow. Each field replaces one constant at one place in the
  * classic mouth; a profile is versioned ("animal@1") so that changing what
@@ -38,6 +38,14 @@ export interface KindProfile {
   /** The character mouth's own defaults, under the owner's mouth settings.
    *  Unused by the classic mouth. */
   readonly traits: CharacterTraits;
+  /**
+   * How the head moves unless the page says (EngineOptions.headMotion):
+   * "3d", turning in depth inside the face mesh (head-turn.ts), for a
+   * person's photograph, whether opaque, layered or a cut-out; "2d", the
+   * rigid layer's shift and roll, for a character or an animal, whose
+   * drawn eyes and muzzle the canonical human face does not fit.
+   */
+  readonly headMotion: "2d" | "3d";
 }
 
 export const HUMAN_PROFILE: KindProfile = {
@@ -48,6 +56,7 @@ export const HUMAN_PROFILE: KindProfile = {
   mouth: "classic",
   blink: "mesh",
   traits: { teeth: "upper", tongue: true, jaw: 1 },
+  headMotion: "3d",
 };
 
 const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
@@ -64,6 +73,7 @@ const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
       mouth: "classic",
       blink: "mesh",
       traits: { teeth: "none", tongue: true, jaw: 1 },
+      headMotion: "2d",
     },
   ],
   [
@@ -79,6 +89,7 @@ const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
       mouth: "character",
       blink: "lid",
       traits: { teeth: "upper", tongue: true, jaw: 1 },
+      headMotion: "2d",
     },
   ],
   [
@@ -93,6 +104,7 @@ const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
       mouth: "character",
       blink: "lid",
       traits: { teeth: "none", tongue: true, jaw: 1.15 },
+      headMotion: "2d",
     },
   ],
 ]);
