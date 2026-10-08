@@ -86,7 +86,8 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request, db: DB)
     Anything else turns this into a membership oracle: try an address, read
     the response, learn who is a customer. That is why there is no "no such
     user" branch and why a delivery failure is not reported either — the
-    difference would be just as readable.
+    difference would be just as readable. So is the time an answer takes:
+    the mail is sent after the answer, never before it.
 
     Rate limited per address so it cannot be used to mail-bomb someone, and
     because Resend charges per message. Also per client (FORGOT_PER_CLIENT

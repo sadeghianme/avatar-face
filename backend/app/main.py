@@ -45,6 +45,7 @@ from app.core.errors import install_error_handlers
 from app.core.logging import RequestIdMiddleware, configure_logging
 from app.db import get_engine, get_session_factory
 from app.models import Base
+from app.services import email
 from app.services.ai_models import verify_at_startup
 from app.services.avatars.build import fail_interrupted
 from app.services.creations import recover_interrupted
@@ -204,6 +205,8 @@ async def lifespan(app: FastAPI):
     # interrupted (above), which is where a deploy lands anyway.
 
     await runner.shutdown()
+    # A reset mail the request already answered for is sent, not dropped.
+    await email.drain()
     await engine.dispose()
 
 

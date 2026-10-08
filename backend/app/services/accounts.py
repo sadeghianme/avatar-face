@@ -17,7 +17,7 @@ from app.core.config import get_settings
 from app.core.errors import Auth401, Conflict409
 from app.core.security import hash_password_async, verify_password_async
 from app.models import User
-from app.services.email import reset_email
+from app.services.email import deliver_in_background, reset_email
 from app.services.email import send as send_email
 from app.services.rate_limit import RESET_LIMIT, RESET_WINDOW_SECONDS, allow_persistent
 from app.services.reset_token import DEFAULT_TTL_SECONDS as RESET_TTL_SECONDS
@@ -87,8 +87,12 @@ async def request_password_reset(db: AsyncSession, email: str) -> None:
     Says nothing either way (api.auth.forgot_password answers the same
     whatever happens here), and is rate limited per address so it cannot be
     used to mail-bomb someone, and because Resend charges per message.
+
+    Takes the same time either way, too: the queries are the same for every
+    address, and for a real account the link is made and mailed after the
+    answer has gone (email.deliver_in_background). Awaited here, Resend's
+    round trip made a real address answer slower than an unknown one.
     """
-    settings = get_settings()
     address = email.strip().lower()
 
     allowed = await allow_persistent(
@@ -107,10 +111,17 @@ async def request_password_reset(db: AsyncSession, email: str) -> None:
     ).scalar_one_or_none()
 
     if user is not None:
-        token, _ = mint_reset_token(settings.jwt_secret, user.id, user.password_hash)
-        link = f"{settings.app_base_url.rstrip('/')}/reset-password?token={token}"
-        subject, html, text = reset_email(settings.app_name, link, RESET_TTL_SECONDS // 60)
-        await send_email(user.email, subject, html, text)
+        # Plain values, not the row: the request's session is closed by the
+        # time the mail goes.
+        deliver_in_background(_mail_reset_link(user.id, user.email, user.password_hash))
+
+
+async def _mail_reset_link(user_id: str, address: str, password_hash: str) -> None:
+    settings = get_settings()
+    token, _ = mint_reset_token(settings.jwt_secret, user_id, password_hash)
+    link = f"{settings.app_base_url.rstrip('/')}/reset-password?token={token}"
+    subject, html, text = reset_email(settings.app_name, link, RESET_TTL_SECONDS // 60)
+    await send_email(address, subject, html, text)
 
 
 async def reset_password(db: AsyncSession, token: str, password: str) -> User:
