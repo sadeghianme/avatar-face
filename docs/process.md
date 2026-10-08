@@ -200,7 +200,7 @@ and `# fmt: on`. The commit that formatted the backend is in
 | `frontend` | structure check, type check, production build | <1 min |
 | `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, the dashboard's generated API types match the committed document, unit tests | <1 min |
 | `deploy-script` | ShellCheck (pinned) on `deploy/*.sh`; every gate of `deploy.sh` | <1 min |
-| `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 22 page visits load in headless Chrome with zero CSP violations (the Simulator injection replayed among them) | ~10 min |
+| `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 22 page visits load in headless Chrome with zero CSP violations (the Simulator injection replayed among them) | ~4 min |
 
 The `images` job's browser sweep (`deploy/smoke/web-sweep.mjs`) seeds a user, a
 photo avatar, a 3D avatar and a share link through the API, speaks on the share
