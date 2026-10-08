@@ -1,11 +1,33 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { bilabialSeal, continuousMouthMix, dampMouth, MouthMotion } from "../continuous-mouth-model";
 import { REFERENCE_POSES } from "../reference-mouth-model";
 import { PERFORMANCE_POSES, validatePerformanceManifest } from "../photographic-performance-model";
 import { validateOralRig } from "../oral-photo";
-import { ContinuousMouth, CORNER_EASE, PROTRUSION } from "../continuous-mouth";
+import { ContinuousMouth, CORNER_EASE, MOUND_REACH, PROTRUSION } from "../continuous-mouth";
+import type { MotionManifest } from "../photographic-performance-model";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
+
+/**
+ * The mouth held on `weights` until its pose spring has settled: 400 frames
+ * on a virtual 60 fps clock (6.7 s; the spring settles in about 4/35 s).
+ * Never the wall clock: the spring steps by the time between deform() calls,
+ * and 400 real calls take about 20 ms on a fast machine and over 100 ms on a
+ * CI runner, so the mouth stopped anywhere from a third of the way to the
+ * pose to all of it, and what a test measured with it.
+ */
+function settle(manifest: MotionManifest, neutral: readonly { x: number; y: number }[], weights: BlendWeights) {
+  let now = 1_000;
+  const clock = vi.spyOn(performance, "now").mockImplementation(() => (now += 1000 / 60));
+  try {
+    const mouth = new ContinuousMouth(manifest);
+    const points = neutral.map((p) => ({ ...p }));
+    for (let i = 0; i < 400; i++) mouth.deform(points, neutral, {} as Rig, weights);
+    return points;
+  } finally {
+    clock.mockRestore();
+  }
+}
 
 const interpolate = (a: BlendWeights, b: BlendWeights, t: number) =>
   Object.fromEntries(
@@ -104,14 +126,7 @@ describe("continuous mouth movement", () => {
       JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8"))
     );
     const neutral = manifest.poses[0].points.map(([x, y]) => ({ x: x * 1000, y: y * 1000 }));
-    const settle = (weights: BlendWeights) => {
-      const mouth = new ContinuousMouth(manifest);
-      const points = neutral.map((p) => ({ ...p }));
-      // Several steps so the mouth's own spring reaches the pose.
-      for (let i = 0; i < 400; i++) mouth.deform(points, neutral, {} as Rig, weights);
-      return points;
-    };
-    const oo = settle(REFERENCE_POSES.oo.weights);
+    const oo = settle(manifest, neutral, REFERENCE_POSES.oo.weights);
     const authoredWidth = (manifest.poses[3].points[291][0] - manifest.poses[3].points[61][0]) * 1000;
     const neutralWidth = neutral[291].x - neutral[61].x;
     const width = oo[291].x - oo[61].x;
@@ -123,7 +138,7 @@ describe("continuous mouth movement", () => {
     expect(CORNER_EASE).toBeLessThan(0.6);
 
     // A spread vowel widens the mouth; nothing about it is eased.
-    const ee = settle(REFERENCE_POSES.ee.weights);
+    const ee = settle(manifest, neutral, REFERENCE_POSES.ee.weights);
     expect(ee[291].x - ee[61].x).toBeGreaterThan(neutralWidth * 0.98);
     // And the centre of the lips is untouched by a lateral ease.
     expect(Math.abs(oo[13].x - neutral[13].x)).toBeLessThan(neutralWidth * 0.06);
@@ -133,21 +148,28 @@ describe("continuous mouth movement", () => {
       JSON.parse(readFileSync(new URL("../../../assets/mouth-motion.json", import.meta.url), "utf8"))
     );
     const neutral = manifest.poses[0].points.map(([x, y]) => ({ x: x * 1000, y: y * 1000 }));
-    const settle = (weights: BlendWeights) => {
-      const mouth = new ContinuousMouth(manifest);
-      const points = neutral.map((p) => ({ ...p }));
-      for (let i = 0; i < 400; i++) mouth.deform(points, neutral, {} as Rig, weights);
-      return points;
-    };
     const width = neutral[291].x - neutral[61].x;
-    const oo = settle(REFERENCE_POSES.oo.weights);
-    const ee = settle(REFERENCE_POSES.ee.weights);
-    // Outer lower lip (17) sits below the mouth centre: the mound pushes it
-    // further down on OO than the retargeted pose alone would, and EE is untouched
-    // by any mound.
+    const oo = settle(manifest, neutral, REFERENCE_POSES.oo.weights);
+    const ee = settle(manifest, neutral, REFERENCE_POSES.ee.weights);
     const cheek = 123; // well outside the lip region
-    expect(Math.hypot(oo[cheek].x - neutral[cheek].x, oo[cheek].y - neutral[cheek].y)).toBeLessThan(width * 0.01);
-    expect(Math.hypot(ee[cheek].x - neutral[cheek].x, ee[cheek].y - neutral[cheek].y)).toBeLessThan(width * 0.01);
+    // Gone by the cheeks: on the held OO face the cheek is outside the
+    // mound's reach, by more than the mound itself could have pushed it
+    // there (a point inside ends at most (1 + PROTRUSION)^2 out), so the
+    // mound moved it not at all.
+    // (Measured as deform() does: about the rest mouth's corners.)
+    const reach = (p: { x: number; y: number }) => {
+      const [left, right] = [neutral[61], neutral[291]];
+      const w = Math.hypot(right.x - left.x, right.y - left.y);
+      const [cx, cy] = [(left.x + right.x) / 2, (left.y + right.y) / 2];
+      return ((p.x - cx) / (w * MOUND_REACH[0])) ** 2 + ((p.y - cy) / (w * MOUND_REACH[1])) ** 2;
+    };
+    expect(reach(oo[cheek])).toBeGreaterThan((1 + PROTRUSION) ** 2);
+    // What does move it is the pose itself, through the lower-face rig (the
+    // cheeks follow the jaw a little), and only a little: held, OO moves it
+    // 1.03% of the mouth's width and EE 0.83%. (Under 1% passed only while
+    // this test ran on the wall clock and the spring never settled.)
+    expect(Math.hypot(oo[cheek].x - neutral[cheek].x, oo[cheek].y - neutral[cheek].y)).toBeLessThan(width * 0.012);
+    expect(Math.hypot(ee[cheek].x - neutral[cheek].x, ee[cheek].y - neutral[cheek].y)).toBeLessThan(width * 0.012);
     expect(PROTRUSION).toBeGreaterThan(0);
     expect(PROTRUSION).toBeLessThanOrEqual(0.08); // 0.1 swelled like a sting
   });

@@ -8,7 +8,9 @@
 // It seeds what the pages need through the API itself: a user, a photo
 // avatar (published, with a share link) and a 3D avatar, then visits the
 // public pages, every dashboard page, the share page (and speaks on it), and
-// runs the Simulator's iframe with the real widget for both avatars.
+// runs the Simulator's iframe with the real widget for both avatars (and
+// speaks there). It also replays the Simulator injection (the review's N1)
+// as a link and as a pasted snippet, and fails if the payload ever runs.
 //
 // Use 127.0.0.1, not localhost: the dashboard points snippets at
 // localhost:7002 whenever its origin says "localhost" (the Vite dev setup).
@@ -227,12 +229,38 @@ async function openPage(browser) {
     await send("Log.enable", {}, session).catch(() => {});
     await send("Runtime.evaluate", { expression: LISTEN }, session).catch(() => {});
   };
+  // Out-of-process frames this page opened. The Simulator's is one: its
+  // origin is opaque (no allow-same-origin), so Chrome runs it in a process
+  // of its own, and its requests, workers and console are reported on its
+  // own session, not the page's. Such a frame (an about:srcdoc one) is NOT
+  // held at its start the way a worker is: it may already be running when
+  // it is attached. So its session is watched at once, every domain asked
+  // for in one go, and nothing here depends on seeing its first requests
+  // (the Simulator's own log says what its widget did).
+  const frames = new Set();
   listeners.add(async (message) => {
     const { method, params } = message;
-    if (method === "Target.attachedToTarget" && message.sessionId === sessionId) {
-      // Workers and out-of-process frames: watch them, then let them run.
-      await setup(params.sessionId);
-      await send("Runtime.runIfWaitingForDebugger", {}, params.sessionId).catch(() => {});
+    if (method === "Target.attachedToTarget" && (message.sessionId === sessionId || frames.has(message.sessionId))) {
+      const child = params.sessionId;
+      if (params.targetInfo.type === "iframe") {
+        frames.add(child);
+        await Promise.all(
+          [
+            send("Network.enable", {}, child),
+            send("Log.enable", {}, child),
+            send("Runtime.enable", {}, child),
+            send("Runtime.addBinding", { name: "__cspViolation" }, child),
+            send("Page.enable", {}, child),
+            send("Page.addScriptToEvaluateOnNewDocument", { source: LISTEN }, child),
+            send("Runtime.evaluate", { expression: LISTEN }, child),
+            send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, child),
+          ].map((call) => call.catch(() => {}))
+        );
+      } else {
+        // Workers: watch them, then let them run.
+        await setup(child);
+      }
+      await send("Runtime.runIfWaitingForDebugger", {}, child).catch(() => {});
     } else if (method === "Runtime.bindingCalled" && params.name === "__cspViolation") {
       violations.push(JSON.parse(params.payload));
     } else if (method === "Log.entryAdded" && params.entry.level === "error") {
@@ -245,9 +273,10 @@ async function openPage(browser) {
       else consoleErrors.push(text.slice(0, 200));
     } else if (method === "Runtime.exceptionThrown") {
       consoleErrors.push(`exception: ${params.exceptionDetails.exception?.description?.split("\n")[0] ?? params.exceptionDetails.text}`);
-    } else if (method === "Network.responseReceived" && message.sessionId === sessionId) {
+    } else if (method === "Network.responseReceived" && (message.sessionId === sessionId || frames.has(message.sessionId))) {
       responses.push({ url: params.response.url, status: params.response.status });
-      if (params.type === "Document") documents.push({ url: params.response.url, headers: params.response.headers });
+      if (params.type === "Document" && message.sessionId === sessionId)
+        documents.push({ url: params.response.url, headers: params.response.headers });
     }
   });
   await send("Page.enable", {}, sessionId);
@@ -338,12 +367,64 @@ try {
     eventually(async () => {
       if (!(await page.evaluate(`Boolean(${selector}?.querySelector("canvas"))`))) throw new Error(`no canvas in ${selector}`);
     });
-  const simulate = (avatar) => async (since) => {
+  // The Simulator's frame has an opaque origin (no allow-same-origin), so
+  // this page cannot look inside it: what the frame reports to the
+  // Simulator's log is how it says it drew and spoke.
+  const logSays = (text, ms) =>
+    eventually(async () => {
+      if (!(await page.evaluate(`document.body.innerText.includes(${JSON.stringify(text)})`)))
+        throw new Error(`the Simulator's log never said "${text}"`);
+    }, ms);
+  const isolated = async () => {
+    const sandbox = await page.evaluate(`document.querySelector('iframe[title="simulator"]')?.getAttribute("sandbox")`);
+    if (sandbox !== "allow-scripts") throw new Error(`the Simulator's frame is sandboxed "${sandbox}", not "allow-scripts"`);
+  };
+  const simulate = () => async (since) => {
     await eventually(() => page.click("Run snippet"));
-    // The widget really ran inside the srcdoc frame, under this policy...
-    await eventually(() => page.answered(`/api/embed/v1/avatars/${avatar}`, since));
-    await canvasIn(`document.querySelector('iframe[title="simulator"]')?.contentDocument`);
-    await sleep(4000); // ...and had time to load its picture or model, and the 3D bundle
+    await eventually(isolated);
+    // The widget really ran inside the srcdoc frame, under this policy: its
+    // liveface:ready (after the avatar, its picture or model and the 3D
+    // bundle all loaded), as the frame reports it...
+    await logSays("avatar ready", 60000);
+    await logSays("canvas mounted");
+    await sleep(2000);
+    // ...and speaks: the line goes to the frame, its widget to the API.
+    await page.type('input[aria-label^="Type something"]', "Hello from the Simulator.");
+    await eventually(() => page.click("Speak"));
+    await eventually(() => page.answered("/api/embed/v1/synthesize", since), 60000);
+    await logSays("finished speaking", 60000);
+  };
+  // The review's N1: a value that closed data-avatar's quotes and the tag,
+  // then ran as an inline script in a frame of the dashboard's origin, with
+  // the session's tokens in reach. Run it as a link and as a paste; if it
+  // ever runs, the log says PWNED or the title does (the word is built from
+  // two halves, so the payload's own text, which the page shows, never
+  // matches).
+  const steal = `parent.postMessage({lf:true,level:"ok",message:"PW"+"NED "+localStorage.getItem("liveface.tokens")},"*");top.document.title="PW"+"NED"`;
+  const poc = `x" data-size='"></script><script>${steal}</script><script x="'`;
+  const notPwned = async () => {
+    if (await page.evaluate(`document.body.innerText.includes("PWNED") || document.title.includes("PWNED")`))
+      throw new Error("the injected script ran");
+  };
+  const linkRefused = async () => {
+    const prefilled = await page.evaluate(`document.querySelector("#snippet")?.value`);
+    if (prefilled !== "") throw new Error(`a crafted ?avatar= was prefilled: ${JSON.stringify(prefilled)?.slice(0, 120)}`);
+    if (await page.evaluate(`[...document.querySelectorAll("button:not([disabled])")].some((b) => b.textContent.includes("Run snippet"))`))
+      throw new Error("Run is enabled for a crafted ?avatar=");
+    await notPwned();
+  };
+  const pasteRefused = (avatar) => async () => {
+    // A valid id, and the payload in every other value the frame receives
+    // (the paste's own quotes escaped, so each value IS the payload).
+    const quoted = (value) => `'${value.replace(/&/g, "&amp;").replace(/'/g, "&#39;")}'`;
+    const snippet = `<script src=${quoted(`${BASE}/api/liveface.js?${poc}`)} data-avatar="${avatar}" data-api="${BASE}/api"
+      data-size=${quoted(poc)} data-provider=${quoted(poc)} data-voice=${quoted(poc)} data-locale=${quoted(poc)}></script>`;
+    await page.type("#snippet", snippet);
+    await eventually(() => page.click("Run snippet"));
+    await eventually(isolated);
+    await logSays("avatar ready", 60000);
+    await sleep(3000);
+    await notPwned();
   };
 
   // Signed out first: the auth pages redirect a signed-in visitor away.
@@ -373,8 +454,10 @@ try {
     ["/members"],
     ["/api-keys"],
     ["/settings"],
-    [`/simulator?avatar=${seeded.photo}`, simulate(seeded.photo)],
-    [`/simulator?avatar=${seeded.model}`, simulate(seeded.model)],
+    [`/simulator?avatar=${seeded.photo}`, simulate()],
+    [`/simulator?avatar=${seeded.model}`, simulate()],
+    [`/simulator?avatar=${encodeURIComponent(poc)}`, linkRefused],
+    ["/simulator", pasteRefused(seeded.photo)],
   ];
   for (const [path, act, options = {}] of visits) {
     const before = {

@@ -173,6 +173,14 @@ export default tseslint.config(
     },
   },
   {
+    // The classic scripts pages load as files (public/): the theme before
+    // first paint (index.html) and the Simulator's harness in its frame.
+    // Files, because the CSP allows no inline script.
+    files: ["public/**/*.js"],
+    extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: { globals: globals.browser, sourceType: "script" },
+  },
+  {
     // Build scripts; reference-proof.mjs also runs functions in a browser page.
     files: ["*.js", "scripts/**/*.mjs"],
     extends: [tseslint.configs.disableTypeChecked],

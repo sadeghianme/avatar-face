@@ -143,5 +143,6 @@ moved: [docs/process.md](docs/process.md).
 3. Rate limits are kept per process (item 1), keyed on the visitor's own
    address behind Cloudflare ([docs/process.md](docs/process.md#client-addresses)):
    everyone behind one carrier-grade NAT shares a bucket.
-4. The dashboard's CSP allows inline scripts because of the Simulator's frame
-   ([docs/process.md](docs/process.md#security-headers) has the way out).
+4. The session's tokens are in `localStorage`, not httpOnly cookies. The CSP
+   allows no inline script, and the Simulator runs snippets in a frame of its
+   own origin ([docs/process.md](docs/process.md#security-headers)).
