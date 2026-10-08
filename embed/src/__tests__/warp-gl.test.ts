@@ -374,8 +374,10 @@ describe("which path the engine takes", () => {
     log.length = 0;
     engineSeam(engine).render();
     const clips = log.filter((l) => l.startsWith("clip(")).length;
-    const triangles = engineSeam(engine).mesh.triangles.length;
-    expect(clips).toBe(triangles);
+    // Every triangle of the face, the neck band: the head's field
+    // (head-field.ts) is drawn only where it moved, and at rest none of it.
+    const mesh = engineSeam(engine).mesh;
+    expect(clips).toBe(mesh.head ? mesh.head.triangleFrom : mesh.triangles.length);
     expect(FakeGL.instances).toHaveLength(0);
     engine.destroy();
   });

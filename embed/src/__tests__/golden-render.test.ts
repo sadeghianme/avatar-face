@@ -202,15 +202,21 @@ const casesFor = (source: Rig): Case[] => [
 /** One frame of `probe` in state `c`, reduced to what the snapshot pins. */
 function frame({ engine, log }: Probe, c: Case) {
   const e = state(engine, c.weights, c.blink ?? 0, c.gaze);
-  const pts = e.deformedPoints();
-  const mesh = pts.map((p) => `${round(p.x)},${round(p.y)}`).join(";");
+  const all = e.deformedPoints();
+  // The face's vertices (the rig's, the mouth's midpoints, the neck band),
+  // and the head's field's after them (head-field.ts), each its own digest:
+  // the field is laid off the picture's own pixels.
+  const field = e.mesh.head;
+  const pts = field ? all.slice(0, field.first) : all;
+  const key = (list: readonly { x: number; y: number }[]) => list.map((p) => `${round(p.x)},${round(p.y)}`).join(";");
   e.render();
   engine.destroy();
   return {
     vertices: pts.length,
     lipGapPx: round(pts[LOWER_INNER].y - pts[UPPER_INNER].y),
     leftEyeOpenPx: round(pts[LEFT_LOWER_LID].y - pts[LEFT_UPPER_LID].y),
-    mesh: digest(mesh),
+    mesh: digest(key(pts)),
+    ...(field ? { head: `${field.count} vertices, ${digest(key(all.slice(field.first)))}` } : {}),
     drawCalls: log.length,
     drawing: digest(log.join("\n")),
   };

@@ -130,18 +130,23 @@ export interface WarpMesh {
   count: number;
   /** Triangles left out for a degenerate source, as the 2D path leaves them. */
   skipped: number;
+  /** Triangles drawn before the head's field's (all of them without one). */
+  headFrom: number;
 }
 
 /**
  * The static half of the mesh: every vertex's texture coordinate and the
  * triangle list, in the order the 2D path draws it, without the triangles
  * it would skip. Built once per geometry; only positions change per frame.
+ * `headFrom`: where the head's field's triangles start in `triangles`
+ * (head-field.ts), drawn only when some of it moved.
  */
 export function buildWarpMesh(
   texPoints: readonly Point[],
   triangles: readonly (readonly [number, number, number])[],
   textureWidth: number,
-  textureHeight: number
+  textureHeight: number,
+  headFrom = triangles.length
 ): WarpMesh {
   const n = texPoints.length;
   const uv = new Float32Array(n * 2);
@@ -151,7 +156,10 @@ export function buildWarpMesh(
   }
   const kept: number[] = [];
   let skipped = 0;
-  for (const [i0, i1, i2] of triangles) {
+  let before = -1;
+  for (let t = 0; t < triangles.length; t++) {
+    if (t === headFrom) before = kept.length / 3;
+    const [i0, i1, i2] = triangles[t];
     const s0 = texPoints[i0],
       s1 = texPoints[i1],
       s2 = texPoints[i2];
@@ -167,7 +175,8 @@ export function buildWarpMesh(
     kept.push(i0, i1, i2);
   }
   const indices = n <= 0xffff ? Uint16Array.from(kept) : Uint32Array.from(kept);
-  return { uv, indices, count: kept.length / 3, skipped };
+  const count = kept.length / 3;
+  return { uv, indices, count, skipped, headFrom: before < 0 ? count : before };
 }
 
 const VERTEX_SHADER = `
@@ -300,6 +309,11 @@ export class WarpRenderer {
   /** Triangles the last mesh draws. */
   get triangleCount(): number {
     return this.count;
+  }
+
+  /** Of those, the ones before the head's field's (all without one). */
+  get headFrom(): number {
+    return Math.min(this.count, this.mesh?.headFrom ?? this.count);
   }
 
   private setup(): void {
@@ -437,11 +451,13 @@ export class WarpRenderer {
 
   /**
    * Draw the mesh at `points` (canvas px, one per vertex, in the mesh's
-   * order) through `affine`, into the offscreen canvas. False when it did
-   * not draw (no context, no texture, no mesh): the caller falls back.
+   * order) through `affine`, into the offscreen canvas: all of it, the
+   * chosen part (`subset`, select), or its first `limit` triangles. False
+   * when it did not draw (no context, no texture, no mesh): the caller
+   * falls back.
    */
-  draw(points: readonly Point[], affine: Affine, subset = false): boolean {
-    return this.render(points, affine, false, subset);
+  draw(points: readonly Point[], affine: Affine, subset = false, limit?: number): boolean {
+    return this.render(points, affine, false, subset, limit);
   }
 
   /**
@@ -491,8 +507,8 @@ export class WarpRenderer {
     return this.subsetCount;
   }
 
-  private render(points: readonly Point[], affine: Affine, solid: boolean, subset: boolean): boolean {
-    const count = subset ? this.subsetCount : this.count;
+  private render(points: readonly Point[], affine: Affine, solid: boolean, subset: boolean, limit?: number): boolean {
+    const count = subset ? this.subsetCount : Math.min(this.count, limit ?? this.count);
     if (!this.available || !this.imageOk || !count || !this.program) return false;
     const gl = this.gl;
     const positions = this.positions;

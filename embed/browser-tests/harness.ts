@@ -19,7 +19,7 @@ import {
   seededRandom,
   subjectRig,
 } from "../src/__tests__/frame-script";
-import { probeSeams, type SeamReport } from "../src/__tests__/seam-probe";
+import { probeLeaks, probeSeams, type LeakReport, type SeamReport } from "../src/__tests__/seam-probe";
 import { SEAM_SIZE, headLayerFade, paintCollar, playSeamScript } from "../src/__tests__/seam-script";
 
 /** One frame drawn: its name, the path the warp took, its RGBA (base64). */
@@ -30,12 +30,16 @@ export interface PageFrame {
 }
 
 /** One seam-test frame: its name, the path the warp took, what the probe
- *  found, and the share of the turn the fold clamp kept. */
+ *  found along the mesh's boundary and inside it, the share of the turn the
+ *  fold clamp kept, and how far the head's field moved. */
 export interface SeamPageFrame {
   name: string;
   path: "gl" | "2d";
   report: SeamReport;
+  leak: LeakReport;
   scale: number;
+  headShift: number;
+  headEdge: boolean;
 }
 
 declare global {
@@ -154,6 +158,9 @@ window.seamSubject = async (layered, warp) => {
     name: f.name,
     path,
     report: probeSeams(f.frame, f.under, SEAM_SIZE, f.segments),
+    leak: probeLeaks(f.backdrops[0], f.backdrops[1], f.drawn, SEAM_SIZE),
     scale: f.scale,
+    headShift: f.headShift,
+    headEdge: f.segments.some((s) => s.kind === "head"),
   }));
 };

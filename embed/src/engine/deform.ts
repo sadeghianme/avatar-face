@@ -162,6 +162,10 @@ export interface DeformInput {
   /** A layered avatar's neck band, placed where the neck's warp puts the
    *  layers under it (neck-blend.ts). Absent: it moves with the head. */
   pin?: NeckPin | null;
+  /** The head's field's own vertices (head-field.ts, FaceMesh.head),
+   *  pushed onto the vertices after the neck band's, turned with the face
+   *  (head-turn.ts HeadTurn.field). Absent: where they rest. */
+  head?: (pts: Point[]) => void;
 }
 
 /** Every vertex of the mesh this frame, canvas px, in vertex order. */
@@ -246,6 +250,11 @@ export function deformFace(f: DeformInput): Point[] {
       x: v.base.x + (p.x - b.x) * v.share + (o ? o.x : 0),
       y: v.base.y + (p.y - b.y) * v.share + (o ? o.y : 0),
     });
+  }
+  // The head's field: the hair, the ears and the head's outline.
+  if (mesh.head) {
+    if (f.head) f.head(pts);
+    else for (const v of mesh.head.vertices) pts.push({ x: v.base.x, y: v.base.y });
   }
 
   return pts;

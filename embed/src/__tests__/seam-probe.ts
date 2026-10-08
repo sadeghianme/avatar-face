@@ -16,6 +16,14 @@
  * The scratchpad detector the engine's seams were hunted with, reduced to
  * the one reference that decides it; pure, so the Skia test (seams.test.ts)
  * and the browser test (browser-tests/) share it.
+ *
+ * Inside the mesh, where it meets itself (the face's outline, where the
+ * head's field takes over, and every edge between two triangles), there is
+ * no picture under it to compare with, and a moved texture is no reference
+ * for a line: there the mesh is drawn twice more, over two solid backdrops
+ * in place of the picture (seam-script.ts), and any pixel inside the drawn
+ * triangles where the two differ shows the backdrop through the mesh, a gap
+ * between triangles or a pixel drawn twice (probeLeaks).
  */
 import type { FaceMesh, Point } from "../engine/geometry";
 import type { Affine } from "../engine/warp-gl";
@@ -23,12 +31,29 @@ import type { Affine } from "../engine/warp-gl";
 const LINE = 4;
 const STEP = 16;
 const RUN = 12;
+/** A leak: the two backdrops differ there by more than this, levels. */
+const LEAK = 2;
+/** Pixels this close to the drawn triangles' own boundary are its edge's
+ *  anti-aliasing, not a leak. */
+const LEAK_EDGE = 2;
 
 export interface Segment {
   a: Point;
   b: Point;
-  /** "hull" for the face's outline, "neck" for the band's bottom edge. */
-  kind: "hull" | "neck";
+  /** "hull" for the face's outline, "neck" for the band's bottom edge,
+   *  "head" for the head's field's outer edge. */
+  kind: "hull" | "neck" | "head";
+}
+
+export interface LeakReport {
+  /** Pixels inside the drawn triangles showing the backdrop, and the most
+   *  any of them does, levels: in the head's field's triangles (the face's
+   *  outline where it takes over included: the field is drawn after the
+   *  face, its seam pads over the outline), and in the face mesh's. */
+  px: number;
+  worst: number;
+  facePx: number;
+  faceWorst: number;
 }
 
 export interface SeamReport {
@@ -43,7 +68,9 @@ export interface SeamReport {
 /**
  * The mesh's outer boundary at `pts` (the frame's vertices), on the canvas
  * through `affine`: every edge of one triangle only, less the halves of an
- * edge the mouth subdivision split (a T-junction is no boundary).
+ * edge the mouth subdivision split (a T-junction is no boundary). With the
+ * head's field, the face's outline is inside the mesh and the field's outer
+ * edge is the boundary instead.
  */
 export function meshBoundary(mesh: FaceMesh, pts: readonly Point[], affine: Affine): Segment[] {
   const count = new Map<string, [number, number, number]>();
@@ -70,6 +97,7 @@ export function meshBoundary(mesh: FaceMesh, pts: readonly Point[], affine: Affi
     return o === a || o === b;
   };
   const firstNeck = first + parents.length;
+  const firstHead = mesh.head ? mesh.head.first : Infinity;
   const at = (p: Point) => ({
     x: affine.a * p.x + affine.c * p.y + affine.e,
     y: affine.b * p.x + affine.d * p.y + affine.f,
@@ -77,9 +105,93 @@ export function meshBoundary(mesh: FaceMesh, pts: readonly Point[], affine: Affi
   const out: Segment[] = [];
   for (const [i, j, n] of count.values()) {
     if (n !== 1 || split.has(i < j ? `${i}:${j}` : `${j}:${i}`) || half(i, j)) continue;
-    out.push({ a: at(pts[i]), b: at(pts[j]), kind: i >= firstNeck && j >= firstNeck ? "neck" : "hull" });
+    const kind = i >= firstHead || j >= firstHead ? "head" : i >= firstNeck && j >= firstNeck ? "neck" : "hull";
+    out.push({ a: at(pts[i]), b: at(pts[j]), kind });
   }
   return out;
+}
+
+/**
+ * Which pixels of a `size` x `size` frame the mesh covers as drawn: every
+ * triangle laid over the picture (an opaque one), or over a cut-out
+ * (`replace`) only those the face moved, and the head's field's only where
+ * it moved (mesh-warp.ts). Per pixel whose centre is inside a drawn
+ * triangle, through `affine`: 2 for a triangle of the head's field, else 1.
+ */
+export function drawnMask(
+  mesh: FaceMesh,
+  pts: readonly Point[],
+  rest: readonly Point[],
+  affine: Affine,
+  size: number,
+  replace: boolean
+): Uint8Array {
+  const mask = new Uint8Array(size * size);
+  const moved = (i: number) => Math.abs(pts[i].x - rest[i].x) > 1e-3 || Math.abs(pts[i].y - rest[i].y) > 1e-3;
+  const from = mesh.head ? mesh.head.triangleFrom : Infinity;
+  const at = (p: Point) => ({
+    x: affine.a * p.x + affine.c * p.y + affine.e,
+    y: affine.b * p.x + affine.d * p.y + affine.f,
+  });
+  mesh.triangles.forEach(([a, b, c], t) => {
+    if ((replace || t >= from) && !moved(a) && !moved(b) && !moved(c)) return;
+    const [p, q, r] = [a, b, c].map((v) => at(pts[v]));
+    const d = (q.x - p.x) * (r.y - p.y) - (r.x - p.x) * (q.y - p.y);
+    if (Math.abs(d) < 1e-9) return;
+    const x0 = Math.max(0, Math.floor(Math.min(p.x, q.x, r.x))),
+      x1 = Math.min(size - 1, Math.ceil(Math.max(p.x, q.x, r.x)));
+    const y0 = Math.max(0, Math.floor(Math.min(p.y, q.y, r.y))),
+      y1 = Math.min(size - 1, Math.ceil(Math.max(p.y, q.y, r.y)));
+    const value = t >= from ? 2 : 1;
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const px = x + 0.5,
+          py = y + 0.5;
+        const u = ((q.x - px) * (r.y - py) - (r.x - px) * (q.y - py)) / d;
+        const v = ((r.x - px) * (p.y - py) - (p.x - px) * (r.y - py)) / d;
+        if (u >= 0 && v >= 0 && u + v <= 1) mask[y * size + x] = Math.max(mask[y * size + x], value);
+      }
+    }
+  });
+  return mask;
+}
+
+/**
+ * The mesh drawn over two solid backdrops (`overA`, `overB`, RGBA): the
+ * pixels inside `mask` (LEAK_EDGE px in from its edge) where they differ,
+ * and by how much at most.
+ */
+export function probeLeaks(
+  overA: Uint8ClampedArray,
+  overB: Uint8ClampedArray,
+  mask: Uint8Array,
+  size: number
+): LeakReport {
+  const report: LeakReport = { px: 0, worst: 0, facePx: 0, faceWorst: 0 };
+  const e = LEAK_EDGE;
+  for (let y = e; y < size - e; y++) {
+    for (let x = e; x < size - e; x++) {
+      const here = mask[y * size + x];
+      if (!here) continue;
+      let inner = true;
+      for (let dy = -e; dy <= e && inner; dy++)
+        for (let dx = -e; dx <= e && inner; dx++) inner = mask[(y + dy) * size + x + dx] > 0;
+      if (!inner) continue;
+      const field = here === 2;
+      const o = (y * size + x) * 4;
+      let d = 0;
+      for (let k = 0; k < 3; k++) d = Math.max(d, Math.abs(overA[o + k] - overB[o + k]));
+      if (d <= LEAK) continue;
+      if (field) {
+        report.px++;
+        report.worst = Math.max(report.worst, d);
+      } else {
+        report.facePx++;
+        report.faceWorst = Math.max(report.faceWorst, d);
+      }
+    }
+  }
+  return report;
 }
 
 /** Luma of an RGBA frame (size x size) over a mid-grey page, sampled

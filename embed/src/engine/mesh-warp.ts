@@ -139,23 +139,31 @@ export class MeshWarp {
    */
   draw(ctx: CanvasRenderingContext2D, pts: Point[], affine: Affine): void {
     const { texture, mesh, replace } = this.source();
-    const rest = replace ? this.restPoints() : null;
+    // The head's field (head-field.ts) is drawn only where it moved, over
+    // any picture: at rest it is the picture under it, pixel for pixel, and
+    // an avatar whose head does not turn in depth draws exactly as before.
+    const head = mesh.head ?? null;
+    const rest = replace || head ? this.restPoints() : null;
     const moved = (i: number) => {
       const p = pts[i],
         r = rest![i];
       return !r || Math.abs(p.x - r.x) > STILL_PX || Math.abs(p.y - r.y) > STILL_PX;
     };
     const still = (a: number, b: number, c: number) => !moved(a) && !moved(b) && !moved(c);
+    // A triangle of the head's field has a vertex of the field's own
+    // (head-field.ts zip); the face's and the neck band's have none.
+    const ofHead = head ? (a: number, b: number, c: number) => Math.max(a, b, c) >= head.first : null;
     const gl = this.ready();
-    if (gl && this.drawGL(ctx, gl, pts, affine, rest ? (a, b, c) => !still(a, b, c) : null)) return;
+    if (gl && this.drawGL(ctx, gl, pts, affine, replace ? (a, b, c) => !still(a, b, c) : null, ofHead, still)) return;
     const pads = this.trianglePads();
     const edges = this.edgePads;
+    const headFrom = head ? head.triangleFrom : Infinity;
     let t = 0;
     for (const [a, b, c] of mesh.triangles) {
       const k = t++;
       const pad = pads ? pads[k] : 0;
-      if (rest && still(a, b, c)) continue;
-      drawWarpedTriangle(ctx, texture, mesh.texPoints, pts, a, b, c, edges?.[k] ?? pad, !!rest);
+      if ((replace || k >= headFrom) && still(a, b, c)) continue;
+      drawWarpedTriangle(ctx, texture, mesh.texPoints, pts, a, b, c, edges?.[k] ?? pad, replace);
     }
   }
 
@@ -176,6 +184,7 @@ export class MeshWarp {
         ...base,
         ...mesh.derivedParents.map(([a, b]) => ({ x: (base[a].x + base[b].x) / 2, y: (base[a].y + base[b].y) / 2 })),
         ...mesh.neckBand.map((v) => v.base),
+        ...(mesh.head?.vertices.map((v) => v.base) ?? []),
       ];
     }
     return this.rest;
@@ -192,13 +201,23 @@ export class MeshWarp {
     gl: WarpRenderer,
     pts: Point[],
     affine: Affine,
-    only: ((a: number, b: number, c: number) => boolean) | null
+    only: ((a: number, b: number, c: number) => boolean) | null,
+    ofHead: ((a: number, b: number, c: number) => boolean) | null = null,
+    still: ((a: number, b: number, c: number) => boolean) | null = null
   ): boolean {
+    const head = this.source().mesh.head;
+    // Laid over, the head's field's triangles that moved with the rest
+    // (head-field.ts); none moved, the rest alone: the triangles before the
+    // field's, as without one.
+    const headMoved =
+      !only && ofHead && still ? (a: number, b: number, c: number) => ofHead(a, b, c) && !still(a, b, c) : null;
+    const anyHead = !!headMoved && this.anyTriangle(headMoved);
     // Only the mesh's box is copied: outside it the GPU canvas is clear,
     // so the drawing is the same, and the copy is the one GPU-path cost
     // that grows with the canvas rather than with the mesh. Two pixels
-    // of margin for the anti-aliased hull.
-    const box = this.box(pts, affine, 2);
+    // of margin for the anti-aliased hull. The head's field's vertices
+    // count only when some of it is drawn.
+    const box = this.box(pts, affine, 2, head && !only && !anyHead ? head.first : pts.length);
     const copy = (op: GlobalCompositeOperation) => {
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -216,7 +235,10 @@ export class MeshWarp {
       copy("lighter");
       return true;
     }
-    if (!gl.draw(pts, affine)) return false;
+    if (headMoved && ofHead && anyHead) {
+      if (!gl.select((a, b, c) => !ofHead(a, b, c) || headMoved(a, b, c))) return false;
+      if (!gl.draw(pts, affine, true)) return false;
+    } else if (!gl.draw(pts, affine, false, head ? gl.headFrom : undefined)) return false;
     copy("source-over");
     return true;
   }
@@ -228,8 +250,13 @@ export class MeshWarp {
    * a pixel wherever the lower-face rig can move the mesh over the still
    * picture (the jaw, the chin, the cheeks, the neck band: the lit neck
    * showed through the seams of the dropped chin as a faint lattice), and
-   * none about the eyes and forehead, which draw exactly as they always
-   * did. Half a pixel where the lips' own drawn line crosses the mesh.
+   * none about the eyes and forehead, which at rest draw exactly as they
+   * always did. Half a pixel where the lips' own drawn line crosses the
+   * mesh. With the head turning in depth every landmark moves, so every
+   * triangle is padded: unpadded, a software canvas's anti-aliased clips let
+   * the picture under the eyes and the forehead, shifted by the turn,
+   * through every edge, a faint wireframe (42 dB against the GPU's at a 9
+   * degree turn).
    */
   trianglePads(): Float32Array | null {
     const { mesh, padEverywhere, lowerFace, unpadOutline } = this.source();
@@ -237,8 +264,9 @@ export class MeshWarp {
       this.padsFor = mesh.triangles;
       this.padsOutline = !!unpadOutline;
       const rig = lowerFace;
+      const turning = !!unpadOutline;
       const moves = (i: number) =>
-        i >= LANDMARK_COUNT || (!!rig && (rig.jaw[i] > 0 || rig.weight[i] > 0 || rig.cheek[i] > 0));
+        turning || i >= LANDMARK_COUNT || (!!rig && (rig.jaw[i] > 0 || rig.weight[i] > 0 || rig.cheek[i] > 0));
       this.pads = Float32Array.from(mesh.triangles, ([a, b, c]) =>
         this.touchesMouth(mesh, a, b, c) ? 0.45 : padEverywhere || moves(a) || moves(b) || moves(c) ? 1 : 0
       );
@@ -247,7 +275,9 @@ export class MeshWarp {
       // extrapolated, and on a layered avatar's collar, where the picture
       // around the neck band is the layers through their own warp, that
       // pixel stepped the lapel's edge (a 4-level line, 2D path only).
-      this.edgePads = unpadOutline ? outlineEdgePads(mesh.triangles, this.pads) : null;
+      this.edgePads = unpadOutline
+        ? outlineEdgePads(mesh.triangles, this.pads, mesh.derivedParents, mesh.basePoints.length)
+        : null;
     }
     return this.pads;
   }
@@ -282,19 +312,29 @@ export class MeshWarp {
     if (!this.textureOk) return null;
     if (this.meshFor !== mesh.triangles) {
       this.meshFor = mesh.triangles;
-      gl.setMesh(buildWarpMesh(mesh.texPoints, mesh.triangles, texture.naturalWidth, texture.naturalHeight));
+      gl.setMesh(
+        buildWarpMesh(
+          mesh.texPoints,
+          mesh.triangles,
+          texture.naturalWidth,
+          texture.naturalHeight,
+          mesh.head?.triangleFrom
+        )
+      );
     }
     return gl;
   }
 
-  /** The mesh's bounding box on the canvas, through `affine`, grown by
-   *  `margin` px and clipped to the canvas; whole pixels. */
-  private box(pts: Point[], affine: Affine, margin: number): Rect {
+  /** The bounding box of the first `count` vertices on the canvas, through
+   *  `affine`, grown by `margin` px and clipped to the canvas; whole
+   *  pixels. */
+  private box(pts: Point[], affine: Affine, margin: number, count = pts.length): Rect {
     let x0 = Infinity,
       y0 = Infinity,
       x1 = -Infinity,
       y1 = -Infinity;
-    for (const p of pts) {
+    for (let i = 0; i < count; i++) {
+      const p = pts[i];
       const x = affine.a * p.x + affine.c * p.y + affine.e;
       const y = affine.b * p.x + affine.d * p.y + affine.f;
       if (x < x0) x0 = x;
@@ -313,15 +353,27 @@ export class MeshWarp {
 }
 
 /** Per triangle, its edges' pads with the mesh's outer boundary's at 0,
- *  for the triangles with such an edge (null for the rest). */
+ *  for the triangles with such an edge (null for the rest). An edge the
+ *  mouth subdivision split (a T-junction: the whole edge on one side, its
+ *  halves at the midpoint `derived` on the other) is inside the mesh, though
+ *  each of the three is in one triangle only: unpadded, the ring of them
+ *  round the mouth let what is under it through on a software canvas. */
 function outlineEdgePads(
   triangles: readonly (readonly [number, number, number])[],
-  pads: Float32Array
+  pads: Float32Array,
+  derived: readonly [number, number][] = [],
+  firstDerived = LANDMARK_COUNT
 ): ([number, number, number] | null)[] {
   const key = (i: number, j: number) => (i < j ? i * 1048576 + j : j * 1048576 + i);
   const count = new Map<number, number>();
   for (const [a, b, c] of triangles)
     for (const k of [key(a, b), key(b, c), key(c, a)]) count.set(k, (count.get(k) ?? 0) + 1);
+  // The split edges and their halves, where all three are there once.
+  derived.forEach(([a, b], k) => {
+    const m = firstDerived + k;
+    const t = [key(a, b), key(a, m), key(m, b)];
+    if (t.every((e) => count.get(e) === 1)) for (const e of t) count.set(e, 2);
+  });
   return triangles.map(([a, b, c], t) => {
     const outer = [key(a, b), key(b, c), key(c, a)].map((k) => count.get(k) === 1);
     if (!outer.some(Boolean)) return null;

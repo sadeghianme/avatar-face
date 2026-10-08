@@ -1,12 +1,16 @@
 /**
  * The picture laid on the canvas, and everything built on where it lies:
- * the face mesh over it (geometry.ts), what it looks like (sampling.ts),
- * whether it is a cut-out, the head as a movable unit and, for a cut-out
- * that asks for it, its own feathered layer (render2d.ts), the character
- * mouth's field and the lower face's rig. All of it is rebuilt whole when the texture or the
- * viewport changes, and nothing else changes it.
+ * the face mesh over it (geometry.ts) and, for the head turning in depth,
+ * the head's field around it (head-field.ts), what it looks like
+ * (sampling.ts), whether it is a cut-out, the head as a movable unit and,
+ * for a cut-out that asks for it, its own feathered layer (render2d.ts),
+ * the character mouth's field and the lower face's rig. All of it is
+ * rebuilt whole when the texture or the viewport changes, and nothing else
+ * changes it (the head's field is laid again, on a new mesh, when the head
+ * motion or the layers change).
  */
 import { CharacterField } from "./character-mouth";
+import { addHeadField, type HeadPictures } from "./head-field";
 import { buildLowerFaceRig, type LowerFaceRig } from "./jaw-rig";
 import type { KindProfile } from "./kind-profile";
 import type { Rig } from "../types";
@@ -19,8 +23,11 @@ export class FacePicture {
   readonly samples = new FaceSamples();
   /** Whether the photo is a cut-out. Decides how far the body may move. */
   cutOut = false;
-  /** The face mesh laid on the canvas. */
+  /** The face mesh laid on the canvas, with the head's field when it is
+   *  wanted and could be laid. */
   mesh!: FaceMesh;
+  /** The same without the head's field. */
+  private bare!: FaceMesh;
   /** The head as a movable unit: where it sits and how far it may travel. */
   headGeom: HeadGeom | null = null;
   /** A cut-out's head REGION — hair, ears, skull — cut out once with
@@ -29,6 +36,11 @@ export class FacePicture {
   headLayer: HeadLayer | null = null;
   /** Cut the head layer for a cut-out (EngineOptions.cutOutHeadLayer). */
   private headLayerWanted = false;
+  /** Lay the head's field (the "3d" head motion). */
+  private headFieldWanted = false;
+  /** A layered avatar's layers: where its head may move without showing
+   *  its still background (head-field.ts). */
+  private layers: HeadPictures["layers"] = null;
   /** The character mouth's jaw field, only for a profile that asks for it. */
   field: CharacterField | null = null;
   /** The jaw, chin and cheeks for every mouth driver (jaw-rig.ts). */
@@ -62,7 +74,8 @@ export class FacePicture {
     this.lowerFace = buildLowerFaceRig(mesh.basePoints);
     if (sample) this.samples.sample(this.texture, mesh.texPoints, this.rig, this.profile);
     refineMesh(mesh, this.rig, this.texture);
-    this.mesh = mesh;
+    this.bare = mesh;
+    this.mesh = this.withHeadField(mesh);
     this.cutHead();
   }
 
@@ -73,6 +86,37 @@ export class FacePicture {
     this.headLayerWanted = on;
     if (this.mesh) this.cutHead();
     return true;
+  }
+
+  /** Lay the head's field around the face (the "3d" head motion), or not.
+   *  False when that is already so. */
+  useHeadField(on: boolean): boolean {
+    if (on === this.headFieldWanted) return false;
+    this.headFieldWanted = on;
+    if (this.bare) this.mesh = this.withHeadField(this.bare);
+    return true;
+  }
+
+  /** A layered avatar's layers (or null): the head's field is laid again
+   *  for them. */
+  setLayers(layers: HeadPictures["layers"]): void {
+    this.layers = layers;
+    if (this.bare && this.headFieldWanted) this.mesh = this.withHeadField(this.bare);
+  }
+
+  /** `mesh` with the head's field laid on a copy of it, when wanted and
+   *  it can be; `mesh` itself otherwise. */
+  private withHeadField(mesh: FaceMesh): FaceMesh {
+    if (!this.headFieldWanted) return mesh;
+    const copy: FaceMesh = { ...mesh, texPoints: [...mesh.texPoints], triangles: [...mesh.triangles] };
+    const [w, h] = this.rig.image_size;
+    addHeadField(
+      copy,
+      this.rig.triangles,
+      { x: this.texture.naturalWidth / w, y: this.texture.naturalHeight / h },
+      { texture: this.texture, cutOut: this.cutOut, layers: this.layers }
+    );
+    return copy.head ? copy : mesh;
   }
 
   /** The head layer, after the refinement: the head's mask must be whole
