@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Awaitable, Callable
 
 from sqlalchemy import select, update
 
 from app.core.errors import AppError
 from app.db import execute_dml, get_session_factory
 from app.models import Avatar, Creation, Organization
+from app.models.shapes import MouthConfig, Note
 from app.services import consent, disclosure, imagegen, mouth_kit, mouth_photo, performance_kit
 from app.services import mouth as mouth_config
 from app.services.ai_models import PROVIDER
@@ -22,6 +24,7 @@ from app.services.jobs import (
     runner,
 )
 from app.services.mouth_photo import TeethFailure
+from app.services.storage import Storage
 from app.services.usage import check_image_limit
 
 logger = logging.getLogger("liveface.creations")
@@ -55,7 +58,7 @@ def animal_character_mouth(creation: Creation, avatar: Avatar) -> None:
 
 
 async def own_mouth(
-    job: Job, creation: Creation, avatar: Avatar, image: bytes, rig: dict, storage
+    job: Job, creation: Creation, avatar: Avatar, image: bytes, rig: dict, storage: Storage
 ) -> bool | None:
     """The mouth a new avatar speaks with, set before its first publish:
     the wizard's last step, "Preparing your avatar". True when the person's
@@ -94,7 +97,7 @@ async def own_mouth(
         return None
     avatar.mouth_config = json.dumps(config)
 
-    def standard(note: dict) -> bool:
+    def standard(note: Note) -> bool:
         # The standard teeth and the bundled motion, and why.
         avatar.mouth_config = json.dumps(
             {**config, "teeth": mouth_config.generic_teeth_record(note)}
@@ -174,12 +177,17 @@ async def record_finish_consent(creation: Creation, consent_id: str) -> None:
         await db.commit()
 
 
-async def single_teeth(job: Job, avatar: Avatar, image: bytes, storage, sending) -> bool:
+async def single_teeth(
+    job: Job, avatar: Avatar, image: bytes, storage: Storage, sending: Callable[[], Awaitable[None]]
+) -> bool:
     """A person's teeth alone: an "ee" photo the image model makes from
     `image`, admitted exactly like an uploaded mouth photo, when the kit
     cannot be made. Anything short of it publishes the standard teeth with
     the reason in the teeth note. True when the teeth were made."""
-    config = mouth_photo.default_config(avatar.face_type) or {}
+    config: MouthConfig = mouth_photo.default_config(avatar.face_type) or {
+        "renderer": "continuous",
+        "profile": {},
+    }
     job.report(0.65, "making the teeth")
     try:
         async with runner.outside_slot(job):
@@ -189,7 +197,7 @@ async def single_teeth(job: Job, avatar: Avatar, image: bytes, storage, sending)
         )
     except mouth_photo.TeethFailure as exc:
         logger.info("finish %s: standard teeth (%s)", job.id, exc.code)
-        note = exc.note()
+        note: Note = exc.note()
     except Exception:
         # Broad on purpose: the provider and the teeth checks fail in many
         # types; any of them is the standard teeth, never a failed finish.

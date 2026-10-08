@@ -35,7 +35,7 @@ from app.services.photo_io import has_alpha, png_bytes, scrub_transparent
 from app.services.publishing import mark_dirty
 from app.services.rig import build_rig, fit_base_mesh, landmarks_from_image, starting_mesh
 from app.services.segment import SegmentationUnavailable, remove_background
-from app.services.storage import STORAGE_ERRORS, get_storage
+from app.services.storage import STORAGE_ERRORS, Storage, get_storage
 
 logger = logging.getLogger("liveface.avatars")
 
@@ -217,7 +217,7 @@ def _crop_png(
     return png_bytes(cropped), (left, top), cropped.size
 
 
-async def _kit_follows_rig(avatar: Avatar, storage) -> list[str]:
+async def _kit_follows_rig(avatar: Avatar, storage: Storage) -> list[str]:
     """The mouth kit moved onto the rig now in place after a crop or its
     reset (mouth_kit.follow_points): a crop cuts the same pixels at whole
     pixels, so the kit is the face's still, only elsewhere in the picture.
@@ -260,7 +260,7 @@ def _move_anchors(anchors, left: float, top: float):
     return anchors
 
 
-async def _uncrop_rig(avatar: Avatar, storage, cropped_keys: list[str]) -> None:
+async def _uncrop_rig(avatar: Avatar, storage: Storage, cropped_keys: list[str]) -> None:
     """Put the rig back into the pre-crop photo's coordinates.
 
     A translation, not a re-detection: the rig keeps its viseme table, its

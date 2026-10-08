@@ -4,11 +4,13 @@ region, and opened on a mesh (where each handle starts)."""
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, fields, replace
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
+from app.models.shapes import Marks
 from app.services.anchor_fit.scheme import (
     CHIN,
     DIAGONALS,
@@ -146,7 +148,7 @@ def for_face_type(marks: FaceMarks, face_type: str) -> FaceMarks:
     return marks
 
 
-def marks_from_dict(data: dict | None, face_type: str) -> FaceMarks:
+def marks_from_dict(data: Mapping[str, Any] | None, face_type: str) -> FaceMarks:
     """Marks as stored in `user_anchors` or sent by the client, in any past
     format, expressed in `face_type`'s scheme. Unknown keys are ignored."""
     data = data or {}
@@ -186,7 +188,7 @@ def saved_marks(rig: dict, face_type: str, rig_on_base: bool) -> FaceMarks:
     return marks_from_dict(stored, face_type)
 
 
-def marks_to_dict(marks: FaceMarks) -> dict:
+def marks_to_dict(marks: FaceMarks) -> Marks:
     """JSON for `user_anchors` and the rig-anchors response. Only what is
     marked is written."""
 
@@ -212,7 +214,8 @@ def marks_to_dict(marks: FaceMarks) -> dict:
         pupil = getattr(marks, name)
         if pupil is not None:
             out[name] = {"center": pt(pupil.center), "rim": pt(pupil.rim)}
-    return out
+    # Built key by key from the dataclass; exactly the Marks shape.
+    return cast(Marks, out)
 
 
 def merge(older: FaceMarks, newer: FaceMarks) -> FaceMarks:

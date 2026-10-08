@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -13,6 +15,7 @@ from sqlalchemy import select
 from app.core.errors import Validation422
 from app.db import get_session_factory
 from app.models import Avatar
+from app.models.shapes import MouthConfig, Note, ProfileValues
 from app.schemas.avatar import MouthProfile
 from app.services import disclosure, mouth, mouth_photo, performance_kit
 from app.services import mouth as mouth_config
@@ -36,7 +39,7 @@ from app.services.mouth_kit.records import (
     teeth_reason,
 )
 from app.services.publishing import mark_dirty
-from app.services.storage import get_storage
+from app.services.storage import Storage, get_storage
 
 logger = logging.getLogger("liveface.mouth_kit")
 
@@ -45,7 +48,21 @@ def _manifest_bytes(manifest: dict) -> bytes:
     return json.dumps(manifest, separators=(",", ":")).encode()
 
 
-async def store(avatar, storage, result: performance_kit.KitResult, *, source: str) -> list[str]:
+def _hold_profile(config: MouthConfig, values: Mapping[str, Any]) -> dict[str, float]:
+    """Set the config's profile to `values` held to the API's ranges, like any
+    profile an owner saves (it is served to strangers), and return it."""
+    held = MouthProfile.model_validate(values).model_dump()
+    config["profile"] = cast(ProfileValues, held)
+    return held
+
+
+async def store(
+    avatar: Avatar,
+    storage: Storage,
+    result: performance_kit.KitResult,
+    *,
+    source: Literal["finish", "mouth_panel"],
+) -> list[str]:
     """Make `result` the draft's mouth kit: its manifest the avatar's own
     motion when it has shapes of the person's own (none, and the bundled
     motion plays: this manifest would only be the Reference's shapes fitted
@@ -56,18 +73,22 @@ async def store(avatar, storage, result: performance_kit.KitResult, *, source: s
     as it was. The caller commits (and marks an edited draft dirty).
     Returns the keys replaced, to delete after the commit: the published
     snapshot has its own copies."""
-    config = mouth.load(avatar.mouth_config) or {"renderer": "continuous", "profile": {}}
-    teeth_record = config.get("teeth") or {}
+    config: MouthConfig = mouth.load(avatar.mouth_config) or {
+        "renderer": "continuous",
+        "profile": {},
+    }
+    teeth_record = config.get("teeth")
     has_photo = bool(config.get("oral_image_key") and config.get("oral_rig_key"))
     # A photo from before the record existed is the owner's too.
-    own_photo = has_photo and (teeth_record.get("source") or "upload") == "upload"
+    source_of_teeth = teeth_record.get("source") if teeth_record else None
+    own_photo = has_photo and (source_of_teeth or "upload") == "upload"
     model = kit_model(result)
     fitted = dict(result.profile)
     previous: list[str] = []
     ai_edited = avatar.ai_edited
 
     new_photo: tuple[str, str] | None = None
-    reason = teeth_reason(result)
+    reason: Note | None = teeth_reason(result)
     if own_photo:
         reason = OWNER_PHOTO
     elif result.teeth_source is not None:
@@ -88,8 +109,8 @@ async def store(avatar, storage, result: performance_kit.KitResult, *, source: s
 
     if new_photo is not None:
         previous += [k for k in (config.get("oral_image_key"), config.get("oral_rig_key")) if k]
-        config.update(oral_image_key=new_photo[0], oral_rig_key=new_photo[1],
-                      teeth=mouth_config.ai_teeth_record(model))
+        config["oral_image_key"], config["oral_rig_key"] = new_photo
+        config["teeth"] = mouth_config.ai_teeth_record(model)
         ai_edited = disclosure.with_ai_teeth(ai_edited, model)
         keys = FITTED_WITH_TEETH
     elif has_photo:
@@ -102,26 +123,26 @@ async def store(avatar, storage, result: performance_kit.KitResult, *, source: s
     # The fitted values the kit decides; everything else the owner set (or
     # the defaults, on a new avatar) stays. Held to the API's ranges like
     # any profile an owner saves: it is served to strangers.
-    config["profile"] = MouthProfile.model_validate({
+    profile = _hold_profile(config, {
         **(config.get("profile") or {}),
         **{k: fitted[k] for k in keys},
-    }).model_dump()
+    })
 
     generated = generated_count(result)
     if generated:
         key = mouth.motion_key(avatar.org_id, avatar.id, uuid4().hex[:8])
         await storage.put_bytes(key, _manifest_bytes(result.manifest), MOTION_TYPE)
-        if config.get("motion_key"):
-            previous.append(config["motion_key"])
+        if old := config.get("motion_key"):
+            previous.append(old)
         config["motion_key"] = key
         ai_edited = disclosure.with_ai_shapes(ai_edited, model, generated)
     else:
-        if config.get("motion_key"):
-            previous.append(config.pop("motion_key"))
+        if old := config.pop("motion_key", None):
+            previous.append(old)
         ai_edited = disclosure.without_ai_shapes(ai_edited)
     config["kit"] = kit_record(
         result, source=source, teeth={"used": new_photo is not None, "reason": reason},
-        fitted={k: config["profile"][k] for k in keys},
+        fitted={k: profile[k] for k in keys},
     )
     avatar.mouth_config = json.dumps(config)
     avatar.ai_edited = ai_edited
@@ -131,7 +152,7 @@ async def store(avatar, storage, result: performance_kit.KitResult, *, source: s
 # --- Following the avatar's edits ------------------------------------------------------
 
 
-def teeth_changed(avatar, reason: dict) -> None:
+def teeth_changed(avatar: Avatar, reason: Note) -> None:
     """The teeth drawn are no longer the ones the kit fitted the profile
     for: the owner uploaded their own photo (OWNER_PHOTO) or removed the
     photo (TEETH_REMOVED: the standard teeth now). The teeth values the kit
@@ -144,10 +165,10 @@ def teeth_changed(avatar, reason: dict) -> None:
     no longer the avatar's, and why. The shapes and the jaw range are
     untouched."""
     config = mouth.load(avatar.mouth_config)
-    kit = (config or {}).get("kit")
+    kit = config.get("kit") if config else None
     if not config or not kit:
         return
-    profile = dict(config.get("profile") or {})
+    profile: dict[str, Any] = dict(config.get("profile") or {})
     target = MouthProfile().model_dump()
     if reason["code"] == TEETH_REMOVED["code"]:
         target = performance_kit.for_standard_teeth(target)
@@ -156,16 +177,16 @@ def teeth_changed(avatar, reason: dict) -> None:
     for key in FITTED_WITH_TEETH:
         if fitted is None or key not in fitted or profile.get(key) == fitted[key]:
             profile[key] = target[key]
-    config["profile"] = MouthProfile.model_validate(profile).model_dump()
-    kit = {**kit, "fitted": {
-        **(fitted or {}), **{k: config["profile"][k] for k in FITTED_WITH_TEETH}}}
+    held = _hold_profile(config, profile)
+    kit = kit.copy()
+    kit["fitted"] = {**(fitted or {}), **{k: held[k] for k in FITTED_WITH_TEETH}}
     if (kit.get("teeth") or {}).get("used"):
         kit["teeth"] = {"used": False, "reason": reason}
     config["kit"] = kit
     avatar.mouth_config = json.dumps(config)
 
 
-def drop(avatar, reason: dict) -> list[str]:
+def drop(avatar: Avatar, reason: Note) -> list[str]:
     """The draft's kit can no longer play on its face (its manifest could
     not follow the points): the motion goes (the engine plays the bundled
     Reference motion again), with the disclosure of its AI-made shapes, and
@@ -173,18 +194,22 @@ def drop(avatar, reason: dict) -> list[str]:
     stay. Returns the motion's key, to delete after the commit; nothing to
     do without one."""
     config = mouth.load(avatar.mouth_config)
-    key = (config or {}).get("motion_key")
+    key = config.get("motion_key") if config else None
     if not config or not key:
         return []
     config.pop("motion_key")
-    if config.get("kit"):
-        config["kit"] = {**config["kit"], "state": "dropped", "dropped": reason}
+    if kit := config.get("kit"):
+        kit = kit.copy()
+        kit["state"], kit["dropped"] = "dropped", reason
+        config["kit"] = kit
     avatar.mouth_config = json.dumps(config)
     avatar.ai_edited = disclosure.without_ai_shapes(avatar.ai_edited)
     return [key]
 
 
-async def follow_points(avatar, storage, points, image_size=None) -> list[str]:
+async def follow_points(
+    avatar: Avatar, storage: Storage, points, image_size=None
+) -> list[str]:
     """Move the draft's kit onto the face's points as they are now, with no
     AI call: points re-confirmed on the same picture (Mark the face's saved
     marks, a re-detection), or the picture moved under the same face (a
@@ -194,7 +219,7 @@ async def follow_points(avatar, storage, points, image_size=None) -> list[str]:
     A kit that cannot follow is dropped rather than left on the old
     points. Returns the keys replaced, to delete after the commit."""
     config = mouth.load(avatar.mouth_config)
-    key = (config or {}).get("motion_key")
+    key = config.get("motion_key") if config else None
     if not config or not key:
         return []
     size = tuple(int(v) for v in image_size) if image_size is not None else None
@@ -211,13 +236,17 @@ async def follow_points(avatar, storage, points, image_size=None) -> list[str]:
     new_key = mouth.motion_key(avatar.org_id, avatar.id, uuid4().hex[:8])
     await storage.put_bytes(new_key, _manifest_bytes(rebased), MOTION_TYPE)
     config["motion_key"] = new_key
-    if config.get("kit"):
-        config["kit"] = {**config["kit"], "rebased_at": _now()}
+    if kit := config.get("kit"):
+        kit = kit.copy()
+        kit["rebased_at"] = _now()
+        config["kit"] = kit
     avatar.mouth_config = json.dumps(config)
     return [key]
 
 
-async def follow_rig(avatar, storage, before: dict | None, after: dict | None) -> list[str]:
+async def follow_rig(
+    avatar: Avatar, storage: Storage, before: dict | None, after: dict | None
+) -> list[str]:
     """After an edit put another rig in place under the same key (undo):
     the kit follows it. A rig of another size is the same face on a picture
     cropped or uncropped (every edit that snapshots a rig moves the face's

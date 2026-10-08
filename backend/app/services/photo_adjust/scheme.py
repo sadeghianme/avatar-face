@@ -4,6 +4,8 @@ skipped."""
 
 from __future__ import annotations
 
+from app.models.shapes import Note
+
 TOUCHUP = "touchup"
 STYLISE = "stylise"
 REGENERATE = "regenerate"
@@ -143,5 +145,5 @@ class AdjustSkipped(Exception):
         super().__init__(detail)
 
 
-def reason(code: str, detail: str) -> dict:
+def reason(code: str, detail: str) -> Note:
     return {"code": code, "detail": detail}

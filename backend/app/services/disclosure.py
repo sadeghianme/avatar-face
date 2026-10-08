@@ -15,6 +15,8 @@ never mutated.
 
 from __future__ import annotations
 
+from app.models.shapes import AiEdited, AiShapesEntry
+
 # The disclosure's modes that say only the MOUTH was AI-made, the picture
 # itself not: its teeth photo (`teeth`), its mouth shapes (`mouth_shapes`,
 # services.mouth_kit). Every other mode is the picture's own (touchup,
@@ -22,7 +24,7 @@ from __future__ import annotations
 MOUTH_MODES = ("teeth", "mouth_shapes")
 
 
-def mouth_disclosure(ai_edited: dict | None) -> dict | None:
+def mouth_disclosure(ai_edited: AiEdited | None) -> AiEdited | None:
     """`ai_edited` with its mode re-derived when only the mouth was AI-made:
     "teeth" while there is a teeth entry, else "mouth_shapes" while there is
     a shapes entry, else nothing to disclose (None). The model is that
@@ -33,47 +35,57 @@ def mouth_disclosure(ai_edited: dict | None) -> dict | None:
         return ai_edited
     teeth, shapes = ai_edited.get("teeth"), ai_edited.get("mouth_shapes")
     if teeth:
-        derived = {"mode": "teeth", "model": teeth.get("model"), "teeth": teeth}
-        return {**derived, "mouth_shapes": shapes} if shapes else derived
+        derived: AiEdited = {"mode": "teeth", "model": teeth.get("model"), "teeth": teeth}
+        if shapes:
+            derived["mouth_shapes"] = shapes
+        return derived
     if shapes:
         return {"mode": "mouth_shapes", "model": shapes.get("model"), "mouth_shapes": shapes}
     return None
 
 
-def with_ai_teeth(ai_edited: dict | None, model: str | None) -> dict:
+def with_ai_teeth(ai_edited: AiEdited | None, model: str | None) -> AiEdited:
     """The disclosure once AI made the teeth (a new dict: JSON columns are
     replaced, never mutated)."""
     if not ai_edited:
         return {"mode": "teeth", "model": model, "teeth": {"model": model}}
-    disclosed = mouth_disclosure({**ai_edited, "teeth": {"model": model}})
+    edited = ai_edited.copy()
+    edited["teeth"] = {"model": model}
+    disclosed = mouth_disclosure(edited)
     assert disclosed is not None  # a teeth entry is always disclosed
     return disclosed
 
 
-def without_ai_teeth(ai_edited: dict | None) -> dict | None:
+def without_ai_teeth(ai_edited: AiEdited | None) -> AiEdited | None:
     """The disclosure once AI-made teeth are gone (replaced or removed):
     whatever else AI did, to the picture or to the mouth's shapes, stays
     disclosed."""
     if not ai_edited:
         return None
-    return mouth_disclosure({k: v for k, v in ai_edited.items() if k != "teeth"})
+    rest = ai_edited.copy()
+    rest.pop("teeth", None)
+    return mouth_disclosure(rest)
 
 
-def with_ai_shapes(ai_edited: dict | None, model: str | None, generated: int) -> dict:
+def with_ai_shapes(ai_edited: AiEdited | None, model: str | None, generated: int) -> AiEdited:
     """The disclosure once AI made `generated` of the mouth's shapes (a new
     dict: JSON columns are replaced, never mutated)."""
-    entry = {"model": model, "generated": generated}
+    entry: AiShapesEntry = {"model": model, "generated": generated}
     if not ai_edited:
         return {"mode": "mouth_shapes", "model": model, "mouth_shapes": entry}
-    disclosed = mouth_disclosure({**ai_edited, "mouth_shapes": entry})
+    edited = ai_edited.copy()
+    edited["mouth_shapes"] = entry
+    disclosed = mouth_disclosure(edited)
     assert disclosed is not None  # a shapes entry is always disclosed
     return disclosed
 
 
-def without_ai_shapes(ai_edited: dict | None) -> dict | None:
+def without_ai_shapes(ai_edited: AiEdited | None) -> AiEdited | None:
     """The disclosure once no AI-made shape is shown (the kit dropped, a
     kit with none, the published mouth without its motion): whatever else
     AI made stays disclosed."""
     if not ai_edited:
         return None
-    return mouth_disclosure({k: v for k, v in ai_edited.items() if k != "mouth_shapes"})
+    rest = ai_edited.copy()
+    rest.pop("mouth_shapes", None)
+    return mouth_disclosure(rest)

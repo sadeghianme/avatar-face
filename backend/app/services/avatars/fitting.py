@@ -43,7 +43,7 @@ from app.services.rig import (
     fit_base_mesh,
     landmarks_from_image,
 )
-from app.services.storage import STORAGE_ERRORS, get_storage
+from app.services.storage import STORAGE_ERRORS, Storage, get_storage
 
 logger = logging.getLogger("liveface.avatars")
 
@@ -103,7 +103,7 @@ async def reprofile_visemes(avatar: Avatar, visemes: bool = True) -> None:
 # --- The fit base ----------------------------------------------------------------
 
 
-async def fit_base(avatar: Avatar, storage, rig: dict) -> tuple[np.ndarray, bool]:
+async def fit_base(avatar: Avatar, storage: Storage, rig: dict) -> tuple[np.ndarray, bool]:
     """The mesh this rig's fits start from — the detection, else the
     template — and whether the rig's own points number their landmarks as
     it does (see anchor_fit.saved_marks): true of a detection, which the rig
@@ -124,6 +124,7 @@ async def fit_base(avatar: Avatar, storage, rig: dict) -> tuple[np.ndarray, bool
         found, _, size, detected = landmarks_from_image(data)
         return fit_base_mesh(found, size, detected), size, detected
 
+    assert avatar.image_key is not None  # every caller fits a photo avatar's rig
     image = await storage.get_bytes(avatar.image_key)
     found, size, detected = await run_in_threadpool(detect, image)
     if list(size) != list(rig["image_size"]):

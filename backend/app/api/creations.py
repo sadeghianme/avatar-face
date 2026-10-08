@@ -30,7 +30,7 @@ The routes do HTTP only: what each request does is services.creations
 
 from __future__ import annotations
 
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Form, Response, UploadFile
 
@@ -38,6 +38,7 @@ from app.api.deps import DB, OrgMember
 from app.core.config import get_settings
 from app.core.errors import Validation422
 from app.models import Creation, CreationStatus, Organization
+from app.models.shapes import CropRect, JobRecord
 from app.schemas.avatar import FaceType, FitReason
 from app.schemas.creation import (
     AdjustRequest,
@@ -58,6 +59,7 @@ from app.schemas.creation import (
     FinishRequest,
     FinishWarning,
     GenerateCreationRequest,
+    JobError,
     JobOut,
     JobProgress,
     PlanOut,
@@ -66,6 +68,7 @@ from app.schemas.creation import (
     PreviewRigRequest,
     RetryRequest,
     StepOut,
+    Validation,
     VersionRequest,
 )
 from app.services import creations as svc
@@ -83,16 +86,18 @@ LIST_LIMIT = 50
 # --- Output ---------------------------------------------------------------------
 
 
-def _job_out(record: dict | None) -> JobOut | None:
+def _job_out(record: JobRecord | None) -> JobOut | None:
     if not record:
         return None
     live = runner.get(record["id"])
     progress = live.progress() if live and record["state"] in ACTIVE_STATES else None
+    error = record.get("error")
     return JobOut(
         id=record["id"],
-        step=record["step"],
+        # One of JobOut's steps: the job runner keeps it as a str.
+        step=cast("Any", record["step"]),
         state=record["state"],
-        error=record.get("error"),
+        error=JobError(**error) if error else None,
         started_at=record["started_at"],
         progress=JobProgress.model_validate(progress) if progress is not None else None,
         retryable=svc.retryable(record),
@@ -175,7 +180,7 @@ async def _out(db: DB, creation: Creation) -> CreationOut:
             image_size=creation.anchors["image_size"],
             detected=bool(creation.anchors.get("detected")),
             marks=creation.anchors.get("marks") or {},
-            validation=creation.anchors["validation"],
+            validation=Validation.model_validate(creation.anchors["validation"]),
         )
     plan = wizard.plan_of(creation.steps)
     return CreationOut(
@@ -301,7 +306,9 @@ async def update_creation(
     the AI results (made from the old frame) and the marks.
     """
     creation = await repo.get(db, ctx.org.id, creation_id)
-    crop = body.crop.model_dump() if body.crop else None
+    crop: CropRect | None = None
+    if body.crop:
+        crop = {"x": body.crop.x, "y": body.crop.y, "w": body.crop.w, "h": body.crop.h}
     if not await edits.frame_or_line(db, creation, crop, body.roll, body.face_type):
         return await _out(db, creation)
     return await _reloaded(db, creation)

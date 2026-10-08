@@ -13,9 +13,11 @@ import io
 import numpy as np
 from PIL import Image
 
+from app.models.shapes import FoundAnchors, Marks, Note
 from app.services import face_template, landmarks
 from app.services.anchor_fit import (
     FaceMarks,
+    FitProblem,
     fit_rig,
     marks_from_dict,
     marks_from_mesh,
@@ -28,7 +30,7 @@ from app.services.rig import build_rig
 from app.services.riggable import check_landmarks
 
 
-def detect_anchors(png: bytes, face_type: str) -> dict:
+def detect_anchors(png: bytes, face_type: str) -> FoundAnchors:
     """The base mesh and the marks the wizard opens on. CPU work.
 
     The base is what every fit of these marks starts from, exactly as an
@@ -60,7 +62,7 @@ def detect_anchors(png: bytes, face_type: str) -> dict:
     stored = marks_to_dict(marks_from_mesh(np.array(opened["points"]), face_type))
     _, problems = fit_rig(skeleton, base, marks_from_dict(stored, face_type), face_type)
 
-    warnings = []
+    warnings: list[Note] = []
     if face_type == "human" and detected:
         verdict = check_landmarks(base, size, detected=True)
         if not verdict.ok:
@@ -85,13 +87,16 @@ def detect_anchors(png: bytes, face_type: str) -> dict:
     }
 
 
-def fit_from_anchors(anchors: dict, sent: dict | None, face_type: str):
+def fit_from_anchors(
+    anchors: FoundAnchors, sent: Marks | None, face_type: str
+) -> tuple[dict, list[FitProblem]]:
     """(rig, problems): the rig finish would build from these anchors and
     the marks the client sent, merged over the stored ones (a region left
     out keeps its stored marking). Always fitted from the stored base, so
     preview and finish cannot disagree."""
     base = np.array(anchors["base"], dtype=np.float64)
-    size = tuple(anchors["image_size"])
+    width, height = anchors["image_size"]
+    size = (width, height)
     skeleton = build_rig(base, size, None, face_type=face_type)
     marks = merge(
         marks_from_dict(anchors.get("marks"), face_type), marks_from_dict(sent, face_type)

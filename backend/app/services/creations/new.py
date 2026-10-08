@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import Conflict409, NotFound404, Validation422
 from app.models import Avatar, AvatarKind, Creation, CreationStatus, Organization
 from app.models.base import new_id
+from app.models.shapes import AvatarLook, AvatarModel, CreationSteps, Plan
 from app.schemas.creation import GenerateCreationRequest
 from app.services import consent, imagegen, wizard
 from app.services.ai_models import PROVIDER
@@ -27,8 +28,8 @@ from app.services.usage import check_image_limit
 
 
 def upload_plan(
-    model: str | None, look: str | None, file_name: str | None
-) -> tuple[dict | None, str | None]:
+    model: AvatarModel | None, look: AvatarLook | None, file_name: str | None
+) -> tuple[CreationSteps | None, str | None]:
     """(steps, line) for an upload by the four-step wizard, which sends the
     `model` and the `look` (both, or neither: 422 plan_incomplete): the plan
     and the name it proposes, kept from the start, and the line they make.
@@ -37,7 +38,7 @@ def upload_plan(
         raise Validation422("Send both the model and the look", code="plan_incomplete")
     if model is None or look is None:
         return None, None
-    steps = {
+    steps: CreationSteps = {
         "current": None,
         "items": {},
         wizard.PLAN: wizard.make_plan(model, look, "upload"),
@@ -66,7 +67,7 @@ async def create_from_upload(
     data: bytes,
     content_type: str | None,
     face_type: str | None,
-    steps: dict | None,
+    steps: CreationSteps | None,
 ) -> Creation:
     """A creation for an uploaded photo (already checked for type and size),
     its ingest job admitted and launched. Refused past the draft limit, by
@@ -114,8 +115,8 @@ async def create_generated(
     409), no image model (409), the draft limit (409), the image limit
     (429), and the job admission."""
     consent.require_ai_enabled(org)
-    plan = None
-    steps = None
+    plan: Plan | None = None
+    steps: CreationSteps | None = None
     face_type = body.face_type
     if (body.model is None) != (body.look is None):
         raise Validation422("Send both the model and the look", code="plan_incomplete")

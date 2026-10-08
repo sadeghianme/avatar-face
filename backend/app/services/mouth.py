@@ -18,6 +18,10 @@ the mouth kit is made of), both owner-facing only.
 from __future__ import annotations
 
 import json
+from typing import cast
+
+from app.models.shapes import CharacterSettings, MouthConfig, Note, OralUrls, TeethRecord
+from app.services.storage import Storage
 
 RENDERERS = ("classic", "continuous")
 
@@ -47,7 +51,7 @@ def character_allowed(face_type: str) -> bool:
     return face_type in CHARACTER_FACE_TYPES
 
 
-def clean_character(raw: dict | None) -> dict | None:
+def clean_character(raw: object) -> CharacterSettings | None:
     """The owner's character settings as stored: only known keys, each in its
     range; a value that is not usable is the default. None for none."""
     if not isinstance(raw, dict):
@@ -56,9 +60,10 @@ def clean_character(raw: dict | None) -> dict | None:
     jaw = float(jaw) if isinstance(jaw, (int, float)) and not isinstance(jaw, bool) else 1.0
     if jaw != jaw:  # NaN
         jaw = 1.0
+    # CHARACTER_STYLES and CHARACTER_TEETH, each with its default first.
     return {
-        "style": raw.get("style") if raw.get("style") in CHARACTER_STYLES else "character",
-        "teeth": raw.get("teeth") if raw.get("teeth") in CHARACTER_TEETH else "upper",
+        "style": "classic" if raw.get("style") == "classic" else "character",
+        "teeth": "none" if raw.get("teeth") == "none" else "upper",
         "tongue": raw["tongue"] if isinstance(raw.get("tongue"), bool) else True,
         "jaw": round(max(JAW_RANGE[0], min(JAW_RANGE[1], jaw)), 3),
     }
@@ -71,12 +76,15 @@ def character_style(raw: str | None) -> str:
     return ((config or {}).get("character") or {}).get("style") or "character"
 
 
-def load(raw: str | None) -> dict | None:
+def load(raw: str | None) -> MouthConfig | None:
     try:
         value = json.loads(raw) if raw else None
     except ValueError:
         return None
-    return value if isinstance(value, dict) and value.get("renderer") in RENDERERS else None
+    if not isinstance(value, dict) or value.get("renderer") not in RENDERERS:
+        return None
+    # The column as this module and its writers keep it (MouthConfig).
+    return cast(MouthConfig, value)
 
 
 def oral_keys(org_id: str, avatar_id: str, stamp: str) -> tuple[str, str]:
@@ -91,7 +99,7 @@ def motion_key(org_id: str, avatar_id: str, stamp: str) -> str:
     return f"orgs/{org_id}/avatars/{avatar_id}/mouth-motion-{stamp}.json"
 
 
-async def photo_urls(config: dict | None, storage) -> dict | None:
+async def photo_urls(config: MouthConfig | None, storage: Storage) -> OralUrls | None:
     """Presigned URLs for the mouth photo and its rig, if both still exist."""
     if not config:
         return None
@@ -106,7 +114,7 @@ async def photo_urls(config: dict | None, storage) -> dict | None:
     }
 
 
-async def motion_url(config: dict | None, storage) -> str | None:
+async def motion_url(config: MouthConfig | None, storage: Storage) -> str | None:
     """The presigned URL of the motion manifest, if it still exists. None
     means the engine plays the bundled Reference motion, as it always did."""
     key = (config or {}).get("motion_key")
@@ -118,15 +126,15 @@ async def motion_url(config: dict | None, storage) -> str | None:
 # --- The teeth record (mouth_config["teeth"], services.mouth_photo) -----------
 
 
-def ai_teeth_record(model: str | None) -> dict:
+def ai_teeth_record(model: str | None) -> TeethRecord:
     return {"source": "ai", "model": model}
 
 
-def upload_teeth_record() -> dict:
+def upload_teeth_record() -> TeethRecord:
     return {"source": "upload"}
 
 
-def generic_teeth_record(note: dict | None) -> dict:
+def generic_teeth_record(note: Note | None) -> TeethRecord:
     """The record of the standard teeth (no teeth photo of its own), and why."""
     return {"source": None, "note": note}
 
@@ -137,7 +145,7 @@ def generic_teeth_record(note: dict | None) -> dict:
 MIGRATED_STANDARD = "migrated_standard"
 
 
-def migrated_teeth_record(day: str) -> dict:
+def migrated_teeth_record(day: str) -> TeethRecord:
     """The standard teeth's record for an existing avatar moved from the
     classic mouth on `day` (an ISO date): `default_config`'s mouth is what
     it gets, and this says why it has no teeth of its own."""

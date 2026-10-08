@@ -28,10 +28,13 @@ from __future__ import annotations
 
 import io
 import math
+from collections.abc import Mapping
+from typing import Any
 
 import numpy as np
 from PIL import Image
 
+from app.models.shapes import Recommendation
 from app.services import landmarks
 from app.services.anchor_fit import LEFT_EYE, RIGHT_EYE
 from app.services.photo_io import on_backdrop
@@ -242,7 +245,7 @@ def yaw_offset(points: np.ndarray) -> float:
     return float(abs(points[NOSE_TIP][0] - (left + right) / 2) / half)
 
 
-def recommend(check: dict, line: str) -> dict:
+def recommend(check: Mapping[str, Any], line: str) -> Recommendation:
     """{mode, reasons}: what step 3 recommends for this image on `line`.
 
     `check` is what `check_photo` found. Reasons are check codes, in a

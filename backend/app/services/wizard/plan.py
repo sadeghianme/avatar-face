@@ -4,15 +4,16 @@ and budgets, and the name the wizard proposes."""
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import Final, Literal
 
+from app.models.shapes import AvatarLook, AvatarModel, CreationSteps, Plan, PlanSource
 from app.services.creations.steps import plan_of  # noqa: F401  (the plan of a creation's steps)
 
 MODELS = ("human", "animal")
 LOOKS = ("realistic", "animation", "cartoon")
 SOURCES = ("upload", "generate")
 # Where the plan lives in a creation's `steps`.
-PLAN = "plan"
+PLAN: Final = "plan"
 
 # AI runs per creation on step 3 (prepare, retry, each change). Each is one
 # paid image call, and the monthly image limit holds them all as well; a
@@ -29,15 +30,15 @@ MAX_WORDS = 300
 # Prepare modes (the job's `mode`): the AI in the plan's look from the
 # upload; a change of the current AI picture; a new picture from the
 # description (a generated creation's Retry); the photo itself, no AI.
-AI = "ai"
-CHANGE = "change"
-GENERATE = "generate"
-ORIGINAL = "original"
+AI: Final = "ai"
+CHANGE: Final = "change"
+GENERATE: Final = "generate"
+ORIGINAL: Final = "original"
 MODES = (AI, CHANGE, GENERATE, ORIGINAL)
 # What a version keeps on its own step item: the anchors found on it, and
 # the record of the try that made it (`ai.last_prepare`'s shape).
-KEPT_ANCHORS = "anchors"
-KEPT_RECORD = "prepare"
+KEPT_ANCHORS: Final = "anchors"
+KEPT_RECORD: Final = "prepare"
 
 
 def line_for(model: str, look: str) -> Literal["human", "animal", "cartoon"]:
@@ -52,7 +53,9 @@ def line_for(model: str, look: str) -> Literal["human", "animal", "cartoon"]:
 STYLE_OF_LOOK = {"realistic": "photoreal", "animation": "render3d", "cartoon": "illustrated"}
 
 
-def make_plan(model: str, look: str, source: str, description: str = "") -> dict:
+def make_plan(
+    model: AvatarModel, look: AvatarLook, source: PlanSource, description: str = ""
+) -> Plan:
     return {
         "model": model,
         "look": look,
@@ -61,11 +64,11 @@ def make_plan(model: str, look: str, source: str, description: str = "") -> dict
     }
 
 
-def inferred_plan(face_type: str | None, generated: bool) -> dict:
+def inferred_plan(face_type: str | None, generated: bool) -> Plan:
     """The plan of a creation the old wizard started (no `plan`): read off
     its line, so the new wizard can carry it on."""
-    model = "animal" if face_type == "animal" else "human"
-    look = "cartoon" if face_type == "cartoon" else "realistic"
+    model: AvatarModel = "animal" if face_type == "animal" else "human"
+    look: AvatarLook = "cartoon" if face_type == "cartoon" else "realistic"
     return make_plan(model, look, GENERATE if generated else "upload")
 
 
@@ -77,7 +80,7 @@ def inferred_plan(face_type: str | None, generated: bool) -> dict:
 # again by each screen from what the tab remembered of the file name, so a
 # reload renamed the avatar.)
 
-NAME = "name"
+NAME: Final = "name"
 NAME_MAX = 40
 # Words a camera or an app puts in a file name: they say nothing about who
 # is in the picture, and a name made of them ("Animal realistic raw") is
@@ -135,7 +138,7 @@ def default_name(*, file_name: str | None = None, description: str | None = None
     return None
 
 
-def name_of(steps: dict | None) -> str | None:
+def name_of(steps: CreationSteps | None) -> str | None:
     """The name kept with the creation, or None (the plan's default)."""
     name = (steps or {}).get(NAME)
     return name.strip() if isinstance(name, str) and name.strip() else None

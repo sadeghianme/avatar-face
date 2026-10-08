@@ -4,7 +4,10 @@ where a creation's files live in storage."""
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Final
 from uuid import uuid4
+
+from app.models.shapes import CropRect
 
 # What each line does (services.lines), under the names creations use.
 from app.services.lines import LINES, LineRules, required_marks, rules_for  # noqa: F401
@@ -33,11 +36,11 @@ CUTOUT_PREFIX = "cutout:"
 CHECK_KEYS = (
     "detector", "detected", "face_box", "roll", "face_state", "checks", "recommendations",
 )
-FULL_FRAME = {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}
+FULL_FRAME: CropRect = {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}
 # In `steps`: {face_type, background} as they were before a stylised
 # version was chosen, restored when the owner goes back to a picture that
 # is not a drawing ("Keep my photo"). Dropped when the owner picks a line.
-BEFORE_STYLISE = "before_stylise"
+BEFORE_STYLISE: Final = "before_stylise"
 
 
 # --- Storage layout ---------------------------------------------------------------

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models.shapes import AvatarLook, AvatarModel
 from app.schemas.avatar import (
     AnchorMarks,
     AnchorPoint,
@@ -95,8 +97,6 @@ class DetectRequest(BaseModel):
     consent_id: str | None = Field(default=None, max_length=64)
 
 
-AvatarModel = Literal["human", "animal"]
-AvatarLook = Literal["realistic", "animation", "cartoon"]
 
 
 class GenerateCreationRequest(BaseModel):
@@ -202,16 +202,16 @@ class StepOut(BaseModel):
     height: int
     # The step this image was made from; null for the original.
     from_: str | None = Field(default=None, alias="from")
-    crop: dict | None = None
+    crop: Mapping[str, Any] | None = None
     roll: float | None = None
     # AI adjust candidates ("adjusted:N"): {mode, style, model,
     # generated_eyes, rejected: {code, detail} | null, checks}. A rejected
     # candidate is shown with its reason and cannot be chosen;
     # generated_eyes means the eyes are the model's invention (the photo's
     # were closed) and must be labelled so.
-    adjust: dict | None = None
+    adjust: Mapping[str, Any] | None = None
     # A generated original: {model, style, provider}.
-    generated: dict | None = None
+    generated: Mapping[str, Any] | None = None
     # Transparent around the subject: a background removal's output
     # ("cutout", "cutout:N"), or a touch-up made from one.
     cutout: bool = False
@@ -236,7 +236,7 @@ class AnchorsOut(BaseModel):
     image: str | None
     image_size: list[int]
     detected: bool
-    marks: dict
+    marks: Mapping[str, Any]
     validation: Validation
 
 
@@ -300,7 +300,7 @@ class AiOut(BaseModel):
     prepare_rounds_left: int = 0
     # "Remove this change" redos that still cost no try.
     free_clears_left: int = 0
-    last_prepare: dict | None = None
+    last_prepare: Mapping[str, Any] | None = None
 
 
 class CreationOut(BaseModel):
@@ -315,7 +315,7 @@ class CreationOut(BaseModel):
     # `recommendation`: {image, mode: "touchup" | "regenerate" | "none",
     # reasons: [check codes]} for the CURRENT image on the creation's line,
     # recomputed with every change of image; null until the line is known.
-    analysis: dict | None = None
+    analysis: Mapping[str, Any] | None = None
     anchors: AnchorsOut | None = None
     job: JobOut | None = None
     avatar_id: str | None = None

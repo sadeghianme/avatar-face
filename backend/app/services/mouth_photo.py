@@ -82,6 +82,7 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import cast
 from uuid import uuid4
 
 import numpy as np
@@ -89,6 +90,8 @@ from PIL import Image
 
 from app.core.errors import AppError, Validation422
 from app.db import get_session_factory
+from app.models import Avatar
+from app.models.shapes import MouthConfig, Note, ProfileValues, TeethRecord
 from app.services import dental_photo, imagegen, landmarks, portrait_photo
 from app.services import photo_adjust as pa
 from app.services.consent import ai_switched_off
@@ -97,6 +100,7 @@ from app.services.mouth import load, oral_keys, renderer_allowed
 from app.services.performance_kit import call_billing, for_standard_teeth
 from app.services.performance_kit.prompts import TEETH_PROMPT
 from app.services.photo_io import png_bytes
+from app.services.storage import Storage
 from app.services.usage import check_image_limit, record_generation
 
 logger = logging.getLogger("liveface.mouth_photo")
@@ -130,14 +134,14 @@ class TeethFailure(Exception):
         self.status = status
         super().__init__(detail)
 
-    def note(self) -> dict:
+    def note(self) -> Note:
         return {"code": self.code, "detail": self.detail}
 
 
 # --- Records --------------------------------------------------------------------
 
 
-def default_config(face_type: str) -> dict | None:
+def default_config(face_type: str) -> MouthConfig | None:
     """The mouth a NEW avatar of this line starts with: the photographic one
     where it is allowed (a person), else None, the classic drawn mouth.
     Existing avatars keep whatever they have. It has no teeth photo of its
@@ -145,7 +149,11 @@ def default_config(face_type: str) -> dict | None:
     them as the Reference draws them (performance_kit.for_standard_teeth);
     a kit made at Finish sets the teeth values it fits."""
     if renderer_allowed("continuous", face_type):
-        return {"renderer": "continuous", "profile": for_standard_teeth({})}
+        # for_standard_teeth's values are ProfileValues' own keys.
+        return {
+            "renderer": "continuous",
+            "profile": cast(ProfileValues, for_standard_teeth({})),
+        }
     return None
 
 
@@ -247,11 +255,13 @@ def admit_photo(png: bytes, rig: dict) -> tuple[bytes, dict]:
     return photo, rig
 
 
-async def store(avatar, storage, photo: bytes, rig: dict, teeth: dict) -> list[str]:
+async def store(
+    avatar: Avatar, storage: Storage, photo: bytes, rig: dict, teeth: TeethRecord
+) -> list[str]:
     """Make `photo` the draft's mouth photo (the caller commits and marks the
     draft dirty). Returns the keys of the photo it replaced, to delete
     after the commit: the published snapshot has its own copies."""
-    config = load(avatar.mouth_config) or {"renderer": "continuous", "profile": {}}
+    config: MouthConfig = load(avatar.mouth_config) or {"renderer": "continuous", "profile": {}}
     previous = [k for k in (config.get("oral_image_key"), config.get("oral_rig_key")) if k]
     image_key, rig_key = await put_photo(avatar, storage, photo, rig)
     config.update(oral_image_key=image_key, oral_rig_key=rig_key, teeth=teeth)
@@ -259,7 +269,9 @@ async def store(avatar, storage, photo: bytes, rig: dict, teeth: dict) -> list[s
     return previous
 
 
-async def put_photo(avatar, storage, photo: bytes, rig: dict) -> tuple[str, str]:
+async def put_photo(
+    avatar: Avatar, storage: Storage, photo: bytes, rig: dict
+) -> tuple[str, str]:
     """Write an admitted mouth photo and its rig under fresh keys, and
     return them (image, rig); the config is the caller's to change. Fresh
     keys per photo: the published snapshot may still point at copies of

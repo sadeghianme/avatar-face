@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.core.errors import AppError, Conflict409, Validation422
 from app.db import get_session_factory
 from app.models import Avatar
+from app.models.shapes import AiUsage, CreationSteps, PrepareRecord
 from app.services import imagegen, photo_adjust, photo_io, wizard
 from app.services.creations.detect import source_on_backdrop
 from app.services.creations.ingest import stored_analysis
@@ -20,7 +21,7 @@ from app.services.creations.records import (
     update_ai_usage,
 )
 from app.services.creations.rules import step_key
-from app.services.creations.steps import step_check
+from app.services.creations.steps import plan_of, step_check
 from app.services.jobs import (
     Job,
     run_cpu,
@@ -66,7 +67,7 @@ async def run_generate(job: Job, params: dict) -> None:
     async with get_session_factory()() as db:
         await check_image_limit(db, job.org_id)
     job.report(0.1, "generating")
-    plan = (creation.steps or {}).get("plan")
+    plan = plan_of(creation.steps)
     if plan and source is None:
         # The four-step wizard: its own prompt for the model and look, a
         # plain backdrop, and the cut-out and the face found in this job.
@@ -117,7 +118,7 @@ async def run_generate(job: Job, params: dict) -> None:
     width, height = analysis["image_size"]
     key = step_key(job.org_id, job.subject_id, "original")
     await storage.put_bytes(key, clean, "image/png")
-    steps = {
+    steps: CreationSteps = {
         "current": "original",
         "items": {
             "original": {
@@ -139,19 +140,19 @@ async def run_generate(job: Job, params: dict) -> None:
     if plan and source is None:
         steps["plan"] = plan
         # The name the wizard proposed from the description, given with the plan.
-        if name := (creation.steps or {}).get("name"):
+        if name := (creation.steps.get("name") if creation.steps else None):
             steps["name"] = name
         values["anchors"], cut = await wizard.settle(
             job, creation, steps, "original", clean, params.get("consent_id"), new_keys
         )
 
-        record = {
+        record: PrepareRecord = {
             "mode": wizard.GENERATE, "look": plan["look"], "instruction": None,
             "step": "original", "cut": cut,
         }
-        steps["items"]["original"][wizard.KEPT_RECORD] = dict(record)
+        steps["items"]["original"][wizard.KEPT_RECORD] = record.copy()
 
-        def remember(usage: dict) -> None:
+        def remember(usage: AiUsage) -> None:
             usage["last_prepare"] = record
 
         await update_ai_usage(job, remember)

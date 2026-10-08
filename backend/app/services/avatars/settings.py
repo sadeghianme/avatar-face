@@ -11,11 +11,13 @@ avatar on every page load, so the change lands without anyone editing HTML
 from __future__ import annotations
 
 import json
+from typing import cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import Conflict409, Validation422
 from app.models import Avatar, AvatarKind
+from app.models.shapes import ProfileValues
 from app.schemas.avatar import AvatarUpdate
 from app.services import scene as scene_service
 from app.services.avatars.fitting import reprofile_visemes
@@ -67,8 +69,12 @@ async def update(db: AsyncSession, avatar: Avatar, body: AvatarUpdate) -> None:
     if body.mouth is not None:
         # Renderer and fit change; the mouth photo is managed by its own
         # endpoints and carried over untouched.
-        current = load_mouth(avatar.mouth_config) or {}
-        current.update(renderer=body.mouth.renderer, profile=body.mouth.profile.model_dump())
+        profile = cast(ProfileValues, body.mouth.profile.model_dump())
+        current = load_mouth(avatar.mouth_config)
+        if current is None:
+            current = {"renderer": body.mouth.renderer, "profile": profile}
+        else:
+            current["renderer"], current["profile"] = body.mouth.renderer, profile
         avatar.mouth_config = json.dumps(current)
     if body.character is not None:
         # How the character mouth is set. The look itself (the new mouth or

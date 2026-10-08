@@ -4,8 +4,11 @@ refusal is the same whichever request makes it."""
 
 from __future__ import annotations
 
+from typing import cast
+
 from app.core.errors import Conflict409, Validation422
 from app.models import Creation, CreationStatus
+from app.models.shapes import CreationAnchors, Marks
 from app.schemas.creation import CreationMarks
 from app.services.anchor_fit import marks_mouth_as_line
 from app.services.creations.detect import anchors_are_current
@@ -34,7 +37,7 @@ def require_face_type(creation: Creation) -> str:
     return creation.face_type
 
 
-def check_marks(marks: CreationMarks | None, face_type: str, size: list[int]) -> dict | None:
+def check_marks(marks: CreationMarks | None, face_type: str, size: list[int]) -> Marks | None:
     """The marks as a dict, refused where the line or the image rules them
     out (the same refusals as the avatar rig-fit endpoint)."""
     if marks is None:
@@ -60,10 +63,11 @@ def check_marks(marks: CreationMarks | None, face_type: str, size: list[int]) ->
 
     if any(not (0 <= p["x"] <= width and 0 <= p["y"] <= height) for p in points(data)):
         raise Validation422("Every mark must be inside the image", code="mark_outside_image")
-    return data
+    # CreationMarks's dump, field for field the Marks shape.
+    return cast(Marks, data)
 
 
-def anchors_for(creation: Creation, anchors_id: str) -> dict:
+def anchors_for(creation: Creation, anchors_id: str) -> CreationAnchors:
     """The creation's anchors, when they are the ones `anchors_id` names and
     still belong to the current image (409 anchors_stale otherwise)."""
     # No anchors at all is stale too: the client holds an id, so it placed

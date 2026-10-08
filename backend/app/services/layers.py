@@ -34,10 +34,12 @@ import logging
 import numpy as np
 from PIL import Image
 
+from app.models import Avatar
 from app.services import segment
 from app.services.jobs import run_cpu
 from app.services.matting import _box_mean
 from app.services.photo_io import png_bytes
+from app.services.storage import Storage
 
 logger = logging.getLogger("liveface.layers")
 
@@ -185,7 +187,9 @@ def layer_key(org_id: str, avatar_id: str, name: str) -> str:
     return f"orgs/{org_id}/avatars/{avatar_id}/layers/{name}.{ext}"
 
 
-async def store_layers(avatar, storage, image_bytes: bytes, face_box: list[float]) -> bool:
+async def store_layers(
+    avatar: Avatar, storage: Storage, image_bytes: bytes, face_box: list[float]
+) -> bool:
     """Build and upload the layer set; True on success.
 
     Failures are logged and swallowed: layers are an enhancement, and every
@@ -215,7 +219,7 @@ async def store_layers(avatar, storage, image_bytes: bytes, face_box: list[float
     return True
 
 
-async def draft_layer_urls(avatar, storage) -> dict[str, str] | None:
+async def draft_layer_urls(avatar: Avatar, storage: Storage) -> dict[str, str] | None:
     """Presigned URLs of the background/body/head decomposition, if built.
 
     The background is absent for cut-outs (nothing behind them); the widget

@@ -3,10 +3,14 @@ the creation's original, and a background removal's cut-out."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any, cast
+
 from sqlalchemy import func
 
 from app.core.errors import Conflict409, Validation422
 from app.models import Creation
+from app.models.shapes import CreationAnalysis, CreationSteps
 from app.services import photo_io, segment
 from app.services.creations.records import SUPERSEDED, load_creation, store_result, write_job
 from app.services.creations.rules import incoming_key, step_key
@@ -38,7 +42,7 @@ async def run_ingest(job: Job, params: dict) -> None:
     width, height = analysis["image_size"]
     key = step_key(job.org_id, job.subject_id, "original")
     await storage.put_bytes(key, clean, "image/png")
-    steps = {
+    steps: CreationSteps = {
         "current": "original",
         "items": {
             "original": {
@@ -50,10 +54,11 @@ async def run_ingest(job: Job, params: dict) -> None:
     # The four-step wizard's plan, and the name it proposes (services.wizard),
     # both given at upload.
     creation = await load_creation(job)
-    given = (creation.steps or {}) if creation is not None else {}
-    for kept in ("plan", "name"):
-        if given.get(kept):
-            steps[kept] = given[kept]
+    given = creation.steps if creation is not None else None
+    if given and (plan := given.get("plan")):
+        steps["plan"] = plan
+    if given and (name := given.get("name")):
+        steps["name"] = name
     stored = await store_result(
         job,
         params,
@@ -70,11 +75,11 @@ async def run_ingest(job: Job, params: dict) -> None:
         await storage.delete(incoming)
 
 
-def stored_analysis(analysis: dict) -> dict:
+def stored_analysis(analysis: Mapping[str, Any]) -> CreationAnalysis:
     """The upload's analysis as the creation keeps it: what step 1 reads.
     The per-line recommendations live on each step's check, so the one the
     wizard shows is always the current image's (api.creations)."""
-    return {k: v for k, v in analysis.items() if k != "recommendations"}
+    return cast(CreationAnalysis, {k: v for k, v in analysis.items() if k != "recommendations"})
 
 
 # --- Background -------------------------------------------------------------------

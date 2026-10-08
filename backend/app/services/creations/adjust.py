@@ -9,6 +9,7 @@ import logging
 from app.core.errors import AppError, Conflict409, Validation422
 from app.db import get_session_factory
 from app.models import Creation
+from app.models.shapes import AdjustCandidate, AdjustRound, AiUsage, CreationSteps, Note, StepItem
 from app.services import imagegen, photo_adjust
 from app.services.creations.records import (
     SUPERSEDED,
@@ -64,7 +65,7 @@ ADJUST_CALLS = {
 AUTO_ADJUST_REASON = "teeth_showing"
 
 
-def source_photo_key(steps: dict | None, step_id: str | None) -> str | None:
+def source_photo_key(steps: CreationSteps | None, step_id: str | None) -> str | None:
     """The key of the photo `step_id` comes from, through every framing
     and cut-out of it: the root of its lineage (the upload, or the
     generated original). The same for a photo re-cropped any number of
@@ -118,7 +119,7 @@ def auto_adjust_of(creation: Creation) -> dict | None:
     return {"mode": TOUCHUP, "image": current, "reasons": list(recommendation["reasons"])}
 
 
-def mouth_warnings(creation: Creation) -> list[dict]:
+def mouth_warnings(creation: Creation) -> list[Note]:
     """What finishing the current image will look like around the mouth, as
     {code, detail} warnings: an open mouth rests open, and parted lips keep
     the photo's teeth painted on them. Empty when the check found neither,
@@ -147,7 +148,7 @@ def mouth_warnings(creation: Creation) -> list[dict]:
     return []
 
 
-def refund_round(usage: dict) -> None:
+def refund_round(usage: AiUsage) -> None:
     usage["adjust_rounds"] = max(0, usage["adjust_rounds"] - 1)
 
 
@@ -288,9 +289,9 @@ async def run_adjust(job: Job, params: dict) -> None:
     number = usage["next_adjusted"]
     steps = copied(creation.steps)
     new_keys: list[str] = []
-    report: list[dict] = []
+    report: list[AdjustCandidate] = []
     for candidate, model in outcomes:
-        entry = {
+        entry: AdjustCandidate = {
             "step": None,
             "ok": candidate.rejected is None,
             "reason": candidate.rejected,
@@ -309,7 +310,7 @@ async def run_adjust(job: Job, params: dict) -> None:
                 step_check(await run_cpu(check_png, candidate.png))
                 if candidate.rejected is None else None
             )
-            steps["items"][step_id] = {
+            item: StepItem = {
                 "key": key,
                 "width": candidate.width,
                 "height": candidate.height,
@@ -325,9 +326,10 @@ async def run_adjust(job: Job, params: dict) -> None:
                     "checks": candidate.checks,
                 },
             }
+            steps["items"][step_id] = item
             entry["step"] = step_id
         report.append(entry)
-    last_round = {
+    last_round: AdjustRound = {
         "mode": mode,
         "style": params.get("style"),
         "source": source_id,
@@ -335,7 +337,7 @@ async def run_adjust(job: Job, params: dict) -> None:
         "limit_reached": limit_error is not None,
     }
 
-    def settle(u: dict) -> None:
+    def settle(u: AiUsage) -> None:
         u["next_adjusted"] = number
         u["last_round"] = last_round
 

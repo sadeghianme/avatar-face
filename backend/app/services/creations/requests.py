@@ -318,6 +318,7 @@ async def use_version(db: AsyncSession, creation: Creation, version: str) -> boo
         return False
     steps, anchors, record = wizard.use_version(creation.steps, version, plan)
     current = steps["current"]
+    assert current is not None  # use_version made one of the version's steps current
     if not (
         anchors
         and anchors.get("face_type") == face_type
@@ -490,7 +491,7 @@ async def retry(
     the one the job was started with if it is theirs), and the
     organization's switch on."""
     given = consent_id
-    record = creation.job or {}
+    record = creation.job
     if not record or not retryable(record):
         raise Conflict409("There is nothing to retry", code="nothing_to_retry")
     params = record.get("params") or {}

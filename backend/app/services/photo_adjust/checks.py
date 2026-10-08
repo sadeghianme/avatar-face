@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from PIL import Image
 
+from app.models.shapes import AdjustChecks, Note
 from app.services import imagegen
 from app.services.anchors import detect_anchors
 from app.services.photo_adjust.paste import (
@@ -74,9 +75,9 @@ class Candidate:
     png: bytes | None
     width: int = 0
     height: int = 0
-    rejected: dict | None = None
+    rejected: Note | None = None
     generated_eyes: bool = False
-    checks: dict = field(default_factory=dict)
+    checks: AdjustChecks = field(default_factory=lambda: AdjustChecks())
     # A touch-up of a cut-out is a cut-out: transparent where the source was.
     cutout: bool = False
 

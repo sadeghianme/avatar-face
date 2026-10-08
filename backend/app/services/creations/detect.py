@@ -5,6 +5,7 @@ cannot see), and the rig a set of marks fits."""
 from __future__ import annotations
 
 import io
+from typing import Literal
 from uuid import uuid4
 
 from PIL import Image
@@ -12,6 +13,7 @@ from PIL import Image
 from app.core.errors import AppError
 from app.db import get_session_factory
 from app.models import Creation
+from app.models.shapes import AiUsage, CreationAnchors, FoundAnchors, Note, VisionCacheEntry
 from app.services import vision_points
 from app.services.anchors import detect_anchors, fit_from_anchors  # noqa: F401
 from app.services.creations.records import (
@@ -42,7 +44,7 @@ from app.services.vision_points import MODEL
 VISION_CACHE_SIZE = 2
 
 
-def vision_cache_hit(usage: dict, digest: str | None, face_type: str) -> dict | None:
+def vision_cache_hit(usage: AiUsage, digest: str | None, face_type: str) -> dict | None:
     """Cached point-finder answer for these pixels, this line, this model."""
     for entry in usage.get("vision_cache") or []:
         if (entry.get("sha256"), entry.get("face_type"), entry.get("model")) == (
@@ -73,9 +75,9 @@ def source_on_backdrop(data: bytes) -> tuple[bytes, str]:
     return out.getvalue(), "image/jpeg"
 
 
-async def ai_points(job: Job, params: dict, data: bytes, face_type: str, size) -> tuple[
-    dict | None, dict | None
-]:
+async def ai_points(
+    job: Job, params: dict, data: bytes, face_type: str, size
+) -> tuple[FoundAnchors | None, Note | None]:
     """(anchors, warning): the point finder's anchors, or why not.
 
     Never fails the detection: a refused, failed or implausible answer
@@ -108,12 +110,12 @@ async def ai_points(job: Job, params: dict, data: bytes, face_type: str, size) -
                 await record_vision(db, job.org_id, vision_points.PROVIDER)
         answered = points
 
-        def settle(usage: dict) -> None:
+        def settle(usage: AiUsage) -> None:
             # Only a call the provider answered spends the detection.
             if not called and params.get("charged"):
                 usage["detections"] = max(0, usage["detections"] - 1)
             if answered is not None:
-                entry = {
+                entry: VisionCacheEntry = {
                     "sha256": digest, "face_type": face_type,
                     "model": vision_points.MODEL, "points": answered,
                 }
@@ -148,7 +150,9 @@ async def run_detect(job: Job, params: dict) -> None:
     job.report(0.2, "finding the face")
     data = await get_storage().get_bytes(image["key"])
     found = await run_cpu(detect_anchors, data, face_type)
-    source = "mediapipe" if found["detected"] else "template"
+    source: Literal["mediapipe", "template", "ai"] = (
+        "mediapipe" if found["detected"] else "template"
+    )
     if params.get("use_ai"):
         ai, warning = None, None
         if wants_ai_points(face_type, found["detected"]):
@@ -157,7 +161,7 @@ async def run_detect(job: Job, params: dict) -> None:
             )
         else:
             # MediaPipe found this face; the budget admission took is returned.
-            def refund(usage: dict) -> None:
+            def refund(usage: AiUsage) -> None:
                 usage["detections"] = max(0, usage["detections"] - 1)
 
             if params.get("charged"):
@@ -166,7 +170,7 @@ async def run_detect(job: Job, params: dict) -> None:
             found, source = ai, "ai"
         elif warning is not None:
             found["validation"]["warnings"].append(warning)
-    anchors = {
+    anchors: CreationAnchors = {
         "id": uuid4().hex,
         "frame": frame_key(creation.steps, current),
         "face_type": face_type,

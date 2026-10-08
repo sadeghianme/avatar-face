@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.errors import Conflict409, Validation422
 from app.models import Creation
+from app.models.shapes import CropRect, StepCheck, StepItem
 from app.services.creations.guards import require_draft, require_face_type, require_image
 from app.services.creations.repo import update_content
 from app.services.creations.rules import (
@@ -57,7 +58,7 @@ def background_offer(face_type: str | None) -> dict:
 async def frame_or_line(
     db: AsyncSession,
     creation: Creation,
-    crop: dict | None,
+    crop: CropRect | None,
     roll: float | None,
     face_type: str | None,
 ) -> bool:
@@ -80,8 +81,10 @@ async def frame_or_line(
 
     if crop is not None or roll is not None:
         previous = items.get("framed")
-        crop = crop if crop is not None else (previous or {}).get("crop", FULL_FRAME)
-        roll = roll if roll is not None else (previous or {}).get("roll", 0.0)
+        if crop is None:
+            crop = previous["crop"] if previous and "crop" in previous else FULL_FRAME
+        if roll is None:
+            roll = previous["roll"] if previous and "roll" in previous else 0.0
         if crop["x"] + crop["w"] > 1.0 + 1e-6 or crop["y"] + crop["h"] > 1.0 + 1e-6:
             raise Validation422("The crop falls outside the photo", code="crop_out_of_bounds")
         if crop["w"] < MIN_CROP_FRACTION or crop["h"] < MIN_CROP_FRACTION:
@@ -108,7 +111,7 @@ async def frame_or_line(
             else:
                 original = await get_storage().get_bytes(items["original"]["key"])
 
-                def frame() -> tuple[bytes, tuple[int, int], dict]:
+                def frame() -> tuple[bytes, tuple[int, int], StepCheck]:
                     image = frame_photo(original, crop, roll)
                     return png_bytes(image), image.size, step_check(check_photo(image))
 
@@ -116,10 +119,11 @@ async def frame_or_line(
                 key = step_key(creation.org_id, creation.id, "framed")
                 await get_storage().put_bytes(key, data, "image/png")
                 new_keys.append(key)
-                items["framed"] = {
+                framed: StepItem = {
                     "key": key, "width": width, "height": height, "from": "original",
                     "crop": crop, "roll": roll, "check": check,
                 }
+                items["framed"] = framed
                 steps["current"] = "framed"
 
     values: dict = {}
@@ -169,13 +173,13 @@ async def choose(db: AsyncSession, creation: Creation, choice: str) -> int | Non
     item = items.get(choice)
     if item is None:
         raise Validation422("There is no such image to choose", code="unknown_choice")
-    adjust = item.get("adjust") or {}
-    if adjust.get("rejected"):
+    adjust = item.get("adjust")
+    rejected = adjust.get("rejected") if adjust else None
+    if rejected:
         raise Validation422(
-            "This result failed its checks and cannot be used: "
-            + adjust["rejected"]["detail"],
+            "This result failed its checks and cannot be used: " + rejected["detail"],
             code="candidate_rejected",
-            extra={"reason": adjust["rejected"]},
+            extra={"reason": rejected},
         )
     if choice == current_step(creation.steps):
         return None
@@ -187,7 +191,7 @@ async def choose(db: AsyncSession, creation: Creation, choice: str) -> int | Non
     face_type = creation.face_type
     restored = False
     before = steps.get(BEFORE_STYLISE)
-    if adjust.get("mode") == "stylise" and face_type != "cartoon":
+    if adjust and adjust.get("mode") == "stylise" and face_type != "cartoon":
         # A stylised person is an animation now: rigged, marked and
         # rendered as one. The cut-outs belonged to the photo line, whose
         # segmenter the animation line does not use, so its backdrop (the
@@ -204,8 +208,9 @@ async def choose(db: AsyncSession, creation: Creation, choice: str) -> int | Non
         # line and the background answer it had before the stylise return.
         face_type = values["face_type"] = before.get("face_type") or "human"
         steps.pop(BEFORE_STYLISE)
-        if before.get("background"):
-            steps["background"] = before["background"]
+        background = before.get("background")
+        if background:
+            steps["background"] = background
         else:
             steps.pop("background", None)
         restored = True

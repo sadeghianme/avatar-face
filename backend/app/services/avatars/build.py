@@ -28,12 +28,12 @@ from app.services.model3d import build_model_rig, make_model_thumbnail
 from app.services.photo_io import ingest_photo
 from app.services.publishing import publish as publish_snapshot
 from app.services.riggable import check_landmarks
-from app.services.storage import STORAGE_ERRORS, get_storage
+from app.services.storage import STORAGE_ERRORS, Storage, get_storage
 
 logger = logging.getLogger("liveface.rig")
 
 
-async def _ingest_upload(avatar, storage, db, data: bytes) -> bytes:
+async def _ingest_upload(avatar: Avatar, storage: Storage, db, data: bytes) -> bytes:
     """Replace a first build's upload with its clean, upright PNG.
 
     The presigned upload path stores whatever the browser sent — EXIF, GPS
@@ -50,6 +50,7 @@ async def _ingest_upload(avatar, storage, db, data: bytes) -> bytes:
     # loop, every embed on every customer's site would wait for it.
     clean = await run_cpu(ingest_photo, data, photo_io.STORED_MAX_EDGE)
     upload_key = avatar.image_key
+    assert upload_key is not None  # process_avatar builds only an avatar with its photo
     key = f"orgs/{avatar.org_id}/avatars/{avatar.id}/source-{uuid4().hex[:8]}.png"
     await storage.put_bytes(key, clean, "image/png")
     avatar.image_key = key
@@ -208,7 +209,7 @@ async def process_avatar(avatar_id: str) -> None:
         await db.commit()
 
 
-async def _carry_crop_origin(avatar, storage, rig: dict) -> None:
+async def _carry_crop_origin(avatar: Avatar, storage: Storage, rig: dict) -> None:
     """Keep the crop origin across a re-detection.
 
     Re-detecting a cropped photo yields points in the same cropped

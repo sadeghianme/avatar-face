@@ -61,8 +61,7 @@ async def remove_mouth_photo(db: AsyncSession, avatar: Avatar) -> None:
     if not config or not config.get("oral_image_key"):
         return
     storage = get_storage()
-    for name in ("oral_image_key", "oral_rig_key"):
-        key = config.pop(name, None)
+    for key in (config.pop("oral_image_key", None), config.pop("oral_rig_key", None)):
         if key:
             await storage.delete(key)
     config.pop("teeth", None)

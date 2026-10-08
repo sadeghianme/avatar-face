@@ -43,6 +43,7 @@ from dataclasses import dataclass
 import httpx
 import numpy as np
 
+from app.models.shapes import FoundAnchors
 from app.services import ai_models, face_template
 from app.services.anchor_fit import fit_rig, marks_from_dict, marks_to_dict, with_head_outline
 from app.services.imagegen import refusal_reason
@@ -382,7 +383,7 @@ def check_geometry(marks: dict, size: tuple[int, int]) -> list[str]:
 
 @dataclass
 class PointsResult:
-    anchors: dict | None
+    anchors: FoundAnchors | None
     problems: list[str]
 
 

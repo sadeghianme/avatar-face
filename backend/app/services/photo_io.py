@@ -25,6 +25,7 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from app.core.errors import Validation422
+from app.models.shapes import CropRect
 
 # Header-checked before decode: a guard against decompression bombs, not a
 # photo-size policy. It sits above every camera a customer is likely to hold
@@ -140,7 +141,7 @@ def ingest_photo(data: bytes, max_edge: int | None = None) -> bytes:
         raise Validation422("That file is not a readable photo", code="unreadable_image") from exc
 
 
-def frame_photo(data: bytes, crop: dict[str, float], roll: float = 0.0) -> Image.Image:
+def frame_photo(data: bytes, crop: CropRect, roll: float = 0.0) -> Image.Image:
     """The crop of a stored photo, levelled by `roll` degrees.
 
     `crop` is {x, y, w, h} in fractions of the photo. `roll` is the tilt to

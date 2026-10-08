@@ -16,11 +16,12 @@ from app.models import Avatar, AvatarKind
 from app.services.jobs import run_cpu
 from app.services.layers import store_layers
 from app.services.rig import make_thumbnail, write_thumbnail_key
+from app.services.storage import Storage
 
 logger = logging.getLogger("liveface.avatars")
 
 
-async def rebuild_layers(avatar: Avatar, storage) -> None:
+async def rebuild_layers(avatar: Avatar, storage: Storage) -> None:
     """Re-derive the background/body/head layers from the current image.
 
     Called after anything that changes what image_key points at — crop,
@@ -43,7 +44,7 @@ async def rebuild_layers(avatar: Avatar, storage) -> None:
         logger.exception("layer rebuild failed for avatar %s", avatar.id)
 
 
-async def rebuild_thumbnail(avatar: Avatar, storage) -> None:
+async def rebuild_thumbnail(avatar: Avatar, storage: Storage) -> None:
     """Regenerate the thumbnail from whatever image_key now points at."""
     if not avatar.image_key:
         return

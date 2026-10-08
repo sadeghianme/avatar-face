@@ -7,6 +7,7 @@ from sqlalchemy import JSON, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import TimestampedBase
+from app.models.shapes import AiEdited, SceneConfig
 
 
 class AvatarStatus(str, enum.Enum):
@@ -102,7 +103,7 @@ class Avatar(TimestampedBase):
     # changed by an AI (the creation wizard's adjust or generate step);
     # null for a photo as its owner gave it. Carried into every publish as
     # the disclosure visitors see ("AI avatar").
-    ai_edited: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    ai_edited: Mapped[AiEdited | None] = mapped_column(JSON, nullable=True)
     # The consents (app.models.consent) the creation of this avatar relied
     # on: the depiction statement, and any third-party AI consent. Evidence,
     # read by nothing that renders.
@@ -111,7 +112,7 @@ class Avatar(TimestampedBase):
     # {kind, color, image_key}} (services.scene). Null for an avatar made
     # before scenes existed, which renders by `framing` alone. Draft/
     # published like framing: changing it marks the draft dirty.
-    scene_config: Mapped[dict | None] = mapped_column("scene", JSON, nullable=True)
+    scene_config: Mapped[SceneConfig | None] = mapped_column("scene", JSON, nullable=True)
 
     @property
     def voice(self) -> dict | None:
