@@ -229,11 +229,23 @@ async function openPage(browser) {
     await send("Log.enable", {}, session).catch(() => {});
     await send("Runtime.evaluate", { expression: LISTEN }, session).catch(() => {});
   };
+  // Out-of-process frames this page opened. The Simulator's is one: its
+  // origin is opaque (no allow-same-origin), so Chrome runs it in a process
+  // of its own, and its requests, workers and console are reported on its
+  // own session, not the page's.
+  const frames = new Set();
   listeners.add(async (message) => {
     const { method, params } = message;
-    if (method === "Target.attachedToTarget" && message.sessionId === sessionId) {
+    if (method === "Target.attachedToTarget" && (message.sessionId === sessionId || frames.has(message.sessionId))) {
       // Workers and out-of-process frames: watch them, then let them run.
       await setup(params.sessionId);
+      if (params.targetInfo.type === "iframe") {
+        frames.add(params.sessionId);
+        await send("Network.enable", {}, params.sessionId).catch(() => {});
+        await send("Page.enable", {}, params.sessionId).catch(() => {});
+        await send("Page.addScriptToEvaluateOnNewDocument", { source: LISTEN }, params.sessionId).catch(() => {});
+        await send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, params.sessionId).catch(() => {});
+      }
       await send("Runtime.runIfWaitingForDebugger", {}, params.sessionId).catch(() => {});
     } else if (method === "Runtime.bindingCalled" && params.name === "__cspViolation") {
       violations.push(JSON.parse(params.payload));
@@ -247,9 +259,10 @@ async function openPage(browser) {
       else consoleErrors.push(text.slice(0, 200));
     } else if (method === "Runtime.exceptionThrown") {
       consoleErrors.push(`exception: ${params.exceptionDetails.exception?.description?.split("\n")[0] ?? params.exceptionDetails.text}`);
-    } else if (method === "Network.responseReceived" && message.sessionId === sessionId) {
+    } else if (method === "Network.responseReceived" && (message.sessionId === sessionId || frames.has(message.sessionId))) {
       responses.push({ url: params.response.url, status: params.response.status });
-      if (params.type === "Document") documents.push({ url: params.response.url, headers: params.response.headers });
+      if (params.type === "Document" && message.sessionId === sessionId)
+        documents.push({ url: params.response.url, headers: params.response.headers });
     }
   });
   await send("Page.enable", {}, sessionId);
