@@ -133,17 +133,33 @@ async function launch() {
       ...(process.env.CI ? ["--no-sandbox"] : []),
       "about:blank",
     ],
-    { stdio: "ignore" },
+    { stdio: ["ignore", "ignore", "pipe"] },
   );
+  // What Chrome says on stderr, kept to explain a start that fails (a CI
+  // runner image update once made it exit at once, with no message here).
+  let stderr = "";
+  chrome.stderr.on("data", (chunk) => {
+    stderr = (stderr + chunk).slice(-4000);
+  });
+  let exited = null;
+  chrome.once("exit", (code, signal) => {
+    exited = { code, signal };
+  });
   let version;
-  for (let i = 0; i < 100 && !version; i++) {
+  // Up to 30 s: a cold runner can take well over the 10 s this used to allow.
+  for (let i = 0; i < 300 && !version && !exited; i++) {
     try {
       version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
     } catch {
       await sleep(100);
     }
   }
-  if (!version) throw new Error("Chrome did not start");
+  if (!version) {
+    chrome.kill();
+    throw new Error(
+      `Chrome did not start${exited ? ` (exited: ${JSON.stringify(exited)})` : " within 30 s"}\n${stderr}`,
+    );
+  }
   const ws = new WebSocket(version.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => {
     ws.addEventListener("open", resolve, { once: true });
@@ -307,7 +323,11 @@ function checkHeaders(documents, path) {
 
 const seeded = await seed();
 console.log(`seeded: photo ${seeded.photo} (shared as ${seeded.share}), 3D ${seeded.model}`);
-const browser = await launch();
+// One retry: a first Chrome start on a cold runner can fail where a second succeeds.
+const browser = await launch().catch(async (error) => {
+  console.warn(`retrying Chrome once: ${error.message}`);
+  return launch();
+});
 const results = [];
 let failures = 0;
 try {
