@@ -1,6 +1,7 @@
 import base64
 import io
-import wave
+
+import soundfile
 
 from tests.conftest import create_org, register_and_login
 
@@ -43,13 +44,13 @@ async def test_synthesize_returns_audio_and_cues(client):
     response = await _synthesize(client, headers, org_id)
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["audio_mime"] == "audio/wav"
+    # The provider's WAV, as the speech cache stores and serves it.
+    assert body["audio_mime"] == "audio/mpeg"
     assert body["duration_ms"] > 0
     assert body["cached"] is False
 
     audio = base64.b64decode(body["audio_b64"])
-    with wave.open(io.BytesIO(audio)) as wav:
-        assert wav.getnframes() > 0
+    assert soundfile.info(io.BytesIO(audio)).frames > 0
 
     cues = body["cues"]
     assert cues[0]["t"] == 0

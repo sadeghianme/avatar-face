@@ -20,7 +20,7 @@ export const simulator = {
   simModeTokenHint:
     "Runs with a short-lived key minted for this page. Proves the avatar, voice and widget work — but not that your own key is configured correctly.",
   simModeOwnHint:
-    "Runs with the key in the snippet, so it also proves the key itself works. The test page has no domain of its own, so the key's allowed domains are not checked here.",
+    "Runs with the key in the snippet, so it also proves the key itself works. The test page has no domain of its own, so a key locked to domains is refused here: test that one on its own site.",
   simPlaceholderKey: "Replace YOUR_API_KEY with a real key, or switch to a test key.",
   simTokenFailed: "Could not get a test key:",
   simRenewed: "Test key expired — renewed automatically.",

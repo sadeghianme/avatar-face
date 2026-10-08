@@ -1,0 +1,15 @@
+{
+  "face_type": "human",
+  "framing": "face",
+  "id": "33333333333333333333333333333333",
+  "image_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/33333333333333333333333333333333/published/r3/image.png?expires=1800007200&signature=ff9b8f1b3e4142c1d32c9be9d5bc38ddab8a4edb3b3bd38b7351bc883afc23c0",
+  "kind": "photo",
+  "layer_urls": null,
+  "model_url": null,
+  "mouth": null,
+  "name": "Golden legacy",
+  "rig_url": "",
+  "scene": null,
+  "thumbnail_url": "",
+  "voice": null
+}

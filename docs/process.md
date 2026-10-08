@@ -60,9 +60,11 @@ repository with a stub `gh`).
    excludes (`.env`, databases, `backend/local_storage`, …) only protect
    server-side files from `--delete`; `deploy/.env` exists only there.
 2. Refuse to continue if `deploy/.env` is missing or empty.
-3. Back up the live SQLite database with SQLite's online backup
-   (`deploy/backup_db.py`, safe under WAL) to `/data/liveface.sqlite3.bak-<stamp>`
-   and keep the newest 10 (`BACKUP_KEEP=<n>` to change).
+3. Back up the live SQLite database with `VACUUM INTO` (`deploy/backup_db.py`:
+   one consistent snapshot through the WAL, compacted, so free pages are not
+   copied) to `/data/liveface.sqlite3.bak-<stamp>` and keep the newest 10
+   (`BACKUP_KEEP=<n>` to change). The backups hold the database only: the
+   files in storage (pictures, rigs, the speech cache) are not in them.
 4. Tag the last verified release (`:release`) as `:previous`, for `--rollback`.
 5. `LIVEFACE_VERSION=<commit> docker compose -f docker-compose.prod.yml up -d --build`.
    The commit is baked into both images: `ENV LIVEFACE_VERSION` and the
@@ -98,8 +100,23 @@ step back only: for anything older, deploy that commit again with
 `deploy/deploy.sh --ref <commit>` (it rebuilds; the model layers are cached).
 
 The database is not touched. If the release being undone ran a migration, the
-older code now runs on the newer schema. If it cannot, restore the backup the
-deploy took just before that release (its path is in that deploy's summary):
+older code now runs on the newer schema, which migrations are written to allow
+(028 keeps the old speech table for this). A release from backend round 3 on
+starts on a database a newer release migrated: it logs that it does not know
+the revision and serves (`app/main.py`, `_ensure_schema`). A release before it
+runs `alembic upgrade` at startup and stops on the unknown revision, so stamp
+the database back to that release's last migration first, while the newer
+release is still running. Rolling back over 028 to the release before it:
+
+```bash
+ssh personal_server "docker exec -w /app/backend -e PYTHONPATH=/app/backend \
+  liveface-liveface-api-1 alembic stamp 027_scene"
+deploy/deploy.sh --rollback
+```
+
+The next deploy runs 028 again (it is written to be re-run). If the older code
+cannot run on the newer schema at all, restore the backup the deploy took
+just before that release (its path is in that deploy's summary):
 
 ```bash
 ssh personal_server
@@ -122,10 +139,18 @@ newer push to the same branch or pull request cancels the run it supersedes.
 
 | Job | What it proves | Time |
 |---|---|---|
-| `backend` | ruff, pyright, pytest against the production pins and the checksummed MediaPipe models | ~12 min |
-| `embed` | lint, type check (tests included), vitest with the pixel goldens, build | ~2 min |
+| `backend` | ruff, pyright, the OpenAPI document exported again and identical to the committed one, pytest against the production pins and the checksummed MediaPipe models | ~12 min |
+| `embed` | lint, type check (tests included), the widget's generated API types match the committed document, vitest with the pixel goldens, build | ~2 min |
 | `frontend` | structure check, type check, production build | <1 min |
-| `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, unit tests | <1 min |
+| `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, the dashboard's generated API types match the committed document, unit tests | <1 min |
+
+**The API contract.** `frontend/src/lib/api-schema.json` is the OpenAPI
+document, and `backend/scripts/export_openapi.py` its only generator
+(`python -m scripts.export_openapi` from `backend/`, or `npm run api:schema`).
+The dashboard generates `src/lib/api-types.ts` from it (`npm run gen:api`), the
+widget `embed/src/api-types.ts` (`npm run gen:api` in `embed/`). A change to
+the API is therefore three files in one pull request: export, then generate
+in both packages; CI fails on any of them left behind.
 | `deploy-script` | ShellCheck (pinned) on `deploy/*.sh`; every gate of `deploy.sh` | <1 min |
 | `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 22 page visits load in headless Chrome with zero CSP violations (the Simulator injection replayed among them) | ~10 min |
 
@@ -153,8 +178,10 @@ Use `127.0.0.1`, not `localhost`: the dashboard points snippets at
 
 ## Branch protection
 
-Not set yet; the owner runs this once (it needs admin rights on the
-repository, which is why it is not automated):
+Set on main: the six checks below are required, `strict` and
+`enforce_admins` are on, force pushes and deletions are refused. It was set
+once by the owner with this call (it needs admin rights on the repository,
+which is why it is not automated); run it again to restore the rule:
 
 ```bash
 gh api --method PUT repos/sadeghianme/avatar-face/branches/main/protection \
@@ -210,6 +237,7 @@ green CI (the `images` job rebuilds both images from scratch), merge, deploy.
 | Base images | `FROM <tag>@sha256:<digest>` in both Dockerfiles | below; Dependabot proposes new digests monthly |
 | GitHub Actions | major tags in `ci.yml` | Dependabot proposes them monthly |
 | ShellCheck | image tag and digest in `ci.yml` | `docker buildx imagetools inspect koalaman/shellcheck:<tag>` |
+| Cloudflare's edge ranges | `backend/app/core/cloudflare_ranges.py` (generated) | `python -m scripts.refresh_cloudflare_ranges` from `backend/` (`--check` only compares); see [Client addresses](#client-addresses) |
 
 **Python libraries.** Change the pin in `backend/constraints.txt` (and the range
 in `pyproject.toml` if it forbids it), run the backend tests locally
@@ -253,6 +281,92 @@ the tag, and the matching `node-version` / `python-version` in `ci.yml`, in one
 pull request. The images use Node 22 (Node 20 is past its end of life); the
 `embed` and `frontend` CI jobs still set Node 20 and should follow.
 
+## Client addresses
+
+Every per-client rate limit (sign-in, sign-up, password reset, `/embed/v1/cues`,
+share pages) and the consent record's keyed address hash use one function,
+`backend/app/core/client_ip.py`. Nothing else reads `request.client` or a
+forwarding header.
+
+Production is Cloudflare, then Caddy on the `web_proxy` docker network, then
+the API. The function starts at the TCP peer, which nobody can forge, and
+walks outward only through hops it trusts:
+
+1. From a peer in `TRUSTED_PROXIES` (the docker ranges: Caddy), the rightmost
+   `X-Forwarded-For` entry is believed, at most `TRUSTED_PROXY_HOPS` (1)
+   entries in all. Entries a client wrote further left are never read.
+2. From an address in Cloudflare's published ranges (`TRUST_CLOUDFLARE`),
+   `CF-Connecting-IP` is the client.
+3. The first address that is neither is the client.
+
+So a visitor through Cloudflare is keyed on their own address, not on the
+edge that thousands share, and a client that reaches Caddy without Cloudflare
+is keyed on its own address whatever headers it sends. Uvicorn runs with
+`--no-proxy-headers` (`backend/Dockerfile`) so that the peer reaches the
+application unchanged. With none of the three settings (development, tests),
+the client is the peer.
+
+Cloudflare's ranges are pinned in the repository, never fetched at startup.
+They change rarely and Cloudflare announces it: refresh them then, and with the
+monthly dependency review (`--check` exits 1 when the pinned list is stale).
+A stale list fails safe: a visitor behind a new edge is keyed on that edge
+until the refresh, as every visitor was before.
+
+## Database size and the speech cache
+
+Every line a widget, a share page or the dashboard speaks is cached, so it is
+synthesised once. Until migration 028 the recording was a WAV blob in the
+main SQLite file, never evicted, and copied into all ten deploy backups.
+Now (`backend/app/services/tts/speech_cache.py`):
+
+- The recording is a file in storage under `speech/`, as MP3 (VBR, about
+  50 kbit/s for 24 kHz speech). libsndfile writes the LAME header, so
+  Chromium, Safari's CoreAudio and libsndfile decode it to exactly the WAV's
+  samples and the cues stay on time; a line that would not is kept as WAV.
+  The dashboard's phrase stream gets PCM back (`pcm=True`).
+- `speech_clips` holds one small row per line: key, cues, duration, file,
+  size, the organization whose request made it, last use (recorded at most
+  hourly).
+- The sweeper (hourly, and at startup) evicts lines unused for
+  `SPEECH_CACHE_MAX_IDLE_DAYS` (90), then the least recently used past an
+  organization's `SPEECH_CACHE_ORG_MAX_BYTES` (256 MiB), then past
+  `SPEECH_CACHE_MAX_BYTES` (2 GiB) in all, each down to 90% of its cap. A
+  cloned voice's lines are pinned: never evicted, not counted. Between
+  sweeps the cache can run over by an hour of speech, which the monthly
+  character allowance bounds.
+- Migration 028 empties the old `speech_cache` table, keeping a cloned
+  voice's lines (copied inline into `speech_clips`, moved to storage at
+  startup). The empty table stays so that a rollback over 028 works (with
+  the stamp described under [Rollback](#rollback)): the older release reads
+  and writes it, every line is a miss once, and cloned voices are
+  unavailable until the next deploy carries them back.
+
+**The file.** SQLite does not give freed pages back to the disk: after 028
+the live file keeps its size, and its free pages are reused by new rows, so
+it stops growing rather than shrinking. The backups shrink at once:
+`deploy/backup_db.py` copies with `VACUUM INTO`, which writes only live
+pages (the online backup API it replaces copied the free ones too). To give
+the space back to the disk, compact the live file once, with the API
+stopped for a few seconds (`VACUUM` needs the database to itself):
+
+```bash
+ssh personal_server
+docker stop liveface-liveface-api-1
+docker run --rm -v liveface_liveface_data:/data liveface-liveface-api \
+  python -c "import sqlite3; db = sqlite3.connect('/data/liveface.sqlite3'); db.execute('VACUUM'); db.close()"
+docker start liveface-liveface-api-1
+```
+
+Measured on a scratch database built by the migrations and filled with
+synthetic rows (25 organizations, 200 avatars, 2,000 usage events, 1,540
+cached lines cut from real speech, 40 of them a cloned voice's): before 028
+the file and each backup were 473.6 MB, 466 MB of it WAV. After 028 and the
+startup drain the live file kept 485.7 MB (484 MB of it free pages) and a
+backup was 1.2 MB, with the cloned lines in storage as 1.7 MB of MP3. Filling
+the cache again with 1,500 lines put 64.7 MB of MP3 in storage (6.9 times
+less than their 445 MB of WAV, 13 ms a line including the encoding), reused
+5.7 MB of the free pages for their rows, and left a 6.9 MB backup.
+
 ## Security headers
 
 The dashboard's nginx (`frontend/nginx.conf`, with the headers in
@@ -294,10 +408,11 @@ session theft through it). So:
    by `postMessage`. The frame posts to the dashboard's origin, never `"*"`, and
    acts only on its parent's messages. The page takes log lines only from that
    frame's window. The widget works there as on a customer's site: the embed
-   API answers any origin, `null` included (the request's `Origin` is `null`,
-   which the API treats as no browser origin, so neither a key's domain list
-   nor the Simulator token's origin binding applies), and `allow="autoplay"`
-   lends the frame the page's permission to play the voice.
+   API's CORS answers any origin, `null` included, and `allow="autoplay"`
+   lends the frame the page's permission to play the voice. Its requests say
+   `Origin: null`, which the API accepts from a Simulator token (the default
+   mode) and refuses for a key locked to domains (`origin_not_allowed`), so
+   "Use my own key" works here only with a key that has no domain list.
 3. **The policy refuses inline script.** A srcdoc document inherits the
    dashboard's CSP, so even a value that escaped layer 1 could not run as an
    inline script there.

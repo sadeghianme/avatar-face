@@ -1,5 +1,7 @@
 /** Shared types for the rig format (v3) and speech cues. */
 
+import type { SynthesizeResponse } from "./api-types";
+
 export interface BlendWeights {
   jawOpen: number;
   mouthClose: number;
@@ -38,13 +40,9 @@ export interface Cue {
   a?: number;
 }
 
-export interface SynthesisPayload {
-  audio_b64: string;
-  audio_mime: string;
-  duration_ms: number;
-  cues: Cue[];
-  cached: boolean;
-}
+/** What POST /embed/v1/synthesize answers: generated from the API's schema
+ *  (api-types.ts), so a field the server renames fails tsc here. */
+export type SynthesisPayload = SynthesizeResponse;
 
 /** Live-adjustable animation parameters (all multipliers/thresholds). */
 export interface EngineTuning {

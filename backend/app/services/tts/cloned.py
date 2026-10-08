@@ -11,7 +11,9 @@ shortcut — the cache is already keyed on exactly the tuple that identifies a
 rendered line, (provider, voice, locale, text), and synthesize_cached
 already returns a hit without consulting any provider. So an uploaded line
 IS a cache entry, and the code path that plays it is the same one that plays
-a cached Kokoro line.
+a cached Kokoro line. Unlike any other entry it is pinned: never evicted
+(services.tts.speech_cache.PINNED_PROVIDERS), because nothing here can make
+it again.
 
 The consequence worth stating plainly: this provider can only speak what was
 uploaded. A miss is a miss, and the caller falls back to a server voice
@@ -23,18 +25,18 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import logging
 
-from sqlalchemy import Row, delete, distinct, func, select
+from sqlalchemy import Row, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFound404
-from app.db import execute_dml, get_session_factory
-from app.models import SpeechCache
+from app.db import get_session_factory
+from app.models import SpeechClip
 from app.services import clonejobs
 from app.services.local_render import capability, render_lines, render_text
 from app.services.storage import STORAGE_ERRORS, get_storage
+from app.services.tts import speech_cache
 from app.services.tts.base import SynthesisResult, TTSProvider, Voice, cache_key
 from app.services.tts.timing import cues_from_text
 
@@ -99,9 +101,9 @@ async def voices_for_org(db: AsyncSession, org_id: str) -> list[Voice]:
     """Cloned voices this org has uploaded, derived from the cache itself."""
     rows = (
         await db.execute(
-            select(distinct(SpeechCache.voice)).where(
-                SpeechCache.provider == PROVIDER_NAME,
-                SpeechCache.voice.like(f"{org_id}:%"),
+            select(distinct(SpeechClip.voice)).where(
+                SpeechClip.provider == PROVIDER_NAME,
+                SpeechClip.voice.like(f"{org_id}:%"),
             )
         )
     ).scalars().all()
@@ -144,7 +146,8 @@ async def store_line(
     db: AsyncSession, org_id: str, name: str, locale: str, text: str,
     audio: bytes, duration_ms: int,
 ) -> None:
-    """Store one rendered line as a cache row. Idempotent by cache key.
+    """Store one rendered line in the speech cache, pinned. Idempotent by
+    cache key: a line uploaded again replaces the one before. Commits.
 
     Shared by the HTTP upload (remote worker) and the in-process renderer
     (backend running on capable hardware) so the two paths cannot drift.
@@ -152,37 +155,29 @@ async def store_line(
     """
     voice = scoped_voice_id(org_id, name)
     key = cache_key(PROVIDER_NAME, voice, locale, text)
-    existing = (
-        await db.execute(select(SpeechCache).where(SpeechCache.cache_key == key))
-    ).scalar_one_or_none()
-    payload = {
-        "provider": PROVIDER_NAME,
-        "voice": voice,
-        "locale": locale,
-        "char_count": len(text),
-        "audio_mime": "audio/wav",
-        "audio": audio,
-        # A pass over the whole recording (up to 10 MB) and the text: a thread's work.
-        "cues_json": json.dumps(
-            await asyncio.to_thread(cues_from_text, text, duration_ms, locale, audio=audio)
+    # A pass over the whole recording (up to 10 MB) and the text: a thread's work.
+    cues = await asyncio.to_thread(cues_from_text, text, duration_ms, locale, audio=audio)
+    await speech_cache.put(
+        db,
+        cache_key=key,
+        provider=PROVIDER_NAME,
+        voice=voice,
+        locale=locale,
+        text=text,
+        result=SynthesisResult(
+            audio=audio, audio_mime="audio/wav", duration_ms=duration_ms, cues=cues
         ),
-        "duration_ms": duration_ms,
-    }
-    if existing is not None:
-        for field, value in payload.items():
-            setattr(existing, field, value)
-    else:
-        db.add(SpeechCache(cache_key=key, **payload))
+        org_id=org_id,
+    )
 
 
 async def upload_line(
     db: AsyncSession, org_id: str, name: str, locale: str, text: str,
     audio: bytes, duration_ms: int,
 ) -> str:
-    """store_line for an upload, committed; the voice's scoped id."""
+    """store_line for an upload; the voice's scoped id."""
     await store_line(db, org_id, name, locale, text, audio, duration_ms)
     voice = scoped_voice_id(org_id, name)
-    await db.commit()
     logger.info("cloned line stored for %s (%d ms)", voice, duration_ms)
     return voice
 
@@ -192,16 +187,16 @@ async def voice_summaries(db: AsyncSession, org_id: str) -> list[Row]:
     rows = (
         await db.execute(
             select(
-                SpeechCache.voice,
+                SpeechClip.voice,
                 func.count().label("lines"),
-                func.sum(SpeechCache.duration_ms).label("total_ms"),
-                func.min(SpeechCache.locale).label("locale"),
+                func.sum(SpeechClip.duration_ms).label("total_ms"),
+                func.min(SpeechClip.locale).label("locale"),
             )
             .where(
-                SpeechCache.provider == PROVIDER_NAME,
-                SpeechCache.voice.like(f"{org_id}:%"),
+                SpeechClip.provider == PROVIDER_NAME,
+                SpeechClip.voice.like(f"{org_id}:%"),
             )
-            .group_by(SpeechCache.voice)
+            .group_by(SpeechClip.voice)
         )
     ).all()
     return list(rows)
@@ -213,24 +208,21 @@ async def voice_summary(db: AsyncSession, voice: str) -> Row:
         await db.execute(
             select(
                 func.count().label("lines"),
-                func.sum(SpeechCache.duration_ms).label("total_ms"),
-                func.min(SpeechCache.locale).label("locale"),
-            ).where(SpeechCache.provider == PROVIDER_NAME, SpeechCache.voice == voice)
+                func.sum(SpeechClip.duration_ms).label("total_ms"),
+                func.min(SpeechClip.locale).label("locale"),
+            ).where(SpeechClip.provider == PROVIDER_NAME, SpeechClip.voice == voice)
         )
     ).one()
 
 
 async def delete_voice(db: AsyncSession, org_id: str, name: str) -> None:
     """Delete every line of the org's voice `name` (404 voice_not_found when
-    there were none). A hard delete: a takedown means the audio is gone."""
+    there were none). A hard delete: a takedown means the audio is gone,
+    its files in storage included."""
     voice = scoped_voice_id(org_id, name)
-    removed = await execute_dml(
-        db,
-        delete(SpeechCache).where(
-            SpeechCache.provider == PROVIDER_NAME, SpeechCache.voice == voice
-        ),
+    removed = await speech_cache.delete_where(
+        db, SpeechClip.provider == PROVIDER_NAME, SpeechClip.voice == voice
     )
-    await db.commit()
     if not removed:
         raise NotFound404("No such cloned voice", code="voice_not_found")
 
@@ -271,7 +263,6 @@ async def render_job(org_id: str, job_id: str) -> None:
                     await store_line(
                         db, org_id, job["name"], job["locale"], text, audio, duration_ms
                     )
-                    await db.commit()
                 await clonejobs.update_progress(storage, org_id, job_id, index)
         await clonejobs.finish_job(storage, org_id, job_id)
         logger.info("rendered clone job %s in-process", job_id)

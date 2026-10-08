@@ -1,0 +1,62 @@
+{
+  "disclosure": {
+    "ai_edited": {
+      "mode": "touchup",
+      "model": "gemini-image",
+      "mouth_shapes": {
+        "generated": 6,
+        "model": "gemini-image"
+      },
+      "teeth": {
+        "model": "gemini-image"
+      }
+    },
+    "line": "human"
+  },
+  "face_type": "human",
+  "framing": "face",
+  "id": "11111111111111111111111111111111",
+  "image_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/11111111111111111111111111111111/published/r3/image.png?expires=1800007200&signature=47a49e13126a2a69b2ae695c03529f95bb374baec9b947186b250d5e7d9f1d0c",
+  "kind": "photo",
+  "layer_urls": {
+    "background": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/11111111111111111111111111111111/published/r3/layer-background.jpg?expires=1800007200&signature=e199f17431cd920701d963daef8f47a19d3407a9ecb88c5568422c067e93102b",
+    "body": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/11111111111111111111111111111111/published/r3/layer-body.png?expires=1800007200&signature=070797f8a80f8c2c7a893e97fdfe58f98566f6364af79c0773eb3da06b73d8f1",
+    "head": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/11111111111111111111111111111111/published/r3/layer-head.png?expires=1800007200&signature=c9549c95310c8794985c8bd32a1c61926e727216bdb5c266913efe0825b05593"
+  },
+  "model_url": null,
+  "mouth": {
+    "character": null,
+    "motion_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/11111111111111111111111111111111/published/r3/motion.json?expires=1800007200&signature=419618d4456574d0ae266e678111ea9c5aa9bfe0279cd68ddf98bbabce31a246",
+    "oral": {
+      "image_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/11111111111111111111111111111111/published/r3/oral.webp?expires=1800007200&signature=ef5fe5377baec7a3c947792a65f7d610e2f873ecb20cba4993c7f64f662a3a36",
+      "rig_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/11111111111111111111111111111111/published/r3/oral.json?expires=1800007200&signature=4f45d987c39bd455ba0e7c1ffae961fa5e6ddb5acb2506fc65688d4ed902d4d0"
+    },
+    "profile": {
+      "jawRange": 0.85,
+      "lipProjection": 0.55,
+      "teethScale": 1.05,
+      "teethY": -0.01,
+      "warmth": 0.5
+    },
+    "renderer": "continuous"
+  },
+  "name": "Golden human_full",
+  "rig_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/11111111111111111111111111111111/published/r3/rig.json?expires=1800007200&signature=b934d7c59d82cbf94ef98931ebcbd9d919a8c535113ac8511649eb80a5dd122f",
+  "scene": {
+    "background": {
+      "image_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/11111111111111111111111111111111/published/r3/scene.webp?expires=1800007200&signature=f6ceefbb68b1a76cf0599c6ceef24f17bf5e97ae428f0caa7757c63374b6c8e8",
+      "kind": "image"
+    },
+    "pan": {
+      "x": 0.1,
+      "y": -0.05
+    },
+    "zoom": 1.15
+  },
+  "thumbnail_url": "http://testserver/storage/orgs/0000000000000000000000000000000a/avatars/11111111111111111111111111111111/published/r3/thumb.jpg?expires=1800007200&signature=ea9b49e34add09543e84e5ff6d9f3eda3c9dc808181e4fd5fa15c4315c2474b3",
+  "voice": {
+    "locale": "en-US",
+    "provider": "kokoro",
+    "voice": "af_heart"
+  }
+}

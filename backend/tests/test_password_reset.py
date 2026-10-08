@@ -1,9 +1,12 @@
 """Password reset: single-use links, and an endpoint that reveals nothing."""
 
+import asyncio
+import statistics
 import time
 
 import pytest
 
+from app.services import email
 from app.services.reset_token import (
     InvalidResetToken,
     fingerprint,
@@ -30,6 +33,13 @@ def _capture_mail(monkeypatch):
         return True
 
     monkeypatch.setattr("app.services.accounts.send_email", fake_send)
+    return sent
+
+
+async def _delivered(sent: list[dict]) -> list[dict]:
+    """The mail sent so far, once every send in flight has finished: the
+    endpoint answers before it mails (email.deliver_in_background)."""
+    await email.drain()
     return sent
 
 
@@ -99,7 +109,7 @@ async def test_the_full_reset_flow(client, _capture_mail):
 
     started = await client.post("/auth/forgot-password", json={"email": "resetme@example.com"})
     assert started.status_code == 202
-    assert len(_capture_mail) == 1
+    assert len(await _delivered(_capture_mail)) == 1
 
     token = _link_from(_capture_mail[0]).split("token=")[1]
     done = await client.post(
@@ -124,7 +134,7 @@ async def test_the_full_reset_flow(client, _capture_mail):
 async def test_a_link_only_works_once(client, _capture_mail):
     await register_and_login(client, "onceonly", email="onceonly@example.com")
     await client.post("/auth/forgot-password", json={"email": "onceonly@example.com"})
-    token = _link_from(_capture_mail[0]).split("token=")[1]
+    token = _link_from((await _delivered(_capture_mail))[0]).split("token=")[1]
 
     first = await client.post(
         "/auth/reset-password", json={"token": token, "password": "first-password"}
@@ -152,7 +162,7 @@ async def test_an_unknown_address_is_answered_exactly_like_a_known_one(client, _
 
     assert hit.status_code == miss.status_code == 202
     assert hit.json() == miss.json()
-    assert len(_capture_mail) == 1, "only the real address gets mail"
+    assert len(await _delivered(_capture_mail)) == 1, "only the real address gets mail"
 
 
 async def test_repeated_requests_are_throttled_without_saying_so(client, _capture_mail):
@@ -164,13 +174,13 @@ async def test_repeated_requests_are_throttled_without_saying_so(client, _captur
             "/auth/forgot-password", json={"email": "floody@example.com"}
         )
         assert response.status_code == 202
-    assert len(_capture_mail) == 3
+    assert len(await _delivered(_capture_mail)) == 3
 
 
 async def test_a_short_password_is_refused(client, _capture_mail):
     await register_and_login(client, "shorty", email="shorty@example.com")
     await client.post("/auth/forgot-password", json={"email": "shorty@example.com"})
-    token = _link_from(_capture_mail[0]).split("token=")[1]
+    token = _link_from((await _delivered(_capture_mail))[0]).split("token=")[1]
 
     response = await client.post(
         "/auth/reset-password", json={"token": token, "password": "short"}
@@ -184,4 +194,48 @@ async def test_the_address_is_matched_case_insensitively(client, _capture_mail):
         "/auth/forgot-password", json={"email": "CASEY@Example.COM"}
     )
     assert response.status_code == 202
-    assert len(_capture_mail) == 1, "an address typed with capitals is the same address"
+    assert len(await _delivered(_capture_mail)) == 1, (
+        "an address typed with capitals is the same address"
+    )
+
+
+async def test_a_known_address_answers_as_fast_as_an_unknown_one(client, monkeypatch):
+    """The answer never waits for the mail (N4): before, a real address
+    waited out Resend's round trip and an unknown one did not, so the time
+    an answer took said who has an account."""
+    release = asyncio.Event()
+    sent: list[str] = []
+
+    async def stuck_send(to, subject, html, text):
+        # Resend on a bad day: nothing comes back until the test says so.
+        await release.wait()
+        sent.append(to)
+        return True
+
+    monkeypatch.setattr("app.services.accounts.send_email", stuck_send)
+    await register_and_login(client, "timing", email="timing@example.com")
+
+    async def answer_seconds(address: str) -> float:
+        started = time.perf_counter()
+        # A request that waited for the send would never finish.
+        response = await asyncio.wait_for(
+            client.post("/auth/forgot-password", json={"email": address}), timeout=5
+        )
+        elapsed = time.perf_counter() - started
+        assert response.status_code == 202
+        assert response.json() == {"status": "sent"}
+        return elapsed
+
+    known, unknown = [], []
+    for i in range(3):  # interleaved, so a slow moment hits both alike
+        known.append(await answer_seconds("timing@example.com"))
+        unknown.append(await answer_seconds(f"nobody{i}@example.com"))
+
+    # The same work either way: within 50 ms, which is noise on any machine
+    # and an order of magnitude below a mail provider's round trip.
+    assert abs(statistics.median(known) - statistics.median(unknown)) < 0.05, (known, unknown)
+    assert sent == [] and email.pending() == 3, "the answers did not wait for the mail"
+
+    release.set()
+    await email.drain()
+    assert sent == ["timing@example.com"] * 3

@@ -14,7 +14,7 @@ from typing import Literal
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-from app.api.deps import DB, OrgMember
+from app.api.deps import DB, OrgMember, client_address
 from app.services import consent as svc
 from app.services.ai_models import PROVIDER
 
@@ -112,10 +112,9 @@ async def give_consent(
     the step it is for (adjust, detect with AI, generate, finish).
 
     A statement about a face names its creation (`creation_id`, one of this
-    organization's; 404 otherwise). The address is taken from the proxy's
-    X-Forwarded-For when the server runs behind one (uvicorn's
-    FORWARDED_ALLOW_IPS, deploy/docker-compose.prod.yml), and only its
-    keyed hash is stored."""
+    organization's; 404 otherwise). The address is the client's, through the
+    proxies this server trusts (deps.client_address), and only its keyed
+    hash is stored."""
     subject_id = None
     if body.scope in svc.SUBJECT_SCOPES and body.creation_id:
         subject_id = await svc.creation_subject(db, ctx.org, body.creation_id)
@@ -126,7 +125,7 @@ async def give_consent(
         body.scope,
         body.text_version,
         body.providers,
-        request.client.host if request.client else None,
+        client_address(request) if request.client else None,
         subject_id=subject_id,
     )
     return ConsentOut(

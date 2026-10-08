@@ -6,6 +6,7 @@ and the always-on offline TTS provider.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 from functools import lru_cache
 from pathlib import Path
@@ -60,6 +61,18 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 15
     refresh_token_days: int = 30
+
+    # --- Client addresses behind proxies (core.client_ip) ---
+    # The reverse proxies in front of this API, as CIDRs: from a peer in one
+    # of these, the rightmost X-Forwarded-For entry is believed. Empty (the
+    # default) believes no header: the client is the TCP peer.
+    trusted_proxies: Annotated[list[str], NoDecode] = []
+    # How many X-Forwarded-For entries, from the right, those proxies may
+    # vouch for: one per proxy that appends to the header.
+    trusted_proxy_hops: int = 1
+    # Behind Cloudflare: a hop from Cloudflare's published ranges
+    # (core.cloudflare_ranges) is believed about CF-Connecting-IP.
+    trust_cloudflare: bool = False
 
     # --- CORS (dashboard origins; /embed/* has its own reflective CORS) ---
     # NoDecode: pydantic-settings JSON-decodes list fields from .env BEFORE
@@ -127,6 +140,19 @@ class Settings(BaseSettings):
     # --- Embed API ---
     embed_rate_limit_per_minute: int = 60
 
+    # --- Speech cache (services.tts.speech_cache) ---
+    # Every line spoken is kept in storage as MP3, with a small row in the
+    # database, so saying it again costs nothing. The least recently used
+    # lines go first past either cap, counted in stored bytes; a cloned
+    # voice's lines are never evicted (they cannot be made again here).
+    speech_cache_max_bytes: int = 2 * 1024**3
+    speech_cache_org_max_bytes: int = 256 * 1024**2
+    # Lines nobody has asked for in this many days go too; 0 keeps them.
+    speech_cache_max_idle_days: int = 90
+    # The MP3's quality: libsndfile's VBR compression level, 0 (best) to 1
+    # (smallest). 0.5 is about 50 kbit/s for 24 kHz speech, a tenth of WAV.
+    speech_cache_mp3_level: float = 0.5
+
     # --- Usage ---
     monthly_char_limit: int = 100_000
 
@@ -150,12 +176,22 @@ class Settings(BaseSettings):
     def storage_configured(self) -> bool:
         return all((self.r2_endpoint, self.r2_access_key, self.r2_secret))
 
-    @field_validator("cors_origins", "allowed_image_types", "model_url_hosts", mode="before")
+    @field_validator(
+        "cors_origins", "allowed_image_types", "model_url_hosts", "trusted_proxies", mode="before"
+    )
     @classmethod
     def _decode_csv(cls, value: object) -> list[str]:
         if isinstance(value, (str, list)):
             return _split_csv(value)
         raise ValueError("expected a comma-separated string or a list")
+
+    @field_validator("trusted_proxies")
+    @classmethod
+    def _check_networks(cls, value: list[str]) -> list[str]:
+        # At startup, not on the first request that needs a client address.
+        for cidr in value:
+            ipaddress.ip_network(cidr, strict=False)
+        return value
 
 
 @lru_cache
