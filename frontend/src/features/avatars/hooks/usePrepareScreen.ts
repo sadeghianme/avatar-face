@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { creationRequests } from "@/features/avatars/api";
 import { consentProblem } from "@/features/avatars/consent";
-import { type DraftStore, errorText, isJobActive, jobFailure } from "@/features/avatars/creation";
+import { errorText, isJobActive, jobFailure, tabStore } from "@/features/avatars/creation";
 import type { ConsentApi } from "@/features/avatars/hooks/useConsent";
 import type { Run } from "@/features/avatars/hooks/useCreation";
 import {
@@ -29,14 +29,6 @@ import {
 } from "@/features/avatars/wizard";
 import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
-
-function tabStore(): DraftStore | null {
-  try {
-    return window.sessionStorage;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Step 3's state and requests (PrepareScreen draws them). It starts by

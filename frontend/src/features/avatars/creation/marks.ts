@@ -64,6 +64,16 @@ export interface DraftMarks {
 /** The part of Web Storage this needs; sessionStorage in the app. */
 export type DraftStore = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
 
+/** This tab's storage, where the wizard keeps its drafts and choices; null
+ *  where the browser refuses it (a sandboxed frame, storage blocked). */
+export function tabStore(): DraftStore | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 const DRAFT_MARKS_PREFIX = "liveface.creationMarks.";
 const MARK_PARTS: ReadonlySet<string> = new Set([
   "head",

@@ -3,10 +3,10 @@ import { useState } from "react";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import {
-  type DraftStore,
   type FinishNotice as Notice,
   finishNoticeFor,
   forgetFinishNotice,
+  tabStore,
 } from "@/features/avatars/creation";
 import {
   factNeedsAttention,
@@ -19,14 +19,6 @@ import { FINISH_WARNINGS, teethNoteKey, teethView } from "@/features/avatars/tee
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import type { Avatar } from "@/lib/types";
-
-function tabStore(): DraftStore | null {
-  try {
-    return window.sessionStorage;
-  } catch {
-    return null;
-  }
-}
 
 const factKey = (fact: PreparedFact) => (fact.kind === "both_standard" ? "mouth" : fact.kind);
 

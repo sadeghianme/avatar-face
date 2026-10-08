@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { DraftStore } from "@/features/avatars/creation";
+import { tabStore } from "@/features/avatars/creation";
 import {
   heldKitJob,
   isKitActive,
@@ -16,14 +16,6 @@ import {
 import { api, ApiError } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
 import type { Schemas } from "@/lib/types";
-
-function tabStore(): DraftStore | null {
-  try {
-    return window.sessionStorage;
-  } catch {
-    return null;
-  }
-}
 
 /** How the job this tab followed ended, and what it was last seen doing
  * (a failure while making the teeth alone is worded as the teeth's). */

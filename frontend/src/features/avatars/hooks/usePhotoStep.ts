@@ -3,7 +3,7 @@ import { useEffect, useReducer } from "react";
 import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import { startCreation } from "@/features/avatars/api";
 import { consentProblem, type FaceStatement, providerLabel } from "@/features/avatars/consent";
-import { checkFile, type Creation, type DraftStore, errorText } from "@/features/avatars/creation";
+import { checkFile, type Creation, errorText, tabStore } from "@/features/avatars/creation";
 import type { ConsentApi } from "@/features/avatars/hooks/useConsent";
 import {
   aiRequired,
@@ -20,14 +20,6 @@ import {
 } from "@/features/avatars/wizard";
 import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
-
-function tabStore(): DraftStore | null {
-  try {
-    return window.sessionStorage;
-  } catch {
-    return null;
-  }
-}
 
 /** What step 2 has been given: how to start, the look, the words or the
  * photo (with its preview's object URL), and the two agreements. */

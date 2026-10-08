@@ -5,11 +5,11 @@ import { creationRequests } from "@/features/avatars/api";
 import { consentProblem, type FaceStatement } from "@/features/avatars/consent";
 import {
   type CreationAnchors,
-  type DraftStore,
   errorText,
   jobFailure,
   pickMarks,
   rememberFinishNotice,
+  tabStore,
 } from "@/features/avatars/creation";
 import type { FaceMarks, FitReason } from "@/features/avatars/face-marks";
 import type { ConsentApi } from "@/features/avatars/hooks/useConsent";
@@ -32,14 +32,6 @@ const PREVIEW_DELAY_MS = 400;
 
 export const PUBLISH_VIEWS = ["points", "preview"] as const;
 export type PublishView = (typeof PUBLISH_VIEWS)[number];
-
-function tabStore(): DraftStore | null {
-  try {
-    return window.sessionStorage;
-  } catch {
-    return null;
-  }
-}
 
 /** The fit Publish would build: its rig (a blob URL, null until the first
  *  answer), what it refuses, and why the last preview failed. */
