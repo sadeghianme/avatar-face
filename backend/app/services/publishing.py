@@ -438,6 +438,11 @@ async def discard_draft(avatar: Avatar, storage: Storage) -> list[str] | None:
             "renderer": published_mouth["renderer"],
             "profile": published_mouth.get("profile") or {},
         }
+        if (character := published_mouth.get("character")) is not None:
+            # How the owner set the character mouth, published by value
+            # (publish_mouth): without it the draft would read as in step
+            # while the next Publish shipped the default character mouth.
+            restored["character"] = character
         oral_image = await restore(published_mouth.get("oral_image_key"), "mouth")
         oral_rig = await restore(published_mouth.get("oral_rig_key"), "mouth-rig")
         if oral_image and oral_rig:

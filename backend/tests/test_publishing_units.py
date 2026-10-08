@@ -678,12 +678,6 @@ async def test_discard_shows_a_published_picture_that_is_gone_as_transparent(
     assert avatar.scene_config["background"] == restored_background
 
 
-@pytest.mark.xfail(
-    reason="discard_draft rebuilds the mouth from renderer/profile/files/teeth/kit only and "
-    "drops the published `character` settings, so the draft reads as in step while it "
-    "differs, and the next Publish ships the default character mouth",
-    strict=True,
-)
 async def test_discard_puts_back_the_published_character_mouth_settings(stamp):
     snapshot = _snapshot(face_type="animal",
                          mouth={"renderer": "classic", "profile": {}, "character": CHARACTER})
