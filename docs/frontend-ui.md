@@ -1,7 +1,8 @@
 # Dashboard UI kit, data layer and lint rules
 
 Status: in place, 2026-10-06 (tests, typed keys and API types added the
-same day). Every page of the dashboard, the landing page
+same day; every screen split into a hook and its sections, 2026-10-08).
+Every page of the dashboard, the landing page
 and the sign-in pages are built from the kit in `frontend/src/components/ui`;
 every server call goes through a feature's data module; `npm run lint`
 enforces both and CI runs it (`frontend-lint`). This is what each part is,
@@ -127,15 +128,33 @@ hook (`features/<x>/hooks/use…`) holds the state, the requests and
 the derived words; the component lays out presentational sections. Busy
 and error states are the mutations' (`isPending`, `error`) rather than
 flags kept beside them; state whose transitions belong together is a
-reducer (a pure one, like `mouth-teeth-line.ts`, is unit-tested). The
-Mouth panel (`useMouthPanel`, `components/mouth/`), the wizard's step 2
-(`usePhotoStep`, `wizard/photo/`), step 3 (`usePrepareScreen`,
-`wizard/prepare/`) and step 4 (`usePublishEditor`, `wizard/publish/`),
-the avatar page (`useAvatarDetail`, `components/detail/`) and the voices
-page (`useVoicesPage`, `useVoiceRecorder`) are built so: no file over 300
-lines, no component with more than five `useState`. Not yet: the lab's
-ReferenceAvatarWorkspace, MarkFacePanel, SharePage, SpeakPanel and
-CropBox (six to eleven `useState` each, no screen tests to hold a split).
+reducer (a pure one, like `mouth-teeth-line.ts` or `crop.ts`, is
+unit-tested). Every screen is built so: no component file over 300
+lines, no component with more than five `useState`.
+
+| Screen | Its state | Its sections |
+|---|---|---|
+| The creation wizard | `useNewWizard` | `wizard/WizardStep` (the screen under its heading), `NewWizard` the frame |
+| Step 2, the photo | `usePhotoStep` | `wizard/photo/` |
+| Step 3, preparing | `usePrepareScreen` | `wizard/prepare/` |
+| Step 4, publishing | `usePublishEditor` | `wizard/publish/` |
+| The avatar page | `useAvatarDetail` | `components/detail/` |
+| Its Mouth panel | `useMouthPanel` | `components/mouth/` |
+| Its Framing & scene | `useSceneEditor`, `useDragPan` | `components/scene/` |
+| Marking the face | `useMarkFace` | `components/mark/` (`MarkFacePreview`, `FitReasons`) |
+| The marking canvas | `useMarkCanvas`, `useElementWidth` | `mark/MarkLoupe` (and `placeLoupe`), `mark/MarkOutlines` |
+| The crop box | `crop.ts` (the geometry, pure) | `components/crop/CropGuides` |
+| Voices | `useVoicesPage`, `useVoiceRecorder` | `voices/components/` |
+| The Speak panel | `useSpeakPanel` | |
+| The share page | `useShareEngine`, `useShareSpeech` | `share/components/ShareComposer` |
+| The reference lab | `useReferenceWorkspace`, `usePerformanceMouth` | `lab/components/reference/` |
+| The landing demo | `demoScan.ts` (the intro, outside React) | `brand/VoiceMeter` |
+
+Larger, and fine so: the pure modules (`wizard.ts`, `mouth-kit.ts`,
+`face-marks.ts`), tested under node. Still to do: `useLipSyncComparison`,
+the lab's streamed comparison, is a hook with thirteen `useState` that
+move together (busy, playing, paused, the stream's statistics); a
+reducer, with a test of the lip-sync workspace to hold it.
 
 ## Lint rules (`frontend/eslint.config.js`)
 
@@ -147,10 +166,13 @@ CropBox (six to eleven `useState` each, no screen tests to hold a split).
 - jsx-a11y recommended.
 - `no-restricted-syntax`: no raw `<button>`, `<input>`, `<select>`,
   `<textarea>` or `<label>` outside the kit, and no kit look spelled out
-  by hand: the classes `btn-*`, `card`, `label` and `field-error` in any
-  `className` or `*ClassName` (a string or a template) or `cx()` call are
-  errors outside `components/ui`. Exceptions: `MarkCanvas` (its face points
-  are raw buttons) and the tests (a test mounts its own fixtures).
+  by hand: every component class in `index.css` (`btn-*`, `icon-btn-*`,
+  `card`, `label`, `field-error`, `input`, `checkbox`, `check-row`,
+  `slider`, `badge-*`, `chip-*`, `choice-tile-*`, `progress`,
+  `code-block`) in any `className` or `*ClassName` (a string or a
+  template) or `cx()` call is an error outside `components/ui`, naming the
+  component to use. Exceptions: `MarkCanvas` (its face points are raw
+  buttons) and the tests (a test mounts its own fixtures).
 - `no-restricted-imports`: no `api`, `fetchStream`, `postFormWithProgress`
   or `uploadWithProgress` outside the data modules, the three data hooks,
   the providers and `lib`; no react-i18next `useTranslation` outside
@@ -189,15 +211,19 @@ Formatting is Prettier (`printWidth` 120), applied once in its own commit;
   a server string is put into the page as HTML, the client sends the
   token only to the API's own origin (`/api`), and a stored entry that is
   not a pair of tokens is dropped rather than parsed into every request
-  (`getTokens`). What would help most next: a Content-Security-Policy on
-  the dashboard's nginx (`frontend/nginx.conf` sets none) and refresh
-  tokens the server can revoke (the backend's backlog). Revisit this
-  decision when either lands.
-- **No debug handles in a production build.** `window.__queryClient`
-  (main.tsx) and `window.__lfEngine` (AvatarPreview, for the visual
-  harnesses) are set only under `import.meta.env.DEV`, which Vite drops
-  from the build. The embed engine's own `__liveface` global is the embed
-  package's (it ships in the widget too).
+  (`getTokens`), and the dashboard's nginx sends a
+  Content-Security-Policy (`frontend/nginx-security-headers.conf`: scripts
+  from its own origin only). What would help most next: refresh tokens
+  the server can revoke (the backend's backlog). Revisit this decision
+  when that lands.
+- **No debug handles of the dashboard's own in a production build.**
+  `window.__queryClient` (main.tsx) and `window.__lfEngine`
+  (AvatarPreview, for the visual harnesses) are set only under
+  `import.meta.env.DEV`, which Vite drops from the build. The embed
+  engine's console handle (`__liveface`) is the engine's own and opt-in
+  (`debug: true`, or `data-debug` / `?liveface-debug` on the widget):
+  the share page and the landing demo opt in, for measuring them live;
+  the dashboard's previews do not.
 - **Retries**: a query is retried once after a network error or a 5xx,
   never after a 4xx other than 408 and 429 (`lib/queryClient.ts`): a
   refused request is not sent twice.
@@ -205,18 +231,23 @@ Formatting is Prettier (`printWidth` 120), applied once in its own commit;
 ## Tests
 
 - `npm test`: node --test over `src/**/*.test.ts`, the pure logic (the
-  kit's rules, query keys, the wizard's model, the mouth kit, retries…),
-  run by stripping their types.
+  kit's rules, query keys, the wizard's model, the mouth kit, the crop's
+  geometry, retries…), run by stripping their types.
 - `npm run test:ui`: Vitest with Testing Library in jsdom over
   `src/**/*.test.tsx`: every kit component's behaviour and accessibility
-  contract (`components/ui/*.test.tsx`), and the main screens (sign-in,
-  the library, the avatar page and its Mouth panel, the wizard's steps 1 to
-  4, voices) against a mocked API. `src/test/` has what they share: the
+  contract (`components/ui/*.test.tsx`), and every screen (sign-in, the
+  library, the avatar page with its Mouth panel, Framing & scene, face
+  marking, marking canvas and crop box, the wizard's steps 1 to 4, voices
+  and the Speak panel, the share page, the reference lab) against a
+  mocked API. A screen split into a hook and sections was tested first
+  and its tests pass on the screen before the split too. `src/test/` has
+  what they share: the
   API mocked at the network (`server.ts`: fetch and XHR answered from a
   route table, so the real client, the data modules and React Query run),
   `renderScreen` (main.tsx's providers, a router at a route), jsdom's
   missing pieces (`dom-shims.ts`: layout for focusable elements, `<dialog>`
-  with Escape, matchMedia, observers) and fixtures. Only tests may import
+  with Escape, matchMedia, observers, a PointerEvent for drags) and
+  fixtures. Only tests may import
   it (the structure check). The engine's canvases are stood in for by
   markers (`vi.mock`). axe-core runs every WCAG 2.1 A/AA rule that needs
   no layout over the whole kit (`a11y.test.tsx`) and over each screen as
