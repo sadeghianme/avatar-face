@@ -2,7 +2,7 @@
  * The head's "personality" for the 3D turn (EngineOptions.headMotion "3d",
  * a person's photo's default): a pose in degrees of a real head rather than
  * pixels of a layer, from a small procedural model. Conservative: at most
- * 7 degrees of yaw, 5 of pitch and 3 of roll (POSE_LIMIT_DEG), the
+ * 9 degrees of yaw, 5 of pitch and 3 of roll (POSE_LIMIT_DEG), the
  * envelope's peaks easing into those limits rather than cut off at them.
  *
  *  - Drift: band-limited noise, three incommensurate sines per axis between
@@ -26,7 +26,14 @@ import type { HeadPose3D } from "./head-turn";
 
 const DEG = Math.PI / 180;
 /** The most of the pose, degrees, before the tuning's scale. */
-export const POSE_LIMIT_DEG = { yaw: 7, pitch: 5, roll: 3 };
+export const POSE_LIMIT_DEG = { yaw: 9, pitch: 5, roll: 3 };
+/** The yaw's drives (the drift, a phrase's shift, a glance) were set for a
+ *  7 degree limit; since the hair and the head's outline turn with the face
+ *  (head-field.ts) the limit is 9, and they reach as far in proportion. The
+ *  roll a turn brings with it is the 7 degree turn's still, and so is the
+ *  head's rigid travel (engine.ts headFrame3d): the two degrees more are the
+ *  face's and the hair's. */
+export const YAW_GAIN = POSE_LIMIT_DEG.yaw / 7;
 /** Past this share of its limit an axis eases into it (softLimit). */
 const KNEE = 0.7;
 /** The eyes go first: a head turn starts this long after the saccade. */
@@ -144,7 +151,7 @@ export class HeadPersonality {
         p: r() * Math.PI * 2,
         a: (amp * [1, 0.6, 0.3][k]) / 1.4,
       }));
-    this.sines = { yaw: make(1.0 * DEG), pitch: make(0.7 * DEG), roll: make(0.45 * DEG) };
+    this.sines = { yaw: make(1.0 * YAW_GAIN * DEG), pitch: make(0.7 * DEG), roll: make(0.45 * DEG) };
   }
 
   start(now: number): void {
@@ -187,7 +194,7 @@ export class HeadPersonality {
         // Mostly the eyes stay on the listener; sometimes they go with it.
         const look = r() < 0.3;
         this.turnTo(
-          { yaw, pitch: -(0.4 + r() * 0.7) * DEG, roll: yaw * 0.25 + (r() - 0.5) * 0.9 * DEG },
+          { yaw: yaw * YAW_GAIN, pitch: -(0.4 + r() * 0.7) * DEG, roll: yaw * 0.25 + (r() - 0.5) * 0.9 * DEG },
           now,
           0.55,
           look
@@ -221,9 +228,9 @@ export class HeadPersonality {
         return Math.sign(v) * v * v;
       };
       const away = r() < 0.55;
-      const yaw = away ? draw() * 4.8 * DEG : this.posture.yaw * 0.3;
+      const yaw = away ? draw() * 4.8 * DEG : (this.posture.yaw / YAW_GAIN) * 0.3;
       const pitch = away ? draw() * 2.2 * DEG + 0.5 * DEG : 0;
-      this.turnTo({ yaw, pitch, roll: yaw * 0.3 + draw() * 0.9 * DEG }, now, 0.8, away);
+      this.turnTo({ yaw: yaw * YAW_GAIN, pitch, roll: yaw * 0.3 + draw() * 0.9 * DEG }, now, 0.8, away);
     }
     // The pending head move, once the eyes have led it.
     if (this.pending && now >= this.pending.at) {

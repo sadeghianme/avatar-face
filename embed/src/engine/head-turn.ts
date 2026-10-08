@@ -7,23 +7,36 @@
  * moved as one) carries a share of the turn and all of the roll (apply),
  * and this carries the rest.
  *
- * The outline. The mesh's outer edge borders pixels that do not turn (the
- * hair, the ears, the background, the rigid layer around it), so it must
- * stay where the rigid motion puts it, and the face inside must meet it
- * without a step. A real turn moves the outline too: at 7 degrees of yaw
- * the forehead's top, well in front of the pivot, travels a tenth of an
- * eye distance, the temples a quarter of that. The prototype faded every
- * landmark's turn to nothing over a band 0.42 eye distances wide, so all
- * of that travel was undone inside the band: the forehead and the temples
- * sheared and stretched at the larger turns. Here only the outline's own
- * travel is taken out, and smoothly: the correction is the harmonic
- * extension of the outline's displacement over the mesh (each interior
- * landmark the weighted mean of its neighbours', the outline's held), so
- * the face keeps every difference of the turn between its parts (the nose
- * sweeping across the cheeks, the far cheek widening, the near one
- * narrowing), and loses only the share of the whole face's travel that
- * the outline could not take, spread over the whole face instead of a
- * band. The rigid motion carries that travel where it can.
+ * The outline. Without the head's field the mesh's outer edge borders
+ * pixels that do not turn (the hair, the ears, the background, the rigid
+ * layer around it), so it must stay where the rigid motion puts it, and the
+ * face inside must meet it without a step. A real turn moves the outline
+ * too: at 7 degrees of yaw the forehead's top, well in front of the pivot,
+ * travels a tenth of an eye distance, the temples a quarter of that. The
+ * prototype faded every landmark's turn to nothing over a band 0.42 eye
+ * distances wide, so all of that travel was undone inside the band: the
+ * forehead and the temples sheared and stretched at the larger turns. Here
+ * only the outline's own travel is taken out, and smoothly: the correction
+ * is the harmonic extension of the outline's displacement over the mesh
+ * (each interior landmark the weighted mean of its neighbours', the
+ * outline's held), so the face keeps every difference of the turn between
+ * its parts (the nose sweeping across the cheeks, the far cheek widening,
+ * the near one narrowing), and loses only the share of the whole face's
+ * travel that the outline could not take, spread over the whole face
+ * instead of a band. The rigid motion carries that travel where it can.
+ *
+ * The head's field (head-field.ts, a ring of triangles from the outline out
+ * over the hair and the ears to where the head ends) lets the outline go:
+ * the outline from one cheek over the top to the other turns with the face
+ * (what its band of hair can take of it: at most HEAD_STRAIN of the band's
+ * width), the harmonic correction takes out only what it does not, and the
+ * field's own vertices turn on the skull (an ellipsoid through the
+ * outline's depth and the head's silhouette, at the skull centre's depth
+ * there), their share falling to 0 where the field ends. A sphere turned
+ * about its centre keeps its silhouette, and so does the head here: the
+ * hair slides over it, compressing on the side the face turns to and
+ * opening on the other. The outline's ends below the ears, where the neck
+ * band hangs, stay held.
  *
  * The jaw line is not outline: the neck band (jaw-rig.ts) hangs below it
  * and is drawn with the mesh, so the chin turns and nods with the face and
@@ -42,6 +55,8 @@
  */
 import { CANONICAL_FACE_CM100 } from "./canonical-face";
 import type { FaceMesh, Point } from "./geometry";
+import type { HeadField } from "./head-field";
+import { softLimit } from "./head-personality";
 import { INNER_LOWER, INNER_UPPER, JAW_ARC, LIP_CORNERS, LOWER_ROWS, UPPER_ROWS } from "./jaw-rig";
 import { EYE_CORNERS, IRISES, LEFT_BROW, LOWER_LIDS, RIGHT_BROW, UPPER_LIDS } from "./landmarks";
 import { apply as applyAffine, invert, type Affine } from "./warp-gl";
@@ -60,6 +75,20 @@ export const PIVOT_CM = { x: 0, y: -0.5, z: -4.2 };
 /** A point of the skull the rigid motion follows: the head's outline, at
  *  the ears' depth and the brow's height. */
 export const SKULL_CM = { x: 0, y: 2.5, z: -0.5 };
+/** The skull's centre (head-field.ts): behind the brow, at the pivot's
+ *  depth. The head's silhouette lies at its depth. */
+export const SKULL_CENTRE_CM = { x: 0, y: 2.5, z: -4.3 };
+/** The most a band of the head's field (outline to its end) is squeezed or
+ *  stretched by the outline's travel, as a share of its width. */
+const HEAD_STRAIN = 0.3;
+/** Where along a spoke the field starts to fade, as a share of the way
+ *  from the outline to its end. */
+const HEAD_FADE_FROM = 0.5;
+/** Along the outline from each of its held ends (below the ears, where the
+ *  neck band hangs), IODs, the outline's travel eases in from nothing: a
+ *  landmark beside a held one, moving whole, crushed the thin triangles
+ *  between them (the temple's, 34-234-127, at a 9 degree turn and a nod). */
+const HEAD_END_IOD = 0.6;
 /** The camera's distance from the pivot, in inter-ocular distances: about
  *  60 cm for a 6.3 cm adult IOD, a portrait lens. */
 const CAMERA_IOD = 9;
@@ -104,6 +133,14 @@ export interface TurnStats {
   maxShift: number;
   /** The share of the turn kept to fold nothing (1: all of it). */
   scale: number;
+  /** The head's field (head-field.ts), when the mesh has one: its
+   *  triangles' smallest area ratio, and its largest shift, px. */
+  headMinAreaRatio: number;
+  headMaxShift: number;
+  /** The outline's landmarks whose travel the field's band capped this
+   *  frame (HEAD_STRAIN), and the smallest share of it they kept. */
+  headCapped: number;
+  headMinShare: number;
 }
 
 /**
@@ -147,7 +184,44 @@ export class HeadTurn {
   /** Each eye's landmarks (corners, lids, iris), and the lips': each moves
    *  as one piece. */
   private readonly pieces: number[][];
-  readonly stats: TurnStats = { flipsBefore: 0, eased: 0, flipsAfter: 0, minAreaRatio: 1, maxShift: 0, scale: 1 };
+  readonly stats: TurnStats = {
+    flipsBefore: 0,
+    eased: 0,
+    flipsAfter: 0,
+    minAreaRatio: 1,
+    maxShift: 0,
+    scale: 1,
+    headMinAreaRatio: 1,
+    headMaxShift: 0,
+    headCapped: 0,
+    headMinShare: 1,
+  };
+  /** The head's field this turn moves with the face (head-field.ts), or
+   *  null: the outline is then held. */
+  readonly head: HeadField | null;
+  /** Per landmark, the field's spoke it starts (-1: none, or one of the
+   *  held ends). */
+  private readonly spokeOf: Int32Array;
+  /** Per outline landmark (basis.outline's order), this frame's share of
+   *  its own travel it keeps (0: held). */
+  private readonly outlineShare: Float64Array;
+  /** Per spoke, the most its landmark may travel in the head's frame
+   *  (HEAD_STRAIN of the band), px, the share it is given toward the
+   *  outline's held ends (HEAD_END_IOD), and this frame's share of the
+   *  turn. */
+  private readonly spokeCap: Float64Array;
+  private readonly spokeGain: Float64Array;
+  private readonly spokeShare: Float64Array;
+  /** Per field vertex: its depth on the skull, and the share of its turn
+   *  it takes (1 near the face, 0 where the field ends). */
+  private readonly headDepth: Float64Array;
+  private readonly headFall: Float64Array;
+  /** The field's triangles, their rest areas (twice, signed). */
+  private readonly headTris: [number, number, number][];
+  private readonly headRestArea: Float64Array;
+  /** This frame's turn, for the field: the rotation, the rigid motion
+   *  undone, the share of the turn kept. Null: at rest. */
+  private frame: { turn: HeadPose3D; back: Affine | null; alpha: number } | null = null;
   /** The triangles (indices into tris) the last fold check found crushed. */
   private readonly crushed: number[] = [];
   /** Triangles smaller than this (twice their area, px²) are slivers with
@@ -191,6 +265,64 @@ export class HeadTurn {
     this.before = new Float64Array(n * 2);
     this.want = new Float64Array(n * 2);
     this.shiftBy = new Float64Array(n * 2);
+
+    // The head's field: each spoke's landmark free to turn (the ends, where
+    // the neck band hangs, held), each of its vertices given a depth on the
+    // skull and the share of its turn it takes.
+    const head = mesh.head ?? null;
+    this.head = head;
+    this.spokeOf = new Int32Array(n).fill(-1);
+    this.outlineShare = new Float64Array(this.basis.outline.length);
+    const spokes = head?.spokes ?? [];
+    this.spokeCap = new Float64Array(spokes.length);
+    this.spokeGain = new Float64Array(spokes.length);
+    this.spokeShare = new Float64Array(spokes.length);
+    this.headDepth = new Float64Array(head?.count ?? 0);
+    this.headFall = new Float64Array(head?.count ?? 0);
+    this.headTris = [];
+    this.headRestArea = new Float64Array(0);
+    if (head) {
+      const onOutline = new Set(this.basis.outline);
+      // How far along the outline each spoke's landmark is from the nearer
+      // of its held ends.
+      const along = new Float64Array(spokes.length);
+      for (let k = 1; k < spokes.length; k++) {
+        const a = base[spokes[k - 1].landmark],
+          b = base[spokes[k].landmark];
+        along[k] = along[k - 1] + Math.hypot(b.x - a.x, b.y - a.y);
+      }
+      const total = along[spokes.length - 1];
+      spokes.forEach((s, k) => {
+        this.spokeCap[k] = HEAD_STRAIN * (s.outer - s.r0);
+        const t = Math.min(1, Math.min(along[k], total - along[k]) / (HEAD_END_IOD * fit.iod));
+        this.spokeGain[k] = t * t * (3 - 2 * t);
+        if (k > 0 && k < spokes.length - 1 && onOutline.has(s.landmark)) this.spokeOf[s.landmark] = k;
+      });
+      const zc = fit.at(SKULL_CENTRE_CM).z;
+      head.vertices.forEach((v, j) => {
+        const s = spokes[v.spoke];
+        // On the skull: an ellipse through the outline's depth and the
+        // silhouette, where the depth is the skull centre's.
+        const S = Math.max(s.silhouette, s.r0 + 1e-3);
+        const room = 1 - (s.r0 / S) ** 2;
+        const left = 1 - (v.r / S) ** 2;
+        const zo = this.depth[s.landmark];
+        this.headDepth[j] = v.r >= S || room <= 1e-6 ? zc : zc + (zo - zc) * Math.sqrt(Math.min(1, left / room));
+        const from = s.r0 + HEAD_FADE_FROM * (s.outer - s.r0);
+        const t = Math.max(0, Math.min(1, (v.r - from) / Math.max(1e-6, s.outer - from)));
+        this.headFall[j] = 1 - t * t * (3 - 2 * t);
+      });
+      const rest = (i: number): Point =>
+        i < n
+          ? base[i]
+          : i >= head.first
+            ? head.vertices[i - head.first].base
+            : i >= n + mesh.derivedParents.length
+              ? mesh.neckBand[i - n - mesh.derivedParents.length].base
+              : base[0];
+      this.headTris = mesh.triangles.slice(head.triangleFrom).map(([a, b, c]) => [a, b, c]);
+      this.headRestArea = Float64Array.from(this.headTris, ([a, b, c]) => area(rest(a), rest(b), rest(c)));
+    }
   }
 
   /**
@@ -250,21 +382,53 @@ export class HeadTurn {
       move[2 * i] = 0;
       move[2 * i + 1] = 0;
     }
-    // Less the outline's own travel, extended smoothly inside: nothing on
-    // the outline, the turn's differences everywhere else.
+    // The outline's own travel: held, or, where the head's field turns with
+    // the face, as much as the field's band takes (HEAD_STRAIN of its
+    // width, eased into past 70% of it: softLimit's knee).
     const { outline, free, weights } = this.basis;
     const h = outline.length;
+    const share = this.outlineShare;
+    this.stats.headCapped = 0;
+    this.stats.headMinShare = 1;
+    for (let k = 0; k < h; k++) {
+      const i = outline[k];
+      const spoke = this.spokeOf[i];
+      if (spoke < 0) {
+        share[k] = 0;
+        continue;
+      }
+      const cap = this.spokeCap[spoke],
+        gain = this.spokeGain[spoke];
+      const m = Math.hypot(want[2 * i], want[2 * i + 1]) * gain;
+      const kept = cap <= 0 ? 0 : m > 1e-9 ? softLimit(m, cap) / m : 1;
+      const s = kept * gain;
+      share[k] = s;
+      this.spokeShare[spoke] = s;
+      if (kept < 0.95) this.stats.headCapped++;
+      this.stats.headMinShare = Math.min(this.stats.headMinShare, kept);
+      move[2 * i] = want[2 * i] * s;
+      move[2 * i + 1] = want[2 * i + 1] * s;
+    }
+    // Less what the outline does not travel, extended smoothly inside:
+    // the outline's own move on it, the turn's differences everywhere else.
     for (let r = 0; r < free.length; r++) {
       const i = free[r];
       let cx = 0,
-        cy = 0;
+        cy = 0,
+        dx = 0,
+        dy = 0;
       for (let k = 0; k < h; k++) {
         const w = weights[r * h + k];
-        cx += w * want[2 * outline[k]];
-        cy += w * want[2 * outline[k] + 1];
+        const o = outline[k];
+        cx += w * want[2 * o];
+        cy += w * want[2 * o + 1];
+        if (share[k]) {
+          dx += w * want[2 * o] * share[k];
+          dy += w * want[2 * o + 1] * share[k];
+        }
       }
-      move[2 * i] = (want[2 * i] - cx) * this.edge[i];
-      move[2 * i + 1] = (want[2 * i + 1] - cy) * this.edge[i];
+      move[2 * i] = (want[2 * i] - cx) * this.edge[i] + dx;
+      move[2 * i + 1] = (want[2 * i + 1] - cy) * this.edge[i] + dy;
     }
     // Each eye as one piece (the irises are on no edge: they go with it): a
     // stretched eye reads as a glance, not a turn. And the lips as one
@@ -330,6 +494,48 @@ export class HeadTurn {
     for (let i = 0; i < n; i++)
       maxShift = Math.max(maxShift, Math.hypot(pts[i].x - before[2 * i], pts[i].y - before[2 * i + 1]));
     this.stats.maxShift = maxShift;
+    this.frame = { turn, back, alpha: this.stats.scale };
+  }
+
+  /**
+   * The head's field's own vertices this frame, pushed onto `pts` (after
+   * the neck band's: the mesh's order), turned with the face by the last
+   * `apply`: each on the skull, by its spoke's share of the turn (what the
+   * spoke's landmark kept) and its own share (falling to 0 where the field
+   * ends), less the rigid motion, as the landmarks. Without a field,
+   * nothing; without a turn this frame (`rest`), where they rest.
+   */
+  field(pts: Point[], rest = false): void {
+    const head = this.head;
+    if (!head) return;
+    const f = rest ? null : this.frame;
+    const start = pts.length;
+    let maxShift = 0;
+    for (let j = 0; j < head.count; j++) {
+      const v = head.vertices[j];
+      const p = v.base;
+      let x = p.x,
+        y = p.y;
+      const k = f ? this.headFall[j] * this.spokeShare[v.spoke] * f.alpha : 0;
+      if (f && k > 0) {
+        let q = this.project(p.x, p.y, this.headDepth[j], f.turn);
+        if (f.back) q = applyAffine(f.back, q);
+        x += (q.x - p.x) * k;
+        y += (q.y - p.y) * k;
+        maxShift = Math.max(maxShift, Math.hypot(x - p.x, y - p.y));
+      }
+      pts.push({ x, y });
+    }
+    this.stats.headMaxShift = maxShift;
+    let minRatio = Infinity;
+    if (pts.length === start + head.count) {
+      this.headTris.forEach(([a, b, c], t) => {
+        const was = this.headRestArea[t];
+        if (Math.abs(was) < this.minArea) return;
+        minRatio = Math.min(minRatio, area(pts[a], pts[b], pts[c]) / was);
+      });
+    }
+    this.stats.headMinAreaRatio = minRatio === Infinity ? 1 : minRatio;
   }
 
   private freeMask: Uint8Array | null = null;
@@ -560,9 +766,11 @@ export function outlineBasis(
 /**
  * The canonical model fitted to the photo's landmarks: the depth of every
  * landmark (iris centres and rims from their eye's), the inter-ocular
- * distance, and any model point placed on the canvas.
+ * distance, and any model point placed on the canvas (and given a depth on
+ * the landmarks' scale). The head's field (head-field.ts) places the skull
+ * with it.
  */
-function fitCanonical(base: readonly Point[]): {
+export function fitCanonical(base: readonly Point[]): {
   depth: Float64Array;
   iod: number;
   at: (p: { x: number; y: number; z: number }) => { x: number; y: number; z: number };

@@ -7,6 +7,7 @@
  * Texture coords map to the TEXTURE's own naturalWidth/naturalHeight (the
  * thumbnail may be scaled down), never to rig.image_size.
  */
+import type { HeadField } from "./head-field";
 import { buildNeckBand } from "./jaw-rig";
 import type { Rig } from "../types";
 import { eyeLine, viewportFor } from "./viewport";
@@ -55,8 +56,14 @@ export interface FaceMesh {
    *  the midpoints, each hanging from a jaw-line vertex by a share of its
    *  motion, so the chin drops over stretching neck skin, not a still one. */
   neckBand: NeckVertex[];
-  /** The rig's triangles with the mouth's refined, then the neck band's. */
+  /** The rig's triangles with the mouth's refined, then the neck band's,
+   *  then the head's field's. */
   triangles: Triangle[];
+  /** The head's field (head-field.ts): the hair, the ears and the head's
+   *  outline turning with the face, its vertices after the neck band's.
+   *  Laid only for the "3d" head motion, and only where the picture could
+   *  be read. */
+  head?: HeadField;
 }
 
 /**

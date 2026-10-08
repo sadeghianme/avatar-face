@@ -79,6 +79,7 @@ import { FrameLoop, FrameStep } from "./engine/frame-loop";
 import { validInnerRing, type Point } from "./engine/geometry";
 import { LANDMARK_COUNT } from "./engine/landmarks";
 import { MeshWarp, type WarpMode } from "./engine/mesh-warp";
+import { YAW_GAIN } from "./engine/head-personality";
 import { HeadTurn, type OutlineBasis, type TurnStats } from "./engine/head-turn";
 import { Motion, type HeadOffset } from "./engine/motion";
 import { NeckWarp, neckBlendFor, neckPin, type NeckPin } from "./engine/neck-blend";
@@ -144,7 +145,8 @@ export interface EngineOptions {
   /**
    * How the head moves. "3d", the default for a person (faceType "human"):
    * the face turns in depth inside the mesh, about a pivot between the ears
-   * (engine/head-turn.ts), at most 7 degrees of yaw, 5 of pitch and 3 of
+   * (engine/head-turn.ts), the hair, the ears and the head's outline with it
+   * (engine/head-field.ts), at most 9 degrees of yaw, 5 of pitch and 3 of
    * roll, with a procedural personality (engine/head-personality.ts); the
    * head's rigid motion (the layer, the whole picture, a cut-out's bust)
    * carries a share of it. "2d", the default for an animal or a cartoon: as
@@ -276,9 +278,12 @@ export class AvatarEngine {
     }));
     this.innerRing = validInnerRing(rig);
     this.classicMouth = new ClassicMouth(ctx, this.profile, this.innerRing);
-    this.picture.useHeadLayer(opts.cutOutHeadLayer ?? false);
-    this.picture.lay(this.scene.zoom ?? 1, this.scene.pan, true);
     this.motion.mode = opts.headMotion ?? defaultHeadMotion(this.profile, opts.faceType);
+    this.picture.useHeadLayer(opts.cutOutHeadLayer ?? false);
+    // The head's field (the hair and the head's outline turning with the
+    // face) is laid for the turn in depth only.
+    this.picture.useHeadField(this.motion.mode === "3d");
+    this.picture.lay(this.scene.zoom ?? 1, this.scene.pan, true);
     this.motion.start(performance.now());
     this.frameLoop = new FrameLoop((now) => {
       this.tick(now);
@@ -300,6 +305,8 @@ export class AvatarEngine {
   setLayers(layers: { background?: HTMLImageElement; body: HTMLImageElement; head: HTMLImageElement }): void {
     if (this.destroyed) return;
     this.layers = layers;
+    // Where the head's field may reach: never past what the layers cover.
+    this.picture.setLayers(layers);
   }
 
   /**
@@ -405,6 +412,7 @@ export class AvatarEngine {
   setHeadMotion(mode: HeadMotionMode): void {
     if (this.destroyed || mode === this.motion.mode) return;
     this.motion.mode = mode;
+    this.picture.useHeadField(mode === "3d");
     if (mode === "3d" && this.speech.speaking)
       this.motion.setSpeechCues(this.speech.cues, this.speech.cueTime(performance.now()));
   }
@@ -549,11 +557,12 @@ export class AvatarEngine {
   // --- Deformation -----------------------------------------------------------
 
   /** Every mesh vertex this frame (deform.ts). */
-  private deformedPoints(turn?: (pts: Point[]) => void, pin?: NeckPin | null): Point[] {
+  private deformedPoints(turn?: (pts: Point[]) => void, pin?: NeckPin | null, head?: (pts: Point[]) => void): Point[] {
     const picture = this.picture;
     return deformFace({
       turn,
       pin,
+      head,
       rig: this.rig,
       mesh: picture.mesh,
       innerRing: this.innerRing,
@@ -571,11 +580,13 @@ export class AvatarEngine {
 
   /**
    * The "3d" head motion's frame: the rigid motion's share of the turn, and
-   * the turn of the face inside the mesh, which makes up the rest. The
-   * outline stays with the rigid motion (head-turn.ts), so what the rigid
-   * motion does not carry of the head's travel and roll is not seen: a
-   * roll, an affine motion of the outline, is the rigid motion's alone.
-   * Half the skull's travel and 40% of the roll move a layered avatar's
+   * the turn of the face inside the mesh, which makes up the rest, the hair
+   * and the head's outline with it (the head's field, head-field.ts, laid
+   * when the picture could be read). Where the field ends the picture goes
+   * with the rigid motion, so what the rigid motion does not carry of the
+   * head's roll is not seen: a roll, an affine motion of the whole head, is
+   * the rigid motion's alone. Half the skull's travel (its yaw's as at a 7
+   * degree limit) and 40% of the roll move a layered avatar's
    * head, which hands the motion over to the body down the neck
    * (neck-blend.ts); a cut-out's bust leans by half the travel and 30% of
    * the roll (render2d.ts applyBustTransform); an opaque photo moves whole,
@@ -583,7 +594,11 @@ export class AvatarEngine {
    * (its edge, in the whole framing, tilts by that: at most 0.6 degrees,
    * as today's motion's does).
    */
-  private headFrame3d(): { offset: HeadOffset; turn: ((pts: Point[]) => void) | undefined } {
+  private headFrame3d(): {
+    offset: HeadOffset;
+    turn: ((pts: Point[]) => void) | undefined;
+    head: ((pts: Point[]) => void) | undefined;
+  } {
     const picture = this.picture;
     const geom = picture.headGeom;
     if (this.headTurnFor !== picture.mesh) {
@@ -594,13 +609,17 @@ export class AvatarEngine {
     const turner = this.headTurn;
     const { pose, brow } = this.motion.pose3d(this.tuning.headMotion);
     const still: HeadOffset = { dx: 0, dy: 0, roll: 0, fdx: 0, fdy: 0 };
-    if (!turner || !geom) return { offset: still, turn: undefined };
+    if (!turner || !geom) return { offset: still, turn: undefined, head: undefined };
     const layered = !!this.layers;
     const share = layered || picture.cutOut ? 0.5 : 0.35;
     const rollShare = layered ? 0.4 : picture.cutOut ? 0.3 : 0.2;
     const skull = turner.skullShift(pose);
     const offset: HeadOffset = {
-      dx: skull.x * share,
+      // The rigid motion follows the skull's yaw as far as it did at a 7
+      // degree limit: the two degrees more (YAW_GAIN) are the face's and the
+      // hair's alone (head-field.ts), so the body, the shoulders and the
+      // picture's edge move no more than they did.
+      dx: (skull.x * share) / YAW_GAIN,
       dy: skull.y * share,
       roll: pose.roll * rollShare,
       fdx: 0,
@@ -613,6 +632,9 @@ export class AvatarEngine {
     return {
       offset,
       turn: quiet ? undefined : (pts) => turner.apply(pts, pose, rigid, brow),
+      // The head's field (head-field.ts) turns with the face, by the turn
+      // just applied to it.
+      head: quiet || !turner.head ? undefined : (pts) => turner.field(pts),
     };
   }
 
@@ -643,7 +665,7 @@ export class AvatarEngine {
     const headOffset = head3d?.offset ?? this.motion.headOffset(picture.headGeom, travel.head);
     const neck = this.neckFor(headOffset);
     this.turning = !!head3d?.turn;
-    const pts = this.deformedPoints(head3d?.turn, neck);
+    const pts = this.deformedPoints(head3d?.turn, neck, head3d?.head);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     composeFrame({
       ctx,

@@ -5,17 +5,19 @@
  * (its own picture for a body, and for a head the same picture faded out
  * down the neck, as a published head layer is), its head turned in depth
  * to every corner of the personality's limits, still and mid-sentence.
- * For each frame the mesh's outer boundary on the canvas and what the
- * canvas held just before the mesh was drawn (seam-probe.ts). Nothing in
- * here touches Node or the DOM: the caller provides the canvas reads.
+ * For each frame the mesh's outer boundary on the canvas (the head's
+ * field's outer edge, the neck band's bottom) and what the canvas held just
+ * before the mesh was drawn, and the mesh drawn over two backdrops for the
+ * seams inside it (seam-probe.ts). Nothing in here touches Node or the DOM:
+ * the caller provides the canvas reads.
  */
 import type { AvatarEngine } from "../engine";
-import type { Point } from "../engine/geometry";
+import type { FaceMesh, Point } from "../engine/geometry";
 import { POSE_LIMIT_DEG } from "../engine/head-personality";
 import { engineSeam } from "../engine/seam";
 import type { Affine } from "../engine/warp-gl";
 import type { Cue, Rig } from "../types";
-import { meshBoundary, type Segment } from "./seam-probe";
+import { drawnMask, meshBoundary, type Segment } from "./seam-probe";
 
 /** The stage's side: the dashboard preview's scale, at a quarter of the
  *  area (the face is ~300 px across). */
@@ -79,6 +81,25 @@ export interface SeamFrame {
   segments: Segment[];
   /** The fold clamp's share of the turn kept (1: all). */
   scale: number;
+  /** The mesh drawn again over a magenta and over a green backdrop in
+   *  place of the picture, RGBA, and the pixels its drawn triangles cover
+   *  (seam-probe.ts probeLeaks). */
+  backdrops: [Uint8ClampedArray, Uint8ClampedArray];
+  drawn: Uint8Array;
+  /** How far the head's field's vertices moved this frame, px at most (0:
+   *  none, or no field). */
+  headShift: number;
+}
+
+/** Every vertex of `mesh` where it rests, in the deformation's order. */
+function restOf(mesh: FaceMesh): Point[] {
+  const base = mesh.basePoints;
+  return [
+    ...base,
+    ...mesh.derivedParents.map(([a, b]) => ({ x: (base[a].x + base[b].x) / 2, y: (base[a].y + base[b].y) / 2 })),
+    ...mesh.neckBand.map((v) => v.base),
+    ...(mesh.head?.vertices.map((v) => v.base) ?? []),
+  ];
 }
 
 /**
@@ -100,14 +121,32 @@ export async function playSeamScript(
       e.tick(clock.now);
     }
   };
-  // What each frame drew the mesh over, with and through.
+  // What each frame drew the mesh over, with and through, and the mesh
+  // drawn over the two backdrops (the canvas put back after each: the
+  // test's picture is opaque, so its pixels read back exactly).
   let under: Uint8ClampedArray | null = null;
   let drawn: { pts: Point[]; affine: Affine } | null = null;
+  let backdrops: [Uint8ClampedArray, Uint8ClampedArray] | null = null;
   const warp = e.meshWarp;
   const draw = warp.draw.bind(warp);
   warp.draw = (ctx, pts, affine) => {
     under = read();
     drawn = { pts: pts.map((p) => ({ ...p })), affine: { ...affine } };
+    const { width, height } = ctx.canvas;
+    const saved = ctx.getImageData(0, 0, width, height);
+    const over = (colour: string) => {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = "copy";
+      ctx.fillStyle = colour;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+      draw(ctx, pts, affine);
+      const pixels = read();
+      ctx.putImageData(saved, 0, 0);
+      return pixels;
+    };
+    backdrops = [over("#ff00ff"), over("#00ff00")];
     draw(ctx, pts, affine);
   };
   const DEG = Math.PI / 180;
@@ -122,15 +161,26 @@ export async function playSeamScript(
   const capture = (name: string) => {
     under = null;
     drawn = null;
+    backdrops = null;
     e.render();
-    if (!under || !drawn) throw new Error(`${name}: the mesh was not drawn`);
+    if (!under || !drawn || !backdrops) throw new Error(`${name}: the mesh was not drawn`);
     const { pts, affine } = drawn as { pts: Point[]; affine: Affine };
+    const rest = restOf(e.mesh);
+    const head = e.mesh.head;
+    let headShift = 0;
+    if (head) {
+      for (let i = head.first; i < head.first + head.count; i++)
+        headShift = Math.max(headShift, Math.hypot(pts[i].x - rest[i].x, pts[i].y - rest[i].y));
+    }
     frames.push({
       name,
       frame: read(),
       under,
       segments: meshBoundary(e.mesh, pts, affine),
       scale: engine.headTurnStats()?.scale ?? 1,
+      backdrops,
+      drawn: drawnMask(e.mesh, pts, rest, affine, SEAM_SIZE, e.cutOut),
+      headShift,
     });
   };
   tick(40);

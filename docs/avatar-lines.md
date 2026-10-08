@@ -1426,6 +1426,137 @@ drawn mouth, make your own in the Mouth panel).
   share of the head's motion, and her background layer's halo shows along
   the left shoulder at the largest turns (main shows a darker double edge
   there); the animal crease above is unchanged, as all animal output is.
+- The hair, the ears and the head's outline turn with the face, stage 2
+  (2026-10-08; `embed/src/engine/head-field.ts`, `head-turn.ts`,
+  `head-personality.ts`, `mesh-warp.ts`, `warp-gl.ts`, `picture.ts`,
+  `engine.ts`). Stage 1 turned the face inside a still head: the outline
+  (the forehead's hairline, the temples) was held where the head's rigid
+  motion put it, so the face slid under its own hair. Now a *head field*
+  carries the turn out over the hair and the ears to the head's silhouette.
+  It is part of the face mesh, not a second warp: a ring of triangles whose
+  inner edge is the face's outline (the rig's boundary from 234 over the
+  top to 454) and whose ends are the neck band's end columns, along spokes
+  from the skull's centre (canonical (0, 2.5, -4.3) cm through the photo's
+  fitted camera), one per outline landmark, four vertices each out to where
+  the field ends. The face and the field share every vertex they meet at
+  and are drawn in the same pass (on the GPU, the same draw), so there is
+  no seam and nothing moves twice. *Where it ends* is read off the
+  picture once (its pixels at most 768 a side): on a cut-out (sakineh,
+  mehdi_avatar) 0.12 IOD past the alpha silhouette, into the clear, short
+  of anything opaque beyond, so the silhouette itself moves with its alpha
+  (the warp replaces what is under a moved triangle); on an opaque photo
+  (the Reference, bita) where the background starts, told by the colour the
+  picture shows well away from the head (one colour: a plain backdrop) or by
+  a layered avatar's own background layer, 0.08 IOD past it over a flat
+  background and 0.05 IOD inside the hair over anything else, so a busy
+  background is never stretched; where the background cannot be told, the
+  canonical skull's outline, the field fading inside 85% of it; never past
+  what a layered avatar's head and body layers cover (its background layer
+  stays still), never within 0.03 IOD of the picture's edge. A picture that
+  cannot be read (a cross-origin texture) gets no field and turns as in
+  stage 1. *How it moves*: the outline from 234 to 454 turns with the face
+  as far as its band of hair takes (30% of the band's width, eased into past
+  70% of it), easing in over 0.6 IOD from its held ends below the ears
+  (moving whole beside a held 234 crushed the temple's thin triangles at a
+  9 degree turn and a nod); the harmonic correction takes out only what the
+  outline does not travel. The field's own vertices turn on the skull: a
+  depth along each spoke on an ellipse through the outline's depth and the
+  silhouette, where the depth is the skull centre's, rotated by the same yaw
+  and pitch about the same pivot, the rigid motion undone, their share
+  falling from halfway along the spoke to 0 where the field ends. A sphere
+  turned about its centre keeps its silhouette, and so does the head: the
+  hair slides over it, compressing on the side the face turns toward and
+  opening on the other; the hairline goes with the forehead. The ears, near
+  the pivot's depth, move as the head's rigid motion moves them, as they
+  did. *Drawn* only where it moved, on both paths and over any picture
+  (laid over an opaque one, replacing what is under a cut-out): at rest the
+  field is the picture under it, pixel for pixel, and it is laid only for
+  the turn in depth, so an animal, a cartoon or `headMotion: "2d"` has none
+  and draws exactly as before. On the GPU the triangles before the field's
+  are drawn as one prefix when none of it moved, else the face's and the
+  field's moved ones as a subset. *The 2D path*, turning, now pads every
+  triangle (stage 1 padded only where the lower face's rig moves the mesh):
+  unpadded, a software canvas's anti-aliased clips let the picture under
+  the eyes and the forehead, shifted by the turn, through every edge, a
+  faint wireframe (42 dB against the GPU path at a 9 degree turn in
+  Playwright's Chromium); and the mouth subdivision's T-junctions are no
+  longer taken for the mesh's outer edge (each of a split edge's three
+  pieces is in one triangle, so all three lost their pads while turning: a
+  jagged ring round the mouth on Skia). *The yaw* is now at most 9 degrees
+  (`POSE_LIMIT_DEG`), the personality's yaw drives (the drift, a phrase's
+  shift, a glance) 9/7 of what they were; the roll a turn brings, and the
+  head's rigid travel (`engine.ts` headFrame3d), are the 7 degree turn's,
+  so the body, the shoulders and an opaque picture's edge move no more than
+  in stage 1: the two degrees more are the face's and the hair's. Twenty
+  simulated minutes per person (idle and the production sentence, 30 fps):
+  yaw peaks at 7.3 degrees (p95 5.0; stage 1 5.7, 3.9), past the soft
+  limit's knee 0.64% of frames as before; the face's fold easing on 1.7% of
+  mehdi_avatar's frames (stage 1 0.01%: its nose's side) and 0.07% of bita's,
+  never anyone else's; the scale-back never; the field's band cap on 0.64%
+  of bita's frames (keeping at least 97% of the outline's travel), never
+  anyone else's; the field's smallest triangle at 53% of its area.
+  *Measured* with stage 1's seam detector, its boundary now the field's
+  outer edge, against the references and what the canvas held before the
+  mesh was drawn, and a new leak test inside the mesh (each frame's mesh
+  drawn again over a magenta and over a green backdrop in place of the
+  picture: a pixel inside the drawn triangles, 2 px from their edge, where
+  the two differ shows the backdrop through a gap or a pixel drawn twice);
+  rest, idle, forced sway and turn, eight frames of the sentence, a full
+  nod, a full turn and the six corners of the pose box at 9 degrees (stage
+  1 at 7); headless Chrome on Metal; sakineh, mehdi_avatar (layered and as
+  a cut-out), bita, the Reference and the cartoon, both paths, 960 and 1440
+  face framings and sakineh's and mehdi_avatar's published whole-picture
+  framing: 0 seams, 0 tears and 0 leaking pixels everywhere (stage 1 the
+  same, without a field), the layers' neck grid 0 and 0 at the face
+  framings (see below for the whole picture). CI holds it on the
+  committed photo, opaque and layered: on Skia (`seams.test.ts`) and in
+  Chromium on both paths (`browser-tests/seams.test.ts`) no seam, no tear,
+  no run stepped by more than 3 levels along the field's outer edge and the
+  neck band's bottom, the field moved in every frame, no pixel of it
+  showing the backdrop, and at most 200 pixels of the face's own triangles
+  (a software raster leaves a few: Skia and Linux Chromium's 2D path about
+  a hundred where padded clips meet at a sharp angle, at most 14 of the
+  backdrops' 255 levels; Linux's SwiftShader GPU path 9 to 24 single pixels
+  at the mouth subdivision's T-junctions; macOS none. Before the turn
+  padded every triangle, eight and a half thousand on Skia, a wireframe;
+  with the T-junctions unpadded, eight hundred, a ring). At the
+  whole-picture framing mehdi_avatar's neck-grid probe reports about 200
+  lines in either stage: its rows fall across the lips there, under the
+  face mesh, which the probe does not see (the frame is clean). Lip-sync,
+  the production sentence, sakineh, mehdi_avatar, bita and the Reference:
+  with the head still every mouth landmark of every frame is stage 1's;
+  turning,
+  the mouth's shape after similarity alignment within 0.05% of its width
+  (stage 2 0.048% worst, stage 1 0.049%) and its opening to its width
+  unchanged. Goldens: the human subject's every frame (darwin-arm64 and
+  linux-x64, Skia and Chromium); toon and animal byte-identical; the
+  draw-call goldens keep the face mesh's digest and drawing, and add the
+  field's vertices' digest. GPU against 2D on the human: 45.3 dB min on
+  macOS (mean 48.0), 48.4 on Linux (51.5). Frame cost (the tick's and the
+  render's JavaScript, 960 stage, face framing, the production sentence,
+  frames paced at 60 Hz, three rounds interleaved with stage 1's on a
+  machine shared with other work; median and p95): the GPU path unchanged
+  within 0.1 ms (sakineh 1.3 and 1.6 ms, mehdi_avatar 1.3 and 1.6, bita 0.9
+  and 1.3, the Reference 0.5 and 0.7, the cartoon 0.4 and 0.7). The 2D path
+  (no WebGL) takes 0.2 to 0.3 ms more at the median (sakineh 4.9,
+  mehdi_avatar 4.8, bita 4.0, the Reference 3.6; the cartoon 2.6, as
+  before) but rasterizes 45 to 70% more pixels a frame (the hair, redrawn;
+  5% more triangles), and on the two cut-outs, where each moved triangle
+  erases and redraws, its p95 (the frames that wait for the raster) rose:
+  sakineh 23 to 24 ms against stage 1's 6 to 17, mehdi_avatar 19 to 24
+  against 6 to 18 (bita 7 against 27, the Reference 4.4 against 4.1; on
+  this machine one run's p95 differs from the next's by up to 35 ms).
+  Erasing a field triangle's own outline instead of its box did not help.
+  *Still weak*: the silhouette of long hair below the ears (the field ends
+  at the ears' level, the neck band's end columns) moves only rigidly; the
+  ears are the rigid motion's; the hair's texture shears a little where the
+  hairline travels far and the silhouette does not (a sphere's surface
+  sliding, but read on a flat picture); mehdi_avatar's nose side still
+  eases at the largest yaw, now a little more often; bita's shoulders lie
+  within the neck band's level reach and take a share of the head's rigid
+  motion (no more than in stage 1), her background layer's halo along the
+  left shoulder at the largest turns; the 2D fallback's raster stalls on
+  cut-outs; the animal crease above is unchanged.
 
 ## Data changes
 
