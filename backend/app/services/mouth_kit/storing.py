@@ -174,12 +174,18 @@ def teeth_changed(avatar: Avatar, reason: Note) -> None:
         target = performance_kit.for_standard_teeth(target)
     # A record from before `fitted` was kept: the values are the kit's.
     fitted = kit.get("fitted")
-    for key in FITTED_WITH_TEETH:
-        if fitted is None or key not in fitted or profile.get(key) == fitted[key]:
-            profile[key] = target[key]
+    refitted = [
+        key
+        for key in FITTED_WITH_TEETH
+        if fitted is None or key not in fitted or profile.get(key) == fitted[key]
+    ]
+    for key in refitted:
+        profile[key] = target[key]
     held = _hold_profile(config, profile)
     kit = kit.copy()
-    kit["fitted"] = {**(fitted or {}), **{k: held[k] for k in FITTED_WITH_TEETH}}
+    # Only what was refitted is the kit's now: a value the owner moved keeps
+    # differing from `fitted`, so the next teeth change leaves it theirs too.
+    kit["fitted"] = {**(fitted or {}), **{k: held[k] for k in refitted}}
     if (kit.get("teeth") or {}).get("used"):
         kit["teeth"] = {"used": False, "reason": reason}
     config["kit"] = kit

@@ -740,13 +740,6 @@ def test_teeth_changed_without_a_kit_changes_nothing(raw):
     assert avatar.mouth_config == raw
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="teeth_changed records every teeth value of the held profile as the kit's "
-    "`fitted`, the owner's moved one included, so the next teeth change sees it as "
-    "the kit's and refits it (storing.py: kit['fitted'] = {..., k: held[k] for k in "
-    "FITTED_WITH_TEETH})",
-)
 def test_a_teeth_value_the_owner_moved_survives_a_second_teeth_change():
     config = _kit_config({**DEFAULTS, "teethY": 0.03, "teethScale": 1.0},
                          {"teethY": 0.016, "teethScale": 1.0})
