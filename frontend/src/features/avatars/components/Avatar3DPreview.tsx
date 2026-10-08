@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { FieldError } from "@/components/ui/FieldError";
 import { cx } from "@/lib/cx";
 
+/** Where the KTX2 transcoder is: the API serves it beside liveface-3d.js
+ *  (embed scripts/build.mjs), on this origin, under the dashboard's CSP. */
+const TRANSCODER_PATH = "/api/";
+
 /**
  * 3D GLB avatar preview. The Three.js engine is dynamically imported so
  * the main dashboard bundle stays slim — only avatars with kind=model3d
@@ -35,7 +39,7 @@ export function Avatar3DPreview({
     const boot = async () => {
       const { Avatar3DEngine } = await import("@liveface/embed/engine3d");
       if (cancelled || !canvasRef.current) return;
-      const instance = await Avatar3DEngine.load(canvasRef.current, modelUrl);
+      const instance = await Avatar3DEngine.load(canvasRef.current, modelUrl, { transcoderPath: TRANSCODER_PATH });
       if (cancelled) {
         instance.destroy();
         return;

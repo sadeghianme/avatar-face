@@ -66,6 +66,8 @@ jobs:
           mkdir -p ../embed/dist
           echo "// ci stub" > ../embed/dist/liveface.js
           echo "// ci stub" > ../embed/dist/liveface-3d.js
+          echo "// ci stub" > ../embed/dist/basis_transcoder.js
+          printf '\0asm\1\0\0\0' > ../embed/dist/basis_transcoder.wasm
           cp ../embed/assets/mouth-teeth.webp ../embed/assets/mouth-teeth.rig.json ../embed/dist/
       - name: Tests
         run: python -m pytest tests -q
