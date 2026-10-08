@@ -358,6 +358,21 @@ def create_app() -> FastAPI:
         """The standard teeth photo's landmarks."""
         return _serve_widget_bundle("mouth-teeth.rig.json", request, "application/json")
 
+    # The KTX2 transcoder (three's Basis Universal build) that liveface-3d.js
+    # decodes a model's textures with: the embed build copies it beside the
+    # bundle (embed/scripts/build.mjs), and liveface-3d.js fetches it from
+    # its own directory, so a customer's page loads it from here, as it does
+    # the bundle, and never from a CDN.
+    @app.get("/basis_transcoder.js", include_in_schema=False)
+    async def basis_transcoder_js(request: Request):
+        """The transcoder's JavaScript wrapper (run in a worker)."""
+        return _serve_widget_bundle("basis_transcoder.js", request)
+
+    @app.get("/basis_transcoder.wasm", include_in_schema=False)
+    async def basis_transcoder_wasm(request: Request):
+        """The transcoder's WebAssembly."""
+        return _serve_widget_bundle("basis_transcoder.wasm", request, "application/wasm")
+
     app.include_router(auth.router)
     app.include_router(orgs.router)
     app.include_router(avatars.router)

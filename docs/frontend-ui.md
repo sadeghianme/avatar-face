@@ -29,7 +29,7 @@ element, and `className` added last so a caller can adjust it.
 | `IconButton` | One icon; `label` is required (its accessible name), `tooltip` shows it on hover |
 | `CopyButton` | Copies `text`, says `copiedLabel` (and `copiedIcon`) for 1.5s |
 | `ConfirmButton` | A destructive action asked once, in place: the question with Cancel (focused) and the confirm |
-| `MenuButton` | A button that opens a short menu (the language menu) |
+| `MenuButton` | A button that opens a short menu of exclusive choices (the language menu): the WAI-ARIA menu button pattern, the focus on the chosen item as it opens, Up/Down/Home/End and type-ahead (`roving.ts` `menuMove`, `typeaheadTarget`), Enter/Space to choose, Escape back to the button, Tab on from it |
 | `Field` | Label, control, hint, error, with the ids wired (`field-ids.ts`): the control inside gets its `id`, `aria-describedby` and `aria-invalid` from the field; its error is a `FieldError` |
 | `FieldError` | Error text (`.field-error`), `role="alert"` (announced as it appears) with an `id` to name in a control's `aria-describedby`; `live={false}` for an error that is part of what the page shows (a failed build's reason, a job's error in a list) |
 | `Label` | A control's name (`htmlFor`), or a group's (`as="p"`, named in `aria-labelledby`); `look="plain"` for a row that wraps its control, `srOnly` |

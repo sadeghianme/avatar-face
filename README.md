@@ -91,6 +91,20 @@ Create an API key (API keys page), then:
 </script>
 ```
 
+`window.Liveface` appears once the widget is up (or has failed, when its calls
+answer quietly). With several widgets on one page, `Liveface.speak()` and the
+rest act on the **first widget to come up**, and each widget has its own handle
+with the same calls: `Liveface.get("AVATAR_ID")` (or its canvas, or its script
+tag), `Liveface.all()`, or `event.detail` of its `liveface:ready` event, which
+fires on its canvas (bubbling) and on its script tag:
+
+```html
+<script id="guide" src="…/liveface.js" data-avatar="GUIDE_ID" data-key="lf_…"></script>
+<script>
+  document.getElementById("guide").addEventListener("liveface:ready", (e) => e.detail.speak("Hi!"));
+</script>
+```
+
 The dashboard's **Simulator** runs a pasted snippet in a clean frame. A sample
 third-party page is `embed/example/index.html` (serve it from another origin to
 exercise the cross-origin path). An avatar's share link (`/s/<token>`) is a

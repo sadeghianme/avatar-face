@@ -14,6 +14,12 @@
  *   Liveface.isSpeaking()
  *   Liveface.listen({lang}) — browser STT, resolves with the transcript
  *   Liveface.sttSupported()
+ *   Liveface.tune({...}), Liveface.engine
+ *
+ * With several widgets on a page, those act on the FIRST to come up (on a
+ * page with one, that one), and each widget has its own handle with the
+ * same calls: Liveface.get(avatarId or its canvas or script tag),
+ * Liveface.all(), and `event.detail` of its `liveface:ready` (widget/handles.ts).
  *
  * The key travels in the X-Api-Key header, never in a URL (where it would
  * reach access logs, proxies and Referer headers).
@@ -47,23 +53,11 @@ import type { AvatarMouthConfig } from "./mouth";
 import { EngineTuning, FaceType, Rig, SynthesisPayload } from "./types";
 import { showFailure } from "./widget/failure";
 import { asFailure, fetchJson, loadImage, loadScript } from "./widget/load";
-
-interface LivefaceApi {
-  speak(text: string): Promise<void>;
-  stop(): void;
-  isSpeaking(): boolean;
-  listen(options?: ListenOptions): Promise<string>;
-  sttSupported(): boolean;
-  /** Adjust animation live, e.g. Liveface.tune({ mouthOpen: 1.3 }). */
-  tune(partial: Partial<EngineTuning>): void;
-  /** The engine itself: a page may call any of its public members, so
-   *  they keep their names in liveface.js (scripts/mangle-names.mjs). */
-  engine: AvatarEngine | Avatar3DEngine | null;
-}
+import { addWidget, announce, livefacePage, type LivefaceHandle, type LivefacePage } from "./widget/handles";
 
 declare global {
   interface Window {
-    Liveface?: LivefaceApi;
+    Liveface?: LivefacePage;
     __Liveface3D?: {
       load: (canvas: HTMLCanvasElement, modelUrl: string, options?: Avatar3DOptions) => Promise<Avatar3DEngine>;
     };
@@ -108,18 +102,6 @@ function headMotionAttr(value: string | undefined): HeadMotionMode | undefined {
   return v === "2d" || v === "3d" ? v : undefined;
 }
 
-/** window.Liveface for an avatar that could not be shown: the page's calls
- *  answer quietly (nothing to say, nothing speaking) instead of throwing. */
-const UNAVAILABLE: LivefaceApi = {
-  speak: () => Promise.resolve(),
-  stop: () => undefined,
-  isSpeaking: () => false,
-  listen: (options?: ListenOptions) => listen(options),
-  sttSupported,
-  tune: () => undefined,
-  engine: null,
-};
-
 async function bootstrap(script: HTMLScriptElement): Promise<void> {
   const avatarId = script.dataset.avatar;
   const apiKey = script.dataset.key;
@@ -155,15 +137,20 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     // Until the avatar's own locale is known, the note speaks the snippet's
     // language, else the page's.
     const locale = script.dataset.locale || document.documentElement?.lang || "en";
-    showFailure(canvas, asFailure(error, "engine"), locale);
+    const failure = asFailure(error, "engine");
+    showFailure(canvas, failure, locale);
+    script.dispatchEvent(
+      new CustomEvent("liveface:error", { detail: { stage: failure.stage, message: failure.message } })
+    );
     // A page that calls Liveface.speak() gets a quiet answer, not a
     // TypeError; another widget's working API is left in place.
-    window.Liveface ??= UNAVAILABLE;
+    livefacePage();
   }
 }
 
 /** Everything after the canvas is in place: the avatar fetched and drawn,
- *  window.Liveface set. Throws (a WidgetFailure, mostly) when it cannot. */
+ *  its handle on the page (widget/handles.ts). Throws (a WidgetFailure,
+ *  mostly) when it cannot. */
 async function mount(
   script: HTMLScriptElement,
   canvas: HTMLCanvasElement,
@@ -309,7 +296,9 @@ async function mount(
   };
   const browserTts = useBrowserVoice ? new BrowserTTS(engine, fetchCues) : null;
 
-  window.Liveface = {
+  const handle: LivefaceHandle = {
+    avatar: avatarId,
+    canvas,
     speak: (text: string) => (browserTts ? browserTts.speak(text, voice || undefined, locale) : queue.speak(text)),
     stop: () => {
       queue.stop();
@@ -323,8 +312,9 @@ async function mount(
     },
     engine,
   };
+  addWidget(handle, script);
   canvas.setAttribute("data-liveface-state", "ready");
-  canvas.dispatchEvent(new CustomEvent("liveface:ready", { bubbles: true }));
+  announce(canvas, script, "liveface:ready", handle);
 }
 
 const current = document.currentScript as HTMLScriptElement | null;
