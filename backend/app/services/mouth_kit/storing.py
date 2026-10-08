@@ -118,15 +118,19 @@ async def store(
         keys = FITTED_WITHOUT_TEETH
     else:
         config["teeth"] = mouth_config.generic_teeth_record(
-            _standard_teeth(reason or _note("teeth_failed", "The teeth could not be made")))
+            _standard_teeth(reason or _note("teeth_failed", "The teeth could not be made"))
+        )
         keys = FITTED_WITH_TEETH
     # The fitted values the kit decides; everything else the owner set (or
     # the defaults, on a new avatar) stays. Held to the API's ranges like
     # any profile an owner saves: it is served to strangers.
-    profile = _hold_profile(config, {
-        **(config.get("profile") or {}),
-        **{k: fitted[k] for k in keys},
-    })
+    profile = _hold_profile(
+        config,
+        {
+            **(config.get("profile") or {}),
+            **{k: fitted[k] for k in keys},
+        },
+    )
 
     generated = generated_count(result)
     if generated:
@@ -141,7 +145,9 @@ async def store(
             previous.append(old)
         ai_edited = disclosure.without_ai_shapes(ai_edited)
     config["kit"] = kit_record(
-        result, source=source, teeth={"used": new_photo is not None, "reason": reason},
+        result,
+        source=source,
+        teeth={"used": new_photo is not None, "reason": reason},
         fitted={k: profile[k] for k in keys},
     )
     avatar.mouth_config = json.dumps(config)
@@ -213,9 +219,7 @@ def drop(avatar: Avatar, reason: Note) -> list[str]:
     return [key]
 
 
-async def follow_points(
-    avatar: Avatar, storage: Storage, points, image_size=None
-) -> list[str]:
+async def follow_points(avatar: Avatar, storage: Storage, points, image_size=None) -> list[str]:
     """Move the draft's kit onto the face's points as they are now, with no
     AI call: points re-confirmed on the same picture (Mark the face's saved
     marks, a re-detection), or the picture moved under the same face (a

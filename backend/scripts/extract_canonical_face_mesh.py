@@ -14,6 +14,7 @@ Run from backend: .venv/bin/python scripts/extract_canonical_face_mesh.py
 
 Provenance: MediaPipe (Google), Apache License 2.0; canonical_face_model.obj.
 """
+
 from __future__ import annotations
 
 import argparse

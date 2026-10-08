@@ -31,9 +31,7 @@ async def test_create_from_stock_runs_pipeline(client):
     )
     assert response.status_code == 201, response.text
     avatar_id = response.json()["id"]
-    detail = (
-        await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)
-    ).json()
+    detail = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
     assert detail["status"] == "ready"
     assert detail["rig_url"] and detail["thumbnail_url"]
     assert detail["name"] == "Nora"

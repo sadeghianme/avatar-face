@@ -72,7 +72,9 @@ def main(source: Path) -> int:
             print("missing", path.name)
             continue
         with Image.open(path) as opened:
-            thumb = crop_square(opened.convert("RGBA")).resize((SIZE, SIZE), Image.Resampling.LANCZOS)
+            thumb = crop_square(opened.convert("RGBA")).resize(
+                (SIZE, SIZE), Image.Resampling.LANCZOS
+            )
         data = encode(thumb)
         (OUT / f"{model}-{look}.webp").write_bytes(data)
         print(f"{model}-{look}.webp {len(data) / 1024:.1f} KB")

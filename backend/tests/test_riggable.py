@@ -64,9 +64,13 @@ def test_a_wide_picture_is_judged_on_its_shorter_side():
     # width. The avatar shows the face in a square, so it is not too small.
     wide = (1376, 768)
     half = 0.226 * 768 / 2
-    assert check_landmarks(face(cx=688, cy=384, half_w=half, half_h=half * 1.2), wide, detected=True).ok
+    assert check_landmarks(
+        face(cx=688, cy=384, half_w=half, half_h=half * 1.2), wide, detected=True
+    ).ok
     small = 0.15 * 768 / 2
-    assert not check_landmarks(face(cx=688, cy=384, half_w=small, half_h=small * 1.2), wide, detected=True).ok
+    assert not check_landmarks(
+        face(cx=688, cy=384, half_w=small, half_h=small * 1.2), wide, detected=True
+    ).ok
 
 
 def test_a_face_running_off_the_edge_is_rejected():

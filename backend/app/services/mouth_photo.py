@@ -180,7 +180,10 @@ def encode_for_visitors(photo: bytes) -> bytes:
         icc = image.info.get("icc_profile")
         out = io.BytesIO()
         image.save(
-            out, format="WEBP", quality=MOUTH_PHOTO_QUALITY, method=4,
+            out,
+            format="WEBP",
+            quality=MOUTH_PHOTO_QUALITY,
+            method=4,
             **({"icc_profile": icc} if icc else {}),
         )
     return out.getvalue()
@@ -269,9 +272,7 @@ async def store(
     return previous
 
 
-async def put_photo(
-    avatar: Avatar, storage: Storage, photo: bytes, rig: dict
-) -> tuple[str, str]:
+async def put_photo(avatar: Avatar, storage: Storage, photo: bytes, rig: dict) -> tuple[str, str]:
     """Write an admitted mouth photo and its rig under fresh keys, and
     return them (image, rig); the config is the caller's to change. Fresh
     keys per photo: the published snapshot may still point at copies of
@@ -306,9 +307,7 @@ def face_request(data: bytes) -> Request:
     if pa.yaw_offset(points) > pa.MAX_TOUCHUP_YAW:
         # The renderer places the teeth frontally; a turned "ee" photo would
         # give it a foreshortened arch.
-        raise TeethFailure(
-            "face_turned", "The head is turned too far to make teeth for it"
-        )
+        raise TeethFailure("face_turned", "The head is turned too far to make teeth for it")
     crop = pa.crop_face(image, pa.face_crop_box(points))
     return Request(pa._jpeg(crop, pa.CROP_QUALITY), "image/jpeg")
 
@@ -400,8 +399,9 @@ async def make_teeth(
                 tried_crop = True
                 fallback = await run_cpu(fallback_request, source)
                 if fallback is not None:
-                    logger.info("teeth refused (%s); asking once more with the head crop",
-                                exc.reason)
+                    logger.info(
+                        "teeth refused (%s); asking once more with the head crop", exc.reason
+                    )
                     request = fallback
                     continue
             raise TeethFailure(

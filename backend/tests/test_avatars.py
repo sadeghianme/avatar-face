@@ -1,4 +1,3 @@
-
 from tests.conftest import create_org, create_ready_avatar, register_and_login, sample_png
 
 
@@ -37,9 +36,7 @@ async def test_confirm_before_upload_fails(client):
         headers=headers,
     )
     avatar_id = created.json()["avatar"]["id"]
-    response = await client.post(
-        f"/orgs/{org_id}/avatars/{avatar_id}/uploaded", headers=headers
-    )
+    response = await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/uploaded", headers=headers)
     assert response.status_code == 422
     assert response.json()["code"] == "image_missing"
 
@@ -49,9 +46,7 @@ async def test_full_pipeline_to_ready(client):
     org_id = await create_org(client, headers)
     avatar_id = await create_ready_avatar(client, headers, org_id)
 
-    detail = (
-        await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)
-    ).json()
+    detail = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
     assert detail["status"] == "ready"
     assert detail["rig_url"] and detail["thumbnail_url"] and detail["image_url"]
 
@@ -60,9 +55,7 @@ async def test_rig_json_is_valid(client):
     headers = await register_and_login(client, "alice")
     org_id = await create_org(client, headers)
     avatar_id = await create_ready_avatar(client, headers, org_id)
-    detail = (
-        await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)
-    ).json()
+    detail = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
 
     rig_response = await client.get(detail["rig_url"])
     assert rig_response.status_code == 200
@@ -72,7 +65,12 @@ async def test_rig_json_is_valid(client):
     assert len(rig["triangles"]) > 800
     assert len(rig["visemes"]) == 15
     assert set(rig["visemes"]["aa"]) == {
-        "jawOpen", "mouthClose", "mouthPucker", "mouthFunnel", "mouthStretch", "mouthSmile",
+        "jawOpen",
+        "mouthClose",
+        "mouthPucker",
+        "mouthFunnel",
+        "mouthStretch",
+        "mouthSmile",
     }
     # Synthetic rig must put the inner lip ring ON the mouth: inside face box,
     # in its lower half, tightly clustered.
@@ -89,9 +87,7 @@ async def test_thumbnail_served(client):
     headers = await register_and_login(client, "alice")
     org_id = await create_org(client, headers)
     avatar_id = await create_ready_avatar(client, headers, org_id)
-    detail = (
-        await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)
-    ).json()
+    detail = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
     response = await client.get(detail["thumbnail_url"])
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/jpeg"
@@ -104,21 +100,15 @@ async def test_avatars_are_org_scoped(client):
     org_b = await create_org(client, bob, "BobCo")
     avatar_id = await create_ready_avatar(client, alice, org_a)
     # Bob cannot see Alice's avatar — neither through her org nor his own.
-    assert (
-        await client.get(f"/orgs/{org_a}/avatars/{avatar_id}", headers=bob)
-    ).status_code == 404
-    assert (
-        await client.get(f"/orgs/{org_b}/avatars/{avatar_id}", headers=bob)
-    ).status_code == 404
+    assert (await client.get(f"/orgs/{org_a}/avatars/{avatar_id}", headers=bob)).status_code == 404
+    assert (await client.get(f"/orgs/{org_b}/avatars/{avatar_id}", headers=bob)).status_code == 404
 
 
 async def test_delete_avatar(client):
     headers = await register_and_login(client, "alice")
     org_id = await create_org(client, headers)
     avatar_id = await create_ready_avatar(client, headers, org_id)
-    response = await client.delete(
-        f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers
-    )
+    response = await client.delete(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)
     assert response.status_code == 204
     assert (
         await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)
@@ -152,9 +142,7 @@ async def test_retry_reenqueues(client):
     avatar_id = created.json()["avatar"]["id"]
     upload_url = created.json()["upload_url"]
     await client.put(upload_url, content=sample_png(), headers={"Content-Type": "image/png"})
-    response = await client.post(
-        f"/orgs/{org_id}/avatars/{avatar_id}/retry", headers=headers
-    )
+    response = await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/retry", headers=headers)
     assert response.status_code == 200
     detail = await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)
     assert detail.json()["status"] == "ready"
@@ -247,9 +235,7 @@ async def test_crop_is_resettable_and_two_crops_reset_all_the_way(client):
     headers = await register_and_login(client, "cropper2")
     org_id = await create_org(client, headers)
     avatar_id = await create_ready_avatar(client, headers, org_id)
-    original = (
-        await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)
-    ).json()
+    original = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
 
     for _ in range(2):
         await client.post(

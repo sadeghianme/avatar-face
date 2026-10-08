@@ -65,7 +65,9 @@ class FakeStorage(Storage):
     async def list_names(self, prefix: str) -> list[str]:
         if self.broken_listing:
             raise OSError("listing unavailable")
-        return sorted({k[len(prefix):].split("/", 1)[0] for k in self.files if k.startswith(prefix)})
+        return sorted(
+            {k[len(prefix) :].split("/", 1)[0] for k in self.files if k.startswith(prefix)}
+        )
 
     async def delete(self, key: str) -> None:
         if key in self.undeletable:
@@ -81,17 +83,31 @@ class FakeStorage(Storage):
         return len(doomed)
 
     def names_under(self, prefix: str) -> list[str]:
-        return sorted({k[len(prefix):].split("/", 1)[0] for k in self.files if k.startswith(prefix)})
+        return sorted(
+            {k[len(prefix) :].split("/", 1)[0] for k in self.files if k.startswith(prefix)}
+        )
 
 
 def _avatar(**fields) -> Avatar:
     """An Avatar row built in memory, never flushed: every column the code
     reads is given, since column defaults only apply on insert."""
     values = {
-        "id": AID, "org_id": ORG, "name": "Ada", "content_type": "image/png",
-        "framing": "face", "face_type": "human", "draft_revision": 0, "has_layers": False,
-        "image_key": None, "rig_key": None, "thumbnail_key": None, "mouth_config": None,
-        "voice_config": None, "published_config": None, "ai_edited": None, "scene_config": None,
+        "id": AID,
+        "org_id": ORG,
+        "name": "Ada",
+        "content_type": "image/png",
+        "framing": "face",
+        "face_type": "human",
+        "draft_revision": 0,
+        "has_layers": False,
+        "image_key": None,
+        "rig_key": None,
+        "thumbnail_key": None,
+        "mouth_config": None,
+        "voice_config": None,
+        "published_config": None,
+        "ai_edited": None,
+        "scene_config": None,
     }
     values.update(fields)
     return Avatar(**values)
@@ -100,9 +116,17 @@ def _avatar(**fields) -> Avatar:
 def _snapshot(**fields) -> dict:
     """A published config at revision 3, as `publish` writes one."""
     config = {
-        "revision": 3, "framing": "face", "scene": None, "face_type": "human", "voice": None,
-        "mouth": None, "image_key": f"{P3}/image.png", "rig_key": None, "thumbnail_key": None,
-        "layer_keys": None, "disclosure": {"ai_edited": None, "line": "human"},
+        "revision": 3,
+        "framing": "face",
+        "scene": None,
+        "face_type": "human",
+        "voice": None,
+        "mouth": None,
+        "image_key": f"{P3}/image.png",
+        "rig_key": None,
+        "thumbnail_key": None,
+        "layer_keys": None,
+        "disclosure": {"ai_edited": None, "line": "human"},
         "published_at": "2026-01-02T03:04:05+00:00",
     }
     config.update(fields)
@@ -198,8 +222,10 @@ async def test_a_photographic_mouth_on_a_face_that_may_not_have_it_publishes_as_
     and none of its files are copied."""
     storage = FakeStorage({f"{ROOT}mouth-s1.webp": b"teeth", f"{ROOT}mouth-s1.json": b"rig"})
     mouth = {
-        "renderer": "continuous", "profile": {"teethScale": 1.1},
-        "oral_image_key": f"{ROOT}mouth-s1.webp", "oral_rig_key": f"{ROOT}mouth-s1.json",
+        "renderer": "continuous",
+        "profile": {"teethScale": 1.1},
+        "oral_image_key": f"{ROOT}mouth-s1.webp",
+        "oral_rig_key": f"{ROOT}mouth-s1.json",
     }
     assert await publishing.publish_mouth(mouth, face_type, publishing._copier(storage, P3)) is None
     assert storage.names_under(f"{ROOT}published/") == []
@@ -218,21 +244,32 @@ async def test_the_classic_mouth_publishes_on_any_face_with_the_owners_character
 
 
 async def test_a_photographic_mouth_is_copied_under_the_snapshots_keys_with_its_records():
-    storage = FakeStorage({
-        f"{ROOT}mouth-s1.webp": b"teeth", f"{ROOT}mouth-s1.json": b"rig",
-        f"{ROOT}mouth-motion-s1.json": b"motion",
-    })
+    storage = FakeStorage(
+        {
+            f"{ROOT}mouth-s1.webp": b"teeth",
+            f"{ROOT}mouth-s1.json": b"rig",
+            f"{ROOT}mouth-motion-s1.json": b"motion",
+        }
+    )
     teeth = {"source": "ai", "model": "t"}
     mouth = {
-        "renderer": "continuous", "profile": {"teethScale": 1.1},
-        "oral_image_key": f"{ROOT}mouth-s1.webp", "oral_rig_key": f"{ROOT}mouth-s1.json",
-        "motion_key": f"{ROOT}mouth-motion-s1.json", "teeth": teeth, "kit": KIT,
+        "renderer": "continuous",
+        "profile": {"teethScale": 1.1},
+        "oral_image_key": f"{ROOT}mouth-s1.webp",
+        "oral_rig_key": f"{ROOT}mouth-s1.json",
+        "motion_key": f"{ROOT}mouth-motion-s1.json",
+        "teeth": teeth,
+        "kit": KIT,
     }
     published = await publishing.publish_mouth(mouth, "human", publishing._copier(storage, P3))
     assert published == {
-        "renderer": "continuous", "profile": {"teethScale": 1.1},
-        "oral_image_key": f"{P3}/mouth.webp", "oral_rig_key": f"{P3}/mouth-rig.json",
-        "motion_key": f"{P3}/mouth-motion.json", "teeth": teeth, "kit": KIT,
+        "renderer": "continuous",
+        "profile": {"teethScale": 1.1},
+        "oral_image_key": f"{P3}/mouth.webp",
+        "oral_rig_key": f"{P3}/mouth-rig.json",
+        "motion_key": f"{P3}/mouth-motion.json",
+        "teeth": teeth,
+        "kit": KIT,
     }
     assert storage.files[f"{P3}/mouth.webp"] == b"teeth"
     assert storage.files[f"{P3}/mouth-rig.json"] == b"rig"
@@ -246,8 +283,10 @@ async def test_a_teeth_photo_without_its_rig_is_not_published_nor_a_motion_that_
     its landmarks. A named file that is gone is simply not published."""
     storage = FakeStorage({f"{ROOT}mouth-s1.webp": b"teeth"})
     mouth = {
-        "renderer": "continuous", "profile": {},
-        "oral_image_key": f"{ROOT}mouth-s1.webp", "oral_rig_key": f"{ROOT}mouth-s1.json",
+        "renderer": "continuous",
+        "profile": {},
+        "oral_image_key": f"{ROOT}mouth-s1.webp",
+        "oral_rig_key": f"{ROOT}mouth-s1.json",
         "motion_key": f"{ROOT}mouth-motion-s1.json",
     }
     published = await publishing.publish_mouth(mouth, "human", publishing._copier(storage, P3))
@@ -258,12 +297,21 @@ async def test_a_teeth_photo_without_its_rig_is_not_published_nor_a_motion_that_
 
 
 async def test_a_publish_copies_the_draft_into_its_revisions_folder_and_records_what_it_serves():
-    storage = FakeStorage({
-        f"{ROOT}source.png": b"img", f"{ROOT}rig.json": b"rig", f"{ROOT}thumb.jpg": b"thumb",
-    })
+    storage = FakeStorage(
+        {
+            f"{ROOT}source.png": b"img",
+            f"{ROOT}rig.json": b"rig",
+            f"{ROOT}thumb.jpg": b"thumb",
+        }
+    )
     avatar = _avatar(
-        draft_revision=5, framing="full", face_type="cartoon", voice_config=json.dumps(VOICE),
-        image_key=f"{ROOT}source.png", rig_key=f"{ROOT}rig.json", thumbnail_key=f"{ROOT}thumb.jpg",
+        draft_revision=5,
+        framing="full",
+        face_type="cartoon",
+        voice_config=json.dumps(VOICE),
+        image_key=f"{ROOT}source.png",
+        rig_key=f"{ROOT}rig.json",
+        thumbnail_key=f"{ROOT}thumb.jpg",
         ai_edited={"mode": "generate", "model": "g1"},
     )
     config = await publishing.publish(avatar, storage)
@@ -271,9 +319,16 @@ async def test_a_publish_copies_the_draft_into_its_revisions_folder_and_records_
     prefix = f"{ROOT}published/r5"
     published_at = config.pop("published_at")
     assert config == {
-        "revision": 5, "framing": "full", "scene": None, "face_type": "cartoon", "voice": VOICE,
-        "mouth": None, "image_key": f"{prefix}/image.png", "rig_key": f"{prefix}/rig.json",
-        "thumbnail_key": f"{prefix}/thumb.jpg", "layer_keys": None,
+        "revision": 5,
+        "framing": "full",
+        "scene": None,
+        "face_type": "cartoon",
+        "voice": VOICE,
+        "mouth": None,
+        "image_key": f"{prefix}/image.png",
+        "rig_key": f"{prefix}/rig.json",
+        "thumbnail_key": f"{prefix}/thumb.jpg",
+        "layer_keys": None,
         "disclosure": {"ai_edited": {"mode": "generate", "model": "g1"}, "line": "cartoon"},
     }
     assert datetime.fromisoformat(published_at).utcoffset() is not None
@@ -308,7 +363,8 @@ async def test_only_the_layers_that_exist_are_published_and_only_for_a_layered_a
     config = await publishing.publish(layered, storage)
     prefix = f"{ROOT}published/r2"
     assert config["layer_keys"] == {
-        "background": f"{prefix}/layer-background.jpg", "head": f"{prefix}/layer-head.png",
+        "background": f"{prefix}/layer-background.jpg",
+        "head": f"{prefix}/layer-head.png",
     }
     assert storage.types[f"{prefix}/layer-background.jpg"] == "image/jpeg"
     assert storage.files[f"{prefix}/layer-head.png"] == b"head"
@@ -322,14 +378,16 @@ async def test_a_scene_is_published_by_value_without_a_picture_it_does_not_show(
     picture is neither copied nor named in the snapshot, and the draft keeps
     it."""
     draft_scene = {
-        "zoom": 1.2, "pan": {"x": -0.25, "y": 0.1},
+        "zoom": 1.2,
+        "pan": {"x": -0.25, "y": 0.1},
         "background": {"kind": "color", "color": "#1e3a8a", "image_key": f"{ROOT}scene-d1.webp"},
     }
     storage = FakeStorage({f"{ROOT}source.png": b"img", f"{ROOT}scene-d1.webp": b"bg"})
     avatar = _avatar(image_key=f"{ROOT}source.png", scene_config=copy.deepcopy(draft_scene))
     config = await publishing.publish(avatar, storage)
     assert config["scene"] == {
-        "zoom": 1.2, "pan": {"x": -0.25, "y": 0.1},
+        "zoom": 1.2,
+        "pan": {"x": -0.25, "y": 0.1},
         "background": {"kind": "color", "color": "#1e3a8a"},
     }
     assert avatar.scene_config == draft_scene
@@ -340,9 +398,11 @@ async def test_a_scene_is_published_by_value_without_a_picture_it_does_not_show(
 async def test_a_shown_background_picture_is_copied_into_the_snapshot():
     storage = FakeStorage({f"{ROOT}source.png": b"img", f"{ROOT}scene-d1.webp": b"bg"})
     avatar = _avatar(
-        draft_revision=1, image_key=f"{ROOT}source.png",
+        draft_revision=1,
+        image_key=f"{ROOT}source.png",
         scene_config={
-            "zoom": 0.4, "pan": {"x": 0.0, "y": 0.0},
+            "zoom": 0.4,
+            "pan": {"x": 0.0, "y": 0.0},
             "background": {"kind": "image", "image_key": f"{ROOT}scene-d1.webp"},
         },
     )
@@ -358,18 +418,23 @@ async def test_a_shown_picture_whose_file_is_gone_publishes_as_transparent():
     avatar = _avatar(
         image_key=f"{ROOT}source.png",
         scene_config={
-            "zoom": 0.4, "pan": {"x": 0.5, "y": 0.0},
+            "zoom": 0.4,
+            "pan": {"x": 0.5, "y": 0.0},
             "background": {"kind": "image", "image_key": f"{ROOT}scene-gone.webp"},
         },
     )
     config = await publishing.publish(avatar, storage)
     assert config["scene"] == {
-        "zoom": 0.4, "pan": {"x": 0.5, "y": 0.0}, "background": {"kind": "transparent"},
+        "zoom": 0.4,
+        "pan": {"x": 0.5, "y": 0.0},
+        "background": {"kind": "transparent"},
     }
 
 
 AI_BOTH = {
-    "mode": "teeth", "model": "t", "teeth": {"model": "t"},
+    "mode": "teeth",
+    "model": "t",
+    "teeth": {"model": "t"},
     "mouth_shapes": {"model": "s", "generated": 6},
 }
 
@@ -379,11 +444,13 @@ AI_BOTH = {
     [
         ("human", ("mouth-s1.webp", "mouth-s1.json", "mouth-motion-s1.json"), AI_BOTH),
         (
-            "human", ("mouth-s1.webp", "mouth-s1.json"),
+            "human",
+            ("mouth-s1.webp", "mouth-s1.json"),
             {"mode": "teeth", "model": "t", "teeth": {"model": "t"}},
         ),
         (
-            "human", ("mouth-motion-s1.json",),
+            "human",
+            ("mouth-motion-s1.json",),
             {"mode": "mouth_shapes", "model": "s", "mouth_shapes": {"model": "s", "generated": 6}},
         ),
         ("animal", ("mouth-s1.webp", "mouth-s1.json", "mouth-motion-s1.json"), None),
@@ -399,12 +466,16 @@ async def test_ai_made_mouth_parts_are_disclosed_only_while_visitors_can_see_the
     for name in present:
         storage.files[f"{ROOT}{name}"] = b"x"
     mouth = {
-        "renderer": "continuous", "profile": {},
-        "oral_image_key": f"{ROOT}mouth-s1.webp", "oral_rig_key": f"{ROOT}mouth-s1.json",
+        "renderer": "continuous",
+        "profile": {},
+        "oral_image_key": f"{ROOT}mouth-s1.webp",
+        "oral_rig_key": f"{ROOT}mouth-s1.json",
         "motion_key": f"{ROOT}mouth-motion-s1.json",
     }
     avatar = _avatar(
-        face_type=face_type, image_key=f"{ROOT}source.png", mouth_config=json.dumps(mouth),
+        face_type=face_type,
+        image_key=f"{ROOT}source.png",
+        mouth_config=json.dumps(mouth),
         ai_edited=copy.deepcopy(AI_BOTH),
     )
     config = await publishing.publish(avatar, storage)
@@ -418,14 +489,19 @@ async def test_a_publish_keeps_the_live_and_the_previous_revision_and_prunes_the
     """Revisions have gaps (three edits, then a publish): the folders are
     listed, not counted down. Anything not named r<n> is left alone."""
     published = f"{ROOT}published/"
-    storage = FakeStorage({
-        f"{ROOT}source.png": b"img",
-        f"{published}r0/image.png": b"0", f"{published}r3/image.png": b"3",
-        f"{published}r6/image.png": b"6", f"{published}r6x/image.png": b"?",
-        f"{published}notes.txt": b"?",
-    })
+    storage = FakeStorage(
+        {
+            f"{ROOT}source.png": b"img",
+            f"{published}r0/image.png": b"0",
+            f"{published}r3/image.png": b"3",
+            f"{published}r6/image.png": b"6",
+            f"{published}r6x/image.png": b"?",
+            f"{published}notes.txt": b"?",
+        }
+    )
     avatar = _avatar(
-        draft_revision=9, image_key=f"{ROOT}source.png",
+        draft_revision=9,
+        image_key=f"{ROOT}source.png",
         published_config=json.dumps({"revision": 6, "image_key": f"{published}r6/image.png"}),
     )
     await publishing.publish(avatar, storage)
@@ -435,11 +511,19 @@ async def test_a_publish_keeps_the_live_and_the_previous_revision_and_prunes_the
 async def test_a_storage_that_cannot_list_or_prune_does_not_fail_the_publish():
     """Pruning and sweeping are housekeeping: the snapshot is recorded and
     what could not be removed stays until a later publish."""
-    storage = FakeStorage({f"{ROOT}source.png": b"img", f"{ROOT}published/r0/image.png": b"0",
-                           f"{ROOT}mouth-orphan.webp": b"x"})
+    storage = FakeStorage(
+        {
+            f"{ROOT}source.png": b"img",
+            f"{ROOT}published/r0/image.png": b"0",
+            f"{ROOT}mouth-orphan.webp": b"x",
+        }
+    )
     storage.broken_listing = True
-    avatar = _avatar(draft_revision=4, image_key=f"{ROOT}source.png",
-                     published_config=json.dumps({"revision": 1}))
+    avatar = _avatar(
+        draft_revision=4,
+        image_key=f"{ROOT}source.png",
+        published_config=json.dumps({"revision": 1}),
+    )
     config = await publishing.publish(avatar, storage)
     assert config["revision"] == 4
     assert f"{ROOT}published/r0/image.png" in storage.files
@@ -461,15 +545,20 @@ async def test_a_publish_sweeps_the_drafts_orphaned_mouth_and_scene_files_only()
     storage.files[f"{ROOT}mouth-stuck.png"] = b"x"
     storage.undeletable.add(f"{ROOT}mouth-stuck.png")
     mouth = {
-        "renderer": "continuous", "profile": {},
-        "oral_image_key": f"{ROOT}mouth-cur.webp", "oral_rig_key": f"{ROOT}mouth-cur.json",
+        "renderer": "continuous",
+        "profile": {},
+        "oral_image_key": f"{ROOT}mouth-cur.webp",
+        "oral_rig_key": f"{ROOT}mouth-cur.json",
         "motion_key": f"{ROOT}mouth-motion-cur.json",
     }
-    scene = {"zoom": 1.0, "pan": {"x": 0.0, "y": 0.0},
-             "background": {"kind": "color", "color": "#112233",
-                            "image_key": f"{ROOT}scene-cur.webp"}}
-    avatar = _avatar(image_key=f"{ROOT}source.png", mouth_config=json.dumps(mouth),
-                     scene_config=scene)
+    scene = {
+        "zoom": 1.0,
+        "pan": {"x": 0.0, "y": 0.0},
+        "background": {"kind": "color", "color": "#112233", "image_key": f"{ROOT}scene-cur.webp"},
+    }
+    avatar = _avatar(
+        image_key=f"{ROOT}source.png", mouth_config=json.dumps(mouth), scene_config=scene
+    )
     await publishing.publish(avatar, storage)
     for name in orphans:
         assert f"{ROOT}{name}" not in storage.files, name
@@ -483,13 +572,20 @@ async def test_a_publish_sweeps_the_drafts_orphaned_mouth_and_scene_files_only()
 async def test_republishing_the_mouth_rewrites_only_the_mouth_of_the_live_snapshot():
     snapshot = _snapshot()
     storage = FakeStorage({f"{ROOT}mouth-motion-m1.json": b"motion"})
-    mouth = {"renderer": "continuous", "profile": {"teethY": 0.02},
-             "motion_key": f"{ROOT}mouth-motion-m1.json"}
-    avatar = _avatar(draft_revision=8, published_config=json.dumps(snapshot),
-                     mouth_config=json.dumps(mouth))
+    mouth = {
+        "renderer": "continuous",
+        "profile": {"teethY": 0.02},
+        "motion_key": f"{ROOT}mouth-motion-m1.json",
+    }
+    avatar = _avatar(
+        draft_revision=8, published_config=json.dumps(snapshot), mouth_config=json.dumps(mouth)
+    )
     result = await publishing.republish_mouth(avatar, storage)
-    expected_mouth = {"renderer": "continuous", "profile": {"teethY": 0.02},
-                      "motion_key": f"{P3}/mouth-motion.json"}
+    expected_mouth = {
+        "renderer": "continuous",
+        "profile": {"teethY": 0.02},
+        "motion_key": f"{P3}/mouth-motion.json",
+    }
     assert result == {**snapshot, "mouth": expected_mouth}
     assert json.loads(avatar.published_config) == result
     assert storage.files[f"{P3}/mouth-motion.json"] == b"motion", "under the snapshot's revision"
@@ -502,16 +598,20 @@ async def test_republishing_follows_the_snapshots_line_and_needs_a_snapshot():
     assert await publishing.republish_mouth(never, FakeStorage()) is None
     assert never.published_config is None
 
-    animal_snapshot = _avatar(face_type="human", mouth_config=mouth,
-                              published_config=json.dumps(_snapshot(face_type="animal")))
+    animal_snapshot = _avatar(
+        face_type="human",
+        mouth_config=mouth,
+        published_config=json.dumps(_snapshot(face_type="animal")),
+    )
     assert (await publishing.republish_mouth(animal_snapshot, FakeStorage()))["mouth"] is None
 
     # A snapshot without a face type goes by the avatar's.
     untyped = _snapshot()
     untyped.pop("face_type")
     for face_type, renderer in (("animal", None), ("human", "continuous")):
-        avatar = _avatar(face_type=face_type, mouth_config=mouth,
-                         published_config=json.dumps(untyped))
+        avatar = _avatar(
+            face_type=face_type, mouth_config=mouth, published_config=json.dumps(untyped)
+        )
         republished = (await publishing.republish_mouth(avatar, FakeStorage()))["mouth"]
         assert (republished or {}).get("renderer") == renderer
 
@@ -527,13 +627,22 @@ async def test_discarding_a_never_published_draft_changes_nothing():
 
 
 async def test_discard_copies_the_published_files_forward_into_fresh_draft_keys(stamp):
-    snapshot = _snapshot(framing="face", face_type="animal", thumbnail_key=f"{P3}/thumb.jpg",
-                         disclosure={"ai_edited": None, "line": "animal"})
+    snapshot = _snapshot(
+        framing="face",
+        face_type="animal",
+        thumbnail_key=f"{P3}/thumb.jpg",
+        disclosure={"ai_edited": None, "line": "animal"},
+    )
     storage = FakeStorage({f"{P3}/image.png": b"pub-img", f"{P3}/thumb.jpg": b"pub-thumb"})
     avatar = _avatar(
-        draft_revision=7, framing="full", face_type="human", has_layers=True,
-        image_key=f"{ROOT}source-x.png", rig_key=f"{ROOT}rig.json",
-        thumbnail_key=f"{ROOT}thumb.jpg", published_config=json.dumps(snapshot),
+        draft_revision=7,
+        framing="full",
+        face_type="human",
+        has_layers=True,
+        image_key=f"{ROOT}source-x.png",
+        rig_key=f"{ROOT}rig.json",
+        thumbnail_key=f"{ROOT}thumb.jpg",
+        published_config=json.dumps(snapshot),
         ai_edited={"mode": "touchup", "model": "m"},
     )
     assert await publishing.discard_draft(avatar, storage) == []
@@ -554,11 +663,15 @@ async def test_discard_copies_the_published_files_forward_into_fresh_draft_keys(
 async def test_discard_restores_layers_in_place_and_deletes_those_the_snapshot_lacks(stamp):
     """Going back to a cut-out must not keep the edited draft's backdrop."""
     snapshot = _snapshot(layer_keys={"head": f"{P3}/layer-head.png"})
-    storage = FakeStorage({
-        f"{P3}/image.png": b"img", f"{P3}/layer-head.png": b"pub-head",
-        layer_key(ORG, AID, "background"): b"draft-bg", layer_key(ORG, AID, "body"): b"draft-body",
-        layer_key(ORG, AID, "head"): b"draft-head",
-    })
+    storage = FakeStorage(
+        {
+            f"{P3}/image.png": b"img",
+            f"{P3}/layer-head.png": b"pub-head",
+            layer_key(ORG, AID, "background"): b"draft-bg",
+            layer_key(ORG, AID, "body"): b"draft-body",
+            layer_key(ORG, AID, "head"): b"draft-head",
+        }
+    )
     avatar = _avatar(draft_revision=5, has_layers=True, published_config=json.dumps(snapshot))
     await publishing.discard_draft(avatar, storage)
     assert storage.files[layer_key(ORG, AID, "head")] == b"pub-head"
@@ -583,37 +696,57 @@ async def test_discard_restores_the_published_mouth_into_fresh_keys_and_returns_
     teeth = {"source": "ai", "model": "t"}
     snapshot = _snapshot(
         mouth={
-            "renderer": "continuous", "profile": {"teethScale": 1.1},
-            "oral_image_key": f"{P3}/mouth.webp", "oral_rig_key": f"{P3}/mouth-rig.json",
-            "motion_key": f"{P3}/mouth-motion.json", "teeth": teeth, "kit": KIT,
+            "renderer": "continuous",
+            "profile": {"teethScale": 1.1},
+            "oral_image_key": f"{P3}/mouth.webp",
+            "oral_rig_key": f"{P3}/mouth-rig.json",
+            "motion_key": f"{P3}/mouth-motion.json",
+            "teeth": teeth,
+            "kit": KIT,
         },
         disclosure={"ai_edited": {"mode": "touchup", "model": "p"}, "line": "human"},
     )
     draft_keys = [f"{ROOT}mouth-d1.webp", f"{ROOT}mouth-d1.json", f"{ROOT}mouth-motion-d1.json"]
-    storage = FakeStorage({
-        f"{P3}/image.png": b"img", f"{P3}/mouth.webp": b"teeth", f"{P3}/mouth-rig.json": b"rig",
-        f"{P3}/mouth-motion.json": b"motion", **dict.fromkeys(draft_keys, b"draft"),
-    })
+    storage = FakeStorage(
+        {
+            f"{P3}/image.png": b"img",
+            f"{P3}/mouth.webp": b"teeth",
+            f"{P3}/mouth-rig.json": b"rig",
+            f"{P3}/mouth-motion.json": b"motion",
+            **dict.fromkeys(draft_keys, b"draft"),
+        }
+    )
     avatar = _avatar(
-        draft_revision=9, published_config=json.dumps(snapshot),
-        mouth_config=json.dumps({
-            "renderer": "classic", "profile": {}, "oral_image_key": draft_keys[0],
-            "oral_rig_key": draft_keys[1], "motion_key": draft_keys[2],
-        }),
+        draft_revision=9,
+        published_config=json.dumps(snapshot),
+        mouth_config=json.dumps(
+            {
+                "renderer": "classic",
+                "profile": {},
+                "oral_image_key": draft_keys[0],
+                "oral_rig_key": draft_keys[1],
+                "motion_key": draft_keys[2],
+            }
+        ),
     )
     leftovers = await publishing.discard_draft(avatar, storage)
     assert leftovers == sorted(draft_keys)
     assert all(key in storage.files for key in draft_keys)
     assert json.loads(avatar.mouth_config) == {
-        "renderer": "continuous", "profile": {"teethScale": 1.1},
+        "renderer": "continuous",
+        "profile": {"teethScale": 1.1},
         "oral_image_key": f"{ROOT}mouth-{stamp}.webp",
         "oral_rig_key": f"{ROOT}mouth-rig-{stamp}.json",
-        "motion_key": f"{ROOT}mouth-motion-{stamp}.json", "teeth": teeth, "kit": KIT,
+        "motion_key": f"{ROOT}mouth-motion-{stamp}.json",
+        "teeth": teeth,
+        "kit": KIT,
     }
     assert storage.files[f"{ROOT}mouth-{stamp}.webp"] == b"teeth"
     assert storage.files[f"{ROOT}mouth-motion-{stamp}.json"] == b"motion"
     assert avatar.ai_edited == {
-        "mode": "touchup", "model": "p", "teeth": {"model": "t"},
+        "mode": "touchup",
+        "model": "p",
+        "teeth": {"model": "t"},
         "mouth_shapes": {"model": "s", "generated": 6},
     }
 
@@ -623,9 +756,12 @@ async def test_a_discarded_mouth_whose_published_files_are_gone_comes_back_unlab
     back: the kit says it was dropped, and no shapes label."""
     snapshot = _snapshot(
         mouth={
-            "renderer": "continuous", "profile": {},
-            "oral_image_key": f"{P3}/mouth.webp", "oral_rig_key": f"{P3}/mouth-rig.json",
-            "motion_key": f"{P3}/mouth-motion.json", "teeth": {"source": "ai", "model": "t"},
+            "renderer": "continuous",
+            "profile": {},
+            "oral_image_key": f"{P3}/mouth.webp",
+            "oral_rig_key": f"{P3}/mouth-rig.json",
+            "motion_key": f"{P3}/mouth-motion.json",
+            "teeth": {"source": "ai", "model": "t"},
             "kit": KIT,
         },
         disclosure={"ai_edited": copy.deepcopy(AI_BOTH), "line": "human"},
@@ -637,24 +773,38 @@ async def test_a_discarded_mouth_whose_published_files_are_gone_comes_back_unlab
     assert set(restored) == {"renderer", "profile", "kit"}
     assert restored["kit"]["state"] == "dropped"
     assert restored["kit"]["dropped"] == {
-        "code": "motion_missing", "detail": "The mouth shapes' file is gone",
+        "code": "motion_missing",
+        "detail": "The mouth shapes' file is gone",
     }
     assert avatar.ai_edited is None
 
 
 async def test_discard_restores_the_published_scene_picture_into_a_fresh_draft_file(stamp):
-    published_scene = {"zoom": 1.2, "pan": {"x": -0.25, "y": 0.1},
-                       "background": {"kind": "image", "image_key": f"{P3}/scene.webp"}}
-    storage = FakeStorage({f"{P3}/image.png": b"img", f"{P3}/scene.webp": b"pub-bg",
-                           f"{ROOT}scene-d1.webp": b"draft-bg"})
+    published_scene = {
+        "zoom": 1.2,
+        "pan": {"x": -0.25, "y": 0.1},
+        "background": {"kind": "image", "image_key": f"{P3}/scene.webp"},
+    }
+    storage = FakeStorage(
+        {
+            f"{P3}/image.png": b"img",
+            f"{P3}/scene.webp": b"pub-bg",
+            f"{ROOT}scene-d1.webp": b"draft-bg",
+        }
+    )
     avatar = _avatar(
-        draft_revision=6, published_config=json.dumps(_snapshot(scene=published_scene)),
-        scene_config={"zoom": 0.3, "pan": {"x": 0.0, "y": 0.0},
-                      "background": {"kind": "image", "image_key": f"{ROOT}scene-d1.webp"}},
+        draft_revision=6,
+        published_config=json.dumps(_snapshot(scene=published_scene)),
+        scene_config={
+            "zoom": 0.3,
+            "pan": {"x": 0.0, "y": 0.0},
+            "background": {"kind": "image", "image_key": f"{ROOT}scene-d1.webp"},
+        },
     )
     assert await publishing.discard_draft(avatar, storage) == [f"{ROOT}scene-d1.webp"]
     assert avatar.scene_config == {
-        "zoom": 1.2, "pan": {"x": -0.25, "y": 0.1},
+        "zoom": 1.2,
+        "pan": {"x": -0.25, "y": 0.1},
         "background": {"kind": "image", "image_key": f"{ROOT}scene-{stamp}.webp"},
     }
     assert storage.files[f"{ROOT}scene-{stamp}.webp"] == b"pub-bg"
@@ -673,19 +823,25 @@ async def test_discard_shows_a_published_picture_that_is_gone_as_transparent(
 ):
     published_scene = {"zoom": 1.0, "pan": {"x": 0.0, "y": 0.0}, "background": published_background}
     storage = FakeStorage({f"{P3}/image.png": b"img"})
-    avatar = _avatar(draft_revision=2, published_config=json.dumps(_snapshot(scene=published_scene)))
+    avatar = _avatar(
+        draft_revision=2, published_config=json.dumps(_snapshot(scene=published_scene))
+    )
     await publishing.discard_draft(avatar, storage)
     assert avatar.scene_config["background"] == restored_background
 
 
 async def test_discard_puts_back_the_published_character_mouth_settings(stamp):
-    snapshot = _snapshot(face_type="animal",
-                         mouth={"renderer": "classic", "profile": {}, "character": CHARACTER})
+    snapshot = _snapshot(
+        face_type="animal", mouth={"renderer": "classic", "profile": {}, "character": CHARACTER}
+    )
     storage = FakeStorage({f"{P3}/image.png": b"img"})
     avatar = _avatar(
-        face_type="animal", draft_revision=5, published_config=json.dumps(snapshot),
-        mouth_config=json.dumps({"renderer": "classic", "profile": {},
-                                 "character": mouth_service.DEFAULT_CHARACTER}),
+        face_type="animal",
+        draft_revision=5,
+        published_config=json.dumps(snapshot),
+        mouth_config=json.dumps(
+            {"renderer": "classic", "profile": {}, "character": mouth_service.DEFAULT_CHARACTER}
+        ),
     )
     await publishing.discard_draft(avatar, storage)
     assert json.loads(avatar.mouth_config).get("character") == CHARACTER
@@ -698,17 +854,21 @@ def test_restored_ai_teeth_are_labelled_with_their_model():
     config = {"disclosure": {"ai_edited": None, "line": "human"}}
     teeth = mouth_service.ai_teeth_record("t")
     assert publishing._restored_ai_edited(None, config, teeth) == {
-        "mode": "teeth", "model": "t", "teeth": {"model": "t"},
+        "mode": "teeth",
+        "model": "t",
+        "teeth": {"model": "t"},
     }
 
 
 @pytest.mark.parametrize("teeth", [None, {"source": "upload"}])
 def test_restored_teeth_that_are_not_ai_made_lose_the_teeth_label(teeth):
-    picture = {"disclosure": {"ai_edited": {"mode": "touchup", "model": "p",
-                                            "teeth": {"model": "t"}}}}
+    picture = {
+        "disclosure": {"ai_edited": {"mode": "touchup", "model": "p", "teeth": {"model": "t"}}}
+    }
     assert publishing._restored_ai_edited(None, picture, teeth) == {"mode": "touchup", "model": "p"}
-    mouth_only = {"disclosure": {"ai_edited": {"mode": "teeth", "model": "t",
-                                               "teeth": {"model": "t"}}}}
+    mouth_only = {
+        "disclosure": {"ai_edited": {"mode": "teeth", "model": "t", "teeth": {"model": "t"}}}
+    }
     assert publishing._restored_ai_edited(None, mouth_only, teeth) is None
 
 
@@ -725,9 +885,15 @@ def test_restored_teeth_that_are_not_ai_made_lose_the_teeth_label(teeth):
 def test_restored_shapes_are_labelled_only_for_a_kit_that_made_some_and_was_not_dropped(
     kit, shapes
 ):
-    config = {"disclosure": {"ai_edited": {
-        "mode": "mouth_shapes", "model": "old", "mouth_shapes": {"model": "old", "generated": 2},
-    }}}
+    config = {
+        "disclosure": {
+            "ai_edited": {
+                "mode": "mouth_shapes",
+                "model": "old",
+                "mouth_shapes": {"model": "old", "generated": 2},
+            }
+        }
+    }
     restored = publishing._restored_ai_edited(None, config, None, kit)
     if shapes is None:
         assert restored is None
@@ -739,7 +905,9 @@ def test_restored_ai_teeth_outrank_restored_ai_shapes_in_a_mouth_only_label():
     config = {"disclosure": {"ai_edited": None, "line": "human"}}
     restored = publishing._restored_ai_edited(None, config, {"source": "ai", "model": "t"}, KIT)
     assert restored == {
-        "mode": "teeth", "model": "t", "teeth": {"model": "t"},
+        "mode": "teeth",
+        "model": "t",
+        "teeth": {"model": "t"},
         "mouth_shapes": {"model": "s", "generated": 6},
     }
 
@@ -751,7 +919,9 @@ def test_the_snapshots_disclosure_wins_over_the_drafts_and_only_its_absence_fall
     # Published before the disclosure was recorded: the draft's own, less
     # the teeth it no longer has, plus the shapes that came back.
     assert publishing._restored_ai_edited(draft, {}, None, KIT) == {
-        "mode": "mouth_shapes", "model": "s", "mouth_shapes": {"model": "s", "generated": 6},
+        "mode": "mouth_shapes",
+        "model": "s",
+        "mouth_shapes": {"model": "s", "generated": 6},
     }
 
 
@@ -780,19 +950,31 @@ async def test_a_bare_snapshot_is_served_as_a_person_with_empty_urls(fields):
     assert view is not None
     # No disclosure in the snapshot: none in the answer, not even a null.
     assert view.model_dump(mode="json") == {
-        "framing": "face", "face_type": "human", "scene": None, "voice": None, "mouth": None,
-        "rig_url": "", "thumbnail_url": "", "image_url": f"{SIGNED}k/image.png",
+        "framing": "face",
+        "face_type": "human",
+        "scene": None,
+        "voice": None,
+        "mouth": None,
+        "rig_url": "",
+        "thumbnail_url": "",
+        "image_url": f"{SIGNED}k/image.png",
         "layer_urls": None,
     }
 
 
 async def test_a_full_snapshot_is_served_with_presigned_urls_and_nothing_internal():
     snapshot = _snapshot(
-        framing="full", face_type="animal", voice=VOICE,
-        scene={"zoom": 1.2, "pan": {"x": -0.25, "y": 0.1},
-               "background": {"kind": "image", "image_key": f"{P3}/scene.webp"}},
+        framing="full",
+        face_type="animal",
+        voice=VOICE,
+        scene={
+            "zoom": 1.2,
+            "pan": {"x": -0.25, "y": 0.1},
+            "background": {"kind": "image", "image_key": f"{P3}/scene.webp"},
+        },
         mouth={"renderer": "classic", "profile": {}, "character": CHARACTER},
-        rig_key=f"{P3}/rig.json", thumbnail_key=f"{P3}/thumb.jpg",
+        rig_key=f"{P3}/rig.json",
+        thumbnail_key=f"{P3}/thumb.jpg",
         layer_keys={"head": f"{P3}/layer-head.png", "background": f"{P3}/layer-background.jpg"},
         disclosure={"ai_edited": {"mode": "generate", "model": "g"}, "line": "animal"},
     )
@@ -800,15 +982,22 @@ async def test_a_full_snapshot_is_served_with_presigned_urls_and_nothing_interna
     view = await publishing.published_view(_avatar(published_config=json.dumps(snapshot)), storage)
     assert view is not None
     assert view.model_dump(mode="json") == {
-        "framing": "full", "face_type": "animal",
-        "scene": {"zoom": 1.2, "pan": {"x": -0.25, "y": 0.1},
-                  "background": {"kind": "image", "image_url": f"{SIGNED}{P3}/scene.webp"}},
+        "framing": "full",
+        "face_type": "animal",
+        "scene": {
+            "zoom": 1.2,
+            "pan": {"x": -0.25, "y": 0.1},
+            "background": {"kind": "image", "image_url": f"{SIGNED}{P3}/scene.webp"},
+        },
         "voice": VOICE,
         "mouth": {"renderer": "classic", "character": CHARACTER},
-        "rig_url": f"{SIGNED}{P3}/rig.json", "thumbnail_url": f"{SIGNED}{P3}/thumb.jpg",
+        "rig_url": f"{SIGNED}{P3}/rig.json",
+        "thumbnail_url": f"{SIGNED}{P3}/thumb.jpg",
         "image_url": f"{SIGNED}{P3}/image.png",
-        "layer_urls": {"head": f"{SIGNED}{P3}/layer-head.png",
-                       "background": f"{SIGNED}{P3}/layer-background.jpg"},
+        "layer_urls": {
+            "head": f"{SIGNED}{P3}/layer-head.png",
+            "background": f"{SIGNED}{P3}/layer-background.jpg",
+        },
         "disclosure": {"ai_edited": {"mode": "generate", "model": "g"}, "line": "animal"},
     }
 
@@ -828,8 +1017,11 @@ async def test_the_classic_mouth_without_character_settings_is_no_mouth_to_a_vis
 
 
 async def test_a_visitor_gets_the_classic_mouths_character_settings_cleaned():
-    mouth = {"renderer": "classic", "profile": {},
-             "character": {"style": "weird", "jaw": 9, "tongue": False, "secret": 1}}
+    mouth = {
+        "renderer": "classic",
+        "profile": {},
+        "character": {"style": "weird", "jaw": 9, "tongue": False, "secret": 1},
+    }
     assert await publishing._mouth_view(mouth, FakeStorage()) == {
         "renderer": "classic",
         "character": {"style": "character", "teeth": "upper", "tongue": False, "jaw": 1.6},
@@ -837,18 +1029,27 @@ async def test_a_visitor_gets_the_classic_mouths_character_settings_cleaned():
 
 
 async def test_the_photographic_mouth_view_presigns_its_files_and_never_shows_the_records():
-    storage = FakeStorage({f"{P3}/mouth.webp": b"t", f"{P3}/mouth-rig.json": b"r",
-                           f"{P3}/mouth-motion.json": b"m"})
+    storage = FakeStorage(
+        {f"{P3}/mouth.webp": b"t", f"{P3}/mouth-rig.json": b"r", f"{P3}/mouth-motion.json": b"m"}
+    )
     mouth = {
-        "renderer": "continuous", "profile": {"teethScale": 1.1}, "character": CHARACTER,
-        "oral_image_key": f"{P3}/mouth.webp", "oral_rig_key": f"{P3}/mouth-rig.json",
-        "motion_key": f"{P3}/mouth-motion.json", "teeth": {"source": "ai", "model": "t"},
+        "renderer": "continuous",
+        "profile": {"teethScale": 1.1},
+        "character": CHARACTER,
+        "oral_image_key": f"{P3}/mouth.webp",
+        "oral_rig_key": f"{P3}/mouth-rig.json",
+        "motion_key": f"{P3}/mouth-motion.json",
+        "teeth": {"source": "ai", "model": "t"},
         "kit": KIT,
     }
     assert await publishing._mouth_view(mouth, storage) == {
-        "renderer": "continuous", "profile": {"teethScale": 1.1}, "character": None,
-        "oral": {"image_url": f"{SIGNED}{P3}/mouth.webp",
-                 "rig_url": f"{SIGNED}{P3}/mouth-rig.json"},
+        "renderer": "continuous",
+        "profile": {"teethScale": 1.1},
+        "character": None,
+        "oral": {
+            "image_url": f"{SIGNED}{P3}/mouth.webp",
+            "rig_url": f"{SIGNED}{P3}/mouth-rig.json",
+        },
         "motion_url": f"{SIGNED}{P3}/mouth-motion.json",
     }
 
@@ -857,12 +1058,17 @@ async def test_the_photographic_mouth_view_falls_back_to_the_standard_teeth_and_
     """Null teeth: the engine loads the standard ones; null motion: the
     bundled Reference motion."""
     mouth = {
-        "renderer": "continuous", "profile": None,
-        "oral_image_key": f"{P3}/mouth.webp", "oral_rig_key": f"{P3}/mouth-rig.json",
+        "renderer": "continuous",
+        "profile": None,
+        "oral_image_key": f"{P3}/mouth.webp",
+        "oral_rig_key": f"{P3}/mouth-rig.json",
         "motion_key": f"{P3}/mouth-motion.json",
     }
     assert await publishing._mouth_view(mouth, FakeStorage()) == {
-        "renderer": "continuous", "profile": {}, "character": None, "oral": None,
+        "renderer": "continuous",
+        "profile": {},
+        "character": None,
+        "oral": None,
         "motion_url": None,
     }
 
@@ -886,15 +1092,26 @@ def test_a_pictures_own_mode_is_left_as_it_is_and_nothing_is_nothing():
             {"mode": "mouth_shapes", "model": "s", "mouth_shapes": {"model": "s", "generated": 2}},
         ),
         (
-            {"mode": "mouth_shapes", "model": "stale",
-             "mouth_shapes": {"model": "s", "generated": 2}},
+            {
+                "mode": "mouth_shapes",
+                "model": "stale",
+                "mouth_shapes": {"model": "s", "generated": 2},
+            },
             {"mode": "mouth_shapes", "model": "s", "mouth_shapes": {"model": "s", "generated": 2}},
         ),
         (
-            {"mode": "mouth_shapes", "model": "s", "teeth": {"model": "t"},
-             "mouth_shapes": {"model": "s", "generated": 2}},
-            {"mode": "teeth", "model": "t", "teeth": {"model": "t"},
-             "mouth_shapes": {"model": "s", "generated": 2}},
+            {
+                "mode": "mouth_shapes",
+                "model": "s",
+                "teeth": {"model": "t"},
+                "mouth_shapes": {"model": "s", "generated": 2},
+            },
+            {
+                "mode": "teeth",
+                "model": "t",
+                "teeth": {"model": "t"},
+                "mouth_shapes": {"model": "s", "generated": 2},
+            },
         ),
     ],
 )
@@ -903,43 +1120,66 @@ def test_a_mouth_only_mode_and_model_are_re_derived_from_its_entries(ai_edited, 
 
 
 def test_new_ai_parts_replace_the_old_entry_without_mutating_the_record():
-    before = {"mode": "teeth", "model": "t1", "teeth": {"model": "t1"},
-              "mouth_shapes": {"model": "s1", "generated": 2}}
+    before = {
+        "mode": "teeth",
+        "model": "t1",
+        "teeth": {"model": "t1"},
+        "mouth_shapes": {"model": "s1", "generated": 2},
+    }
     kept = copy.deepcopy(before)
     assert disclosure.with_ai_teeth(before, "t2") == {
-        "mode": "teeth", "model": "t2", "teeth": {"model": "t2"},
+        "mode": "teeth",
+        "model": "t2",
+        "teeth": {"model": "t2"},
         "mouth_shapes": {"model": "s1", "generated": 2},
     }
     assert disclosure.with_ai_shapes(before, "s2", 5) == {
-        "mode": "teeth", "model": "t1", "teeth": {"model": "t1"},
+        "mode": "teeth",
+        "model": "t1",
+        "teeth": {"model": "t1"},
         "mouth_shapes": {"model": "s2", "generated": 5},
     }
     assert before == kept
-    assert disclosure.with_ai_teeth({}, None) == {"mode": "teeth", "model": None,
-                                                  "teeth": {"model": None}}
+    assert disclosure.with_ai_teeth({}, None) == {
+        "mode": "teeth",
+        "model": None,
+        "teeth": {"model": None},
+    }
     assert disclosure.with_ai_shapes({}, "s", 1) == {
-        "mode": "mouth_shapes", "model": "s", "mouth_shapes": {"model": "s", "generated": 1},
+        "mode": "mouth_shapes",
+        "model": "s",
+        "mouth_shapes": {"model": "s", "generated": 1},
     }
 
 
 def test_ai_shapes_added_to_ai_teeth_leave_the_teeth_in_charge():
     teeth = disclosure.with_ai_teeth(None, "t")
     assert disclosure.with_ai_shapes(teeth, "s", 3) == {
-        "mode": "teeth", "model": "t", "teeth": {"model": "t"},
+        "mode": "teeth",
+        "model": "t",
+        "teeth": {"model": "t"},
         "mouth_shapes": {"model": "s", "generated": 3},
     }
     assert teeth == {"mode": "teeth", "model": "t", "teeth": {"model": "t"}}
 
 
 def test_removing_a_mouth_part_keeps_the_picture_and_the_other_part_in_a_new_dict():
-    picture = {"mode": "stylise", "model": "x", "teeth": {"model": "t"},
-               "mouth_shapes": {"model": "s", "generated": 2}}
+    picture = {
+        "mode": "stylise",
+        "model": "x",
+        "teeth": {"model": "t"},
+        "mouth_shapes": {"model": "s", "generated": 2},
+    }
     kept = copy.deepcopy(picture)
     assert disclosure.without_ai_teeth(picture) == {
-        "mode": "stylise", "model": "x", "mouth_shapes": {"model": "s", "generated": 2},
+        "mode": "stylise",
+        "model": "x",
+        "mouth_shapes": {"model": "s", "generated": 2},
     }
     assert disclosure.without_ai_shapes(picture) == {
-        "mode": "stylise", "model": "x", "teeth": {"model": "t"},
+        "mode": "stylise",
+        "model": "x",
+        "teeth": {"model": "t"},
     }
     assert picture == kept
     plain = {"mode": "generate", "model": "g"}
@@ -969,8 +1209,11 @@ MISSING_PICTURE = "no background picture has been uploaded"
         ({"pan": {"x": "left"}}, None, "pan.x must be a number"),
         ({"pan": {"y": 1.5}}, None, "pan.y must be between -1.0 and 1.0"),
         ({"background": "red"}, None, "background must be an object"),
-        ({"background": {"kind": "gradient"}}, None,
-         "background kind must be transparent, color or image"),
+        (
+            {"background": {"kind": "gradient"}},
+            None,
+            "background kind must be transparent, color or image",
+        ),
         ({"background": {"kind": "color"}}, None, "color must be #rrggbb"),
         ({"background": {"kind": "color", "color": "#12345g"}}, None, "color must be #rrggbb"),
         ({"background": {"kind": "color", "color": "#1234567"}}, None, "color must be #rrggbb"),
@@ -990,7 +1233,9 @@ def test_a_scene_is_refused_with_a_message_per_problem(value, image_key, message
 
 def test_a_scene_is_filled_with_defaults_and_rounded():
     assert scene_service.clean({}, None) == {
-        "zoom": 1.0, "pan": {"x": 0.0, "y": 0.0}, "background": {"kind": "transparent"},
+        "zoom": 1.0,
+        "pan": {"x": 0.0, "y": 0.0},
+        "background": {"kind": "transparent"},
     }
     assert scene_service.clean({"pan": None, "background": None}, None) == scene_service.clean(
         {}, None
@@ -1007,10 +1252,13 @@ def test_a_colour_is_normalised_and_kept_only_for_kind_color():
         return scene_service.clean({"background": sent}, "k")["background"]
 
     assert background({"kind": "color", "color": "  #1E3A8A "}) == {
-        "kind": "color", "color": "#1e3a8a", "image_key": "k",
+        "kind": "color",
+        "color": "#1e3a8a",
+        "image_key": "k",
     }
     assert background({"kind": "transparent", "color": "#ffffff"}) == {
-        "kind": "transparent", "image_key": "k",
+        "kind": "transparent",
+        "image_key": "k",
     }
     assert background({"kind": "image", "color": "#ffffff"}) == {"kind": "image", "image_key": "k"}
 
@@ -1018,13 +1266,15 @@ def test_a_colour_is_normalised_and_kept_only_for_kind_color():
 def test_the_owner_never_names_a_key_the_stored_picture_is_kept_whatever_is_shown():
     sent = {"kind": "image", "image_key": "orgs/other/avatars/x/scene-evil.webp"}
     assert scene_service.clean({"background": sent}, "k")["background"] == {
-        "kind": "image", "image_key": "k",
+        "kind": "image",
+        "image_key": "k",
     }
     with pytest.raises(ValueError, match=MISSING_PICTURE):
         scene_service.clean({"background": sent}, None)
     hidden = {"kind": "color", "color": "#000000", "image_key": "orgs/other/x.webp"}
     assert scene_service.clean({"background": hidden}, None)["background"] == {
-        "kind": "color", "color": "#000000",
+        "kind": "color",
+        "color": "#000000",
     }
 
 
@@ -1042,7 +1292,9 @@ def test_a_new_zoom_is_a_checked_copy():
 
 def test_an_avatar_without_a_scene_renders_by_its_framing():
     assert scene_service.from_framing(None) == {
-        "zoom": 1.0, "pan": {"x": 0.0, "y": 0.0}, "background": {"kind": "transparent"},
+        "zoom": 1.0,
+        "pan": {"x": 0.0, "y": 0.0},
+        "background": {"kind": "transparent"},
     }
     assert scene_service.effective(SimpleNamespace(framing="full")) == scene_service.from_framing(
         "full"
@@ -1077,14 +1329,21 @@ def test_which_picture_a_scene_holds_and_whether_it_shows_it():
 
 
 def test_the_owner_is_told_whether_a_picture_is_stored_never_where():
-    scene = {"zoom": 1.2, "pan": {"x": 0.1, "y": -0.2},
-             "background": {"kind": "color", "color": "#112233", "image_key": f"{ROOT}scene-a.webp"}}
+    scene = {
+        "zoom": 1.2,
+        "pan": {"x": 0.1, "y": -0.2},
+        "background": {"kind": "color", "color": "#112233", "image_key": f"{ROOT}scene-a.webp"},
+    }
     view = scene_service.public_view(scene)
-    assert view == {"zoom": 1.2, "pan": {"x": 0.1, "y": -0.2},
-                    "background": {"kind": "color", "has_image": True, "color": "#112233"}}
+    assert view == {
+        "zoom": 1.2,
+        "pan": {"x": 0.1, "y": -0.2},
+        "background": {"kind": "color", "has_image": True, "color": "#112233"},
+    }
     assert view["pan"] is not scene["pan"]
     assert scene_service.public_view({"zoom": 0.5}) == {
-        "zoom": 0.5, "pan": {"x": 0.0, "y": 0.0},
+        "zoom": 0.5,
+        "pan": {"x": 0.0, "y": 0.0},
         "background": {"kind": "transparent", "has_image": False},
     }
     assert scene_service.public_view(None) is None
@@ -1093,11 +1352,17 @@ def test_the_owner_is_told_whether_a_picture_is_stored_never_where():
 
 async def test_a_visitor_gets_a_presigned_url_for_a_picture_that_exists():
     key = f"{P3}/scene.webp"
-    scene = {"zoom": 1.2, "pan": {"x": -0.25, "y": 0.1},
-             "background": {"kind": "image", "image_key": key}}
+    scene = {
+        "zoom": 1.2,
+        "pan": {"x": -0.25, "y": 0.1},
+        "background": {"kind": "image", "image_key": key},
+    }
     view = await scene_service.visitor_view(scene, FakeStorage({key: b"bg"}))
-    assert view == {"zoom": 1.2, "pan": {"x": -0.25, "y": 0.1},
-                    "background": {"kind": "image", "image_url": f"{SIGNED}{key}"}}
+    assert view == {
+        "zoom": 1.2,
+        "pan": {"x": -0.25, "y": 0.1},
+        "background": {"kind": "image", "image_url": f"{SIGNED}{key}"},
+    }
 
 
 @pytest.mark.parametrize(
@@ -1113,8 +1378,11 @@ async def test_a_visitor_gets_the_colour_and_no_picture_that_is_not_shown():
     key = f"{P3}/scene.webp"
     storage = FakeStorage({key: b"bg"})
     shown = await scene_service.visitor_view(
-        {"zoom": 1.0, "pan": {"x": 0.0, "y": 0.0},
-         "background": {"kind": "color", "color": "#112233", "image_key": key}},
+        {
+            "zoom": 1.0,
+            "pan": {"x": 0.0, "y": 0.0},
+            "background": {"kind": "color", "color": "#112233", "image_key": key},
+        },
         storage,
     )
     assert shown["background"] == {"kind": "color", "color": "#112233"}
@@ -1132,15 +1400,21 @@ async def test_a_visitor_gets_the_colour_and_no_picture_that_is_not_shown():
 async def test_storing_a_picture_shows_it_and_returns_the_key_it_replaced(stamp):
     old = f"{ROOT}scene-old.webp"
     storage = FakeStorage({old: b"old"})
-    avatar = _avatar(scene_config={
-        "zoom": 1.2, "pan": {"x": 0.1, "y": 0.0},
-        "background": {"kind": "color", "color": "#112233", "image_key": old},
-    })
+    avatar = _avatar(
+        scene_config={
+            "zoom": 1.2,
+            "pan": {"x": 0.1, "y": 0.0},
+            "background": {"kind": "color", "color": "#112233", "image_key": old},
+        }
+    )
     assert await scene_service.store_image(avatar, storage, b"webp") == [old]
     new = scene_service.image_key(ORG, AID, stamp)
     assert new == f"{ROOT}scene-{stamp}.webp"
-    assert avatar.scene_config == {"zoom": 1.2, "pan": {"x": 0.1, "y": 0.0},
-                                   "background": {"kind": "image", "image_key": new}}
+    assert avatar.scene_config == {
+        "zoom": 1.2,
+        "pan": {"x": 0.1, "y": 0.0},
+        "background": {"kind": "image", "image_key": new},
+    }
     assert storage.files[new] == b"webp"
     assert storage.types[new] == "image/webp"
     assert old in storage.files, "deleted by the caller after its commit"
@@ -1150,30 +1424,45 @@ async def test_storing_a_picture_on_an_avatar_without_a_scene_starts_from_its_fr
     avatar = _avatar(framing="full")
     assert await scene_service.store_image(avatar, FakeStorage(), b"webp") == []
     assert avatar.scene_config == {
-        "zoom": 0.0, "pan": {"x": 0.0, "y": 0.0},
+        "zoom": 0.0,
+        "pan": {"x": 0.0, "y": 0.0},
         "background": {"kind": "image", "image_key": f"{ROOT}scene-{stamp}.webp"},
     }
 
 
 def test_removing_the_picture_shows_nothing_behind_and_returns_its_key():
     key = f"{ROOT}scene-a.webp"
-    avatar = _avatar(scene_config={"zoom": 0.8, "pan": {"x": 0.2, "y": 0.0},
-                                   "background": {"kind": "image", "image_key": key}})
+    avatar = _avatar(
+        scene_config={
+            "zoom": 0.8,
+            "pan": {"x": 0.2, "y": 0.0},
+            "background": {"kind": "image", "image_key": key},
+        }
+    )
     assert scene_service.without_image(avatar) == [key]
-    assert avatar.scene_config == {"zoom": 0.8, "pan": {"x": 0.2, "y": 0.0},
-                                   "background": {"kind": "transparent"}}
+    assert avatar.scene_config == {
+        "zoom": 0.8,
+        "pan": {"x": 0.2, "y": 0.0},
+        "background": {"kind": "transparent"},
+    }
     bare = _avatar(framing="face")
     assert scene_service.without_image(bare) == []
     assert bare.scene_config == scene_service.from_framing("face")
 
 
 async def test_the_scene_sweep_deletes_only_the_drafts_unnamed_background_files():
-    names = ["scene-old.webp", "scene-cur.webp", "scene.webp", "scene-x.png", "mouth-a.webp",
-             "published/r1/scene.webp"]
+    names = [
+        "scene-old.webp",
+        "scene-cur.webp",
+        "scene.webp",
+        "scene-x.png",
+        "mouth-a.webp",
+        "published/r1/scene.webp",
+    ]
     storage = FakeStorage({f"{ROOT}{name}": b"x" for name in names})
     scene = {"zoom": 1.0, "background": {"kind": "image", "image_key": f"{ROOT}scene-cur.webp"}}
     await scene_service.sweep_files(_avatar(), storage, scene)
-    assert sorted(k[len(ROOT):] for k in storage.files) == sorted(
+    assert sorted(k[len(ROOT) :] for k in storage.files) == sorted(
         n for n in names if n != "scene-old.webp"
     )
 
@@ -1242,8 +1531,7 @@ def test_the_mouth_style_is_the_character_one_unless_the_owner_chose_classic(raw
 
 @pytest.mark.parametrize(
     "raw",
-    [None, "", "{broken", "[]", "null", '"classic"', '{"profile": {}}',
-     '{"renderer": "hologram"}'],
+    [None, "", "{broken", "[]", "null", '"classic"', '{"profile": {}}', '{"renderer": "hologram"}'],
 )
 def test_a_stored_mouth_needs_a_known_renderer(raw):
     assert mouth_service.load(raw) is None
@@ -1260,15 +1548,17 @@ def test_draft_file_keys_sit_beside_the_avatar_where_the_sweeps_know_them():
     motion = mouth_service.motion_key(ORG, AID, "s1")
     background = scene_service.image_key(ORG, AID, "s1")
     assert (image, rig, motion, background) == (
-        f"{ROOT}mouth-s1.webp", f"{ROOT}mouth-s1.json", f"{ROOT}mouth-motion-s1.json",
+        f"{ROOT}mouth-s1.webp",
+        f"{ROOT}mouth-s1.json",
+        f"{ROOT}mouth-motion-s1.json",
         f"{ROOT}scene-s1.webp",
     )
     for key in (image, rig, motion):
-        name = key[len(ROOT):]
+        name = key[len(ROOT) :]
         assert publishing._MOUTH_FILE.fullmatch(name)
         assert not scene_service.SCENE_FILE.fullmatch(name)
-    assert scene_service.SCENE_FILE.fullmatch(background[len(ROOT):])
-    assert not publishing._MOUTH_FILE.fullmatch(background[len(ROOT):])
+    assert scene_service.SCENE_FILE.fullmatch(background[len(ROOT) :])
+    assert not publishing._MOUTH_FILE.fullmatch(background[len(ROOT) :])
 
 
 BOTH_KEYS = {"renderer": "continuous", "oral_image_key": "i", "oral_rig_key": "r"}
@@ -1308,7 +1598,9 @@ def test_the_teeth_records_say_where_the_teeth_came_from_or_why_there_are_none()
     assert mouth_service.generic_teeth_record(None) == {"source": None, "note": None}
     assert mouth_service.migrated_teeth_record("2026-10-08") == {
         "source": None,
-        "note": {"code": mouth_service.MIGRATED_STANDARD,
-                 "detail": "Standard teeth: moved from the classic mouth on 2026-10-08"},
+        "note": {
+            "code": mouth_service.MIGRATED_STANDARD,
+            "detail": "Standard teeth: moved from the classic mouth on 2026-10-08",
+        },
     }
     assert mouth_service.MIGRATED_STANDARD == "migrated_standard"

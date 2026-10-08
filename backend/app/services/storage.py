@@ -9,6 +9,7 @@ Two implementations behind one interface:
 URLs are ABSOLUTE (built from PUBLIC_BASE_URL) because the embed widget runs
 on third-party origins and must be able to load textures/audio directly.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -267,8 +268,15 @@ class LocalStorage(Storage):
 
 
 class S3Storage(Storage):
-    def __init__(self, endpoint: str, access_key: str, secret: str, bucket: str, region: str,
-                 expiry_seconds: int):
+    def __init__(
+        self,
+        endpoint: str,
+        access_key: str,
+        secret: str,
+        bucket: str,
+        region: str,
+        expiry_seconds: int,
+    ):
         self.bucket = bucket
         self.expiry_seconds = expiry_seconds
         self._session = aioboto3.Session()
@@ -324,8 +332,10 @@ class S3Storage(Storage):
         async with self._client() as s3:
             paginator = s3.get_paginator("list_objects_v2")
             async for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix, Delimiter="/"):
-                names += [p["Prefix"][len(prefix):].rstrip("/") for p in page.get("CommonPrefixes", [])]
-                names += [o["Key"][len(prefix):] for o in page.get("Contents", [])]
+                names += [
+                    p["Prefix"][len(prefix) :].rstrip("/") for p in page.get("CommonPrefixes", [])
+                ]
+                names += [o["Key"][len(prefix) :] for o in page.get("Contents", [])]
         return names
 
     async def delete(self, key: str) -> None:

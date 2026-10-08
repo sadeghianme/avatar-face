@@ -52,12 +52,15 @@ MODEL = "fake-image-model"
 # --- The kit's world -----------------------------------------------------------------
 
 
-def isotropic_pose(shape: str, base_points: np.ndarray, reference: pk.ReferenceMotion) -> np.ndarray:
+def isotropic_pose(
+    shape: str, base_points: np.ndarray, reference: pk.ReferenceMotion
+) -> np.ndarray:
     """The Reference's `shape` on this face, scaled by mouth width alone:
     what a model that drew this person saying it would give back."""
     rest, pose = reference.rest, reference.poses[shape]
-    scale = (np.linalg.norm(base_points[291] - base_points[61])
-             / np.linalg.norm(rest[291] - rest[61]))
+    scale = np.linalg.norm(base_points[291] - base_points[61]) / np.linalg.norm(
+        rest[291] - rest[61]
+    )
     return base_points + (pose - rest) * scale
 
 
@@ -173,7 +176,7 @@ def _targets(manifest: dict) -> dict[str, np.ndarray]:
 
 
 def _path(url: str) -> str:
-    return url[url.index("/storage/"):]
+    return url[url.index("/storage/") :]
 
 
 def _files(prefix: str) -> list[str]:
@@ -186,7 +189,8 @@ def _files(prefix: str) -> list[str]:
 async def _set_switch(org_id: str, enabled: bool) -> None:
     async with get_session_factory()() as db:
         await db.execute(
-            update(Organization).where(Organization.id == org_id)
+            update(Organization)
+            .where(Organization.id == org_id)
             .values(third_party_ai_enabled=enabled)
         )
         await db.commit()
@@ -230,8 +234,7 @@ async def test_finishing_a_person_prepares_their_own_mouth(client, faces, world)
     # The profile has the kit's teeth fit; the jaw range is the Reference's
     # default, which the manifest is true at.
     assert config["profile"]["jawRange"] == manifest["jaw_range"] == 0.85
-    assert set(config["profile"]) == {"teethScale", "teethY", "warmth", "lipProjection",
-                                      "jawRange"}
+    assert set(config["profile"]) == {"teethScale", "teethY", "warmth", "lipProjection", "jawRange"}
     assert config["kit"]["fitted"] == {k: config["profile"][k] for k in ("teethY", "teethScale")}
     kit = config["kit"]
     assert kit["state"] == "made" and kit["source"] == "finish"
@@ -242,21 +245,25 @@ async def test_finishing_a_person_prepares_their_own_mouth(client, faces, world)
 
     # Disclosed, and the consent that let the pictures go is on record.
     assert avatar.ai_edited == {
-        "mode": "teeth", "model": MODEL, "teeth": {"model": MODEL},
+        "mode": "teeth",
+        "model": MODEL,
+        "teeth": {"model": MODEL},
         "mouth_shapes": {"model": MODEL, "generated": 6},
     }
     assert consent_id in avatar.consent_ids
     async with get_session_factory()() as db:
         from app.models import Creation
 
-        creation = (await db.execute(
-            select(Creation).where(Creation.id == base.rsplit("/", 1)[1]))).scalar_one()
+        creation = (
+            await db.execute(select(Creation).where(Creation.id == base.rsplit("/", 1)[1]))
+        ).scalar_one()
     assert consent_id in creation.consent_ids
 
     # The first publish carries all of it, as copies.
     published = json.loads(avatar.published_config)
     assert published["mouth"]["motion_key"] == (
-        f"orgs/{org_id}/avatars/{avatar_id}/published/r0/mouth-motion.json")
+        f"orgs/{org_id}/avatars/{avatar_id}/published/r0/mouth-motion.json"
+    )
     assert await _manifest(published["mouth"]["motion_key"]) == manifest
     assert published["disclosure"]["ai_edited"]["mouth_shapes"] == {"model": MODEL, "generated": 6}
 
@@ -269,8 +276,9 @@ async def test_finishing_a_person_prepares_their_own_mouth(client, faces, world)
     assert mouth["kit"]["state"] == "made"
     assert (mouth["kit"]["generated"], mouth["kit"]["retargeted"]) == (6, 0)
     assert [s["shape"] for s in mouth["kit"]["shapes"]] == list(pk.SHAPES)
-    assert all(s["provenance"] == "generated" and s["reason"] is None
-               for s in mouth["kit"]["shapes"])
+    assert all(
+        s["provenance"] == "generated" and s["reason"] is None for s in mouth["kit"]["shapes"]
+    )
     assert mouth["kit"]["teeth"] == {"used": True, "reason": None}
     assert "motion_key" not in mouth and "kit" not in (mouth["kit"] or {})
 
@@ -279,15 +287,18 @@ async def test_visitors_fetch_the_motion_cross_origin_and_may_cache_it(client, f
     headers, org_id = await _org(client, "visited")
     await ai_consent(client, headers, org_id)
     avatar_id, url, _ = await _finished(client, headers, org_id)
-    served = (await client.get(
-        f"/embed/v1/avatars/{avatar_id}", headers=await _embed_key(client, headers, org_id)
-    )).json()
+    served = (
+        await client.get(
+            f"/embed/v1/avatars/{avatar_id}", headers=await _embed_key(client, headers, org_id)
+        )
+    ).json()
     motion_url = served["mouth"]["motion_url"]
     assert "/published/" in motion_url
 
     origin = "https://shop.example"
     preflight = await client.options(
-        _path(motion_url), headers={"Origin": origin, "Access-Control-Request-Method": "GET"})
+        _path(motion_url), headers={"Origin": origin, "Access-Control-Request-Method": "GET"}
+    )
     assert preflight.status_code == 204
     assert preflight.headers["access-control-allow-origin"] == origin
     fetched = await client.get(_path(motion_url), headers={"Origin": origin})
@@ -300,9 +311,11 @@ async def test_visitors_fetch_the_motion_cross_origin_and_may_cache_it(client, f
     max_age = int(fetched.headers["cache-control"].removeprefix("private, max-age="))
     assert 3600 <= max_age <= 7200
     assert fetched.json()["version"] == 2
-    again = (await client.get(
-        f"/embed/v1/avatars/{avatar_id}", headers=await _embed_key(client, headers, org_id)
-    )).json()
+    again = (
+        await client.get(
+            f"/embed/v1/avatars/{avatar_id}", headers=await _embed_key(client, headers, org_id)
+        )
+    ).json()
     assert again["mouth"]["motion_url"] == motion_url
     assert again["mouth"]["oral"] == served["mouth"]["oral"]
     # The teeth photo's rig is fetched the same way, and cached the same way.
@@ -323,9 +336,7 @@ async def test_visitors_fetch_the_motion_cross_origin_and_may_cache_it(client, f
     assert "/published/" in shared["mouth"]["motion_url"]
 
 
-async def test_refused_shapes_are_the_references_and_every_answer_is_metered(
-    client, faces, world
-):
+async def test_refused_shapes_are_the_references_and_every_answer_is_metered(client, faces, world):
     refused = imagegen.ImageGenRefused("IMAGE_SAFETY")
     world.behaviour.update(oh=[refused, refused], th=[refused, refused])
     # A face a quarter of the frame wide, so its head crop is a real crop.
@@ -343,7 +354,13 @@ async def test_refused_shapes_are_the_references_and_every_answer_is_metered(
         assert kit["shapes"][shape]["attempts"] == [pk.FACE_CROP, pk.HEAD_CROP]
     manifest = await _manifest(config["motion_key"])
     assert [p["provenance"] for p in manifest["poses"][1:]] == [
-        "generated", "generated", "generated", "retargeted", "generated", "retargeted"]
+        "generated",
+        "generated",
+        "generated",
+        "retargeted",
+        "generated",
+        "retargeted",
+    ]
     # Every answer, refusals included, was billed and is metered.
     assert len(world.requests) == 9
     assert await _usage(org_id, IMAGE_KIND) == [mouth_kit.SHAPES_CALL] * 9
@@ -393,12 +410,11 @@ async def test_ai_switched_off_mid_kit_sends_nothing_more(client, faces, world):
     assert await _usage(org_id, IMAGE_KIND) == [mouth_kit.SHAPES_CALL] * 3
     shapes = (await _config(avatar_id))["kit"]["shapes"]
     assert {s: shapes[s]["reason"]["code"] for s in ("oh", "fv", "th")} == dict.fromkeys(
-        ("oh", "fv", "th"), "third_party_ai_disabled")
+        ("oh", "fv", "th"), "third_party_ai_disabled"
+    )
 
 
-async def test_without_consent_nothing_is_made_and_the_bundled_motion_plays(
-    client, faces, world
-):
+async def test_without_consent_nothing_is_made_and_the_bundled_motion_plays(client, faces, world):
     headers, org_id = await _org(client, "unconsented")
     avatar_id, url, _ = await _finished(client, headers, org_id)
     assert world.kits == 0 and world.requests == []
@@ -410,9 +426,11 @@ async def test_without_consent_nothing_is_made_and_the_bundled_motion_plays(
     assert detail["mouth"]["motion_url"] is None and detail["mouth"]["kit"] is None
     published = await _published(avatar_id)
     assert "motion_key" not in published["mouth"]
-    served = (await client.get(
-        f"/embed/v1/avatars/{avatar_id}", headers=await _embed_key(client, headers, org_id)
-    )).json()
+    served = (
+        await client.get(
+            f"/embed/v1/avatars/{avatar_id}", headers=await _embed_key(client, headers, org_id)
+        )
+    ).json()
     assert served["mouth"]["motion_url"] is None
     assert (await _avatar(avatar_id)).ai_edited is None
 
@@ -552,10 +570,15 @@ async def test_a_running_finish_shows_how_many_shapes_are_done(client, faces, wo
     await ai_consent(client, headers, org_id)
     base, _ = await _create(client, headers, org_id)
     anchors = await _detect(client, headers, base)
-    started = await client.post(f"{base}/finish", headers=headers, json={
-        "name": "Ada", "anchors_id": anchors["id"],
-        "consent_id": await depiction(client, headers, base),
-    })
+    started = await client.post(
+        f"{base}/finish",
+        headers=headers,
+        json={
+            "name": "Ada",
+            "anchors_id": anchors["id"],
+            "consent_id": await depiction(client, headers, base),
+        },
+    )
     assert started.status_code == 202, started.text
     for _ in range(200):
         progress = ((await _get(client, headers, base))["job"] or {}).get("progress") or {}
@@ -573,15 +596,16 @@ async def test_a_running_finish_shows_how_many_shapes_are_done(client, faces, wo
 
 
 async def _later_edit(client, headers, url, teeth_y: float = 0.01):
-    response = await client.patch(url, json={"mouth": {
-        "renderer": "continuous", "profile": {"teethY": teeth_y}}}, headers=headers)
+    response = await client.patch(
+        url,
+        json={"mouth": {"renderer": "continuous", "profile": {"teethY": teeth_y}}},
+        headers=headers,
+    )
     assert response.status_code == 200, response.text
     return response.json()
 
 
-async def test_published_motion_copies_are_pruned_and_deleted_with_the_avatar(
-    client, faces, world
-):
+async def test_published_motion_copies_are_pruned_and_deleted_with_the_avatar(client, faces, world):
     headers, org_id = await _org(client, "pruned")
     await ai_consent(client, headers, org_id)
     avatar_id, url, _ = await _finished(client, headers, org_id)
@@ -618,7 +642,8 @@ async def test_discard_brings_the_published_motion_back_labelled(client, faces, 
     assert config["motion_key"] != published["mouth"]["motion_key"]
     assert "/published/" not in config["motion_key"]
     assert await _manifest(config["motion_key"]) == await _manifest(
-        published["mouth"]["motion_key"])
+        published["mouth"]["motion_key"]
+    )
     assert config["kit"]["state"] == "made" and config["kit"]["generated"] == 6
     assert body["mouth"]["kit"]["state"] == "made" and body["mouth"]["motion_url"]
     assert body["ai_edited"]["mouth_shapes"] == {"model": MODEL, "generated": 6}
@@ -637,11 +662,14 @@ async def test_the_shapes_are_disclosed_only_while_visitors_see_them(client, fac
     await client.post(f"{url}/publish", headers=headers)
     assert (await _published(avatar_id))["disclosure"]["ai_edited"] is None
     assert (await _avatar(avatar_id)).ai_edited["mouth_shapes"]["generated"] == 6, (
-        "the draft keeps it with the motion")
+        "the draft keeps it with the motion"
+    )
     await _later_edit(client, headers, url)
     await client.post(f"{url}/publish", headers=headers)
     assert (await _published(avatar_id))["disclosure"]["ai_edited"]["mouth_shapes"] == {
-        "model": MODEL, "generated": 6}
+        "model": MODEL,
+        "generated": 6,
+    }
 
 
 def test_the_disclosure_algebra_keeps_mouth_modes_right():
@@ -649,17 +677,27 @@ def test_the_disclosure_algebra_keeps_mouth_modes_right():
     from app.services.disclosure import with_ai_teeth, without_ai_teeth
 
     shapes = disclosure.with_ai_shapes(None, "m", 4)
-    assert shapes == {"mode": "mouth_shapes", "model": "m",
-                      "mouth_shapes": {"model": "m", "generated": 4}}
+    assert shapes == {
+        "mode": "mouth_shapes",
+        "model": "m",
+        "mouth_shapes": {"model": "m", "generated": 4},
+    }
     both = with_ai_teeth(shapes, "t")
-    assert both["mode"] == "teeth" and both["model"] == "t" and both["mouth_shapes"]["generated"] == 4
+    assert (
+        both["mode"] == "teeth" and both["model"] == "t" and both["mouth_shapes"]["generated"] == 4
+    )
     assert without_ai_teeth(both) == shapes
-    assert disclosure.without_ai_shapes(both) == {"mode": "teeth", "model": "t",
-                                                 "teeth": {"model": "t"}}
+    assert disclosure.without_ai_shapes(both) == {
+        "mode": "teeth",
+        "model": "t",
+        "teeth": {"model": "t"},
+    }
     assert disclosure.without_ai_shapes(shapes) is None
     touched = {"mode": "touchup", "model": "p"}
-    assert disclosure.with_ai_shapes(touched, "m", 6) == {**touched, "mouth_shapes": {
-        "model": "m", "generated": 6}}
+    assert disclosure.with_ai_shapes(touched, "m", 6) == {
+        **touched,
+        "mouth_shapes": {"model": "m", "generated": 6},
+    }
     assert disclosure.without_ai_shapes(disclosure.with_ai_shapes(touched, "m", 6)) == touched
 
 
@@ -678,8 +716,9 @@ async def test_re_marked_points_move_the_kit_without_ai(client, faces, world):
     mouth = anchors["mouth"]
     mouth["left"]["x"] -= 3
     mouth["right"]["x"] += 3
-    saved = await client.post(f"{url}/rig-fit", json={"mouth": mouth, "persist": True},
-                              headers=headers)
+    saved = await client.post(
+        f"{url}/rig-fit", json={"mouth": mouth, "persist": True}, headers=headers
+    )
     assert saved.status_code == 200, saved.text
     rig = saved.json()["rig"]
 
@@ -691,8 +730,11 @@ async def test_re_marked_points_move_the_kit_without_ai(client, faces, world):
     assert np.allclose(new_targets["rest"], rig["points"], atol=0.02)
     assert not np.allclose(new_targets["rest"], old_targets["rest"], atol=0.02)
     for shape in pk.SHAPES:
-        assert np.allclose(new_targets[shape] - new_targets["rest"],
-                           old_targets[shape] - old_targets["rest"], atol=0.02), shape
+        assert np.allclose(
+            new_targets[shape] - new_targets["rest"],
+            old_targets[shape] - old_targets["rest"],
+            atol=0.02,
+        ), shape
     assert new["character"] == old["character"] and new["kit"] == old["kit"]
     assert after["kit"]["rebased_at"]
     assert len(world.requests) == calls, "no AI call"
@@ -713,8 +755,9 @@ async def test_a_redetection_of_the_same_picture_moves_the_kit_too(client, faces
     rig = json.loads(await get_storage().get_bytes(avatar.rig_key))
     after = json.loads(avatar.mouth_config)
     assert after["motion_key"] != before["motion_key"]
-    assert np.allclose(_targets(await _manifest(after["motion_key"]))["rest"], rig["points"],
-                       atol=0.02)
+    assert np.allclose(
+        _targets(await _manifest(after["motion_key"]))["rest"], rig["points"], atol=0.02
+    )
     # The rig changed: visitors get it at the next publish, which the
     # Publish bar says.
     assert (await client.get(url, headers=headers)).json()["unpublished"] is True
@@ -736,8 +779,9 @@ async def test_a_crop_moves_the_kit_with_the_face(client, faces, world):
     calls = len(world.requests)
     old = _targets(await _manifest(before["motion_key"]))
 
-    cropped = await client.post(f"{url}/crop", json={"x": 0.05, "y": 0.05, "width": 0.9,
-                                                     "height": 0.9}, headers=headers)
+    cropped = await client.post(
+        f"{url}/crop", json={"x": 0.05, "y": 0.05, "width": 0.9, "height": 0.9}, headers=headers
+    )
     assert cropped.status_code == 200, cropped.text
     config = await _config(avatar_id)
     rig = await _rig(avatar_id)
@@ -773,8 +817,9 @@ async def test_a_crop_moves_the_kit_with_the_face(client, faces, world):
     assert len(world.requests) == calls, "no AI call"
 
     # Cropped again and reset.
-    await client.post(f"{url}/crop", json={"x": 0.1, "y": 0.0, "width": 0.8, "height": 0.9},
-                      headers=headers)
+    await client.post(
+        f"{url}/crop", json={"x": 0.1, "y": 0.0, "width": 0.8, "height": 0.9}, headers=headers
+    )
     reset = await client.post(f"{url}/crop", json={"reset": True}, headers=headers)
     assert reset.status_code == 200, reset.text
     config = await _config(avatar_id)
@@ -815,11 +860,16 @@ async def test_an_undo_of_the_same_rig_changes_nothing_and_a_kit_that_cannot_fol
     key = "orgs/o/avatars/a/mouth-motion-1.json"
     await storage.put_bytes(key, b"not json", "application/json")
     row = SimpleNamespace(
-        id="a", org_id="o",
-        ai_edited={"mode": "mouth_shapes", "model": "m",
-                   "mouth_shapes": {"model": "m", "generated": 6}},
-        mouth_config=json.dumps({"renderer": "continuous", "profile": {},
-                                 "motion_key": key, "kit": {"state": "made"}}),
+        id="a",
+        org_id="o",
+        ai_edited={
+            "mode": "mouth_shapes",
+            "model": "m",
+            "mouth_shapes": {"model": "m", "generated": 6},
+        },
+        mouth_config=json.dumps(
+            {"renderer": "continuous", "profile": {}, "motion_key": key, "kit": {"state": "made"}}
+        ),
     )
     rig = {"image_size": [400, 500], "points": [[1.0, 2.0]] * 478}
     assert await mouth_kit.follow_rig(row, storage, rig, dict(rig)) == []
@@ -844,8 +894,7 @@ async def _panel_person(client, who) -> tuple[dict, str, str, str]:
 
 
 async def _start(client, headers, url, consent_id):
-    return await client.post(f"{url}/mouth-kit", json={"consent_id": consent_id},
-                             headers=headers)
+    return await client.post(f"{url}/mouth-kit", json={"consent_id": consent_id}, headers=headers)
 
 
 async def _job(client, headers, url) -> dict | None:
@@ -935,11 +984,15 @@ async def test_the_panels_kit_is_for_a_person_only(client, faces, world):
 async def test_the_owners_teeth_are_never_replaced(client, faces, world, mouth_detector):
     headers, org_id, url, consent_id = await _panel_person(client, "ownteeth")
     avatar_id = url.rsplit("/", 1)[1]
-    uploaded = await client.post(f"{url}/mouth-photo", files={
-        "file": ("ee.png", FULL_CROWNS, "image/png")}, headers=headers)
+    uploaded = await client.post(
+        f"{url}/mouth-photo", files={"file": ("ee.png", FULL_CROWNS, "image/png")}, headers=headers
+    )
     assert uploaded.status_code == 200, uploaded.text
-    await client.patch(url, json={"mouth": {"renderer": "continuous", "profile": {
-        "teethY": 0.03, "jawRange": 0.95}}}, headers=headers)
+    await client.patch(
+        url,
+        json={"mouth": {"renderer": "continuous", "profile": {"teethY": 0.03, "jawRange": 0.95}}},
+        headers=headers,
+    )
     before = await _config(avatar_id)
 
     assert (await _start(client, headers, url, consent_id)).status_code == 202
@@ -955,8 +1008,11 @@ async def test_the_owners_teeth_are_never_replaced(client, faces, world, mouth_d
     assert after["profile"]["teethY"] == 0.03 and after["profile"]["jawRange"] == 0.95
     assert after["kit"]["teeth"] == {"used": False, "reason": mouth_kit.OWNER_PHOTO}
     ai_edited = (await _avatar(avatar_id)).ai_edited
-    assert ai_edited == {"mode": "mouth_shapes", "model": MODEL,
-                         "mouth_shapes": {"model": MODEL, "generated": 6}}
+    assert ai_edited == {
+        "mode": "mouth_shapes",
+        "model": MODEL,
+        "mouth_shapes": {"model": MODEL, "generated": 6},
+    }
 
 
 async def test_a_kit_that_makes_nothing_fails_and_leaves_the_draft_alone(client, faces, world):
@@ -990,8 +1046,9 @@ async def test_where_the_panel_cannot_make_a_kit_it_makes_the_teeth(
     assert consent_id in (await _avatar(avatar_id)).consent_ids
 
     # With the owner's own teeth there is nothing it could bring.
-    uploaded = await client.post(f"{url}/mouth-photo", files={
-        "file": ("ee.png", FULL_CROWNS, "image/png")}, headers=headers)
+    uploaded = await client.post(
+        f"{url}/mouth-photo", files={"file": ("ee.png", FULL_CROWNS, "image/png")}, headers=headers
+    )
     assert uploaded.status_code == 200
     assert (await _start(client, headers, url, consent_id)).status_code == 202
     await runner.drain()
@@ -1001,8 +1058,9 @@ async def test_where_the_panel_cannot_make_a_kit_it_makes_the_teeth(
 
 async def test_the_old_synchronous_teeth_route_is_gone(client, faces, world):
     headers, _, url, consent_id = await _panel_person(client, "oldroute")
-    response = await client.post(f"{url}/mouth-photo/generate",
-                                 json={"consent_id": consent_id}, headers=headers)
+    response = await client.post(
+        f"{url}/mouth-photo/generate", json={"consent_id": consent_id}, headers=headers
+    )
     assert response.status_code in (404, 405)
 
 
@@ -1011,8 +1069,9 @@ async def test_another_orgs_kit_is_not_yours(client, faces, world):
     other_headers, other_org = await _org(client, "stranger")
     foreign = url.replace(url.split("/")[2], other_org)
     assert (await client.get(f"{foreign}/mouth-kit", headers=other_headers)).status_code == 404
-    started = await client.post(f"{foreign}/mouth-kit", json={"consent_id": consent_id},
-                                headers=other_headers)
+    started = await client.post(
+        f"{foreign}/mouth-kit", json={"consent_id": consent_id}, headers=other_headers
+    )
     assert started.status_code == 404
 
 
@@ -1024,10 +1083,16 @@ async def test_the_guard_meters_what_was_billed_as_the_kit_counts_it(client, mon
     flight; none for a call that never reached the provider or failed
     without an answer."""
     headers, org_id = await _org(client, "guarded")
-    outcomes = iter([
-        None, imagegen.ImageGenRefused("SAFETY"), imagegen.ImageGenNoImage("NO_IMAGE"),
-        TimeoutError(), RuntimeError("500"), imagegen.ImageGenUnavailable("no key"),
-    ])
+    outcomes = iter(
+        [
+            None,
+            imagegen.ImageGenRefused("SAFETY"),
+            imagegen.ImageGenNoImage("NO_IMAGE"),
+            TimeoutError(),
+            RuntimeError("500"),
+            imagegen.ImageGenUnavailable("no key"),
+        ]
+    )
 
     async def provider(prompt, payload, mime):
         error = next(outcomes)
@@ -1076,11 +1141,20 @@ def test_a_kit_whose_motion_did_not_come_back_is_restored_as_dropped():
     none = {**made, "generated": 0}
     assert publishing._restored_kit(none, False) == none
     # And no label for shapes that are not there.
-    config = {"disclosure": {"ai_edited": {"mode": "mouth_shapes", "model": "m",
-                                           "mouth_shapes": {"model": "m", "generated": 6}}}}
+    config = {
+        "disclosure": {
+            "ai_edited": {
+                "mode": "mouth_shapes",
+                "model": "m",
+                "mouth_shapes": {"model": "m", "generated": 6},
+            }
+        }
+    }
     assert publishing._restored_ai_edited(None, config, None, gone) is None
     assert publishing._restored_ai_edited(None, config, None, made)["mouth_shapes"] == {
-        "model": "m", "generated": 6}
+        "model": "m",
+        "generated": 6,
+    }
 
 
 # --- What review found: races, consent, connections, leaks, edits --------------------------
@@ -1102,13 +1176,12 @@ async def _creation_row(base: str):
     from app.models import Creation
 
     async with get_session_factory()() as db:
-        return (await db.execute(
-            select(Creation).where(Creation.id == base.rsplit("/", 1)[1]))).scalar_one()
+        return (
+            await db.execute(select(Creation).where(Creation.id == base.rsplit("/", 1)[1]))
+        ).scalar_one()
 
 
-async def test_a_redetection_never_undoes_a_kit_stored_meanwhile(
-    client, faces, world, monkeypatch
-):
+async def test_a_redetection_never_undoes_a_kit_stored_meanwhile(client, faces, world, monkeypatch):
     """Re-detect (process_avatar) reads its row, detects, and writes it back
     much later. A Mouth panel kit stored in between (six paid calls, new
     teeth) survives it, and follows the new points: the re-detection moves
@@ -1165,8 +1238,9 @@ async def test_a_redetection_never_undoes_a_kit_stored_meanwhile(
     assert await storage.exists(final["oral_image_key"])
     assert await storage.exists(final["motion_key"])
     rig = await _rig(avatar_id)
-    assert np.allclose(_targets(await _manifest(final["motion_key"]))["rest"], rig["points"],
-                       atol=0.02)
+    assert np.allclose(
+        _targets(await _manifest(final["motion_key"]))["rest"], rig["points"], atol=0.02
+    )
     for key in (first["motion_key"], first["oral_image_key"]):
         assert not await storage.exists(key), key
     detail = (await client.get(url, headers=headers)).json()
@@ -1303,8 +1377,11 @@ async def test_the_panels_kit_sends_nothing_before_its_consent_is_recorded(
         assert recorded_before_sending and all(recorded_before_sending)
         assert len(world.requests) == len(await _usage(org_id, IMAGE_KIND)) > 0
         kit = (await _config(avatar_id))["kit"]
-        stopped = [s for s, e in kit["shapes"].items()
-                   if (e["reason"] or {}).get("code") == "consent_not_recorded"]
+        stopped = [
+            s
+            for s, e in kit["shapes"].items()
+            if (e["reason"] or {}).get("code") == "consent_not_recorded"
+        ]
         assert stopped, "the call waiting on the failed record did not go"
 
 
@@ -1470,8 +1547,9 @@ async def test_an_upload_removed_after_the_kit_gives_the_standard_teeth_their_se
     headers, org_id = await _org(client, "uploadremoved")
     await ai_consent(client, headers, org_id)
     avatar_id, url, _ = await _finished(client, headers, org_id)
-    uploaded = await client.post(f"{url}/mouth-photo", files={
-        "file": ("ee.png", FULL_CROWNS, "image/png")}, headers=headers)
+    uploaded = await client.post(
+        f"{url}/mouth-photo", files={"file": ("ee.png", FULL_CROWNS, "image/png")}, headers=headers
+    )
     assert uploaded.status_code == 200, uploaded.text
     assert _teeth_values(await _config(avatar_id)) == (0.0, 1.0)
     removed = await client.delete(f"{url}/mouth-photo", headers=headers)
@@ -1487,8 +1565,9 @@ async def test_an_upload_after_the_kit_is_seated_as_any_photo_is(
     headers, org_id = await _org(client, "uploadafter")
     await ai_consent(client, headers, org_id)
     avatar_id, url, _ = await _finished(client, headers, org_id)
-    uploaded = await client.post(f"{url}/mouth-photo", files={
-        "file": ("ee.png", FULL_CROWNS, "image/png")}, headers=headers)
+    uploaded = await client.post(
+        f"{url}/mouth-photo", files={"file": ("ee.png", FULL_CROWNS, "image/png")}, headers=headers
+    )
     assert uploaded.status_code == 200, uploaded.text
     config = await _config(avatar_id)
     assert (config["profile"]["teethY"], config["profile"]["teethScale"]) == (0.0, 1.0)
@@ -1500,8 +1579,11 @@ async def test_teeth_values_the_owner_moved_are_theirs(client, faces, world):
     await ai_consent(client, headers, org_id)
     avatar_id, url, _ = await _finished(client, headers, org_id)
     fitted = (await _config(avatar_id))["profile"]
-    await client.patch(url, json={"mouth": {"renderer": "continuous", "profile": {
-        **fitted, "teethY": 0.04}}}, headers=headers)
+    await client.patch(
+        url,
+        json={"mouth": {"renderer": "continuous", "profile": {**fitted, "teethY": 0.04}}},
+        headers=headers,
+    )
     await client.delete(f"{url}/mouth-photo", headers=headers)
     config = await _config(avatar_id)
     assert config["profile"]["teethY"] == 0.04, "moved by the owner: kept"
@@ -1535,8 +1617,11 @@ async def test_publishing_sweeps_mouth_files_no_draft_names(client, faces, world
     avatar_id, url, _ = await _finished(client, headers, org_id)
     storage = get_storage()
     prefix = f"orgs/{org_id}/avatars/{avatar_id}/"
-    orphans = [f"{prefix}mouth-motion-deadbeef.json", f"{prefix}mouth-deadbeef.webp",
-               f"{prefix}mouth-deadbeef.json"]
+    orphans = [
+        f"{prefix}mouth-motion-deadbeef.json",
+        f"{prefix}mouth-deadbeef.webp",
+        f"{prefix}mouth-deadbeef.json",
+    ]
     for key in orphans:
         await storage.put_bytes(key, b"{}", "application/json")
     await _later_edit(client, headers, url)
@@ -1581,7 +1666,7 @@ async def test_an_avatar_being_prepared_points_to_its_creation(client, faces, wo
 
 
 async def test_a_teeth_photo_that_failed_a_check_says_which(client, faces, world):
-    """"Rejected" alone would not say whether the lips were too close or
+    """ "Rejected" alone would not say whether the lips were too close or
     the head moved: the note carries the check's own reason."""
     world.behaviour[pk.TEETH] = lambda points: rotate(points, 8)
     headers, org_id = await _org(client, "whichcheck")

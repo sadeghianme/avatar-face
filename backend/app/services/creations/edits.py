@@ -120,8 +120,13 @@ async def frame_or_line(
                 await get_storage().put_bytes(key, data, "image/png")
                 new_keys.append(key)
                 framed: StepItem = {
-                    "key": key, "width": width, "height": height, "from": "original",
-                    "crop": crop, "roll": roll, "check": check,
+                    "key": key,
+                    "width": width,
+                    "height": height,
+                    "from": "original",
+                    "crop": crop,
+                    "roll": roll,
+                    "check": check,
                 }
                 items["framed"] = framed
                 steps["current"] = "framed"

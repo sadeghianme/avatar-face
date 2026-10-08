@@ -40,7 +40,8 @@ def open_mouth_photo(monkeypatch):
         lambda data, purpose: (data, {"points": [], "inner_lip_ring": []}, None),
     )
     monkeypatch.setattr(
-        mouth_photo, "teeth_verdict",
+        mouth_photo,
+        "teeth_verdict",
         lambda photo, rig: Acceptance(True, 400, 20000, 0.12, 0.14),
     )
     monkeypatch.setattr(mouth_photo, "crop_to_mouth", lambda png, rig: (png, rig))
@@ -82,7 +83,9 @@ async def test_the_fit_profile_is_range_checked(client, setup):
     response = await client.patch(f"/orgs/{org_id}/avatars/{avatar_id}", json=bad, headers=headers)
     assert response.status_code == 422
     unknown = {"mouth": {"renderer": "hologram"}}
-    response = await client.patch(f"/orgs/{org_id}/avatars/{avatar_id}", json=unknown, headers=headers)
+    response = await client.patch(
+        f"/orgs/{org_id}/avatars/{avatar_id}", json=unknown, headers=headers
+    )
     assert response.status_code == 422
 
 
@@ -117,7 +120,9 @@ async def test_the_teeth_photo_is_published_as_a_copy(client, setup, open_mouth_
 async def test_discard_restores_the_published_mouth(client, setup, open_mouth_photo):
     headers, org_id, avatar_id, _ = setup
     url = f"/orgs/{org_id}/avatars/{avatar_id}"
-    await client.post(f"{url}/mouth-photo", files={"file": ("ee.png", _png(), "image/png")}, headers=headers)
+    await client.post(
+        f"{url}/mouth-photo", files={"file": ("ee.png", _png(), "image/png")}, headers=headers
+    )
     await client.post(f"{url}/publish", headers=headers)
     await client.patch(url, json={"mouth": {"renderer": "classic"}}, headers=headers)
     await client.delete(f"{url}/mouth-photo", headers=headers)
@@ -185,9 +190,7 @@ async def test_the_photographic_mouth_is_for_human_faces_only(client, setup, fac
     headers, org_id, avatar_id, _ = setup
     url = f"/orgs/{org_id}/avatars/{avatar_id}"
     await client.patch(url, json={"face_type": face_type}, headers=headers)
-    response = await client.patch(
-        url, json={"mouth": {"renderer": "continuous"}}, headers=headers
-    )
+    response = await client.patch(url, json={"mouth": {"renderer": "continuous"}}, headers=headers)
     assert response.status_code == 422
     assert response.json()["code"] == "mouth_not_for_face_type"
     # Nor in one request that changes both.
@@ -195,7 +198,9 @@ async def test_the_photographic_mouth_is_for_human_faces_only(client, setup, fac
         url, json={"face_type": face_type, "mouth": {"renderer": "continuous"}}, headers=headers
     )
     assert both.status_code == 422
-    assert (await client.patch(url, json={"mouth": {"renderer": "classic"}}, headers=headers)).status_code == 200
+    assert (
+        await client.patch(url, json={"mouth": {"renderer": "classic"}}, headers=headers)
+    ).status_code == 200
 
 
 async def test_a_face_that_stops_being_human_loses_the_photographic_mouth(client, setup):

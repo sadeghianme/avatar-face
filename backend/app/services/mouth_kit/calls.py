@@ -163,7 +163,9 @@ class CallGuard:
                 self._in_flight -= 1
 
 
-def progress_to(job: Job | None, start: float, end: float) -> Callable[[float, str, int, int], None]:
+def progress_to(
+    job: Job | None, start: float, end: float
+) -> Callable[[float, str, int, int], None]:
     """The kit's progress as `job`'s, between `start` and `end` of its bar:
     SHAPES_LABEL with how many of its requests (the six shapes and the
     teeth photo) are settled, then FIT_LABEL once they all are (the fit,
@@ -204,7 +206,12 @@ async def make(
     guard = CallGuard(org_id, on_first_send)
     async with runner.outside_slot(job):
         return await performance_kit.build_kit(
-            picture, points, guard, teeth=teeth, concurrency=CONCURRENCY, bound_calls=False,
+            picture,
+            points,
+            guard,
+            teeth=teeth,
+            concurrency=CONCURRENCY,
+            bound_calls=False,
             on_progress=on_progress,
         )
 

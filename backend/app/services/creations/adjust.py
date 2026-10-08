@@ -134,17 +134,21 @@ def mouth_warnings(creation: Creation) -> list[Note]:
         return []
     state = (check_of(creation.steps, current_step(creation.steps)) or {}).get("face_state") or {}
     if state.get("mouth_open"):
-        return [error_record(
-            "mouth_open",
-            "The mouth is open in this picture, so the avatar rests with it open; "
-            "regenerate the photo or use one with the lips closed",
-        )]
+        return [
+            error_record(
+                "mouth_open",
+                "The mouth is open in this picture, so the avatar rests with it open; "
+                "regenerate the photo or use one with the lips closed",
+            )
+        ]
     if state.get("teeth_showing"):
-        return [error_record(
-            "teeth_showing",
-            "The lips are parted in this picture, so its own teeth stay painted on them "
-            "as the avatar talks; a touch-up closes them",
-        )]
+        return [
+            error_record(
+                "teeth_showing",
+                "The lips are parted in this picture, so its own teeth stay painted on them "
+                "as the avatar talks; a touch-up closes them",
+            )
+        ]
     return []
 
 
@@ -213,12 +217,18 @@ async def run_adjust(job: Job, params: dict) -> None:
             answered += 1
             async with get_session_factory()() as db:
                 await record_generation(db, job.org_id, "gemini", ADJUST_CALLS[mode])
-            outcomes.append((
-                photo_adjust.Candidate(None, rejected=photo_adjust.reason(
-                    "no_image", "The AI answered without an image, so it was not asked again",
-                )),
-                imagegen.MODEL,
-            ))
+            outcomes.append(
+                (
+                    photo_adjust.Candidate(
+                        None,
+                        rejected=photo_adjust.reason(
+                            "no_image",
+                            "The AI answered without an image, so it was not asked again",
+                        ),
+                    ),
+                    imagegen.MODEL,
+                )
+            )
             logger.info("adjust %s answered without an image (%s)", job.id, exc.reason)
             break
         except imagegen.ImageGenRefused as exc:
@@ -237,18 +247,24 @@ async def run_adjust(job: Job, params: dict) -> None:
                 if fallback is not None:
                     logger.info(
                         "adjust %s refused (%s); asking once more with the head crop",
-                        job.id, exc.reason,
+                        job.id,
+                        exc.reason,
                     )
                     prepared = fallback
                     attempt -= 1
                     continue
-            outcomes.append((
-                photo_adjust.Candidate(None, rejected=photo_adjust.reason(
-                    "safety_refused",
-                    "The AI declined to edit this photo, so it was not asked again",
-                )),
-                imagegen.MODEL,
-            ))
+            outcomes.append(
+                (
+                    photo_adjust.Candidate(
+                        None,
+                        rejected=photo_adjust.reason(
+                            "safety_refused",
+                            "The AI declined to edit this photo, so it was not asked again",
+                        ),
+                    ),
+                    imagegen.MODEL,
+                )
+            )
             logger.info("adjust %s refused (%s); not retried", job.id, exc.reason)
             break
         except imagegen.ImageGenUnavailable as exc:
@@ -261,12 +277,17 @@ async def run_adjust(job: Job, params: dict) -> None:
             # Broad on purpose: the provider's call fails in many types; any
             # other than those above costs this candidate, not the round.
             logger.exception("adjust %s: the provider call failed", job.id)
-            outcomes.append((
-                photo_adjust.Candidate(None, rejected=photo_adjust.reason(
-                    "provider_error", "The AI service did not return an image"
-                )),
-                None,
-            ))
+            outcomes.append(
+                (
+                    photo_adjust.Candidate(
+                        None,
+                        rejected=photo_adjust.reason(
+                            "provider_error", "The AI service did not return an image"
+                        ),
+                    ),
+                    None,
+                )
+            )
             continue
         answered += 1
         async with get_session_factory()() as db:
@@ -300,7 +321,7 @@ async def run_adjust(job: Job, params: dict) -> None:
         if candidate.png is not None:
             step_id = f"{ADJUSTED_PREFIX}{number}"
             number += 1
-            key = step_key(job.org_id, job.subject_id, f"adjusted{step_id[len(ADJUSTED_PREFIX):]}")
+            key = step_key(job.org_id, job.subject_id, f"adjusted{step_id[len(ADJUSTED_PREFIX) :]}")
             await storage.put_bytes(key, candidate.png, "image/png")
             new_keys.append(key)
             # Checked like any image the owner may use, so step 3 can say
@@ -308,7 +329,8 @@ async def run_adjust(job: Job, params: dict) -> None:
             # one: it cannot be chosen.
             check = (
                 step_check(await run_cpu(check_png, candidate.png))
-                if candidate.rejected is None else None
+                if candidate.rejected is None
+                else None
             )
             item: StepItem = {
                 "key": key,

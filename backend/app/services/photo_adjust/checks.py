@@ -53,8 +53,10 @@ def cheek_colour(image: Image.Image, points: np.ndarray) -> np.ndarray | None:
 
 
 def skin_drift(
-    source: Image.Image, source_points: np.ndarray | None,
-    candidate: Image.Image, candidate_points: np.ndarray | None,
+    source: Image.Image,
+    source_points: np.ndarray | None,
+    candidate: Image.Image,
+    candidate_points: np.ndarray | None,
 ) -> float | None:
     """Delta E (lightness at half weight) between the two cheek colours, or
     None when either face was not found."""
@@ -124,9 +126,7 @@ def _checked(
             # Like with like: the source is judged on the grey the model
             # saw, so a cut-out candidate is too (not on the black under
             # its alpha 0).
-            drift = skin_drift(
-                source, source_points, on_backdrop(image), np.asarray(found["base"])
-            )
+            drift = skin_drift(source, source_points, on_backdrop(image), np.asarray(found["base"]))
             if drift is not None:
                 candidate.checks["skin_delta_e"] = round(drift, 1)
                 if drift > MAX_SKIN_DELTA_E:
@@ -170,7 +170,9 @@ def finish_candidate(
             # saw: outside the eyes and lips a cut-out stays bit-identical.
             image = paste_back(
                 _own_rgb(data) if alpha is not None else source,
-                prepared.source_points, result, result_points,
+                prepared.source_points,
+                result,
+                result_points,
             )
         except AdjustSkipped as exc:
             return Candidate(None, rejected=reason(exc.code, exc.detail))

@@ -1,4 +1,5 @@
 """Usage metering: every synthesis is recorded; orgs have a monthly char limit."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -43,7 +44,12 @@ VISION_KIND = "vision_points"
 # kit makes (services.mouth_kit), its "ee" (the teeth photo) included;
 # "teeth": the single "ee" photo made when the kit cannot be.
 IMAGE_CALLS = (
-    "generate", "adjust_touchup", "adjust_stylise", "adjust_regen", "teeth", "mouth_shapes",
+    "generate",
+    "adjust_touchup",
+    "adjust_stylise",
+    "adjust_regen",
+    "teeth",
+    "mouth_shapes",
     # The wizard's step 3 (services.wizard): the upload in its look, or a change.
     "prepare",
 )
@@ -85,9 +91,7 @@ async def record_generation(
     character total, which is metered separately and would otherwise be
     silently inflated by a feature that has nothing to do with speech.
     `call` names what the image was for (IMAGE_CALLS)."""
-    db.add(
-        UsageEvent(org_id=org_id, kind=IMAGE_KIND, provider=provider, char_count=0, source=call)
-    )
+    db.add(UsageEvent(org_id=org_id, kind=IMAGE_KIND, provider=provider, char_count=0, source=call))
     await db.commit()
 
 
@@ -117,9 +121,7 @@ async def record_vision(db: AsyncSession, org_id: str, provider: str) -> None:
 
 async def record_generated_avatar(db: AsyncSession, org_id: str, provider: str) -> None:
     """A candidate the user actually kept."""
-    db.add(
-        UsageEvent(org_id=org_id, kind=GENERATED_AVATAR_KIND, provider=provider, char_count=0)
-    )
+    db.add(UsageEvent(org_id=org_id, kind=GENERATED_AVATAR_KIND, provider=provider, char_count=0))
     await db.commit()
 
 
@@ -134,8 +136,7 @@ async def check_usage_limit(db: AsyncSession, org_id: str, incoming_chars: int) 
 
 
 async def record_synthesis(
-    db: AsyncSession, org_id: str, provider: str, char_count: int,
-    cached: bool, source: str
+    db: AsyncSession, org_id: str, provider: str, char_count: int, cached: bool, source: str
 ) -> None:
     db.add(
         UsageEvent(

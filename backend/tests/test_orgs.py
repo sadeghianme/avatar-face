@@ -26,7 +26,10 @@ async def test_the_personal_org_is_made_once_however_many_times_it_is_asked(clie
     # Racing requests (a double-fired effect, two tabs): one organization.
     other = await register_and_login(client, "racer")
     results = await asyncio.gather(
-        *[client.post("/orgs", json={"name": "r", "personal": True}, headers=other) for _ in range(5)]
+        *[
+            client.post("/orgs", json={"name": "r", "personal": True}, headers=other)
+            for _ in range(5)
+        ]
     )
     assert all(r.status_code in (200, 201) for r in results), [r.text for r in results]
     assert len({r.json()["id"] for r in results}) == 1
@@ -39,7 +42,10 @@ async def test_the_personal_org_is_made_once_however_many_times_it_is_asked(clie
     # Nobody else's personal organization is returned to another user.
     third = await register_and_login(client, "third")
     mine = await client.post("/orgs", json=body, headers=third)
-    assert mine.status_code == 201 and mine.json()["id"] not in {first.json()["id"], made.json()["id"]}
+    assert mine.status_code == 201 and mine.json()["id"] not in {
+        first.json()["id"],
+        made.json()["id"],
+    }
 
 
 async def test_non_member_gets_404(client):
@@ -53,9 +59,7 @@ async def test_non_member_gets_404(client):
 async def test_rename_requires_admin(client):
     alice = await register_and_login(client, "alice")
     org_id = await create_org(client, alice)
-    response = await client.patch(
-        f"/orgs/{org_id}", json={"name": "Renamed"}, headers=alice
-    )
+    response = await client.patch(f"/orgs/{org_id}", json={"name": "Renamed"}, headers=alice)
     assert response.status_code == 200
     assert response.json()["name"] == "Renamed"
 
@@ -125,9 +129,7 @@ async def test_revoked_invitation_cannot_be_accepted(client):
         headers=alice,
     )
     invitation_id, token = invite.json()["id"], invite.json()["token"]
-    revoke = await client.delete(
-        f"/orgs/{org_id}/invitations/{invitation_id}", headers=alice
-    )
+    revoke = await client.delete(f"/orgs/{org_id}/invitations/{invitation_id}", headers=alice)
     assert revoke.status_code == 204
     bob = await register_and_login(client, "bob")
     response = await client.post(f"/invitations/{token}/accept", headers=bob)

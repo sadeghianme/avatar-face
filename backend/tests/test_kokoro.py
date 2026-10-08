@@ -1,6 +1,5 @@
 """Kokoro local TTS: registration, graceful absence, and cue alignment."""
 
-
 from app.services.tts.base import SynthesisResult
 from app.services.tts.kokoro import DEFAULT_VOICE, VOICES, KokoroTTSProvider
 
@@ -69,7 +68,7 @@ async def test_british_voices_phonemize_as_british(monkeypatch):
 
     monkeypatch.setattr(
         "app.services.tts.kokoro._render",
-        lambda text, voice_id, lang: (captured.update(lang=lang) or (b"RIFF", 500)),
+        lambda text, voice_id, lang: captured.update(lang=lang) or (b"RIFF", 500),
     )
     provider = KokoroTTSProvider()
     await provider.synthesize("hello", "bf_emma", "en-GB")

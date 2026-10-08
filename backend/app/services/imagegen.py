@@ -297,7 +297,9 @@ async def _request(prompt: str, source: bytes | None, source_mime: str) -> Gener
     if response.status_code >= 300:
         # The body carries the reason — a blocked prompt and an invalid key
         # look identical without it.
-        logger.error("gemini rejected the request (%s): %s", response.status_code, response.text[:400])
+        logger.error(
+            "gemini rejected the request (%s): %s", response.status_code, response.text[:400]
+        )
         raise RuntimeError(f"image generation failed ({response.status_code})")
 
     body = response.json()
@@ -448,11 +450,16 @@ async def _qwen_image(prompt: str, source: bytes | None, mime: str | None) -> Ge
                 },
             )
             if response.status_code >= 300:
-                logger.error("qwen edit rejected (%s): %s", response.status_code, response.text[:300])
+                logger.error(
+                    "qwen edit rejected (%s): %s", response.status_code, response.text[:300]
+                )
                 raise RuntimeError(f"Qwen image generation failed ({response.status_code})")
             content = (
-                response.json().get("output", {}).get("choices", [{}])[0]
-                .get("message", {}).get("content", [])
+                response.json()
+                .get("output", {})
+                .get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", [])
             )
             image_url = next((c["image"] for c in content if "image" in c), None)
         else:
@@ -467,7 +474,9 @@ async def _qwen_image(prompt: str, source: bytes | None, mime: str | None) -> Ge
                 },
             )
             if submitted.status_code >= 300:
-                logger.error("qwen submit rejected (%s): %s", submitted.status_code, submitted.text[:300])
+                logger.error(
+                    "qwen submit rejected (%s): %s", submitted.status_code, submitted.text[:300]
+                )
                 raise RuntimeError(f"Qwen image generation failed ({submitted.status_code})")
             task_id = submitted.json().get("output", {}).get("task_id")
             if not task_id:
@@ -483,7 +492,9 @@ async def _qwen_image(prompt: str, source: bytes | None, mime: str | None) -> Ge
                     image_url = results[0].get("url") if results else None
                     break
                 if state in ("FAILED", "CANCELED"):
-                    raise RuntimeError(f"Qwen task {state.lower()}: {output.get('message', '')[:120]}")
+                    raise RuntimeError(
+                        f"Qwen task {state.lower()}: {output.get('message', '')[:120]}"
+                    )
 
         if not image_url:
             raise RuntimeError("Qwen returned no image")

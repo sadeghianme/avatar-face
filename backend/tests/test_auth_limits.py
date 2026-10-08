@@ -116,7 +116,9 @@ async def test_forgot_password_is_limited_per_client(client, monkeypatch):
 async def test_reset_password_is_limited_per_client(client, monkeypatch):
     monkeypatch.setattr(auth, "RESET_PER_CLIENT", Limit("reset-client-test", 2, 900))
     body = {"token": "not-a-token", "password": "a-new-password"}
-    assert [(await client.post("/auth/reset-password", json=body)).status_code for _ in range(2)] == [
+    assert [
+        (await client.post("/auth/reset-password", json=body)).status_code for _ in range(2)
+    ] == [
         401,
         401,
     ]

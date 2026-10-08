@@ -36,7 +36,8 @@ def test_the_embed_draws_the_standard_teeth():
         assert image.format == "WEBP"
         assert list(image.size) == rig["image_size"]
         verdict = dental_photo.accept_teeth_photo(
-            image, np.asarray(rig["points"]), rig["inner_lip_ring"])
+            image, np.asarray(rig["points"]), rig["inner_lip_ring"]
+        )
     assert verdict.accepted, verdict.as_dict()
     assert verdict.crown_coverage == pytest.approx(0.115, abs=0.003)
 
@@ -49,14 +50,17 @@ def test_they_are_what_the_script_builds_from_the_references_photo():
     from scripts.build_standard_teeth import REFERENCE, build
 
     photo, rig = _assets()
-    built, built_rig = build(REFERENCE / "oral-detail-v3.webp",
-                             REFERENCE / "oral-detail-v3.rig.json")
+    built, built_rig = build(
+        REFERENCE / "oral-detail-v3.webp", REFERENCE / "oral-detail-v3.rig.json"
+    )
     assert rig == built_rig
     # Pixel for pixel as built here (the encoder of another Pillow may
     # write other bytes for the same pixels, within the WebP's own loss).
     with Image.open(io.BytesIO(photo)) as ours, Image.open(io.BytesIO(built)) as fresh:
-        difference = np.abs(np.asarray(ours.convert("RGB"), dtype=np.int16)
-                            - np.asarray(fresh.convert("RGB"), dtype=np.int16))
+        difference = np.abs(
+            np.asarray(ours.convert("RGB"), dtype=np.int16)
+            - np.asarray(fresh.convert("RGB"), dtype=np.int16)
+        )
     assert difference.mean() < 1.0
 
 

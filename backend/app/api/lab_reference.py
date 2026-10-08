@@ -1,4 +1,5 @@
 """Private, temporary reference previews. Never create or publish an avatar."""
+
 from __future__ import annotations
 
 import json
@@ -30,7 +31,9 @@ class ReferencePreview(BaseModel):
 
 
 @router.post("/preview", response_model=ReferencePreview, status_code=201)
-async def upload_reference(file: UploadFile, ctx: OrgMember, purpose: Literal["portrait", "mouth"] = "portrait") -> ReferencePreview:
+async def upload_reference(
+    file: UploadFile, ctx: OrgMember, purpose: Literal["portrait", "mouth"] = "portrait"
+) -> ReferencePreview:
     settings = get_settings()
     if file.content_type not in settings.allowed_image_types:
         raise Validation422("Choose a JPEG, PNG or WebP photo", code="unsupported_image_type")
@@ -45,6 +48,10 @@ async def upload_reference(file: UploadFile, ctx: OrgMember, purpose: Literal["p
     prefix = f"orgs/{ctx.org.id}/candidates/reference-{preview_id}"
     await storage.put_bytes(f"{prefix}.png", photo, "image/png")
     await storage.put_bytes(f"{prefix}.json", json.dumps(rig).encode(), "application/json")
-    return ReferencePreview(id=preview_id, image_url=await storage.presign_get(f"{prefix}.png"),
-                            rig_url=await storage.presign_get(f"{prefix}.json"), quality_note=note,
-                            retention_hours=settings.candidate_retention_hours)
+    return ReferencePreview(
+        id=preview_id,
+        image_url=await storage.presign_get(f"{prefix}.png"),
+        rig_url=await storage.presign_get(f"{prefix}.json"),
+        quality_note=note,
+        retention_hours=settings.candidate_retention_hours,
+    )

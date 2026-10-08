@@ -100,9 +100,7 @@ async def render_capability(ctx: OrgMember) -> dict:
 
 
 @router.post("/{job_id}/render", status_code=202)
-async def render_here(
-    job_id: str, ctx: OrgMember, background: BackgroundTasks
-) -> dict:
+async def render_here(job_id: str, ctx: OrgMember, background: BackgroundTasks) -> dict:
     """Render a job inside this backend, if the hardware allows.
 
     202 with the claimed job: rendering takes seconds per line, and the page
@@ -146,9 +144,7 @@ async def claim(ctx: OrgMember) -> dict:
         raise NotFound404("No jobs waiting", code="queue_empty")
     return {
         **job,
-        "reference_url": await storage.presign_get(
-            clonejobs.reference_key(ctx.org.id, job["id"])
-        ),
+        "reference_url": await storage.presign_get(clonejobs.reference_key(ctx.org.id, job["id"])),
     }
 
 

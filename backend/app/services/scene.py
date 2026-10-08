@@ -219,7 +219,9 @@ def prepare_image(data: bytes) -> bytes:
             mode = "RGBA" if image.mode in ("RGBA", "LA", "P") and _has_alpha(image) else "RGB"
             converted = image.convert(mode)
     except (UnidentifiedImageError, OSError, ValueError) as exc:
-        raise Validation422("That file is not a picture we can read", code="scene_image_invalid") from exc
+        raise Validation422(
+            "That file is not a picture we can read", code="scene_image_invalid"
+        ) from exc
     longest = max(converted.size)
     if longest > MAX_SIDE:
         ratio = MAX_SIDE / longest

@@ -29,6 +29,7 @@ Rig JSON (v3) schema:
 The mesh fits start from is not in here: it is stored beside the rig as
 fit-base.json (services.anchor_fit), because this file is published.
 """
+
 from __future__ import annotations
 
 import io
@@ -50,14 +51,28 @@ class NoFaceDetected(Exception):
     """The image has no usable face. Distinguished from a crash so the user
     gets an instruction instead of a stack trace in `error`."""
 
+
 RIG_VERSION = 3
 NUM_LANDMARKS = 478
 THUMBNAIL_SIZE = 256
 
 # 15 Oculus visemes
 OCULUS_VISEMES = [
-    "sil", "PP", "FF", "TH", "DD", "kk", "CH", "SS",
-    "nn", "RR", "aa", "E", "ih", "oh", "ou",
+    "sil",
+    "PP",
+    "FF",
+    "TH",
+    "DD",
+    "kk",
+    "CH",
+    "SS",
+    "nn",
+    "RR",
+    "aa",
+    "E",
+    "ih",
+    "oh",
+    "ou",
 ]
 
 # Per-viseme ARKit blendshape weights (rig v3) — drives the 2D deformation
@@ -224,8 +239,10 @@ def synthetic_face_mesh(width: int, height: int) -> np.ndarray:
     # Mouth: ellipses centered below the nose.
     mouth_cx, mouth_cy = cx, cy + fh * 0.52
     mouth_w, mouth_h = fw * 0.42, fh * 0.10
-    for ring, (rw, rh) in ((OUTER_LIP_RING, (mouth_w, mouth_h)),
-                           (INNER_LIP_RING, (mouth_w * 0.62, mouth_h * 0.42))):
+    for ring, (rw, rh) in (
+        (OUTER_LIP_RING, (mouth_w, mouth_h)),
+        (INNER_LIP_RING, (mouth_w * 0.62, mouth_h * 0.42)),
+    ):
         n = len(ring)
         for i, idx in enumerate(ring):
             angle = 2 * math.pi * i / n
@@ -233,9 +250,11 @@ def synthetic_face_mesh(width: int, height: int) -> np.ndarray:
 
     # Eyes (canonical-ish index clusters) + irises (468-477).
     for side, ex in ((-1, cx - fw * 0.42), (1, cx + fw * 0.42)):
-        eye_idx = ([33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]
-                   if side < 0 else
-                   [263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466])
+        eye_idx = (
+            [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]
+            if side < 0
+            else [263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466]
+        )
         ey = cy - fh * 0.18
         for i, idx in enumerate(eye_idx):
             angle = 2 * math.pi * i / len(eye_idx)
@@ -251,7 +270,11 @@ def synthetic_face_mesh(width: int, height: int) -> np.ndarray:
         brow = [46, 53, 52, 65, 55] if side < 0 else [276, 283, 282, 295, 285]
         for i, idx in enumerate(brow):
             t = i / (len(brow) - 1)
-            put(idx, cx + sign * fw * (0.55 - 0.38 * t), cy - fh * (0.34 + 0.04 * math.sin(t * math.pi)))
+            put(
+                idx,
+                cx + sign * fw * (0.55 - 0.38 * t),
+                cy - fh * (0.34 + 0.04 * math.sin(t * math.pi)),
+            )
 
     # Nose line + tip.
     for i, idx in enumerate([168, 6, 197, 195, 5, 4]):
@@ -276,16 +299,21 @@ def synthetic_face_mesh(width: int, height: int) -> np.ndarray:
         ring_t = 0.15 + 0.78 * (i / max(n - 1, 1))
         angle = 2.399963 * i  # golden angle: even angular coverage
         radius_jitter = 1.0 + rng.uniform(-0.03, 0.03)
-        put(int(idx),
+        put(
+            int(idx),
             cx + fw * ring_t * radius_jitter * math.cos(angle),
-            cy + fh * ring_t * radius_jitter * math.sin(angle))
+            cy + fh * ring_t * radius_jitter * math.sin(angle),
+        )
 
     return points
 
 
-def build_rig(points: np.ndarray, image_size: tuple[int, int],
-              blendshapes: dict[str, float] | None = None,
-              face_type: str = "human") -> dict:
+def build_rig(
+    points: np.ndarray,
+    image_size: tuple[int, int],
+    blendshapes: dict[str, float] | None = None,
+    face_type: str = "human",
+) -> dict:
     """Build the rig. `face_type` only selects the viseme table — geometry,
     triangulation and every other field are identical for all types, and
     "human" is the default so existing callers are unaffected."""
@@ -326,8 +354,9 @@ def make_thumbnail(data: bytes) -> tuple[bytes, str]:
     image = Image.open(io.BytesIO(data))
     transparent = has_alpha(image)
     image = image.convert("RGBA" if transparent else "RGB")
-    image.thumbnail((THUMBNAIL_SIZE, THUMBNAIL_SIZE) if max(image.size) > THUMBNAIL_SIZE
-                    else image.size)
+    image.thumbnail(
+        (THUMBNAIL_SIZE, THUMBNAIL_SIZE) if max(image.size) > THUMBNAIL_SIZE else image.size
+    )
     # Keep aspect; the engine maps texture coords to naturalWidth/Height.
     if transparent:
         # Resampling blends colour into pixels it leaves fully transparent.

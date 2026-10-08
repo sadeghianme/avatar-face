@@ -37,7 +37,9 @@ def _fake_kokoro(monkeypatch, calls: list[str]):
         calls.append(text)
         ms = 300
         return SynthesisResult(
-            audio=_wav(ms), audio_mime="audio/wav", duration_ms=ms,
+            audio=_wav(ms),
+            audio_mime="audio/wav",
+            duration_ms=ms,
             cues=[{"t": 0, "viseme": "aa", "a": 1.0}, {"t": ms, "viseme": "sil", "a": 1.0}],
         ), False
 
@@ -61,7 +63,9 @@ async def test_kokoro_streams_in_phrases_with_offsets_that_join(client, monkeypa
     _fake_kokoro(monkeypatch, calls)
     text = "The market opened higher today. Analysts were surprised, and said so. Then it fell."
     response = await client.post(
-        f"/tts/orgs/{org_id}/stream", json={"text": text, "provider": "kokoro", "voice": "af_heart"}, headers=headers
+        f"/tts/orgs/{org_id}/stream",
+        json={"text": text, "provider": "kokoro", "voice": "af_heart"},
+        headers=headers,
     )
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/x-ndjson")
@@ -107,7 +111,11 @@ async def test_every_phrase_is_metered(client, monkeypatch):
     _fake_kokoro(monkeypatch, calls)
     text = "One sentence here. And a second one, clearly. Third."
     before = (await client.get(f"/orgs/{org_id}/usage", headers=headers)).json()
-    await client.post(f"/tts/orgs/{org_id}/stream", json={"text": text, "provider": "kokoro", "voice": "af_heart"}, headers=headers)
+    await client.post(
+        f"/tts/orgs/{org_id}/stream",
+        json={"text": text, "provider": "kokoro", "voice": "af_heart"},
+        headers=headers,
+    )
     after = (await client.get(f"/orgs/{org_id}/usage", headers=headers)).json()
     assert after["chars_used"] - before["chars_used"] == len(text)
 
@@ -121,14 +129,18 @@ async def test_a_failing_phrase_is_reported_not_hidden(client, monkeypatch):
 
     monkeypatch.setattr(tts_api, "synthesize_cached", broken)
     response = await client.post(
-        f"/tts/orgs/{org_id}/stream", json={"text": "Anything at all.", "provider": "kokoro", "voice": "af_heart"}, headers=headers
+        f"/tts/orgs/{org_id}/stream",
+        json={"text": "Anything at all.", "provider": "kokoro", "voice": "af_heart"},
+        headers=headers,
     )
     frames = _frames(response.text)
     assert frames[-1]["type"] == "error"
     assert frames[-1]["code"] == "speech_stream_failed"
     # The slot is released: a second stream is allowed.
     again = await client.post(
-        f"/tts/orgs/{org_id}/stream", json={"text": "Anything at all.", "provider": "kokoro", "voice": "af_heart"}, headers=headers
+        f"/tts/orgs/{org_id}/stream",
+        json={"text": "Anything at all.", "provider": "kokoro", "voice": "af_heart"},
+        headers=headers,
     )
     assert again.status_code == 200
 
@@ -137,6 +149,8 @@ async def test_another_org_cannot_stream_on_your_account(client):
     headers, org_id = await _org(client)
     other = await register_and_login(client, "streamintruder")
     response = await client.post(
-        f"/tts/orgs/{org_id}/stream", json={"text": "hi", "provider": "offline", "voice": "offline-warm"}, headers=other
+        f"/tts/orgs/{org_id}/stream",
+        json={"text": "hi", "provider": "offline", "voice": "offline-warm"},
+        headers=other,
     )
     assert response.status_code in (403, 404)

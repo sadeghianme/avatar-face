@@ -91,7 +91,8 @@ def test_the_deploy_backup_never_overwrites_a_file(tmp_path):
     backup.write_bytes(b"precious")
     result = subprocess.run(
         [sys.executable, str(BACKUP_SCRIPT), str(live), str(backup)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode != 0 and "already exists" in result.stderr
     assert backup.read_bytes() == b"precious"
@@ -102,7 +103,8 @@ def test_the_deploy_backup_refuses_a_missing_database(tmp_path):
     target = tmp_path / "backup.sqlite3"
     result = subprocess.run(
         [sys.executable, str(BACKUP_SCRIPT), str(tmp_path / "typo.sqlite3"), str(target)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode != 0 and "no database" in result.stderr
     assert not target.exists()

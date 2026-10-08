@@ -72,7 +72,9 @@ async def process_avatar(avatar_id: str) -> None:
     storage = get_storage()
 
     async with factory() as db:
-        avatar = (await db.execute(select(Avatar).where(Avatar.id == avatar_id))).scalar_one_or_none()
+        avatar = (
+            await db.execute(select(Avatar).where(Avatar.id == avatar_id))
+        ).scalar_one_or_none()
         if avatar is None or avatar.image_key is None:
             return
         avatar.status = AvatarStatus.processing
@@ -99,7 +101,9 @@ async def process_avatar(avatar_id: str) -> None:
                 points, blendshapes, size, detected = await run_cpu(
                     rigging.landmarks_from_image, image_bytes
                 )
-                points = await run_cpu(rigging.starting_mesh, points, size, detected, avatar.face_type)
+                points = await run_cpu(
+                    rigging.starting_mesh, points, size, detected, avatar.face_type
+                )
 
                 # An undetected face is NOT a failure: the fallback mesh (the
                 # face template, or the synthetic mesh for a human) is a
@@ -115,8 +119,8 @@ async def process_avatar(avatar_id: str) -> None:
                         "The muzzle could not be located automatically — no "
                         "detector is trained on animal faces. Open “Mark the "
                         "face” and place the head, eyes and mouth by hand."
-                        if animal else
-                        "No face was detected in this image, so the animation "
+                        if animal
+                        else "No face was detected in this image, so the animation "
                         "points are a guess. Open “Mark the face” and place "
                         "the head, eyes, mouth and pupils by hand."
                     )
@@ -228,9 +232,7 @@ async def _carry_crop_origin(avatar: Avatar, storage: Storage, rig: dict) -> Non
 
 # Shown on an avatar whose job a restart cut short. The retry endpoint (the
 # button beside this message) re-runs it from the stored image.
-INTERRUPTED_ERROR = (
-    "Processing was interrupted by a server restart. Press Retry to run it again."
-)
+INTERRUPTED_ERROR = "Processing was interrupted by a server restart. Press Retry to run it again."
 
 
 async def fail_interrupted(db) -> int:

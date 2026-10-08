@@ -123,7 +123,10 @@ def check_landmarks(points, image_size: tuple[int, int], detected: bool) -> RigC
     margin = face_w * MIN_EDGE_MARGIN
     if x0 < margin or y0 < margin or x1 > width - margin or y1 > height - margin:
         return RigCheck(
-            False, "face runs off the edge of the frame", fraction, detected=detected,
+            False,
+            "face runs off the edge of the frame",
+            fraction,
+            detected=detected,
             code="face_at_edge",
         )
 

@@ -17,8 +17,13 @@ CHARACTER = {"style": "character", "teeth": "none", "tongue": False, "jaw": 1.3}
 
 
 def test_settings_are_clamped_and_unknown_keys_dropped():
-    assert clean_character({"style": "weird", "teeth": "fangs", "tongue": "yes", "jaw": 9, "x": 1}) == {
-        "style": "character", "teeth": "upper", "tongue": True, "jaw": 1.6,
+    assert clean_character(
+        {"style": "weird", "teeth": "fangs", "tongue": "yes", "jaw": 9, "x": 1}
+    ) == {
+        "style": "character",
+        "teeth": "upper",
+        "tongue": True,
+        "jaw": 1.6,
     }
     assert clean_character({"jaw": 0})["jaw"] == 0.5
     assert clean_character({"jaw": float("nan")})["jaw"] == 1.0
@@ -32,7 +37,10 @@ def test_the_owner_is_told_their_settings_and_the_style_defaults_to_the_characte
     assert mouth_view(raw)["character"] == CHARACTER
     assert mouth_view(json.dumps({"renderer": "classic", "profile": {}}))["character"] is None
     assert character_style(None) == "character"
-    assert character_style(json.dumps({"renderer": "classic", "character": {"style": "classic"}})) == "classic"
+    assert (
+        character_style(json.dumps({"renderer": "classic", "character": {"style": "classic"}}))
+        == "classic"
+    )
 
 
 async def test_an_animation_and_an_animal_fit_with_the_character_mouth_by_default(client):
@@ -43,7 +51,9 @@ async def test_an_animation_and_an_animal_fit_with_the_character_mouth_by_defaul
         assert (await client.get(base, headers=headers)).json()["render_profile"] == profile
 
 
-async def test_choosing_the_classic_mouth_moves_the_draft_rig_back_and_choosing_again_forward(client):
+async def test_choosing_the_classic_mouth_moves_the_draft_rig_back_and_choosing_again_forward(
+    client,
+):
     headers, _, _, base = await _setup(client, "pet2", "animal")
     await _fit(client, headers, base, await _anchors(client, headers, base), True)
 
@@ -56,7 +66,9 @@ async def test_choosing_the_classic_mouth_moves_the_draft_rig_back_and_choosing_
     await _fit(client, headers, base, await _anchors(client, headers, base), True)
     assert (await _rig(client, headers, base))["render_profile"] == "animal@1"
 
-    response = await client.patch(base, json={"character": {"style": "character", "jaw": 1.2}}, headers=headers)
+    response = await client.patch(
+        base, json={"character": {"style": "character", "jaw": 1.2}}, headers=headers
+    )
     assert response.json()["render_profile"] == "animal@2"
     assert (await _rig(client, headers, base))["render_profile"] == "animal@2"
 

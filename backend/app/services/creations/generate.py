@@ -107,8 +107,9 @@ async def run_generate(job: Job, params: dict) -> None:
         # Broad on purpose: the provider's call fails in many types; any
         # other than those above is provider_error, which may be retried.
         logger.exception("generation %s failed", job.id)
-        raise AppError("The AI service did not return an image; try again",
-                       code="provider_error") from exc
+        raise AppError(
+            "The AI service did not return an image; try again", code="provider_error"
+        ) from exc
     async with get_session_factory()() as db:
         await record_generation(db, job.org_id, "gemini", "generate")
 
@@ -122,7 +123,10 @@ async def run_generate(job: Job, params: dict) -> None:
         "current": "original",
         "items": {
             "original": {
-                "key": key, "width": width, "height": height, "from": None,
+                "key": key,
+                "width": width,
+                "height": height,
+                "from": None,
                 "check": step_check(analysis),
                 "generated": {
                     "model": generated.model,
@@ -147,8 +151,11 @@ async def run_generate(job: Job, params: dict) -> None:
         )
 
         record: PrepareRecord = {
-            "mode": wizard.GENERATE, "look": plan["look"], "instruction": None,
-            "step": "original", "cut": cut,
+            "mode": wizard.GENERATE,
+            "look": plan["look"],
+            "instruction": None,
+            "step": "original",
+            "cut": cut,
         }
         steps["items"]["original"][wizard.KEPT_RECORD] = record.copy()
 

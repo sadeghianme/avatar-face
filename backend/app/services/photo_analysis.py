@@ -115,8 +115,15 @@ INNER_LIPS = ((13, 14), (82, 87), (312, 317))
 NONE, TOUCHUP, REGENERATE = "none", "touchup", "regenerate"
 TOUCHUP_REASONS = ("eyes_closed", "eyes_half_closed", "gaze_off_camera", "teeth_showing")
 REGENERATE_REASONS = (
-    "no_face", "head_turned", "head_tilted", "face_small", "low_resolution",
-    "too_dark", "too_bright", "blurry", "mouth_open",
+    "no_face",
+    "head_turned",
+    "head_tilted",
+    "face_small",
+    "low_resolution",
+    "too_dark",
+    "too_bright",
+    "blurry",
+    "mouth_open",
 )
 # An animal or an animation is only judged on what the rig needs of its
 # pose: a face to find, facing the camera. Their eyes, mouths and colours
@@ -277,8 +284,7 @@ def _laplacian_variance(gray: np.ndarray) -> float:
     if gray.shape[0] < 3 or gray.shape[1] < 3:
         return 0.0
     lap = (
-        gray[:-2, 1:-1] + gray[2:, 1:-1] + gray[1:-1, :-2] + gray[1:-1, 2:]
-        - 4.0 * gray[1:-1, 1:-1]
+        gray[:-2, 1:-1] + gray[2:, 1:-1] + gray[1:-1, :-2] + gray[1:-1, 2:] - 4.0 * gray[1:-1, 1:-1]
     )
     return float(lap.var())
 
@@ -288,9 +294,7 @@ def _region(rgb: Image.Image, box: tuple[float, float, float, float] | None) -> 
         return rgb
     x0, y0, x1, y1 = box
     w, h = rgb.size
-    clipped = (
-        max(0, int(x0)), max(0, int(y0)), min(w, math.ceil(x1)), min(h, math.ceil(y1))
-    )
+    clipped = (max(0, int(x0)), max(0, int(y0)), min(w, math.ceil(x1)), min(h, math.ceil(y1)))
     if clipped[2] - clipped[0] < 4 or clipped[3] - clipped[1] < 4:
         return rgb
     return rgb.crop(clipped)
@@ -393,8 +397,10 @@ def check_photo(image: Image.Image) -> dict:
         state = face_state(points)
         checks.extend(_check(code, detail) for code, detail in FACE_STATE_CHECKS if state[code])
         face_box = (
-            float(points[:, 0].min()), float(points[:, 1].min()),
-            float(points[:, 0].max()), float(points[:, 1].max()),
+            float(points[:, 0].min()),
+            float(points[:, 1].min()),
+            float(points[:, 0].max()),
+            float(points[:, 1].max()),
         )
         verdict = check_landmarks(points, size, detected=True)
         if not verdict.ok and verdict.code:

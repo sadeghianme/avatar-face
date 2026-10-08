@@ -78,9 +78,11 @@ async def test_a_refused_edit_raises_the_refusal_and_an_image_carries_its_model(
     image = base64.b64encode(b"png-bytes").decode()
     fake = FakeGemini(
         monkeypatch,
-        body={"candidates": [{"content": {"parts": [
-            {"inlineData": {"mimeType": "image/png", "data": image}}
-        ]}}]},
+        body={
+            "candidates": [
+                {"content": {"parts": [{"inlineData": {"mimeType": "image/png", "data": image}}]}}
+            ]
+        },
     )
     made = await imagegen.edit_image("p", b"src", "image/jpeg")
     assert made.image == b"png-bytes" and made.model == imagegen.MODEL
@@ -105,9 +107,17 @@ async def test_an_http_failure_is_not_a_refusal(monkeypatch):
 @pytest.mark.parametrize(
     "body, reason",
     [
-        ({"candidates": [{"finishReason": "NO_IMAGE",
-                          "content": {"parts": [{"text": "I can't make that image."}]}}]},
-         "NO_IMAGE"),
+        (
+            {
+                "candidates": [
+                    {
+                        "finishReason": "NO_IMAGE",
+                        "content": {"parts": [{"text": "I can't make that image."}]},
+                    }
+                ]
+            },
+            "NO_IMAGE",
+        ),
         ({"candidates": [{"finishReason": "IMAGE_OTHER"}]}, "IMAGE_OTHER"),
         ({"candidates": [{"content": {"parts": [{"text": "Here you go"}]}}]}, None),
     ],

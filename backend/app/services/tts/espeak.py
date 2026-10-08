@@ -181,7 +181,9 @@ def _phonemise(voice: str, words: list[str], deadline: float, found: dict[str, s
         return
     logger.info(
         "espeak-ng printed %d lines for %d words (voice %s); splitting the batch",
-        len(lines), len(words), voice,
+        len(lines),
+        len(words),
+        voice,
     )
     middle = len(words) // 2
     _phonemise(voice, words[:middle], deadline, found)

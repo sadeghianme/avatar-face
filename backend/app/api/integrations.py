@@ -3,6 +3,7 @@
 Secrets are WRITE-ONLY through this API: reads return a mask ("••••1234")
 plus the source (db | env | unset), never the value. Gated to org owners.
 """
+
 from __future__ import annotations
 
 import logging

@@ -46,11 +46,19 @@ _ended: OrderedDict[str, dict] = OrderedDict()
 ENDED_KEPT = 256
 
 # A failure asking again would repeat, until something changes.
-NOT_RETRYABLE = frozenset({
-    "third_party_ai_disabled", "imagegen_unavailable", "landmarks_unavailable",
-    "mouth_not_for_face_type", "not_a_photo", "source_gone", "avatar_not_found",
-    "safety_refused", "image_limit_reached",
-})
+NOT_RETRYABLE = frozenset(
+    {
+        "third_party_ai_disabled",
+        "imagegen_unavailable",
+        "landmarks_unavailable",
+        "mouth_not_for_face_type",
+        "not_a_photo",
+        "source_gone",
+        "avatar_not_found",
+        "safety_refused",
+        "image_limit_reached",
+    }
+)
 
 
 def _job_out(job: Job, state: str, error: dict | None = None) -> dict:
@@ -145,9 +153,10 @@ async def _make_for_avatar(job: Job, params: dict) -> None:
         _require_person(avatar)
         picture_key, rig_key = avatar.image_key, avatar.rig_key
         config = mouth.load(avatar.mouth_config) or {}
-        own_teeth = bool(config.get("oral_image_key")) and (
-            (config.get("teeth") or {}).get("source") or "upload"
-        ) == "upload"
+        own_teeth = (
+            bool(config.get("oral_image_key"))
+            and ((config.get("teeth") or {}).get("source") or "upload") == "upload"
+        )
         if await ai_switched_off(org_id):
             raise Forbidden403(
                 "Your organization turned off third-party AI, so nothing was sent",
@@ -176,15 +185,18 @@ async def _make_for_avatar(job: Job, params: dict) -> None:
     job.report(0.05, SHAPES_LABEL, count=(0, SHAPE_COUNT + (0 if own_teeth else 1)))
     try:
         result = await make(
-            org_id, picture, points, teeth=not own_teeth, job=job, on_first_send=sending,
+            org_id,
+            picture,
+            points,
+            teeth=not own_teeth,
+            job=job,
+            on_first_send=sending,
             on_progress=progress_to(job, 0.05, 0.85),
         )
     except (performance_kit.KitUnavailable, ValueError) as exc:
         code = getattr(exc, "code", "kit_unavailable")
         if own_teeth:
-            raise Conflict409(
-                getattr(exc, "detail", None) or str(exc), code=code
-            ) from exc
+            raise Conflict409(getattr(exc, "detail", None) or str(exc), code=code) from exc
         logger.info("mouth kit %s: no kit on this server (%s); the teeth alone", job.id, code)
         await _teeth_alone(job, org_id, avatar_id, picture, sending)
         return
@@ -205,7 +217,10 @@ async def _make_for_avatar(job: Job, params: dict) -> None:
             # Re-marked, re-detected or cropped meanwhile: the same face,
             # and the kit follows it (follow_points).
             result.manifest = await run_cpu(
-                performance_kit.rebase_manifest, result.manifest, rig["points"], None,
+                performance_kit.rebase_manifest,
+                result.manifest,
+                rig["points"],
+                None,
                 tuple(rig["image_size"]),
             )
         stale = await store(avatar, storage, result, source="mouth_panel")
@@ -241,8 +256,9 @@ def _nothing_made(result: performance_kit.KitResult) -> AppError:
     every answer failed)."""
     reasons = [reason for entry in result.report.values() if (reason := entry.get("reason"))]
     stopped = next((r for r in reasons if r["code"] in _TEETH_NOTE_CODES), None)
-    reason = stopped or (reasons[0] if reasons else _note(
-        "provider_error", "The AI service did not return an image"))
+    reason = stopped or (
+        reasons[0] if reasons else _note("provider_error", "The AI service did not return an image")
+    )
     return AppError(
         f"None of the mouth shapes could be made: {reason['detail']}", code=reason["code"]
     )

@@ -16,6 +16,7 @@ set (the engine's fallback decomposition path, and the blink) and the 15
 scene's extras carry what the engine needs beside them: the rig's own
 viseme table, the look, where to frame.
 """
+
 from __future__ import annotations
 
 import time
@@ -68,7 +69,9 @@ def interior_for(profile: str | None) -> tuple[str, bool, str]:
     return "both", True, "human"
 
 
-def _targets_for_face(subject: HeadSubject, frame: G.FaceFrame, scale: float) -> dict[str, np.ndarray]:
+def _targets_for_face(
+    subject: HeadSubject, frame: G.FaceFrame, scale: float
+) -> dict[str, np.ndarray]:
     """Every target's head-frame delta (478, 3): the ARKit set in
     MORPH_NAMES order, then the viseme shapes the rig's table names."""
     left = G.side_weights(subject.points, frame)
@@ -89,7 +92,9 @@ def _targets_for_face(subject: HeadSubject, frame: G.FaceFrame, scale: float) ->
         name = G.VISEME_MORPH_NAMES.get(viseme)
         if name is None:
             continue
-        targets[name] = G.viseme_delta(baked["dx"], baked["dy"], table.get(viseme, {}), subject.points, frame, scale)
+        targets[name] = G.viseme_delta(
+            baked["dx"], baked["dy"], table.get(viseme, {}), subject.points, frame, scale
+        )
     return targets
 
 
@@ -133,24 +138,37 @@ def build_head(subject: HeadSubject, texture_format: str = "webp", quality: int 
     # Double-sided: a pucker folds a few triangles at the mouth corners (the
     # corner moves in faster than the skin beside it), and culled, a folded
     # triangle is a hole showing the cavity. The 2D engine draws them flipped.
-    face_material = glb.add_material("Face", face_tex, unlit=unlit, roughness=roughness, double_sided=True)
+    face_material = glb.add_material(
+        "Face", face_tex, unlit=unlit, roughness=roughness, double_sided=True
+    )
     triangles = T.face_triangles()
     normals = G.vertex_normals(face, triangles)
     face_targets = _targets_for_face(subject, frame, scale)
     face_mesh = glb.add_mesh(
-        "Face", face, X.crop_uvs(points, crop), triangles, face_material, normals,
+        "Face",
+        face,
+        X.crop_uvs(points, crop),
+        triangles,
+        face_material,
+        normals,
         [(name, delta) for name, delta in face_targets.items()],
     )
     lap("face")
 
     # --- the skull and neck ---
     top = X.hair_top(picture, frame)
-    fit = G.fit_skull(face, frame, scale, top, X.silhouette_reach(picture, face, frame, pivot, scale))
+    fit = G.fit_skull(
+        face, frame, scale, top, X.silhouette_reach(picture, face, frame, pivot, scale)
+    )
     skull = G.skull_mesh(fit)
     skull_tex, sizes["skull"] = texture(X.skull_texture(picture, fit, pivot, scale), fmt_opaque)
     skull_material = glb.add_material("Skull", skull_tex, unlit=unlit, roughness=roughness)
     skull_mesh = glb.add_mesh(
-        "Skull", skull.positions, skull.uvs, skull.triangles, skull_material,
+        "Skull",
+        skull.positions,
+        skull.uvs,
+        skull.triangles,
+        skull_material,
         G.vertex_normals(skull.positions, skull.triangles),
         [(name, G.skirt_morph(skull, delta)) for name, delta in face_targets.items()],
     )
@@ -158,9 +176,17 @@ def build_head(subject: HeadSubject, texture_format: str = "webp", quality: int 
     z_card = float(face[T.FACE_OVAL, 2].min()) - G.HAIR_CARD_BEHIND * face_width_m
     neck = G.neck_mesh(face, frame, scale, z_card)
     neck_tex, sizes["neck"] = texture(X.neck_texture(picture, frame, neck, pivot, scale), fmt_alpha)
-    neck_material = glb.add_material("Neck", neck_tex, alpha_mode="BLEND", unlit=unlit, roughness=roughness)
-    neck_mesh = glb.add_mesh("Neck", neck.positions, neck.uvs, neck.triangles, neck_material,
-                             G.vertex_normals(neck.positions, neck.triangles))
+    neck_material = glb.add_material(
+        "Neck", neck_tex, alpha_mode="BLEND", unlit=unlit, roughness=roughness
+    )
+    neck_mesh = glb.add_mesh(
+        "Neck",
+        neck.positions,
+        neck.uvs,
+        neck.triangles,
+        neck_material,
+        G.vertex_normals(neck.positions, neck.triangles),
+    )
     lap("skull")
 
     # --- the cards ---
@@ -169,12 +195,16 @@ def build_head(subject: HeadSubject, texture_format: str = "webp", quality: int 
     hair_tex, sizes["hair"] = texture(X.hair_card_image(picture, frame, box, oval_px), fmt_alpha)
     hair_material = glb.add_material("HairCard", hair_tex, alpha_mode="BLEND", unlit=True)
     hair_quad = G.card_mesh(box, z_card, pivot, scale)
-    hair_mesh = glb.add_mesh("HairCard", hair_quad.positions, hair_quad.uvs, hair_quad.triangles, hair_material)
+    hair_mesh = glb.add_mesh(
+        "HairCard", hair_quad.positions, hair_quad.uvs, hair_quad.triangles, hair_material
+    )
     body_image, body_box = X.body_card_image(picture, frame, box, oval_px)
     body_tex, sizes["body"] = texture(body_image, fmt_alpha)
     body_material = glb.add_material("Body", body_tex, alpha_mode="BLEND", unlit=True)
     body_quad = G.card_mesh(body_box, z_card - G.BODY_CARD_BEHIND * face_width_m, pivot, scale)
-    body_mesh = glb.add_mesh("Body", body_quad.positions, body_quad.uvs, body_quad.triangles, body_material)
+    body_mesh = glb.add_mesh(
+        "Body", body_quad.positions, body_quad.uvs, body_quad.triangles, body_material
+    )
     lap("cards")
 
     # --- the mouth interior ---
@@ -196,19 +226,32 @@ def build_head(subject: HeadSubject, texture_format: str = "webp", quality: int 
         if part.name == "Cavity":
             material = glb.add_material("Cavity", cavity_tex, unlit=True, double_sided=True)
         elif part.name in teeth_textures:
-            material = glb.add_material(part.name, teeth_textures[part.name], alpha_mode="BLEND", roughness=0.5)
+            material = glb.add_material(
+                part.name, teeth_textures[part.name], alpha_mode="BLEND", roughness=0.5
+            )
         else:
-            material = glb.add_material("Tongue", colour=(*X.tongue_colour(lip), 1.0), roughness=0.6, unlit=unlit)
+            material = glb.add_material(
+                "Tongue", colour=(*X.tongue_colour(lip), 1.0), roughness=0.6, unlit=unlit
+            )
         targets = G.interior_morphs(part, face_targets) or None
-        mesh = glb.add_mesh(part.name, part.mesh.positions, part.mesh.uvs, part.mesh.triangles, material,
-                            G.vertex_normals(part.mesh.positions, part.mesh.triangles), targets)
+        mesh = glb.add_mesh(
+            part.name,
+            part.mesh.positions,
+            part.mesh.uvs,
+            part.mesh.triangles,
+            material,
+            G.vertex_normals(part.mesh.positions, part.mesh.triangles),
+            targets,
+        )
         interior_nodes.append(glb.add_node(part.name, mesh))
     lap("mouth")
 
     # --- the nodes ---
     children = [
-        glb.add_node("Face", face_mesh), glb.add_node("Skull", skull_mesh),
-        glb.add_node("HairCard", hair_mesh), *interior_nodes,
+        glb.add_node("Face", face_mesh),
+        glb.add_node("Skull", skull_mesh),
+        glb.add_node("HairCard", hair_mesh),
+        *interior_nodes,
     ]
     head = glb.add_node("Head", children=children)
     # The neck stays with the body: a head turns on it.
@@ -240,13 +283,22 @@ def build_head(subject: HeadSubject, texture_format: str = "webp", quality: int 
         "face_width_px": round(frame.width, 1),
         "depth_scale": round(z_scale, 4),
         "hair_top_px": top,
-        "skull": {"a_x": round(fit.a_x, 4), "b_top": round(fit.b_top, 4), "b_bottom": round(fit.b_bottom, 4), "c": round(fit.c, 4)},
+        "skull": {
+            "a_x": round(fit.a_x, 4),
+            "b_top": round(fit.b_top, 4),
+            "b_bottom": round(fit.b_bottom, 4),
+            "c": round(fit.c, 4),
+        },
         "vertices": {
-            "face": int(len(face)), "skull": int(len(skull.positions)), "neck": int(len(neck.positions)),
+            "face": int(len(face)),
+            "skull": int(len(skull.positions)),
+            "neck": int(len(neck.positions)),
             "mouth": int(sum(len(p.mesh.positions) for p in parts)),
         },
         "triangles": {
-            "face": int(len(triangles)), "skull": int(len(skull.triangles)), "neck": int(len(neck.triangles)),
+            "face": int(len(triangles)),
+            "skull": int(len(skull.triangles)),
+            "neck": int(len(neck.triangles)),
             "mouth": int(sum(len(p.mesh.triangles) for p in parts)),
         },
         "draw_calls": 5 + len(parts),

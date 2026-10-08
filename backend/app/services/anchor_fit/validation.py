@@ -111,29 +111,31 @@ def validate(base: np.ndarray, fitted: np.ndarray, pupils: bool = True) -> list[
     problems: list[FitProblem] = []
     flips = flipped_triangles(base, fitted)
     if flips:
-        problems.append(FitProblem(
-            "folded_mesh",
-            f"{flips} triangle{'s' if flips != 1 else ''} of the face would fold over; "
-            "move the marks so the eyes, mouth and head do not cross each other",
-            flips,
-        ))
+        problems.append(
+            FitProblem(
+                "folded_mesh",
+                f"{flips} triangle{'s' if flips != 1 else ''} of the face would fold over; "
+                "move the marks so the eyes, mouth and head do not cross each other",
+                flips,
+            )
+        )
 
     x, y = fitted[:, 0], fitted[:, 1]
     if y[LEFT_EYE["top"]] > y[LEFT_EYE["bottom"]] or y[RIGHT_EYE["top"]] > y[RIGHT_EYE["bottom"]]:
-        problems.append(FitProblem(
-            "lids_inverted", "An eye's top mark is below its bottom mark"
-        ))
+        problems.append(FitProblem("lids_inverted", "An eye's top mark is below its bottom mark"))
     order = [x[LEFT_EYE["left"]], x[LEFT_EYE["right"]], x[RIGHT_EYE["left"]], x[RIGHT_EYE["right"]]]
     if not all(a < b for a, b in zip(order, order[1:])):
-        problems.append(FitProblem(
-            "eyes_out_of_order",
-            "The eye corners are out of order; each eye's left mark must be left of its right "
-            "mark, and the left eye left of the right eye",
-        ))
+        problems.append(
+            FitProblem(
+                "eyes_out_of_order",
+                "The eye corners are out of order; each eye's left mark must be left of its right "
+                "mark, and the left eye left of the right eye",
+            )
+        )
     if not x[MOUTH["left"]] < x[MOUTH["right"]]:
-        problems.append(FitProblem(
-            "mouth_reversed", "The mouth's left corner is right of its right corner"
-        ))
+        problems.append(
+            FitProblem("mouth_reversed", "The mouth's left corner is right of its right corner")
+        )
 
     head = [HEAD["left"], HEAD["right"], HEAD["top"], HEAD["bottom"]]
     x0, x1 = float(x[head].min()), float(x[head].max())
@@ -141,13 +143,14 @@ def validate(base: np.ndarray, fitted: np.ndarray, pupils: bool = True) -> list[
     slack = HEAD_SLACK * max(x1 - x0, y1 - y0)
     features = [*LEFT_EYE.values(), *RIGHT_EYE.values(), *MOUTH.values(), *SEAM]
     outside = [
-        i for i in features
+        i
+        for i in features
         if not (x0 - slack <= x[i] <= x1 + slack and y0 - slack <= y[i] <= y1 + slack)
     ]
     if outside:
-        problems.append(FitProblem(
-            "outside_head", "The eyes and the mouth must be inside the head"
-        ))
+        problems.append(
+            FitProblem("outside_head", "The eyes and the mouth must be inside the head")
+        )
 
     # The head's eight marks are drawn as one closed curve; a curve that
     # crosses itself, or goes round the face out of order, is a head turned
@@ -155,15 +158,15 @@ def validate(base: np.ndarray, fitted: np.ndarray, pupils: bool = True) -> list[
     # for the fold count to see it.
     ring = fitted[HEAD_OUTLINE]
     if outline_crossed(ring):
-        problems.append(FitProblem(
-            "outline_crossed", "The head's outline crosses itself"
-        ))
+        problems.append(FitProblem("outline_crossed", "The head's outline crosses itself"))
     elif not outline_in_order(base[HEAD_OUTLINE], ring):
-        problems.append(FitProblem(
-            "outline_out_of_order",
-            "The head's outline points must go round the face in order: top, temple, side, "
-            "jaw corner, chin, and back up the other side",
-        ))
+        problems.append(
+            FitProblem(
+                "outline_out_of_order",
+                "The head's outline points must go round the face in order: top, temple, side, "
+                "jaw corner, chin, and back up the other side",
+            )
+        )
 
     # The fold count no longer sees the iris, so a pupil dragged onto the
     # cheek is caught here: its centre must lie within its eye's marks.
@@ -171,11 +174,13 @@ def validate(base: np.ndarray, fitted: np.ndarray, pupils: bool = True) -> list[
         xs = [x[eye["left"]], x[eye["right"]]]
         ys = [y[eye["top"]], y[eye["bottom"]]]
         slack = EYE_SLACK * abs(xs[1] - xs[0])
-        return (min(xs) - slack <= x[iris] <= max(xs) + slack
-                and min(ys) - slack <= y[iris] <= max(ys) + slack)
+        return (
+            min(xs) - slack <= x[iris] <= max(xs) + slack
+            and min(ys) - slack <= y[iris] <= max(ys) + slack
+        )
 
     if pupils and not (in_eye(LEFT_IRIS[0], LEFT_EYE) and in_eye(RIGHT_IRIS[0], RIGHT_EYE)):
-        problems.append(FitProblem(
-            "pupil_outside_eye", "Each pupil's centre must be inside its eye"
-        ))
+        problems.append(
+            FitProblem("pupil_outside_eye", "Each pupil's centre must be inside its eye")
+        )
     return problems

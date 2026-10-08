@@ -123,7 +123,8 @@ def _line_from_region(mouth: RegionMarks) -> tuple[Point, ...]:
     as a line: the corners stay, the seam runs through the centre."""
     left, right = mouth.left, mouth.right
     mid = mouth.center or (
-        (mouth.top[0] + mouth.bottom[0]) / 2, (mouth.top[1] + mouth.bottom[1]) / 2
+        (mouth.top[0] + mouth.bottom[0]) / 2,
+        (mouth.top[1] + mouth.bottom[1]) / 2,
     )
     halfway = lambda a, b: ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)  # noqa: E731
     return (left, halfway(left, mid), mid, halfway(mid, right), right)
@@ -229,6 +230,7 @@ def merge(older: FaceMarks, newer: FaceMarks) -> FaceMarks:
     moved leaves the ones it does not send to the warp, as every head did
     before there were diagonals: an outline pinned where the old edges had
     it would pull the new ones out of shape."""
+
     def pick(name: str) -> Any:
         value = getattr(newer, name)
         return value if value is not None else getattr(older, name)

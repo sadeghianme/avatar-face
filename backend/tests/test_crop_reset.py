@@ -16,12 +16,16 @@ from tests.conftest import create_org, register_and_login, sample_png
 
 MARKS = {
     "head": {
-        "left": {"x": 70, "y": 200}, "right": {"x": 250, "y": 200},
-        "top": {"x": 160, "y": 60}, "bottom": {"x": 160, "y": 340},
+        "left": {"x": 70, "y": 200},
+        "right": {"x": 250, "y": 200},
+        "top": {"x": 160, "y": 60},
+        "bottom": {"x": 160, "y": 340},
     },
     "mouth": {
-        "left": {"x": 125, "y": 270}, "right": {"x": 195, "y": 272},
-        "top": {"x": 160, "y": 262}, "bottom": {"x": 160, "y": 290},
+        "left": {"x": 125, "y": 270},
+        "right": {"x": 195, "y": 272},
+        "top": {"x": 160, "y": 262},
+        "bottom": {"x": 160, "y": 290},
     },
 }
 
@@ -159,8 +163,13 @@ def test_a_crop_moves_every_kind_of_mark():
     from app.services.avatars.photo import _move_anchors
 
     anchors = {
-        "head": {"left": {"x": 10, "y": 20}, "right": {"x": 30, "y": 20},
-                 "top": {"x": 20, "y": 5}, "bottom": {"x": 20, "y": 40}, "center": None},
+        "head": {
+            "left": {"x": 10, "y": 20},
+            "right": {"x": 30, "y": 20},
+            "top": {"x": 20, "y": 5},
+            "bottom": {"x": 20, "y": 40},
+            "center": None,
+        },
         "mouth_line": [{"x": 12 + i, "y": 30} for i in range(5)],
         "chin": {"x": 20, "y": 38},
         "source": "owner",

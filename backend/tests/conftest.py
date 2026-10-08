@@ -4,6 +4,7 @@ Determinism rule: tests must behave the same regardless of a developer's
 .env — so storage is forced to the local-filesystem fallback (R2_* nulled,
 storage cache cleared) and the DB is a throwaway SQLite file per session.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -95,7 +96,9 @@ async def client(app):
 
 
 async def register_and_login(
-    client: AsyncClient, username: str = "alice", email: str | None = None,
+    client: AsyncClient,
+    username: str = "alice",
+    email: str | None = None,
     password: str = "password123",
 ) -> dict[str, str]:
     """Returns auth headers for a fresh user."""
@@ -151,14 +154,10 @@ async def create_ready_avatar(
     avatar_id = payload["avatar"]["id"]
     upload_url = payload["upload_url"]
 
-    put = await client.put(
-        upload_url, content=sample_png(), headers={"Content-Type": "image/png"}
-    )
+    put = await client.put(upload_url, content=sample_png(), headers={"Content-Type": "image/png"})
     assert put.status_code == 200, put.text
 
-    confirm = await client.post(
-        f"/orgs/{org_id}/avatars/{avatar_id}/uploaded", headers=headers
-    )
+    confirm = await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/uploaded", headers=headers)
     assert confirm.status_code == 200, confirm.text
 
     # BackgroundTasks run before the response returns under the ASGI

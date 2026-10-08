@@ -8,6 +8,7 @@ jawOpen, the lids lower on the blink, every viseme a mix of those), PNG
 textures a few pixels wide. What the embed's GLB-loading tests load into
 three.js to check the names, counts and hierarchy the engine relies on.
 """
+
 from __future__ import annotations
 
 import sys
@@ -32,7 +33,9 @@ def main() -> None:
     rig["render_profile"] = None
     bake = synthetic_bake(points)
     bake["image_size"] = [128, 128]
-    subject = HeadSubject(name="synthetic", picture=picture, points=points, z=z, rig=rig, bake=bake, look="photo")
+    subject = HeadSubject(
+        name="synthetic", picture=picture, points=points, z=z, rig=rig, bake=bake, look="photo"
+    )
     build = build_head(subject, texture_format="png")
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_bytes(build.glb)

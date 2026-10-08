@@ -9,6 +9,7 @@ worker thread (Starlette's FileResponse, which also answers Range requests)
 instead of reading it whole on the event loop; a PUT is read up to a size
 limit and refused past it.
 """
+
 from __future__ import annotations
 
 import mimetypes
@@ -38,9 +39,7 @@ def _local() -> LocalStorage:
 
 
 @router.get("/{key:path}")
-async def storage_get(
-    key: str, expires: int = Query(...), signature: str = Query(...)
-) -> Response:
+async def storage_get(key: str, expires: int = Query(...), signature: str = Query(...)) -> Response:
     """The file behind a signed GET URL, streamed. A `Range` header gets a
     206 with that part. 401 `bad_signature`, 404 `object_not_found`."""
     storage = _local()

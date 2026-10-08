@@ -1,6 +1,5 @@
 """Piper: the languages Kokoro cannot speak, Persian first."""
 
-
 from app.services.tts.piper import CATALOGUE, PiperTTSProvider
 
 
@@ -57,7 +56,7 @@ async def test_an_unknown_voice_prefers_the_requested_locale(monkeypatch, tmp_pa
     captured = {}
     monkeypatch.setattr(
         "app.services.tts.piper._render",
-        lambda text, stem: (captured.update(stem=stem) or (b"RIFF", 1000)),
+        lambda text, stem: captured.update(stem=stem) or (b"RIFF", 1000),
     )
     await PiperTTSProvider().synthesize("hallo", "no-such-voice", "de-DE")
     assert captured["stem"] == CATALOGUE["de_thorsten"][0]

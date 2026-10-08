@@ -343,9 +343,7 @@ def _locate_crop(outer, inner) -> tuple[int, int] | None:
     return found[0] if len(found) == 1 else None
 
 
-def _redetect_rig(
-    avatar: Avatar, image_bytes: bytes, previous: dict
-) -> tuple[dict, dict] | None:
+def _redetect_rig(avatar: Avatar, image_bytes: bytes, previous: dict) -> tuple[dict, dict] | None:
     """Last resort for a crop reset with no recoverable origin: the rig and
     its fit base, built as a first build would build them.
 
@@ -366,7 +364,9 @@ def _redetect_rig(
             "crop reset for avatar %s: crop origin unknown, hand marks dropped", avatar.id
         )
     rig = build_rig(
-        starting_mesh(points, size, detected, avatar.face_type), size, blendshapes,
+        starting_mesh(points, size, detected, avatar.face_type),
+        size,
+        blendshapes,
         face_type=avatar.face_type,
     )
     return rig, fit_base_record(fit_base_mesh(points, size, detected), rig, detected)

@@ -21,6 +21,7 @@ Piper phonemizes with espeak — the same front end this project already
 uses for lip-sync in ~100 languages — so the visemes and the audio are
 derived from the same phonemization of the same text.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -111,9 +112,7 @@ class PiperTTSProvider(TTSProvider):
         # An unknown id must not 500 a visitor's page: prefer a voice for the
         # requested locale, else the first installed one.
         if voice not in installed:
-            voice = next(
-                (v for v in installed if CATALOGUE[v][2] == locale), installed[0]
-            )
+            voice = next((v for v in installed if CATALOGUE[v][2] == locale), installed[0])
         stem, _, voice_locale = CATALOGUE[voice]
 
         async with _synth_semaphore:

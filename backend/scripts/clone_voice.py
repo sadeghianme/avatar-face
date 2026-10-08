@@ -42,7 +42,7 @@ import wave
 from pathlib import Path
 
 SAMPLE_WIDTH = 2  # 16-bit PCM: half the bytes of Chatterbox's float32, no
-                  # audible difference, and what every browser decodes.
+# audible difference, and what every browser decodes.
 
 
 def _to_wav_bytes(tensor, sample_rate: int) -> bytes:
@@ -70,7 +70,7 @@ def main() -> int:
         "--api",
         required=True,
         help="API base URL, including any prefix — e.g. https://host/api "
-             "in production, http://localhost:7002 against the backend directly",
+        "in production, http://localhost:7002 against the backend directly",
     )
     parser.add_argument("--token", required=True, help="dashboard access token")
     parser.add_argument("--org", required=True, help="organisation id")

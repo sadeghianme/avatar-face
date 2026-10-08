@@ -35,6 +35,7 @@ from app.services.performance_kit.registration import (
 
 # --- 4. Retarget fallback -----------------------------------------------------------------------
 
+
 def retarget_reference_pose(
     shape: str, base_points: np.ndarray, reference: ReferenceMotion
 ) -> np.ndarray:
@@ -143,8 +144,12 @@ class ProfileFit:
     teeth_photo: bool = False
 
     def as_dict(self) -> dict:
-        return {"profile": self.profile, "measurements": self.measurements, "reasons": self.reasons,
-                "teeth_photo": self.teeth_photo}
+        return {
+            "profile": self.profile,
+            "measurements": self.measurements,
+            "reasons": self.reasons,
+            "teeth_photo": self.teeth_photo,
+        }
 
 
 @dataclass(frozen=True)
@@ -303,11 +308,16 @@ def normalize_amplitude(
         made = opening(aa, base_points)
         if made > 1e-6:
             result.scale = reference_open["aa"] / made
-        result.measurements.update(aa_opening=round(made, 4),
-                                   reference_aa_opening=round(reference_open["aa"], 4))
+        result.measurements.update(
+            aa_opening=round(made, 4), reference_aa_opening=round(reference_open["aa"], 4)
+        )
     else:
-        result.reasons.append({"field": "amplitude", **_reason(
-            "aa_not_generated", "No AA of this face to scale its shapes by")})
+        result.reasons.append(
+            {
+                "field": "amplitude",
+                **_reason("aa_not_generated", "No AA of this face to scale its shapes by"),
+            }
+        )
     result.measurements["amplitude"] = round(result.scale, 4)
     for shape, targets in generated.items():
         scaled = base_points + result.scale * (targets - base_points)

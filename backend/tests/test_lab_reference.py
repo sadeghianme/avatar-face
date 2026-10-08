@@ -1,4 +1,5 @@
 """Temporary previews must not create customer avatars or accept bad faces."""
+
 from __future__ import annotations
 
 import io
@@ -24,7 +25,11 @@ def mock_detection(monkeypatch, *, detected=True, gap=None):
     if gap is not None:
         width = np.linalg.norm(points[291] - points[61])
         points[14] = points[13] + [0, width * gap]
-    monkeypatch.setattr(portrait_photo, "landmarks_from_image", lambda _: (points, {}, tuple(rig["image_size"]), detected))
+    monkeypatch.setattr(
+        portrait_photo,
+        "landmarks_from_image",
+        lambda _: (points, {}, tuple(rig["image_size"]), detected),
+    )
 
 
 @pytest.mark.asyncio
@@ -58,12 +63,17 @@ async def test_upload_validation_and_size_bound(client, monkeypatch):
     headers = await register_and_login(client)
     org = await create_org(client, headers)
     route = f"/orgs/{org}/lab/reference/preview"
-    for content, mime, code in [(b"bad", "text/plain", "unsupported_image_type"), (b"bad", "image/png", "unreadable_image")]:
+    for content, mime, code in [
+        (b"bad", "text/plain", "unsupported_image_type"),
+        (b"bad", "image/png", "unreadable_image"),
+    ]:
         result = await client.post(route, headers=headers, files={"file": ("photo", content, mime)})
         assert result.status_code == 422
         assert result.json()["code"] == code
     monkeypatch.setattr(lab_reference, "MAX_BYTES", 4)
-    result = await client.post(route, headers=headers, files={"file": ("photo.png", sample_png(), "image/png")})
+    result = await client.post(
+        route, headers=headers, files={"file": ("photo.png", sample_png(), "image/png")}
+    )
     assert result.json()["code"] == "image_too_large"
 
 
@@ -71,11 +81,11 @@ def test_refuses_synthetic_face_and_open_neutral(monkeypatch):
     mock_detection(monkeypatch, detected=False)
     with pytest.raises(Validation422, match="No clear face"):
         lab_reference.prepare_photo(sample_png(), "portrait")
-    mock_detection(monkeypatch, gap=.2)
+    mock_detection(monkeypatch, gap=0.2)
     with pytest.raises(Validation422, match="closed-mouth"):
         lab_reference.prepare_photo(sample_png(), "portrait")
     assert len(lab_reference.prepare_photo(sample_png(), "mouth")[1]["points"]) == 478
-    mock_detection(monkeypatch, gap=.005)
+    mock_detection(monkeypatch, gap=0.005)
     with pytest.raises(Validation422, match="upper teeth"):
         lab_reference.prepare_photo(sample_png(), "mouth")
 

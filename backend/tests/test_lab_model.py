@@ -3,20 +3,27 @@
 RUN_LIPSYNC_MODEL_TESTS=1 plus KOKORO_LIPSYNC_MODEL_PATH and KOKORO_VOICES_PATH
 enables these on a machine with the lab weights installed.
 """
+
 import os
 
 import pytest
 
-pytestmark = pytest.mark.skipif(os.environ.get("RUN_LIPSYNC_MODEL_TESTS") != "1", reason="requires lab model weights")
+pytestmark = pytest.mark.skipif(
+    os.environ.get("RUN_LIPSYNC_MODEL_TESTS") != "1", reason="requires lab model weights"
+)
 
 
-@pytest.mark.parametrize("voice,text", [
-    ("af_heart", "Peter bought a blue paper bag. Five very vivid flowers."),
-    ("bf_emma", "Please pause. We see two little boats. Mother made blueberry muffins."),
-    ("ff_siwis", "Papa prépare un beau bouquet. Vous voyez cinq fleurs magnifiques."),
-])
+@pytest.mark.parametrize(
+    "voice,text",
+    [
+        ("af_heart", "Peter bought a blue paper bag. Five very vivid flowers."),
+        ("bf_emma", "Please pause. We see two little boats. Mother made blueberry muffins."),
+        ("ff_siwis", "Papa prépare un beau bouquet. Vous voyez cinq fleurs magnifiques."),
+    ],
+)
 def test_real_phoneme_tracks(voice, text):
     from app.services.tts.lab_timing import _render
+
     audio, duration, native, baseline = _render(text, voice)
     assert audio.startswith(b"RIFF")
     assert 500 < duration < 30000

@@ -4,6 +4,7 @@ Everything has a working default so the app boots with zero configuration:
 SQLite for the database, an HMAC-signed local-filesystem storage fallback,
 and the always-on offline TTS provider.
 """
+
 from __future__ import annotations
 
 import ipaddress
@@ -23,7 +24,6 @@ def _split_csv(value: str | list[str]) -> list[str]:
         return [item.strip() for item in value if item.strip()]
     value = value.strip()
     if value.startswith("["):  # JSON-style list still works alongside CSV
-
         try:
             return [str(item).strip() for item in json.loads(value)]
         except ValueError:

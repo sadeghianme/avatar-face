@@ -80,8 +80,11 @@ def human_rig() -> tuple[dict, np.ndarray]:
 
 def line_marks(layout: str, chin=(500, 850)) -> FaceMarks:
     return FaceMarks(
-        head=HEAD, left_eye=LEFT_EYE, right_eye=RIGHT_EYE,
-        mouth_line=LAYOUTS[layout], chin=chin,
+        head=HEAD,
+        left_eye=LEFT_EYE,
+        right_eye=RIGHT_EYE,
+        mouth_line=LAYOUTS[layout],
+        chin=chin,
     )
 
 
@@ -196,8 +199,11 @@ def test_a_human_mouth_marked_wider_folds_nothing_and_keeps_its_seam():
     marks = marks_from_mesh(base, "human")
     m = marks.mouth
     wider = RegionMarks(
-        (m.left[0] - 15, m.left[1]), (m.right[0] + 15, m.right[1]), m.top,
-        (m.bottom[0], m.bottom[1] + 10), (m.center[0], m.center[1] + 4),
+        (m.left[0] - 15, m.left[1]),
+        (m.right[0] + 15, m.right[1]),
+        m.top,
+        (m.bottom[0], m.bottom[1] + 10),
+        (m.center[0], m.center[1] + 4),
     )
     out, problems = fit_rig(rig, base, replace(marks, mouth=wider), "human")
     fitted = np.array(out["points"])
@@ -235,7 +241,8 @@ def test_a_human_pupil_drawn_another_size_saves(factor):
     rig, base = human_rig()
     marks = marks_from_mesh(base, "human")
     resized = replace(
-        marks, left_pupil=_resized(marks.left_pupil, factor),
+        marks,
+        left_pupil=_resized(marks.left_pupil, factor),
         right_pupil=_resized(marks.right_pupil, factor),
     )
     out, problems = fit_rig(rig, base, resized, "human")
@@ -251,7 +258,9 @@ def test_a_lower_lid_moved_past_the_iris_saves(dy):
     rig, base = human_rig()
     marks = marks_from_mesh(base, "human")
     e = marks.left_eye
-    lower = replace(marks, left_eye=RegionMarks(e.left, e.right, e.top, (e.bottom[0], e.bottom[1] + dy)))
+    lower = replace(
+        marks, left_eye=RegionMarks(e.left, e.right, e.top, (e.bottom[0], e.bottom[1] + dy))
+    )
     out, problems = fit_rig(rig, base, lower, "human")
     assert problems == []
     # The iris stays the marked circle; the lid alone moved.
@@ -268,11 +277,18 @@ def test_a_toon_pupil_inside_its_eye_saves(seed):
         for cx in (390, 610):
             w = rng.uniform(70, 150)
             h = w * rng.uniform(0.35, 1.0)
-            eyes.append(RegionMarks((cx - w / 2, 400), (cx + w / 2, 400), (cx, 400 - h / 2), (cx, 400 + h / 2)))
+            eyes.append(
+                RegionMarks(
+                    (cx - w / 2, 400), (cx + w / 2, 400), (cx, 400 - h / 2), (cx, 400 + h / 2)
+                )
+            )
             pupils.append(_pupil((cx, 400), h * rng.uniform(0.2, 0.45)))
         marks = replace(
-            line_marks("toon big grin"), left_eye=eyes[0], right_eye=eyes[1],
-            left_pupil=pupils[0], right_pupil=pupils[1],
+            line_marks("toon big grin"),
+            left_eye=eyes[0],
+            right_eye=eyes[1],
+            left_pupil=pupils[0],
+            right_pupil=pupils[1],
         )
         assert fit_rig(rig, base, marks, "cartoon")[1] == []
 
@@ -282,7 +298,9 @@ def test_marking_a_pupil_does_not_move_the_skin():
     are exactly what they are without it."""
     rig, base = human_rig()
     marks = marks_from_mesh(base, "human")
-    shifted = replace(marks, left_pupil=_pupil((marks.left_pupil.center[0] + 4, marks.left_pupil.center[1]), 6))
+    shifted = replace(
+        marks, left_pupil=_pupil((marks.left_pupil.center[0] + 4, marks.left_pupil.center[1]), 6)
+    )
     with_pupil = np.array(fit_rig(rig, base, shifted, "human")[0]["points"])
     without = np.array(fit_rig(rig, base, replace(marks, left_pupil=None), "human")[0]["points"])
     skin = [i for i in range(478) if i not in IRIS]
@@ -504,15 +522,22 @@ def old_panel_anchors(rig: dict) -> dict:
     def region(indices, with_center=False) -> dict:
         idx = np.array(indices)
         xs, ys = points[idx, 0], points[idx, 1]
-        out = {"left": pt(idx[xs.argmin()]), "right": pt(idx[xs.argmax()]),
-               "top": pt(idx[ys.argmin()]), "bottom": pt(idx[ys.argmax()])}
+        out = {
+            "left": pt(idx[xs.argmin()]),
+            "right": pt(idx[xs.argmax()]),
+            "top": pt(idx[ys.argmin()]),
+            "bottom": pt(idx[ys.argmax()]),
+        }
         if with_center:
             out["center"] = {"x": (xs.min() + xs.max()) / 2, "y": (ys.min() + ys.max()) / 2}
         return out
 
     def pupil(ring) -> dict:
         r = max(np.mean([np.linalg.norm(points[j] - points[ring[0]]) for j in ring[1:]]), 2.0)
-        return {"center": pt(ring[0]), "rim": {"x": points[ring[0]][0] + r, "y": points[ring[0]][1]}}
+        return {
+            "center": pt(ring[0]),
+            "rim": {"x": points[ring[0]][0] + r, "y": points[ring[0]][1]},
+        }
 
     return {
         "head": region(range(len(points))),
@@ -648,7 +673,10 @@ def test_the_head_diagonals_are_the_oval_landmarks_nearest_the_box_diagonals():
     diagonal of its box; on the template, these are the oval's landmarks
     nearest those diagonals. Pinned: stored marks name these landmarks."""
     assert HEAD_DIAGONALS == {
-        "upper_left": 54, "upper_right": 284, "lower_right": 365, "lower_left": 136,
+        "upper_left": 54,
+        "upper_right": 284,
+        "lower_right": 365,
+        "lower_left": 136,
     }
     unit = face_template.normalised()
     cx, cy = (unit[234][0] + unit[454][0]) / 2, (unit[10][1] + unit[152][1]) / 2
@@ -658,7 +686,10 @@ def test_the_head_diagonals_are_the_oval_landmarks_nearest_the_box_diagonals():
         return math.atan2((unit[i][1] - cy) / hh, (unit[i][0] - cx) / hw)
 
     wanted = {
-        "upper_left": (-1, -1), "upper_right": (1, -1), "lower_right": (1, 1), "lower_left": (-1, 1),
+        "upper_left": (-1, -1),
+        "upper_right": (1, -1),
+        "lower_right": (1, 1),
+        "lower_left": (-1, 1),
     }
     for name, (dx, dy) in wanted.items():
         target = math.atan2(dy, dx)
@@ -698,10 +729,13 @@ def test_eight_head_marks_pin_their_landmarks():
 
 def _curve(ring: np.ndarray, steps: int = 200) -> np.ndarray:
     n = len(ring)
-    return np.array([
-        catmull_rom(ring[(k - 1) % n], ring[k], ring[(k + 1) % n], ring[(k + 2) % n], t)
-        for k in range(n) for t in np.linspace(0, 1, steps, endpoint=False)
-    ])
+    return np.array(
+        [
+            catmull_rom(ring[(k - 1) % n], ring[k], ring[(k + 1) % n], ring[(k + 2) % n], t)
+            for k in range(n)
+            for t in np.linspace(0, 1, steps, endpoint=False)
+        ]
+    )
 
 
 def _off_curve(points: np.ndarray, ring: np.ndarray) -> float:
@@ -812,7 +846,8 @@ def test_a_crossed_outline_is_refused():
     rig, base = template_rig()
     swapped = outline_marks(
         "dog wide muzzle",
-        upper_right=OVAL_DIAGONALS["lower_right"], lower_right=OVAL_DIAGONALS["upper_right"],
+        upper_right=OVAL_DIAGONALS["lower_right"],
+        lower_right=OVAL_DIAGONALS["upper_right"],
     )
     assert "outline_crossed" in codes(fit_rig(rig, base, swapped, "animal")[1])
 

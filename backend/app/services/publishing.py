@@ -297,9 +297,7 @@ async def republish_mouth(avatar: Avatar, storage: Storage) -> PublishedConfig |
 
 
 def _shows_oral_photo(mouth: MouthConfig | None) -> bool:
-    return bool(
-        mouth and mouth.get("renderer") == "continuous" and mouth.get("oral_image_key")
-    )
+    return bool(mouth and mouth.get("renderer") == "continuous" and mouth.get("oral_image_key"))
 
 
 def _plays_own_motion(mouth: MouthConfig | None) -> bool:
@@ -346,11 +344,15 @@ _MOUTH_FILE = re.compile(r"mouth-[A-Za-z0-9-]+\.(?:webp|png|json)")
 
 
 def _mouth_keys(mouth: MouthConfig | None) -> set[str]:
-    return {key for key in (
-        (mouth or {}).get("oral_image_key"),
-        (mouth or {}).get("oral_rig_key"),
-        (mouth or {}).get("motion_key"),
-    ) if key}
+    return {
+        key
+        for key in (
+            (mouth or {}).get("oral_image_key"),
+            (mouth or {}).get("oral_rig_key"),
+            (mouth or {}).get("motion_key"),
+        )
+        if key
+    }
 
 
 async def _sweep_mouth_files(avatar: Avatar, storage: Storage, mouth: MouthConfig | None) -> None:
@@ -489,7 +491,9 @@ async def discard_draft(avatar: Avatar, storage: Storage) -> list[str] | None:
     # Back in step with what is published.
     avatar.draft_revision = config.get("revision", 0)
     logger.info("discarded draft for avatar %s", avatar.id)
-    restored_keys = _mouth_keys(load_mouth(avatar.mouth_config)) | scene_service.keys(scene_service.load(avatar))
+    restored_keys = _mouth_keys(load_mouth(avatar.mouth_config)) | scene_service.keys(
+        scene_service.load(avatar)
+    )
     return sorted(discarded - restored_keys)
 
 
@@ -577,32 +581,32 @@ async def published_view(avatar: Avatar, storage: Storage) -> PublishedView | No
         return None
     image_url = await storage.presign_get(config["image_key"])
     layer_keys = config.get("layer_keys") or {}
-    layer_urls = {
-        name: await storage.presign_get(key) for name, key in layer_keys.items()
-    }
+    layer_urls = {name: await storage.presign_get(key) for name, key in layer_keys.items()}
     rig_key, thumbnail_key = config.get("rig_key"), config.get("thumbnail_key")
 
-    return PublishedView.model_validate({
-        "framing": config.get("framing", "face"),
-        # What the avatar is, as published: the engine moves a person's head
-        # in depth and an animal's or a cartoon's as a layer, which the rig
-        # cannot tell it (one fitted before render profiles names none,
-        # whatever the face). Every snapshot carries it, migration 020's
-        # backfill included; "human" covers one that somehow does not.
-        "face_type": config.get("face_type") or "human",
-        # Null for a snapshot from before scenes existed: the engine renders
-        # by the framing, as it always did.
-        "scene": await scene_service.visitor_view(config.get("scene"), storage),
-        "voice": config.get("voice"),
-        "mouth": await _mouth_view(config.get("mouth"), storage),
-        "rig_url": await storage.presign_get(rig_key) if rig_key else "",
-        "thumbnail_url": await storage.presign_get(thumbnail_key) if thumbnail_key else "",
-        "image_url": image_url,
-        "layer_urls": layer_urls or None,
-        # Absent from snapshots published before disclosure existed (and
-        # left out of the answer then, not sent as null).
-        "disclosure": config.get("disclosure") or None,
-    })
+    return PublishedView.model_validate(
+        {
+            "framing": config.get("framing", "face"),
+            # What the avatar is, as published: the engine moves a person's head
+            # in depth and an animal's or a cartoon's as a layer, which the rig
+            # cannot tell it (one fitted before render profiles names none,
+            # whatever the face). Every snapshot carries it, migration 020's
+            # backfill included; "human" covers one that somehow does not.
+            "face_type": config.get("face_type") or "human",
+            # Null for a snapshot from before scenes existed: the engine renders
+            # by the framing, as it always did.
+            "scene": await scene_service.visitor_view(config.get("scene"), storage),
+            "voice": config.get("voice"),
+            "mouth": await _mouth_view(config.get("mouth"), storage),
+            "rig_url": await storage.presign_get(rig_key) if rig_key else "",
+            "thumbnail_url": await storage.presign_get(thumbnail_key) if thumbnail_key else "",
+            "image_url": image_url,
+            "layer_urls": layer_urls or None,
+            # Absent from snapshots published before disclosure existed (and
+            # left out of the answer then, not sent as null).
+            "disclosure": config.get("disclosure") or None,
+        }
+    )
 
 
 async def _mouth_view(mouth: MouthConfig | None, storage: Storage) -> dict | None:

@@ -34,7 +34,14 @@ DIAGONALS = tuple(HEAD_DIAGONALS)
 # The eight head marks in order around the face, clockwise on screen from
 # the top: the order the outline is drawn in, and checked in.
 HEAD_OUTLINE_EDGES = (
-    "top", "upper_right", "right", "lower_right", "bottom", "lower_left", "left", "upper_left",
+    "top",
+    "upper_right",
+    "right",
+    "lower_right",
+    "bottom",
+    "lower_left",
+    "left",
+    "upper_left",
 )
 HEAD_OUTLINE = [{**HEAD, **HEAD_DIAGONALS}[edge] for edge in HEAD_OUTLINE_EDGES]
 LEFT_EYE = {"left": 33, "right": 133, "top": 159, "bottom": 145}

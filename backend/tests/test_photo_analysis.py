@@ -122,7 +122,10 @@ def test_a_suggested_level_needs_no_filled_corners():
             y = cy + dx * math.sin(theta) + dy * math.cos(theta)
             assert -0.5 <= x <= size[0] + 0.5 and -0.5 <= y <= size[1] + 0.5
     assert inside_when_turned({"x": 0.1, "y": 0.1, "w": 0.5, "h": 0.5}, 0.0, size) == {
-        "x": 0.1, "y": 0.1, "w": 0.5, "h": 0.5,
+        "x": 0.1,
+        "y": 0.1,
+        "w": 0.5,
+        "h": 0.5,
     }
 
 
@@ -352,7 +355,8 @@ def test_a_turned_head_needs_regenerating_which_also_fixes_the_eyes(face_is):
     check = _check(face_is, lambda p: turned(with_eyes(p, 0.05), MAX_NOSE_OFFSET + 0.05))
     assert "head_turned" in _codes(check)
     assert check["recommendations"]["human"] == {
-        "mode": "regenerate", "reasons": ["head_turned", "eyes_closed"],
+        "mode": "regenerate",
+        "reasons": ["head_turned", "eyes_closed"],
     }
 
 
@@ -366,7 +370,8 @@ def test_a_touchup_is_not_recommended_on_a_head_it_would_refuse(face_is):
     assert check["face_state"]["measures"]["yaw"] > MAX_TOUCHUP_YAW
     assert "head_turned" not in _codes(check)
     assert check["recommendations"]["human"] == {
-        "mode": "regenerate", "reasons": ["head_turned", "eyes_closed"],
+        "mode": "regenerate",
+        "reasons": ["head_turned", "eyes_closed"],
     }
     # Frontal enough, the same eyes are a touch-up.
     assert _check(face_is, lambda p: with_eyes(p, 0.05))["recommendations"]["human"]["mode"] == (
@@ -386,12 +391,14 @@ def test_a_small_face_and_poor_light_need_regenerating(face_is):
     face_is["box"] = (0.45, 0.35, 0.55, 0.45)
     small = _check(face_is, lambda p: p, textured(1200, 1200))
     assert small["recommendations"]["human"] == {
-        "mode": "regenerate", "reasons": ["face_small", "low_resolution"],
+        "mode": "regenerate",
+        "reasons": ["face_small", "low_resolution"],
     }
     face_is["box"] = (0.3, 0.2, 0.7, 0.7)
     dark = _check(face_is, lambda p: with_mouth(p, 0.2), textured(*GOOD, low=0, high=30))
     assert dark["recommendations"]["human"] == {
-        "mode": "regenerate", "reasons": ["too_dark", "mouth_open"],
+        "mode": "regenerate",
+        "reasons": ["too_dark", "mouth_open"],
     }
 
 
