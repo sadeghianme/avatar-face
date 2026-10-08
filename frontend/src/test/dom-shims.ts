@@ -13,6 +13,7 @@
  * - matchMedia (nothing matches unless a test says so: `setMedia`),
  *   ResizeObserver, IntersectionObserver, object URLs, scrolling, canvas
  *   contexts, media playback, pointer capture: inert stand-ins.
+ * - PointerEvent (a MouseEvent with an id and a type), for a drag.
  */
 
 const media = new Map<string, boolean>();
@@ -111,6 +112,23 @@ export function installDomShims(): void {
   }
   window.ResizeObserver = InertObserver as unknown as typeof ResizeObserver;
   window.IntersectionObserver = InertObserver as unknown as typeof IntersectionObserver;
+
+  // --- Pointer events ----------------------------------------------------------------------
+  // jsdom has no PointerEvent, so Testing Library's fireEvent.pointerDown
+  // would make a plain Event and lose clientX: a MouseEvent with the
+  // pointer's id and type is enough for a drag.
+  if (!("PointerEvent" in window)) {
+    class PointerEventShim extends MouseEvent {
+      pointerId: number;
+      pointerType: string;
+      constructor(type: string, init: PointerEventInit = {}) {
+        super(type, init);
+        this.pointerId = init.pointerId ?? 0;
+        this.pointerType = init.pointerType ?? "mouse";
+      }
+    }
+    Object.defineProperty(window, "PointerEvent", { configurable: true, value: PointerEventShim });
+  }
 
   // --- Everything else ------------------------------------------------------------------------
   let blobs = 0;

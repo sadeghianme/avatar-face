@@ -3,9 +3,23 @@ import { useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/FieldError";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { CropGuides, CropShade } from "@/features/avatars/components/crop/CropGuides";
+import {
+  clamp01,
+  type CropDrag,
+  type CropRect,
+  DEFAULT_RECT,
+  dragTo,
+  fitRatio,
+  keyed,
+  pixelSize,
+  type Size,
+  tooSmall as isTooSmall,
+} from "@/features/avatars/crop";
 import { useT } from "@/i18n";
 import type { MessageKey } from "@/i18n/types";
-import { cx } from "@/lib/cx";
+
+export type { CropRect } from "@/features/avatars/crop";
 
 /**
  * The crop interaction: an image, a rectangle, handles, aspect presets.
@@ -28,35 +42,9 @@ import { cx } from "@/lib/cx";
  * It is an "application" region, not a group: a screen reader in browse mode
  * keeps the arrow keys for reading unless the focused element is a widget,
  * and the key handler would never hear them. Where the box is, and how big,
- * is part of its description and is read out after each key.
+ * is part of its description and is read out after each key. The geometry
+ * is crop.ts's; the shade, outline and handles are CropGuides'.
  */
-
-/** Fractions of the image, so the rectangle survives any display size. */
-interface Rect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
-type Handle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
-
-type Drag =
-  { kind: "move"; grabX: number; grabY: number; start: Rect } | { kind: "resize"; handle: Handle; start: Rect };
-
-/** Matches the server, which refuses to leave a face with nothing on it. */
-const MIN_SIDE = 0.15;
-
-const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-
-// One arrow key press moves or resizes the rectangle by this share of the
-// image. There is no fast variant: Shift already means resize, and 1% is
-// fine enough for a crop and quick enough to cross a photo.
-const KEY_STEP = 0.01;
-// A keyboard resize stops here; the pointer can go smaller and is told off
-// by the red outline, but a held key would otherwise collapse the box.
-const KEY_MIN_SIDE = 0.05;
-const DEFAULT_RECT: Rect = { x: 0.08, y: 0.04, w: 0.84, h: 0.92 };
 
 const ASPECTS: { key: MessageKey; ratio: number | null }[] = [
   { key: "cropFree", ratio: null },
@@ -64,13 +52,6 @@ const ASPECTS: { key: MessageKey; ratio: number | null }[] = [
   { key: "cropPortrait", ratio: 4 / 5 },
   { key: "cropWide", ratio: 16 / 9 },
 ];
-
-export interface CropRect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
 
 export function CropBox({
   src,
@@ -98,9 +79,9 @@ export function CropBox({
   const positionId = useId();
   // Filled by key presses only: a pointer drag would read out every pixel.
   const [spoken, setSpoken] = useState("");
-  const [own, setOwn] = useState<Rect>(value ?? DEFAULT_RECT);
+  const [own, setOwn] = useState<CropRect>(value ?? DEFAULT_RECT);
   const rect = value ?? own;
-  const setRect = (next: Rect) => {
+  const setRect = (next: CropRect) => {
     if (value === undefined) setOwn(next);
     onChange?.(next);
   };
@@ -108,11 +89,10 @@ export function CropBox({
   // arrives before React has re-rendered from pointerdown, so a state-held
   // drag reads null and the first movement of every drag is dropped. The
   // boolean mirror exists only so the thirds grid can appear.
-  const dragRef = useRef<Drag | null>(null);
+  const dragRef = useRef<CropDrag | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  const [natural, setNatural] = useState<Size | null>(null);
   const [ratio, setRatio] = useState<number | null>(null);
-  const [error] = useState<string | null>(null);
 
   const at = (e: React.PointerEvent) => {
     const box = frame.current?.getBoundingClientRect();
@@ -123,21 +103,7 @@ export function CropBox({
     };
   };
 
-  /** Force a rectangle to the locked aspect, holding the given anchor still. */
-  const applyRatio = (r: Rect, anchorRight: boolean, anchorBottom: boolean): Rect => {
-    if (!ratio || !natural) return r;
-    // The rectangle is in fractions of two different dimensions, so the pixel
-    // aspect is not w/h — it has to go through the image's own proportions.
-    const h = (r.w * natural.w) / (ratio * natural.h);
-    const next = { ...r, h };
-    if (anchorBottom) next.y = r.y + r.h - h;
-    if (next.y < 0) next.y = 0;
-    if (next.y + next.h > 1) next.h = 1 - next.y;
-    if (anchorRight) next.x = r.x + r.w - next.w;
-    return next;
-  };
-
-  const start = (e: React.PointerEvent, next: Drag) => {
+  const start = (e: React.PointerEvent, next: CropDrag) => {
     e.preventDefault();
     e.stopPropagation();
     dragRef.current = next;
@@ -159,77 +125,30 @@ export function CropBox({
 
   const move = (e: React.PointerEvent) => {
     const drag = dragRef.current;
-    if (!drag) return;
-    const p = at(e);
-    if (drag.kind === "move") {
-      const s = drag.start;
-      setRect({
-        ...s,
-        // Clamped so the box slides along the edge rather than shrinking when
-        // it is pushed past the boundary.
-        x: Math.max(0, Math.min(1 - s.w, s.x + (p.x - drag.grabX))),
-        y: Math.max(0, Math.min(1 - s.h, s.y + (p.y - drag.grabY))),
-      });
-      return;
-    }
-    const s = drag.start;
-    const h = drag.handle;
-    const west = h === "nw" || h === "w" || h === "sw";
-    const east = h === "ne" || h === "e" || h === "se";
-    const north = h === "nw" || h === "n" || h === "ne";
-    const south = h === "sw" || h === "s" || h === "se";
-
-    let x0 = west ? p.x : s.x;
-    let x1 = east ? p.x : s.x + s.w;
-    let y0 = north ? p.y : s.y;
-    let y1 = south ? p.y : s.y + s.h;
-    if (x1 < x0) [x0, x1] = [x1, x0];
-    if (y1 < y0) [y0, y1] = [y1, y0];
-
-    setRect(applyRatio({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, east, south));
+    if (drag) setRect(dragTo(drag, at(e), ratio, natural));
   };
 
   const chooseRatio = (next: number | null) => {
     setRatio(next);
-    if (next && natural) {
-      const h = (rect.w * natural.w) / (next * natural.h);
-      const y = Math.max(0, Math.min(1 - Math.min(h, 1), rect.y));
-      setRect({ ...rect, y, h: Math.min(h, 1 - y) });
-    }
+    if (next && natural) setRect(fitRatio(rect, next, natural));
   };
 
-  const describe = (r: Rect) => {
+  const describe = (r: CropRect) => {
     const pc = (v: number) => Math.round(v * 100);
     const text = t("cropAreaPosition", { left: pc(r.x), top: pc(r.y), width: pc(r.w), height: pc(r.h) });
-    return natural ? `${text} (${Math.round(r.w * natural.w)} × ${Math.round(r.h * natural.h)} px)` : text;
+    return natural ? `${text} (${pixelSize(r, natural)} px)` : text;
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    const dx = e.key === "ArrowLeft" ? -KEY_STEP : e.key === "ArrowRight" ? KEY_STEP : 0;
-    const dy = e.key === "ArrowUp" ? -KEY_STEP : e.key === "ArrowDown" ? KEY_STEP : 0;
-    if (!dx && !dy) return;
+    const next = keyed(rect, e.key, e.shiftKey, ratio, natural);
+    if (!next) return;
     e.preventDefault();
-    let next: Rect;
-    if (e.shiftKey) {
-      const w = Math.max(KEY_MIN_SIDE, Math.min(1 - rect.x, rect.w + dx));
-      const h = Math.max(KEY_MIN_SIDE, Math.min(1 - rect.y, rect.h + dy));
-      next = applyRatio({ ...rect, w, h }, false, false);
-    } else {
-      next = {
-        ...rect,
-        x: Math.max(0, Math.min(1 - rect.w, rect.x + dx)),
-        y: Math.max(0, Math.min(1 - rect.h, rect.y + dy)),
-      };
-    }
     setRect(next);
     setSpoken(describe(next));
   };
 
-  const tooSmall = rect.w < MIN_SIDE || rect.h < MIN_SIDE;
-  const outPx = natural ? `${Math.round(rect.w * natural.w)} × ${Math.round(rect.h * natural.h)}` : "";
-
+  const tooSmall = isTooSmall(rect);
   const pct = (v: number) => `${v * 100}%`;
-  const edge = "absolute bg-white/90";
 
   return (
     <div>
@@ -263,27 +182,7 @@ export function CropBox({
           }
         />
 
-        {/* Dim the four bands outside the crop rather than putting one big
-            shadow behind it: this shows exactly what is being cut. */}
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute inset-x-0 top-0 bg-black/60" style={{ height: pct(rect.y) }} />
-          <div
-            className="absolute inset-x-0 bottom-0 bg-black/60"
-            style={{ height: pct(Math.max(0, 1 - rect.y - rect.h)) }}
-          />
-          <div
-            className="absolute left-0 bg-black/60"
-            style={{ top: pct(rect.y), height: pct(rect.h), width: pct(rect.x) }}
-          />
-          <div
-            className="absolute right-0 bg-black/60"
-            style={{
-              top: pct(rect.y),
-              height: pct(rect.h),
-              width: pct(Math.max(0, 1 - rect.x - rect.w)),
-            }}
-          />
-        </div>
+        <CropShade rect={rect} />
 
         <div
           className="absolute cursor-move outline-none focus-visible:ring-2 focus-visible:ring-brand-400
@@ -302,55 +201,13 @@ export function CropBox({
           onPointerMove={move}
           onPointerUp={() => end()}
         >
-          <div className={cx("absolute inset-0 ring-1", tooSmall ? "ring-red-400" : "ring-white/70")} />
-          {/* Thirds, shown only while dragging — permanent guides turn into
-              clutter the moment you stop needing them. */}
-          {dragging && (
-            <div className="pointer-events-none absolute inset-0">
-              <div className="absolute inset-y-0 left-1/3 w-px bg-white/30" />
-              <div className="absolute inset-y-0 left-2/3 w-px bg-white/30" />
-              <div className="absolute inset-x-0 top-1/3 h-px bg-white/30" />
-              <div className="absolute inset-x-0 top-2/3 h-px bg-white/30" />
-            </div>
-          )}
-
-          {/* Corner brackets, the way a real crop tool draws them: they sit
-              inside the frame so they never hide the edge they define. */}
-          {(
-            [
-              ["nw", "left-0 top-0 border-l-[3px] border-t-[3px] cursor-nwse-resize"],
-              ["ne", "right-0 top-0 border-r-[3px] border-t-[3px] cursor-nesw-resize"],
-              ["sw", "bottom-0 left-0 border-b-[3px] border-l-[3px] cursor-nesw-resize"],
-              ["se", "bottom-0 right-0 border-b-[3px] border-r-[3px] cursor-nwse-resize"],
-            ] as [Handle, string][]
-          ).map(([handle, cls]) => (
-            <span
-              key={handle}
-              onPointerDown={(e) => start(e, { kind: "resize", handle, start: rect })}
-              onPointerMove={move}
-              onPointerUp={() => end()}
-              className={cx("absolute h-6 w-6 border-white", cls)}
-            />
-          ))}
-
-          {/* Edge bars — resizing one side only is half of what a crop tool
-              is for, and corners alone force you to fight the aspect. */}
-          {(
-            [
-              ["n", `${edge} left-1/2 top-0 h-[3px] w-7 -translate-x-1/2 cursor-ns-resize`],
-              ["s", `${edge} bottom-0 left-1/2 h-[3px] w-7 -translate-x-1/2 cursor-ns-resize`],
-              ["w", `${edge} left-0 top-1/2 h-7 w-[3px] -translate-y-1/2 cursor-ew-resize`],
-              ["e", `${edge} right-0 top-1/2 h-7 w-[3px] -translate-y-1/2 cursor-ew-resize`],
-            ] as [Handle, string][]
-          ).map(([handle, cls]) => (
-            <span
-              key={handle}
-              onPointerDown={(e) => start(e, { kind: "resize", handle, start: rect })}
-              onPointerMove={move}
-              onPointerUp={() => end()}
-              className={cls}
-            />
-          ))}
+          <CropGuides
+            tooSmall={tooSmall}
+            dragging={dragging}
+            onHandleDown={(e, handle) => start(e, { kind: "resize", handle, start: rect })}
+            onMove={move}
+            onEnd={end}
+          />
         </div>
       </div>
 
@@ -362,7 +219,7 @@ export function CropBox({
           value={ASPECTS.find((a) => a.ratio === ratio)?.key ?? "cropFree"}
           onChange={(key) => chooseRatio(ASPECTS.find((a) => a.key === key)?.ratio ?? null)}
         />
-        <span className="font-mono text-[12px] text-gray-400">{outPx}</span>
+        <span className="font-mono text-[12px] text-gray-400">{pixelSize(rect, natural)}</span>
         {onApply && onCancel && (
           <div className="ms-auto flex gap-2">
             <Button variant="secondary" onClick={onCancel} disabled={busy}>
@@ -386,7 +243,6 @@ export function CropBox({
         {spoken}
       </p>
       {tooSmall && <FieldError className="mt-2">{t("cropTooSmall")}</FieldError>}
-      {error && <FieldError className="mt-2">{error}</FieldError>}
     </div>
   );
 }
