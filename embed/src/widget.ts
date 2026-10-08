@@ -43,7 +43,6 @@
  * an animal or a cartoon.
  */
 import { BrowserTTS } from "./browser-tts";
-import { addWidget, announce, livefacePage, type LivefaceHandle, type LivefacePage } from "./widget/handles";
 import { aiLabel, renderAiLabel, type Disclosure } from "./widget/disclosure";
 import { AvatarEngine, type HeadMotionMode, type Scene } from "./engine";
 import type { Avatar3DEngine, Avatar3DOptions } from "./engine3d";
@@ -54,6 +53,7 @@ import type { AvatarMouthConfig } from "./mouth";
 import { EngineTuning, FaceType, Rig, SynthesisPayload } from "./types";
 import { showFailure } from "./widget/failure";
 import { asFailure, fetchJson, loadImage, loadScript } from "./widget/load";
+import { addWidget, announce, livefacePage, type LivefaceHandle, type LivefacePage } from "./widget/handles";
 
 declare global {
   interface Window {
