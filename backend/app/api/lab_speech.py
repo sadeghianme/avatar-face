@@ -62,7 +62,9 @@ async def synthesize(body: LabSpeechRequest, ctx: OrgMember, db: DB) -> LabSpeec
             ) from error
         mime, cached, source = "audio/wav", False, "native_phonemes"
     else:
-        result, cached = await synthesize_cached(db, body.provider, body.voice, body.locale, body.text)
+        result, cached = await synthesize_cached(
+            db, body.provider, body.voice, body.locale, body.text, org_id=ctx.org.id
+        )
         audio, mime, duration = result.audio, result.audio_mime, result.duration_ms
         cues, baseline, source = result.cues, result.cues, "existing_provider"
     await record_synthesis(db, ctx.org.id, body.provider, len(body.text), cached, source="dashboard")
@@ -105,7 +107,9 @@ async def stream(body: LabSpeechRequest, ctx: OrgMember, db: DB):
             yield _line({"type": "start", "version": 1, "mode": "native_phrases" if native else "buffered_provider"})
             if not native:
                 async with get_session_factory()() as session:
-                    result, cached = await synthesize_cached(session, body.provider, body.voice, body.locale, body.text)
+                    result, cached = await synthesize_cached(
+                        session, body.provider, body.voice, body.locale, body.text, org_id=org_id
+                    )
                     await record_synthesis(session, org_id, body.provider, len(body.text), cached, source="dashboard")
                 yield _line({"type": "recording", "audio_b64": base64.b64encode(result.audio).decode(),
                     "audio_mime": result.audio_mime, "duration_ms": result.duration_ms,

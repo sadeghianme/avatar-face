@@ -215,7 +215,7 @@ async def embed_synthesize(
     api_key = await _authenticate(request, db)
     await check_usage_limit(db, api_key.org_id, len(body.text))
     result, cached = await synthesize_cached(
-        db, body.provider, body.voice, body.locale, body.text
+        db, body.provider, body.voice, body.locale, body.text, org_id=api_key.org_id
     )
     await record_synthesis(
         db, api_key.org_id, body.provider, len(body.text), cached, source="embed"

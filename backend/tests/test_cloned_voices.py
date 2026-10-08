@@ -54,7 +54,8 @@ async def test_an_uploaded_line_becomes_a_cache_hit(client, org):
     async with get_session_factory()() as db:
         result, cached = await synthesize_cached(db, PROVIDER_NAME, voice, "en-US", "Hello there")
     assert cached is True
-    assert result.audio_mime == "audio/wav"
+    # Stored, like every cached line, as MP3 in storage (speech_cache).
+    assert result.audio_mime == "audio/mpeg"
     assert result.duration_ms > 0
     # Cues are generated server-side, so the uploader never supplies them.
     assert result.cues and result.cues[0]["t"] == 0

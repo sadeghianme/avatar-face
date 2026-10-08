@@ -138,21 +138,22 @@ def test_cache_keys_keep_native_and_stretched_recordings_apart():
 async def test_a_stretched_row_is_never_served_once_native_timing_is_on(app, monkeypatch):
     """A recording cached before native timing (stretched cues) stays in the
     table, but the native key does not find it: the text is spoken again."""
-    import json
-
     from app.db import get_session_factory
-    from app.models import SpeechCache
+    from app.services.tts import speech_cache
+    from app.services.tts.base import SynthesisResult
 
     monkeypatch.setattr(kokoro, "_original_configured", lambda: True)
     async with get_session_factory()() as db:
-        db.add(SpeechCache(
+        await speech_cache.put(
+            db,
             cache_key=registry.cache_key("kokoro", DEFAULT_VOICE, "en-US", "pa"),
-            provider="kokoro", voice=DEFAULT_VOICE, locale="en-US", char_count=2,
-            audio_mime="audio/wav", audio=_wav(1000),
-            cues_json=json.dumps([{"t": 0, "viseme": "sil"}, {"t": 999, "viseme": "sil"}]),
-            duration_ms=1000,
-        ))
-        await db.commit()
+            provider="kokoro", voice=DEFAULT_VOICE, locale="en-US", text="pa",
+            result=SynthesisResult(
+                audio=_wav(1000), audio_mime="audio/wav", duration_ms=1000,
+                cues=[{"t": 0, "viseme": "sil"}, {"t": 999, "viseme": "sil"}],
+            ),
+            org_id=None,
+        )
 
         monkeypatch.setattr(lab_timing, "configured", lambda: False)
         _, cached = await registry.synthesize_cached(db, "kokoro", DEFAULT_VOICE, "en-US", "pa")

@@ -1,4 +1,4 @@
-"""Delete staged images nobody kept.
+"""Delete staged images nobody kept, and keep the speech cache in bounds.
 
 Uploading a photo, restyling it, cropping it and cutting out its background
 each leave an image behind, because every edit writes a new object rather than
@@ -8,6 +8,11 @@ saves becomes an avatar; the rest are litter.
 Nothing here is precious, which is the point: a staged image is picked within
 minutes or abandoned. A day's grace is far longer than any real session and
 still bounds the pile.
+
+Each tick also moves what is left of the speech cache in the database to
+storage and evicts the least recently used lines past its caps
+(services.tts.speech_cache). The first tick is at startup, so a new release
+drains the old table at once.
 
 Runs in-process on a timer rather than as a cron entry, so a fresh deployment
 sweeps without anyone remembering to install anything. That is the right call
@@ -25,6 +30,7 @@ import logging
 from app.core.config import get_settings
 from app.services.creations import expire_idle, recover_stranded
 from app.services.storage import get_storage
+from app.services.tts import speech_cache
 
 logger = logging.getLogger("liveface.sweeper")
 
@@ -39,8 +45,8 @@ CANDIDATE_SEGMENT = "/candidates/"
 
 
 async def sweep_once() -> int:
-    """One pass: staged images past their retention (when it is on), then
-    idle creations. Returns the staged images removed."""
+    """One pass: staged images past their retention (when it is on), idle
+    creations, then the speech cache. Returns the staged images removed."""
     settings = get_settings()
     removed = 0
     if settings.candidate_retention_hours > 0:
@@ -54,6 +60,8 @@ async def sweep_once() -> int:
         if removed:
             logger.info("swept %d stale staged image(s)", removed)
     await expire_creations()
+    # Never raises: it logs its own failures.
+    await speech_cache.sweep()
     return removed
 
 

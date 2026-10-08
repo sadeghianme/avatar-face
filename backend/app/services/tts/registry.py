@@ -1,18 +1,18 @@
 """Provider registry + speech cache.
 
 The offline provider is always available; real providers appear only when
-their credentials are configured. Synthesis results are cached in the
-speech_cache table keyed on sha256(provider, voice, locale, text).
+their credentials are configured. Synthesis results are cached
+(services.tts.speech_cache: the recording in storage as MP3, a row each in
+speech_clips) keyed on sha256(provider, voice, locale, text).
 """
 from __future__ import annotations
 
-import json
+import asyncio
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFound404, Validation422
-from app.models import SpeechCache
+from app.services.tts import speech_cache
 from app.services.tts.base import SynthesisResult, TTSProvider, cache_key
 from app.services.tts.cloned import ClonedTTSProvider
 from app.services.tts.kokoro import KokoroTTSProvider
@@ -65,40 +65,43 @@ def _cache_version(provider_name: str) -> str:
 
 
 async def synthesize_cached(
-    db: AsyncSession, provider_name: str, voice: str, locale: str, text: str
+    db: AsyncSession,
+    provider_name: str,
+    voice: str,
+    locale: str,
+    text: str,
+    *,
+    org_id: str | None = None,
+    pcm: bool = False,
 ) -> tuple[SynthesisResult, bool]:
-    """Synthesize through the cache. Returns (result, was_cached)."""
+    """Synthesize through the cache. Returns (result, was_cached).
+
+    The audio is what the cache stores (MP3 for a provider's WAV), the same
+    on the first request and every one after, unless `pcm`: then it is
+    16-bit PCM WAV (the dashboard's phrase stream reads samples). `org_id`
+    is the organization the line is counted against in the cache's
+    per-organization cap.
+    """
     key = cache_key(provider_name, voice, locale, text, _cache_version(provider_name))
-    row = (
-        await db.execute(select(SpeechCache).where(SpeechCache.cache_key == key))
-    ).scalar_one_or_none()
-    if row is not None:
-        return (
-            SynthesisResult(
-                audio=row.audio,
-                audio_mime=row.audio_mime,
-                duration_ms=row.duration_ms,
-                cues=json.loads(row.cues_json),
-            ),
-            True,
-        )
+    hit = await speech_cache.get(db, key)
+    if hit is not None:
+        if pcm:
+            hit.audio = await asyncio.to_thread(speech_cache.as_wav, hit.audio, hit.audio_mime)
+            hit.audio_mime = "audio/wav"
+        return hit, True
 
     provider = get_provider(provider_name)
     result = await provider.synthesize(text, voice, locale)
     if not result.cacheable:
         return result, False
-    db.add(
-        SpeechCache(
-            cache_key=key,
-            provider=provider_name,
-            voice=voice,
-            locale=locale,
-            char_count=len(text),
-            audio_mime=result.audio_mime,
-            audio=result.audio,
-            cues_json=json.dumps(result.cues),
-            duration_ms=result.duration_ms,
-        )
+    stored = await speech_cache.put(
+        db,
+        cache_key=key,
+        provider=provider_name,
+        voice=voice,
+        locale=locale,
+        text=text,
+        result=result,
+        org_id=org_id,
     )
-    await db.commit()
-    return result, False
+    return (result if pcm else stored), False

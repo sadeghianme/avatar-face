@@ -29,9 +29,11 @@ def _fake_kokoro(monkeypatch, calls: list[str]):
 
     real = registry.synthesize_cached
 
-    async def fake(db, provider, voice, locale, text):
+    async def fake(db, provider, voice, locale, text, **options):
         if provider != "kokoro":
-            return await real(db, provider, voice, locale, text)
+            return await real(db, provider, voice, locale, text, **options)
+        # The phrase stream reads samples: it must ask for them.
+        assert options.get("pcm") is True
         calls.append(text)
         ms = 300
         return SynthesisResult(

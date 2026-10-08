@@ -140,6 +140,19 @@ class Settings(BaseSettings):
     # --- Embed API ---
     embed_rate_limit_per_minute: int = 60
 
+    # --- Speech cache (services.tts.speech_cache) ---
+    # Every line spoken is kept in storage as MP3, with a small row in the
+    # database, so saying it again costs nothing. The least recently used
+    # lines go first past either cap, counted in stored bytes; a cloned
+    # voice's lines are never evicted (they cannot be made again here).
+    speech_cache_max_bytes: int = 2 * 1024**3
+    speech_cache_org_max_bytes: int = 256 * 1024**2
+    # Lines nobody has asked for in this many days go too; 0 keeps them.
+    speech_cache_max_idle_days: int = 90
+    # The MP3's quality: libsndfile's VBR compression level, 0 (best) to 1
+    # (smallest). 0.5 is about 50 kbit/s for 24 kHz speech, a tenth of WAV.
+    speech_cache_mp3_level: float = 0.5
+
     # --- Usage ---
     monthly_char_limit: int = 100_000
 

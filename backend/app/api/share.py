@@ -104,7 +104,7 @@ async def public_speak(token: str, body: PublicSpeak, request: Request, db: DB) 
 
     await check_usage_limit(db, avatar.org_id, len(body.text))
     result, cached = await synthesize_cached(
-        db, body.provider, body.voice, body.locale, body.text
+        db, body.provider, body.voice, body.locale, body.text, org_id=avatar.org_id
     )
     await record_synthesis(
         db, avatar.org_id, body.provider, len(body.text), cached, source="share"
