@@ -36,6 +36,15 @@
     realError.apply(console, args);
   };
 
+  // The widget's own word on the avatar (embed/src/widget/handles.ts and
+  // widget/failure.ts): both events bubble from its canvas. A failure is
+  // otherwise only a console warning and a note under the canvas.
+  document.addEventListener("liveface:ready", () => send("ok", "avatar ready"));
+  document.addEventListener("liveface:error", (event) => {
+    const detail = event.detail || {};
+    send("error", `avatar failed (${detail.stage}): ${detail.message}`);
+  });
+
   let tries = 0;
   const poll = setInterval(() => {
     if (window.Liveface) {

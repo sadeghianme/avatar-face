@@ -232,21 +232,35 @@ async function openPage(browser) {
   // Out-of-process frames this page opened. The Simulator's is one: its
   // origin is opaque (no allow-same-origin), so Chrome runs it in a process
   // of its own, and its requests, workers and console are reported on its
-  // own session, not the page's.
+  // own session, not the page's. Such a frame (an about:srcdoc one) is NOT
+  // held at its start the way a worker is: it may already be running when
+  // it is attached. So its session is watched at once, every domain asked
+  // for in one go, and nothing here depends on seeing its first requests
+  // (the Simulator's own log says what its widget did).
   const frames = new Set();
   listeners.add(async (message) => {
     const { method, params } = message;
     if (method === "Target.attachedToTarget" && (message.sessionId === sessionId || frames.has(message.sessionId))) {
-      // Workers and out-of-process frames: watch them, then let them run.
-      await setup(params.sessionId);
+      const child = params.sessionId;
       if (params.targetInfo.type === "iframe") {
-        frames.add(params.sessionId);
-        await send("Network.enable", {}, params.sessionId).catch(() => {});
-        await send("Page.enable", {}, params.sessionId).catch(() => {});
-        await send("Page.addScriptToEvaluateOnNewDocument", { source: LISTEN }, params.sessionId).catch(() => {});
-        await send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, params.sessionId).catch(() => {});
+        frames.add(child);
+        await Promise.all(
+          [
+            send("Network.enable", {}, child),
+            send("Log.enable", {}, child),
+            send("Runtime.enable", {}, child),
+            send("Runtime.addBinding", { name: "__cspViolation" }, child),
+            send("Page.enable", {}, child),
+            send("Page.addScriptToEvaluateOnNewDocument", { source: LISTEN }, child),
+            send("Runtime.evaluate", { expression: LISTEN }, child),
+            send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, child),
+          ].map((call) => call.catch(() => {}))
+        );
+      } else {
+        // Workers: watch them, then let them run.
+        await setup(child);
       }
-      await send("Runtime.runIfWaitingForDebugger", {}, params.sessionId).catch(() => {});
+      await send("Runtime.runIfWaitingForDebugger", {}, child).catch(() => {});
     } else if (method === "Runtime.bindingCalled" && params.name === "__cspViolation") {
       violations.push(JSON.parse(params.payload));
     } else if (method === "Log.entryAdded" && params.entry.level === "error") {
@@ -365,13 +379,15 @@ try {
     const sandbox = await page.evaluate(`document.querySelector('iframe[title="simulator"]')?.getAttribute("sandbox")`);
     if (sandbox !== "allow-scripts") throw new Error(`the Simulator's frame is sandboxed "${sandbox}", not "allow-scripts"`);
   };
-  const simulate = (avatar) => async (since) => {
+  const simulate = () => async (since) => {
     await eventually(() => page.click("Run snippet"));
-    // The widget really ran inside the srcdoc frame, under this policy...
-    await eventually(() => page.answered(`/api/embed/v1/avatars/${avatar}`, since));
-    await isolated();
+    await eventually(isolated);
+    // The widget really ran inside the srcdoc frame, under this policy: its
+    // liveface:ready (after the avatar, its picture or model and the 3D
+    // bundle all loaded), as the frame reports it...
+    await logSays("avatar ready", 60000);
     await logSays("canvas mounted");
-    await sleep(4000); // ...and had time to load its picture or model, and the 3D bundle...
+    await sleep(2000);
     // ...and speaks: the line goes to the frame, its widget to the API.
     await page.type('input[aria-label^="Type something"]', "Hello from the Simulator.");
     await eventually(() => page.click("Speak"));
@@ -397,7 +413,7 @@ try {
       throw new Error("Run is enabled for a crafted ?avatar=");
     await notPwned();
   };
-  const pasteRefused = (avatar) => async (since) => {
+  const pasteRefused = (avatar) => async () => {
     // A valid id, and the payload in every other value the frame receives
     // (the paste's own quotes escaped, so each value IS the payload).
     const quoted = (value) => `'${value.replace(/&/g, "&amp;").replace(/'/g, "&#39;")}'`;
@@ -405,9 +421,8 @@ try {
       data-size=${quoted(poc)} data-provider=${quoted(poc)} data-voice=${quoted(poc)} data-locale=${quoted(poc)}></script>`;
     await page.type("#snippet", snippet);
     await eventually(() => page.click("Run snippet"));
-    await eventually(() => page.answered(`/api/embed/v1/avatars/${avatar}`, since));
-    await isolated();
-    await logSays("canvas mounted");
+    await eventually(isolated);
+    await logSays("avatar ready", 60000);
     await sleep(3000);
     await notPwned();
   };
@@ -439,8 +454,8 @@ try {
     ["/members"],
     ["/api-keys"],
     ["/settings"],
-    [`/simulator?avatar=${seeded.photo}`, simulate(seeded.photo)],
-    [`/simulator?avatar=${seeded.model}`, simulate(seeded.model)],
+    [`/simulator?avatar=${seeded.photo}`, simulate()],
+    [`/simulator?avatar=${seeded.model}`, simulate()],
     [`/simulator?avatar=${encodeURIComponent(poc)}`, linkRefused],
     ["/simulator", pasteRefused(seeded.photo)],
   ];
