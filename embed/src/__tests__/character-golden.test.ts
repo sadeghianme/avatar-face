@@ -16,8 +16,10 @@ import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../types";
  * mouth never touches the other. A rig that does not name one of these
  * profiles must never reach this code at all (character-mouth.test.ts).
  *
- * Two textures: one flat colour (cel art, which is what the look sampler calls
- * flat), and one that changes with position (a render, which gets shading).
+ * Three textures: one flat colour (cel art, which is what the look sampler calls
+ * flat), one that changes with position (a render, which gets shading), and
+ * one that changes with position about a lip's red (a render whose tongue
+ * lies behind its lower lip, 2026-10-09).
  */
 
 const rig = JSON.parse(readFileSync(new URL("./fixtures/fitted-animal-rig.json", import.meta.url), "utf8")) as Rig;
@@ -59,6 +61,14 @@ class RecordingPath {
 type Texture = (x: number, y: number) => [number, number, number, number];
 const flatSkin: Texture = () => [182, 128, 110, 255];
 const positional: Texture = (x, y) => [(x * 3 + y) % 256, (x + y * 5) % 256, (x * 7 + y * 11) % 256, 255];
+/** A render whose lips are of the tongue's red, a person's or a toon's
+ *  (character-paint.ts lipLikeTongue): its tongue lies behind the lip. */
+const redLips: Texture = (x, y) => [
+  150 + ((x * 3 + y) % 40),
+  70 + ((x + y * 5) % 30),
+  60 + ((x * 7 + y * 11) % 30),
+  255,
+];
 
 const describeArg = (a: unknown) =>
   typeof a === "number"
@@ -175,6 +185,7 @@ describe.each(["toon@1", "animal@2"])("%s golden output", (profile) => {
   for (const [label, texture] of [
     ["flat art", flatSkin],
     ["render", positional],
+    ["render, red lips", redLips],
   ] as const) {
     for (const [name, weights, extra] of cases) {
       it(`${label}, ${name}: mesh and drawing are unchanged`, () => {

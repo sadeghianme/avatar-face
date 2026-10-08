@@ -73,8 +73,8 @@ exports[`animal@2 golden output > flat art, rest: mesh and drawing are unchanged
 exports[`animal@2 golden output > render, E (spread): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 62.95,
-  "drawCalls": 32783,
-  "drawing": "04d0db96fdbf951b",
+  "drawCalls": 32779,
+  "drawing": "a9f5662ac072845d",
   "lipGapPx": 82.45,
   "mesh": "2074d7c28e448967",
 }
@@ -93,8 +93,8 @@ exports[`animal@2 golden output > render, FF: mesh and drawing are unchanged 1`]
 exports[`animal@2 golden output > render, TH, tongue up: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 31.83,
-  "drawCalls": 32783,
-  "drawing": "3af1fb21c3276c6c",
+  "drawCalls": 32779,
+  "drawing": "e13d6f8a21f660b1",
   "lipGapPx": 40.55,
   "mesh": "80e57ee84f11741f",
 }
@@ -103,8 +103,8 @@ exports[`animal@2 golden output > render, TH, tongue up: mesh and drawing are un
 exports[`animal@2 golden output > render, aa (open): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 100.5,
-  "drawCalls": 32783,
-  "drawing": "4f3bf82db78d0277",
+  "drawCalls": 32779,
+  "drawing": "16582033128a1e0f",
   "lipGapPx": 126.24,
   "mesh": "3746e9ab9d477704",
 }
@@ -123,10 +123,80 @@ exports[`animal@2 golden output > render, blink full: mesh and drawing are uncha
 exports[`animal@2 golden output > render, oh (rounded): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 73.97,
-  "drawCalls": 32783,
-  "drawing": "679db765acb254f1",
+  "drawCalls": 32779,
+  "drawing": "eea381745ac00f67",
   "lipGapPx": 93.08,
   "mesh": "915c1a0f6f0fffc3",
+}
+`;
+
+exports[`animal@2 golden output > render, red lips, E (spread): mesh and drawing are unchanged 1`] = `
+{
+  "chinDropPx": 62.95,
+  "drawCalls": 32713,
+  "drawing": "f7865866de0b737c",
+  "lipGapPx": 82.45,
+  "mesh": "2074d7c28e448967",
+}
+`;
+
+exports[`animal@2 golden output > render, red lips, FF: mesh and drawing are unchanged 1`] = `
+{
+  "chinDropPx": 1.01,
+  "drawCalls": 32602,
+  "drawing": "ae2257891b72ed1a",
+  "lipGapPx": 1.14,
+  "mesh": "67a0854c270bb73b",
+}
+`;
+
+exports[`animal@2 golden output > render, red lips, TH, tongue up: mesh and drawing are unchanged 1`] = `
+{
+  "chinDropPx": 31.83,
+  "drawCalls": 32730,
+  "drawing": "9f0cdd1af4d6e475",
+  "lipGapPx": 40.55,
+  "mesh": "80e57ee84f11741f",
+}
+`;
+
+exports[`animal@2 golden output > render, red lips, aa (open): mesh and drawing are unchanged 1`] = `
+{
+  "chinDropPx": 100.5,
+  "drawCalls": 32713,
+  "drawing": "2158f317c73fad44",
+  "lipGapPx": 126.24,
+  "mesh": "3746e9ab9d477704",
+}
+`;
+
+exports[`animal@2 golden output > render, red lips, blink full: mesh and drawing are unchanged 1`] = `
+{
+  "chinDropPx": 0,
+  "drawCalls": 32762,
+  "drawing": "610af07dde7bb779",
+  "lipGapPx": 0.83,
+  "mesh": "0c67777b3363014d",
+}
+`;
+
+exports[`animal@2 golden output > render, red lips, oh (rounded): mesh and drawing are unchanged 1`] = `
+{
+  "chinDropPx": 73.97,
+  "drawCalls": 32713,
+  "drawing": "e04c576b79ad79d5",
+  "lipGapPx": 93.08,
+  "mesh": "915c1a0f6f0fffc3",
+}
+`;
+
+exports[`animal@2 golden output > render, red lips, rest: mesh and drawing are unchanged 1`] = `
+{
+  "chinDropPx": 0,
+  "drawCalls": 32602,
+  "drawing": "274cd20f3960c7e7",
+  "lipGapPx": 0.83,
+  "mesh": "0c67777b3363014d",
 }
 `;
 
@@ -213,8 +283,8 @@ exports[`toon@1 golden output > flat art, rest: mesh and drawing are unchanged 1
 exports[`toon@1 golden output > render, E (spread): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 55.37,
-  "drawCalls": 32840,
-  "drawing": "66395ac461ea06d6",
+  "drawCalls": 32836,
+  "drawing": "02b7f8e0a000168a",
   "lipGapPx": 73,
   "mesh": "0040f6f02ee00d7b",
 }
@@ -233,8 +303,8 @@ exports[`toon@1 golden output > render, FF: mesh and drawing are unchanged 1`] =
 exports[`toon@1 golden output > render, TH, tongue up: mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 27.7,
-  "drawCalls": 32840,
-  "drawing": "957e638aed8cb84f",
+  "drawCalls": 32836,
+  "drawing": "b539a8b59b375b2d",
   "lipGapPx": 35.39,
   "mesh": "2d7472a1e6c3314c",
 }
@@ -243,8 +313,8 @@ exports[`toon@1 golden output > render, TH, tongue up: mesh and drawing are unch
 exports[`toon@1 golden output > render, aa (open): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 87.41,
-  "drawCalls": 32840,
-  "drawing": "f728dbe1101b50cb",
+  "drawCalls": 32836,
+  "drawing": "54f23ff2549d5162",
   "lipGapPx": 109.91,
   "mesh": "9db745c85b884155",
 }
@@ -263,10 +333,80 @@ exports[`toon@1 golden output > render, blink full: mesh and drawing are unchang
 exports[`toon@1 golden output > render, oh (rounded): mesh and drawing are unchanged 1`] = `
 {
   "chinDropPx": 64.32,
-  "drawCalls": 32840,
-  "drawing": "c385fb8f7dbf4f4b",
+  "drawCalls": 32836,
+  "drawing": "0151e83b339acc35",
   "lipGapPx": 81.05,
   "mesh": "78b73d30c307dd08",
+}
+`;
+
+exports[`toon@1 golden output > render, red lips, E (spread): mesh and drawing are unchanged 1`] = `
+{
+  "chinDropPx": 55.37,
+  "drawCalls": 32770,
+  "drawing": "0101e656f92dbd50",
+  "lipGapPx": 73,
+  "mesh": "0040f6f02ee00d7b",
+}
+`;
+
+exports[`toon@1 golden output > render, red lips, FF: mesh and drawing are unchanged 1`] = `
+{
+  "chinDropPx": 16.54,
+  "drawCalls": 32749,
+  "drawing": "c7f039c2dc9a5ad4",
+  "lipGapPx": 26.31,
+  "mesh": "2b2dc910cdf755e5",
+}
+`;
+
+exports[`toon@1 golden output > render, red lips, TH, tongue up: mesh and drawing are unchanged 1`] = `
+{
+  "chinDropPx": 27.7,
+  "drawCalls": 32787,
+  "drawing": "14a0163d84d6aedb",
+  "lipGapPx": 35.39,
+  "mesh": "2d7472a1e6c3314c",
+}
+`;
+
+exports[`toon@1 golden output > render, red lips, aa (open): mesh and drawing are unchanged 1`] = `
+{
+  "chinDropPx": 87.41,
+  "drawCalls": 32770,
+  "drawing": "30b7a03a8927379a",
+  "lipGapPx": 109.91,
+  "mesh": "9db745c85b884155",
+}
+`;
+
+exports[`toon@1 golden output > render, red lips, blink full: mesh and drawing are unchanged 1`] = `
+{
+  "chinDropPx": 0,
+  "drawCalls": 32762,
+  "drawing": "610af07dde7bb779",
+  "lipGapPx": 0.83,
+  "mesh": "0c67777b3363014d",
+}
+`;
+
+exports[`toon@1 golden output > render, red lips, oh (rounded): mesh and drawing are unchanged 1`] = `
+{
+  "chinDropPx": 64.32,
+  "drawCalls": 32770,
+  "drawing": "5d6d7d9945cfb84d",
+  "lipGapPx": 81.05,
+  "mesh": "78b73d30c307dd08",
+}
+`;
+
+exports[`toon@1 golden output > render, red lips, rest: mesh and drawing are unchanged 1`] = `
+{
+  "chinDropPx": 0,
+  "drawCalls": 32602,
+  "drawing": "274cd20f3960c7e7",
+  "lipGapPx": 0.83,
+  "mesh": "0c67777b3363014d",
 }
 `;
 
