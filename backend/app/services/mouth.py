@@ -34,7 +34,7 @@ def renderer_allowed(renderer: str, face_type: str) -> bool:
     return renderer != "continuous" or face_type in CONTINUOUS_FACE_TYPES
 
 
-# The character mouth (embed/src/character-mouth.ts) is how an animation or an
+# The character mouth (embed/src/engine/character-mouth.ts) is how an animation or an
 # animal talks: a drawn or rendered opening with a tongue and, for a toon,
 # teeth. It is chosen by the rig's render profile, not by `renderer`, so the
 # photographic mouth and the character mouth never meet on one face; what is

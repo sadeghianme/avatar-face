@@ -116,7 +116,7 @@ NO_PUPIL_FACE_TYPES = frozenset({"animal"})
 #
 # A new fit names the line's current profile: "toon@1" for the Animation and
 # Cartoon looks (face type cartoon) and "animal@2" for animals, both of which
-# move and paint the mouth as a character's (embed/src/character-mouth.ts).
+# move and paint the mouth as a character's (embed/src/engine/character-mouth.ts).
 # A rig fitted before them keeps the profile it was saved with ("animal@1", or
 # none) until its owner fits it again or switches its mouth style
 # (LEGACY_PROFILES is what "classic" means), so nothing live changes by itself.

@@ -198,7 +198,7 @@ class MouthUpdate(BaseModel):
 
 class CharacterUpdate(BaseModel):
     """How an animation or an animal's character mouth is set. Ranges mirror
-    TRAIT_LIMITS in embed/src/character-mouth.ts; a published config is served
+    TRAIT_LIMITS in embed/src/engine/character-mouth.ts; a published config is served
     to strangers and must not trust the client's clamp."""
 
     style: Literal["character", "classic"] = "character"
