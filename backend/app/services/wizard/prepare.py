@@ -144,11 +144,11 @@ async def settle(
     return anchors, cut is not None
 
 
-def _refund(usage: AiUsage) -> None:
+def refund(usage: AiUsage) -> None:
     usage["prepare_rounds"] = max(0, int(usage.get("prepare_rounds") or 0) - 1)
 
 
-def _refund_free(usage: AiUsage) -> None:
+def refund_free(usage: AiUsage) -> None:
     usage["free_clears"] = max(0, int(usage.get("free_clears") or 0) - 1)
 
 
@@ -353,7 +353,7 @@ async def prepare_job(job: Job, params: dict) -> None:
             ):
                 # Nothing was sent, or nothing answered: the try is given back.
                 # (A refusal or an answer without a picture was billed.)
-                give_back = _refund_free if params.get("free") else _refund
+                give_back = refund_free if params.get("free") else refund
                 await records.update_ai_usage(job, give_back)
             raise
         job.report(0.6, "checking the picture")
