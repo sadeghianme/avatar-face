@@ -198,7 +198,7 @@ and `# fmt: on`. The commit that formatted the backend is in
 | Job | What it proves | Time |
 |---|---|---|
 | `backend-checks` | ruff (lint and format), pyright, the OpenAPI document exported again and identical to the committed one, the migrations against the models and the newest one down and up | ~1 min |
-| `backend-tests` (×2) | pytest with coverage, half of the suite each, on every core, against the production pins, espeak-ng and the checksummed MediaPipe models | 3–5 min |
+| `backend-tests` (×2) | pytest with coverage, half of the suite each, on every core, against the production pins, espeak-ng and the checksummed MediaPipe models | 4–5 min |
 | `backend-coverage` | the two halves' coverage combined, at or above the floor; the HTML and LCOV report uploaded | ~20 s |
 | `backend` | every backend job above passed (the required check) | seconds |
 | `embed` | lint, type check (tests included), the widget's generated API types match the committed document, vitest with the pixel goldens and coverage at or above its floors, build, the browser tests | ~2.5 min |
@@ -295,6 +295,12 @@ place of the plain ones. Every report (HTML and LCOV) is uploaded as an
 artifact, kept 7 days: `backend-coverage`, `embed-coverage`,
 `frontend-coverage` on the run's page (`gh run download <run> -n
 embed-coverage`).
+
+What it costs, measured on this change's runs: pytest under coverage takes
+about 4.3 minutes per half instead of 3 (most runs; the runners vary by a
+minute either way), `backend-coverage` 17 seconds after them, so a whole
+run takes about 5.5 minutes instead of 4. Vitest takes 10 seconds longer in
+`embed` and 5 in `frontend`; node --test, a fraction of a second.
 
 **Raising a floor.** When a change raises a number by a point or more, raise
 its floor in the same pull request: read the measured value in the job's log
