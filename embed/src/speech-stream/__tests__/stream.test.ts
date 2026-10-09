@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { streamSpeech } from "../index";
+import { SpeechError, streamSpeech } from "../index";
 
 /**
  * The orchestration between wire and engine. The player is faked (it needs
@@ -128,6 +128,39 @@ describe("streamSpeech", () => {
     expect(engine.stopSpeech).toHaveBeenCalled();
   });
 
+  it("an error frame's refusal reaches the caller with its code, detail and status", async () => {
+    const handle = streamSpeech(
+      fakeEngine() as never,
+      async () =>
+        ndjson([
+          { type: "start", version: 1, mode: "recording" },
+          {
+            type: "error",
+            code: "cloned_line_missing",
+            detail: "This line has not been rendered in the cloned voice 'Mehdi voice' yet.",
+            status: 404,
+          },
+        ]),
+      { player: fakePlayer() as never }
+    );
+    const error = await handle.done.catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(SpeechError);
+    expect(error).toMatchObject({
+      code: "cloned_line_missing",
+      detail: "This line has not been rendered in the cloned voice 'Mehdi voice' yet.",
+      status: 404,
+    });
+  });
+
+  it("an error frame without its fields is still a SpeechError, generic", async () => {
+    const handle = streamSpeech(fakeEngine() as never, async () => ndjson([{ type: "error", status: "x" }]), {
+      player: fakePlayer() as never,
+    });
+    const error = await handle.done.catch((reason: unknown) => reason);
+    expect(error).toMatchObject({ code: "speech_stream_failed", status: null });
+    expect((error as SpeechError).detail).toMatch(/interrupted/);
+  });
+
   it("a stream that ends without done is an error, not a shortened recording", async () => {
     const player = fakePlayer();
     const handle = streamSpeech(
@@ -143,6 +176,28 @@ describe("streamSpeech", () => {
       player: fakePlayer() as never,
     });
     await expect(handle.done).rejects.toThrow("429");
+    await expect(handle.done).rejects.toMatchObject({ code: "http_429", status: 429 });
+  });
+
+  it("a refused request says the API's code and sentence", async () => {
+    const refusal = new Response(JSON.stringify({ code: "speech_busy", detail: "Speech is already being prepared." }), {
+      status: 429,
+      headers: { "Content-Type": "application/json" },
+    });
+    const handle = streamSpeech(fakeEngine() as never, async () => refusal, { player: fakePlayer() as never });
+    await expect(handle.done).rejects.toMatchObject({
+      name: "SpeechError",
+      code: "speech_busy",
+      detail: "Speech is already being prepared.",
+      status: 429,
+      message: "Speech is already being prepared. (429 speech_busy)",
+    });
+  });
+
+  it("a 200 without a body is an error", async () => {
+    const empty = { ok: true, status: 200, body: null } as unknown as Response;
+    const handle = streamSpeech(fakeEngine() as never, async () => empty, { player: fakePlayer() as never });
+    await expect(handle.done).rejects.toThrow(/without a body/);
   });
 
   it("stop() aborts and later frames are ignored", async () => {

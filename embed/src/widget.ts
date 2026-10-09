@@ -9,7 +9,9 @@
  *           data-provider="kokoro"></script>
  *
  * Renders a canvas where the script tag sits and exposes window.Liveface:
- *   Liveface.speak(text)  — chunked + prefetched for long text
+ *   Liveface.speak(text)  — chunked + prefetched for long text; rejects
+ *                           with a SpeechError (`code`, `detail`, `status`)
+ *                           when the server refuses a line
  *   Liveface.stop()
  *   Liveface.isSpeaking()
  *   Liveface.listen({lang}) — browser STT, resolves with the transcript
@@ -48,6 +50,7 @@ import { aiLabel, renderAiLabel } from "./widget/disclosure";
 import { AvatarEngine, type HeadMotionMode } from "./engine";
 import type { Avatar3DEngine, Avatar3DOptions } from "./engine3d";
 import { SpeechQueue } from "./speech";
+import { speechErrorOfResponse } from "./speech-error";
 import { listen, sttSupported, ListenOptions } from "./stt";
 import type { AvatarMouthConfig } from "./mouth";
 import { EngineTuning, Rig } from "./types";
@@ -257,7 +260,9 @@ async function mount(
       headers,
       body: JSON.stringify({ text, provider, voice, locale }),
     });
-    if (!response.ok) throw new Error(`synthesize failed: ${response.status}`);
+    // Liveface.speak() rejects with the API's reason (SpeechError: its
+    // code, detail and status), so a page can branch on the code.
+    if (!response.ok) throw await speechErrorOfResponse(response);
     return (await response.json()) as SynthesizeResponse;
   };
   const queue = new SpeechQueue(engine, synth);

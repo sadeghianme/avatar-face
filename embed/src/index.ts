@@ -12,6 +12,6 @@ export { listen, sttSupported } from "./stt";
 export type { ListenOptions } from "./stt";
 export type { BlendWeights, Cue, EngineTuning, FaceType, Rig, SynthesisPayload } from "./types";
 export { DEFAULT_TUNING, ZERO_WEIGHTS, weightsFromLegacy } from "./types";
-export { streamSpeech, StreamingSpeechPlayer } from "./speech-stream";
+export { SpeechError, streamSpeech, StreamingSpeechPlayer } from "./speech-stream";
 export type { StreamHandle, StreamOptions } from "./speech-stream";
 export type { CharacterSettings, ClassicMouthConfig } from "./engine/character-mouth";

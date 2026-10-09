@@ -497,6 +497,16 @@ describe("liveface.js on a customer's page", () => {
       destroyAll(p);
     });
 
+    it("a line the server refuses rejects speak() with the API's code, detail and status", async () => {
+      const detail = "This line has not been rendered in the cloned voice 'Mehdi voice' yet.";
+      const p = page({ ...resources, [SYNTH]: { status: 404, error: { detail, code: "cloned_line_missing" } } });
+      await settled(await p.embed({ avatar: "av_1" }));
+      const refusal = await p.window.Liveface!.speak("Never rendered.").catch((reason: unknown) => reason);
+      expect(refusal).toMatchObject({ name: "SpeechError", code: "cloned_line_missing", detail, status: 404 });
+      expect(String(refusal)).toBe(`SpeechError: ${detail} (404 cloned_line_missing)`);
+      destroyAll(p);
+    });
+
     it("a photo and a 3D avatar side by side: each its own engine, in the order they came up", async () => {
       const p = page(resources);
       const model = await p.embed({ avatar: "m_1" });
