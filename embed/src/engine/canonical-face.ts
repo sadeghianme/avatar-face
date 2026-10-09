@@ -5,66 +5,53 @@
  * camera. The rig keeps only each landmark's x and y in the photo; its
  * depth comes from this model, fitted to them (head-depth.ts). The ten iris
  * landmarks (468-477) are not in the model.
+ *
+ * Kept as text, half the bytes of the numbers written out and fewer once
+ * compressed, decoded once when the module loads: every x's magnitude, then
+ * every y, then every z, each value plus 2048 in two base-64 digits; then
+ * the x's signs, six to a digit (the face is symmetric, and its two halves'
+ * x's alike compress well). canonical-face.test.ts holds it to the
+ * backend's model.
  */
-// prettier-ignore
-export const CANONICAL_FACE_CM100: readonly number[] = [
-  0, -341, 598, 0, -113, 748, 0, -209, 606, -46, 96, 663, 0, -46, 759, 0, 37, 724, 0, 247, 579, -425, 258, 328,
-  0, 402, 528, 0, 489, 539, 0, 826, 448, 0, -371, 586, 0, -392, 557, 0, -399, 522, 0, -454, 540, 0, -475, 553,
-  0, -502, 560, 0, -537, 554, 0, -615, 507, 0, -150, 711, -42, -147, 645, -709, 543, 10, -263, 204, 385, -320, 199, 380,
-  -378, 204, 365, -447, 242, 316, -216, 219, 385, -321, 322, 412, -267, 321, 409, -375, 317, 397, -416, 306, 372, -506, 193, 278,
-  -227, -743, 439, -445, 266, 317, -721, 226, 7, -580, 235, 220, -284, -72, 443, -71, -333, 588, -61, -392, 544, -143, -350, 550,
-  -191, -380, 503, -113, -397, 519, -156, -408, 484, -265, -500, 419, -43, -109, 736, -50, -48, 744, -525, 388, 336, -172, 97, 456,
-  -161, -94, 581, -165, -61, 558, -477, -70, 353, -48, 30, 710, -373, 451, 455, -459, 430, 405, -628, 662, 143, -122, 414, 511,
-  -219, 310, 400, -310, -435, 410, -672, -479, -175, -119, -131, 574, -73, -159, 583, -246, -434, 428, -220, -430, 416, -499, 480, 375,
-  -159, -126, 546, -264, 452, 492, -276, 510, 502, -352, 801, 373, -560, 572, 272, -306, 657, 453, -572, 425, 283, -637, 479, 159,
-  -67, -369, 574, -126, -379, 542, -173, -395, 500, -104, -146, 566, -232, -433, 426, -206, -448, 452, -215, -428, 404, -95, -104, 651,
-  -147, -404, 460, -102, -399, 493, -53, -399, 514, -77, -610, 499, -70, -529, 545, -67, -495, 551, -63, -470, 545, -58, -452, 534,
-  -154, -442, 475, -162, -448, 481, -173, -462, 485, -184, -483, 482, -237, -311, 487, -754, -105, -243, 0, -172, 660, -183, -440, 440,
-  -193, -441, 450, -60, -201, 587, -141, -171, 524, -66, -182, 586, -234, 57, 429, -333, 10, 411, -173, -92, 527, -513, 749, 266,
-  -454, 632, 368, -399, 511, 447, -217, -544, 446, -140, 501, 532, -162, 660, 492, -189, 824, 428, -420, 224, 338, -573, 141, 243,
-  -186, 236, 384, -499, 307, 308, -130, 142, 483, -131, -67, 642, -647, 94, 169, -526, 95, 297, -443, 72, 352, -330, 86, 387,
-  -243, 113, 404, -182, 147, 422, -56, 231, 557, -634, -53, 188, -559, 321, 269, -24, -146, 707, -161, 34, 490, -774, 237, -201,
-  -139, 185, 445, -179, -98, 485, -467, 266, 308, -133, -28, 610, -727, -289, -225, -186, 259, 376, -92, 7, 667, -500, -614, 189,
-  -509, -718, 71, -716, -81, -7, -584, -525, 92, -685, 366, 72, -241, -826, 412, -18, -169, 657, -210, -16, 457, -641, 224, 156,
-  -367, 236, 364, -318, 229, 378, -220, -460, 448, -623, -194, 166, -129, -930, 409, -321, -853, 280, -407, -799, 193, 0, 655, 503,
-  0, -940, 426, -272, 232, 378, -229, 240, 370, -200, 250, 369, -613, 340, 204, -229, 289, 378, -272, 296, 387, -318, 296, 388,
-  -367, 293, 372, -402, 286, 348, -756, 411, -99, -402, 248, 344, 0, -252, 593, -178, -268, 521, -122, -118, 595, -73, -254, 582,
-  0, 327, 524, -414, -700, 267, -331, -766, 338, -131, -864, 470, -594, -622, -63, -200, 274, 374, -90, 124, 575, 0, -877, 489,
-  -231, -897, 361, -695, -244, -13, -110, -446, 512, -118, -458, 519, -126, -479, 524, -133, -511, 521, -155, -582, 476, -195, -418, 443,
-  -212, -414, 456, -229, -405, 458, -285, -367, 448, -528, -224, 286, -95, 191, 520, -131, 310, 423, -178, 286, 388, -185, -410, 425,
-  -544, -403, 211, -77, 318, 486, -194, -661, 452, 0, 106, 677, -52, 158, 615, 0, 173, 632, -125, 23, 568, 0, -794, 518,
-  0, -699, 515, -100, -693, 498, -329, -538, 380, -231, -157, 459, -268, -611, 410, -383, -154, 414, -296, -227, 444, -439, -268, 364,
-  -122, -783, 497, -154, -14, 520, -388, -604, 331, -308, -681, 381, -375, -450, 373, -609, -321, 147, -459, -473, 298, -658, -394, 7,
-  -349, -320, 413, -126, 80, 531, -113, -93, 654, -144, -114, 591, -92, -53, 700, -176, 353, 433, -263, 371, 436, -339, 372, 431,
-  -408, 368, 408, -462, 347, 365, -517, 254, 267, -730, 76, -5, -471, 165, 311, -407, 148, 348, -327, 147, 373, -253, 162, 387,
-  -197, 186, 396, -158, 210, 408, -766, 67, -244, -140, -134, 563, -88, 66, 623, -77, -97, 708, -46, -133, 679, -75, -107, 680,
-  -124, -159, 548, -39, -141, 696, -32, -161, 651, -164, 256, 386, -126, 247, 420, -103, 238, 462, -425, 277, 332, -453, 291, 334,
-  46, 96, 663, 425, 258, 328, 42, -147, 645, 709, 543, 10, 263, 204, 385, 320, 199, 380, 378, 204, 365, 447, 242, 316,
-  216, 219, 385, 321, 322, 412, 267, 321, 409, 375, 317, 397, 416, 306, 372, 506, 193, 278, 227, -743, 439, 445, 266, 317,
-  721, 226, 7, 580, 235, 220, 284, -72, 443, 71, -333, 588, 61, -392, 544, 143, -350, 550, 191, -380, 503, 113, -397, 519,
-  156, -408, 484, 265, -500, 419, 43, -109, 736, 50, -48, 744, 525, 388, 336, 172, 97, 456, 161, -94, 581, 165, -61, 558,
-  477, -70, 353, 48, 30, 710, 373, 451, 455, 459, 430, 405, 628, 662, 143, 122, 414, 511, 219, 310, 400, 310, -435, 410,
-  672, -479, -175, 119, -131, 574, 73, -159, 583, 246, -434, 428, 220, -430, 416, 499, 480, 375, 159, -126, 546, 264, 452, 492,
-  276, 510, 502, 352, 801, 373, 560, 572, 272, 306, 657, 453, 572, 425, 283, 637, 479, 159, 67, -369, 574, 126, -379, 542,
-  173, -395, 500, 104, -146, 566, 232, -433, 426, 206, -448, 452, 215, -428, 404, 95, -104, 651, 147, -404, 460, 102, -399, 493,
-  53, -399, 514, 77, -610, 499, 70, -529, 545, 67, -495, 551, 63, -470, 545, 58, -452, 534, 154, -442, 475, 162, -448, 481,
-  173, -462, 485, 184, -483, 482, 237, -311, 487, 754, -105, -243, 183, -440, 440, 193, -441, 450, 60, -201, 587, 141, -171, 524,
-  66, -182, 586, 234, 57, 429, 333, 10, 411, 173, -92, 527, 513, 749, 266, 454, 632, 368, 399, 511, 447, 217, -544, 446,
-  140, 501, 532, 162, 660, 492, 189, 824, 428, 420, 224, 338, 573, 141, 243, 186, 236, 384, 499, 307, 308, 130, 142, 483,
-  131, -67, 642, 647, 94, 169, 526, 95, 297, 443, 72, 352, 330, 86, 387, 243, 113, 404, 182, 147, 422, 56, 231, 557,
-  634, -53, 188, 559, 321, 269, 24, -146, 707, 161, 34, 490, 774, 237, -201, 139, 185, 445, 179, -98, 485, 467, 266, 308,
-  133, -28, 610, 727, -289, -225, 186, 259, 376, 92, 7, 667, 500, -614, 189, 509, -718, 71, 716, -81, -7, 584, -525, 92,
-  685, 366, 72, 241, -826, 412, 18, -169, 657, 210, -16, 457, 641, 224, 156, 367, 236, 364, 318, 229, 378, 220, -460, 448,
-  623, -194, 166, 129, -930, 409, 321, -853, 280, 407, -799, 193, 272, 232, 378, 229, 240, 370, 200, 250, 369, 613, 340, 204,
-  229, 289, 378, 272, 296, 387, 318, 296, 388, 367, 293, 372, 402, 286, 348, 756, 411, -99, 402, 248, 344, 178, -268, 521,
-  122, -118, 595, 73, -254, 582, 414, -700, 267, 331, -766, 338, 131, -864, 470, 594, -622, -63, 200, 274, 374, 90, 124, 575,
-  231, -897, 361, 695, -244, -13, 110, -446, 512, 118, -458, 519, 126, -479, 524, 133, -511, 521, 155, -582, 476, 195, -418, 443,
-  212, -414, 456, 229, -405, 458, 285, -367, 448, 528, -224, 286, 95, 191, 520, 131, 310, 423, 178, 286, 388, 185, -410, 425,
-  544, -403, 211, 77, 318, 486, 194, -661, 452, 52, 158, 615, 125, 23, 568, 100, -693, 498, 329, -538, 380, 231, -157, 459,
-  268, -611, 410, 383, -154, 414, 296, -227, 444, 439, -268, 364, 122, -783, 497, 154, -14, 520, 388, -604, 331, 308, -681, 381,
-  375, -450, 373, 609, -321, 147, 459, -473, 298, 658, -394, 7, 349, -320, 413, 126, 80, 531, 113, -93, 654, 144, -114, 591,
-  92, -53, 700, 176, 353, 433, 263, 371, 436, 339, 372, 431, 408, 368, 408, 462, 347, 365, 517, 254, 267, 730, 76, -5,
-  471, 165, 311, 407, 148, 348, 327, 147, 373, 253, 162, 387, 197, 186, 396, 158, 210, 408, 766, 67, -244, 140, -134, 563,
-  88, 66, 623, 77, -97, 708, 46, -133, 679, 75, -107, 680, 124, -159, 548, 39, -141, 696, 32, -161, 651, 164, 256, 386,
-  126, 247, 420, 103, 238, 462, 425, 277, 332, 453, 291, 334,
-];
+const DIGITS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const MODEL =
+  "gAgAgAgugAgAgAmpgAgAgAgAgAgAgAgAgAgAgAgAgqrFkHlAl6m/jYlBkLl3mgn6jjm9rRpEkchHg9iPi/hxickJgrgyoNisihilndgwl1nL" +
+  "p0h6jbk2qgh3hJj2jcnzifkIkUlgowkyo8p9hDh+ithojojOjXhfiThmg1hNhGhDg/g6iaiiiti4jtrygAi3jBg8iNhCjqlNitoBnGmPjZiM" +
+  "iii9mko9i6nziCiDqHoOm7lKjzi2g4p6ovgYihsGiLiznTiFrXi6hcn0n9rMpIqtjxgSjSqBlvk+jcpviBlBmXgAgAkQjljIpljlkQk+lvmS" +
+  "r0mSgAiyh6hJgAmelLiDpSjIhagAjnq3huh2h+iFibjDjUjlkdoQhfiDiyi5oghNjCgAg0gAh9gAgAhklJjnkMl/kom3h6iamEk0l3phnLqS" +
+  "ldh+hxiQhciwkHlTmYnOoFranXmXlHj9jFier+iMhYhNguhLh8gnggikh+hnmpnFgumpgqrFkHlAl6m/jYlBkLl3mgn6jjm9rRpEkchHg9iP" +
+  "i/hxickJgrgyoNisihilndgwl1nLp0h6jbk2qgh3hJj2jcnzifkIkUlgowkyo8p9hDh+ithojojOjXhfiThmg1hNhGhDg/g6iaiiiti4jtry" +
+  "i3jBg8iNhCjqlNitoBnGmPjZiMiii9mko9i6nziCiDqHoOm7lKjzi2g4p6ovgYihsGiLiznTiFrXi6hcn0n9rMpIqtjxgSjSqBlvk+jcpviB" +
+  "lBmXkQjljIpljlkQk+lvmSr0mSiyh6hJmelLiDpSjIhajnq3huh2h+iFibjDjUjlkdoQhfiDiyi5oghNjCg0h9hklJjnkMl/kom3h6iamEk0" +
+  "l3phnLqSldh+hxiQhciwkHlTmYnOoFranXmXlHj9jFier+iMhYhNguhLh8gnggikh+hnmpnFarePcvhgfSglj3kCmSnps6aNZ4ZxY6YlYKXn" +
+  "WZdqdtofjMjHjMjyjblClBk9kyjBUZkKjijre4azZ4aiaEZzZoYMeTfQmEhheifDe6genDmuqWmek2ZNYhd9dhZOZSngeCnEn+sho8qRmpnf" +
+  "aPaFZ1duZPZAZUeYZsZxZxWeXvYRYqY8ZGZAYyYdbJeXdUZIZHc3dVdKg5gKekrtp4n/Xgn1qUs4jgiNjskziOe9hehfhIhWhxiTjnfLlBdu" +
+  "gijti5eekKfkbfkDgHWaUyevXzluTGdXfwjgjsjlY0c+ReSrThqPRUjojwj6lUkhkokoklkembj4cEb0eKcClHVEUCSgWSkSh8STR/cMZCY2" +
+  "YhYBW6ZeZiZraRcgi/k2keZmZtk+VrhqieitgXTmVFVLXmdjWddmcdb0TxfyWkVXY+a/YnZ2bAhQejeOfLlhlzl0lwlbj+hMiliUiTiii6jS" +
+  "hDd6hCefd7eVdhdzdfkAj3jukVkjhgkCdtofjMjHjMjyjblClBk9kyjBUZkKjijre4azZ4aiaEZzZoYMeTfQmEhheifDe6genDmuqWmek2ZN" +
+  "Yhd9dhZOZSngeCnEn+sho8qRmpnfaPaFZ1duZPZAZUeYZsZxZxWeXvYRYqY8ZGZAYyYdbJeXZIZHc3dVdKg5gKekrtp4n/Xgn1qUs4jgiNjs" +
+  "kziOe9hehfhIhWhxiTjnfLlBdugijti5eekKfkbfkDgHWaUyevXzluTGdXfwjgjsjlY0c+ReSrThjojwj6lUkhkokoklkembj4b0eKcCVEUC" +
+  "SgWSkSh8R/cMZCY2YhYBW6ZeZiZraRcgi/k2keZmZtk+VriegXVLXmdjWddmcdb0TxfyWkVXY+a/YnZ2bAhQejeOfLlhlzl0lwlbj+hMiliU" +
+  "iTiii6jShDd6hCefd7eVdhdzdfkAj3jukVkjpWrspeqXr3rUpDlIoQobnApKotoKocopowoqn7rHqFgKmBl8ltk8mBmcmZmNl0kWm3k9gHjc" +
+  "m7pMogomn3oHnkmjrgrolQnIpFoulhrGnHmViPn/mQmadRo+pHmsmgl3oinsn2l1kQnFkbifo+oen0o2mqnEmUqLnMntoCnzohonohoWnbnh" +
+  "nlninncNqUm4nCpLoMpKmtmboPkKlwm/m+oUnsmslSjzmAk0njqCipkplgmDmUmmoti8kNrDnqc3m9nlk0picfl4qbi9hHf5hchImcqRnJic" +
+  "lsl6nAimmZkYjBn3mql6lylxjMl6mDmEl0lcedlYpRoJpTpGoMkLlSnWfBl2o/nplpfzoAoHoMoJncm7nInKnAkeoImnmEmpjTnmnEqlpnp4" +
+  "o4oGoDnyl8nLmamem8lsnxoIlLl9l1iTkqgHmdoTqOpPq8mxm0mvmYltkLf7k3lcl1mDmMmYcMozpvrEqnqookq4qLmCmknOlMlOqXlIqFgK" +
+  "mBl8ltk8mBmcmZmNl0kWm3k9gHjcm7pMogomn3oHnkmjrgrolQnIpFoulhrGnHmViPn/mQmadRo+pHmsmgl3oinsn2l1kQnFkbifo+oen0o2" +
+  "mqnEmUqLnMntoCnzohonohoWnbnhnlninncNm4nCpLoMpKmtmboPkKlwm/m+oUnsmslSjzmAk0njqCipkplgmDmUmmoti8kNrDnqc3m9nlk0" +
+  "picfl4qbi9hHf5hchImcqRnJiclsl6nAimmZkYjBl6lylxjMl6mDmEl0lcedlYoJpTpGkLlSnWfBl2o/lpfzoAoHoMoJncm7nInKnAkeoImn" +
+  "mEmpjTnmnEpno4nyl8nLmamem8lsnxoIlLl9l1iTkqgHmdoTqOpPq8mxm0mvmYltkLf7k3lcl1mDmMmYcMozpvrEqnqookq4qLmCmknOlMlO" +
+  "ICA8///////////v/////////5/7+9//X5///////DAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+export const CANONICAL_FACE_CM100: readonly number[] = decode(MODEL);
+
+/** x, y, z for each of the 468 landmarks, from the model's text. */
+function decode(text: string): number[] {
+  const n = 468;
+  const digit = (k: number) => DIGITS.indexOf(text[k]);
+  const at = (k: number) => digit(2 * k) * 64 + digit(2 * k + 1) - 2048;
+  const out: number[] = [];
+  for (let i = 0; i < n; i++)
+    out.push((digit(6 * n + ((i / 6) | 0)) >> (i % 6)) & 1 ? -at(i) : at(i), at(n + i), at(2 * n + i));
+  return out;
+}
