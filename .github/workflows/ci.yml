@@ -7,8 +7,7 @@ name: ci
 
 on:
   push:
-    # TEMPORARY (measuring the image push; reverted before merge)
-    branches: [main, chore/fast-deploys]
+    branches: [main]
   pull_request:
   # A pull request in the merge queue: the commit the queue would put on
   # main, tested before it gets there (docs/process.md, "Merge queue").
@@ -675,17 +674,6 @@ jobs:
             else
               echo "$image: private (an anonymous reader gets HTTP $code)"
             fi
-          done
-      - name: TEMPORARY - the packages' visibility, as the API reports it
-        if: env.PUBLISH == 'true'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          for name in liveface-api liveface-web; do
-            curl -s -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/users/sadeghianme/packages/container/$name" \
-              | jq -c '{name, visibility, repository: .repository.full_name, created_at, message}'
           done
       - name: Container logs
         if: failure()
