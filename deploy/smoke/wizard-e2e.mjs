@@ -480,8 +480,10 @@ try {
     const refusal = page.getByRole("alert").filter({ hasText: "These points would stretch the face:" });
     await refusal.waitFor();
     check(await publishButton.isDisabled(), "Publish is enabled on points out of place");
+    // The note beside Publish (a phone's copy sits under the picture, hidden here).
     await page
       .getByText("Move the points listed above back onto the face, or press “Fix it for me”.")
+      .filter({ visible: true })
       .first()
       .waitFor();
     await refusal.getByRole("button", { name: "Fix it for me" }).click();
