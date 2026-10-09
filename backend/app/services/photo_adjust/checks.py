@@ -15,8 +15,8 @@ from app.models.shapes import AdjustChecks, Note
 from app.services import imagegen
 from app.services.anchors import detect_anchors
 from app.services.photo_adjust.paste import (
-    _hull_mask,
     delta_e,
+    hull_mask,
     paste_back,
     rgb_to_lab,
 )
@@ -46,7 +46,7 @@ logger = logging.getLogger("liveface.photo_adjust")
 def cheek_colour(image: Image.Image, points: np.ndarray) -> np.ndarray | None:
     """Mean LAB colour over both cheeks, or None if they cover no pixels."""
     rgb = np.asarray(image.convert("RGB"))
-    mask = _hull_mask(rgb.shape[:2], [points[CHEEK_IMAGE_LEFT], points[CHEEK_IMAGE_RIGHT]])
+    mask = hull_mask(rgb.shape[:2], [points[CHEEK_IMAGE_LEFT], points[CHEEK_IMAGE_RIGHT]])
     if mask.sum() < 16:
         return None
     return rgb_to_lab(rgb[mask].astype(np.float64)).mean(axis=0)

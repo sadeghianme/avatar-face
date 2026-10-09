@@ -124,7 +124,7 @@ def align(result_points: np.ndarray, source_points: np.ndarray) -> tuple[np.ndar
     return matrix, float(np.sqrt(np.mean(residual**2)))
 
 
-def _hull_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray:
+def hull_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray:
     """Union of the convex hulls of `polygons` (pixel coords of the window)."""
     hulls = []
     for pts in polygons:
@@ -132,10 +132,10 @@ def _hull_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray
             hulls.append(pts[ConvexHull(pts).vertices])
         except (QhullError, ValueError):
             hulls.append(pts)
-    return _polygon_mask(shape, hulls)
+    return polygon_mask(shape, hulls)
 
 
-def _polygon_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray:
+def polygon_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray:
     """Union of `polygons` as drawn, in their point order (a contour, not
     its hull)."""
     canvas = Image.new("L", (shape[1], shape[0]), 0)
@@ -208,7 +208,7 @@ class Region:
     within: tuple[np.ndarray, ...] = ()
 
 
-def _paste_region(
+def paste_region(
     out: np.ndarray,
     source_rgb: np.ndarray,
     result: Image.Image,
@@ -258,7 +258,7 @@ def _paste_region(
     )
 
     offset = np.array([x0, y0])
-    hull = _hull_mask(window, [region.source - offset, region.result - offset])
+    hull = hull_mask(window, [region.source - offset, region.result - offset])
     # The distances alone (scipy's stub also allows the indices it returns
     # only when asked for them); likewise below.
     distance = cast(np.ndarray, distance_transform_edt(~hull))
@@ -270,13 +270,13 @@ def _paste_region(
     if region.keep_out:
         # Nothing of the answer lands on a brow, fading in over BROW_GUARD
         # of the region's size, and the brow is not skin to measure.
-        outside = _polygon_mask(window, [p - offset for p in region.keep_out])
+        outside = polygon_mask(window, [p - offset for p in region.keep_out])
         guard = max(BROW_GUARD * size, 1.0)
         clear = cast(np.ndarray, distance_transform_edt(~outside))
         alpha *= _smoothstep(clear / guard)
         ring_mask &= clear > guard
     for polygon in region.within:
-        ring_mask &= _hull_mask(window, [polygon - offset])
+        ring_mask &= hull_mask(window, [polygon - offset])
     if not alpha.any():
         return
 
@@ -370,5 +370,5 @@ def paste_back(
         ),
         Region("lips", source_points[LIPS], mapped[LIPS], LIP_DILATE, LIP_FEATHER, within=ovals),
     ):
-        _paste_region(out, source_rgb, answer, to_result, region, rng)
+        paste_region(out, source_rgb, answer, to_result, region, rng)
     return Image.fromarray(out)

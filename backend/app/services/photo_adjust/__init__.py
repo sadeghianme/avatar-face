@@ -81,33 +81,22 @@ The package:
     checks   what is checked on an answer, the candidate it makes, and
              the prompt of a generated creation
 
-Everything is re-exported here, so `photo_adjust.X` keeps working.
+The public names are re-exported here, so `photo_adjust.X` keeps working;
+what the modules share among themselves (paste.hull_mask) is imported from
+its module. Nothing private is re-exported.
 """
 
 from __future__ import annotations
 
 from app.services.photo_adjust.checks import (
     Candidate,
-    _checked,
-    _png,
     cheek_colour,
     finish_candidate,
     generation_prompt,
     skin_drift,
 )
 from app.services.photo_adjust.paste import (
-    _D65,
-    _MAD_TO_STD,
-    _RGB_TO_XYZ,
-    _XYZ_TO_RGB,
     Region,
-    _antialiased,
-    _grain,
-    _hull_mask,
-    _invert,
-    _paste_region,
-    _polygon_mask,
-    _smoothstep,
     align,
     apply,
     delta_e,
@@ -183,13 +172,11 @@ __all__ = [
     "AdjustSkipped",
     "align",
     "decode_alpha",
-    "_antialiased",
     "apply",
     "BROW_GUARD",
     "BROW_IMAGE_LEFT",
     "BROW_IMAGE_RIGHT",
     "Candidate",
-    "_checked",
     "cheek_colour",
     "CHEEK_IMAGE_LEFT",
     "CHEEK_IMAGE_RIGHT",
@@ -198,7 +185,6 @@ __all__ = [
     "CROP_QUALITY",
     "CROP_SCALE",
     "CROP_SIZE",
-    "_D65",
     "delta_e",
     "detect_points",
     "EYE_DILATE",
@@ -213,19 +199,15 @@ __all__ = [
     "FALLBACK_FACE_WIDTHS",
     "finish_candidate",
     "generation_prompt",
-    "_grain",
     "head_crop",
     "head_crop_box",
     "head_crop_fallback",
-    "_hull_mask",
-    "_invert",
     "jaw_shift",
     "encode_jpeg",
     "lab_to_rgb",
     "LIP_DILATE",
     "LIP_FEATHER",
     "LIPS",
-    "_MAD_TO_STD",
     "MAX_ALIGN_RESIDUAL",
     "MAX_CANDIDATES",
     "MAX_JAW_SHIFT",
@@ -236,9 +218,6 @@ __all__ = [
     "NOSE_TIP",
     "decode_own_rgb",
     "paste_back",
-    "_paste_region",
-    "_png",
-    "_polygon_mask",
     "prepare",
     "Prepared",
     "reason",
@@ -247,19 +226,16 @@ __all__ = [
     "Region",
     "decode_rgb",
     "rgb_to_lab",
-    "_RGB_TO_XYZ",
     "RING_WIDTH",
     "ROUNDS_PER_CREATION",
     "similarity_transform",
     "skin_drift",
     "SKIN_L_WEIGHT",
-    "_smoothstep",
     "SOURCE_MAX_EDGE",
     "STABLE",
     "STORED_MAX_EDGE",
     "STYLISE",
     "TOUCHUP",
     "TOUCHUP_PROMPT",
-    "_XYZ_TO_RGB",
     "yaw_offset",
 ]
