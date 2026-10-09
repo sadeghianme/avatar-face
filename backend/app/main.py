@@ -126,6 +126,9 @@ async def _ensure_schema(engine) -> None:
             await conn.run_sync(Base.metadata.create_all)
 
     cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    # Keep the application's logging: alembic/env.py configures logging from
+    # alembic.ini only when the `alembic` command runs it.
+    cfg.attributes["configure_logger"] = False
 
     def run_alembic(action: str) -> None:
         (command.stamp if action == "stamp" else command.upgrade)(cfg, "head")
