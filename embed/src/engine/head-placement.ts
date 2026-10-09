@@ -21,6 +21,7 @@ import { YAW_GAIN } from "./head-personality";
 import type { HeadPose3D } from "./head-camera";
 import type { OutlineBasis } from "./head-outline";
 import { HeadTurn, type TurnStats } from "./head-turn";
+import { MouthPose, type PosedMouth } from "./mouth-pose";
 import type { HeadOffset, Motion } from "./motion";
 import { NeckWarp, neckBlendFor, neckPin, type NeckPin } from "./neck-blend";
 import type { FacePicture } from "./picture";
@@ -93,6 +94,8 @@ export class HeadPlacement {
   private readonly turnField = (pts: Point[]) => this.turner?.field(pts);
   /** The last frame turned the face in depth (the "3d" motion, not at rest). */
   turning = false;
+  /** The mouth's frame under the turn (mouth-pose.ts). */
+  private readonly mouth = new MouthPose();
 
   constructor(private readonly triangles: Rig["triangles"]) {}
 
@@ -113,6 +116,15 @@ export class HeadPlacement {
    *  fold clamp kept, the largest shift. */
   stats(): Readonly<TurnStats> | null {
     return this.turner?.stats ?? null;
+  }
+
+  /**
+   * The mouth's frame this frame (mouth-pose.ts), for the face whose rest
+   * pose is `base`: the rest pose as the last turn showed it, and the turn.
+   * Null when the face did not turn in depth: the rest pose is the frame.
+   */
+  posedMouth(base: readonly Point[]): PosedMouth | null {
+    return this.turning && this.turner ? this.mouth.pose(this.turner, base) : null;
   }
 
   /** The canvas a layered avatar's layers are drawn on through the neck. */

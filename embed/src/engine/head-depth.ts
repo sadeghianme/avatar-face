@@ -24,7 +24,7 @@ export const SKULL_CM = { x: 0, y: 2.5, z: -0.5 };
  *  depth. The head's silhouette lies at its depth. */
 export const SKULL_CENTRE_CM = { x: 0, y: 2.5, z: -4.3 };
 /** Canonical outer eye corners' distance, cm (33 to 263). */
-const CANON_IOD = 8.89;
+export const CANON_IOD_CM = 8.89;
 /** Passes of neighbour averaging over the depth: the nose's steep sides
  *  turned at full relief slide over the cheek beside them, which a 2D
  *  mesh can only show as a fold. Smoothed, the relief is kept at the
@@ -88,7 +88,7 @@ export function fitCanonical(base: readonly Point[]): CanonicalFit {
   }
   return {
     depth,
-    iod: CANON_IOD * s,
+    iod: CANON_IOD_CM * s,
     at: (p) => ({
       x: ru[0] * p.x + ru[1] * p.y + ru[2] * p.z + ru[3],
       y: rv[0] * p.x + rv[1] * p.y + rv[2] * p.z + rv[3],

@@ -60,6 +60,31 @@ describe("HeadTurn's geometry", () => {
   });
 });
 
+describe("HeadTurn.applied", () => {
+  it("is nothing before the first apply", () => {
+    expect(HeadTurn.build(mesh, rig.triangles)!.applied()).toBeNull();
+  });
+
+  it("is what the last apply did: each landmark's shift, the turn, its share, the rigid motion undone", () => {
+    const pose = { yaw: 6 * DEG, pitch: -3 * DEG, roll: 2 * DEG };
+    const pts = turned(pose);
+    const last = turn.applied()!;
+    for (const i of [1, 13, 61, 152, 234]) {
+      expect(last.shift[2 * i]).toBeCloseTo(pts[i].x - mesh.basePoints[i].x, 9);
+      expect(last.shift[2 * i + 1]).toBeCloseTo(pts[i].y - mesh.basePoints[i].y, 9);
+    }
+    // The roll is the rigid motion's: the turn asked has none.
+    expect(last.pose).toEqual({ yaw: pose.yaw, pitch: pose.pitch, roll: 0 });
+    expect(last.share).toBe(turn.stats.scale);
+    expect(last.back).toBeNull();
+    const geom = { pivotX: 480, pivotY: 400, bustPivotY: 900, bustReach: 300 };
+    turned(pose, headMotionAffine(geom, { dx: 9, dy: 3, roll: 0 }, false));
+    const back = turn.applied()!.back!;
+    expect(back.e).toBeCloseTo(-9, 9);
+    expect(back.f).toBeCloseTo(-3, 9);
+  });
+});
+
 describe("HeadTurn on the face", () => {
   const outline = [...turn.basis.outline];
 

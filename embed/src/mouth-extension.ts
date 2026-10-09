@@ -72,10 +72,45 @@ export interface MouthSurfaceFrame {
   /** Every vertex of the mesh this frame, canvas px: the engine's own,
    *  moved again next frame (MouthExtension). */
   points: readonly MouthPoint[];
+  /** The face's landmarks at rest, no speech in them, as this frame shows
+   *  them: the mouth's frame (its corners, centre, width and angle are read
+   *  off these). The rest pose itself, unless the head turns in depth this
+   *  frame: then the rest pose moved as the turn moved each landmark, the
+   *  lips as one piece, so what is placed from it sits where the turned
+   *  lips in `points` are (engine/mouth-pose.ts). */
   neutral: readonly MouthPoint[];
+  /** The head's turn in depth this frame (the "3d" head motion), for what
+   *  lies behind the lips; absent when the face did not turn in depth (at
+   *  rest, in the "2d" motion). Optional to read: an extension that
+   *  ignores it draws everything in `neutral`'s frame, as on the lips. */
+  turn?: MouthTurn;
   rig: Rig;
   weights: BlendWeights;
   viseme: string;
+}
+
+/**
+ * The head's turn in depth, for what a mouth draws behind the lips
+ * (MouthSurfaceFrame.turn). The lips turn as one piece with the face;
+ * what lies deeper, the teeth, turns about the same pivot, so it moves a
+ * little less than they do (parallax), as a solid head's does. Valid for
+ * the frame it is handed in, as the rest of the frame is.
+ */
+export interface MouthTurn {
+  /** This frame's yaw and pitch, radians, as far as the face turned: yaw
+   *  + turns the nose to the canvas's right, pitch + nods it down. */
+  readonly yaw: number;
+  readonly pitch: number;
+  /** Canvas px per millimetre of this face. */
+  readonly mm: number;
+  /**
+   * Where a point `depth` px behind the lips' surface is seen this frame,
+   * written into `out` and returned. (x, y) is the point as if it lay on
+   * the lips, in `neutral`'s frame: at depth 0 it is (x, y) itself, and
+   * so is any depth while the head faces the camera. Continuous in the
+   * turn and the depth.
+   */
+  behindLips(out: MouthPoint, x: number, y: number, depth: number): MouthPoint;
 }
 
 export interface MouthFrame {
