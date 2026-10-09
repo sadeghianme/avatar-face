@@ -156,4 +156,16 @@ describe("what the customer's page says", () => {
     assert.equal(frameMessage({ lf: true, level: "ok", message: { toString: () => "not a string" } }), null);
     assert.equal(frameMessage({ lf: true, level: "info", message: "x".repeat(5000) })?.message.length, 2000);
   });
+
+  it("keeps a refusal's code only when it looks like one", () => {
+    const refused = { lf: true, level: "error", message: "speak failed: SpeechError: …" };
+    assert.deepEqual(frameMessage({ ...refused, code: "cloned_line_missing" }), {
+      level: "error",
+      message: refused.message,
+      code: "cloned_line_missing",
+    });
+    for (const code of [undefined, 404, "", "Not A Code", "x".repeat(80), "<b>"]) {
+      assert.deepEqual(frameMessage({ ...refused, code }), { level: "error", message: refused.message });
+    }
+  });
 });

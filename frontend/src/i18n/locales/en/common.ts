@@ -89,4 +89,13 @@ export const common = {
   error: "Something went wrong",
   mine: "Created by me",
   close: "Close",
+  // A line that could not be said, by the server's code (lib/speechError.ts).
+  speechErr: {
+    cloned_line_missing: "This line hasn't been recorded in your cloned voice yet.",
+    speech_busy: "Speech is already being prepared. Stop it, or try again in a moment.",
+    speech_stream_failed: "Speech was interrupted. Please try again.",
+    usage_limit_reached: "This month's speech allowance is used up.",
+    nothing_to_speak: "There are no words to say aloud in this text.",
+    provider_not_configured: "This voice isn't available on this server. Choose another one.",
+  },
 } as const;

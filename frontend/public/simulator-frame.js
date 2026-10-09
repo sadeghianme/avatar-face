@@ -14,7 +14,13 @@
 // CSP, which allows scripts from the dashboard's origin only.
 (() => {
   const dashboard = new URL(document.currentScript.src).origin;
-  const send = (level, message) => parent.postMessage({ lf: true, level, message: String(message) }, dashboard);
+  // `code`: the API's error code a refusal came with (a SpeechError from
+  // Liveface.speak()), for the Simulator to word in the member's language.
+  const send = (level, message, code) =>
+    parent.postMessage(
+      { lf: true, level, message: String(message), ...(typeof code === "string" ? { code } : {}) },
+      dashboard
+    );
 
   // A script's own error (an ErrorEvent), and a script that did not load (an
   // error event on its <script>, which only a capturing listener sees).
@@ -69,7 +75,7 @@
       send("info", `speak(${JSON.stringify(data.speak)})`);
       Promise.resolve(window.Liveface.speak(data.speak))
         .then(() => send("ok", "finished speaking"))
-        .catch((error) => send("error", `speak failed: ${error}`));
+        .catch((error) => send("error", `speak failed: ${error}`, error && error.code));
     }
     if (data.stop === true) window.Liveface.stop();
   });

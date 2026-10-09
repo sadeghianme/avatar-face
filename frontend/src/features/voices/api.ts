@@ -2,6 +2,7 @@ import { BrowserTTS } from "@liveface/embed";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
+import { clonedVoiceName, renderedLines } from "@/features/voices/clonedLines";
 import { api, fetchStream } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
 import type { Provider, Schemas, Synthesis, Voice } from "@/lib/types";
@@ -118,6 +119,22 @@ export function useCloneJobs(orgId: string | undefined) {
     void queryClient.invalidateQueries({ queryKey: queryKeys.clonedVoices(orgId) });
   }, [doneCount, orgId, queryClient]);
   return query;
+}
+
+/**
+ * The lines a cloned voice can say (clonedLines.ts), from the clone jobs;
+ * `voiceId` null (another provider chosen) asks nothing. The jobs' own
+ * query, read without its polling: the Speak panel follows a render the
+ * Voices page is watching, and starts none.
+ */
+export function useRenderedLines(orgId: string | undefined, voiceId: string | null, locale: string) {
+  const name = voiceId === null ? null : clonedVoiceName(voiceId);
+  return useQuery({
+    queryKey: queryKeys.cloneJobs(orgId),
+    queryFn: () => api.get<CloneJob[]>(`/orgs/${orgId}/clone-jobs`),
+    enabled: Boolean(orgId) && name !== null,
+    select: (jobs: CloneJob[]) => (name === null ? [] : renderedLines(jobs, name, locale)),
+  });
 }
 
 /** Whether this backend can render a clone on its own hardware (fixed until a restart). */

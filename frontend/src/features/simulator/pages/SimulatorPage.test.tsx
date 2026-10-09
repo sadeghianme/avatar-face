@@ -177,4 +177,28 @@ describe("the customer's page", () => {
     expect(screen.queryByText("from this window")).not.toBeInTheDocument();
     expect(screen.queryByText("bad level")).not.toBeInTheDocument();
   });
+
+  it("words a refused line in the member's language, its code beside it", async () => {
+    const view = simulator(`/simulator?avatar=${ID}`);
+    await view.user.click(runButton());
+    const frame = await waitFor(frameOnPage);
+    const refused = (message: string, code: string) =>
+      fireEvent(
+        window,
+        new MessageEvent("message", {
+          data: { lf: true, level: "error", message, code },
+          source: frame.contentWindow,
+        })
+      );
+    refused(
+      "speak failed: SpeechError: This line has not been rendered… (404 cloned_line_missing)",
+      "cloned_line_missing"
+    );
+    refused("speak failed: SpeechError: Too many requests (429 rate_limited)", "rate_limited");
+
+    const known = await screen.findByText(t("speechErr.cloned_line_missing"));
+    expect(known).toHaveTextContent("(cloned_line_missing)");
+    // A code the dashboard has no words for keeps the widget's own line.
+    expect(screen.getByText(/Too many requests \(429 rate_limited\)/)).toHaveTextContent("(rate_limited)");
+  });
 });
