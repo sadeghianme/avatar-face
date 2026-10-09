@@ -164,7 +164,7 @@ def head_crop_source(data: bytes) -> tuple[bytes, str] | None:
     input, never the same request repeated (photo_adjust.head_crop)."""
     image = on_backdrop(Image.open(io.BytesIO(data)))
     try:
-        points = photo_adjust._detect(image)
+        points = photo_adjust.detect_points(image)
     except landmarks.LandmarkerUnavailable:
         return None
     if points is None:
@@ -172,7 +172,7 @@ def head_crop_source(data: bytes) -> tuple[bytes, str] | None:
     crop = photo_adjust.head_crop(image, points)
     if crop is None:
         return None
-    return photo_adjust._jpeg(crop, imagegen.SOURCE_QUALITY), "image/jpeg"
+    return photo_adjust.encode_jpeg(crop, imagegen.SOURCE_QUALITY), "image/jpeg"
 
 
 async def _ask_ai(job: Job, prompt: str, source: bytes | None, mode: str) -> tuple[bytes, str]:

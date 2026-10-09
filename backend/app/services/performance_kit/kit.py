@@ -176,7 +176,7 @@ def _require_landmarker() -> None:
 
 
 def _default_detect(image: Image.Image) -> np.ndarray | None:
-    return photo_adjust._detect(image)
+    return photo_adjust.detect_points(image)
 
 
 def _png(image: Image.Image) -> bytes:

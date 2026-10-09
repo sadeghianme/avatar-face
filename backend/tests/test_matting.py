@@ -7,7 +7,7 @@ up as a number rather than as someone noticing a fringe months later.
 import numpy as np
 
 from app.services.matting import (
-    _box_mean,
+    box_mean,
     estimate_background,
     guided_filter,
     refine_matte,
@@ -31,13 +31,13 @@ def test_box_mean_matches_the_obvious_implementation():
     rng = np.random.default_rng(0)
     a = rng.random((9, 11)).astype(np.float32)
     for r in (1, 2, 4):
-        assert np.allclose(_box_mean(a, r), _brute_force_box_mean(a, r), atol=1e-5)
+        assert np.allclose(box_mean(a, r), _brute_force_box_mean(a, r), atol=1e-5)
 
 
 def test_box_mean_normalises_by_the_real_window_at_the_border():
     """A zero-padded filter would darken the frame edge towards zero."""
     a = np.ones((8, 8), dtype=np.float32)
-    assert np.allclose(_box_mean(a, 3), 1.0)
+    assert np.allclose(box_mean(a, 3), 1.0)
 
 
 def _soft_edge_scene(offset=0):
@@ -51,7 +51,7 @@ def _soft_edge_scene(offset=0):
     # place. The offset is the point — the mask disagrees with the photo.
     coarse = np.zeros((h, w), dtype=np.float32)
     coarse[:, 32 + offset :] = 1.0
-    coarse = _box_mean(_box_mean(coarse, 4), 4)
+    coarse = box_mean(box_mean(coarse, 4), 4)
     return rgb.astype(np.uint8), coarse, truth
 
 

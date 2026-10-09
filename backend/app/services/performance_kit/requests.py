@@ -55,7 +55,7 @@ class _Crop:
 def _base_image(base_png: bytes) -> Image.Image:
     """What the model and the detector are shown: a cut-out on the neutral
     grey (photo_adjust's own decoding, so a kit sees what AI adjust sees)."""
-    return photo_adjust._rgb(base_png)
+    return photo_adjust.decode_rgb(base_png)
 
 
 def head_square(
@@ -87,7 +87,7 @@ def _crop(image: Image.Image, points: np.ndarray, kind: str) -> _Crop | None:
     None when the head crop would be the whole photo (head_square)."""
     if kind == FACE_CROP:
         x0, y0, side = photo_adjust.face_crop_box(points)
-        payload = photo_adjust._jpeg(
+        payload = photo_adjust.encode_jpeg(
             photo_adjust.crop_face(image, (x0, y0, side)), photo_adjust.CROP_QUALITY
         )
         return _Crop(kind, payload, (x0, y0, x0 + side, y0 + side))
@@ -100,7 +100,9 @@ def _crop(image: Image.Image, points: np.ndarray, kind: str) -> _Crop | None:
     edge = min(int(round(side)), photo_adjust.SOURCE_MAX_EDGE)
     crop = photo_adjust.crop_face(image, square, size=edge)
     return _Crop(
-        kind, photo_adjust._jpeg(crop, imagegen.SOURCE_QUALITY), (x0, y0, x0 + side, y0 + side)
+        kind,
+        photo_adjust.encode_jpeg(crop, imagegen.SOURCE_QUALITY),
+        (x0, y0, x0 + side, y0 + side),
     )
 
 
