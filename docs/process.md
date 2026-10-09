@@ -205,7 +205,7 @@ and `# fmt: on`. The commit that formatted the backend is in
 | `frontend` | type check, the unit tests (node --test) and the rendering tests (Vitest), each with coverage at or above its floors, structure check, production build | ~1 min |
 | `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, the dashboard's generated API types match the committed document | <1 min |
 | `deploy-script` | ShellCheck (pinned) on `deploy/*.sh`; every gate of `deploy.sh` | <1 min |
-| `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 22 page visits load in headless Chrome with zero CSP violations (the Simulator injection replayed among them); then the wizard end to end, from a new account to a published, spoken, shared and deleted avatar | ~4 min |
+| `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 22 page visits load in headless Chrome with zero CSP violations (the Simulator injection replayed among them); then the wizard end to end, from a new account to a published, spoken, shared and deleted avatar | ~5 min, the wizard ~1 of it |
 
 The `images` job's browser sweep (`deploy/smoke/web-sweep.mjs`) seeds a user, a
 photo avatar, a 3D avatar and a share link through the API, speaks on the share
@@ -244,8 +244,9 @@ After the sweep, the same job makes an avatar the way an owner does
 3. Step 3 prepares the photo itself (MediaPipe's cut-out and face, in the
    API image): "No AI was used", and the picture loads.
 4. Step 4 shows the points found. The test checks that the eyes, mouth and
-   head points sit in a face's order on the picture, then presses
-   **Publish**.
+   head points sit in a face's order on the picture, plays the talking
+   preview's sample (its stream must answer, not the browser's fallback
+   voice), then presses **Publish**.
 5. On the avatar's page the stage draws a picture (screenshot pixels, not
    one flat colour). A typed line is spoken in the image's Kokoro voice:
    **Speak** stays busy until the player has played the stream out, at
@@ -278,7 +279,9 @@ npm ci --prefix deploy/smoke
 node deploy/smoke/wizard-e2e.mjs http://127.0.0.1:7090   # CHROME=<path> picks the browser
 ```
 
-It prints each step with its time, and where its files are:
+In CI it takes about 50 seconds, after a 2-second `npm ci`. On a busy laptop
+it can take a few minutes, and every wait's bound allows for that. It prints
+each step with its time, and where its files are:
 `$WIZARD_E2E_ARTIFACTS`, or a new temp directory. That directory has a
 screenshot after every step, `console.log`, `network.json` and
 `steps.json`. On a failure it also has a screenshot of every open page and a
