@@ -20,8 +20,9 @@ The package, by part of the head:
     parts      the neck, the hair and body cards, the mouth interior
     morphs     the morph targets, and the camera framing
 
-Everything is re-exported here, so `geometry.X` (build and texture read it
-as G.X) keeps working.
+The public names are re-exported here, so `geometry.X` (build and texture
+read it as G.X) keeps working. Nothing private is: each module's helpers
+stay in it.
 """
 
 from __future__ import annotations
@@ -97,10 +98,6 @@ from app.services.head3d.geometry.morphs import (
 )
 from app.services.head3d.geometry.parts import (
     InteriorPart,
-    _cavity,
-    _ellipsoid,
-    _shell,
-    _teeth_arch,
     card_mesh,
     head_box,
     mouth_frame,
@@ -115,7 +112,6 @@ from app.services.head3d.geometry.skull import (
     SILHOUETTE_MARGIN,
     SkullFit,
     SkullMesh,
-    _frame_of,
     back_ring,
     fit_skull,
     oval_directions,
@@ -130,10 +126,8 @@ __all__ = [
     "calibrate_depth",
     "card_mesh",
     "CAVITY",
-    "_cavity",
     "CORNER_RECESS",
     "CROWN_ABOVE_FOREHEAD",
-    "_ellipsoid",
     "EQUATOR_PAST_OVAL",
     "face_frame",
     "FACE_WIDTH_M",
@@ -142,7 +136,6 @@ __all__ = [
     "frame_box",
     "FRAME_HEIGHTS",
     "FRAME_LIFT",
-    "_frame_of",
     "grid_triangles",
     "HAIR_CARD_BEHIND",
     "HEAD_BACK",
@@ -178,7 +171,6 @@ __all__ = [
     "oval_directions",
     "OVAL_HOLE_FEATHER",
     "OVAL_SMOOTH_PASSES",
-    "_shell",
     "SIDE_BLEND",
     "side_weights",
     "SILHOUETTE_MARGIN",
@@ -196,7 +188,6 @@ __all__ = [
     "surface_depth",
     "surface_weights",
     "SYMMETRIC_TO_ARKIT",
-    "_teeth_arch",
     "TEETH_ARCH_DEPTH",
     "TEETH_WIDTH",
     "to_image",
