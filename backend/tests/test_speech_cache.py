@@ -23,7 +23,7 @@ from app.core.config import get_settings
 from app.db import get_session_factory
 from app.models import LegacySpeechCache, SpeechClip, utcnow
 from app.services.storage import get_storage
-from app.services.tts import registry, speech_cache
+from app.services.tts import registry, speech_cache, speech_codec
 from app.services.tts.base import SynthesisResult, cache_key
 from app.services.tts.stream import pcm_packet
 from tests.conftest import create_org, register_and_login
@@ -103,7 +103,7 @@ def test_an_mp3_that_would_not_start_on_time_is_refused(monkeypatch):
 def test_pcm_comes_back_with_every_sample():
     source = _wav(seconds=2)
     encoded, mime = speech_cache.encode(source, "audio/wav")
-    back = speech_cache.as_wav(encoded, mime)
+    back = speech_codec.as_wav(encoded, mime)
     with wave.open(io.BytesIO(back)) as handle:
         assert (handle.getframerate(), handle.getnchannels(), handle.getsampwidth()) == (
             24000,
@@ -111,7 +111,7 @@ def test_pcm_comes_back_with_every_sample():
             2,
         )
         assert handle.getnframes() == 2 * 24000
-    assert speech_cache.as_wav(source, "audio/wav") is source
+    assert speech_codec.as_wav(source, "audio/wav") is source
 
 
 # --- Through synthesize_cached -----------------------------------------------

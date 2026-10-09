@@ -8,15 +8,12 @@ evicting it: at the default monthly character allowance that was about
 backup. Now:
 
 * **The recording is a file in storage** (`speech/<k[:2]>/<key>-<nonce>.mp3`),
-  as MP3: VBR from libsndfile's LAME (soundfile, already a dependency), about
-  a tenth of the WAV. libsndfile writes the LAME header that names the
-  encoder's delay and padding, so Chromium, Safari (CoreAudio) and
-  libsndfile decode it to exactly the WAV's samples: the cues, timed against
-  the WAV, stay on time. `encode` checks that on every line and keeps the
-  original when it does not hold. Every player takes `audio/mpeg` (the
+  as MP3 (speech_codec: about a tenth of the WAV, and decoded on the WAV's
+  own samples, which browsers were measured to do too, so the cues, timed
+  against the WAV, stay on time). Every player takes `audio/mpeg` (the
   widget, the share page and the dashboard play `audio_mime` through an
   audio element); the dashboard's phrase stream wants PCM and asks for it
-  (`as_wav`).
+  (`speech_codec.as_wav`).
 * **The row is the index**: key, cues, duration, mime, where the file is and
   how big, which organization's request made it, and when it was last used.
   The database and its backups carry a few hundred bytes a line.
@@ -39,7 +36,6 @@ and eviction needs the order, not the second.
 from __future__ import annotations
 
 import asyncio
-import io
 import json
 import logging
 from dataclasses import dataclass
@@ -54,13 +50,13 @@ from app.core.config import get_settings
 from app.db import get_session_factory
 from app.models import LegacySpeechCache, SpeechClip, utcnow
 from app.services.storage import STORAGE_ERRORS, Storage, get_storage
+from app.services.tts import speech_codec
 from app.services.tts.base import SynthesisResult
+from app.services.tts.speech_codec import MP3, WAV_MIMES
 
 logger = logging.getLogger("liveface.speech_cache")
 
 PREFIX = "speech/"
-MP3 = "audio/mpeg"
-WAV_MIMES = frozenset({"audio/wav", "audio/x-wav", "audio/wave"})
 # Lines from these providers cannot be made again on this server.
 PINNED_PROVIDERS = frozenset({"cloned"})
 # Eviction brings a total over its cap down to this share of it.
@@ -70,62 +66,15 @@ TOUCH_RESOLUTION = timedelta(hours=1)
 DELETE_CHUNK = 500
 DRAIN_BATCH = 200
 
-_mp3_unavailable_logged = False
-
-
 # --- The recording -----------------------------------------------------------
 
 
 def encode(audio: bytes, mime: str, level: float | None = None) -> tuple[bytes, str]:
-    """`audio` as the cache stores it: a WAV as MP3, anything else as it is.
-
-    The MP3 is kept only if it decodes to exactly the WAV's samples (the
-    LAME header's delay and padding honoured): otherwise the cues would be
-    late by the encoder's delay, and the original is kept instead. CPU work:
-    call it on a thread.
-    """
-    global _mp3_unavailable_logged
-    if mime not in WAV_MIMES:
-        return audio, mime
-    import soundfile  # optional runtime (tests.test_layering.LAZY)
-
+    """`audio` as the cache stores it (speech_codec.encode), at the
+    SPEECH_CACHE_MP3_LEVEL setting unless `level` is given. CPU work: call
+    it on a thread."""
     level = get_settings().speech_cache_mp3_level if level is None else level
-    try:
-        samples, rate = soundfile.read(io.BytesIO(audio), dtype="int16")
-        out = io.BytesIO()
-        soundfile.write(
-            out,
-            samples,
-            rate,
-            format="MP3",
-            subtype="MPEG_LAYER_III",
-            compression_level=level,
-            bitrate_mode="VARIABLE",
-        )
-        encoded = out.getvalue()
-        decoded = soundfile.info(io.BytesIO(encoded)).frames
-    except (soundfile.LibsndfileError, RuntimeError, ValueError, TypeError) as error:
-        if not _mp3_unavailable_logged:
-            _mp3_unavailable_logged = True
-            logger.warning("speech is cached as it came, not as MP3: %s", error)
-        return audio, mime
-    if decoded != len(samples):
-        logger.warning("an MP3 decoded to %d samples, not %d: kept as WAV", decoded, len(samples))
-        return audio, mime
-    return encoded, MP3
-
-
-def as_wav(audio: bytes, mime: str) -> bytes:
-    """`audio` as 16-bit PCM WAV, for a caller that reads samples (the
-    dashboard's phrase stream). CPU work: call it on a thread."""
-    if mime in WAV_MIMES:
-        return audio
-    import soundfile  # optional runtime (tests.test_layering.LAZY)
-
-    samples, rate = soundfile.read(io.BytesIO(audio), dtype="int16")
-    out = io.BytesIO()
-    soundfile.write(out, samples, rate, format="WAV", subtype="PCM_16")
-    return out.getvalue()
+    return speech_codec.encode(audio, mime, level)
 
 
 def storage_key(cache_key: str, mime: str) -> str:

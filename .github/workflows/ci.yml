@@ -243,28 +243,42 @@ jobs:
           path: embed/dist/pixel-diffs/
           if-no-files-found: ignore
       - run: npm run build
+      # The speech cache's encoder (backend/app/services/tts/speech_codec.py),
+      # run by the speech timing test below on its own: soundfile and numpy at
+      # the production pins, nothing else of the backend.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install the speech encoder
+        run: pip install -c ../backend/constraints.txt soundfile numpy
       # The browser tests (browser-tests/), in Chromium with WebGL on
       # SwiftShader: the GPU warp most visitors get, against the 2D path and
       # its goldens, and liveface.js with its names renamed against the same
-      # bundle without, pixel for pixel. Chromium is cached by Playwright's
-      # version (package-lock.json pins it); its system libraries are not
-      # in the cache, so they are installed either way.
+      # bundle without, pixel for pixel. The speech timing test also runs in
+      # Firefox and WebKit: a cached line played as the widget plays it, its
+      # sound found again where the engine's clock says it is. The browsers
+      # are cached by Playwright's version (package-lock.json pins it); their
+      # system libraries are not in the cache, so they are installed either
+      # way.
       - name: Playwright's version
         id: playwright
         run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
-      - name: Cache Chromium
-        id: chromium
+      - name: Cache the browsers
+        id: browsers
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: chromium-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      - name: Install Chromium
-        if: steps.chromium.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps --only-shell chromium
-      - name: Install Chromium's system libraries
-        if: steps.chromium.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
+          key: browsers-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install the browsers
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps --only-shell chromium firefox webkit
+      - name: Install the browsers' system libraries
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium firefox webkit
       - name: Browser tests
+        env:
+          LIVEFACE_PYTHON: python
+          SPEECH_TIMING_BROWSERS: chromium,firefox,webkit
         run: npm run test:browser
       - name: Upload the frames that failed the browser goldens
         if: failure()
