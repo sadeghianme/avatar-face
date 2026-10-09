@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { Point } from "../geometry";
-import { FoldCheck, area } from "../head-fold";
+import { FoldCheck, area, longest } from "../head-fold";
 
 /**
  * The turn's fold clamp (head-fold.ts) on a square fanned about its centre:
  * a corner pushed through an edge is a fold, a sliver has no shape to keep,
  * and easing moves a crushed triangle's free corners halfway to its mean
  * move, those of several crushed triangles to the mean of their means.
+ * And the turn's longest shift, measured as Math.hypot measures each.
  */
 const base: Point[] = [
   { x: 0, y: 0 },
@@ -111,5 +112,36 @@ describe("FoldCheck.ease", () => {
     expect(y).toBeCloseTo(0.5 * -8 + 0.5 * (-8 / 3), 12);
     // The same check eased again: the same, nothing carried over.
     expect(once()).toEqual([x, y]);
+  });
+});
+
+describe("longest", () => {
+  /** Math.hypot over every shift, the way the stats were measured. */
+  const everyOne = (d: Float64Array, n: number) => {
+    let max = 0;
+    for (let i = 0; i < n; i++) max = Math.max(max, Math.hypot(d[2 * i], d[2 * i + 1]));
+    return max;
+  };
+
+  it("is what measuring every shift gives, to the bit, near-ties and nothing at all included", () => {
+    let seed = 3;
+    const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let run = 0; run < 200; run++) {
+      const n = 1 + Math.floor(random() * 500);
+      const d = new Float64Array(2 * n);
+      const scale = 10 ** (random() * 8 - 4);
+      for (let i = 0; i < 2 * n; i++) d[i] = (random() - 0.5) * scale;
+      // Shifts a rounding apart from one another, and shifts of nothing.
+      const k = Math.floor(random() * n);
+      d[2 * k] = d[0] * (1 + 1e-15);
+      d[2 * k + 1] = d[1];
+      d[2 * Math.floor(random() * n)] = 0;
+      expect(longest(d, n)).toBe(everyOne(d, n));
+    }
+  });
+
+  it("is 0 for no shift, and not a number for a shift that is not one", () => {
+    expect(longest(new Float64Array(6), 3)).toBe(0);
+    expect(longest(Float64Array.from([1, 2, NaN, 0, 3, 4]), 3)).toBeNaN();
   });
 });

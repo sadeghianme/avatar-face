@@ -18,7 +18,7 @@ import type { FaceMesh, Point } from "./geometry";
 import { projectTurn, type HeadPose3D } from "./head-camera";
 import { SKULL_CENTRE_CM, type CanonicalFit } from "./head-depth";
 import type { HeadField } from "./head-field";
-import { area, longer } from "./head-fold";
+import { area, longest } from "./head-fold";
 import { softLimit } from "./head-personality";
 
 /** The most a band of the head's field (outline to its end) is squeezed or
@@ -59,9 +59,10 @@ export class FieldTurn {
   /** The field's triangles, and their rest areas (twice, signed). */
   private readonly headTris: [number, number, number][];
   private readonly headRestArea: Float64Array;
-  /** Where the camera puts a vertex, this frame, and the longest shift. */
+  /** Where the camera puts a vertex, this frame, and each vertex's
+   *  shift. */
   private readonly seen: Point = { x: 0, y: 0 };
-  private readonly longest = new Float64Array(2);
+  private readonly shifts: Float64Array;
 
   /**
    * The field `head` laid on `mesh`, for a turn about `pivot` seen from
@@ -90,6 +91,7 @@ export class FieldTurn {
     this.spokeShare = new Float64Array(spokes.length);
     this.headDepth = new Float64Array(head.count);
     this.headFall = new Float64Array(head.count);
+    this.shifts = new Float64Array(2 * head.count);
     const onOutline = new Set(outline);
     // How far along the outline each spoke's landmark is from the nearer
     // of its held ends.
@@ -174,27 +176,32 @@ export class FieldTurn {
     const head = this.head;
     const inPlace = pts.length === head.first + head.count;
     const q = this.seen;
-    const longest = this.longest.fill(0);
+    const shifts = this.shifts;
     for (let j = 0; j < head.count; j++) {
       const v = head.vertices[j];
       const p = v.base;
       let x = p.x,
-        y = p.y;
+        y = p.y,
+        dx = 0,
+        dy = 0;
       const k = turn ? this.headFall[j] * this.spokeShare[v.spoke] * alpha : 0;
       if (turn && k > 0) {
         projectTurn(q, p.x, p.y, this.headDepth[j], turn, this.pivot, this.camera);
         if (back) applyAffine(back, q, q);
         x += (q.x - p.x) * k;
         y += (q.y - p.y) * k;
-        longer(longest, x - p.x, y - p.y);
+        dx = x - p.x;
+        dy = y - p.y;
       }
+      shifts[2 * j] = dx;
+      shifts[2 * j + 1] = dy;
       if (inPlace) {
         const o = pts[head.first + j];
         o.x = x;
         o.y = y;
       } else pts.push({ x, y });
     }
-    report.headMaxShift = longest[0];
+    report.headMaxShift = longest(shifts, head.count);
     const tris = this.headTris,
       restArea = this.headRestArea;
     let minRatio = Infinity;

@@ -28,7 +28,7 @@ import { CAMERA_IOD, projectTurn, type HeadPose3D } from "./head-camera";
 import { PIVOT_CM, SKULL_CM, fitCanonical, smoothDepth } from "./head-depth";
 import type { HeadField } from "./head-field";
 import { FieldTurn } from "./head-field-turn";
-import { EASE_PASSES, FoldCheck, longer } from "./head-fold";
+import { EASE_PASSES, FoldCheck, longest } from "./head-fold";
 import { outlineBasis, outlineFade, type OutlineBasis } from "./head-outline";
 import { INNER_LOWER, INNER_UPPER, LIP_CORNERS, LOWER_ROWS, UPPER_ROWS } from "./jaw-rig";
 import { EYE_CORNERS, IRISES, LEFT_BROW, LOWER_LIDS, RIGHT_BROW, UPPER_LIDS } from "./landmarks";
@@ -127,7 +127,6 @@ export class HeadTurn {
   private readonly want: Float64Array;
   private readonly shiftBy: Float64Array;
   private readonly seen: Point = { x: 0, y: 0 };
-  private readonly longest = new Float64Array(2);
 
   private constructor(
     mesh: FaceMesh,
@@ -316,9 +315,12 @@ export class HeadTurn {
       folded = fold.folds(before, pts, this.stats);
     }
     this.stats.flipsAfter = folded;
-    const longest = this.longest.fill(0);
-    for (let i = 0; i < n; i++) longer(longest, pts[i].x - before[2 * i], pts[i].y - before[2 * i + 1]);
-    this.stats.maxShift = longest[0];
+    // Each landmark's shift (into `want`, done with), and the longest.
+    for (let i = 0; i < n; i++) {
+      want[2 * i] = pts[i].x - before[2 * i];
+      want[2 * i + 1] = pts[i].y - before[2 * i + 1];
+    }
+    this.stats.maxShift = longest(want, n);
     this.hasBack = !!back;
     this.alpha = this.stats.scale;
     this.turned = true;

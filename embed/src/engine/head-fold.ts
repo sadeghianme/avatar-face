@@ -25,22 +25,29 @@ export function area(a: Point, b: Point, c: Point): number {
 }
 
 /**
- * Math.hypot(dx, dy) folded into `longest`: [the longest of a frame's
- * shifts so far, as Math.hypot measures each (the turn's stats:
- * TurnStats.maxShift, headMaxShift), the longest square so far]. Math.hypot
+ * The longest of `count` shifts (x, y pairs in `d`), as Math.hypot measures
+ * each: the turn's stats (TurnStats.maxShift, headMaxShift). Math.hypot
  * makes an array for every call in V8, and a frame has hundreds of shifts,
  * so only those that could be the longest are measured: one whose square is
  * within a hair (1e-6) of the longest square so far. Every other is shorter
- * by far more than either measure's rounding, so the longest is what
- * measuring them all gives, to the bit.
+ * by far more than either measure's rounding, and none is negative, so this
+ * is what measuring them all gives, to the bit. The shifts come in an array,
+ * one call a frame: a number handed to a call V8 does not inline is boxed.
  */
-export function longer(longest: Float64Array, dx: number, dy: number): void {
-  const sq = dx * dx + dy * dy;
-  // A square too small to be told apart (subnormal), or not a number, is
-  // measured as it is.
-  if (longest[1] > 1e-200 && sq < longest[1] * (1 - 1e-6)) return;
-  longest[0] = Math.max(longest[0], Math.hypot(dx, dy));
-  if (sq > longest[1]) longest[1] = sq;
+export function longest(d: Float64Array, count: number): number {
+  let max = 0,
+    best = 0;
+  for (let i = 0; i < count; i++) {
+    const dx = d[2 * i],
+      dy = d[2 * i + 1];
+    const sq = dx * dx + dy * dy;
+    // A square too small to be told apart (subnormal), or not a number, is
+    // measured as it is; no shift at all changes nothing.
+    if (sq === 0 || (best > 1e-200 && sq < best * (1 - 1e-6))) continue;
+    max = Math.max(max, Math.hypot(dx, dy));
+    if (sq > best) best = sq;
+  }
+  return max;
 }
 
 /** The rig's triangles, checked for folds after a turn, and their crushed
