@@ -505,7 +505,7 @@ mark reached the audio graph, MP3 minus WAV, medians over the marks):
 | Chromium 153, macOS | 0.0 at all 6 marks | −0.2 to +0.2 |
 | Chromium 153, Linux (CI) | 0.0 | +0.1 to +3.8 |
 | Firefox 155, macOS | 0.0 | −1.3 to +1.9 |
-| Firefox 155, Linux (CI) | 0.0 | −2.0 to −1.4 |
+| Firefox 155, Linux (CI) | 0.0 | −2.0 to +0.7 |
 | WebKit 26.6, macOS | 0.0 | −3.4 to +0.8 |
 | WebKit 26.6, Linux (CI) | 0.0 | not measurable: GStreamer's element source holds about a second of audio, so the route is no ruler |
 
