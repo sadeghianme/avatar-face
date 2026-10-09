@@ -9,7 +9,9 @@
  */
 import type { LowerFaceRig } from "./jaw-rig";
 import { padTriangle } from "./seam-pad";
-import { WarpRenderer, buildWarpMesh, type Affine } from "./warp-gl";
+import type { Affine } from "./affine";
+import { WarpRenderer } from "./warp-gl";
+import { buildWarpMesh } from "./warp-mesh";
 import type { FaceMesh, Point, Rect } from "./geometry";
 import { LANDMARK_COUNT } from "./landmarks";
 

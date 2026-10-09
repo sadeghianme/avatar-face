@@ -18,12 +18,14 @@
 import type { Rig } from "../types";
 import type { Point } from "./geometry";
 import { YAW_GAIN } from "./head-personality";
-import { HeadTurn, type HeadPose3D, type OutlineBasis, type TurnStats } from "./head-turn";
+import type { HeadPose3D } from "./head-camera";
+import type { OutlineBasis } from "./head-outline";
+import { HeadTurn, type TurnStats } from "./head-turn";
 import type { HeadOffset, Motion } from "./motion";
 import { NeckWarp, neckBlendFor, neckPin, type NeckPin } from "./neck-blend";
 import type { FacePicture } from "./picture";
 import { headMotionAffine } from "./render2d";
-import type { Affine } from "./warp-gl";
+import type { Affine } from "./affine";
 
 /** A share of the "3d" turn: of the skull's travel, and of the roll. */
 export interface RigidShare {

@@ -12,7 +12,11 @@
  *   engine/viewport.ts             where it lies: the zoom and the pan
  *   engine/geometry.ts             the mesh laid on the canvas, refined
  *   engine/landmarks.ts            the MediaPipe landmark tables
- *   engine/jaw-rig.ts              the lower face as one rig: jaw, chin, cheeks, neck band
+ *   engine/jaw-rig.ts              the lower face as one rig: jaw, chin, cheeks, and
+ *   engine/neck-band.ts              the neck band below the jaw line
+ *   engine/head-field.ts           the head beyond the face: the hair, the ears, laid
+ *   engine/head-extent.ts            as far as the picture says the head reaches
+ *   engine/head-layer.ts           a cut-out's head cut out as its own layer (opt-in)
  *   engine/kind-profile.ts         what a line of faces (human, toon, animal) changes
  *   engine/sampling.ts             what the picture looks like
  *   engine/face-light.ts           its brightest skin, the teeth's ceiling
@@ -33,12 +37,18 @@
  * The frame
  *   engine/head-placement.ts       where the head is: its rigid motion, its turn, the neck
  *   engine/deform.ts               every vertex, this frame, with
- *   engine/head-turn.ts              the head's turn in depth
- *   engine/canonical-face.ts         the depth it is given
+ *   engine/head-turn.ts              the head's turn in depth, from
+ *   engine/head-depth.ts               the depth it is given (canonical-face.ts, fitted)
+ *   engine/head-camera.ts              the turn about the pivot, through the camera
+ *   engine/head-outline.ts             the outline held, and the weights that hold it
+ *   engine/head-field-turn.ts          the head's field turned with the face
+ *   engine/head-fold.ts                the clamp that folds no triangle
  *   engine/neck-blend.ts             a layered avatar's neck, from head to body
  *   engine/render2d.ts             the frame composed: picture, body, head
+ *   engine/affine.ts                 the transforms it composes, as the context does
  *   engine/mesh-warp.ts            the warped mesh, on the GPU or in 2D, with
- *   engine/warp-gl.ts                the GPU path
+ *   engine/warp-gl.ts                the GPU path, and
+ *   engine/warp-mesh.ts                its static mesh
  *   engine/seam-pad.ts               the overlap that hides the seams between triangles
  *   engine/paint-features.ts       what is painted over the mesh:
  *   engine/paint-eyes.ts             gaze, lashes, and

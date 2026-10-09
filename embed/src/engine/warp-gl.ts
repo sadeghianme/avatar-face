@@ -19,7 +19,8 @@
  * What stays the same as the 2D path, on purpose:
  * - The triangles, in the same order, with the same exclusion: a source
  *   triangle with |det| < 1e-6 in texture space (engine/mesh-warp.ts
- *   drawWarpedTriangle) is skipped here too, once, when the mesh is built.
+ *   drawWarpedTriangle) is skipped here too, once, when the mesh is built
+ *   (warp-mesh.ts).
  * - The body sway and breath and the head's rigid transform: the same
  *   affine the 2D path puts on its context goes in as the vertex matrix,
  *   so the GL canvas is already in canvas pixels and is drawn under the
@@ -43,68 +44,8 @@
  * for 2D (`warp: "2d"`, for tests and comparisons).
  */
 
-export interface Point {
-  x: number;
-  y: number;
-}
-
-/** A 2D affine as CanvasRenderingContext2D.transform takes it:
- *  x' = a x + c y + e, y' = b x + d y + f. */
-export interface Affine {
-  a: number;
-  b: number;
-  c: number;
-  d: number;
-  e: number;
-  f: number;
-}
-
-export const IDENTITY: Readonly<Affine> = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
-
-/** `m` after `n`, as `ctx.transform(n)` composes onto a context holding `m`:
- *  points go through `n` first, then `m`. */
-export function multiply(m: Affine, n: Affine): Affine {
-  return {
-    a: m.a * n.a + m.c * n.b,
-    b: m.b * n.a + m.d * n.b,
-    c: m.a * n.c + m.c * n.d,
-    d: m.b * n.c + m.d * n.d,
-    e: m.a * n.e + m.c * n.f + m.e,
-    f: m.b * n.e + m.d * n.f + m.f,
-  };
-}
-
-/** `ctx.translate(x, y)` on a context holding `m`. */
-export function translate(m: Affine, x: number, y: number): Affine {
-  return multiply(m, { a: 1, b: 0, c: 0, d: 1, e: x, f: y });
-}
-
-/** `ctx.rotate(angle)` on a context holding `m`. */
-export function rotate(m: Affine, angle: number): Affine {
-  const cos = Math.cos(angle),
-    sin = Math.sin(angle);
-  return multiply(m, { a: cos, b: sin, c: -sin, d: cos, e: 0, f: 0 });
-}
-
-/** Apply an affine to a point. */
-export function apply(m: Affine, p: Point): Point {
-  return { x: m.a * p.x + m.c * p.y + m.e, y: m.b * p.x + m.d * p.y + m.f };
-}
-
-/** The inverse of `m` (the identity for a singular one, which no head's
- *  motion is). */
-export function invert(m: Affine): Affine {
-  const det = m.a * m.d - m.b * m.c;
-  if (!det) return { ...IDENTITY };
-  return {
-    a: m.d / det,
-    b: -m.b / det,
-    c: -m.c / det,
-    d: m.a / det,
-    e: (m.c * m.f - m.d * m.e) / det,
-    f: (m.b * m.e - m.a * m.f) / det,
-  };
-}
+import type { Affine, Point } from "./affine";
+import type { WarpMesh } from "./warp-mesh";
 
 /**
  * The vertex matrix: canvas pixels through `affine`, then to clip space
@@ -116,67 +57,6 @@ export function clipMatrix(affine: Affine, width: number, height: number): Float
   const sx = 2 / width,
     sy = -2 / height;
   return new Float32Array([a * sx, b * sy, 0, c * sx, d * sy, 0, e * sx - 1, f * sy + 1, 1]);
-}
-
-/** The 2D path skips a source triangle this degenerate (drawWarpedTriangle). */
-export const MIN_SOURCE_DET = 1e-6;
-
-export interface WarpMesh {
-  /** Texture coordinates, normalised 0..1, two per vertex. */
-  uv: Float32Array;
-  /** Triangle corners, three per triangle, in the 2D path's draw order. */
-  indices: Uint16Array | Uint32Array;
-  /** Triangles drawn. */
-  count: number;
-  /** Triangles left out for a degenerate source, as the 2D path leaves them. */
-  skipped: number;
-  /** Triangles drawn before the head's field's (all of them without one). */
-  headFrom: number;
-}
-
-/**
- * The static half of the mesh: every vertex's texture coordinate and the
- * triangle list, in the order the 2D path draws it, without the triangles
- * it would skip. Built once per geometry; only positions change per frame.
- * `headFrom`: where the head's field's triangles start in `triangles`
- * (head-field.ts), drawn only when some of it moved.
- */
-export function buildWarpMesh(
-  texPoints: readonly Point[],
-  triangles: readonly (readonly [number, number, number])[],
-  textureWidth: number,
-  textureHeight: number,
-  headFrom = triangles.length
-): WarpMesh {
-  const n = texPoints.length;
-  const uv = new Float32Array(n * 2);
-  for (let i = 0; i < n; i++) {
-    uv[i * 2] = texPoints[i].x / textureWidth;
-    uv[i * 2 + 1] = texPoints[i].y / textureHeight;
-  }
-  const kept: number[] = [];
-  let skipped = 0;
-  let before = -1;
-  for (let t = 0; t < triangles.length; t++) {
-    if (t === headFrom) before = kept.length / 3;
-    const [i0, i1, i2] = triangles[t];
-    const s0 = texPoints[i0],
-      s1 = texPoints[i1],
-      s2 = texPoints[i2];
-    if (!s0 || !s1 || !s2) {
-      skipped++;
-      continue;
-    }
-    const det = s0.x * (s1.y - s2.y) + s1.x * (s2.y - s0.y) + s2.x * (s0.y - s1.y);
-    if (Math.abs(det) < MIN_SOURCE_DET) {
-      skipped++;
-      continue;
-    }
-    kept.push(i0, i1, i2);
-  }
-  const indices = n <= 0xffff ? Uint16Array.from(kept) : Uint32Array.from(kept);
-  const count = kept.length / 3;
-  return { uv, indices, count, skipped, headFrom: before < 0 ? count : before };
 }
 
 const VERTEX_SHADER = `

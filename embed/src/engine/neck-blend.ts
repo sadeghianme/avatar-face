@@ -31,7 +31,7 @@
  * is drawn in two positions; nothing is left to tear.
  */
 import type { FaceMesh, Point, Rect } from "./geometry";
-import { apply, invert, type Affine } from "./warp-gl";
+import { apply, invert, type Affine } from "./affine";
 
 /** Rows the eased part of the picture is drawn in (half of them across the
  *  neck), and columns either side of the band, where the line rises toward

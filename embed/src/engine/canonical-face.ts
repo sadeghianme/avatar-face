@@ -3,7 +3,7 @@
  * backend's head3d/canonical_face_mesh.json holds, from face_landmarker.task):
  * x, y, z per landmark in hundredths of a centimetre, y up, z toward the
  * camera. The rig keeps only each landmark's x and y in the photo; its
- * depth comes from this model, fitted to them (head-turn.ts). The ten iris
+ * depth comes from this model, fitted to them (head-depth.ts). The ten iris
  * landmarks (468-477) are not in the model.
  */
 // prettier-ignore

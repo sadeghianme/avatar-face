@@ -22,7 +22,7 @@
  */
 import type { Cue } from "../types";
 import { VOWEL_VISEMES } from "./cues";
-import type { HeadPose3D } from "./head-turn";
+import type { HeadPose3D } from "./head-camera";
 
 const DEG = Math.PI / 180;
 /** The most of the pose, degrees, before the tuning's scale. */

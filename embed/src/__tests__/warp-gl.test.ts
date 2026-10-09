@@ -4,18 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AvatarEngine } from "../engine";
 import { MeshWarp } from "../engine/mesh-warp";
 import { engineSeam } from "../engine/seam";
-import {
-  IDENTITY,
-  MIN_SOURCE_DET,
-  apply,
-  buildWarpMesh,
-  clipMatrix,
-  multiply,
-  rotate,
-  translate,
-  type Affine,
-  type Point,
-} from "../engine/warp-gl";
+import { IDENTITY, translate, type Point } from "../engine/affine";
+import { clipMatrix } from "../engine/warp-gl";
+import { MIN_SOURCE_DET, buildWarpMesh } from "../engine/warp-mesh";
 import type { Rig } from "../types";
 
 /**
@@ -27,53 +18,7 @@ import type { Rig } from "../types";
 
 const rig = JSON.parse(readFileSync(new URL("./fixtures/human-rig.json", import.meta.url), "utf8")) as Rig;
 
-const close = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) < 1e-9;
-
-describe("the affine as a 2D context composes it", () => {
-  const samples: Point[] = [
-    { x: 0, y: 0 },
-    { x: 10, y: -3 },
-    { x: -7.5, y: 42 },
-    { x: 300, y: 1440 },
-  ];
-
-  it("multiply applies the second transform first, as ctx.transform does", () => {
-    const m: Affine = { a: 0.9, b: 0.1, c: -0.2, d: 1.1, e: 5, f: -8 };
-    const n: Affine = { a: 1.5, b: -0.3, c: 0.4, d: 0.8, e: -20, f: 7 };
-    const both = multiply(m, n);
-    for (const p of samples) expect(close(apply(both, p), apply(m, apply(n, p)))).toBe(true);
-  });
-
-  it("translate and rotate are the context's own steps", () => {
-    const m: Affine = { a: 0.9, b: 0.1, c: -0.2, d: 1.1, e: 5, f: -8 };
-    const t = translate(m, 12, -34);
-    const r = rotate(m, 0.3);
-    for (const p of samples) {
-      expect(close(apply(t, p), apply(m, { x: p.x + 12, y: p.y - 34 }))).toBe(true);
-      const cos = Math.cos(0.3),
-        sin = Math.sin(0.3);
-      expect(close(apply(r, p), apply(m, { x: p.x * cos - p.y * sin, y: p.x * sin + p.y * cos }))).toBe(true);
-    }
-  });
-
-  it("the body transform's three steps about a pivot are a rotation that keeps the pivot", () => {
-    // translate(pivot) rotate(angle) translate(-pivot, -pivot.y - rise): what
-    // applyBodyTransform puts on the context.
-    const pivot = { x: 720, y: 2520 },
-      angle = 0.02,
-      rise = 3;
-    let m = translate(IDENTITY, pivot.x, pivot.y);
-    m = rotate(m, angle);
-    m = translate(m, -pivot.x, -pivot.y - rise);
-    // The pivot, lifted by the rise, maps to itself.
-    expect(close(apply(m, { x: pivot.x, y: pivot.y + rise }), pivot)).toBe(true);
-    // A point at head height moves sideways by sin(angle) * its reach from
-    // the pivot (the rise lifts it first, so the reach grows by it).
-    const head = { x: 720, y: 500 };
-    const moved = apply(m, head);
-    expect(moved.x - head.x).toBeCloseTo(Math.sin(angle) * (pivot.y + rise - head.y), 6);
-  });
-
+describe("the vertex matrix", () => {
   it("clipMatrix maps canvas pixels through the affine to clip space, y up", () => {
     const w = 1440,
       h = 900;
@@ -96,48 +41,6 @@ describe("the affine as a 2D context composes it", () => {
 });
 
 describe("the mesh buffers", () => {
-  it("keep every triangle the 2D path draws, in its order, and skip the ones it skips", () => {
-    const tex: Point[] = [
-      { x: 0, y: 0 },
-      { x: 100, y: 0 },
-      { x: 0, y: 100 },
-      { x: 100, y: 100 },
-      // Three on a line: a degenerate source triangle.
-      { x: 200, y: 200 },
-      { x: 210, y: 210 },
-      { x: 220, y: 220 },
-    ];
-    const triangles: [number, number, number][] = [
-      [0, 1, 2],
-      [4, 5, 6],
-      [1, 3, 2],
-      [2, 1, 0],
-    ];
-    const mesh = buildWarpMesh(tex, triangles, 200, 400);
-    expect(mesh.count).toBe(3);
-    expect(mesh.skipped).toBe(1);
-    expect(Array.from(mesh.indices)).toEqual([0, 1, 2, 1, 3, 2, 2, 1, 0]);
-    // Texture coordinates over the texture's own size.
-    expect(Array.from(mesh.uv.slice(0, 8))).toEqual([0, 0, 0.5, 0, 0, 0.25, 0.5, 0.25]);
-    expect(mesh.indices).toBeInstanceOf(Uint16Array);
-  });
-
-  it("use the 2D path's own degeneracy threshold", () => {
-    const tiny = MIN_SOURCE_DET / 4;
-    const tex: Point[] = [
-      { x: 0, y: 0 },
-      { x: 1, y: 0 },
-      { x: 2, y: tiny },
-    ];
-    expect(buildWarpMesh(tex, [[0, 1, 2]], 10, 10).count).toBe(0);
-    const okay: Point[] = [
-      { x: 0, y: 0 },
-      { x: 1, y: 0 },
-      { x: 2, y: MIN_SOURCE_DET * 4 },
-    ];
-    expect(buildWarpMesh(okay, [[0, 1, 2]], 10, 10).count).toBe(1);
-  });
-
   it("match the engine's triangle list for a real rig, mouth subdivision and neck band included", () => {
     stubBrowser();
     const engine = makeEngine();
