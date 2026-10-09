@@ -198,16 +198,22 @@ export DEPLOYING="$SECOND"
 api="ghcr.io/sadeghianme/liveface-api"
 web="ghcr.io/sadeghianme/liveface-web"
 
+# Private images, and docker on the server has no login: the registry says
+# "denied".
 rm -f "$DOCKER_CONFIG/config.json"
-live_ "a server with no login to ghcr.io is refused, with what to run" 7 \
+export DOCKER_PULL=denied
+live_ "private images and no login are refused, with what to run" 7 \
   "docker login ghcr.io -u sadeghianme --password-stdin" --
-if grep -qvE '^(pull|image inspect)' "$DOCKER_LOG"; then
-  fail "the server was changed before the login was checked: $(cat "$DOCKER_LOG")"
+grep -qF "docker here has no login for ghcr.io" "$WORK/out" \
+  || fail "the refusal does not say there is no login: $(cat "$WORK/out")"
+if grep -qvE '^pull ' "$DOCKER_LOG"; then
+  fail "the server was changed before the pull was refused: $(cat "$DOCKER_LOG")"
 fi
 
 echo '{"auths": {"ghcr.io": {}}}' >"$DOCKER_CONFIG/config.json"
-export DOCKER_PULL=denied
-live_ "a login the registry refuses is refused the same way" 7 "read:packages" --
+live_ "a login the registry refuses is refused the same way" 7 \
+  "docker here has a login for ghcr.io, and the registry refused it" --
+rm "$DOCKER_CONFIG/config.json"
 export DOCKER_PULL=missing
 live_ "a commit CI pushed no images for is refused, pointing at --build" 8 \
   "deploy/deploy.sh --build --ref $SECOND" --
@@ -215,6 +221,7 @@ if grep -qvE '^pull ' "$DOCKER_LOG"; then
   fail "the server was changed before the images were found: $(cat "$DOCKER_LOG")"
 fi
 
+# A pull that works needs nothing more (public images need no login).
 export DOCKER_PULL=ok
 echo "name: an older compose file" >"$REMOTE_DIR/deploy/docker-compose.prod.yml"
 live_ "a deploy pulls both images, restarts on them, verifies and prunes" 0 "images    pulled" --

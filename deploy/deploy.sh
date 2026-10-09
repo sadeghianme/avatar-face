@@ -24,8 +24,9 @@
 #       still running, failed, cancelled, or never ran, and no successful
 #       merge queue run of that commit either.
 # Then on the server, before anything there changes:
-#   [7] the server cannot pull from ghcr.io: not logged in, or its token
-#       cannot read the packages. What to run, once, is printed;
+#   [7] the server cannot pull from ghcr.io: the images are private and it
+#       is not logged in, or its token cannot read them. What to run, once,
+#       is printed;
 #   [8] no image of this commit in the registry: CI pushes them only for a
 #       commit on main or in the merge queue whose images job passed (and
 #       only since pull mode). --build builds it on the server instead.
@@ -373,12 +374,6 @@ else
 set -uo pipefail
 registry="$1"
 shift
-# Whether docker has a login for the registry at all: the key alone, never
-# the credential beside it.
-if ! grep -qs "\"$registry\"" "${DOCKER_CONFIG:-$HOME/.docker}/config.json"; then
-  echo "  docker on this server has no login for $registry" >&2
-  exit 7
-fi
 for ref in "$@"; do
   started=$(date +%s)
   if out="$(docker pull --quiet "$ref" 2>&1)"; then
@@ -388,8 +383,16 @@ for ref in "$@"; do
   printf '%s\n' "$out" | sed 's/^/  docker: /' >&2
   case "$out" in
     *"manifest unknown"* | *"not found"*) exit 8 ;;
-    *) exit 7 ;;
   esac
+  # Refused (a private image answers "denied" to a reader it does not
+  # know). Whether docker has a login for the registry at all says which
+  # fix applies: the key alone is read, never the credential beside it.
+  if grep -qs "\"$registry\"" "${DOCKER_CONFIG:-$HOME/.docker}/config.json"; then
+    echo "  docker here has a login for $registry, and the registry refused it" >&2
+  else
+    echo "  docker here has no login for $registry" >&2
+  fi
+  exit 7
 done
 REMOTE_SCRIPT
   case "$pull_status" in
@@ -399,6 +402,8 @@ REMOTE_SCRIPT
         echo "REFUSED: $REMOTE cannot pull from $REGISTRY (above: what docker said)."
         echo "  The images are private, so docker on the server needs a login to $REGISTRY,"
         echo "  made once, by the owner. This script never asks for or handles the token."
+        echo "  A login it has but the registry refuses is a token without read:packages,"
+        echo "  or an expired one: make a new one and log in again, the same way."
         echo "  1. Create a personal access token (classic) with the read:packages scope"
         echo "     alone (GitHub's registry accepts no fine-grained token):"
         echo "       https://github.com/settings/tokens/new?scopes=read:packages&description=liveface-server-pull"

@@ -663,12 +663,15 @@ jobs:
           same liveface-api:ci "$API_IMAGE:$GITHUB_SHA"
           same liveface-web:ci "$WEB_IMAGE:$GITHUB_SHA"
           # Private, as they should stay: the registry gives no anonymous
-          # reader a token (403) for a package that is not public. A warning,
-          # not a failure: making them public is the owner's call to make.
+          # reader a token (403) for a package that is not public. GitHub
+          # creates a package a workflow publishes with its repository's
+          # visibility, public here, so the owner makes each private once
+          # (docs/process.md, "Images"). A warning, not a failure: which way
+          # it is set is the owner's call.
           for image in "$API_IMAGE" "$WEB_IMAGE"; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://ghcr.io/token?scope=repository:${image#ghcr.io/}:pull")
             if [ "$code" = 200 ]; then
-              echo "::warning::$image is PUBLIC: anyone can pull it (docs/process.md, \"Images\")"
+              echo "::warning::$image is PUBLIC: anyone can pull it. To make it private: https://github.com/users/sadeghianme/packages/container/${image##*/}/settings, Danger Zone, Change visibility (docs/process.md, \"Images\")"
             else
               echo "$image: private (an anonymous reader gets HTTP $code)"
             fi
