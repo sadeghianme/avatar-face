@@ -149,6 +149,13 @@ widget `embed/src/api-types.ts` (`npm run gen:api` in `embed/`). A change to
 the API is therefore three files in one pull request: export, then generate
 in both packages; CI fails on any of them left behind.
 
+**Private names stay in their module.** No other module, package `__init__`
+or test imports, reads, patches or re-exports a backend module's
+underscore name; what the modules of a package share is public in the module
+that owns it, and a test drives a public function or patches a public seam
+(`backend/tests/test_private_names.py`, in the suite, beside the layering
+checks of `test_layering.py`).
+
 **The backend is four jobs**, and `backend` stands for them:
 
 - `backend-checks`: everything but the tests. That is `ruff check`, `ruff format
