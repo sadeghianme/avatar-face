@@ -1664,6 +1664,87 @@ drawn mouth, make your own in the Mouth panel).
   with the jaw still open, fills the opening with enamel and a pale band
   for a frame or two; a render with orange or tan lips past 18 degrees
   keeps the tongue that lies along the lip.
+- The mouth turns with the head (2026-10-10; `embed/src/engine/mouth-pose.ts`,
+  `embed/src/mouth/dental-arch.ts`, `head-turn.ts`, `head-placement.ts`,
+  `paint-mouth.ts`, `mouth/dental-oral-surface.ts`, `mouth-extension.ts`).
+  *The report*: while the head turned in depth, the teeth stayed where the
+  mouth is at rest. The landmarks are turned inside the mesh, the lips as
+  one piece, but every mouth was handed the rest pose as its frame
+  (`neutral: mesh.basePoints`), so its cavity and teeth were placed from
+  the mouth at rest: at 7 degrees of yaw the upper incisors' midline sat
+  16% of the mouth's width off the lips (sakineh; 11 to 14% on
+  mehdi_avatar and bita), and a 5 degree nod hid the upper row under the
+  upper lip. The owner approved the prototype (`proto/mouth-turns-with-head`);
+  this is it rebuilt. *The frame*: `MouthPose` reads the turn's last apply
+  (`HeadTurn.applied()`: each landmark's shift, the pose, the share the fold
+  clamp kept, the rigid motion taken out) and hands the mouth the rest pose
+  moved by each landmark's own shift as `neutral`, so the corners, width and
+  angle every mouth reads (the continuous mouth and its drawn-teeth
+  fallback, the classic mouth, the character mouth) are the turned lips';
+  null when the face did not turn in depth, so frontal frames and the "2d"
+  motion are untouched. The speech still deforms the lips in the rest frame,
+  before the turn. *The contract* grows without breaking anyone:
+  `MouthSurfaceFrame.turn` (optional, typed `MouthTurn`: yaw, pitch, px per
+  mm, `behindLips(out, x, y, depth)`, where a point that deep behind the
+  lips is seen: (x, y) itself at depth 0 and at no turn, continuous in
+  both); an extension that ignores it draws in `neutral`'s frame, as on the
+  lips. *The teeth in depth* (`dental-arch.ts`): the upper incisors 10 mm
+  behind the lips' line, the lower 12, each arch curving back toward the
+  molars (0.031 mm per mm² off the midline: the canines 9 mm further back,
+  the first molars 19), `ARCH_MM`. The photo is the arch seen from in front,
+  so each column is given its depth and seen through the turn: the arch
+  lags the lips a little (about 3% of the mouth's width at 7 degrees, on
+  purpose), the side coming toward the camera widens, the far side
+  foreshortens. Drawn so that the turned path is the frontal one at no turn,
+  pixel for pixel, and moves from it continuously: the turn is split into a
+  frame (the frontal rectangle onto the box the turned arch spans, through
+  the context's transform) and a bend applied to the arch's own picture in
+  24 affine strips, each in a band of whole pixels (the bands tile it: every
+  pixel drawn once, no seam), and the bent picture's box is drawn exactly as
+  the frontal arch is (the same box, rectangle, clip, alpha, filter). The
+  prototype drew overlapping strips on a scratch canvas and that canvas onto
+  the face, a second path that differed from the frontal one by up to 31
+  levels on about 160 px at 0.001 degrees; a window over the picture growing
+  with the turn would not be continuous either (Skia draws a whole-pixel
+  source rectangle's edges unlike a fractional one's). *Measured* (the
+  turn-mouth harness, real engine in headless Chrome, 1920 px, face
+  framing; frames whose teeth show; the worst frame per sequence, % of the
+  mouth's width): the incisors' midline against the turned lips' frame,
+  the line swept -9 to +9 degrees nodding to 5, held visemes at +-7 and a
+  nod, the line at +-7 and nodding, the engine's own motion: sakineh 17.8%
+  -> 3.5%, mehdi_avatar 12.8 -> 3.2, bita 15.8 -> 3.5 (the prototype 3.5,
+  3.3, 3.5); against the inner opening's centre along the mouth 17.6 -> 3.9,
+  12.3 -> 4.0, 15.7 -> 4.1. Frontal and "2d": every frame of the production
+  line held frontal (GPU and 2D warp), held aa, E and oh, and the line with
+  the "2d" head motion, on all three, hashes as main's (1188 frames, 0
+  differ). Small turns in Chrome, the teeth drawn turned against the frontal
+  drawing at the same lips: 0.001 degrees at most 2 levels, no pixel over 2,
+  mean 0.0002 to 0.0005; 0.01 degrees mean 0.002 to 0.003; 0.1 degrees
+  0.014 to 0.023 (the whole face moves more: at 0.001 degrees against the
+  frame at 0, up to 29 levels on up to 32 px). On Skia (CI,
+  `dental-arch.test.ts`) the drawing at no turn is byte-identical, within 2
+  levels to a thousandth of a degree, its mean difference grows with the
+  turn from 0.0001 levels at 1e-5 degrees, and what the bend adds over the
+  arch moved by its frame starts at nothing (Skia's raster moves an image's
+  antialiased edge in steps: a frontal arch moved 0.003 px moves an edge
+  pixel by 23 levels, whatever draws it). The seam detector (rest, idle,
+  sway, the line, a nod, a turn, the pose box's corners; all three, both
+  paths): the same counts as main and the prototype, 0 under-layer seams
+  and tears, 0 on the head. Render time (`render()` synced by a 1 px read,
+  960 px, the line swept and nodding, frames whose teeth show, three
+  alternating rounds): sakineh median 12.6 ms on both (p90 24.9 -> 26.0),
+  mehdi_avatar 12.9 -> 13.0 (25.1 -> 25.4). *Goldens*: the
+  human's Skia frames that turn or open (9 of 13: held aa, E, ou, the line
+  at 20 to 80%, both turned frames; the classic mouth follows the turn, its
+  mouth cells up to 9 levels, the whole frame 1) and its Chromium grids
+  (mouth cells up to 3), darwin-arm64 and linux-x64 (Playwright
+  v1.63.0-noble, linux/amd64); rest and blink unchanged; toon and animal
+  byte-identical on both. *Still weak*: the cavity, the tongue and the
+  contact shadow stay in the lips' frame, without depth; the classic mouth's
+  drawn teeth follow the lips' frame without parallax; a turned arch is
+  resampled twice (its picture bent, then drawn), a softening of under a
+  picture pixel (the photo has 512 per mouth width) that a frontal one does
+  not have.
 
 ## Data changes
 
