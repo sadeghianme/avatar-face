@@ -10,8 +10,16 @@ from __future__ import annotations
 
 import base64
 import io
+import logging
 import re
 import wave
+
+from app.core.errors import AppError, error_body
+
+# What a stream says when something unexpected broke it: nothing of the
+# exception itself, which is the log's.
+STREAM_FAILED = "speech_stream_failed"
+STREAM_FAILED_DETAIL = "Speech preparation was interrupted. Please try again."
 
 
 def speech_phrases(text: str) -> list[str]:
@@ -93,3 +101,24 @@ def pcm_packet(
         "cues": cues,
         "baseline_cues": baseline,
     }
+
+
+def error_frame(
+    exc: Exception, logger: logging.Logger, *, detail: str = STREAM_FAILED_DETAIL
+) -> dict:
+    """The terminal `error` frame for a failure inside a speech stream.
+
+    The status line has gone out with the headers by then, so the frame
+    carries what it would have said. A refusal the app raised (an AppError:
+    a cloned line never rendered, the month's characters spent, a text with
+    nothing to say) is said exactly as the API says it anywhere else —
+    `detail`, `code`, its extra context — with its HTTP `status`, so a client
+    can tell the member what to do next. Anything else is a fault: the client
+    hears only that speech was interrupted (`detail` overrides the sentence),
+    and the exception goes to the log with its traceback.
+    """
+    if isinstance(exc, AppError):
+        logger.warning("speech stream refused (%s): %s", exc.code, exc.detail)
+        return {**error_body(exc), "type": "error", "status": exc.status_code}
+    logger.error("speech stream failed", exc_info=exc)
+    return {"type": "error", "code": STREAM_FAILED, "detail": detail, "status": 500}

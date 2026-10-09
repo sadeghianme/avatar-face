@@ -427,3 +427,21 @@ async def test_a_simulator_token_works_from_the_sandboxed_simulator_frame(client
     )
     assert elsewhere.status_code == 401
     assert elsewhere.json()["code"] == "simulator_token_invalid"
+
+
+async def test_a_cloned_line_never_rendered_is_a_refusal_with_its_code(client, monkeypatch):
+    """The widget's own path, outside any stream: the API's envelope, so an
+    integrator can branch on the code."""
+    from app.services.tts import cloned
+
+    unavailable = {"available": False, "device": None, "reason": "no accelerator"}
+    monkeypatch.setattr(cloned, "capability", lambda: unavailable)
+    _, org_id, _, created = await _setup(client)
+    response = await client.post(
+        "/embed/v1/synthesize",
+        json={"text": "Never rendered", "provider": "cloned", "voice": f"{org_id}:sarah"},
+        headers={"X-Api-Key": created["plaintext"]},
+    )
+    assert response.status_code == 404
+    assert response.json()["code"] == "cloned_line_missing"
+    assert org_id not in response.text

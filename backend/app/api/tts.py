@@ -22,7 +22,7 @@ from app.schemas.tts import (
 )
 from app.services.tts.languages import available_languages
 from app.services.tts.registry import available_providers, get_provider, synthesize_cached
-from app.services.tts.stream import pcm_packet, phrase_batch_size, speech_phrases
+from app.services.tts.stream import error_frame, pcm_packet, phrase_batch_size, speech_phrases
 from app.services.usage import check_usage_limit, record_synthesis
 
 router = APIRouter(prefix="/tts", tags=["tts"])
@@ -85,7 +85,10 @@ async def stream(body: SynthesizeRequest, ctx: OrgMember, db: DB):
     """Speech in phrases, so the first word plays before the rest exists.
 
     NDJSON frames: `start`, ordered `chunk`s of mono 24 kHz PCM16 with the
-    phrase's own cues, then `done` (or `error`). Only Kokoro streams; any
+    phrase's own cues, then `done` — or `error`, with the `code`, `detail`
+    and `status` the same refusal would answer outside a stream (a cloned
+    line never rendered: 404 `cloned_line_missing`), or the generic
+    `speech_stream_failed` for a fault. Only Kokoro streams; any
     other provider gets one `recording` frame from the existing path, and the
     client plays it exactly as before.
 
@@ -193,17 +196,11 @@ async def stream(body: SynthesizeRequest, ctx: OrgMember, db: DB):
             )
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
             # Broad on purpose: the headers are sent, so any failure is said
-            # in the stream itself, where the client shows it.
-            logger.exception("speech stream failed")
-            yield line(
-                {
-                    "type": "error",
-                    "code": "speech_stream_failed",
-                    "detail": "Speech preparation was interrupted. Please try again.",
-                }
-            )
+            # in the stream itself, where the client shows it — a refusal
+            # with its code, anything else as an interruption (error_frame).
+            yield line(error_frame(exc, logger))
         finally:
             release()
 

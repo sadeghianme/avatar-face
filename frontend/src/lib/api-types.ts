@@ -1966,7 +1966,10 @@ export interface paths {
      * @description Speech in phrases, so the first word plays before the rest exists.
      *
      *     NDJSON frames: `start`, ordered `chunk`s of mono 24 kHz PCM16 with the
-     *     phrase's own cues, then `done` (or `error`). Only Kokoro streams; any
+     *     phrase's own cues, then `done` — or `error`, with the `code`, `detail`
+     *     and `status` the same refusal would answer outside a stream (a cloned
+     *     line never rendered: 404 `cloned_line_missing`), or the generic
+     *     `speech_stream_failed` for a fault. Only Kokoro streams; any
      *     other provider gets one `recording` frame from the existing path, and the
      *     client plays it exactly as before.
      *

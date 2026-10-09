@@ -144,6 +144,8 @@ async def test_partial_failure_is_terminal_and_slot_is_released(client, monkeypa
     events = [json.loads(line) for line in response.text.splitlines()]
     assert [e["type"] for e in events] == ["start", "chunk", "error"]
     assert "private model" not in response.text
+    assert events[-1]["code"] == "speech_stream_failed"
+    assert events[-1]["status"] == 500
     monkeypatch.setattr(lab_timing, "synthesize_native", original)
     assert (await client.post(path, headers=headers, json={"text": "Hello"})).status_code == 200
 
@@ -159,6 +161,22 @@ async def test_fallback_is_explicit(client, monkeypatch):
     assert events[0]["mode"] == "buffered_provider"
     assert events[1]["timing_source"] == "existing_provider"
     assert [e["type"] for e in events] == ["start", "recording", "done"]
+
+
+async def test_a_refused_provider_is_said_with_its_code(client, monkeypatch):
+    """A voice this server cannot use is a refusal the lab can name, not an
+    interruption."""
+    path, headers, _, _ = await setup_stream(client, monkeypatch)
+    response = await client.post(
+        path,
+        headers=headers,
+        json={"text": "Hello", "provider": "azure", "voice": "en-US-JennyNeural"},
+    )
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert [e["type"] for e in events] == ["start", "error"]
+    assert events[-1]["code"] == "provider_not_configured"
+    assert events[-1]["status"] == 422
+    assert events[-1]["detail"] == "Provider 'azure' is not configured"
 
 
 @pytest.fixture

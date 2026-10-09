@@ -20,7 +20,7 @@ from app.db import get_session_factory
 from app.schemas.tts import CueOut
 from app.services.tts import lab_timing
 from app.services.tts.registry import synthesize_cached
-from app.services.tts.stream import pcm_packet, phrase_batch_size, speech_phrases
+from app.services.tts.stream import error_frame, pcm_packet, phrase_batch_size, speech_phrases
 from app.services.usage import check_usage_limit, record_synthesis
 
 router = APIRouter(prefix="/orgs/{org_id}/lab/lip-sync", tags=["lab"])
@@ -190,16 +190,17 @@ async def stream(body: LabSpeechRequest, ctx: OrgMember, db: DB):
             )
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
             # Broad on purpose: the headers are sent, so any failure is said
-            # in the stream itself, where the client shows it.
-            logger.exception("Lab speech stream failed")
+            # in the stream itself, where the client shows it — a refusal
+            # with its code, anything else as an interruption (error_frame).
             yield _line(
-                {
-                    "type": "error",
-                    "code": "speech_stream_failed",
-                    "detail": "Speech preparation was interrupted. Please try again. No automatic retry was made.",
-                }
+                error_frame(
+                    exc,
+                    logger,
+                    detail="Speech preparation was interrupted. Please try again. "
+                    "No automatic retry was made.",
+                )
             )
         finally:
             release()
