@@ -10,8 +10,10 @@ import { cx } from "@/lib/cx";
 
 const PARTS = ["eyes", "lips", "head"] as const;
 
-/** What was found: the eyes, lips and head (drag a point only if it is
- *  off), or a hint to place them; then Reset and the keyboard's keys. */
+/** What was found, said as it is: the eyes, lips and head (drag a point
+ *  only if it is off); found, but with points to look at (the refusal
+ *  below says which); or not found at all, with a hint to place them. Then
+ *  Reset and the keyboard's keys. */
 export function FaceFound({ editor, busy }: { editor: PublishEditorState; busy: boolean }) {
   const { t } = useT();
   return (
@@ -40,6 +42,10 @@ export function FaceFound({ editor, busy }: { editor: PublishEditorState; busy: 
           </ul>
           <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">{t("wzPointsHint")}</p>
         </div>
+      ) : editor.detected ? (
+        <Banner appearance="soft" tone="info" icon="target">
+          {t("wzFoundCheck")}
+        </Banner>
       ) : (
         <Banner appearance="soft" tone="warning" icon="target">
           {t("wzNotFound")}
@@ -71,10 +77,12 @@ export function FaceFound({ editor, busy }: { editor: PublishEditorState; busy: 
 
 /**
  * What Publish waits for, each beside its answer: points that would
- * stretch the face (listed), points placed by hand to confirm, the
- * statement about this face (worded for the plan: on an "Animal" plan,
- * the detector's person on a photo may be a dog, wizard.statementKey);
- * then the name it will have.
+ * stretch the face (listed, with "Fix it for me", which puts the points
+ * back where they were found, a layout that always publishes), points
+ * placed by hand to confirm, the statement about this face (worded for the
+ * plan: on an "Animal" plan, the detector's person on a photo may be a
+ * dog, wizard.statementKey); then the name it will have. A crease the fit
+ * smoothed between two points is said in a line, and holds nothing.
  */
 export function PublishChecks({ editor }: { editor: PublishEditorState }) {
   const { t } = useT();
@@ -92,7 +100,19 @@ export function PublishChecks({ editor }: { editor: PublishEditorState }) {
               <li key={reason.code}>{reasonText(reason)}</li>
             ))}
           </ul>
+          {editor.canFix && (
+            <Button variant="secondary" size="sm" icon="sparkles" className="mt-3" onClick={editor.resetMarks}>
+              {t("wzFixPoints")}
+            </Button>
+          )}
         </Banner>
+      )}
+
+      {editor.reasons.length === 0 && editor.notes.length > 0 && (
+        <p role="status" className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-300">
+          <Icon name="check" className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          {t("wzFitSmoothed")}
+        </p>
       )}
 
       {editor.needsConfirm && (

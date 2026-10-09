@@ -157,6 +157,7 @@ export const wizard = {
   wzFound_head: "Head",
   wzNotFound:
     "We couldn't find the face on our own. Drag the points onto the eyes, the mouth and the edge of the face.",
+  wzFoundCheck: "We found the face. Check the points below before you publish.",
   wzResetPoints: "Reset points",
   wzPointsHint: "The points are placed for you. Drag one only if it's off.",
   wzKeysTitle: "Using the keyboard",
@@ -169,13 +170,16 @@ export const wizard = {
   wzPublishAs: "It will be called",
   wzDescribedAs: "Described as “{{description}}”",
   wzHoldPoints: "Confirm the points first.",
-  wzHoldFit: "Move the points so the face isn't stretched.",
+  wzHoldFit: "Move the points listed above back onto the face, or press “Fix it for me”.",
+  wzHoldFitMove: "Move the points listed above back onto the face.",
   wzHoldStatement2: "Confirm the statement to publish.",
   wzPreviewLoading: "Loading the preview…",
   wzPreviewFailed: "The preview couldn't load. You can still publish, or retry.",
   wzMouthKitNote:
     "We're also making its own teeth and mouth shapes, so it speaks naturally. This can take up to a minute.",
   wzFitProblems: "These points would stretch the face:",
+  wzFixPoints: "Fix it for me",
+  wzFitSmoothed: "We smoothed a small crease where two points met. It's ready to publish.",
 
   // Default names
   wzName_human_realistic: "Human avatar",

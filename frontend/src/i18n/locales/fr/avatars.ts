@@ -105,6 +105,7 @@ export const avatars = {
   fitEyesOrder:
     "Les coins des yeux sont dans le désordre : le repère gauche de chaque œil doit être à gauche de son repère droit, et l'œil de gauche à gauche de l'œil de droite.",
   fitMouthReversed: "Le coin gauche de la bouche est à droite de son coin droit.",
+  fitMouthAboveEyes: "La bouche doit être sous les yeux.",
   fitOutsideHead: "Les yeux et la bouche doivent être dans la tête.",
   fitOutlineCrossed: "Le contour de la tête se croise. Remettez ses repères violets dans l'ordre autour du visage.",
   fitOutlineOrder:

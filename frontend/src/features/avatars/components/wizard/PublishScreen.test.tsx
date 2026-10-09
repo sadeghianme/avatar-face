@@ -3,12 +3,13 @@
  * or to place, the talking preview, the statement about the face, and
  * Publish, which builds the avatar and follows the build to its page.
  */
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { NewAvatarPage } from "@/features/avatars";
 import { ai, anchors, creation, job, step } from "@/features/avatars/creation/fixtures";
 import type { CreationAnchors } from "@/features/avatars/creation/types";
+import { GROUP_LABELS } from "@/features/avatars/face-marks";
 import type { Plan, WizardCreation } from "@/features/avatars/wizard";
 import { translate } from "@/i18n";
 import { mockConsent, mockSpeech } from "@/test/api";
@@ -43,6 +44,16 @@ const NOT_FOUND: Partial<CreationAnchors> = {
   source: "template",
   validation: { ok: true, reasons: [], warnings: [], detected: false, one_click: false },
 };
+const FOLDED = { code: "folded_mesh", detail: "1 triangle of the face would fold over", count: 1 };
+const EYES_CROSSED = { code: "eyes_out_of_order", detail: "The eye corners are out of order" };
+const SMOOTHED = { code: "folds_smoothed", detail: "1 thin triangle was smoothed", count: 1 };
+
+/** The head's top point, moved one image pixel right with the arrow key. */
+async function nudgeHeadTop(user: ReturnType<typeof renderScreen>["user"]) {
+  const handle = screen.getAllByRole("button", { name: new RegExp(`^${t(GROUP_LABELS.head)}: `) })[0];
+  act(() => handle.focus());
+  await user.keyboard("{ArrowRight}");
+}
 
 async function setup(answer: WizardCreation | (() => WizardCreation), prepare?: (server: MockServer) => void) {
   const server = createServer();
@@ -114,6 +125,85 @@ describe("step 4: Publish", () => {
     const problems = await screen.findByText(t("wzFitProblems"));
     expect(problems.closest("[role=alert]")).not.toBeNull();
     expect(screen.getByRole("button", { name: t("wzPublish") })).toBeDisabled();
+  });
+
+  it("a face found whose points the fit refuses says it was found, lists why, and says what to do", async () => {
+    await setup(ready(), (s) =>
+      s.on("POST", `${BASE}/preview-rig`, () => ({ rig: { version: 1 }, reasons: [FOLDED], notes: [] }))
+    );
+    expect(await screen.findByText(t("wzFoundCheck"))).toBeInTheDocument();
+    expect(screen.queryByText(t("wzNotFound"))).not.toBeInTheDocument();
+    expect(await screen.findByText(t("fitFolded", { count: 1 }))).toBeInTheDocument();
+    // Found points need no tick: the refusal is what holds Publish.
+    expect(screen.queryByRole("checkbox", { name: t("wzPointsConfirm") })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: t("wzPublish") })).toBeDisabled();
+    expect(screen.getAllByText(t("wzHoldFitMove")).length).toBeGreaterThan(0);
+    // Nothing was moved, so there is nothing to put back.
+    expect(screen.queryByRole("button", { name: t("wzFixPoints") })).not.toBeInTheDocument();
+  });
+
+  it("points refused when they were found, passing now: the newest preview has the last word", async () => {
+    const stale: Partial<CreationAnchors> = {
+      validation: { ok: false, reasons: [FOLDED], warnings: [], detected: true, one_click: false },
+    };
+    const { server } = await setup(ready({}, stale));
+    await waitFor(() => expect(server.requests("POST", `${BASE}/preview-rig`)).toHaveLength(1));
+    expect(await screen.findByRole("list", { name: t("wzFaceFound") })).toBeInTheDocument();
+    expect(screen.queryByText(t("wzNotFound"))).not.toBeInTheDocument();
+    expect(screen.queryByText(t("wzFitProblems"))).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: t("wzPointsConfirm") })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: t("wzPublish") })).toBeEnabled());
+  });
+
+  it("moved points the fit refuses: “Fix it for me” puts them back where found, and Publish follows", async () => {
+    const { user, server } = await setup(ready(), (s) =>
+      s.on("POST", `${BASE}/preview-rig`, (request) =>
+        (request.body as { marks?: unknown }).marks
+          ? { rig: { version: 1 }, reasons: [EYES_CROSSED], notes: [] }
+          : { rig: { version: 1 }, reasons: [], notes: [] }
+      )
+    );
+    await waitFor(() => expect(server.requests("POST", `${BASE}/preview-rig`)).toHaveLength(1));
+    await nudgeHeadTop(user);
+    const fix = await screen.findByRole("button", { name: t("wzFixPoints") }, { timeout: 3000 });
+    expect(screen.getByRole("button", { name: t("wzPublish") })).toBeDisabled();
+    expect(screen.getAllByText(t("wzHoldFit")).length).toBeGreaterThan(0);
+    await user.click(fix);
+    await waitFor(() => expect(screen.getByRole("button", { name: t("wzPublish") })).toBeEnabled(), {
+      timeout: 3000,
+    });
+    const previews = server.requests("POST", `${BASE}/preview-rig`);
+    expect(previews.at(-1)?.body).toEqual({ anchors_id: "a1" });
+    expect(screen.queryByText(t("wzFitProblems"))).not.toBeInTheDocument();
+  });
+
+  it("Reset points puts back a layout that publishes", async () => {
+    const { user, server } = await setup(ready(), (s) =>
+      s.on("POST", `${BASE}/preview-rig`, (request) =>
+        (request.body as { marks?: unknown }).marks
+          ? { rig: { version: 1 }, reasons: [FOLDED], notes: [] }
+          : { rig: { version: 1 }, reasons: [], notes: [] }
+      )
+    );
+    await waitFor(() => expect(server.requests("POST", `${BASE}/preview-rig`)).toHaveLength(1));
+    const reset = screen.getByRole("button", { name: t("wzResetPoints") });
+    expect(reset).toBeDisabled();
+    await nudgeHeadTop(user);
+    await screen.findByText(t("fitFolded", { count: 1 }), {}, { timeout: 3000 });
+    expect(reset).toBeEnabled();
+    await user.click(reset);
+    await waitFor(() => expect(screen.getByRole("button", { name: t("wzPublish") })).toBeEnabled(), {
+      timeout: 3000,
+    });
+    expect(server.requests("POST", `${BASE}/preview-rig`).at(-1)?.body).toEqual({ anchors_id: "a1" });
+  });
+
+  it("a crease the fit smoothed between two points is said in a line, and holds nothing", async () => {
+    await setup(ready(), (s) =>
+      s.on("POST", `${BASE}/preview-rig`, () => ({ rig: { version: 1 }, reasons: [], notes: [SMOOTHED] }))
+    );
+    expect(await screen.findByText(t("wzFitSmoothed"))).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: t("wzPublish") })).toBeEnabled();
   });
 
   it("a face not found: place the points, then say they are right before Publish", async () => {

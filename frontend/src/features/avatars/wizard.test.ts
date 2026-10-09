@@ -43,6 +43,7 @@ import {
   photoBlocker,
   plainBody,
   planOf,
+  pointsFound,
   preparedStep,
   prepareStage,
   recallChoices,
@@ -129,6 +130,8 @@ const anchors = (image: StepId, extra: Partial<CreationAnchors> = {}): CreationA
   validation: { ok: true, reasons: [], warnings: [], detected: true, one_click: true },
   ...extra,
 });
+
+const FOLDED = { code: "folded_mesh", detail: "1 triangle of the face would fold over", count: 1 };
 
 const prepared = (overrides: Partial<WizardCreation> = {}) =>
   creation({
@@ -362,6 +365,23 @@ describe("step 4", () => {
       false
     );
     assert.equal(faceFound(null), false);
+  });
+
+  it("says the face was found whenever a detector found it, whatever its points do now", () => {
+    assert.equal(pointsFound(anchors("x" as StepId)), true);
+    assert.equal(pointsFound(anchors("x" as StepId, { detected: false, source: "ai" })), true);
+    assert.equal(pointsFound(anchors("x" as StepId, { detected: false, source: "template" })), false);
+    assert.equal(pointsFound(null), false);
+    // Refused when stored, passing now: the newest fit's word wins.
+    const refusedThen = anchors("x" as StepId, {
+      validation: { ok: false, reasons: [FOLDED], warnings: [], detected: true, one_click: false },
+    });
+    assert.equal(pointsFound(refusedThen), true);
+    assert.equal(faceFound(refusedThen), false);
+    assert.equal(faceFound(refusedThen, []), true);
+    assert.equal(faceFound(anchors("x" as StepId), [FOLDED]), false);
+    // A guess is never "found", whatever the fit says.
+    assert.equal(faceFound(anchors("x" as StepId, { detected: false, source: "template" }), []), false);
   });
 });
 

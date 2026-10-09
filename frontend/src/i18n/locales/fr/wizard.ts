@@ -162,6 +162,7 @@ export const wizard = {
   wzFound_head: "Tête",
   wzNotFound:
     "Nous n’avons pas trouvé le visage tout seuls. Faites glisser les points sur les yeux, la bouche et le contour du visage.",
+  wzFoundCheck: "Nous avons trouvé le visage. Vérifiez les points ci-dessous avant de publier.",
   wzResetPoints: "Réinitialiser les points",
   wzPointsHint: "Les points sont placés pour vous. N’en déplacez un que s’il est mal placé.",
   wzKeysTitle: "Au clavier",
@@ -174,13 +175,16 @@ export const wizard = {
   wzPublishAs: "Il s’appellera",
   wzDescribedAs: "Décrit comme « {{description}} »",
   wzHoldPoints: "Confirmez d’abord les points.",
-  wzHoldFit: "Déplacez les points pour que le visage ne soit pas déformé.",
+  wzHoldFit: "Replacez sur le visage les points indiqués ci-dessus, ou appuyez sur « Corriger pour moi ».",
+  wzHoldFitMove: "Replacez sur le visage les points indiqués ci-dessus.",
   wzHoldStatement2: "Confirmez la déclaration pour publier.",
   wzPreviewLoading: "Chargement de l’aperçu…",
   wzPreviewFailed: "L’aperçu n’a pas pu se charger. Vous pouvez tout de même publier, ou réessayer.",
   wzMouthKitNote:
     "Nous créons aussi ses propres dents et formes de bouche, pour qu’il parle naturellement. Cela peut prendre jusqu’à une minute.",
   wzFitProblems: "Ces points déformeraient le visage :",
+  wzFixPoints: "Corriger pour moi",
+  wzFitSmoothed: "Nous avons lissé un petit pli là où deux points se rejoignaient. Il est prêt à être publié.",
 
   // Noms par défaut
   wzName_human_realistic: "Avatar humain",

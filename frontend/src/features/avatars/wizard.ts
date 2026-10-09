@@ -28,6 +28,7 @@ import type {
   DraftStore,
   StepId,
 } from "@/features/avatars/creation";
+import type { FitReason } from "@/features/avatars/face-marks";
 import type { MessageKey } from "@/i18n/types";
 import type { FaceType, Refine, Schemas, WithDefaults } from "@/lib/types";
 
@@ -521,13 +522,25 @@ function isBusyPreparing(creation: Creation): boolean {
   return Boolean(job && isPrepareJob(job) && (job.state === "queued" || job.state === "running"));
 }
 
+/** Were the points found on the face, by the detector or the vision model
+ * (an animal, a drawing), rather than guessed from the face template? What
+ * the page may say ("we found the face", or "we couldn't"), and whether the
+ * owner must tick that points they placed on a guess are right. */
+export function pointsFound(anchors: Pick<CreationAnchors, "detected" | "source"> | null): boolean {
+  return Boolean(anchors && (anchors.detected || anchors.source === "ai"));
+}
+
 /** Were the eyes, lips and head found, well enough to publish without
- * placing a point? A detection the validator passes, or the vision
- * model's points (an animal, a drawing) that fit. A template's guess is
- * not: then the points editor opens. */
-export function faceFound(anchors: Pick<CreationAnchors, "detected" | "source" | "validation"> | null): boolean {
-  if (!anchors) return false;
-  return anchors.validation.ok && (anchors.detected || anchors.source === "ai");
+ * placing a point? Points found (pointsFound) whose fit passes: `reasons`
+ * are the newest fit's refusals (the live preview's), else the validation
+ * stored with the points says. A template's guess is not: then the points
+ * editor opens. */
+export function faceFound(
+  anchors: Pick<CreationAnchors, "detected" | "source" | "validation"> | null,
+  reasons?: readonly FitReason[]
+): boolean {
+  if (!anchors || !pointsFound(anchors)) return false;
+  return reasons ? reasons.length === 0 : anchors.validation.ok;
 }
 
 // --- Names ----------------------------------------------------------------------------

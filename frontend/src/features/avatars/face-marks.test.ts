@@ -144,6 +144,10 @@ describe("the head's outline", () => {
     assert.equal(FIT_REASON_LABELS.outline_crossed, "fitOutlineCrossed");
     assert.equal(FIT_REASON_LABELS.outline_out_of_order, "fitOutlineOrder");
   });
+
+  it("names a mouth placed above the eyes", () => {
+    assert.equal(FIT_REASON_LABELS.mouth_above_eyes, "fitMouthAboveEyes");
+  });
 });
 
 describe("the handles", () => {

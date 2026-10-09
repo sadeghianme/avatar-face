@@ -214,7 +214,9 @@ export type Creation = Refine<
   }
 >;
 
-/** The rig the finish would build, fitted and not saved. */
+/** The rig the finish would build, fitted and not saved: what refuses it
+ * (`reasons`), and what was smoothed on the way (`notes`: thin triangles
+ * between the points that would have folded; nothing to act on). */
 export type PreviewRig = Refine<Schemas["PreviewRigOut"], { reasons: FitReason[] }>;
 
 /** Something the finished picture still shows around the mouth

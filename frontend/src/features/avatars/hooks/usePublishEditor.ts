@@ -19,6 +19,7 @@ import {
   avatarName,
   faceFound,
   planOf,
+  pointsFound,
   recallChoices,
   statementToAsk,
   type WizardCreation,
@@ -34,26 +35,32 @@ export const PUBLISH_VIEWS = ["points", "preview"] as const;
 export type PublishView = (typeof PUBLISH_VIEWS)[number];
 
 /** The fit Publish would build: its rig (a blob URL, null until the first
- *  answer), what it refuses, and why the last preview failed. */
+ *  answer), what it refuses, what it smoothed on the way (thin triangles
+ *  between the points; nothing to act on), and why the last preview
+ *  failed. `answered`: a preview has answered for these points, so
+ *  `reasons` is the server's word on them rather than what was stored
+ *  with the points when they were found. */
 interface Fit {
   rigUrl: string | null;
   reasons: FitReason[];
+  notes: FitReason[];
+  answered: boolean;
   previewError: string | null;
 }
 
 type FitEvent =
-  | { type: "previewed"; rigUrl: string; reasons: FitReason[] }
+  | { type: "previewed"; rigUrl: string; reasons: FitReason[]; notes: FitReason[] }
   | { type: "previewFailed"; error: string }
   | { type: "refused"; reasons: FitReason[] };
 
 function fit(state: Fit, event: FitEvent): Fit {
   switch (event.type) {
     case "previewed":
-      return { rigUrl: event.rigUrl, reasons: event.reasons, previewError: null };
+      return { rigUrl: event.rigUrl, reasons: event.reasons, notes: event.notes, answered: true, previewError: null };
     case "previewFailed":
       return { ...state, previewError: event.error };
     case "refused":
-      return { ...state, reasons: event.reasons };
+      return { ...state, reasons: event.reasons, notes: [], answered: true };
   }
 }
 
@@ -118,13 +125,25 @@ export function usePublishEditor({
   const requests = useMemo(() => creationRequests(orgId, creation.id), [orgId, creation.id]);
   const plan = planOf(creation);
   const line = LINES[creation.face_type ?? "human"];
-  const found = faceFound(anchors);
   // The big picture shows the points (to drag) or the talking preview: two
   // canvases that cannot be one. Points first; playing the sample switches.
   const [view, setView] = useState<PublishView>("points");
   const [marks, setMarks] = useState<FaceMarks>(anchors.marks);
   const [engine, setEngine] = useState<AvatarEngine | null>(null);
-  const [rig, fitted] = useReducer(fit, { rigUrl: null, reasons: anchors.validation.reasons, previewError: null });
+  const [rig, fitted] = useReducer(fit, {
+    rigUrl: null,
+    reasons: anchors.validation.reasons,
+    notes: [],
+    answered: false,
+    previewError: null,
+  });
+  // Found by the detector (or the vision model), as opposed to the
+  // template's guess: what the page says, whatever the points do now.
+  const detected = pointsFound(anchors);
+  // Found, and the fit of the points as they are passes (the newest
+  // preview's word once there is one: points stored before a fix to the
+  // validator may have been refused then and pass now).
+  const found = faceFound(anchors, rig.answered ? rig.reasons : undefined);
   const [said, answer] = useReducer(answers, { confirmed: false, statement: false, refused: null });
   const statementScope =
     said.refused ?? statementToAsk(creation, recallChoices(tabStore(), creation.id)?.statement ?? null);
@@ -163,7 +182,7 @@ export function usePublishEditor({
           const result = await requests.previewRig({ anchors_id: anchors.id, ...(edited ? { marks } : {}) });
           if (request !== latest.current) return;
           const rigUrl = URL.createObjectURL(new Blob([JSON.stringify(result.rig)], { type: "application/json" }));
-          fitted({ type: "previewed", rigUrl, reasons: result.reasons });
+          fitted({ type: "previewed", rigUrl, reasons: result.reasons, notes: result.notes ?? [] });
         } catch (err) {
           if (request !== latest.current) return;
           if (err instanceof ApiError && err.code === "anchors_stale") {
@@ -182,14 +201,27 @@ export function usePublishEditor({
   }, [marks, anchors.id, requests]);
 
   const blocked = rig.reasons.length > 0;
-  const needsConfirm = !found;
+  // Only points placed on the template's guess need the owner's word that
+  // they sit right: found points the validator passes are publishable as
+  // they are (one click), and found points it refuses say why below.
+  const needsConfirm = !detected;
+  // Points that would distort the face can always be put back where they
+  // were found (or guessed), which the server guarantees to pass: "Fix it
+  // for me" is Reset, offered where the refusal is.
+  const canFix = blocked && edited;
   const hold: MessageKey | null = blocked
-    ? "wzHoldFit"
+    ? canFix
+      ? "wzHoldFit"
+      : "wzHoldFitMove"
     : needsConfirm && !said.confirmed
       ? "wzHoldPoints"
       : statementScope && !said.statement
         ? "wzHoldStatement2"
         : null;
+  const resetMarks = () => {
+    setMarks(anchors.marks);
+    setView("points");
+  };
 
   // The server's, decided when the creation was made: the same on every
   // screen and after a reload, and what the finish takes.
@@ -231,18 +263,21 @@ export function usePublishEditor({
 
   return {
     plan,
+    detected,
     found,
     view,
     setView,
     marks,
     setMarks,
     edited,
-    resetMarks: () => setMarks(anchors.marks),
+    resetMarks,
+    canFix,
     engine,
     setEngine,
     rigUrl: rig.rigUrl,
     previewError: rig.previewError,
     reasons: rig.reasons,
+    notes: rig.notes,
     needsConfirm,
     confirmed: said.confirmed,
     confirm: (value: boolean) => answer({ type: "confirmed", value }),
