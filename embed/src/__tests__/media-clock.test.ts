@@ -33,10 +33,10 @@ describe("the media clock", () => {
 
   it("holds at zero after `playing` until the position moves", () => {
     // Safari's media stack fires `playing` as play() starts the player, and
-    // the position (with the sound) follows up to a second later: measured
-    // in Playwright's WebKit, 16-1012 ms (browser-tests/speech-timing.test.ts).
-    // A clock that ran on from `playing` was 250 ms ahead of the voice, and
-    // then stood still while the voice caught up.
+    // the position (with the sound) follows later: measured in Playwright's
+    // WebKit, 16 ms to 1.9 s (browser-tests/speech-timing.test.ts). A clock
+    // that ran on from `playing` was 250 ms ahead of the voice, and then
+    // stood still while the voice caught up.
     const media = new FakeAudio();
     const clock = new MediaClock(media);
     media.paused = false;

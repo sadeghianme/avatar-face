@@ -16,12 +16,13 @@
  * - until the voice is heard, time holds at 0: the mouth waits for the voice
  *   instead of mouthing words nobody hears yet. Heard means the element's
  *   position has moved since a `playing`: `playing` alone is not enough.
- *   Measured in Playwright's WebKit (Safari's media stack), `playing` fires
- *   16 ms to a second before the position (and the sound) starts, and in
- *   Firefox 30-120 ms before (embed/browser-tests/speech-timing.test.ts);
- *   a clock that ran on from `playing` was ahead of the voice by as much as
- *   it was allowed to run (MAX_EXTRAPOLATION_MS), then stood still for as
- *   long while the voice caught up, at the start of every line;
+ *   Measured (embed/browser-tests/speech-timing.test.ts), `playing` fires
+ *   before the position (and the sound) starts: in WebKit, Safari's media
+ *   stack, 16 to 265 ms on macOS and 1.9 s on a Linux runner; in Firefox
+ *   30 to 300 ms and 1.4 s. A clock that ran on from `playing` was ahead
+ *   of the voice by as much as it was allowed to run
+ *   (MAX_EXTRAPOLATION_MS), then stood still for as long while the voice
+ *   caught up, at the start of every line;
  * - `playing` and `seeked` re-anchor on the element's position, and after
  *   either the clock again stands at that position until it moves;
  * - every frame follows `currentTime`, and between two updates of it

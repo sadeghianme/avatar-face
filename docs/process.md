@@ -201,7 +201,7 @@ and `# fmt: on`. The commit that formatted the backend is in
 | `backend-tests` (×2) | pytest with coverage, half of the suite each, on every core, against the production pins, espeak-ng and the checksummed MediaPipe models | 4–5 min |
 | `backend-coverage` | the two halves' coverage combined, at or above the floor; the HTML and LCOV report uploaded | ~20 s |
 | `backend` | every backend job above passed (the required check) | seconds |
-| `embed` | lint, type check (tests included), the widget's generated API types match the committed document, vitest with the pixel goldens and coverage at or above its floors, build, the browser tests (Chromium; the speech timing test also in Firefox and WebKit, with the backend's speech encoder and a null sound sink: about a minute and a half of it) | ~3.5 min |
+| `embed` | lint, type check (tests included), the widget's generated API types match the committed document, vitest with the pixel goldens and coverage at or above its floors, build, the browser tests (Chromium; the speech timing test also in Firefox and WebKit, with the backend's speech encoder and a null sound sink: about a minute and a half of it) | ~4 min |
 | `frontend` | type check, the unit tests (node --test) and the rendering tests (Vitest), each with coverage at or above its floors, structure check, production build | ~1 min |
 | `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, the dashboard's generated API types match the committed document | <1 min |
 | `deploy-script` | ShellCheck (pinned) on `deploy/*.sh`; every gate of `deploy.sh` | <1 min |
@@ -503,9 +503,9 @@ mark reached the audio graph, MP3 minus WAV, medians over the marks):
 | Browser | decodeAudioData, MP3 mark minus source | Through the element, MP3 minus WAV |
 |---|---|---|
 | Chromium 153, macOS | 0.0 at all 6 marks | −0.2 to +0.2 |
-| Chromium 153, Linux (CI) | 0.0 | +0.1 to +3.1 |
+| Chromium 153, Linux (CI) | 0.0 | +0.1 to +3.8 |
 | Firefox 155, macOS | 0.0 | −1.3 to +1.9 |
-| Firefox 155, Linux (CI) | 0.0 | −1.4 |
+| Firefox 155, Linux (CI) | 0.0 | −2.0 to −1.4 |
 | WebKit 26.6, macOS | 0.0 | −3.4 to +0.8 |
 | WebKit 26.6, Linux (CI) | 0.0 | not measurable: GStreamer's element source holds about a second of audio, so the route is no ruler |
 

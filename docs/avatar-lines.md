@@ -1058,7 +1058,7 @@ drawn mouth, make your own in the Mouth panel).
   checked by decodeAudioData only; docs/process.md has the table). The
   clock itself was the fault, at the start of every line: browsers fire
   `playing` before the position (and the sound) moves (macOS: Firefox
-  50-270 ms, WebKit 110-265; CI's Linux with a null sound sink: Firefox
+  30-300 ms, WebKit 16-265; CI's Linux with a null sound sink: Firefox
   1.4 s, WebKit 1.9 s), and the clock ran on from `playing` up to its
   250 ms limit, then stood still until the voice caught up: the mouth ahead
   of the voice by 51-222 ms in Firefox and 122-236 ms in WebKit for up to
