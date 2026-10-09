@@ -1,8 +1,8 @@
 /**
  * A screen as the app mounts it (main.tsx's providers, a router at a
- * route), against the mocked API (server.ts). Signed in by default: the
- * session's two requests (/auth/me, /orgs) are answered with `user` and
- * `orgs`.
+ * route), against the mocked API (server.ts). Signed in by default: an
+ * access token in memory (lib/api), as after a sign-in, and the session's
+ * two requests (/auth/me, /orgs) answered with `user` and `orgs`.
  *
  *   const { server, user } = renderScreen(<AvatarsPage />, { route: "/app" });
  *
@@ -16,7 +16,7 @@ import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactElement, ReactNode } from "react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
-import { setTokens } from "@/lib/api";
+import { setAccessToken } from "@/lib/api";
 import type { Org, User } from "@/lib/types";
 import { AuthProvider } from "@/providers/auth";
 import { OrgProvider } from "@/providers/org";
@@ -68,7 +68,7 @@ export function renderScreen(ui: ReactElement, options: ScreenOptions = {}): Scr
   const { route = "/", path = "*", routes = {}, signedIn = true, user = aUser(), orgs = [anOrg()] } = options;
   const server = options.server ?? createServer();
   if (signedIn) {
-    setTokens({ access_token: "test-access-token", refresh_token: "test-refresh-token" });
+    setAccessToken("test-access-token");
     // Defaults: a test's own routes for them win.
     server.fallback("GET", "/auth/me", () => user).fallback("GET", "/orgs", () => orgs);
   }

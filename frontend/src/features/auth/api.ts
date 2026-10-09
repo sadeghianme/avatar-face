@@ -37,9 +37,11 @@ export function useForgotPassword() {
   });
 }
 
-/** A new password from a reset link; answers with a session to adopt. */
+/** A new password from a reset link: every other session of the account
+ *  ends, and the answer is this browser's new one, to adopt. */
 export function useResetPassword() {
   return useMutation({
-    mutationFn: (body: Schemas["ResetPasswordRequest"]) => api.post<Schemas["TokenPair"]>("/auth/reset-password", body),
+    mutationFn: (body: Schemas["ResetPasswordRequest"]) =>
+      api.post<Schemas["AccessToken"]>("/auth/reset-password", body),
   });
 }

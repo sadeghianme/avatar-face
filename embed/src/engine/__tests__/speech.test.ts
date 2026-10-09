@@ -179,8 +179,12 @@ describe("SpeechTrack's voice", () => {
     fake.currentTime = 0.05;
     fake.fire("playing");
     expect(h.onSync).toHaveBeenCalledWith(50);
-    expect(speech.awaitingVoice()).toBe(false);
+    // `playing`, and the position not moving yet: still waiting, at its position.
+    expect(speech.awaitingVoice()).toBe(true);
     expect(speech.cueTime(1000)).toBe(50);
+    fake.currentTime = 0.066;
+    expect(speech.awaitingVoice()).toBe(false);
+    expect(speech.cueTime(1016)).toBe(66);
   });
 
   it("closes the mouth while the voice is paused", () => {
@@ -190,6 +194,7 @@ describe("SpeechTrack's voice", () => {
     speech.play(audio, false);
     FakeAudio.last!.currentTime = 0.3;
     FakeAudio.last!.fire("playing");
+    FakeAudio.last!.currentTime = 0.316;
     expect(speech.currentViseme(1000)).toBe("aa");
     FakeAudio.last!.fire("pause");
     expect(speech.voicePaused()).toBe(true);

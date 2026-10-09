@@ -13,7 +13,7 @@ import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFound404, Validation422
-from app.services.tts import speech_cache
+from app.services.tts import speech_cache, speech_codec
 from app.services.tts.base import SynthesisResult, TTSProvider, cache_key
 from app.services.tts.cloned import ClonedTTSProvider
 from app.services.tts.kokoro import KokoroTTSProvider
@@ -87,7 +87,7 @@ async def synthesize_cached(
     hit = await speech_cache.get(db, key)
     if hit is not None:
         if pcm:
-            hit.audio = await asyncio.to_thread(speech_cache.as_wav, hit.audio, hit.audio_mime)
+            hit.audio = await asyncio.to_thread(speech_codec.as_wav, hit.audio, hit.audio_mime)
             hit.audio_mime = "audio/wav"
         return hit, True
 

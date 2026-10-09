@@ -65,16 +65,31 @@ What CI runs, per package (`.github/workflows/ci.yml`):
 
 | Package | Commands (from the package directory) |
 |---|---|
-| backend | `ruff check .` · `ruff format --check .` (`ruff format .` fixes it) · `pyright` · the OpenAPI document re-exported and compared (`python -m scripts.export_openapi`) · migrations against the models (`alembic upgrade head` then `alembic check`, on an empty SQLite) · `python -m pytest tests -q -n auto` (or `make test` from the root) |
-| embed | `npm run lint` · `npm run format:check` · `npm run typecheck` (sources and tests) · `npm run check:api` (generated API types) · `npm test` (vitest, pixel goldens included) · `npm run build` · `npm run test:browser` (Chromium) |
-| frontend | `npm run check` (feature boundaries, en/fr parity) · `npm run lint` · `npm run format:check` · `npm run typecheck` (app and tests) · `npm run check:api` (generated API types) · `npm test` (`node --test`, Node 22+) · `npm run test:ui` (rendering tests) · `npm run build` (type check + bundle) |
+| backend | `ruff check .` · `ruff format --check .` (`ruff format .` fixes it) · `pyright` · the OpenAPI document re-exported and compared (`python -m scripts.export_openapi`) · migrations against the models (`alembic upgrade head` then `alembic check`, on an empty SQLite) · `python -m pytest tests -q -n auto --cov` (or `make test` without coverage, `make coverage` with it, from the root) |
+| embed | `npm run lint` · `npm run format:check` · `npm run typecheck` (sources and tests) · `npm run check:api` (generated API types) · `npm run test:coverage` (vitest, pixel goldens included, with coverage; `npm test` without) · `npm run build` · `npm run test:browser` (Chromium; the speech timing test also in Firefox and WebKit, with the backend's speech encoder) |
+| frontend | `npm run check` (feature boundaries, en/fr parity) · `npm run lint` · `npm run format:check` · `npm run typecheck` (app and tests) · `npm run check:api` (generated API types) · `npm run test:coverage` (`node --test` with coverage, Node 22+; `npm test` without) · `npm run test:ui:coverage` (rendering tests with coverage; `npm run test:ui` without) · `npm run build` (type check + bundle) |
 | deploy | `deploy/test-deploy.sh` (every gate of `deploy.sh`) · ShellCheck on `deploy/*.sh` |
 | images | both Dockerfiles build, boot and pass `deploy/smoke/web-sweep.mjs`: every page in headless Chrome, zero CSP violations ([docs/process.md](docs/process.md#ci)) |
 
 CI runs on every push to main and every pull request; a newer push cancels the
 run it supersedes. The backend runs as three parallel jobs: its checks, and
-its tests in two halves. The required `backend` check passes only when all
-three do ([docs/process.md](docs/process.md#ci)).
+its tests in two halves; a fourth combines the halves' coverage. The required
+`backend` check passes only when all four do ([docs/process.md](docs/process.md#ci)).
+
+### Coverage
+
+Every suite is measured, and CI fails a change that takes one below its
+floor: the value CI measured minus 1 to 2 points. Measured on 2026-10-09:
+the backend 92.0% (lines and branches together; floor 91), the widget 90.1%
+of lines (floor 89), the dashboard's unit tests 93.4% of the lines they load
+(floor 92) and its rendering tests 65.2% of the whole app (floor 64), with
+floors on branches and functions too. The floors are in
+`backend/.coveragerc`, `embed/vitest.config.ts`, `frontend/vitest.config.ts`
+and the `test:coverage` script of `frontend/package.json`. When a change
+raises a number, raise its floor in the same pull request (measured value
+minus 1, rounded down); never lower one to make a change pass. The HTML and
+LCOV reports are artifacts of every CI run, kept 7 days. Details:
+[docs/process.md](docs/process.md#coverage).
 
 ## Embedding on any site
 
@@ -139,10 +154,11 @@ moved: [docs/process.md](docs/process.md).
 
 1. In-memory state (credential overlay, rate limiters, job runner): one API
    process only. More workers need Redis and a real queue.
-2. Refresh tokens cannot be revoked yet (no server-side session table).
-3. Rate limits are kept per process (item 1), keyed on the visitor's own
+2. Rate limits are kept per process (item 1), keyed on the visitor's own
    address behind Cloudflare ([docs/process.md](docs/process.md#client-addresses)):
    everyone behind one carrier-grade NAT shares a bucket.
-4. The session's tokens are in `localStorage`, not httpOnly cookies. The CSP
-   allows no inline script, and the Simulator runs snippets in a frame of its
-   own origin ([docs/process.md](docs/process.md#security-headers)).
+3. A user cannot list their sessions or end one other than their own: "Log
+   out everywhere" (Settings) and a new password end them all. Sessions
+   themselves are server-side and revocable: a refresh token rotated on every
+   use, in an httpOnly cookie, and an access token kept in memory
+   ([docs/process.md](docs/process.md#sessions)).

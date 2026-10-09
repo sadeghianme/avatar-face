@@ -12,7 +12,8 @@ still bounds the pile.
 Each tick also moves what is left of the speech cache in the database to
 storage and evicts the least recently used lines past its caps
 (services.tts.speech_cache). The first tick is at startup, so a new release
-drains the old table at once.
+drains the old table at once. And it deletes the dashboard's refresh tokens
+past their expiry (services.sessions), which nothing can exchange any more.
 
 Runs in-process on a timer rather than as a cron entry, so a fresh deployment
 sweeps without anyone remembering to install anything. That is the right call
@@ -28,6 +29,7 @@ import asyncio
 import logging
 
 from app.core.config import get_settings
+from app.services import sessions
 from app.services.creations import expire_idle, recover_stranded
 from app.services.storage import get_storage
 from app.services.tts import speech_cache
@@ -62,7 +64,19 @@ async def sweep_once() -> int:
     await expire_creations()
     # Never raises: it logs its own failures.
     await speech_cache.sweep()
+    await purge_sessions()
     return removed
+
+
+async def purge_sessions() -> int:
+    """Expired refresh tokens out of the table; never raises."""
+    try:
+        return await sessions.purge_expired()
+    except Exception:
+        # Broad on purpose: housekeeping must never take the API down, and
+        # the next tick tries again.
+        logger.exception("refresh token purge failed")
+        return 0
 
 
 async def expire_creations() -> int:

@@ -10,7 +10,10 @@
 // public pages, every dashboard page, the share page (and speaks on it), and
 // runs the Simulator's iframe with the real widget for both avatars (and
 // speaks there). It also replays the Simulator injection (the review's N1)
-// as a link and as a pasted snippet, and fails if the payload ever runs.
+// as a link and as a pasted snippet, and fails if the payload ever runs. And
+// it signs in the way the dashboard does, then checks that the session
+// survives a reload with no token where a script could read it (the refresh
+// token is an httpOnly cookie; the access token lives in memory).
 //
 // Use 127.0.0.1, not localhost: the dashboard points snippets at
 // localhost:7002 whenever its origin says "localhost" (the Vite dev setup).
@@ -81,8 +84,9 @@ async function seed() {
   const user = `sweep${Date.now()}`;
   const password = "sweep-password-1";
   await api("POST", "/auth/register", { json: { email: `${user}@example.com`, username: user, password } });
-  const tokens = await api("POST", "/auth/login", { json: { username_or_email: user, password } });
-  const token = tokens.access_token;
+  // The access token, for seeding from here (the refresh cookie this
+  // answer also sets is the browser's business, not this script's).
+  const { access_token: token } = await api("POST", "/auth/login", { json: { username_or_email: user, password } });
   let orgs = await api("GET", "/orgs", { token });
   if (!orgs.length) orgs = [await api("POST", "/orgs", { token, json: { name: "Sweep" } })];
   const org = orgs[0].id;
@@ -95,7 +99,7 @@ async function seed() {
     "model/gltf-binary",
   );
   const shared = await api("POST", `/orgs/${org}/avatars/${photo}/share`, { token });
-  return { tokens, photo, model, share: shared.share_token };
+  return { user, password, photo, model, share: shared.share_token };
 }
 
 // --------------------------------------------------------------- browser ---
@@ -361,8 +365,26 @@ const results = [];
 let failures = 0;
 try {
   const page = await openPage(browser);
-  const signIn = () =>
-    page.evaluate(`localStorage.setItem("liveface.tokens", ${JSON.stringify(JSON.stringify(seeded.tokens))})`);
+  // Signed in by the page itself, as the login form does: the API answers
+  // with an access token and sets the httpOnly refresh cookie in this
+  // browser, which the reload then restores the session from.
+  const signIn = async () => {
+    const status = await page.evaluate(`fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(${JSON.stringify({ username_or_email: seeded.user, password: seeded.password })}),
+    }).then((r) => r.status)`);
+    if (status !== 200) throw new Error(`sign-in answered ${status}`);
+  };
+  // After a reload: still signed in, and nothing of the session readable by
+  // a script: the refresh cookie is httpOnly, the access token in memory.
+  const sessionOutOfReach = async () => {
+    const where = await page.evaluate("location.pathname");
+    if (where !== "/app") throw new Error(`a reload lost the session (at ${where})`);
+    const visible = await page.evaluate(`JSON.stringify({ cookie: document.cookie, stored: Object.keys(localStorage).map((k) => k + "=" + localStorage.getItem(k)).join(";") })`);
+    if (/lf_refresh|lfs_|eyJ/.test(visible) || visible.includes("liveface.tokens"))
+      throw new Error(`a session token is readable by script: ${visible.slice(0, 200)}`);
+  };
   const canvasIn = (selector) =>
     eventually(async () => {
       if (!(await page.evaluate(`Boolean(${selector}?.querySelector("canvas"))`))) throw new Error(`no canvas in ${selector}`);
@@ -396,11 +418,11 @@ try {
   };
   // The review's N1: a value that closed data-avatar's quotes and the tag,
   // then ran as an inline script in a frame of the dashboard's origin, with
-  // the session's tokens in reach. Run it as a link and as a paste; if it
-  // ever runs, the log says PWNED or the title does (the word is built from
-  // two halves, so the payload's own text, which the page shows, never
-  // matches).
-  const steal = `parent.postMessage({lf:true,level:"ok",message:"PW"+"NED "+localStorage.getItem("liveface.tokens")},"*");top.document.title="PW"+"NED"`;
+  // the session's tokens in reach (they were in localStorage then). Run it as
+  // a link and as a paste; if it ever runs, the log says PWNED or the title
+  // does (the word is built from two halves, so the payload's own text, which
+  // the page shows, never matches).
+  const steal = `parent.postMessage({lf:true,level:"ok",message:"PW"+"NED "+document.cookie},"*");top.document.title="PW"+"NED"`;
   const poc = `x" data-size='"></script><script>${steal}</script><script x="'`;
   const notPwned = async () => {
     if (await page.evaluate(`document.body.innerText.includes("PWNED") || document.title.includes("PWNED")`))
@@ -444,6 +466,7 @@ try {
       await sleep(3000);
     }],
     ["/app", signIn, { reload: true }],
+    ["/app", sessionOutOfReach],
     ["/avatars/new"],
     [`/avatars/${seeded.photo}`, () => canvasIn("document")],
     [`/avatars/${seeded.model}`, () => canvasIn("document")],

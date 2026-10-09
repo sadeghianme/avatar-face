@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { LoginPage } from "@/features/auth";
 import { translate } from "@/i18n";
-import { getTokens } from "@/lib/api";
+import { getAccessToken } from "@/lib/api";
 import { expectAccessible } from "@/test/axe";
 import { aUser } from "@/test/fixtures";
 import { renderScreen } from "@/test/render";
@@ -13,6 +13,8 @@ import { apiError, createServer } from "@/test/server";
 vi.mock("@/components/brand/DemoAvatar", () => ({ DEMO_PORTRAIT: "", DemoAvatar: () => null }));
 
 const t = translate;
+
+const TOKEN = "eyJ.access-token-of-ana.sig";
 
 function setup() {
   const server = createServer();
@@ -53,10 +55,10 @@ describe("LoginPage", () => {
     expect(server.requests("POST", "/auth/login")).toHaveLength(0);
   });
 
-  it("signs in, keeps the session and goes to the library", async () => {
+  it("signs in, keeps the session in memory only and goes to the library", async () => {
     const { user, identifier, password, server, location } = setup();
     server
-      .on("POST", "/auth/login", () => ({ access_token: "a1", refresh_token: "r1", token_type: "bearer" }))
+      .on("POST", "/auth/login", () => ({ access_token: TOKEN, token_type: "bearer", expires_in: 900 }))
       .on("GET", "/auth/me", () => aUser());
     await user.type(identifier, "ana");
     await user.type(password, "correct horse");
@@ -67,7 +69,15 @@ describe("LoginPage", () => {
       username_or_email: "ana",
       password: "correct horse",
     });
-    expect(getTokens()).toEqual({ access_token: "a1", refresh_token: "r1", token_type: "bearer" });
+    expect(getAccessToken()).toBe(TOKEN);
+    expect(server.requests("GET", "/auth/me")[0].headers.get("Authorization")).toBe(`Bearer ${TOKEN}`);
+    // Nothing of the session is written where a script could read it later.
+    for (const storage of [localStorage, sessionStorage]) {
+      const values = Array.from({ length: storage.length }, (_, i) => storage.getItem(storage.key(i) ?? ""));
+      expect(values.join(" ")).not.toContain(TOKEN);
+    }
+    expect(localStorage.getItem("liveface.tokens")).toBeNull();
+    expect(document.cookie).not.toContain(TOKEN);
   });
 
   it("a refused sign-in is said in an alert, and the form stays", async () => {
@@ -77,7 +87,7 @@ describe("LoginPage", () => {
     await user.type(password, "nope");
     await user.click(screen.getByRole("button", { name: t("login") }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Wrong username or password");
-    expect(getTokens()).toBeNull();
+    expect(getAccessToken()).toBeNull();
     expect(identifier).toHaveValue("ana");
   });
   it("passes axe, with its errors showing", async () => {

@@ -1,0 +1,13 @@
+{
+  "name": "@liveface/smoke",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Smoke tests of the built production images: the browser end of CI's images job (docs/process.md)",
+  "type": "module",
+  "scripts": {
+    "wizard": "node wizard-e2e.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.63.0"
+  }
+}

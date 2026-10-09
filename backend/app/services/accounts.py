@@ -1,8 +1,8 @@
 """Accounts: who a user is, signing up and in, and resetting a password.
 
-The queries and writes behind api.auth and the bearer-token dependency
-(api.deps.get_current_user). Tokens themselves are app.core.security's;
-this module only decides whose they are.
+The queries and writes behind api.auth. Sessions and their tokens are
+services.sessions' (and app.core.security's); this module decides whose
+they are, and ends them all when the password changes.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from app.core.config import get_settings
 from app.core.errors import Auth401, Conflict409
 from app.core.security import hash_password_async, verify_password_async
 from app.models import User
+from app.services import sessions
 from app.services.email import deliver_in_background, reset_email
 from app.services.email import send as send_email
 from app.services.rate_limit import RESET_LIMIT, RESET_WINDOW_SECONDS, allow_persistent
@@ -31,14 +32,6 @@ logger = logging.getLogger("liveface.auth")
 
 async def get_user(db: AsyncSession, user_id: str) -> User | None:
     return (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
-
-
-async def require_user(db: AsyncSession, user_id: str) -> User:
-    """The user a valid token names; 401 unknown_user once they are gone."""
-    user = await get_user(db, user_id)
-    if user is None:
-        raise Auth401("User no longer exists", code="unknown_user")
-    return user
 
 
 async def register(
@@ -125,7 +118,11 @@ async def _mail_reset_link(user_id: str, address: str, password_hash: str) -> No
 
 
 async def reset_password(db: AsyncSession, token: str, password: str) -> User:
-    """Set the password a reset link was sent for; the user, to sign in."""
+    """Set the password a reset link was sent for; the user, to sign in.
+
+    Every session of the account ends with the old password, in the same
+    commit (set_password): whoever reset it may be locking someone out.
+    """
     settings = get_settings()
     try:
         user_id, token_fingerprint = verify_reset_token(settings.jwt_secret, token)
@@ -142,6 +139,20 @@ async def reset_password(db: AsyncSession, token: str, password: str) -> User:
     if not hmac.compare_digest(token_fingerprint, hash_fingerprint(user.password_hash)):
         raise Auth401("This reset link has already been used", code="reset_token_used")
 
-    user.password_hash = await hash_password_async(password)
-    await db.commit()
+    await set_password(db, user, password, reason="password_reset")
     return user
+
+
+async def set_password(
+    db: AsyncSession, user: User, password: str, reason: str = "password_change"
+) -> None:
+    """A new password, and every session of the account revoked with it.
+
+    The one place a password changes (a reset is the only route that changes
+    one today): a password is changed because someone else may know the old
+    one, and then they may hold a session too.
+    """
+    user.password_hash = await hash_password_async(password)
+    ended = await sessions.end_all_sessions(db, user.id, reason)
+    await db.commit()
+    logger.info("password changed; %d session token(s) revoked", ended)
