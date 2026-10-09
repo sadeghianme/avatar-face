@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 import jwt
@@ -13,9 +14,17 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from app.core.security import _DUMMY_HASH, hash_password, verify_password
+from app.core.errors import Auth401
+from app.core.security import (
+    _DUMMY_HASH,
+    _access_key,
+    create_access_token,
+    decode_access_token,
+    hash_password,
+    verify_password,
+)
 from app.db import get_session_factory
-from app.models import User
+from app.models import User, utcnow
 from app.services.tts import providers
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -114,7 +123,52 @@ async def test_an_account_from_before_signs_in(client):
     assert me.json()["username"] == "old"
 
 
-# --- tokens ------------------------------------------------------------------
+# --- access tokens -----------------------------------------------------------
+
+
+def test_an_access_token_carries_its_user_and_session():
+    claims = decode_access_token(create_access_token("user-1", "session-1"))
+    assert claims == ("user-1", "session-1")
+
+
+def _encode(claims: dict) -> str:
+    return jwt.encode(claims, _access_key("test-secret"), algorithm="HS256")
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        # expired
+        {"sub": "u", "sid": "s", "type": "access", "iat": 0, "exp": 1},
+        # no session
+        {"sub": "u", "type": "access", "iat": 0, "exp": 4102444800},
+        # not an access token
+        {"sub": "u", "sid": "s", "type": "refresh", "iat": 0, "exp": 4102444800},
+        # no expiry
+        {"sub": "u", "sid": "s", "type": "access", "iat": 0},
+        # no user
+        {"sid": "s", "type": "access", "iat": 0, "exp": 4102444800},
+    ],
+)
+def test_only_a_complete_unexpired_access_token_is_accepted(claims):
+    with pytest.raises(Auth401) as refused:
+        decode_access_token(_encode(claims))
+    assert refused.value.code == "invalid_token"
+
+
+def test_a_tampered_or_unsigned_token_is_refused():
+    token = create_access_token("user-1", "session-1")
+    header, payload, signature = token.split(".")
+    with pytest.raises(Auth401):
+        decode_access_token(f"{header}.{payload}.{signature[::-1]}")
+    now = utcnow()
+    unsigned = jwt.encode(
+        {"sub": "u", "sid": "s", "type": "access", "iat": now, "exp": now + timedelta(hours=1)},
+        key=None,
+        algorithm="none",
+    )
+    with pytest.raises(Auth401):
+        decode_access_token(unsigned)
 
 
 async def test_google_tts_signs_its_assertion_with_pyjwt(monkeypatch):

@@ -12,6 +12,7 @@ import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -60,7 +61,26 @@ class Settings(BaseSettings):
     app_base_url: str = "http://localhost:5174"
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 15
+    # How long a session lasts without being used: each refresh issues a
+    # token good for this long again (services.sessions).
     refresh_token_days: int = 30
+
+    # --- Dashboard session cookies (api.auth) ---
+    # The refresh cookie's Path: where the dashboard reaches the auth routes.
+    # It calls the API at /api on its own origin, through Vite's proxy in
+    # development and Caddy in production, so the cookie goes back to
+    # /api/auth/* and to nothing else.
+    session_cookie_path: str = "/api/auth"
+    # Secure on the session cookies. Unset: on exactly when the dashboard
+    # (app_base_url) is served over https, as in production; off for Vite
+    # over plain http (:5174, or a phone on the LAN), where a browser would
+    # not keep a Secure cookie at all.
+    session_cookie_secure: bool | None = None
+    # A refresh token presented again within this many seconds of being
+    # exchanged is a race (two tabs refreshing at once, a retried request),
+    # not a theft: it is refused, but the session stands. Later, the whole
+    # session is revoked.
+    refresh_reuse_grace_seconds: int = 10
 
     # --- Client addresses behind proxies (core.client_ip) ---
     # The reverse proxies in front of this API, as CIDRs: from a peer in one
@@ -175,6 +195,25 @@ class Settings(BaseSettings):
     @property
     def storage_configured(self) -> bool:
         return all((self.r2_endpoint, self.r2_access_key, self.r2_secret))
+
+    @property
+    def cookies_secure(self) -> bool:
+        """Whether the session cookies are marked Secure (session_cookie_secure)."""
+        if self.session_cookie_secure is not None:
+            return self.session_cookie_secure
+        return self.app_base_url.lower().startswith("https://")
+
+    @property
+    def dashboard_origins(self) -> frozenset[str]:
+        """The origins the dashboard is served from: CORS_ORIGINS and
+        APP_BASE_URL's. A cookie-authenticated request from a browser that
+        does not say it is same-origin must come from one of these
+        (api.auth.require_same_origin)."""
+        origins = {origin.rstrip("/").lower() for origin in self.cors_origins}
+        parts = urlsplit(self.app_base_url)
+        if parts.scheme and parts.netloc:
+            origins.add(f"{parts.scheme}://{parts.netloc}".lower())
+        return frozenset(origins)
 
     @field_validator(
         "cors_origins", "allowed_image_types", "model_url_hosts", "trusted_proxies", mode="before"

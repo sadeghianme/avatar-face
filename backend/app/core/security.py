@@ -1,4 +1,4 @@
-"""Password hashing and JWT issuing/validation.
+"""Password hashing, and the dashboard's access tokens.
 
 Passwords are bcrypt, through the `bcrypt` package itself. Every hash in the
 database was written by passlib's bcrypt handler, which is the same
@@ -8,17 +8,26 @@ as they are, and new ones are written exactly as passlib wrote them (cost
 migrated and nobody resets a password. tests/test_security.py checks hashes
 passlib made.
 
-Tokens are PyJWT's, in the same HS256 form python-jose wrote.
+An access token is a JWT (PyJWT, HS256) that lives `access_token_minutes`
+and names its user (`sub`) and its session (`sid`, services.sessions). Its
+key is derived from JWT_SECRET for this one use (`_access_key`), so no other
+value made with that secret (a reset link's signature, an address hash)
+can ever be mistaken for one. The session is the revocable part: the refresh token,
+in an httpOnly cookie, and its row in the database. api.deps checks on
+every request that the session is still open, so signing out, signing out
+everywhere or resetting the password ends every token at once, not when
+they expire.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import NamedTuple
 
 import bcrypt
 import jwt
@@ -35,12 +44,11 @@ BCRYPT_PREFIX = b"2b"
 # this change must still verify. (bcrypt 5 refuses them instead of cutting.)
 BCRYPT_MAX_BYTES = 72
 
+
 # What a bcrypt hash looks like: variant, cost, 22 characters of salt and 31
 # of checksum. Checked before bcrypt sees one: the library panics (an
 # exception that is not an Exception) on a truncated hash.
 _BCRYPT_HASH = re.compile(r"\$2[abxy]\$\d\d\$[./A-Za-z0-9]{53}")
-
-TokenType = Literal["access", "refresh"]
 
 
 def _secret(plain: str) -> bytes:
@@ -101,39 +109,52 @@ async def verify_password_async(plain: str, hashed: str | None) -> bool:
     return matched and hashed is not None
 
 
-def _create_token(subject: str, token_type: TokenType, expires: timedelta) -> str:
+class AccessClaims(NamedTuple):
+    """Whose a valid access token is, and the session it was issued for."""
+
+    user_id: str
+    session_id: str
+
+
+def _access_key(secret: str) -> bytes:
+    """The access tokens' signing key: 32 bytes, from JWT_SECRET and a
+    label of their own (domain separation; and the full HS256 key length
+    whatever the secret's, so PyJWT has no short key to warn about)."""
+    return hashlib.sha256(b"liveface access token v1:" + secret.encode()).digest()
+
+
+def create_access_token(user_id: str, session_id: str) -> str:
     settings = get_settings()
     now = datetime.now(UTC)
     claims = {
-        "sub": subject,
-        "type": token_type,
+        "sub": user_id,
+        "sid": session_id,
+        "type": "access",
         "iat": now,
-        "exp": now + expires,
+        "exp": now + timedelta(minutes=settings.access_token_minutes),
         "jti": uuid.uuid4().hex,
     }
-    return jwt.encode(claims, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(claims, _access_key(settings.jwt_secret), algorithm=settings.jwt_algorithm)
 
 
-def create_access_token(user_id: str) -> str:
-    settings = get_settings()
-    return _create_token(user_id, "access", timedelta(minutes=settings.access_token_minutes))
-
-
-def create_refresh_token(user_id: str) -> str:
-    settings = get_settings()
-    return _create_token(user_id, "refresh", timedelta(days=settings.refresh_token_days))
-
-
-def decode_token(token: str, expected_type: TokenType) -> str:
-    """Return the user id from a valid token of the expected type."""
+def decode_access_token(token: str) -> AccessClaims:
+    """The claims of a valid, unexpired access token; 401 `invalid_token`
+    for anything else, a token from before sessions (no `sid`) included.
+    Whether the session is still open is the caller's to check
+    (services.sessions.session_user)."""
     settings = get_settings()
     try:
-        claims = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        claims = jwt.decode(
+            token,
+            _access_key(settings.jwt_secret),
+            algorithms=[settings.jwt_algorithm],
+            options={"require": ["exp", "iat", "sub", "sid"]},
+        )
     except jwt.PyJWTError as exc:
         raise Auth401("Invalid or expired token", code="invalid_token") from exc
-    if claims.get("type") != expected_type:
+    if claims.get("type") != "access":
         raise Auth401("Wrong token type", code="invalid_token")
-    sub = claims.get("sub")
-    if not sub:
+    user_id, session_id = claims["sub"], claims["sid"]
+    if not isinstance(user_id, str) or not user_id or not isinstance(session_id, str):
         raise Auth401("Malformed token", code="invalid_token")
-    return str(sub)
+    return AccessClaims(user_id, session_id)

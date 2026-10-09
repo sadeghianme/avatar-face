@@ -31,14 +31,15 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class RefreshRequest(BaseModel):
-    refresh_token: str
+class AccessToken(BaseModel):
+    """A session's access token, for the Authorization header, kept in
+    memory by the dashboard. Its refresh token is never in a body: it is the
+    httpOnly cookie the same response sets (api.auth)."""
 
-
-class TokenPair(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
+    # Seconds the access token is good for.
+    expires_in: int
 
 
 class UserOut(BaseModel):

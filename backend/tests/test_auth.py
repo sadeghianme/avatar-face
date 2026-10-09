@@ -74,27 +74,7 @@ async def test_login_wrong_password(client):
     assert response.json()["code"] == "invalid_credentials"
 
 
-async def test_refresh_flow(client):
-    await register_and_login(client, "alice")
-    login = await client.post(
-        "/auth/login", json={"username_or_email": "alice", "password": "password123"}
-    )
-    refresh_token = login.json()["refresh_token"]
-    response = await client.post("/auth/refresh", json={"refresh_token": refresh_token})
-    assert response.status_code == 200
-    new_access = response.json()["access_token"]
-    me = await client.get("/auth/me", headers={"Authorization": f"Bearer {new_access}"})
-    assert me.status_code == 200
-
-
-async def test_access_token_rejected_as_refresh(client):
-    await register_and_login(client, "alice")
-    login = await client.post(
-        "/auth/login", json={"username_or_email": "alice", "password": "password123"}
-    )
-    access = login.json()["access_token"]
-    response = await client.post("/auth/refresh", json={"refresh_token": access})
-    assert response.status_code == 401
+# Refreshing, signing out and the session cookie: tests/test_sessions.py.
 
 
 async def test_me_requires_token(client):
