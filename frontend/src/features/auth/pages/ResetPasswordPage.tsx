@@ -35,13 +35,13 @@ export function ResetPasswordPage() {
     setBusy(true);
     setError(null);
     try {
-      const tokens = await reset.mutateAsync({ token, password });
+      const session = await reset.mutateAsync({ token, password });
       // Straight in. Someone who has just proved control of the mailbox and
       // chosen a password should not be asked to type it again. Through the
-      // auth context, not setTokens: writing storage alone leaves the context
+      // auth context, not setAccessToken: the token alone leaves the context
       // believing nobody is signed in, and /app bounces straight back to
       // /login.
-      await adoptSession(tokens);
+      await adoptSession(session);
       navigate("/app", { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

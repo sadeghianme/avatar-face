@@ -108,7 +108,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           composition (the kit's unstyled button), 44px+ tall as drawn. */}
       <Button
         variant="unstyled"
-        onClick={logout}
+        onClick={() => void logout()}
         className="mx-3 mb-3 flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"
       >
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-500 text-[13px] font-medium text-white">

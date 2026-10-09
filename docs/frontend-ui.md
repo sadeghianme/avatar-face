@@ -200,26 +200,29 @@ Formatting is Prettier (`printWidth` 120), applied once in its own commit;
 
 ## Security notes
 
-- **The session's tokens are in `localStorage`** (`lib/api.ts`, key
-  `liveface.tokens`): the access token and the refresh token. Kept so on
-  purpose for now. An httpOnly cookie would keep them out of reach of a
-  script injected into the page, but it needs the API to set and read
-  the cookie, CSRF protection on every write, and a refresh that works
-  across the API's origin; that is a change to the auth contract, not to
-  this dashboard. What holds meanwhile: React escapes everything it
-  renders (no `dangerouslySetInnerHTML` in `src/`), nothing from a URL or
-  a server string is put into the page as HTML, the client sends the
-  token only to the API's own origin (`/api`), and a stored entry that is
-  not a pair of tokens is dropped rather than parsed into every request
-  (`getTokens`), and the dashboard's nginx sends a
-  Content-Security-Policy (`frontend/nginx-security-headers.conf`: scripts
-  from its own origin only, no inline script). The one page that writes
-  HTML, the Simulator's customer page, escapes every value, accepts only
-  an avatar id from a link, and runs in a frame without
-  `allow-same-origin`, so nothing in it can read the tokens
-  (`docs/process.md`, "Security headers"). What would help most next:
-  refresh tokens the server can revoke (the backend's backlog). Revisit
-  this decision when that lands.
+- **No session token where a script can read it** (`lib/api.ts`,
+  `providers/auth.tsx`; the design is `docs/process.md`, "Sessions"). The
+  access token lives in `lib/api`'s memory and goes out as a bearer header,
+  to the API's own origin (`/api`) only. The refresh token is the API's
+  httpOnly cookie, sent by the browser to `/api/auth/*` alone. On load the
+  auth provider restores the session with one refresh, when the API's
+  readable `lf_session` cookie says there is one, and deletes the
+  `liveface.tokens` entry older releases kept in `localStorage`. A 401
+  refreshes once however many calls were refused (`renewedAfter401`), one
+  tab at a time (a Web Lock); a refusal from the server signs the tab out
+  (`onSignedOut`: the user and the query cache are cleared). Signing out
+  calls the API, which ends the session there. Never write a token to
+  `localStorage`, `sessionStorage` or a readable cookie. A script injected
+  into the page could still act as the user while the page is open (any
+  design allows that); it could no longer carry a session away. What else
+  holds: React escapes everything it renders (no `dangerouslySetInnerHTML`
+  in `src/`), nothing from a URL or a server string is put into the page as
+  HTML, and the dashboard's nginx sends a Content-Security-Policy
+  (`frontend/nginx-security-headers.conf`: scripts from its own origin
+  only, no inline script). The one page that writes HTML, the Simulator's
+  customer page, escapes every value, accepts only an avatar id from a link,
+  and runs in a frame without `allow-same-origin` (`docs/process.md`,
+  "Security headers").
 - **No debug handles of the dashboard's own in a production build.**
   `window.__queryClient` (main.tsx) and `window.__lfEngine`
   (AvatarPreview, for the visual harnesses) are set only under

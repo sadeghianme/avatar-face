@@ -16,7 +16,7 @@ import wave
 from pathlib import Path
 
 import httpx
-from jose import jwt as jose_jwt
+import jwt
 
 from app.core.credentials import credentials
 from app.services.tts.base import SynthesisResult, TTSProvider, Voice
@@ -228,7 +228,9 @@ class GoogleTTSProvider(TTSProvider):
     async def _access_token(self) -> str:
         sa = self._service_account()
         now = int(time.time())
-        assertion = jose_jwt.encode(
+        # The service account's OAuth assertion (RS256: PyJWT signs with the
+        # cryptography package).
+        assertion = jwt.encode(
             {
                 "iss": sa["client_email"],
                 "scope": "https://www.googleapis.com/auth/cloud-platform",

@@ -47,11 +47,58 @@ export interface paths {
     put?: never;
     /**
      * Login
-     * @description Tokens for these credentials. 401 `invalid_credentials`; 429
-     *     `rate_limited` past LOGIN_PER_CLIENT attempts a minute from one address
-     *     or LOGIN_PER_ACCOUNT attempts on one account in ten minutes.
+     * @description A new session for these credentials: its access token, and its
+     *     refresh cookie. A session this browser held before ends (its cookie is
+     *     replaced). 401 `invalid_credentials`; 429 `rate_limited` past
+     *     LOGIN_PER_CLIENT attempts a minute from one address or LOGIN_PER_ACCOUNT
+     *     attempts on one account in ten minutes; 403 `cross_site_request`.
      */
     post: operations["login_auth_login_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/logout": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Logout
+     * @description Sign this browser out: its session is revoked (the one the refresh
+     *     cookie names, and the bearer token's, if one came along) and the
+     *     cookies are deleted. Always 204, signed in or not. 403
+     *     `cross_site_request`.
+     */
+    post: operations["logout_auth_logout_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/logout-all": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Logout All
+     * @description Sign out everywhere: every session of this account is revoked, this
+     *     one included, and this browser's cookies are deleted. Bearer-authorized,
+     *     so another site cannot make a browser send it.
+     */
+    post: operations["logout_all_auth_logout_all_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -84,7 +131,18 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Refresh */
+    /**
+     * Refresh
+     * @description A new access token for the session in the refresh cookie, which is
+     *     exchanged for the next one (services.sessions.rotate). 401 with the
+     *     cookies deleted when there is none to refresh: `no_session`,
+     *     `invalid_refresh_token`, `session_revoked`, `session_expired`,
+     *     `refresh_token_reused` (the session is revoked everywhere), or
+     *     `refresh_superseded` (the token that replaced this one was exchanged
+     *     too, by another tab: try again). The same cookie again within
+     *     REFRESH_REUSE_GRACE_SECONDS answers with the same next token, so an
+     *     answer lost to a reload costs nothing. 403 `cross_site_request`.
+     */
     post: operations["refresh_auth_refresh_post"];
     delete?: never;
     options?: never;
@@ -124,14 +182,16 @@ export interface paths {
     put?: never;
     /**
      * Reset Password
-     * @description Finish a reset, and sign the user straight in.
+     * @description Finish a reset: every session of the account is revoked with the old
+     *     password, and this browser is signed straight into a new one.
      *
      *     Signing in here is deliberate: the alternative is bouncing someone who has
      *     just proved control of the mailbox back to a login form to type the
      *     password they set four seconds ago.
      *
      *     401 `reset_token_invalid` / `reset_token_used`; 429 `rate_limited` past
-     *     RESET_PER_CLIENT attempts in fifteen minutes from one address.
+     *     RESET_PER_CLIENT attempts in fifteen minutes from one address; 403
+     *     `cross_site_request`.
      */
     post: operations["reset_password_auth_reset_password_post"];
     delete?: never;
@@ -1977,6 +2037,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /**
+     * AccessToken
+     * @description A session's access token, for the Authorization header, kept in
+     *     memory by the dashboard. Its refresh token is never in a body: it is the
+     *     httpOnly cookie the same response sets (api.auth).
+     */
+    AccessToken: {
+      /** Access Token */
+      access_token: string;
+      /** Expires In */
+      expires_in: number;
+      /**
+       * Token Type
+       * @default bearer
+       */
+      token_type: string;
+    };
     /** AdjustCandidateOut */
     AdjustCandidateOut: {
       /**
@@ -3582,11 +3659,6 @@ export interface components {
       /** Rig Url */
       rig_url: string;
     };
-    /** RefreshRequest */
-    RefreshRequest: {
-      /** Refresh Token */
-      refresh_token: string;
-    };
     /** RegisterRequest */
     RegisterRequest: {
       /**
@@ -3799,18 +3871,6 @@ export interface components {
       /** Duration Ms */
       duration_ms: number;
     };
-    /** TokenPair */
-    TokenPair: {
-      /** Access Token */
-      access_token: string;
-      /** Refresh Token */
-      refresh_token: string;
-      /**
-       * Token Type
-       * @default bearer
-       */
-      token_type: string;
-    };
     /** UserOut */
     UserOut: {
       /**
@@ -3968,7 +4028,9 @@ export interface operations {
       query?: never;
       header?: never;
       path?: never;
-      cookie?: never;
+      cookie?: {
+        lf_refresh?: string | null;
+      };
     };
     requestBody: {
       content: {
@@ -3982,7 +4044,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["TokenPair"];
+          "application/json": components["schemas"]["AccessToken"];
         };
       };
       /** @description Validation Error */
@@ -3993,6 +4055,53 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
         };
+      };
+    };
+  };
+  logout_auth_logout_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: {
+        lf_refresh?: string | null;
+      };
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  logout_all_auth_logout_all_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
@@ -4021,13 +4130,11 @@ export interface operations {
       query?: never;
       header?: never;
       path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["RefreshRequest"];
+      cookie?: {
+        lf_refresh?: string | null;
       };
     };
+    requestBody?: never;
     responses: {
       /** @description Successful Response */
       200: {
@@ -4035,8 +4142,15 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["TokenPair"];
+          "application/json": components["schemas"]["AccessToken"];
         };
+      };
+      /** @description No session to refresh; the cookies are deleted */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {
@@ -4087,7 +4201,9 @@ export interface operations {
       query?: never;
       header?: never;
       path?: never;
-      cookie?: never;
+      cookie?: {
+        lf_refresh?: string | null;
+      };
     };
     requestBody: {
       content: {
@@ -4101,7 +4217,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["TokenPair"];
+          "application/json": components["schemas"]["AccessToken"];
         };
       };
       /** @description Validation Error */

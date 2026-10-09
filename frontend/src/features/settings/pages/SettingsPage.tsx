@@ -8,6 +8,7 @@ import { Select } from "@/components/ui/Select";
 import { useRenameOrg, useUsage } from "@/features/settings/api";
 import { AiSwitchCard } from "@/features/settings/components/AiSwitchCard";
 import { ProvidersCard } from "@/features/settings/components/ProvidersCard";
+import { SessionsCard } from "@/features/settings/components/SessionsCard";
 import { useT } from "@/i18n";
 import { useOrg } from "@/providers/org";
 import { useTheme } from "@/providers/theme";
@@ -109,6 +110,8 @@ export function SettingsPage() {
           </Select>
         </div>
       </Card>
+
+      <SessionsCard />
 
       {isOwner && orgId && <ProvidersCard orgId={orgId} kind="voice" />}
       {isOwner && orgId && <ProvidersCard orgId={orgId} kind="image" />}

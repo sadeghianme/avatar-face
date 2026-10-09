@@ -11,6 +11,11 @@
 # (the versions tested end to end), with the liveface-backend line dropped
 # (the project itself is not a constraint; none was present in that freeze).
 #
+# Edited by hand on 2026-10-09: passlib and python-jose (with ecdsa, rsa and
+# pyasn1, which only python-jose needed) removed, PyJWT 2.15.1 added, for the
+# change that replaced them (app/core/security.py). The next regeneration
+# from the production container replaces this note.
+#
 # To regenerate: in the production container run `pip freeze`, delete the
 # liveface-backend line, and replace everything below this header.
 #
@@ -45,7 +50,6 @@ cryptography==50.0.2
 cycler==0.12.1
 dlinfo==2.0.0
 dnspython==2.8.0
-ecdsa==0.19.2
 email-validator==2.3.0
 espeakng-loader==0.2.4
 fastapi==0.142.2
@@ -72,25 +76,22 @@ onnxruntime==1.30.0
 opencv-contrib-python==5.0.0.93
 opentelemetry-api==1.45.0
 packaging==26.3
-passlib==1.7.4
 pathvalidate==3.3.1
 phonemizer==3.4.0
 pillow==12.3.0
 piper-tts==1.8.0
 propcache==0.5.4
 protobuf==7.36.2
-pyasn1==0.6.4
 pycparser==3.0
 pydantic==2.13.5
 pydantic-settings==2.15.0
 pydantic_core==2.46.5
+PyJWT==2.15.1
 pyparsing==3.3.3
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.4
-python-jose==3.5.0
 python-multipart==0.0.32
 PyYAML==6.0.3
-rsa==4.9.1
 s3transfer==0.14.0
 scipy==1.18.1
 six==1.17.0
