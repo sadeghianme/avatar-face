@@ -39,12 +39,21 @@ landmark between them goes on the smooth curve the owner sees through them
 (`_outline_pairs`), so the mesh's edge is that outline. Marks saved with a
 four-point head pin those four only and fit exactly as they always did.
 
-**A fit that folds is refused, not saved.** `validate` names what is wrong
-(folded triangles, lids upside down, eyes or mouth corners out of order,
-features outside the head, a head outline that crosses itself or goes round
-the face out of order, a pupil outside its eye) and rig-fit refuses to
-store such a rig. The preview still returns it, with the reasons, so the
-owner sees what to move.
+**Marks out of place are refused; a sliver between them is not.**
+`validate` names what is wrong (folded triangles, lids upside down, eyes or
+mouth corners out of order, a mouth above the eyes, features outside the
+head, a head outline that crosses itself or goes round the face out of
+order, a pupil outside its eye) and rig-fit refuses to store such a rig.
+The preview still returns it, with the reasons, so the owner sees what to
+move. Folds are counted against the base AND against the mesh the base's
+own marks make (`reference_points`): the fit lays the lips out on a mouth
+line and the oval on its outline, and a triangle a pixel thin that this
+layout turns over from the detection was laid out, not folded. Counted
+against the detection alone, 64% of detector-like faces on the cartoon
+line were refused on their own marks, and Reset put the owner back on the
+same refusal. Folds left once the marks moved, with nothing else wrong,
+are smoothed (`smoothing`) when no mark has to move, and the fit says so in
+a note; only a fold that cannot be is refused.
 
 The base mesh is kept beside the rig in storage (fit-base.json), never in
 rig.json: the rig is published to every visitor, the base is only needed
@@ -61,7 +70,9 @@ The package:
     warping     the marks turned into landmark targets, and the one
                 thin-plate-spline warp from the base
     validation  what makes a fit unsaveable (folds, order, containment)
-    fit         fit_rig, and the stored base (fit-base.json) it starts from
+    smoothing   small folds between marks, smoothed without moving a mark
+    fit         fit_marks / fit_rig, the base's own marks and the mesh they
+                make, and the stored base (fit-base.json) fits start from
 
 The public names are re-exported here, so `anchor_fit.X` keeps working.
 Nothing private is: each module's helpers stay in it.
@@ -71,12 +82,18 @@ from __future__ import annotations
 
 from app.services.anchor_fit.fit import (
     FIT_BASE_VERSION,
+    FitResult,
     fit_base_key,
     fit_base_points,
     fit_base_record,
+    fit_marks,
     fit_rig,
     move_fit_base,
+    own_marks,
+    pinned_landmarks,
     read_fit_base,
+    reference_points,
+    warped_points,
     write_fit_base,
 )
 from app.services.anchor_fit.marks import (
@@ -121,23 +138,30 @@ from app.services.anchor_fit.scheme import (
     MOUTH_STYLES,
     NO_PUPIL_FACE_TYPES,
     NUM_POINTS,
+    ORIENTATION_PX,
+    OVERSHOOT,
     RENDER_PROFILES,
     RIGHT_COMMISSURE,
     RIGHT_EYE,
     RIGHT_IRIS,
     SEAM,
     SEAM_GAP,
+    SMOOTH_LIMIT,
     SMOOTHING,
     Point,
     marks_mouth_as_line,
     marks_pupils,
     render_profile_for,
 )
+from app.services.anchor_fit.smoothing import smooth_folds
 from app.services.anchor_fit.validation import (
+    FOLDED_MESH,
     FitProblem,
     flipped_triangles,
+    folded,
     outline_crossed,
     outline_in_order,
+    skin_triangles,
     validate,
 )
 from app.services.anchor_fit.warping import (
@@ -161,10 +185,14 @@ __all__ = [
     "fit_base_points",
     "fit_base_record",
     "FIT_BASE_VERSION",
+    "fit_marks",
     "fit_rig",
     "FitProblem",
+    "FitResult",
     "FLIP_EPSILON",
     "flipped_triangles",
+    "FOLDED_MESH",
+    "folded",
     "for_face_type",
     "HEAD",
     "HEAD_DIAGONALS",
@@ -194,13 +222,18 @@ __all__ = [
     "move_fit_base",
     "NO_PUPIL_FACE_TYPES",
     "NUM_POINTS",
+    "OVERSHOOT",
+    "ORIENTATION_PX",
     "outline_crossed",
     "outline_in_order",
+    "own_marks",
+    "pinned_landmarks",
     "part_lips",
     "Point",
     "pupil_pairs",
     "PupilMarks",
     "read_fit_base",
+    "reference_points",
     "RegionMarks",
     "render_profile_for",
     "RENDER_PROFILES",
@@ -212,9 +245,13 @@ __all__ = [
     "SEAM",
     "SEAM_GAP",
     "seam_line",
+    "skin_triangles",
+    "smooth_folds",
+    "SMOOTH_LIMIT",
     "SMOOTHING",
     "validate",
     "warp",
+    "warped_points",
     "with_head_outline",
     "write_fit_base",
 ]

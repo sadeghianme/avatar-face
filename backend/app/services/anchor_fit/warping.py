@@ -37,6 +37,9 @@ from app.services.anchor_fit.scheme import (
     SEAM,
     SEAM_GAP,
     SMOOTHING,
+    TEAR_NEAR,
+    TEAR_SLACK,
+    TEAR_STRETCH,
     Point,
     marks_mouth_as_line,
     marks_pupils,
@@ -351,11 +354,59 @@ def correspondences(
     return pairs
 
 
-def warp(base: np.ndarray, pairs: list[tuple[int, np.ndarray]]) -> np.ndarray:
+def _torn_apart(src: np.ndarray, dst: np.ndarray, scale: float) -> tuple[np.ndarray, np.ndarray]:
+    """The warp's control points with each group that starts together but
+    is pulled apart made one point, at the group's mean.
+
+    A smooth map cannot separate points that start on top of each other,
+    and a thin-plate spline made to bends everything around them: a shut
+    eye's lids are detected within a pixel of each other, and its top mark
+    nudged 3 px down moved the face 85 px and folded 50 to 180 of its
+    triangles. Pins closer than TEAR_NEAR of the face whose targets part
+    TEAR_STRETCH times further than that (and TEAR_SLACK of the face more)
+    are those; the fit still puts each landmark on its own mark after the
+    warp, and the folds left around it are small enough to smooth. Pins
+    that move together, however close (a mouth line's parted lips, a
+    commissure's four), are untouched.
+    """
+    near, slack = TEAR_NEAR * scale, TEAR_SLACK * scale
+    count = len(src)
+    parent = list(range(count))
+
+    def root(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    torn = False
+    for a in range(count):
+        apart = np.linalg.norm(src[a + 1 :] - src[a], axis=1)
+        for k in np.flatnonzero(apart < near):
+            b = a + 1 + int(k)
+            if np.linalg.norm(dst[b] - dst[a]) > TEAR_STRETCH * apart[k] + slack:
+                parent[root(b)] = root(a)
+                torn = True
+    if not torn:
+        return src, dst
+    groups: dict[int, list[int]] = {}
+    for i in range(count):
+        groups.setdefault(root(i), []).append(i)
+    members = list(groups.values())
+    return (
+        np.array([src[g].mean(axis=0) for g in members]),
+        np.array([dst[g].mean(axis=0) for g in members]),
+    )
+
+
+def warp(base: np.ndarray, pairs: list[tuple[int, np.ndarray]], tear: bool = False) -> np.ndarray:
     """One thin-plate-spline warp of every base point, pinning `pairs`.
 
     Solved in coordinates normalised to the face, so SMOOTHING means the same
-    on a 300px thumbnail and a 2000px photo.
+    on a 300px thumbnail and a 2000px photo. With `tear`, pins that start
+    together but are pulled apart are one control point (`_torn_apart`):
+    the fit asks for that only when the plain warp folds, so a fit that
+    passes is the same rig it always was.
     """
     # One target per landmark (a later pair for the same index wins), and
     # landmarks at the same base position share the average of their
@@ -366,9 +417,10 @@ def warp(base: np.ndarray, pairs: list[tuple[int, np.ndarray]]) -> np.ndarray:
         grouped.setdefault((float(base[i][0]), float(base[i][1])), []).append(target)
     src = np.array(list(grouped.keys()))
     dst = np.array([np.mean(targets, axis=0) for targets in grouped.values()])
-
     origin = base.min(axis=0)
     scale = max(float(np.ptp(base, axis=0).max()), 1.0)
+    if tear:
+        src, dst = _torn_apart(src, dst, scale)
     spline = RBFInterpolator(
         (src - origin) / scale,
         (dst - origin) / scale,

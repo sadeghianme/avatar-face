@@ -458,17 +458,20 @@ async def preview_rig(
     creation_id: str, body: PreviewRigRequest, ctx: OrgMember, db: DB
 ) -> PreviewRigOut:
     """The rig finish would build from these marks, with the validator's
-    reasons. Nothing is saved.
+    reasons (each refuses it) and notes (what was smoothed on the way: thin
+    triangles between the marks that would have folded; nothing to act
+    on). Nothing is saved.
 
     Computed per request rather than as a job: a fit is milliseconds, the
     same call the avatar rig-fit preview makes on every drag, and queueing it
     behind someone's background removal would make the handles lag.
     """
     creation = await repo.get(db, ctx.org.id, creation_id)
-    rig, problems = await requests.preview_rig(creation, body)
+    result = await requests.preview_rig(creation, body)
     return PreviewRigOut(
-        rig=rig,
-        reasons=[FitReason(code=p.code, detail=p.detail, count=p.count) for p in problems],
+        rig=result.rig,
+        reasons=[FitReason(code=p.code, detail=p.detail, count=p.count) for p in result.problems],
+        notes=[FitReason(code=p.code, detail=p.detail, count=p.count) for p in result.notes],
     )
 
 

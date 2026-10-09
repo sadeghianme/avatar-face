@@ -1540,7 +1540,9 @@ export interface paths {
     /**
      * Preview Rig
      * @description The rig finish would build from these marks, with the validator's
-     *     reasons. Nothing is saved.
+     *     reasons (each refuses it) and notes (what was smoothed on the way: thin
+     *     triangles between the marks that would have folded; nothing to act
+     *     on). Nothing is saved.
      *
      *     Computed per request rather than as a job: a fit is milliseconds, the
      *     same call the avatar rig-fit preview makes on every drag, and queueing it
@@ -3309,6 +3311,8 @@ export interface components {
     };
     /** PreviewRigOut */
     PreviewRigOut: {
+      /** Notes */
+      notes?: components["schemas"]["FitReason"][];
       /** Reasons */
       reasons?: components["schemas"]["FitReason"][];
       /** Rig */

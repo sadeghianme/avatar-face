@@ -103,11 +103,34 @@ CHIN_MERGE = 0.01
 # nearly coincide; small enough that every mark lands within a tenth of a
 # pixel on a 1000px face.
 SMOOTHING = 1e-7
+# Pins closer than TEAR_NEAR of the face (2.5 px on a 500 px face) whose
+# targets part more than TEAR_STRETCH times further, and by TEAR_SLACK of
+# the face beyond that, are one control point of the warp
+# (warping._torn_apart): a shut eye's lids with one of them moved.
+TEAR_NEAR = 0.005
+TEAR_STRETCH = 4.0
+TEAR_SLACK = 0.001
+# How much further than any pin the warp may carry a landmark nothing pins,
+# as a fraction of the face, before the fit tears such pins apart
+# (fit._fitted_points). Twice the most measured on 11,726 fits that passed
+# (1.6%, an open mouth's corner nudged); a shut eye's lid nudged 3 px threw
+# the face 13%.
+OVERSHOOT = 0.03
 # Triangles smaller than this (fraction of the face box area) are ignored by
 # the fold count: a collapsed sliver, like the one between an outer mouth
 # corner and the inner corner the mouth line puts on top of it, has no
 # orientation to lose.
 FLIP_EPSILON = 1e-7
+# Nor has a triangle whose least height is under this, in pixels, whatever
+# the face's size: a fit is stored to the hundredth of a pixel, and that
+# rounding alone turns a nearly straight triple over (measured: three jaw
+# landmarks of a detected face, 0.04 px from a line, "folded" by the
+# rounding of points the fit had not moved).
+ORIENTATION_PX = 0.05
+# How far, as a fraction of the face's size, the fold smoothing may move a
+# landmark the owner did not mark. A fold that needs more is the owner's
+# marks crossing each other, not a sliver between them, and stays refused.
+SMOOTH_LIMIT = 0.03
 # Slack on "inside the head", as a fraction of the head's size: a detected
 # face turned slightly away can put the far eye corner a pixel past the
 # cheek contour.

@@ -9,6 +9,7 @@ import numpy as np
 from scipy.spatial import Delaunay
 
 from app.services.anchor_fit.scheme import (
+    CHIN,
     EYE_SLACK,
     FLIP_EPSILON,
     HEAD,
@@ -18,6 +19,7 @@ from app.services.anchor_fit.scheme import (
     LEFT_EYE,
     LEFT_IRIS,
     MOUTH,
+    ORIENTATION_PX,
     RIGHT_EYE,
     RIGHT_IRIS,
     SEAM,
@@ -39,25 +41,74 @@ def _signed_areas(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
     return (b[:, 0] - a[:, 0]) * (c[:, 1] - a[:, 1]) - (b[:, 1] - a[:, 1]) * (c[:, 0] - a[:, 0])
 
 
-def flipped_triangles(
-    base: np.ndarray, fitted: np.ndarray, triangles: np.ndarray | None = None
-) -> int:
-    """How many triangles of the base triangulation the fit turned over.
+def skin_triangles(base: np.ndarray) -> np.ndarray:
+    """The base triangulation the fold count is taken on.
 
-    Triangles with an iris vertex do not count: the iris lies under the
+    Triangles with an iris vertex are left out: the iris lies under the
     lids, not in the skin, and in every detection its ring already reaches
     past both of them, so a lid moved over it, or a smaller pupil, would
     "fold" a triangle between two layers that never touch.
     """
+    triangles = Delaunay(base).simplices
+    return triangles[~np.isin(triangles, IRIS).any(axis=1)]
+
+
+def _orientation(points: np.ndarray, triangles: np.ndarray, eps: float) -> np.ndarray:
+    """Each triangle's orientation (+1 or -1), or 0 where it has none to
+    trust: smaller than `eps` (a doubled area), or thinner than
+    ORIENTATION_PX, which the rounding of stored points can turn over."""
+    areas = _signed_areas(points, triangles)
+    a, b, c = points[triangles[:, 0]], points[triangles[:, 1]], points[triangles[:, 2]]
+    longest = np.maximum.reduce(
+        [
+            np.linalg.norm(b - a, axis=1),
+            np.linalg.norm(c - b, axis=1),
+            np.linalg.norm(a - c, axis=1),
+        ]
+    )
+    thin = np.abs(areas) <= np.maximum(eps, ORIENTATION_PX * longest)
+    return np.where(thin, 0.0, np.sign(areas))
+
+
+def folded(
+    base: np.ndarray,
+    fitted: np.ndarray,
+    reference: np.ndarray | None = None,
+    triangles: np.ndarray | None = None,
+) -> np.ndarray:
+    """The triangles of the base triangulation the fit turned over: a mask
+    over `triangles` (skin_triangles(base) when not given).
+
+    With a `reference` (fit.reference_points: the mesh the base's own marks
+    make), a triangle is folded only when the fit turns it over from BOTH:
+    a triangle the base's own marks already turn over is one the fit lays
+    out itself (the lips onto a mouth line, the oval onto the outline), not
+    one the marks crossed, and either way round is the fit's to choose. A
+    triangle's orientation counts only where it has one in every mesh it is
+    compared in.
+    """
     if triangles is None:
-        triangles = Delaunay(base).simplices
-    skin: np.ndarray = triangles[~np.isin(triangles, IRIS).any(axis=1)]
-    before = _signed_areas(base, skin)
-    after = _signed_areas(fitted, skin)
+        triangles = skin_triangles(base)
     box = np.ptp(base, axis=0)
     eps = FLIP_EPSILON * float(box[0] * box[1]) * 2  # signed areas are doubled
-    measurable = (np.abs(before) > eps) & (np.abs(after) > eps)
-    return int(np.sum(measurable & (np.sign(before) != np.sign(after))))
+    before = _orientation(base, triangles, eps)
+    after = _orientation(fitted, triangles, eps)
+    turned = (before != 0) & (after != 0) & (before != after)
+    if reference is not None:
+        own = _orientation(reference, triangles, eps)
+        turned &= (own != 0) & (own != after)
+    return turned
+
+
+def flipped_triangles(
+    base: np.ndarray,
+    fitted: np.ndarray,
+    triangles: np.ndarray | None = None,
+    reference: np.ndarray | None = None,
+) -> int:
+    """How many triangles of the base triangulation the fit turned over
+    (`folded`, which says how they are counted)."""
+    return int(folded(base, fitted, reference, triangles).sum())
 
 
 def _cross(o: np.ndarray, a: np.ndarray, b: np.ndarray) -> float:
@@ -104,24 +155,65 @@ def outline_in_order(base_ring: np.ndarray, ring: np.ndarray) -> bool:
     return bool(np.all(_turns(ring) * direction > 0))
 
 
-def validate(base: np.ndarray, fitted: np.ndarray, pupils: bool = True) -> list[FitProblem]:
+FOLDED_MESH = "folded_mesh"
+
+
+def folded_problem(count: int) -> FitProblem:
+    return FitProblem(
+        FOLDED_MESH,
+        f"{count} triangle{'s' if count != 1 else ''} of the face would fold over; "
+        "move the marks so the eyes, mouth and head do not cross each other",
+        count,
+    )
+
+
+def _mouth_above_eyes(fitted: np.ndarray) -> bool:
+    """Whether the mouth's middle is not below both eyes, "below" being
+    from the top of the head towards the chin, so a tilted head is judged
+    along its own axis."""
+    down = fitted[CHIN] - fitted[HEAD["top"]]
+    length = float(np.linalg.norm(down))
+    if length < 1e-9:
+        return False  # a head of no height: the outline checks say so
+    down = down / length
+    mouth = fitted[[MOUTH["left"], MOUTH["right"], *SEAM]].mean(axis=0)
+    return any(
+        float((mouth - fitted[[eye["top"], eye["bottom"]]].mean(axis=0)) @ down) <= 0
+        for eye in (LEFT_EYE, RIGHT_EYE)
+    )
+
+
+def validate(
+    base: np.ndarray,
+    fitted: np.ndarray,
+    pupils: bool = True,
+    reference: np.ndarray | None = None,
+) -> list[FitProblem]:
     """Everything wrong with a fit, or nothing. Shared by preview and save.
     `pupils` is whether the line has pupils to check (an animal's are never
-    marked, so no owner could correct them)."""
+    marked, so no owner could correct them). `reference` is the mesh the
+    base's own marks make, which the fold count also compares with
+    (`folded`).
+
+    A fold alone may be a sliver between marks that are each where they
+    belong, which fit_marks smooths away; every other problem is the marks
+    themselves out of place, and is refused as it is."""
     problems: list[FitProblem] = []
-    flips = flipped_triangles(base, fitted)
+    flips = flipped_triangles(base, fitted, reference=reference)
     if flips:
-        problems.append(
-            FitProblem(
-                "folded_mesh",
-                f"{flips} triangle{'s' if flips != 1 else ''} of the face would fold over; "
-                "move the marks so the eyes, mouth and head do not cross each other",
-                flips,
-            )
-        )
+        problems.append(folded_problem(flips))
 
     x, y = fitted[:, 0], fitted[:, 1]
-    if y[LEFT_EYE["top"]] > y[LEFT_EYE["bottom"]] or y[RIGHT_EYE["top"]] > y[RIGHT_EYE["bottom"]]:
+
+    def upside_down(eye: dict[str, int]) -> bool:
+        # The lids of a shut eye meet, and their marks can cross by a hair,
+        # a detection's as much as a hand's: a pixel was enough to refuse
+        # every shut eye in the sweep. Upside down is crossed by more than
+        # the slack a pupil has.
+        slack = EYE_SLACK * abs(x[eye["right"]] - x[eye["left"]])
+        return bool(y[eye["top"]] > y[eye["bottom"]] + slack)
+
+    if upside_down(LEFT_EYE) or upside_down(RIGHT_EYE):
         problems.append(FitProblem("lids_inverted", "An eye's top mark is below its bottom mark"))
     order = [x[LEFT_EYE["left"]], x[LEFT_EYE["right"]], x[RIGHT_EYE["left"]], x[RIGHT_EYE["right"]]]
     if not all(a < b for a, b in zip(order, order[1:])):
@@ -136,6 +228,8 @@ def validate(base: np.ndarray, fitted: np.ndarray, pupils: bool = True) -> list[
         problems.append(
             FitProblem("mouth_reversed", "The mouth's left corner is right of its right corner")
         )
+    if _mouth_above_eyes(fitted):
+        problems.append(FitProblem("mouth_above_eyes", "The mouth must be below the eyes"))
 
     head = [HEAD["left"], HEAD["right"], HEAD["top"], HEAD["bottom"]]
     x0, x1 = float(x[head].min()), float(x[head].max())
