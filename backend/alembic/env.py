@@ -9,8 +9,13 @@ from app.core.config import get_settings
 from app.models import Base
 
 config = context.config
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# The `alembic` command logs as alembic.ini says. The API migrates in its own
+# process at startup (app.main), with its JSON logging already in place, and
+# turns this off: fileConfig there replaced the root handler, raised the root
+# level to WARN and disabled every logger already made, which silenced the
+# application's logs for the life of the process.
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 config.set_main_option("sqlalchemy.url", get_settings().database_url)
 target_metadata = Base.metadata

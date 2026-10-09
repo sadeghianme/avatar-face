@@ -66,7 +66,7 @@ BACKGROUND_ALPHA = 0.05
 UNMIX_FLOOR = 0.25
 
 
-def _box_mean(a, r: int):
+def box_mean(a, r: int):
     """Mean over a (2r+1)² window, normalised by the true window size.
 
     Border pixels divide by however many neighbours they actually have, so the
@@ -104,14 +104,14 @@ def guided_filter(guide, src, radius: int, eps: float = GUIDE_EPS):
     with barely any luminance step — exactly the case a greyscale guide
     cannot see, and exactly where cut-outs look worst.
     """
-    mean_guide = _box_mean(guide, radius)
-    mean_src = _box_mean(src, radius)
-    mean_cross = _box_mean(guide * src[:, :, None], radius)
+    mean_guide = box_mean(guide, radius)
+    mean_src = box_mean(src, radius)
+    mean_cross = box_mean(guide * src[:, :, None], radius)
     cov_cross = mean_cross - mean_guide * mean_src[:, :, None]
 
     r_, g_, b_ = guide[:, :, 0], guide[:, :, 1], guide[:, :, 2]
     products = np.stack([r_ * r_, r_ * g_, r_ * b_, g_ * g_, g_ * b_, b_ * b_], axis=-1)
-    m = _box_mean(products, radius)
+    m = box_mean(products, radius)
     mr, mg, mb = mean_guide[:, :, 0], mean_guide[:, :, 1], mean_guide[:, :, 2]
 
     # Covariance of the guide within each window, plus eps on the diagonal.
@@ -146,7 +146,7 @@ def guided_filter(guide, src, radius: int, eps: float = GUIDE_EPS):
     )
     offset = mean_src - (coeff * mean_guide).sum(axis=-1)
 
-    return (_box_mean(coeff, radius) * guide).sum(axis=-1) + _box_mean(offset, radius)
+    return (box_mean(coeff, radius) * guide).sum(axis=-1) + box_mean(offset, radius)
 
 
 def estimate_background(rgb, alpha, radius: int):
@@ -158,8 +158,8 @@ def estimate_background(rgb, alpha, radius: int):
     harmless because nothing there gets un-mixed.
     """
     weight = (alpha < BACKGROUND_ALPHA).astype(np.float32)
-    weighted = _box_mean(rgb * weight[:, :, None], radius)
-    support = _box_mean(weight, radius)[:, :, None]
+    weighted = box_mean(rgb * weight[:, :, None], radius)
+    support = box_mean(weight, radius)[:, :, None]
 
     if weight.any():
         fallback = rgb[weight > 0.5].mean(axis=0).astype(np.float32)

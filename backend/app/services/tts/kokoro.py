@@ -91,7 +91,7 @@ class KokoroTTSProvider(TTSProvider):
 
     def is_configured(self) -> bool:
         """Either model, with the voices: a server may ship only one."""
-        return _original_configured() or native_timing_enabled()
+        return original_configured() or native_timing_enabled()
 
     def cache_version(self) -> str:
         """Native-timed recordings are keyed apart from stretched ones."""
@@ -117,13 +117,13 @@ class KokoroTTSProvider(TTSProvider):
                 native = await _synthesize_native(text, voice_id, lang, locale)
                 if native is not None:
                     return native
-                if not _original_configured():
+                if not original_configured():
                     raise RuntimeError(
                         "the timestamped Kokoro model failed and no other Kokoro model is installed"
                     )
                 fell_back = True
             try:
-                audio, duration_ms = await asyncio.to_thread(_render, text, voice_id, lang)
+                audio, duration_ms = await asyncio.to_thread(render, text, voice_id, lang)
             except ValueError as exc:
                 refused = _unspeakable(exc)
                 if refused is not None:
@@ -142,7 +142,7 @@ class KokoroTTSProvider(TTSProvider):
         )
 
 
-def _original_configured() -> bool:
+def original_configured() -> bool:
     """Is kokoro-v1.0.onnx installed, with the voices?"""
     settings = get_settings()
     return bool(
@@ -212,7 +212,7 @@ async def _synthesize_native(
     return SynthesisResult(audio=audio, audio_mime="audio/wav", duration_ms=duration_ms, cues=cues)
 
 
-def _render(text: str, voice_id: str, lang: str) -> tuple[bytes, int]:
+def render(text: str, voice_id: str, lang: str) -> tuple[bytes, int]:
     import soundfile as sf  # libsndfile: only where Kokoro speaks
 
     engine = _get_engine()

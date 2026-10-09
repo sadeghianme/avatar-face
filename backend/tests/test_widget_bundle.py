@@ -132,13 +132,13 @@ async def test_the_ktx2_transcoder_is_served_beside_the_3d_bundle(client):
 
 
 def test_etag_normalisation_rules():
-    from app.main import _etag_matches
+    from app.main import etag_matches
 
-    assert _etag_matches('"abc"', '"abc"')
-    assert _etag_matches('W/"abc"', '"abc"')
-    assert _etag_matches('W/"abc-gzip"', '"abc"')
-    assert _etag_matches('"other", W/"abc-br"', '"abc"')
-    assert _etag_matches("*", '"abc"')
-    assert not _etag_matches('"abc"', '"abd"')
-    assert not _etag_matches(None, '"abc"')
-    assert not _etag_matches("", '"abc"')
+    assert etag_matches('"abc"', '"abc"')
+    assert etag_matches('W/"abc"', '"abc"')
+    assert etag_matches('W/"abc-gzip"', '"abc"')
+    assert etag_matches('"other", W/"abc-br"', '"abc"')
+    assert etag_matches("*", '"abc"')
+    assert not etag_matches('"abc"', '"abd"')
+    assert not etag_matches(None, '"abc"')
+    assert not etag_matches("", '"abc"')

@@ -16,8 +16,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from app.core.errors import Auth401
 from app.core.security import (
-    _DUMMY_HASH,
-    _access_key,
+    DUMMY_HASH,
+    access_key,
     create_access_token,
     decode_access_token,
     hash_password,
@@ -71,7 +71,7 @@ def test_a_password_longer_than_72_bytes_is_cut_where_passlib_cut_it():
 def test_new_hashes_are_written_as_passlib_wrote_them():
     hashed = hash_password("password123")
     assert PASSLIB_FORMAT.match(hashed), hashed
-    assert hashed[:7] == _DUMMY_HASH[:7]
+    assert hashed[:7] == DUMMY_HASH[:7]
     assert verify_password("password123", hashed)
     assert not verify_password("password124", hashed)
     # Salted: the same password never hashes the same twice.
@@ -132,7 +132,7 @@ def test_an_access_token_carries_its_user_and_session():
 
 
 def _encode(claims: dict) -> str:
-    return jwt.encode(claims, _access_key("test-secret"), algorithm="HS256")
+    return jwt.encode(claims, access_key("test-secret"), algorithm="HS256")
 
 
 @pytest.mark.parametrize(

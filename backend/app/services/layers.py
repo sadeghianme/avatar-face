@@ -37,7 +37,7 @@ from PIL import Image
 from app.models import Avatar
 from app.services import segment
 from app.services.jobs import run_cpu
-from app.services.matting import _box_mean
+from app.services.matting import box_mean
 from app.services.photo_io import png_bytes
 from app.services.storage import Storage
 
@@ -171,8 +171,8 @@ def _diffuse_fill(rgb, alpha):
     filled = rgb.copy()
     radius = max(4, int(min(height, width) * 0.02))
     while known.min() < 1.0 and radius < 2 * max(height, width):
-        num = _box_mean(filled * known[:, :, None], radius)
-        den = _box_mean(known, radius)[:, :, None]
+        num = box_mean(filled * known[:, :, None], radius)
+        den = box_mean(known, radius)[:, :, None]
         have = den[:, :, 0] > 1e-4
         new = (known < 1.0) & have
         if new.any():

@@ -28,14 +28,14 @@ from app.services.mouth_kit.calls import (
     OWNER_PHOTO,
     REBASE_FAILED,
     TEETH_REMOVED,
-    _note,
-    _now,
     generated_count,
     kit_model,
+    note,
+    now,
 )
 from app.services.mouth_kit.records import (
-    _standard_teeth,
     kit_record,
+    standard_teeth,
     teeth_reason,
 )
 from app.services.publishing import mark_dirty
@@ -102,7 +102,7 @@ async def store(
             # so it is refitted for the teeth that will be drawn: the
             # standard ones.
             logger.info("mouth kit: the teeth photo was refused as WebP (%s)", exc.code)
-            reason = _note("mouth_teeth_unclear", exc.detail)
+            reason = note("mouth_teeth_unclear", exc.detail)
             fitted = performance_kit.for_standard_teeth(fitted)
         else:
             new_photo = await mouth_photo.put_photo(avatar, storage, photo, rig)
@@ -118,7 +118,7 @@ async def store(
         keys = FITTED_WITHOUT_TEETH
     else:
         config["teeth"] = mouth_config.generic_teeth_record(
-            _standard_teeth(reason or _note("teeth_failed", "The teeth could not be made"))
+            standard_teeth(reason or note("teeth_failed", "The teeth could not be made"))
         )
         keys = FITTED_WITH_TEETH
     # The fitted values the kit decides; everything else the owner set (or
@@ -248,7 +248,7 @@ async def follow_points(avatar: Avatar, storage: Storage, points, image_size=Non
     config["motion_key"] = new_key
     if kit := config.get("kit"):
         kit = kit.copy()
-        kit["rebased_at"] = _now()
+        kit["rebased_at"] = now()
         config["kit"] = kit
     avatar.mouth_config = json.dumps(config)
     return [key]
@@ -287,7 +287,7 @@ async def follow_redetection(org_id: str, avatar_id: str, points) -> None:
     storage = get_storage()
     stale: list[str] = []
     async with avatar_edits.hold(avatar_id), get_session_factory()() as db:
-        avatar = await _load_avatar(db, org_id, avatar_id)
+        avatar = await load_avatar(db, org_id, avatar_id)
         if avatar is None:
             return
         stale = await follow_points(avatar, storage, points)
@@ -298,7 +298,7 @@ async def follow_redetection(org_id: str, avatar_id: str, points) -> None:
         await storage.delete(key)
 
 
-async def _load_avatar(db, org_id: str, avatar_id: str):
+async def load_avatar(db, org_id: str, avatar_id: str):
     return (
         await db.execute(select(Avatar).where(Avatar.id == avatar_id, Avatar.org_id == org_id))
     ).scalar_one_or_none()

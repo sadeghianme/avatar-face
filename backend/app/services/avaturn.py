@@ -54,7 +54,7 @@ def configured() -> bool:
     return bool(api_token())
 
 
-async def _post(path: str, payload: dict | None = None) -> dict:
+async def post(path: str, payload: dict | None = None) -> dict:
     token = api_token()
     if not token:
         raise AvaturnUnavailable("avaturn_api_token is not set")
@@ -79,8 +79,8 @@ async def new_session() -> dict:
     a handle for their avatar list, and reusing one across our customers
     would let each of them see the others' avatars in the editor.
     """
-    user = await _post("/api/v1/users/new")
-    session = await _post(
+    user = await post("/api/v1/users/new")
+    session = await post(
         "/api/v1/sessions/new",
         {"user_id": user["id"], "config": {"type": "create"}},
     )

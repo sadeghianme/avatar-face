@@ -56,18 +56,18 @@ OWNER_PHOTO: Note = {"code": "owner_photo", "detail": "Your own teeth photo is u
 TEETH_REMOVED: Note = {"code": "teeth_removed", "detail": "The teeth photo was removed"}
 
 
-def _now() -> str:
+def now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _note(code: str, detail: str) -> Note:
+def note(code: str, detail: str) -> Note:
     return {"code": code, "detail": detail}
 
 
 # --- Calls -----------------------------------------------------------------------
 
 
-class _Stopped(imagegen.ImageGenUnavailable):
+class CallsStopped(imagegen.ImageGenUnavailable):
     """No more calls may go: an ImageGenUnavailable, which the kit reads as
     "nothing sent, send nothing more", saying why (the organization's
     switch, the monthly limit, a consent that could not be recorded;
@@ -92,7 +92,7 @@ class CallGuard:
     read again, the limit counting every call of this kit still in flight
     as spent; the consent is recorded (`on_first_send`, before the first
     picture leaves). Recording it is tried again before every call until it
-    succeeds: until then nothing is sent (`_Stopped`
+    succeeds: until then nothing is sent (`CallsStopped`
     "consent_not_recorded", which the kit reads as "send nothing more").
     Then the provider call itself, bounded by imagegen's timeout (the kit's
     own bound is off: waiting for this lock, the database or the consent's
@@ -118,7 +118,7 @@ class CallGuard:
                     # next call to try again; this one does
                     # not go, since nothing would say what allowed it.
                     logger.exception("could not record the consent for org %s", self.org_id)
-                    raise _Stopped(*CONSENT_NOT_RECORDED) from exc
+                    raise CallsStopped(*CONSENT_NOT_RECORDED) from exc
                 self._on_first_send = None
             self._in_flight += 1
             self.sent += 1
@@ -137,7 +137,7 @@ class CallGuard:
 
     async def _admit(self) -> None:
         if await ai_switched_off(self.org_id):
-            raise _Stopped(
+            raise CallsStopped(
                 "third_party_ai_disabled",
                 "Your organization turned off third-party AI, so nothing more was sent",
             )
@@ -145,7 +145,7 @@ class CallGuard:
             async with get_session_factory()() as db:
                 await check_image_limit(db, self.org_id, incoming=self._in_flight + 1)
         except AppError as exc:
-            raise _Stopped(exc.code, exc.detail) from exc
+            raise CallsStopped(exc.code, exc.detail) from exc
 
     async def _settle(self, error: BaseException | None) -> None:
         billed = performance_kit.call_billing(error)

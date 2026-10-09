@@ -15,8 +15,8 @@ from app.models.shapes import AdjustChecks, Note
 from app.services import imagegen
 from app.services.anchors import detect_anchors
 from app.services.photo_adjust.paste import (
-    _hull_mask,
     delta_e,
+    hull_mask,
     paste_back,
     rgb_to_lab,
 )
@@ -33,10 +33,10 @@ from app.services.photo_adjust.scheme import (
 )
 from app.services.photo_adjust.sending import (
     Prepared,
-    _alpha,
-    _detect,
-    _own_rgb,
-    _rgb,
+    decode_alpha,
+    decode_own_rgb,
+    decode_rgb,
+    detect_points,
 )
 from app.services.photo_io import on_backdrop, png_bytes
 
@@ -46,7 +46,7 @@ logger = logging.getLogger("liveface.photo_adjust")
 def cheek_colour(image: Image.Image, points: np.ndarray) -> np.ndarray | None:
     """Mean LAB colour over both cheeks, or None if they cover no pixels."""
     rgb = np.asarray(image.convert("RGB"))
-    mask = _hull_mask(rgb.shape[:2], [points[CHEEK_IMAGE_LEFT], points[CHEEK_IMAGE_RIGHT]])
+    mask = hull_mask(rgb.shape[:2], [points[CHEEK_IMAGE_LEFT], points[CHEEK_IMAGE_RIGHT]])
     if mask.sum() < 16:
         return None
     return rgb_to_lab(rgb[mask].astype(np.float64)).mean(axis=0)
@@ -140,7 +140,7 @@ def finish_candidate(
     data: bytes, prepared: Prepared, answer: bytes, mode: str, face_type: str
 ) -> Candidate:
     """Turn a provider answer into a checked candidate. CPU work."""
-    source = _rgb(data)
+    source = decode_rgb(data)
     try:
         with Image.open(io.BytesIO(answer)) as decoded:
             result = decoded.convert("RGB")
@@ -154,7 +154,7 @@ def finish_candidate(
 
     if mode == TOUCHUP:
         try:
-            result_points = _detect(result)
+            result_points = detect_points(result)
         except Exception:
             # Broad on purpose: the detector's runtime fails in its own types.
             logger.exception("detecting the touch-up answer failed")
@@ -163,13 +163,13 @@ def finish_candidate(
             return Candidate(
                 None, rejected=reason("no_face_in_result", "No face was found in the result")
             )
-        alpha = _alpha(data)
+        alpha = decode_alpha(data)
         assert prepared.source_points is not None  # a touch-up is prepared with them
         try:
             # Into the image's own pixels, not the grey composite the model
             # saw: outside the eyes and lips a cut-out stays bit-identical.
             image = paste_back(
-                _own_rgb(data) if alpha is not None else source,
+                decode_own_rgb(data) if alpha is not None else source,
                 prepared.source_points,
                 result,
                 result_points,
@@ -192,7 +192,7 @@ def finish_candidate(
     source_points = None
     if face_type == "human":
         try:
-            source_points = _detect(source)
+            source_points = detect_points(source)
         except Exception:
             # Broad on purpose: the detector's runtime fails in its own types;
             # the result is then checked without the source's face.

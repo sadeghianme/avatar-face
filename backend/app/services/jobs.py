@@ -71,7 +71,7 @@ QUEUE_RETRY_AFTER_SECONDS = 30
 CPU_THREAD_PREFIX = "liveface-cpu"
 
 
-def _limit_cpu_thread() -> None:
+def limit_cpu_thread() -> None:
     """Runs once, on the worker thread, before its first task.
 
     OpenCV otherwise sizes its own pool to every core for each call. The
@@ -86,7 +86,7 @@ def _limit_cpu_thread() -> None:
 
 
 _executor = ThreadPoolExecutor(
-    max_workers=1, thread_name_prefix=CPU_THREAD_PREFIX, initializer=_limit_cpu_thread
+    max_workers=1, thread_name_prefix=CPU_THREAD_PREFIX, initializer=limit_cpu_thread
 )
 
 

@@ -74,7 +74,7 @@ repository with a stub `gh`).
 6. Wait up to 5 minutes for `/api/health` to report the commit, then check
    `/version.json`; only then tag the new images `:release`.
 
-Migrations run when the API container starts (`app/main.py`, `_ensure_schema`).
+Migrations run when the API container starts (`app/main.py`, `ensure_schema`).
 A migration that fails crash-loops the new container: roll back.
 
 ### Emergencies: `--skip-ci-check`
@@ -103,7 +103,7 @@ The database is not touched. If the release being undone ran a migration, the
 older code now runs on the newer schema, which migrations are written to allow
 (028 keeps the old speech table for this). A release from backend round 3 on
 starts on a database a newer release migrated: it logs that it does not know
-the revision and serves (`app/main.py`, `_ensure_schema`). A release before it
+the revision and serves (`app/main.py`, `ensure_schema`). A release before it
 runs `alembic upgrade` at startup and stops on the unknown revision, so stamp
 the database back to that release's last migration first, while the newer
 release is still running. Rolling back over 028 to the release before it:
@@ -148,6 +148,13 @@ The dashboard generates `src/lib/api-types.ts` from it (`npm run gen:api`), the
 widget `embed/src/api-types.ts` (`npm run gen:api` in `embed/`). A change to
 the API is therefore three files in one pull request: export, then generate
 in both packages; CI fails on any of them left behind.
+
+**Private names stay in their module.** No other module, package `__init__`
+or test imports, reads, patches or re-exports a backend module's
+underscore name; what the modules of a package share is public in the module
+that owns it, and a test drives a public function or patches a public seam
+(`backend/tests/test_private_names.py`, in the suite, beside the layering
+checks of `test_layering.py`).
 
 **The backend is four jobs**, and `backend` stands for them:
 

@@ -48,7 +48,7 @@ class Prepared:
     generated_eyes: bool = False
 
 
-def _rgb(data: bytes) -> Image.Image:
+def decode_rgb(data: bytes) -> Image.Image:
     """Decode to what the model and the detector are shown: opaque RGB, a
     cut-out on the neutral grey backdrop (photo_io.on_backdrop). Black,
     what is under alpha 0, would read as a dark room to the model."""
@@ -56,7 +56,7 @@ def _rgb(data: bytes) -> Image.Image:
         return on_backdrop(image)
 
 
-def _own_rgb(data: bytes) -> Image.Image:
+def decode_own_rgb(data: bytes) -> Image.Image:
     """The image's own colour channels, not composited: what a touch-up
     pastes into, so a cut-out's pixels outside the eyes and lips stay its
     own to the bit (and zero under alpha 0)."""
@@ -66,7 +66,7 @@ def _own_rgb(data: bytes) -> Image.Image:
         return image.convert("RGB")
 
 
-def _alpha(data: bytes) -> Image.Image | None:
+def decode_alpha(data: bytes) -> Image.Image | None:
     """The alpha channel of a transparent image, or None for an opaque one."""
     with Image.open(io.BytesIO(data)) as image:
         if image.mode in ("RGBA", "LA", "PA") or "transparency" in image.info:
@@ -74,7 +74,7 @@ def _alpha(data: bytes) -> Image.Image | None:
     return None
 
 
-def _jpeg(image: Image.Image, quality: int) -> bytes:
+def encode_jpeg(image: Image.Image, quality: int) -> bytes:
     out = io.BytesIO()
     image.save(out, format="JPEG", quality=quality, optimize=True)
     return out.getvalue()
@@ -124,7 +124,7 @@ def eyes_closed(points: np.ndarray) -> bool:
     return min(eye_aspect_ratios(points)) < EYE_CLOSED_EAR
 
 
-def _detect(image: Image.Image) -> np.ndarray | None:
+def detect_points(image: Image.Image) -> np.ndarray | None:
     found = landmarks.detect(image)
     return None if found is None else found.points
 
@@ -136,10 +136,10 @@ def prepare(data: bytes, mode: str, face_type: str, style: str | None = None) ->
     face found, no detector on this server, head turned too far), before
     anything is sent or spent.
     """
-    image = _rgb(data)
+    image = decode_rgb(data)
     if mode == TOUCHUP:
         try:
-            points = _detect(image)
+            points = detect_points(image)
         except landmarks.LandmarkerUnavailable as exc:
             raise AdjustSkipped(
                 "landmarks_unavailable", "Face detection is not available on this server"
@@ -156,7 +156,7 @@ def prepare(data: bytes, mode: str, face_type: str, style: str | None = None) ->
         box = face_crop_box(points)
         return Prepared(
             prompt=TOUCHUP_PROMPT,
-            payload=_jpeg(crop_face(image, box), CROP_QUALITY),
+            payload=encode_jpeg(crop_face(image, box), CROP_QUALITY),
             mime="image/jpeg",
             crop=box,
             source_points=points,
@@ -170,7 +170,9 @@ def prepare(data: bytes, mode: str, face_type: str, style: str | None = None) ->
     whole = image.copy()
     if max(whole.size) > SOURCE_MAX_EDGE:
         whole.thumbnail((SOURCE_MAX_EDGE, SOURCE_MAX_EDGE), Image.Resampling.LANCZOS)
-    return Prepared(prompt=prompt, payload=_jpeg(whole, imagegen.SOURCE_QUALITY), mime="image/jpeg")
+    return Prepared(
+        prompt=prompt, payload=encode_jpeg(whole, imagegen.SOURCE_QUALITY), mime="image/jpeg"
+    )
 
 
 # A whole-photo edit the provider declines can pass as a head-and-shoulders
@@ -226,9 +228,9 @@ def head_crop_fallback(
     works on a crop (touch-up). CPU work."""
     if mode == TOUCHUP:
         return None
-    image = _rgb(data)
+    image = decode_rgb(data)
     try:
-        points = _detect(image)
+        points = detect_points(image)
     except landmarks.LandmarkerUnavailable:
         return None
     if points is None:
@@ -239,6 +241,6 @@ def head_crop_fallback(
     whole = prepare(data, mode, face_type, style)
     return Prepared(
         prompt=whole.prompt,
-        payload=_jpeg(crop, imagegen.SOURCE_QUALITY),
+        payload=encode_jpeg(crop, imagegen.SOURCE_QUALITY),
         mime="image/jpeg",
     )

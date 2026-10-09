@@ -27,7 +27,7 @@ from app.services.performance_kit.registration import (
     mouth_frame,
     shared_triangles,
 )
-from app.services.performance_kit.requests import _checked_points
+from app.services.performance_kit.requests import checked_points
 
 GENERATED = "generated"
 RETARGETED = "retargeted"
@@ -186,7 +186,7 @@ def rebase_manifest(
     unchanged. Raises ValueError for a manifest this module did not write,
     or points that are not 478 finite pixels. CPU work (the triangulation).
     """
-    points = _checked_points(base_points)
+    points = checked_points(base_points)
     if not is_kit_manifest(manifest):
         raise ValueError("not a performance kit manifest")
     width, height = (int(v) for v in (image_size or manifest["frame"]["image_size"]))

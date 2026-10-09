@@ -27,6 +27,7 @@ from app.services.photo_adjust import (
     LIPS,
     AdjustSkipped,
 )
+from app.services.photo_adjust.paste import hull_mask, paste_region, polygon_mask
 
 WIDTH, HEIGHT = 400, 500
 FACE_BOX = (0.3 * WIDTH, 0.2 * HEIGHT, 0.7 * WIDTH, 0.7 * HEIGHT)
@@ -108,7 +109,7 @@ def _region_mask(points: np.ndarray, pad: float) -> np.ndarray:
     may touch)."""
     from scipy.ndimage import distance_transform_edt
 
-    hull = pa._hull_mask(
+    hull = hull_mask(
         (HEIGHT, WIDTH), [points[EYE_IMAGE_LEFT], points[EYE_IMAGE_RIGHT], points[LIPS]]
     )
     return distance_transform_edt(~hull) <= pad
@@ -345,7 +346,8 @@ def test_an_answer_the_model_shifted_and_turned_is_put_back_in_place():
     forward = np.hstack(
         (scale * rotation, (centre - scale * rotation @ centre + [9.0, -6.0])[:, None])
     )
-    inverse = pa._invert(forward)
+    # PIL's AFFINE maps output pixels to input ones: the inverse transform.
+    inverse = np.linalg.inv(np.vstack((forward, [0.0, 0.0, 1.0])))[:2]
     moved = crop.transform(
         crop.size,
         Image.Transform.AFFINE,
@@ -586,7 +588,7 @@ def _hairy_brows(image: Image.Image, points: np.ndarray, seed: int = 5) -> Image
     draw = ImageDraw.Draw(out)
     for contour in (pa.BROW_IMAGE_LEFT, pa.BROW_IMAGE_RIGHT):
         polygon = points[contour]
-        mask = pa._polygon_mask((image.height, image.width), [polygon])
+        mask = polygon_mask((image.height, image.width), [polygon])
         ys, xs = np.nonzero(mask)
         for i in rng.choice(len(xs), size=len(xs) // 6, replace=False):
             x, y = int(xs[i]), int(ys[i])
@@ -635,9 +637,7 @@ def test_hairy_brows_are_not_taken_for_grain_nor_pasted(finder):
         # A std-based estimate took the brow hairs for grain and added noise
         # four to eight times the photo's own here.
         assert after < 1.4 * before + 0.3, (before, after)
-    brows = pa._polygon_mask(
-        (BIG_H, BIG_W), [points[pa.BROW_IMAGE_LEFT], points[pa.BROW_IMAGE_RIGHT]]
-    )
+    brows = polygon_mask((BIG_H, BIG_W), [points[pa.BROW_IMAGE_LEFT], points[pa.BROW_IMAGE_RIGHT]])
     assert np.array_equal(np.asarray(source)[brows], np.asarray(result)[brows])
 
 
@@ -665,7 +665,7 @@ def test_brows_the_answer_moved_are_neither_pasted_nor_measured():
     result = pa.paste_back(source, points, answer, raised.points)
     before, after = np.asarray(source, dtype=np.float64), np.asarray(result, dtype=np.float64)
     in_photo = raised.points * (side / CROP_SIZE) + np.array([x0, y0])
-    moved_brows = pa._polygon_mask(
+    moved_brows = polygon_mask(
         (HEIGHT, WIDTH), [in_photo[pa.BROW_IMAGE_LEFT], in_photo[pa.BROW_IMAGE_RIGHT]]
     )
     assert moved_brows.sum() > 50
@@ -692,7 +692,7 @@ def test_the_lip_ring_measures_only_skin_inside_both_faces():
     region = pa.Region(
         "lips", lips, lips, pa.LIP_DILATE, pa.LIP_FEATHER, within=(window_face, window_face)
     )
-    pa._paste_region(
+    paste_region(
         out,
         source,
         answer,
@@ -743,7 +743,7 @@ def test_a_shrunk_answer_is_averaged_not_aliased():
     assert CROP_SIZE / crop_box[2] > 2
     arr = np.asarray(answer, dtype=np.float64).copy()
     lines = _stripes(CROP_SIZE, CROP_SIZE)
-    eyes = pa._hull_mask(
+    eyes = hull_mask(
         (CROP_SIZE, CROP_SIZE), [answer_points[EYE_IMAGE_LEFT], answer_points[EYE_IMAGE_RIGHT]]
     )
     arr[eyes] = lines[eyes][:, None]
@@ -751,7 +751,7 @@ def test_a_shrunk_answer_is_averaged_not_aliased():
     result = np.asarray(
         pa.paste_back(source, points, striped, answer_points).convert("L"), dtype=np.float64
     )
-    inside = pa._hull_mask((HEIGHT, WIDTH), [points[EYE_IMAGE_LEFT], points[EYE_IMAGE_RIGHT]])
+    inside = hull_mask((HEIGHT, WIDTH), [points[EYE_IMAGE_LEFT], points[EYE_IMAGE_RIGHT]])
     from scipy.ndimage import binary_erosion
 
     core = binary_erosion(inside, iterations=1)

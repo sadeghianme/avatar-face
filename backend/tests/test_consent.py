@@ -173,7 +173,7 @@ async def test_consents_are_per_org_membership(client):
 # --- the switch ---------------------------------------------------------------------
 
 
-async def _member(client, owner, org_id, username, role="member"):
+async def add_member(client, owner, org_id, username, role="member"):
     invite = await client.post(
         f"/orgs/{org_id}/invitations",
         json={"email": f"{username}@example.com", "role": role},
@@ -187,8 +187,8 @@ async def _member(client, owner, org_id, username, role="member"):
 
 async def test_only_owners_and_admins_switch_third_party_ai(client):
     owner, org_id = await _org(client, "boss")
-    member = await _member(client, owner, org_id, "worker")
-    admin = await _member(client, owner, org_id, "deputy", role="admin")
+    member = await add_member(client, owner, org_id, "worker")
+    admin = await add_member(client, owner, org_id, "deputy", role="admin")
 
     refused = await client.patch(
         f"/orgs/{org_id}", json={"third_party_ai_enabled": False}, headers=member
@@ -235,7 +235,7 @@ async def test_require_accepts_only_this_users_current_consent_for_the_scope(cli
     from app.models import Membership, Organization
 
     alice, org_id = await _org(client, "alice")
-    bob = await _member(client, alice, org_id, "bob")
+    bob = await add_member(client, alice, org_id, "bob")
     ai_id = (await _give(client, alice, org_id)).json()["id"]
     depiction_id = (await _statement(client, alice, org_id)).json()["id"]
 

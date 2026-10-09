@@ -16,14 +16,21 @@ from app.services import vision_points as vp
 from app.services.usage import IMAGE_KIND, VISION_KIND  # noqa: F401
 from tests.test_creation_ai import (  # noqa: F401  (fixtures)
     FakeImages,
-    _org,
-    _usage,
     ai_consent,
     faces,
     images,
+    usage_sources,
+    user_and_org,
     vision,
 )
-from tests.test_creations import _get, _run, _step, depiction, portrait, segmenter  # noqa: F401
+from tests.test_creations import (  # noqa: F401
+    depiction,
+    get_json,
+    portrait,
+    request_and_drain,
+    segmenter,
+    step_of,
+)
 from tests.test_vision_points import answer_for, face_in_pixels
 
 
@@ -169,20 +176,20 @@ def test_a_picture_that_is_all_backdrop_is_not_a_cutout():
 async def _upload(client, headers, org_id, model="human", look="realistic", data=None):
     files = {"file": ("me.png", data or portrait(600, 750), "image/png")}
     form = {"model": model, "look": look}
-    response = await _run(
+    response = await request_and_drain(
         client, headers, "POST", f"/orgs/{org_id}/creations", files=files, data=form
     )
     assert response.status_code == 202, response.text
     base = f"/orgs/{org_id}/creations/{response.json()['id']}"
-    return base, await _get(client, headers, base)
+    return base, await get_json(client, headers, base)
 
 
 async def _prepare(client, headers, base, **body):
-    return await _run(client, headers, "POST", f"{base}/prepare", json=body)
+    return await request_and_drain(client, headers, "POST", f"{base}/prepare", json=body)
 
 
 async def test_an_upload_keeps_its_plan_and_takes_its_line_from_it(client, faces):
-    headers, org_id = await _org(client, "planner")
+    headers, org_id = await user_and_org(client, "planner")
     _, body = await _upload(client, headers, org_id, model="animal", look="animation")
     assert body["plan"] == {
         "model": "animal",
@@ -205,7 +212,7 @@ async def test_an_upload_keeps_its_plan_and_takes_its_line_from_it(client, faces
 
 async def test_prepare_makes_the_look_cuts_it_out_and_finds_the_face(client, faces, images):
     images.script = [studio()]
-    headers, org_id = await _org(client, "preparer")
+    headers, org_id = await user_and_org(client, "preparer")
     base, _ = await _upload(client, headers, org_id, look="animation")
 
     refused = await _prepare(client, headers, base)
@@ -215,14 +222,14 @@ async def test_prepare_makes_the_look_cuts_it_out_and_finds_the_face(client, fac
     response = await _prepare(client, headers, base, consent_id=consent_id)
     assert response.status_code == 202, response.text
     assert response.json()["job"]["step"] == "prepare"
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     assert body["current"] == "cutout:0"
-    made = _step(body, "adjusted:0")
+    made = step_of(body, "adjusted:0")
     assert made["from"] == "original"
     assert made["adjust"]["mode"] == "stylise" and made["adjust"]["style"] == "render3d"
-    assert _step(body, "cutout:0")["cutout"] is True
-    alpha = alpha_of(await _fetch(client, _step(body, "cutout:0")["url"]))
+    assert step_of(body, "cutout:0")["cutout"] is True
+    alpha = alpha_of(await _fetch(client, step_of(body, "cutout:0")["url"]))
     assert alpha[3, 3] == 0 and alpha[alpha.shape[0] // 2 - 60, alpha.shape[1] // 2] == 255
     # The face is found on the picture shown, ready to publish.
     assert body["anchors"]["image"] == "adjusted:0"
@@ -238,14 +245,14 @@ async def test_prepare_makes_the_look_cuts_it_out_and_finds_the_face(client, fac
     # The upload went, on grey, with the wizard's own prompt for the look.
     assert images.calls[0]["source"] is not None
     assert wizard.LOOK_WORDS[("human", "animation")] in images.calls[0]["prompt"]
-    assert await _usage(org_id, IMAGE_KIND) == ["prepare"]
+    assert await usage_sources(org_id, IMAGE_KIND) == ["prepare"]
     # A stylised photo is still that person: the statement is asked.
     assert body["statement"] == "depiction"
 
 
 async def test_a_change_edits_the_ai_picture_with_the_owners_words(client, faces, images):
     images.script = [studio(), studio(shirt=(150, 40, 40))]
-    headers, org_id = await _org(client, "changer")
+    headers, org_id = await user_and_org(client, "changer")
     base, _ = await _upload(client, headers, org_id, look="cartoon")
     consent_id = await ai_consent(client, headers, org_id)
     await _prepare(client, headers, base, consent_id=consent_id)
@@ -256,22 +263,22 @@ async def test_a_change_edits_the_ai_picture_with_the_owners_words(client, faces
     await _prepare(
         client, headers, base, mode="change", instruction="a red shirt", consent_id=consent_id
     )
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     assert body["current"] == "cutout:1"
-    assert _step(body, "adjusted:1")["from"] == "adjusted:0"
-    assert _step(body, "adjusted:1")["adjust"]["instruction"] == "a red shirt"
+    assert step_of(body, "adjusted:1")["from"] == "adjusted:0"
+    assert step_of(body, "adjusted:1")["adjust"]["instruction"] == "a red shirt"
     assert '"a red shirt"' in images.calls[1]["prompt"]
     assert images.calls[1]["prompt"].startswith("Edit this avatar portrait")
     # The earlier result stays, to go back to.
-    assert _step(body, "cutout:0") is not None
+    assert step_of(body, "cutout:0") is not None
 
 
 async def test_retrying_a_change_tries_the_same_change_again_on_the_same_base(
     client, faces, images
 ):
     images.script = [studio(), studio(shirt=(150, 40, 40)), studio(shirt=(160, 50, 50))]
-    headers, org_id = await _org(client, "retrier")
+    headers, org_id = await user_and_org(client, "retrier")
     base, _ = await _upload(client, headers, org_id, look="cartoon")
     consent_id = await ai_consent(client, headers, org_id)
     await _prepare(client, headers, base, consent_id=consent_id)
@@ -290,10 +297,10 @@ async def test_retrying_a_change_tries_the_same_change_again_on_the_same_base(
         consent_id=consent_id,
     )
     assert again.status_code == 202, again.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
-    assert _step(body, "adjusted:2")["from"] == "adjusted:0"
-    assert _step(body, "adjusted:2")["adjust"]["instruction"] == "a red shirt"
+    assert step_of(body, "adjusted:2")["from"] == "adjusted:0"
+    assert step_of(body, "adjusted:2")["adjust"]["instruction"] == "a red shirt"
     assert images.calls[2]["prompt"].startswith("Edit this avatar portrait")
     assert body["ai"]["last_prepare"]["mode"] == "change"
     assert body["ai"]["last_prepare"]["instruction"] == "a red shirt"
@@ -308,14 +315,14 @@ async def test_retrying_a_change_tries_the_same_change_again_on_the_same_base(
         again=True,
         consent_id=consent_id,
     )
-    body = await _get(client, headers, base)
-    assert _step(body, "adjusted:3")["from"] == "adjusted:0"
+    body = await get_json(client, headers, base)
+    assert step_of(body, "adjusted:3")["from"] == "adjusted:0"
 
     # Clearing it: a plain prepare from the upload again, no instruction.
     images.script = [studio()]
     await _prepare(client, headers, base, consent_id=consent_id)
-    body = await _get(client, headers, base)
-    assert _step(body, "adjusted:4")["from"] == "original"
+    body = await get_json(client, headers, base)
+    assert step_of(body, "adjusted:4")["from"] == "original"
     assert body["ai"]["last_prepare"]["instruction"] is None
 
     # "again" is for a change only; the six-try budget still counts every one.
@@ -342,11 +349,11 @@ async def test_a_prepare_waiting_on_the_provider_does_not_hold_a_running_slot(
 
     monkeypatch.setattr(imagegen, "edit_image", watching)
     images.script = [studio()]
-    headers, org_id = await _org(client, "slotlender")
+    headers, org_id = await user_and_org(client, "slotlender")
     base, _ = await _upload(client, headers, org_id, look="cartoon")
     consent_id = await ai_consent(client, headers, org_id)
     await _prepare(client, headers, base, consent_id=consent_id)
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     assert seen["holds"] is False and seen["free"] == runner.max_running
     # ... and the job holds one again for the rest of its work.
@@ -354,20 +361,20 @@ async def test_a_prepare_waiting_on_the_provider_does_not_hold_a_running_slot(
 
 
 async def test_the_original_photo_is_cut_out_without_ai(client, faces, images, segmenter):
-    headers, org_id = await _org(client, "purist")
+    headers, org_id = await user_and_org(client, "purist")
     base, _ = await _upload(client, headers, org_id)
     response = await _prepare(client, headers, base, mode="original")
     assert response.status_code == 202, response.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     assert body["current"] == "cutout"
-    assert _step(body, "cutout")["from"] in ("original", "framed")
+    assert step_of(body, "cutout")["from"] in ("original", "framed")
     assert body["anchors"] is not None and body["anchors"]["detected"] is True
     assert images.calls == []
     assert body["ai"]["prepare_rounds_left"] == wizard.PREPARE_ROUNDS_PER_CREATION
     # Again: made anew, not piled up.
     await _prepare(client, headers, base, mode="original")
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert [s["id"] for s in body["steps"] if s["id"].startswith("cutout")] == ["cutout"]
 
     styled, _ = await _upload(client, headers, org_id, look="cartoon")
@@ -382,7 +389,7 @@ async def test_the_original_photo_is_used_when_the_organization_has_ai_off(
     # consent; the admin then switched the organization's AI off. "Use my
     # original photo" needs no AI, so it is made, not refused with 403, and
     # no vision model is asked for the points.
-    headers, org_id = await _org(client, "switchedoff")
+    headers, org_id = await user_and_org(client, "switchedoff")
     base, _ = await _upload(client, headers, org_id)
     consent_id = await ai_consent(client, headers, org_id)
     off = await client.patch(
@@ -391,7 +398,7 @@ async def test_the_original_photo_is_used_when_the_organization_has_ai_off(
     assert off.status_code == 200, off.text
     response = await _prepare(client, headers, base, mode="original", consent_id=consent_id)
     assert response.status_code == 202, response.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     assert body["current"] == "cutout"
     assert images.calls == []
@@ -402,26 +409,26 @@ async def test_ai_tries_are_counted_and_given_back_when_nothing_answered(
 ):
     monkeypatch.setattr(wizard, "PREPARE_ROUNDS_PER_CREATION", 2)
     images.script = ["error"]
-    headers, org_id = await _org(client, "budget")
+    headers, org_id = await user_and_org(client, "budget")
     base, _ = await _upload(client, headers, org_id, look="cartoon")
     consent_id = await ai_consent(client, headers, org_id)
     await _prepare(client, headers, base, consent_id=consent_id)
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "failed"
     assert body["job"]["error"]["code"] == "provider_error"
     assert body["job"]["retryable"] is True
     assert body["ai"]["prepare_rounds_left"] == 2  # not answered: given back
 
     images.script = ["error", studio()]
-    retried = await _run(client, headers, "POST", f"{base}/retry")
+    retried = await request_and_drain(client, headers, "POST", f"{base}/retry")
     assert retried.status_code == 202, retried.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done" and body["current"] == "cutout:0"
     assert body["ai"]["prepare_rounds_left"] == 1
 
     images.script = ["error", studio(), "refuse"]
     await _prepare(client, headers, base, consent_id=consent_id)
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["error"]["code"] == "safety_refused"
     assert body["job"]["retryable"] is False
     spent = await _prepare(client, headers, base, consent_id=consent_id)
@@ -430,9 +437,9 @@ async def test_ai_tries_are_counted_and_given_back_when_nothing_answered(
 
 async def test_a_described_character_is_made_cut_out_and_found_in_one_job(client, faces, images):
     images.script = [studio()]
-    headers, org_id = await _org(client, "describer")
+    headers, org_id = await user_and_org(client, "describer")
     consent_id = await ai_consent(client, headers, org_id)
-    response = await _run(
+    response = await request_and_drain(
         client,
         headers,
         "POST",
@@ -446,7 +453,7 @@ async def test_a_described_character_is_made_cut_out_and_found_in_one_job(client
     )
     assert response.status_code == 202, response.text
     base = f"/orgs/{org_id}/creations/{response.json()['id']}"
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     assert body["face_type"] == "human"
     assert body["plan"] == {
@@ -466,14 +473,14 @@ async def test_a_described_character_is_made_cut_out_and_found_in_one_job(client
     images.script = [studio(), studio(shirt=(20, 120, 60))]
     again = await _prepare(client, headers, base, mode="generate", consent_id=consent_id)
     assert again.status_code == 202, again.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["current"] == "cutout:0"
-    assert _step(body, "adjusted:0")["adjust"]["mode"] == "generate"
+    assert step_of(body, "adjusted:0")["adjust"]["mode"] == "generate"
     assert body["statement"] == "generated_face"
 
     # The statement made with the description is found at publish.
     await depiction(client, headers, base, "generated_face")
-    finish = await _run(
+    finish = await request_and_drain(
         client,
         headers,
         "POST",
@@ -481,13 +488,13 @@ async def test_a_described_character_is_made_cut_out_and_found_in_one_job(client
         json={"name": "Baker", "anchors_id": body["anchors"]["id"]},
     )
     assert finish.status_code == 202, finish.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["status"] == "finished", body["job"]
 
 
 async def _generate_animal(client, headers, org_id, look):
     consent_id = await ai_consent(client, headers, org_id)
-    response = await _run(
+    response = await request_and_drain(
         client,
         headers,
         "POST",
@@ -510,14 +517,14 @@ async def test_a_drawn_animal_the_detector_calls_a_face_publishes_without_a_stat
     # MediaPipe (the fixture's Faces) finds a "face" on every image, as it did
     # on a cartoon dog: a false positive, not a person's likeness.
     images.script = [studio()]
-    headers, org_id = await _org(client, f"dog{look}")
+    headers, org_id = await user_and_org(client, f"dog{look}")
     base = await _generate_animal(client, headers, org_id, look)
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     assert body["analysis"]["detected"] is True
     assert body["face_type"] == "cartoon"
     assert body["statement"] is None
-    finish = await _run(
+    finish = await request_and_drain(
         client,
         headers,
         "POST",
@@ -527,7 +534,7 @@ async def test_a_drawn_animal_the_detector_calls_a_face_publishes_without_a_stat
     assert finish.status_code == 202, finish.text
     # An animal-like character starts without the human-style teeth the
     # character mouth would otherwise draw (the line is plain "cartoon").
-    avatar_id = (await _get(client, headers, base))["avatar_id"]
+    avatar_id = (await get_json(client, headers, base))["avatar_id"]
     avatar = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
     assert avatar["mouth"]["character"]["teeth"] == "none", avatar["mouth"]
     assert avatar["mouth"]["character"]["style"] == "character"
@@ -568,12 +575,12 @@ async def test_a_realistic_generated_animal_that_reads_as_a_face_still_needs_the
     client, faces, images
 ):
     images.script = [studio()]
-    headers, org_id = await _org(client, "dogreal")
+    headers, org_id = await user_and_org(client, "dogreal")
     base = await _generate_animal(client, headers, org_id, "realistic")
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["face_type"] == "animal"
     assert body["statement"] == "generated_face"
-    finish = await _run(
+    finish = await request_and_drain(
         client,
         headers,
         "POST",
@@ -585,9 +592,9 @@ async def test_a_realistic_generated_animal_that_reads_as_a_face_still_needs_the
 
 async def test_a_drawn_person_still_needs_the_statement(client, faces, images):
     images.script = [studio()]
-    headers, org_id = await _org(client, "drawnperson")
+    headers, org_id = await user_and_org(client, "drawnperson")
     consent_id = await ai_consent(client, headers, org_id)
-    response = await _run(
+    response = await request_and_drain(
         client,
         headers,
         "POST",
@@ -595,18 +602,18 @@ async def test_a_drawn_person_still_needs_the_statement(client, faces, images):
         json={"model": "human", "look": "cartoon", "prompt": "a baker", "consent_id": consent_id},
     )
     base = f"/orgs/{org_id}/creations/{response.json()['id']}"
-    assert (await _get(client, headers, base))["statement"] == "generated_face"
+    assert (await get_json(client, headers, base))["statement"] == "generated_face"
 
 
 async def test_a_statement_about_another_creation_does_not_publish_this_one(client, faces, images):
     images.script = [studio()]
-    headers, org_id = await _org(client, "strict")
+    headers, org_id = await user_and_org(client, "strict")
     base, _ = await _upload(client, headers, org_id)
     other, _ = await _upload(client, headers, org_id)
     await _prepare(client, headers, base, mode="original")
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     await depiction(client, headers, other)
-    finish = await _run(
+    finish = await request_and_drain(
         client,
         headers,
         "POST",
@@ -622,7 +629,7 @@ async def test_an_animal_upload_the_detector_reads_as_a_person_is_still_attested
     the dashboard words it for the plan: "this photo shows an animal, not a
     real person; or, if it shows a person…"). A photo no detector reads as a
     face needs none, and a person's plan asks the usual statement."""
-    headers, org_id = await _org(client, "kennel")
+    headers, org_id = await user_and_org(client, "kennel")
     # MediaPipe (the fixture's Faces) reads a face on this upload, as it did
     # on a realistic dog photo.
     _, body = await _upload(client, headers, org_id, model="animal", look="realistic")
@@ -644,10 +651,10 @@ async def test_the_name_is_decided_once_when_the_creation_is_made(client, faces,
     """The dashboard once worked the name out again on each screen from what
     the tab remembered of the file name, so a reload renamed the avatar. It
     is now the server's, set with the creation, and the finish takes it."""
-    headers, org_id = await _org(client, "namer")
+    headers, org_id = await user_and_org(client, "namer")
 
     async def upload(file_name, model="human", look="realistic"):
-        response = await _run(
+        response = await request_and_drain(
             client,
             headers,
             "POST",
@@ -656,7 +663,7 @@ async def test_the_name_is_decided_once_when_the_creation_is_made(client, faces,
             data={"model": model, "look": look},
         )
         assert response.status_code == 202, response.text
-        return await _get(client, headers, f"/orgs/{org_id}/creations/{response.json()['id']}")
+        return await get_json(client, headers, f"/orgs/{org_id}/creations/{response.json()['id']}")
 
     assert (await upload("maria_headshot.png"))["name"] == "Maria headshot"
     # A technical file name proposes nothing: the dashboard names it after
@@ -667,7 +674,7 @@ async def test_the_name_is_decided_once_when_the_creation_is_made(client, faces,
     # A described character: from the description.
     images.script = [studio()]
     consent_id = await ai_consent(client, headers, org_id)
-    response = await _run(
+    response = await request_and_drain(
         client,
         headers,
         "POST",
@@ -680,15 +687,15 @@ async def test_the_name_is_decided_once_when_the_creation_is_made(client, faces,
         },
     )
     base = f"/orgs/{org_id}/creations/{response.json()['id']}"
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["name"] == "Cheerful baker"
     # The finish without a name takes the one kept with the creation.
     await depiction(client, headers, base, "generated_face")
-    finish = await _run(
+    finish = await request_and_drain(
         client, headers, "POST", f"{base}/finish", json={"anchors_id": body["anchors"]["id"]}
     )
     assert finish.status_code == 202, finish.text
-    avatar = await _get(client, headers, f"/orgs/{org_id}/avatars/{finish.json()['avatar_id']}")
+    avatar = await get_json(client, headers, f"/orgs/{org_id}/avatars/{finish.json()['avatar_id']}")
     assert avatar["name"] == "Cheerful baker"
 
 
@@ -697,26 +704,26 @@ async def test_an_animals_points_come_from_the_ai_when_the_detector_is_blind(
 ):
     images.script = [studio()]
     faces.none_for.add((600, 750))  # MediaPipe sees no face on a dog
-    headers, org_id = await _org(client, "petowner")
+    headers, org_id = await user_and_org(client, "petowner")
     base, _ = await _upload(client, headers, org_id, model="animal", look="realistic")
-    assert (await _get(client, headers, base))["face_type"] == "animal"
+    assert (await get_json(client, headers, base))["face_type"] == "animal"
     vision.answer = answer_for(face_in_pixels(box=(180, 150, 420, 450)), "animal", (600, 750))
     consent_id = await ai_consent(client, headers, org_id)
     await _prepare(client, headers, base, consent_id=consent_id)
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     assert body["anchors"]["source"] == "ai"
     assert body["anchors"]["validation"]["ok"] is True
     assert len(vision.calls) == 1 and vision.calls[0]["face_type"] == "animal"
-    assert await _usage(org_id, VISION_KIND) == ["detect"]
+    assert await usage_sources(org_id, VISION_KIND) == ["detect"]
     # An animal's statement: none (no person's likeness).
     assert body["statement"] is None
 
 
 async def test_an_old_draft_is_carried_on_with_the_plan_its_line_implies(client, faces, images):
     images.script = [studio()]
-    headers, org_id = await _org(client, "legacy")
-    response = await _run(
+    headers, org_id = await user_and_org(client, "legacy")
+    response = await request_and_drain(
         client,
         headers,
         "POST",
@@ -725,17 +732,17 @@ async def test_an_old_draft_is_carried_on_with_the_plan_its_line_implies(client,
         data={"face_type": "human"},
     )
     base = f"/orgs/{org_id}/creations/{response.json()['id']}"
-    assert (await _get(client, headers, base))["plan"] is None
+    assert (await get_json(client, headers, base))["plan"] is None
     consent_id = await ai_consent(client, headers, org_id)
     await _prepare(client, headers, base, consent_id=consent_id)
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     assert body["plan"]["look"] == "realistic" and body["plan"]["model"] == "human"
 
 
 @pytest.mark.parametrize("look", ["realistic", "cartoon"])
 async def test_ai_off_refuses_the_ai_and_leaves_the_photo(client, faces, images, look):
-    headers, org_id = await _org(client, f"off{look}")
+    headers, org_id = await user_and_org(client, f"off{look}")
     consent_id = await ai_consent(client, headers, org_id)
     base, _ = await _upload(client, headers, org_id, look=look)
     await client.patch(f"/orgs/{org_id}", json={"third_party_ai_enabled": False}, headers=headers)
@@ -759,17 +766,17 @@ async def test_a_declined_upload_is_asked_once_more_on_the_head_crop(client, fac
     images.script = ["refuse", studio()]
     # A face a quarter of the frame wide, so its head crop is a real crop.
     faces.by_size[(600, 750)] = face_template.place((250, 250, 350, 400))
-    headers, org_id = await _org(client, "crop-prepare")
+    headers, org_id = await user_and_org(client, "crop-prepare")
     base, _ = await _upload(client, headers, org_id, look="cartoon")
     await _prepare(client, headers, base, consent_id=await ai_consent(client, headers, org_id))
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     assert len(images.calls) == 2
     full, crop = (Image.open(io.BytesIO(c["source"])) for c in images.calls)
     assert crop.width * crop.height < full.width * full.height, "the second ask is the crop"
     assert images.calls[0]["prompt"] == images.calls[1]["prompt"]
     assert body["current"] == "cutout:0"
-    assert await _usage(org_id, IMAGE_KIND) == ["prepare", "prepare"], "both asks metered"
+    assert await usage_sources(org_id, IMAGE_KIND) == ["prepare", "prepare"], "both asks metered"
     assert body["ai"]["prepare_rounds_left"] == wizard.PREPARE_ROUNDS_PER_CREATION - 1
 
 
@@ -778,14 +785,14 @@ async def test_a_head_crop_that_is_declined_too_is_safety_refused(client, faces,
 
     images.script = ["refuse"]
     faces.by_size[(600, 750)] = face_template.place((250, 250, 350, 400))
-    headers, org_id = await _org(client, "crop-twice")
+    headers, org_id = await user_and_org(client, "crop-twice")
     base, _ = await _upload(client, headers, org_id, look="animation")
     await _prepare(client, headers, base, consent_id=await ai_consent(client, headers, org_id))
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert len(images.calls) == 2, "the photo, then its head crop; never a third time"
     assert body["job"]["error"]["code"] == "safety_refused"
     assert body["job"]["retryable"] is False
-    assert await _usage(org_id, IMAGE_KIND) == ["prepare", "prepare"]
+    assert await usage_sources(org_id, IMAGE_KIND) == ["prepare", "prepare"]
 
 
 async def test_a_picture_that_is_already_a_head_crop_or_has_no_face_is_asked_once(
@@ -796,7 +803,7 @@ async def test_a_picture_that_is_already_a_head_crop_or_has_no_face_is_asked_onc
     images.script = ["refuse"]
     # The face fills the frame: its head crop is the same picture.
     faces.by_size[(600, 750)] = face_template.place((30, 30, 570, 720))
-    headers, org_id = await _org(client, "crop-same-prepare")
+    headers, org_id = await user_and_org(client, "crop-same-prepare")
     base, _ = await _upload(client, headers, org_id, look="cartoon")
     consent_id = await ai_consent(client, headers, org_id)
     await _prepare(client, headers, base, consent_id=consent_id)
@@ -806,7 +813,7 @@ async def test_a_picture_that_is_already_a_head_crop_or_has_no_face_is_asked_onc
     animal, _ = await _upload(client, headers, org_id, model="animal", look="cartoon")
     await _prepare(client, headers, animal, consent_id=consent_id)
     assert len(images.calls) == 2, "one more ask for the animal, no crop retry"
-    body = await _get(client, headers, animal)
+    body = await get_json(client, headers, animal)
     assert body["job"]["error"]["code"] == "safety_refused"
 
 
@@ -814,7 +821,7 @@ async def test_a_declined_change_is_asked_once_more_on_the_crop_too(client, face
     from app.services import face_template
 
     images.script = [studio(), "refuse", studio(shirt=(150, 40, 40))]
-    headers, org_id = await _org(client, "crop-change")
+    headers, org_id = await user_and_org(client, "crop-change")
     base, _ = await _upload(client, headers, org_id, look="cartoon")
     consent_id = await ai_consent(client, headers, org_id)
     await _prepare(client, headers, base, consent_id=consent_id)
@@ -823,7 +830,7 @@ async def test_a_declined_change_is_asked_once_more_on_the_crop_too(client, face
     await _prepare(
         client, headers, base, mode="change", instruction="a red shirt", consent_id=consent_id
     )
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     assert len(images.calls) == 3
     assert body["current"] == "cutout:1"
@@ -831,28 +838,28 @@ async def test_a_declined_change_is_asked_once_more_on_the_crop_too(client, face
 
 async def test_removing_a_change_gives_its_try_back_but_is_still_metered(client, faces, images):
     images.script = [studio(), studio(shirt=(150, 40, 40)), studio()]
-    headers, org_id = await _org(client, "clearer")
+    headers, org_id = await user_and_org(client, "clearer")
     base, _ = await _upload(client, headers, org_id, look="cartoon")
     consent_id = await ai_consent(client, headers, org_id)
     await _prepare(client, headers, base, consent_id=consent_id)
     await _prepare(
         client, headers, base, mode="change", instruction="a red shirt", consent_id=consent_id
     )
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["ai"]["prepare_rounds_left"] == wizard.PREPARE_ROUNDS_PER_CREATION - 2
     assert body["ai"]["free_clears_left"] == wizard.FREE_CLEARS_PER_CREATION
 
     cleared = await _prepare(client, headers, base, clear=True, consent_id=consent_id)
     assert cleared.status_code == 202, cleared.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
-    assert _step(body, "adjusted:2")["from"] == "original"
+    assert step_of(body, "adjusted:2")["from"] == "original"
     assert body["ai"]["last_prepare"]["instruction"] is None
     # The try is not taken, the redo is one paid image call all the same.
     assert body["ai"]["prepare_rounds_left"] == wizard.PREPARE_ROUNDS_PER_CREATION - 2
     assert body["ai"]["free_clears_left"] == wizard.FREE_CLEARS_PER_CREATION - 1
     assert len(images.calls) == 3
-    assert await _usage(org_id, IMAGE_KIND) == ["prepare"] * 3
+    assert await usage_sources(org_id, IMAGE_KIND) == ["prepare"] * 3
 
     bad = await _prepare(
         client, headers, base, mode="change", instruction="x", clear=True, consent_id=consent_id
@@ -866,18 +873,18 @@ async def test_only_a_few_removals_per_creation_are_free_after_that_they_count(
     monkeypatch.setattr(wizard, "FREE_CLEARS_PER_CREATION", 2)
     monkeypatch.setattr(wizard, "PREPARE_ROUNDS_PER_CREATION", 2)
     images.script = [studio()] * 5
-    headers, org_id = await _org(client, "clear-cap")
+    headers, org_id = await user_and_org(client, "clear-cap")
     base, _ = await _upload(client, headers, org_id, look="cartoon")
     consent_id = await ai_consent(client, headers, org_id)
     await _prepare(client, headers, base, consent_id=consent_id)
     await _prepare(client, headers, base, consent_id=consent_id)
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["ai"]["prepare_rounds_left"] == 0
     # No tries left, yet the free removals still work.
     for left in (1, 0):
         done = await _prepare(client, headers, base, clear=True, consent_id=consent_id)
         assert done.status_code == 202, done.text
-        body = await _get(client, headers, base)
+        body = await get_json(client, headers, base)
         assert body["ai"]["prepare_rounds_left"] == 0
         assert body["ai"]["free_clears_left"] == left
     # The cap is reached: the next one is an ordinary try, refused with none left.
@@ -889,28 +896,28 @@ async def test_only_a_few_removals_per_creation_are_free_after_that_they_count(
     monkeypatch.setattr(wizard, "PREPARE_ROUNDS_PER_CREATION", 3)
     counted = await _prepare(client, headers, base, clear=True, consent_id=consent_id)
     assert counted.status_code == 202, counted.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["ai"]["prepare_rounds_left"] == 0
     assert body["ai"]["free_clears_left"] == 0
 
 
 async def test_a_removal_that_nothing_answered_gives_back_its_free_one(client, faces, images):
     images.script = [studio(), "error"]
-    headers, org_id = await _org(client, "clear-fail")
+    headers, org_id = await user_and_org(client, "clear-fail")
     base, _ = await _upload(client, headers, org_id, look="cartoon")
     consent_id = await ai_consent(client, headers, org_id)
     await _prepare(client, headers, base, consent_id=consent_id)
     await _prepare(client, headers, base, clear=True, consent_id=consent_id)
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "failed"
     assert body["ai"]["free_clears_left"] == wizard.FREE_CLEARS_PER_CREATION
     assert body["ai"]["prepare_rounds_left"] == wizard.PREPARE_ROUNDS_PER_CREATION - 1
 
     # Its retry is a removal again: free, not a try.
     images.script = [studio()]
-    retried = await _run(client, headers, "POST", f"{base}/retry")
+    retried = await request_and_drain(client, headers, "POST", f"{base}/retry")
     assert retried.status_code == 202, retried.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done"
     assert body["ai"]["free_clears_left"] == wizard.FREE_CLEARS_PER_CREATION - 1
     assert body["ai"]["prepare_rounds_left"] == wizard.PREPARE_ROUNDS_PER_CREATION - 1
@@ -925,17 +932,17 @@ async def _version(client, headers, base, version):
 
 async def test_every_version_stays_and_any_can_be_taken_back(client, faces, images, segmenter):
     images.script = [studio(), studio(shirt=(150, 40, 40))]
-    headers, org_id = await _org(client, "versions")
+    headers, org_id = await user_and_org(client, "versions")
     base, _ = await _upload(client, headers, org_id)
     consent_id = await ai_consent(client, headers, org_id)
     await _prepare(client, headers, base, mode="original")
-    own = await _get(client, headers, base)
+    own = await get_json(client, headers, base)
     await _prepare(client, headers, base, consent_id=consent_id)
-    first = await _get(client, headers, base)
+    first = await get_json(client, headers, base)
     await _prepare(
         client, headers, base, mode="change", instruction="shorter hair", consent_id=consent_id
     )
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["current"] == "cutout:1"
     left = body["ai"]["prepare_rounds_left"]
 
@@ -971,8 +978,8 @@ async def test_every_version_stays_and_any_can_be_taken_back(client, faces, imag
         again=True,
         consent_id=consent_id,
     )
-    body = await _get(client, headers, base)
-    assert _step(body, "adjusted:2")["from"] == "adjusted:0"
+    body = await get_json(client, headers, base)
+    assert step_of(body, "adjusted:2")["from"] == "adjusted:0"
 
     # Only versions: not a cut-out, not a made-up id.
     for wrong in ("cutout:0", "adjusted:9", "framed"):
@@ -984,7 +991,7 @@ async def test_an_upload_is_a_version_only_once_prepared_and_only_when_realistic
     client, faces, images, segmenter
 ):
     images.script = [studio(), studio()]
-    headers, org_id = await _org(client, "versions-original")
+    headers, org_id = await user_and_org(client, "versions-original")
     consent_id = await ai_consent(client, headers, org_id)
     base, _ = await _upload(client, headers, org_id)
     await _prepare(client, headers, base, consent_id=consent_id)

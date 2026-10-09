@@ -22,9 +22,9 @@ pytestmark = pytest.mark.skipif(
     ],
 )
 def test_real_phoneme_tracks(voice, text):
-    from app.services.tts.lab_timing import _render
+    from app.services.tts.lab_timing import render_native
 
-    audio, duration, native, baseline = _render(text, voice)
+    audio, duration, native, baseline = render_native(text, voice)
     assert audio.startswith(b"RIFF")
     assert 500 < duration < 30000
     assert len(native) > 5
