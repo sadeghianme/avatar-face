@@ -201,7 +201,7 @@ and `# fmt: on`. The commit that formatted the backend is in
 | `backend-tests` (×2) | pytest with coverage, half of the suite each, on every core, against the production pins, espeak-ng and the checksummed MediaPipe models | 4–5 min |
 | `backend-coverage` | the two halves' coverage combined, at or above the floor; the HTML and LCOV report uploaded | ~20 s |
 | `backend` | every backend job above passed (the required check) | seconds |
-| `embed` | lint, type check (tests included), the widget's generated API types match the committed document, vitest with the pixel goldens and coverage at or above its floors, build, the browser tests | ~2.5 min |
+| `embed` | lint, type check (tests included), the widget's generated API types match the committed document, vitest with the pixel goldens and coverage at or above its floors, build, the browser tests (Chromium; the speech timing test also in Firefox and WebKit, with the backend's speech encoder and a null sound sink: about a minute and a half of it) | ~4 min |
 | `frontend` | type check, the unit tests (node --test) and the rendering tests (Vitest), each with coverage at or above its floors, structure check, production build | ~1 min |
 | `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, the dashboard's generated API types match the committed document | <1 min |
 | `deploy-script` | ShellCheck (pinned) on `deploy/*.sh`; every gate of `deploy.sh` | <1 min |
@@ -526,10 +526,12 @@ main SQLite file, never evicted, and copied into all ten deploy backups.
 Now (`backend/app/services/tts/speech_cache.py`):
 
 - The recording is a file in storage under `speech/`, as MP3 (VBR, about
-  50 kbit/s for 24 kHz speech). libsndfile writes the LAME header, so
-  Chromium, Safari's CoreAudio and libsndfile decode it to exactly the WAV's
-  samples and the cues stay on time; a line that would not is kept as WAV.
-  The dashboard's phrase stream gets PCM back (`pcm=True`).
+  50 kbit/s for 24 kHz speech; `speech_codec.py`). libsndfile writes the
+  LAME header that names the encoder's delay and padding, and the
+  browsers honour it (measured, below), so the MP3 plays on the WAV's own
+  samples and the cues stay on time; a line libsndfile would not decode in
+  full is kept as WAV. The dashboard's phrase stream gets PCM back
+  (`pcm=True`).
 - `speech_clips` holds one small row per line: key, cues, duration, file,
   size, the organization whose request made it, last use (recorded at most
   hourly).
@@ -546,6 +548,34 @@ Now (`backend/app/services/tts/speech_cache.py`):
   the stamp described under [Rollback](#rollback)): the older release reads
   and writes it, every line is a miss once, and cloned voices are
   unavailable until the next deploy carries them back.
+
+**Timing in browsers (2026-10-09).** An MP3 starts late by its encoder's
+delay (576 + 529 samples, 46 ms at 24 kHz) unless the decoder honours the
+LAME header; that was checked only with libsndfile until review 3 (R1).
+`embed/browser-tests/speech-timing.test.ts` encodes a click track with the
+production encoder (`backend/scripts/encode_speech.py`, which runs
+`speech_codec.py` alone), plays it as the widget plays speech, and finds
+each mark again. CI runs it in Chromium, Firefox and WebKit on every
+change (the embed job, with PulseAudio's null sink as the runner's sound
+card). Measured (ms; "through the element": the engine's clock when the
+mark reached the audio graph, MP3 minus WAV, medians over the marks):
+
+| Browser | decodeAudioData, MP3 mark minus source | Through the element, MP3 minus WAV |
+|---|---|---|
+| Chromium 153, macOS | 0.0 at all 6 marks | −0.2 to +0.2 |
+| Chromium 153, Linux (CI) | 0.0 | +0.1 to +3.8 |
+| Firefox 155, macOS | 0.0 | −1.3 to +1.9 |
+| Firefox 155, Linux (CI) | 0.0 | −2.0 to +0.7 |
+| WebKit 26.6, macOS | 0.0 | −3.4 to +0.8 |
+| WebKit 26.6, Linux (CI) | 0.0 | not measurable: GStreamer's element source holds about a second of audio, so the route is no ruler |
+
+So the format stays MP3, and nothing about stored lines changed: no cache
+version, no migration, every clip in production stays valid. (The same
+test found the clock running ahead at the start of a line, fixed in
+`embed/src/engine/media-clock.ts`; docs/avatar-lines.md, "Speech clock in
+real browsers".) Not measured: real Safari and iOS (Safari's WebDriver
+needs `safaridriver --enable`, an administrator's step), older Firefox ESR
+releases, Chrome on Android.
 
 **The file.** SQLite does not give freed pages back to the disk: after 028
 the live file keeps its size, and its free pages are reused by new rows, so
