@@ -67,7 +67,19 @@ set -euo pipefail
 # deploy had actually finished both times, which is the worst version of
 # this failure -- it looks like a broken deploy and is not.
 SSH_OPTS=(-o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o ConnectTimeout=20)
+# One connection for the whole deploy: a new one to this server takes 3.5s
+# and a deploy makes about a dozen; over the first, each takes 0.6s. The
+# socket lives in a directory of this run's own (short: a socket's path is
+# limited to ~100 characters), closed and removed on exit.
+CONTROL_DIR="$(mktemp -d /tmp/liveface-ssh.XXXXXX)"
+SSH_OPTS+=(-o ControlMaster=auto -o "ControlPath=$CONTROL_DIR/s" -o ControlPersist=60)
 ssh() { command ssh "${SSH_OPTS[@]}" "$@"; }
+EXPORT=""
+cleanup() {
+  [ ! -S "$CONTROL_DIR/s" ] || command ssh -o "ControlPath=$CONTROL_DIR/s" -O exit "$REMOTE" >/dev/null 2>&1 || true
+  rm -rf "$CONTROL_DIR" ${EXPORT:+"$EXPORT"}
+}
+trap cleanup EXIT
 
 REMOTE="${REMOTE:-personal_server}"
 REMOTE_DIR="${REMOTE_DIR:-/root/projects/liveface}"
@@ -82,11 +94,13 @@ API_CONTAINER="liveface-liveface-api-1"
 API_IMAGE="liveface-liveface-api"
 WEB_IMAGE="liveface-liveface-web"
 # Where CI pushes the images it tested, tagged with the commit (private;
-# ci.yml, the images job). The server pulls them with its own login.
+# ci.yml, the images job): the repository owner's namespace. The server
+# pulls them with its own login, as the GitHub account whose token it holds.
 REGISTRY="ghcr.io"
+IMAGE_OWNER="sadeghianme"
 REGISTRY_USER="sadeghianme"
-GHCR_API="$REGISTRY/$REGISTRY_USER/liveface-api"
-GHCR_WEB="$REGISTRY/$REGISTRY_USER/liveface-web"
+GHCR_API="$REGISTRY/$IMAGE_OWNER/liveface-api"
+GHCR_WEB="$REGISTRY/$IMAGE_OWNER/liveface-web"
 # The label both Dockerfiles set: what marks an image as this project's when
 # the leftovers of earlier releases are pruned.
 IMAGE_SOURCE="https://github.com/sadeghianme/avatar-face"
@@ -294,7 +308,6 @@ WEB_REF="$GHCR_WEB:$SHA"
 
 if [ "$BUILD" = 1 ]; then
   EXPORT="$(mktemp -d "${TMPDIR:-/tmp}/liveface-release.XXXXXX")"
-  trap 'rm -rf "$EXPORT"' EXIT
   git -C "$LOCAL_DIR" archive --format=tar "$SHA" | tar -x -C "$EXPORT"
   FILES="$(find "$EXPORT" -type f | wc -l | tr -d ' ')"
   KB="$(du -sk "$EXPORT" | cut -f1)"

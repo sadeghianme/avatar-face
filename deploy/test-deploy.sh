@@ -44,13 +44,15 @@ case " $* " in
 esac
 exit 0
 STUB
-# The server: ssh drops its options and the host, and runs the command here,
-# as the remote shell would.
+# The server: ssh records how it was called, drops its options and the
+# host, and runs the command here, as the remote shell would.
 cat >"$WORK/bin/ssh" <<'STUB'
 #!/usr/bin/env bash
+args="$*"
+printf '%s\n' "${args//$'\n'/ }" >>"$SSH_LOG"
 while [ $# -gt 0 ]; do
   case "$1" in
-    -o) shift 2 ;;
+    -o | -O) shift 2 ;;
     -*) shift ;;
     *) break ;;
   esac
@@ -95,7 +97,7 @@ done
 printf '{"status":"ok","version":"%s"}\n' "$DEPLOYING"
 STUB
 chmod +x "$WORK/bin/"*
-export PATH="$WORK/bin:$PATH" GH_LOG="$WORK/gh.log" DOCKER_LOG="$WORK/docker.log"
+export PATH="$WORK/bin:$PATH" GH_LOG="$WORK/gh.log" DOCKER_LOG="$WORK/docker.log" SSH_LOG="$WORK/ssh.log"
 export REMOTE=test-server REMOTE_DIR="$WORK/server" PUBLIC_URL=https://liveface.test
 export DOCKER_CONFIG="$WORK/docker-config"
 mkdir -p "$REMOTE_DIR/deploy" "$DOCKER_CONFIG"
@@ -115,6 +117,7 @@ run_() {
   shift 4
   local got=0
   : >"$DOCKER_LOG"
+  : >"$SSH_LOG"
   "$WORK/repo/deploy/deploy.sh" "$@" >"$WORK/out" 2>&1 </dev/null || got=$?
   if [ "$got" = "$want" ] && grep -qF -- "$text" "$WORK/out"; then
     echo "ok   $name"
@@ -252,6 +255,13 @@ if grep -qE -- '--build|^build|buildx' "$DOCKER_LOG"; then
   fail "a pulled deploy built something: $(grep -E -- '--build|^build|buildx' "$DOCKER_LOG")"
 else
   echo "ok   nothing is built on the server"
+fi
+control="$(grep -o -m1 -- "ControlPath=[^ ]*" "$SSH_LOG" | sed 's/^ControlPath=//')"
+if [ -n "$control" ] && [ "$(grep -c -F -- "ControlPath=$control " "$SSH_LOG")" = "$(wc -l <"$SSH_LOG" | tr -d ' ')" ] \
+  && [ ! -e "$(dirname "$control")" ]; then
+  echo "ok   every ssh call shares one connection, whose socket is gone at the end"
+else
+  fail "ssh was called: $(cat "$SSH_LOG")"
 fi
 if git_ show "$SECOND:deploy/docker-compose.prod.yml" | cmp -s - "$REMOTE_DIR/deploy/docker-compose.prod.yml" \
   && [ "$(cat "$REMOTE_DIR/deploy/.env")" = "JWT_SECRET=server-only" ]; then
