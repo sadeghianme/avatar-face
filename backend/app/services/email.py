@@ -10,11 +10,19 @@ endpoint deliberately answers the same way whether or not the address exists,
 so that it cannot be used to discover who has an account. An exception
 escaping on a delivery failure would undo that by making a real address
 respond differently from an unknown one.
+
+For the same reason a reset mail is never awaited by the request that asks
+for it (`deliver_in_background`): Resend's round trip, up to TIMEOUT_SECONDS,
+would otherwise be added to the answer for a real address only, and the time
+an answer takes is just as readable as its body.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import Coroutine
+from typing import Any
 
 import httpx
 
@@ -41,7 +49,9 @@ async def send(to: str, subject: str, html: str, text: str) -> bool:
     if not configured():
         # Loud, because in production this means password reset is silently
         # dead — the user sees "check your inbox" and nothing ever arrives.
-        logger.error("email is not configured (RESEND_API_KEY / EMAIL_FROM); not sending %r", subject)
+        logger.error(
+            "email is not configured (RESEND_API_KEY / EMAIL_FROM); not sending %r", subject
+        )
         return False
 
     try:
@@ -67,6 +77,42 @@ async def send(to: str, subject: str, html: str, text: str) -> bool:
         logger.error("email rejected (%s): %s", response.status_code, response.text[:300])
         return False
     return True
+
+
+# Mail being sent after its request was answered. Held here because the loop
+# keeps only a weak reference to a task: an unreferenced one can be collected
+# mid-send. Bounded by the limits in front of it (a reset mail goes only to a
+# real account, at most RESET_LIMIT an hour per address).
+_outbox: set[asyncio.Task[Any]] = set()
+
+
+def deliver_in_background(message: Coroutine[Any, Any, Any]) -> None:
+    """Send `message` (a coroutine that sends mail) after this request.
+
+    The caller returns at once; the send runs on the loop like any other
+    network wait. Its failures are logged here, and shutdown waits for it
+    (`drain`), so a deploy does not drop a reset mail half-sent.
+    """
+    task = asyncio.get_running_loop().create_task(message)
+    _outbox.add(task)
+    task.add_done_callback(_sent)
+
+
+def _sent(task: asyncio.Task[Any]) -> None:
+    _outbox.discard(task)
+    if not task.cancelled() and (error := task.exception()) is not None:
+        logger.error("background email failed", exc_info=error)
+
+
+def pending() -> int:
+    """How many messages are still being sent."""
+    return len(_outbox)
+
+
+async def drain(timeout: float = TIMEOUT_SECONDS + 5) -> None:
+    """Wait for the mail still being sent (at shutdown, and in tests)."""
+    if _outbox:
+        await asyncio.wait(set(_outbox), timeout=timeout)
 
 
 def reset_email(app_name: str, link: str, minutes: int) -> tuple[str, str, str]:

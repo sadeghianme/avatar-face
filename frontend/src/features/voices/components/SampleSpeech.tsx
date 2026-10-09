@@ -7,12 +7,12 @@ import {
   streamSpeech,
 } from "@liveface/embed";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { SERVER_PROVIDER, speechStream } from "@/features/voices/api";
 import type { VoiceSelection } from "@/features/voices/components/VoicePicker";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 /** The built-in voice a sample is read in, by the dashboard's language. */
@@ -49,7 +49,7 @@ export function SampleSpeech({
   labels: { play: string; stop: string };
   className?: string;
 }) {
-  const { i18n } = useTranslation();
+  const { i18n } = useT();
   const [speaking, setSpeaking] = useState(false);
   const stream = useRef<StreamHandle | null>(null);
   const browser = useMemo(() => (engine ? new BrowserTTS(engine as unknown as CuePlayer) : null), [engine]);

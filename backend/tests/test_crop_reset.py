@@ -16,12 +16,16 @@ from tests.conftest import create_org, register_and_login, sample_png
 
 MARKS = {
     "head": {
-        "left": {"x": 70, "y": 200}, "right": {"x": 250, "y": 200},
-        "top": {"x": 160, "y": 60}, "bottom": {"x": 160, "y": 340},
+        "left": {"x": 70, "y": 200},
+        "right": {"x": 250, "y": 200},
+        "top": {"x": 160, "y": 60},
+        "bottom": {"x": 160, "y": 340},
     },
     "mouth": {
-        "left": {"x": 125, "y": 270}, "right": {"x": 195, "y": 272},
-        "top": {"x": 160, "y": 262}, "bottom": {"x": 160, "y": 290},
+        "left": {"x": 125, "y": 270},
+        "right": {"x": 195, "y": 272},
+        "top": {"x": 160, "y": 262},
+        "bottom": {"x": 160, "y": 290},
     },
 }
 
@@ -145,33 +149,38 @@ async def test_an_unrecoverable_origin_re_detects_as_the_right_face_type(client)
 
 @pytest.mark.parametrize("left, top", [(0, 0), (17, 5), (100, 150)])
 def test_locating_a_crop(left, top):
-    from app.services.avatars.photo import _locate_crop
+    from app.services.avatars.photo import locate_crop
 
     photo = Image.open(io.BytesIO(textured_png()))
     crop = photo.crop((left, top, left + 120, top + 90))
-    assert _locate_crop(photo, crop) == (left, top)
+    assert locate_crop(photo, crop) == (left, top)
     flat = Image.open(io.BytesIO(sample_png()))
-    assert _locate_crop(flat, flat.crop((left, top, left + 120, top + 90))) is None
+    assert locate_crop(flat, flat.crop((left, top, left + 120, top + 90))) is None
 
 
 def test_a_crop_moves_every_kind_of_mark():
     """Mouth lines and chins are marks too; the source is not a point."""
-    from app.services.avatars.photo import _move_anchors
+    from app.services.avatars.photo import move_anchors
 
     anchors = {
-        "head": {"left": {"x": 10, "y": 20}, "right": {"x": 30, "y": 20},
-                 "top": {"x": 20, "y": 5}, "bottom": {"x": 20, "y": 40}, "center": None},
+        "head": {
+            "left": {"x": 10, "y": 20},
+            "right": {"x": 30, "y": 20},
+            "top": {"x": 20, "y": 5},
+            "bottom": {"x": 20, "y": 40},
+            "center": None,
+        },
         "mouth_line": [{"x": 12 + i, "y": 30} for i in range(5)],
         "chin": {"x": 20, "y": 38},
         "source": "owner",
     }
-    moved = _move_anchors(anchors, 5, 10)
+    moved = move_anchors(anchors, 5, 10)
     assert moved["head"]["left"] == {"x": 5, "y": 10}
     assert moved["head"]["center"] is None
     assert [p["x"] for p in moved["mouth_line"]] == [7, 8, 9, 10, 11]
     assert moved["chin"] == {"x": 15, "y": 28}
     assert moved["source"] == "owner"
-    assert _move_anchors(moved, -5, -10) == anchors
+    assert move_anchors(moved, -5, -10) == anchors
 
 
 async def test_overlapping_edits_of_one_avatar_run_one_after_the_other(client, monkeypatch):

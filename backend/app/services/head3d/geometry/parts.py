@@ -58,7 +58,9 @@ def neck_mesh(face: np.ndarray, frame: FaceFrame, scale: float, card_z: float) -
             positions.append((radius * math.sin(angle), y, axis_z + radius * math.cos(angle)))
             uvs.append((u, r / (rows - 1)))
     P = np.array(positions)
-    tri = orient_outward(P, grid_triangles(rows, NECK_SEGMENTS + 1), np.array((0.0, (top + bottom) / 2, axis_z)))
+    tri = orient_outward(
+        P, grid_triangles(rows, NECK_SEGMENTS + 1), np.array((0.0, (top + bottom) / 2, axis_z))
+    )
     return Mesh(positions=P, uvs=np.array(uvs), triangles=tri)
 
 
@@ -72,12 +74,19 @@ def head_box(frame: FaceFrame, image_size: tuple[int, int]) -> tuple[float, floa
     fw, fh = x1 - x0, y1 - y0
     w, h = image_size
     return (
-        max(0.0, x0 - fw * HEAD_BOX_SIDE), max(0.0, y0 - fh * HEAD_BOX_ABOVE),
-        min(float(w), x1 + fw * HEAD_BOX_SIDE), min(float(h), y1 + fh * HEAD_BOX_BELOW),
+        max(0.0, x0 - fw * HEAD_BOX_SIDE),
+        max(0.0, y0 - fh * HEAD_BOX_ABOVE),
+        min(float(w), x1 + fw * HEAD_BOX_SIDE),
+        min(float(h), y1 + fh * HEAD_BOX_BELOW),
     )
 
 
-def card_mesh(box: tuple[float, float, float, float], z: float, pivot: tuple[float, float, float], scale: float) -> Mesh:
+def card_mesh(
+    box: tuple[float, float, float, float],
+    z: float,
+    pivot: tuple[float, float, float],
+    scale: float,
+) -> Mesh:
     """A quad over an image box at depth `z` (head frame), UVs over the box."""
     x0, y0, x1, y1 = box
     corners = np.array([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], dtype=np.float64)
@@ -133,7 +142,11 @@ def surface_weights(face: np.ndarray, xy: np.ndarray) -> tuple[np.ndarray, np.nd
             indices[k] = tris[t]
             weights[k] = (l1[t], l2[t], l3[t])
         else:
-            nearest = int(np.argmin(np.hypot(p[:T.NUM_MESH_VERTICES, 0] - x, p[:T.NUM_MESH_VERTICES, 1] - y)))
+            nearest = int(
+                np.argmin(
+                    np.hypot(p[: T.NUM_MESH_VERTICES, 0] - x, p[: T.NUM_MESH_VERTICES, 1] - y)
+                )
+            )
             indices[k] = nearest
             weights[k] = (1.0, 0.0, 0.0)
     return indices, weights
@@ -156,7 +169,9 @@ def _shell(face: np.ndarray, xy: np.ndarray, behind: np.ndarray | float) -> np.n
     return np.column_stack((xy, surface_depth(face, xy) - np.asarray(behind, dtype=np.float64)))
 
 
-def _teeth_arch(face: np.ndarray, seam: np.ndarray, width: float, spec: dict[str, float], columns: int = 7) -> Mesh:
+def _teeth_arch(
+    face: np.ndarray, seam: np.ndarray, width: float, spec: dict[str, float], columns: int = 7
+) -> Mesh:
     """A row of teeth: a strip `columns` wide on the face's own depth, a
     little behind it, bending back a touch more toward the corners. UV u
     left to right, v top to bottom."""
@@ -172,7 +187,9 @@ def _teeth_arch(face: np.ndarray, seam: np.ndarray, width: float, spec: dict[str
     return Mesh(positions=P, uvs=np.array(uvs), triangles=tris)
 
 
-def _cavity(face: np.ndarray, seam: np.ndarray, width: float, columns: int = 7, rows: int = 5) -> InteriorPart:
+def _cavity(
+    face: np.ndarray, seam: np.ndarray, width: float, columns: int = 7, rows: int = 5
+) -> InteriorPart:
     """The dark backdrop: a grid on the face's depth, CAVITY["behind"] widths
     behind it above the seam and CAVITY["behind_low"] below, where the
     lower lip travels back as the jaw opens. It hugs the skin: every face
@@ -182,7 +199,9 @@ def _cavity(face: np.ndarray, seam: np.ndarray, width: float, columns: int = 7, 
     for r in range(rows):
         v = r / (rows - 1)
         y = CAVITY["top"] + (CAVITY["bottom"] - CAVITY["top"]) * v
-        depth = CAVITY["behind"] + (CAVITY["behind_low"] - CAVITY["behind"]) * float(smoothstep(-y / 0.25))
+        depth = CAVITY["behind"] + (CAVITY["behind_low"] - CAVITY["behind"]) * float(
+            smoothstep(-y / 0.25)
+        )
         for c in range(columns):
             u = c / (columns - 1)
             xy.append((seam[0] + (u - 0.5) * CAVITY["width"] * width, seam[1] + y * width))
@@ -191,8 +210,12 @@ def _cavity(face: np.ndarray, seam: np.ndarray, width: float, columns: int = 7, 
     grid = np.array(xy)
     P = _shell(face, grid, np.array(behind))
     tris = orient_outward(P, grid_triangles(rows, columns), seam + np.array((0, 0, -width)))
-    return InteriorPart("Cavity", Mesh(positions=P, uvs=np.array(uvs), triangles=tris), jaw_share=0.0,
-                        skin=surface_weights(face, grid))
+    return InteriorPart(
+        "Cavity",
+        Mesh(positions=P, uvs=np.array(uvs), triangles=tris),
+        jaw_share=0.0,
+        skin=surface_weights(face, grid),
+    )
 
 
 def _ellipsoid(centre: np.ndarray, radii: np.ndarray, lat: int = 6, lon: int = 12) -> Mesh:
@@ -201,7 +224,9 @@ def _ellipsoid(centre: np.ndarray, radii: np.ndarray, lat: int = 6, lon: int = 1
         phi = math.pi * i / lat
         for j in range(lon + 1):
             lam = 2 * math.pi * j / lon
-            n = np.array((math.sin(phi) * math.cos(lam), math.cos(phi), math.sin(phi) * math.sin(lam)))
+            n = np.array(
+                (math.sin(phi) * math.cos(lam), math.cos(phi), math.sin(phi) * math.sin(lam))
+            )
             positions.append(centre + n * radii)
             uvs.append((j / lon, i / lat))
     P = np.array(positions)
@@ -219,9 +244,17 @@ def mouth_interior(face: np.ndarray, teeth: str, tongue: bool) -> list[InteriorP
     seam, width = mouth_frame(face)
     parts: list[InteriorPart] = [_cavity(face, seam, width)]
     if teeth in ("both", "upper"):
-        parts.append(InteriorPart("TeethUpper", _teeth_arch(face, seam, width, UPPER_TEETH), jaw_share=0.0))
+        parts.append(
+            InteriorPart("TeethUpper", _teeth_arch(face, seam, width, UPPER_TEETH), jaw_share=0.0)
+        )
     if teeth == "both":
-        parts.append(InteriorPart("TeethLower", _teeth_arch(face, seam, width, LOWER_TEETH), jaw_share=LOWER_TEETH_JAW_SHARE))
+        parts.append(
+            InteriorPart(
+                "TeethLower",
+                _teeth_arch(face, seam, width, LOWER_TEETH),
+                jaw_share=LOWER_TEETH_JAW_SHARE,
+            )
+        )
     if tongue:
         cx, cy, cz = TONGUE["centre"]
         xy = np.array([[seam[0] + cx * width, seam[1] + cy * width]])

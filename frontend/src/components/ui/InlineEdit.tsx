@@ -55,7 +55,10 @@ export function InlineEdit({
   }, [saved, editing]);
 
   useEffect(() => {
-    if (editing) input.current?.select();
+    // focus() first: select() alone does not move the focus everywhere.
+    if (!editing) return;
+    input.current?.focus();
+    input.current?.select();
   }, [editing]);
 
   useEffect(() => {

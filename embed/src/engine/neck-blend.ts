@@ -31,7 +31,7 @@
  * is drawn in two positions; nothing is left to tear.
  */
 import type { FaceMesh, Point, Rect } from "./geometry";
-import { apply, invert, type Affine } from "./warp-gl";
+import { apply, invert, type Affine } from "./affine";
 
 /** Rows the eased part of the picture is drawn in (half of them across the
  *  neck), and columns either side of the band, where the line rises toward
@@ -109,6 +109,7 @@ export class NeckWarp {
   /** Each corner where the head's motion `update` was given puts it, row by
    *  row, body-frame px. */
   private readonly moved: Point[][];
+  private tris: NeckTriangle[] | null = null;
 
   constructor(
     readonly blend: NeckBlend,
@@ -138,21 +139,31 @@ export class NeckWarp {
   }
 
   /** The head moved by `head` relative to the body (head frame to body
-   *  frame): every corner by its share of it. */
+   *  frame): every corner by its share of it. The corners are moved where
+   *  they are, so the triangles (triangles) hold them from frame to frame. */
   update(head: Affine): void {
-    this.ys.forEach((y, j) => {
-      this.xs.forEach((x, i) => {
-        const s = this.shares[j][i];
-        const h = apply(head, { x, y });
-        this.moved[j][i] = { x: x + s * (h.x - x), y: y + s * (h.y - y) };
-      });
-    });
+    const { xs, ys, shares, moved } = this;
+    for (let j = 0; j < ys.length; j++) {
+      const y = ys[j];
+      for (let i = 0; i < xs.length; i++) {
+        const x = xs[i],
+          s = shares[j][i];
+        // apply(head, { x, y }), written out.
+        const hx = head.a * x + head.c * y + head.e,
+          hy = head.b * x + head.d * y + head.f;
+        const m = moved[j][i];
+        m.x = x + s * (hx - x);
+        m.y = y + s * (hy - y);
+      }
+    }
   }
 
   /** The grid's triangles: rest corners and moved ones, in drawing order
-   *  (the top and bottom rows whole, the neck's cell by cell). */
-  triangles(): { rest: [Point, Point, Point]; moved: [Point, Point, Point] }[] {
-    const out: { rest: [Point, Point, Point]; moved: [Point, Point, Point] }[] = [];
+   *  (the top and bottom rows whole, the neck's cell by cell). Made once:
+   *  the moved corners are the grid's own, moved by `update`. */
+  triangles(): readonly NeckTriangle[] {
+    if (this.tris) return this.tris;
+    const out: NeckTriangle[] = (this.tris = []);
     const last = this.ys.length - 2;
     const columns = this.xs.length - 1;
     for (let j = 0; j <= last; j++) {
@@ -172,8 +183,9 @@ export class NeckWarp {
   }
 
   /** Where the warp puts a point resting at `p`, body frame: by the affine
-   *  of the grid triangle it rests in (outside the grid, the nearest). */
-  at(p: Point): Point {
+   *  of the grid triangle it rests in (outside the grid, the nearest); into
+   *  `out` when given (which may be `p`). */
+  at(p: Point, out?: Point): Point {
     const { xs, ys } = this;
     const j = clampIndex(ys, p.y);
     const last = ys.length - 2;
@@ -193,10 +205,18 @@ export class NeckWarp {
     const m = this.moved;
     // The cell's diagonal runs from (x0, y0) to (x1, y1): above it the
     // first triangle, below it the second.
-    const [A, B, C] = u >= v ? [m[j][i0], m[j][i1], m[j + 1][i1]] : [m[j][i0], m[j + 1][i1], m[j + 1][i0]];
+    const above = u >= v;
+    const A = m[j][i0],
+      B = above ? m[j][i1] : m[j + 1][i1],
+      C = above ? m[j + 1][i1] : m[j + 1][i0];
     // Barycentric weights in the rest cell (u, v in the unit square).
-    const [wa, wb, wc] = u >= v ? [1 - u, u - v, v] : [1 - v, u, v - u];
-    return { x: wa * A.x + wb * B.x + wc * C.x, y: wa * A.y + wb * B.y + wc * C.y };
+    const wa = above ? 1 - u : 1 - v,
+      wb = above ? u - v : u,
+      wc = above ? v : v - u;
+    const r = out ?? { x: 0, y: 0 };
+    r.x = wa * A.x + wb * B.x + wc * C.x;
+    r.y = wa * A.y + wb * B.y + wc * C.y;
+    return r;
   }
 }
 
@@ -204,6 +224,13 @@ function clampIndex(edges: readonly number[], v: number): number {
   let k = 0;
   while (k < edges.length - 2 && v > edges[k + 1]) k++;
   return k;
+}
+
+/** One of the warp's triangles: its corners at rest, and where the warp
+ *  puts them. */
+export interface NeckTriangle {
+  rest: [Point, Point, Point];
+  moved: [Point, Point, Point];
 }
 
 /** The neck band's hold on the body this frame: the warp, and the head's
@@ -224,9 +251,17 @@ export function neckPin(warp: NeckWarp, head: Affine): NeckPin {
 }
 
 /** What to add to a band vertex resting at `rest` (the mesh's frame) to
- *  put it where the warp puts the layers under it. */
-export function neckPinOffset(pin: NeckPin, rest: Point): Point {
-  if (rest.y <= pin.warp.ys[1]) return { x: 0, y: 0 };
-  const q = apply(pin.back, pin.warp.at(rest));
-  return { x: q.x - rest.x, y: q.y - rest.y };
+ *  put it where the warp puts the layers under it; into `out` when given
+ *  (every band vertex, every frame). */
+export function neckPinOffset(pin: NeckPin, rest: Point, out?: Point): Point {
+  const r = out ?? { x: 0, y: 0 };
+  if (rest.y <= pin.warp.ys[1]) {
+    r.x = 0;
+    r.y = 0;
+    return r;
+  }
+  const q = apply(pin.back, pin.warp.at(rest, r), r);
+  q.x = q.x - rest.x;
+  q.y = q.y - rest.y;
+  return q;
 }

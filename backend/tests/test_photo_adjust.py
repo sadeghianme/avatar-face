@@ -27,6 +27,7 @@ from app.services.photo_adjust import (
     LIPS,
     AdjustSkipped,
 )
+from app.services.photo_adjust.paste import hull_mask, paste_region, polygon_mask
 
 WIDTH, HEIGHT = 400, 500
 FACE_BOX = (0.3 * WIDTH, 0.2 * HEIGHT, 0.7 * WIDTH, 0.7 * HEIGHT)
@@ -108,8 +109,9 @@ def _region_mask(points: np.ndarray, pad: float) -> np.ndarray:
     may touch)."""
     from scipy.ndimage import distance_transform_edt
 
-    hull = pa._hull_mask((HEIGHT, WIDTH), [points[EYE_IMAGE_LEFT], points[EYE_IMAGE_RIGHT],
-                                            points[LIPS]])
+    hull = hull_mask(
+        (HEIGHT, WIDTH), [points[EYE_IMAGE_LEFT], points[EYE_IMAGE_RIGHT], points[LIPS]]
+    )
     return distance_transform_edt(~hull) <= pad
 
 
@@ -118,10 +120,14 @@ def _paste_reach(points: np.ndarray) -> float:
     the larger of the two regions' dilation and feather."""
     eye_width = float(np.ptp(points[EYE_IMAGE_LEFT][:, 0]))
     mouth_width = float(np.ptp(points[LIPS][:, 0]))
-    return 1.6 * max(
-        (pa.EYE_DILATE + pa.EYE_FEATHER) * eye_width,
-        (pa.LIP_DILATE + pa.LIP_FEATHER) * mouth_width,
-    ) + 3
+    return (
+        1.6
+        * max(
+            (pa.EYE_DILATE + pa.EYE_FEATHER) * eye_width,
+            (pa.LIP_DILATE + pa.LIP_FEATHER) * mouth_width,
+        )
+        + 3
+    )
 
 
 # --- what is sent ----------------------------------------------------------------
@@ -252,7 +258,9 @@ def test_lab_round_trips():
 # --- the paste --------------------------------------------------------------------
 
 
-def _answer_from_crop(source: Image.Image, points: np.ndarray, change) -> tuple[Image.Image, np.ndarray, tuple]:
+def _answer_from_crop(
+    source: Image.Image, points: np.ndarray, change
+) -> tuple[Image.Image, np.ndarray, tuple]:
     box = pa.face_crop_box(points)
     crop = pa.crop_face(source, box)
     return change(crop, crop_points(points, box)), crop_points(points, box), box
@@ -264,8 +272,12 @@ def test_only_the_eyes_and_lips_change_and_the_rest_is_the_original_to_the_bit()
 
     def change(crop, pts):
         # The model "relit" everything and painted the eyes and lips blue.
-        tinted = Image.fromarray(np.clip(np.asarray(crop, dtype=np.int16) + 25, 0, 255).astype(np.uint8))
-        return _paint_hulls(tinted, [pts[EYE_IMAGE_LEFT], pts[EYE_IMAGE_RIGHT], pts[LIPS]], (20, 40, 230))
+        tinted = Image.fromarray(
+            np.clip(np.asarray(crop, dtype=np.int16) + 25, 0, 255).astype(np.uint8)
+        )
+        return _paint_hulls(
+            tinted, [pts[EYE_IMAGE_LEFT], pts[EYE_IMAGE_RIGHT], pts[LIPS]], (20, 40, 230)
+        )
 
     answer, answer_points, _ = _answer_from_crop(source, points, change)
     result = pa.paste_back(source, points, answer, answer_points)
@@ -286,7 +298,9 @@ def test_the_answers_relighting_is_matched_away():
     points = face_points()
 
     def brighter(crop, pts):
-        return Image.fromarray(np.clip(np.asarray(crop, dtype=np.int16) + 40, 0, 255).astype(np.uint8))
+        return Image.fromarray(
+            np.clip(np.asarray(crop, dtype=np.int16) + 40, 0, 255).astype(np.uint8)
+        )
 
     answer, answer_points, _ = _answer_from_crop(source, points, brighter)
     result = pa.paste_back(source, points, answer, answer_points)
@@ -329,15 +343,22 @@ def test_an_answer_the_model_shifted_and_turned_is_put_back_in_place():
     angle, scale = math.radians(3.0), 1.04
     centre = np.array([CROP_SIZE / 2, CROP_SIZE / 2])
     rotation = np.array([[math.cos(angle), -math.sin(angle)], [math.sin(angle), math.cos(angle)]])
-    forward = np.hstack((scale * rotation, (centre - scale * rotation @ centre + [9.0, -6.0])[:, None]))
-    inverse = pa._invert(forward)
+    forward = np.hstack(
+        (scale * rotation, (centre - scale * rotation @ centre + [9.0, -6.0])[:, None])
+    )
+    # PIL's AFFINE maps output pixels to input ones: the inverse transform.
+    inverse = np.linalg.inv(np.vstack((forward, [0.0, 0.0, 1.0])))[:2]
     moved = crop.transform(
-        crop.size, Image.Transform.AFFINE, tuple(inverse.reshape(-1)),
+        crop.size,
+        Image.Transform.AFFINE,
+        tuple(inverse.reshape(-1)),
         resample=Image.Resampling.BICUBIC,
     )
     result = pa.paste_back(source, points, moved, pa.apply(forward, in_crop))
     mask = _region_mask(points, pad=1)
-    error = np.abs(np.asarray(result, dtype=np.float64) - np.asarray(source, dtype=np.float64))[mask]
+    error = np.abs(np.asarray(result, dtype=np.float64) - np.asarray(source, dtype=np.float64))[
+        mask
+    ]
     assert error.mean() < 4.0
 
 
@@ -380,8 +401,9 @@ def test_a_touchup_answer_without_a_face_is_rejected_with_no_image(finder):
 
 def test_an_unreadable_answer_is_rejected():
     prepared = pa.Prepared(prompt="p", payload=b"", mime="image/jpeg")
-    candidate = pa.finish_candidate(png(noisy_photo()), prepared, b"not an image",
-                                    pa.REGENERATE, "animal")
+    candidate = pa.finish_candidate(
+        png(noisy_photo()), prepared, b"not an image", pa.REGENERATE, "animal"
+    )
     assert candidate.png is None and candidate.rejected["code"] == "unreadable_result"
 
 
@@ -401,7 +423,9 @@ def test_a_regenerated_person_whose_skin_changed_is_rejected(finder):
 def test_a_regenerated_person_with_the_same_skin_passes(finder):
     source = noisy_photo()
     finder.by_size[(WIDTH, HEIGHT)] = face_points()
-    brighter = Image.fromarray(np.clip(np.asarray(source, dtype=np.int16) + 12, 0, 255).astype(np.uint8))
+    brighter = Image.fromarray(
+        np.clip(np.asarray(source, dtype=np.int16) + 12, 0, 255).astype(np.uint8)
+    )
     prepared = pa.Prepared(prompt="p", payload=b"", mime="image/jpeg")
     candidate = pa.finish_candidate(png(source), prepared, png(brighter), pa.REGENERATE, "human")
     assert candidate.rejected is None, candidate.rejected
@@ -419,8 +443,11 @@ def test_a_result_without_a_face_is_rejected_for_people_and_animations(finder):
 def test_an_animal_result_needs_no_detection(finder):
     prepared = pa.Prepared(prompt="p", payload=b"", mime="image/jpeg")
     candidate = pa.finish_candidate(
-        png(noisy_photo()), prepared, png(Image.new("RGB", (300, 300), (90, 60, 30))),
-        pa.REGENERATE, "animal",
+        png(noisy_photo()),
+        prepared,
+        png(Image.new("RGB", (300, 300), (90, 60, 30))),
+        pa.REGENERATE,
+        "animal",
     )
     assert candidate.rejected is None
     assert finder.calls == 0
@@ -442,8 +469,11 @@ def test_a_stylised_result_is_checked_as_an_animation_without_the_skin_guard(fin
 def test_a_huge_result_is_stored_no_larger_than_an_upload():
     prepared = pa.Prepared(prompt="p", payload=b"", mime="image/jpeg")
     candidate = pa.finish_candidate(
-        png(noisy_photo()), prepared, png(Image.new("RGB", (4096, 2048), (9, 9, 9))),
-        pa.REGENERATE, "animal",
+        png(noisy_photo()),
+        prepared,
+        png(Image.new("RGB", (4096, 2048), (9, 9, 9))),
+        pa.REGENERATE,
+        "animal",
     )
     assert max(candidate.width, candidate.height) == pa.STORED_MAX_EDGE
 
@@ -502,12 +532,13 @@ def test_a_cutout_is_touched_up_on_grey_and_stays_the_same_cutout(finder):
     sent = np.asarray(_decode(prepared.payload), dtype=np.int16)
     x0, y0, side = prepared.crop
     band = int((335 - x0) * CROP_SIZE / side), int((355 - x0) * CROP_SIZE / side)
-    shown = sent[CROP_SIZE // 2 - 50: CROP_SIZE // 2 + 50, band[0]:band[1]]
+    shown = sent[CROP_SIZE // 2 - 50 : CROP_SIZE // 2 + 50, band[0] : band[1]]
     assert np.abs(shown - 128).max() <= 6, "the removed background is shown as flat grey"
 
     def paint(crop, pts):
-        return _paint_hulls(crop, [pts[EYE_IMAGE_LEFT], pts[EYE_IMAGE_RIGHT], pts[LIPS]],
-                            (20, 40, 230))
+        return _paint_hulls(
+            crop, [pts[EYE_IMAGE_LEFT], pts[EYE_IMAGE_RIGHT], pts[LIPS]], (20, 40, 230)
+        )
 
     answer = paint(_decode(prepared.payload), crop_points(points, prepared.crop))
     finder.by_size[(CROP_SIZE, CROP_SIZE)] = crop_points(points, prepared.crop)
@@ -557,13 +588,16 @@ def _hairy_brows(image: Image.Image, points: np.ndarray, seed: int = 5) -> Image
     draw = ImageDraw.Draw(out)
     for contour in (pa.BROW_IMAGE_LEFT, pa.BROW_IMAGE_RIGHT):
         polygon = points[contour]
-        mask = pa._polygon_mask((image.height, image.width), [polygon])
+        mask = polygon_mask((image.height, image.width), [polygon])
         ys, xs = np.nonzero(mask)
         for i in rng.choice(len(xs), size=len(xs) // 6, replace=False):
             x, y = int(xs[i]), int(ys[i])
             dx, dy = rng.integers(3, 9), rng.integers(-3, 2)
-            draw.line((x, y, x + dx, y + dy), fill=tuple(int(v) for v in rng.integers(30, 70, 3)),
-                      width=int(rng.integers(1, 3)))
+            draw.line(
+                (x, y, x + dx, y + dy),
+                fill=tuple(int(v) for v in rng.integers(30, 70, 3)),
+                width=int(rng.integers(1, 3)),
+            )
     return out
 
 
@@ -603,9 +637,7 @@ def test_hairy_brows_are_not_taken_for_grain_nor_pasted(finder):
         # A std-based estimate took the brow hairs for grain and added noise
         # four to eight times the photo's own here.
         assert after < 1.4 * before + 0.3, (before, after)
-    brows = pa._polygon_mask(
-        (BIG_H, BIG_W), [points[pa.BROW_IMAGE_LEFT], points[pa.BROW_IMAGE_RIGHT]]
-    )
+    brows = polygon_mask((BIG_H, BIG_W), [points[pa.BROW_IMAGE_LEFT], points[pa.BROW_IMAGE_RIGHT]])
     assert np.array_equal(np.asarray(source)[brows], np.asarray(result)[brows])
 
 
@@ -633,7 +665,7 @@ def test_brows_the_answer_moved_are_neither_pasted_nor_measured():
     result = pa.paste_back(source, points, answer, raised.points)
     before, after = np.asarray(source, dtype=np.float64), np.asarray(result, dtype=np.float64)
     in_photo = raised.points * (side / CROP_SIZE) + np.array([x0, y0])
-    moved_brows = pa._polygon_mask(
+    moved_brows = polygon_mask(
         (HEIGHT, WIDTH), [in_photo[pa.BROW_IMAGE_LEFT], in_photo[pa.BROW_IMAGE_RIGHT]]
     )
     assert moved_brows.sum() > 50
@@ -657,10 +689,17 @@ def test_the_lip_ring_measures_only_skin_inside_both_faces():
     answer = Image.new("RGB", (size, size), (150, 150, 150))
     lips = np.array([[70.0, 95.0], [130.0, 95.0], [130.0, 105.0], [70.0, 105.0]])
     out = source.copy()
-    region = pa.Region("lips", lips, lips, pa.LIP_DILATE, pa.LIP_FEATHER,
-                       within=(window_face, window_face))
-    pa._paste_region(out, source, answer, np.hstack((np.eye(2), np.zeros((2, 1)))), region,
-                     np.random.default_rng(0))
+    region = pa.Region(
+        "lips", lips, lips, pa.LIP_DILATE, pa.LIP_FEATHER, within=(window_face, window_face)
+    )
+    paste_region(
+        out,
+        source,
+        answer,
+        np.hstack((np.eye(2), np.zeros((2, 1)))),
+        region,
+        np.random.default_rng(0),
+    )
     # The middle of the lips: the answer's 150, not shifted toward the neck.
     assert abs(float(out[100, 100].mean()) - 150) < 3
 
@@ -704,13 +743,15 @@ def test_a_shrunk_answer_is_averaged_not_aliased():
     assert CROP_SIZE / crop_box[2] > 2
     arr = np.asarray(answer, dtype=np.float64).copy()
     lines = _stripes(CROP_SIZE, CROP_SIZE)
-    eyes = pa._hull_mask((CROP_SIZE, CROP_SIZE), [answer_points[EYE_IMAGE_LEFT],
-                                                   answer_points[EYE_IMAGE_RIGHT]])
+    eyes = hull_mask(
+        (CROP_SIZE, CROP_SIZE), [answer_points[EYE_IMAGE_LEFT], answer_points[EYE_IMAGE_RIGHT]]
+    )
     arr[eyes] = lines[eyes][:, None]
     striped = Image.fromarray(arr.astype(np.uint8))
-    result = np.asarray(pa.paste_back(source, points, striped, answer_points).convert("L"),
-                        dtype=np.float64)
-    inside = pa._hull_mask((HEIGHT, WIDTH), [points[EYE_IMAGE_LEFT], points[EYE_IMAGE_RIGHT]])
+    result = np.asarray(
+        pa.paste_back(source, points, striped, answer_points).convert("L"), dtype=np.float64
+    )
+    inside = hull_mask((HEIGHT, WIDTH), [points[EYE_IMAGE_LEFT], points[EYE_IMAGE_RIGHT]])
     from scipy.ndimage import binary_erosion
 
     core = binary_erosion(inside, iterations=1)

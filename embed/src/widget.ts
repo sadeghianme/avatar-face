@@ -9,11 +9,19 @@
  *           data-provider="kokoro"></script>
  *
  * Renders a canvas where the script tag sits and exposes window.Liveface:
- *   Liveface.speak(text)  — chunked + prefetched for long text
+ *   Liveface.speak(text)  — chunked + prefetched for long text; rejects
+ *                           with a SpeechError (`code`, `detail`, `status`)
+ *                           when the server refuses a line
  *   Liveface.stop()
  *   Liveface.isSpeaking()
  *   Liveface.listen({lang}) — browser STT, resolves with the transcript
  *   Liveface.sttSupported()
+ *   Liveface.tune({...}), Liveface.engine
+ *
+ * With several widgets on a page, those act on the FIRST to come up (on a
+ * page with one, that one), and each widget has its own handle with the
+ * same calls: Liveface.get(avatarId or its canvas or script tag),
+ * Liveface.all(), and `event.detail` of its `liveface:ready` (widget/handles.ts).
  *
  * The key travels in the X-Api-Key header, never in a URL (where it would
  * reach access logs, proxies and Referer headers).
@@ -36,34 +44,23 @@
  * published face type: the turn in depth for a person, the rigid layer for
  * an animal or a cartoon.
  */
+import type { CueResponse, EmbedAvatarOut, SynthesizeResponse } from "./api-types";
 import { BrowserTTS } from "./browser-tts";
-import { aiLabel, renderAiLabel, type Disclosure } from "./widget/disclosure";
-import { AvatarEngine, type HeadMotionMode, type Scene } from "./engine";
+import { aiLabel, renderAiLabel } from "./widget/disclosure";
+import { AvatarEngine, type HeadMotionMode } from "./engine";
 import type { Avatar3DEngine, Avatar3DOptions } from "./engine3d";
 import { SpeechQueue } from "./speech";
+import { speechErrorOfResponse } from "./speech-error";
 import { listen, sttSupported, ListenOptions } from "./stt";
-import type { ClassicMouthConfig } from "./engine/character-mouth";
 import type { AvatarMouthConfig } from "./mouth";
-import { EngineTuning, FaceType, Rig, SynthesisPayload } from "./types";
+import { EngineTuning, Rig } from "./types";
 import { showFailure } from "./widget/failure";
 import { asFailure, fetchJson, loadImage, loadScript } from "./widget/load";
-
-interface LivefaceApi {
-  speak(text: string): Promise<void>;
-  stop(): void;
-  isSpeaking(): boolean;
-  listen(options?: ListenOptions): Promise<string>;
-  sttSupported(): boolean;
-  /** Adjust animation live, e.g. Liveface.tune({ mouthOpen: 1.3 }). */
-  tune(partial: Partial<EngineTuning>): void;
-  /** The engine itself: a page may call any of its public members, so
-   *  they keep their names in liveface.js (scripts/mangle-names.mjs). */
-  engine: AvatarEngine | Avatar3DEngine | null;
-}
+import { addWidget, announce, livefacePage, type LivefaceHandle, type LivefacePage } from "./widget/handles";
 
 declare global {
   interface Window {
-    Liveface?: LivefaceApi;
+    Liveface?: LivefacePage;
     __Liveface3D?: {
       load: (canvas: HTMLCanvasElement, modelUrl: string, options?: Avatar3DOptions) => Promise<Avatar3DEngine>;
     };
@@ -76,27 +73,6 @@ declare global {
   }
 }
 
-/** What GET /embed/v1/avatars/{id} answers (backend/app/api/embed.py). */
-interface PublishedAvatar {
-  kind?: string;
-  framing?: string;
-  /** The published scene (zoom, pan, background), or null for a snapshot
-   *  from before scenes existed. */
-  scene?: Scene | null;
-  rig_url: string;
-  thumbnail_url: string;
-  image_url?: string | null;
-  model_url?: string | null;
-  layer_urls?: { background?: string; body: string; head: string } | null;
-  voice?: { provider: string; voice: string; locale: string } | null;
-  mouth?: AvatarMouthConfig | ClassicMouthConfig | null;
-  /** Absent for snapshots published before disclosures were recorded. */
-  disclosure?: Disclosure;
-  /** What the avatar is, as published: it chooses the head motion's
-   *  default. Absent from an API before it said so: the rig's profile does. */
-  face_type?: FaceType | null;
-}
-
 /** A data-* switch: present and not "off", "false" or "0". */
 function switchedOn(value: string | undefined): boolean {
   return value !== undefined && !["off", "false", "0"].includes(value.trim().toLowerCase());
@@ -107,18 +83,6 @@ function headMotionAttr(value: string | undefined): HeadMotionMode | undefined {
   const v = value?.trim().toLowerCase();
   return v === "2d" || v === "3d" ? v : undefined;
 }
-
-/** window.Liveface for an avatar that could not be shown: the page's calls
- *  answer quietly (nothing to say, nothing speaking) instead of throwing. */
-const UNAVAILABLE: LivefaceApi = {
-  speak: () => Promise.resolve(),
-  stop: () => undefined,
-  isSpeaking: () => false,
-  listen: (options?: ListenOptions) => listen(options),
-  sttSupported,
-  tune: () => undefined,
-  engine: null,
-};
 
 async function bootstrap(script: HTMLScriptElement): Promise<void> {
   const avatarId = script.dataset.avatar;
@@ -155,15 +119,20 @@ async function bootstrap(script: HTMLScriptElement): Promise<void> {
     // Until the avatar's own locale is known, the note speaks the snippet's
     // language, else the page's.
     const locale = script.dataset.locale || document.documentElement?.lang || "en";
-    showFailure(canvas, asFailure(error, "engine"), locale);
+    const failure = asFailure(error, "engine");
+    showFailure(canvas, failure, locale);
+    script.dispatchEvent(
+      new CustomEvent("liveface:error", { detail: { stage: failure.stage, message: failure.message } })
+    );
     // A page that calls Liveface.speak() gets a quiet answer, not a
     // TypeError; another widget's working API is left in place.
-    window.Liveface ??= UNAVAILABLE;
+    livefacePage();
   }
 }
 
 /** Everything after the canvas is in place: the avatar fetched and drawn,
- *  window.Liveface set. Throws (a WidgetFailure, mostly) when it cannot. */
+ *  its handle on the page (widget/handles.ts). Throws (a WidgetFailure,
+ *  mostly) when it cannot. */
 async function mount(
   script: HTMLScriptElement,
   canvas: HTMLCanvasElement,
@@ -180,7 +149,9 @@ async function mount(
   const debug = switchedOn(script.dataset.debug) || new URLSearchParams(location.search).has("liveface-debug");
 
   const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
-  const info = await fetchJson<PublishedAvatar>(`${apiBase}/embed/v1/avatars/${avatarId}`, "avatar", {
+  // The published avatar (backend schemas.published, EmbedAvatarOut): its
+  // type is generated from the API's schema (api-types.ts).
+  const info = await fetchJson<EmbedAvatarOut>(`${apiBase}/embed/v1/avatars/${avatarId}`, "avatar", {
     headers: { "X-Api-Key": apiKey },
   });
 
@@ -283,14 +254,16 @@ async function mount(
     }
   }
 
-  const synth = async (text: string): Promise<SynthesisPayload> => {
+  const synth = async (text: string): Promise<SynthesizeResponse> => {
     const response = await fetch(`${apiBase}/embed/v1/synthesize`, {
       method: "POST",
       headers,
       body: JSON.stringify({ text, provider, voice, locale }),
     });
-    if (!response.ok) throw new Error(`synthesize failed: ${response.status}`);
-    return response.json();
+    // Liveface.speak() rejects with the API's reason (SpeechError: its
+    // code, detail and status), so a page can branch on the code.
+    if (!response.ok) throw await speechErrorOfResponse(response);
+    return (await response.json()) as SynthesizeResponse;
   };
   const queue = new SpeechQueue(engine, synth);
   // data-provider="browser": free local speechSynthesis voices.
@@ -304,12 +277,14 @@ async function mount(
       body: JSON.stringify({ text, locale }),
     });
     if (!response.ok) return null;
-    const data = await response.json();
+    const data = (await response.json()) as CueResponse;
     return { cues: data.cues, durationMs: data.duration_ms, wordMarks: data.word_marks };
   };
   const browserTts = useBrowserVoice ? new BrowserTTS(engine, fetchCues) : null;
 
-  window.Liveface = {
+  const handle: LivefaceHandle = {
+    avatar: avatarId,
+    canvas,
     speak: (text: string) => (browserTts ? browserTts.speak(text, voice || undefined, locale) : queue.speak(text)),
     stop: () => {
       queue.stop();
@@ -323,8 +298,9 @@ async function mount(
     },
     engine,
   };
+  addWidget(handle, script);
   canvas.setAttribute("data-liveface-state", "ready");
-  canvas.dispatchEvent(new CustomEvent("liveface:ready", { bubbles: true }));
+  announce(canvas, script, "liveface:ready", handle);
 }
 
 const current = document.currentScript as HTMLScriptElement | null;

@@ -1,4 +1,7 @@
 /** fr: settings strings. A key lives in exactly one file; add new ones here. */
+import type { settings as en } from "@/i18n/locales/en/settings";
+import type { Locale } from "@/i18n/types";
+
 export const settings = {
   orgSettings: "Organisation",
   orgName: "Nom de l'organisation",
@@ -11,4 +14,10 @@ export const settings = {
   aiSwitchNotAllowed: "Seuls les propriétaires et les administrateurs peuvent le modifier.",
   usageAiImages: "Images IA : {{used}} / {{limit}}",
   usageAiPoints: "Repérage de points IA : {{used}} / {{limit}}",
-} as const;
+  sessionsTitle: "Appareils connectés",
+  sessionsHint:
+    "Connecté sur un ordinateur que vous n’utilisez plus, ou quelqu’un d’autre connaît votre mot de passe ? Se déconnecter partout met fin à toutes les sessions de votre compte, celle-ci comprise. Choisir un nouveau mot de passe fait de même.",
+  logoutEverywhere: "Se déconnecter partout",
+  logoutEverywhereAsk: "Se déconnecter sur tous les appareils, celui-ci compris ?",
+  logoutEverywhereFailed: "La déconnexion partout a échoué. Réessayez.",
+} as const satisfies Locale<typeof en>;

@@ -29,7 +29,10 @@ async def _first_build(client, monkeypatch, name, *, face_type="human", detected
         rig_module,
         "landmarks_from_image",
         lambda data: (
-            rig_module.synthetic_face_mesh(1024, 1024) * shrink, None, (1024, 1024), detected
+            rig_module.synthetic_face_mesh(1024, 1024) * shrink,
+            None,
+            (1024, 1024),
+            detected,
         ),
     )
     headers = await register_and_login(client, name)
@@ -40,7 +43,9 @@ async def _first_build(client, monkeypatch, name, *, face_type="human", detected
         headers=headers,
     )
     body = created.json()
-    await client.put(body["upload_url"], content=sample_png(), headers={"content-type": "image/png"})
+    await client.put(
+        body["upload_url"], content=sample_png(), headers={"content-type": "image/png"}
+    )
     avatar_id = body["avatar"]["id"]
     await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/uploaded", headers=headers)
     key = await client.post(
@@ -64,10 +69,10 @@ async def test_a_confidently_detected_human_publishes_itself(client, monkeypatch
 @pytest.mark.parametrize(
     "face_type, detected, shrink",
     [
-        ("human", False, 1.0),    # no face found: the mesh is a placeholder
-        ("human", True, 0.25),    # found, but too small to pass the checks
-        ("animal", True, 1.0),    # no detector knows a muzzle
-        ("cartoon", True, 1.0),   # stylised eyes and mouths land wrong
+        ("human", False, 1.0),  # no face found: the mesh is a placeholder
+        ("human", True, 0.25),  # found, but too small to pass the checks
+        ("animal", True, 1.0),  # no detector knows a muzzle
+        ("cartoon", True, 1.0),  # stylised eyes and mouths land wrong
     ],
 )
 async def test_an_unconfirmed_first_build_waits_for_its_owner(
@@ -76,8 +81,12 @@ async def test_an_unconfirmed_first_build_waits_for_its_owner(
     """Nothing goes live on a guess: the avatar is ready to edit, says it is
     not live, and embed and share keep answering 404 until Publish."""
     headers, org_id, avatar_id, key = await _first_build(
-        client, monkeypatch, f"held-{face_type}-{detected}-{shrink}",
-        face_type=face_type, detected=detected, shrink=shrink,
+        client,
+        monkeypatch,
+        f"held-{face_type}-{detected}-{shrink}",
+        face_type=face_type,
+        detected=detected,
+        shrink=shrink,
     )
     base = f"/orgs/{org_id}/avatars/{avatar_id}"
     detail = (await client.get(base, headers=headers)).json()
@@ -119,16 +128,18 @@ async def test_a_snapshot_backfilled_by_migration_020_is_live(client):
     async with get_session_factory()() as db:
         avatar = (await db.execute(select(Avatar).where(Avatar.id == avatar_id))).scalar_one()
         # As the migration wrote it: the draft's own keys, revision 0.
-        avatar.published_config = json.dumps({
-            "revision": 0,
-            "framing": avatar.framing,
-            "face_type": avatar.face_type,
-            "image_key": avatar.image_key,
-            "rig_key": avatar.rig_key,
-            "thumbnail_key": avatar.thumbnail_key,
-            "layer_keys": None,
-            "published_at": None,
-        })
+        avatar.published_config = json.dumps(
+            {
+                "revision": 0,
+                "framing": avatar.framing,
+                "face_type": avatar.face_type,
+                "image_key": avatar.image_key,
+                "rig_key": avatar.rig_key,
+                "thumbnail_key": avatar.thumbnail_key,
+                "layer_keys": None,
+                "published_at": None,
+            }
+        )
         await db.commit()
 
     detail = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
@@ -150,7 +161,8 @@ async def test_a_3d_model_publishes_itself(client):
     )
     body = created.json()
     await client.put(
-        body["upload_url"], content=make_glb(RPM_LIKE_GLTF),
+        body["upload_url"],
+        content=make_glb(RPM_LIKE_GLTF),
         headers={"content-type": "model/gltf-binary"},
     )
     avatar_id = body["avatar"]["id"]
@@ -253,9 +265,7 @@ async def test_published_assets_are_copies_not_pointers(client, setup):
     from app.models import Avatar
 
     async with get_session_factory()() as db:
-        avatar = (
-            await db.execute(select(Avatar).where(Avatar.id == avatar_id))
-        ).scalar_one()
+        avatar = (await db.execute(select(Avatar).where(Avatar.id == avatar_id))).scalar_one()
         config = json.loads(avatar.published_config)
         assert "/published/" in config["image_key"]
         assert config["image_key"] != avatar.image_key
@@ -416,9 +426,7 @@ async def test_another_org_cannot_publish_your_avatar(client, setup):
     headers, org_id, avatar_id, key = setup
     other = await register_and_login(client, "intruder")
     other_org = await create_org(client, other, name="Other")
-    response = await client.post(
-        f"/orgs/{other_org}/avatars/{avatar_id}/publish", headers=other
-    )
+    response = await client.post(f"/orgs/{other_org}/avatars/{avatar_id}/publish", headers=other)
     assert response.status_code == 404
 
 
@@ -435,7 +443,7 @@ async def test_startup_runs_the_recovery(client, setup, monkeypatch):
         return None
 
     # Only the recovery is under test: no migrations, sweeper or model warm-up.
-    monkeypatch.setattr(main, "_ensure_schema", no_schema)
+    monkeypatch.setattr(main, "ensure_schema", no_schema)
     monkeypatch.setattr(lab_timing, "warm_native", nothing)
     monkeypatch.setattr(get_settings(), "candidate_retention_hours", 0, raising=False)
 

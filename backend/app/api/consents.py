@@ -14,7 +14,7 @@ from typing import Literal
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-from app.api.deps import DB, OrgMember
+from app.api.deps import DB, OrgMember, client_address
 from app.services import consent as svc
 from app.services.ai_models import PROVIDER
 
@@ -84,9 +84,7 @@ class MyConsentOut(BaseModel):
 
 
 @router.get("/mine", response_model=MyConsentOut)
-async def my_consent(
-    ctx: OrgMember, db: DB, scope: Literal["third_party_ai"]
-) -> MyConsentOut:
+async def my_consent(ctx: OrgMember, db: DB, scope: Literal["third_party_ai"]) -> MyConsentOut:
     """The signed-in member's latest consent for `scope` under the current
     wording, or null: the dashboard asks once per person and wording, not
     per photo. A step still checks it (and the organization's switch).
@@ -105,17 +103,14 @@ async def my_consent(
 
 
 @router.post("", response_model=ConsentOut, status_code=201)
-async def give_consent(
-    body: ConsentCreate, ctx: OrgMember, db: DB, request: Request
-) -> ConsentOut:
+async def give_consent(body: ConsentCreate, ctx: OrgMember, db: DB, request: Request) -> ConsentOut:
     """Record a statement by the signed-in member. Pass the returned id to
     the step it is for (adjust, detect with AI, generate, finish).
 
     A statement about a face names its creation (`creation_id`, one of this
-    organization's; 404 otherwise). The address is taken from the proxy's
-    X-Forwarded-For when the server runs behind one (uvicorn's
-    FORWARDED_ALLOW_IPS, deploy/docker-compose.prod.yml), and only its
-    keyed hash is stored."""
+    organization's; 404 otherwise). The address is the client's, through the
+    proxies this server trusts (deps.client_address), and only its keyed
+    hash is stored."""
     subject_id = None
     if body.scope in svc.SUBJECT_SCOPES and body.creation_id:
         subject_id = await svc.creation_subject(db, ctx.org, body.creation_id)
@@ -126,7 +121,7 @@ async def give_consent(
         body.scope,
         body.text_version,
         body.providers,
-        request.client.host if request.client else None,
+        client_address(request) if request.client else None,
         subject_id=subject_id,
     )
     return ConsentOut(

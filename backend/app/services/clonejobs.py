@@ -61,9 +61,7 @@ async def _read_index(storage, org_id: str) -> list[str]:
 
 
 async def _write_index(storage, org_id: str, ids: list[str]) -> None:
-    await storage.put_bytes(
-        _index_key(org_id), json.dumps(ids).encode(), "application/json"
-    )
+    await storage.put_bytes(_index_key(org_id), json.dumps(ids).encode(), "application/json")
 
 
 async def _read_job(storage, org_id: str, job_id: str) -> dict | None:
@@ -77,7 +75,7 @@ async def _read_job(storage, org_id: str, job_id: str) -> dict | None:
         return None
 
 
-async def _write_job(storage, org_id: str, job: dict) -> None:
+async def write_job(storage, org_id: str, job: dict) -> None:
     await storage.put_bytes(
         _job_key(org_id, job["id"]), json.dumps(job).encode(), "application/json"
     )
@@ -99,7 +97,7 @@ async def create_job(
         "finished_at": None,
     }
     await storage.put_bytes(reference_key(org_id, job["id"]), reference, "audio/wav")
-    await _write_job(storage, org_id, job)
+    await write_job(storage, org_id, job)
     ids = await _read_index(storage, org_id)
     await _write_index(storage, org_id, [job["id"], *ids])
     return job
@@ -139,7 +137,7 @@ async def claim_next(storage, org_id: str) -> dict | None:
             job["status"] = "processing"
             job["claimed_at"] = now
             job["error"] = None
-            await _write_job(storage, org_id, job)
+            await write_job(storage, org_id, job)
             return job
     return None
 
@@ -150,13 +148,11 @@ async def update_progress(storage, org_id: str, job_id: str, done_lines: int) ->
         return None
     job["done_lines"] = done_lines
     job["claimed_at"] = time.time()  # progress renews the claim
-    await _write_job(storage, org_id, job)
+    await write_job(storage, org_id, job)
     return job
 
 
-async def finish_job(
-    storage, org_id: str, job_id: str, *, error: str | None = None
-) -> dict | None:
+async def finish_job(storage, org_id: str, job_id: str, *, error: str | None = None) -> dict | None:
     job = await _read_job(storage, org_id, job_id)
     if job is None:
         return None
@@ -165,7 +161,7 @@ async def finish_job(
     job["finished_at"] = time.time()
     if not error:
         job["done_lines"] = len(job["lines"])
-    await _write_job(storage, org_id, job)
+    await write_job(storage, org_id, job)
     return job
 
 

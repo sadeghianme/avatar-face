@@ -24,7 +24,7 @@ from scripts.migrate_classic_mouths import (
     write_backup,
 )
 from tests.conftest import create_org, create_ready_avatar, register_and_login
-from tests.test_model3d import _upload_glb
+from tests.test_model3d import upload_glb
 
 DAY = "2026-10-05"
 # What a new person gets today without AI, plus why this one has no teeth
@@ -56,8 +56,13 @@ async def _state(avatar_id: str) -> tuple:
     """Everything the migration may and may not touch, byte for byte."""
     row = await _row(avatar_id)
     return (
-        row.mouth_config, row.published_config, row.draft_revision,
-        row.face_type, row.status, row.kind, row.framing,
+        row.mouth_config,
+        row.published_config,
+        row.draft_revision,
+        row.face_type,
+        row.status,
+        row.kind,
+        row.framing,
     )
 
 
@@ -90,7 +95,9 @@ async def world(client):
     # Chose the classic renderer in the Mouth panel after publishing: the
     # draft names it, the snapshot does not, and the edit is unpublished.
     edited = await human("Edited Edna")
-    patched = await client.patch(url(edited), json={"mouth": {"renderer": "classic"}}, headers=headers)
+    patched = await client.patch(
+        url(edited), json={"mouth": {"renderer": "classic"}}, headers=headers
+    )
     assert patched.status_code == 200 and patched.json()["unpublished"] is True
     # Already the photographic mouth, with a fit of its own.
     continuous = await human("Continuous Cora")
@@ -102,19 +109,31 @@ async def world(client):
     assert (await client.post(f"{url(continuous)}/publish", headers=headers)).status_code == 200
     # A kit of its own (its motion), on the classic renderer.
     kit = await human("Kit Kim")
-    await _set(kit, mouth_config=json.dumps({
-        "renderer": "classic", "profile": {},
-        "motion_key": f"orgs/{org_id}/avatars/{kit}/mouth-motion-abc.json",
-        "kit": {"id": "k1", "generated": 6},
-    }))
+    await _set(
+        kit,
+        mouth_config=json.dumps(
+            {
+                "renderer": "classic",
+                "profile": {},
+                "motion_key": f"orgs/{org_id}/avatars/{kit}/mouth-motion-abc.json",
+                "kit": {"id": "k1", "generated": 6},
+            }
+        ),
+    )
     # The owner's teeth photo, on the classic renderer.
     photo = await human("Photo Pat")
-    await _set(photo, mouth_config=json.dumps({
-        "renderer": "classic", "profile": {},
-        "oral_image_key": f"orgs/{org_id}/avatars/{photo}/mouth-abc.webp",
-        "oral_rig_key": f"orgs/{org_id}/avatars/{photo}/mouth-abc.json",
-        "teeth": {"source": "upload"},
-    }))
+    await _set(
+        photo,
+        mouth_config=json.dumps(
+            {
+                "renderer": "classic",
+                "profile": {},
+                "oral_image_key": f"orgs/{org_id}/avatars/{photo}/mouth-abc.webp",
+                "oral_rig_key": f"orgs/{org_id}/avatars/{photo}/mouth-abc.json",
+                "teeth": {"source": "upload"},
+            }
+        ),
+    )
     # Another line: the photographic mouth draws human teeth.
     cartoon = await human("Cartoon Cat")
     await client.patch(url(cartoon), json={"face_type": "cartoon"}, headers=headers)
@@ -123,12 +142,17 @@ async def world(client):
     failed = await human("Failed Fay")
     await _set(failed, status=AvatarStatus.failed)
     # A 3D model.
-    model = await _upload_glb(client, headers, org_id)
+    model = await upload_glb(client, headers, org_id)
     assert (await client.get(url(model), headers=headers)).json()["status"] == "ready"
 
     return SimpleNamespace(
-        headers=headers, org_id=org_id, visitor=visitor, url=url,
-        classic=classic, edited=edited, moved=[classic, edited],
+        headers=headers,
+        org_id=org_id,
+        visitor=visitor,
+        url=url,
+        classic=classic,
+        edited=edited,
+        moved=[classic, edited],
         untouched=[continuous, kit, photo, cartoon, failed, model],
         continuous=continuous,
     )
@@ -169,7 +193,10 @@ async def test_apply_moves_the_draft_and_the_snapshot_of_the_right_avatars_only(
     for avatar_id in world.moved:
         row = await _row(avatar_id)
         assert json.loads(row.mouth_config) == MIGRATED
-        assert MIGRATED["profile"] == {"teethY": REFERENCE_TEETH_Y, "teethScale": REFERENCE_TEETH_SCALE}
+        assert MIGRATED["profile"] == {
+            "teethY": REFERENCE_TEETH_Y,
+            "teethScale": REFERENCE_TEETH_SCALE,
+        }
         published, was = json.loads(row.published_config), json.loads(before[avatar_id][1])
         assert published["mouth"] == MIGRATED
         assert was["mouth"] is None
@@ -194,14 +221,13 @@ async def test_apply_moves_the_draft_and_the_snapshot_of_the_right_avatars_only(
     assert set(entries) == set(world.moved)
     for avatar_id in world.moved:
         assert entries[avatar_id]["before"] == {
-            "mouth_config": before[avatar_id][0], "published_config": before[avatar_id][1],
+            "mouth_config": before[avatar_id][0],
+            "published_config": before[avatar_id][1],
         }
     assert json.loads(entries[world.classic]["after"]["mouth_config"]) == MIGRATED
 
 
-async def test_visitors_get_the_photographic_mouth_with_the_standard_teeth(
-    client, world, tmp_path
-):
+async def test_visitors_get_the_photographic_mouth_with_the_standard_teeth(client, world, tmp_path):
     await _migrate(world, tmp_path)
     served = (await client.get(f"/embed/v1/avatars/{world.classic}", headers=world.visitor)).json()
     assert served["mouth"] == {

@@ -35,9 +35,7 @@ class CropRequest(BaseModel):
 
 @router.post("/{avatar_id}/background", response_model=AvatarOut)
 @one_edit_at_a_time
-async def set_background(
-    avatar_id: str, body: BackgroundRequest, ctx: OrgMember, db: DB
-) -> Avatar:
+async def set_background(avatar_id: str, body: BackgroundRequest, ctx: OrgMember, db: DB) -> Avatar:
     """Cut the subject out of the photo, or put the original back.
 
     The rig is untouched on purpose. Removing a background does not move a
@@ -63,9 +61,7 @@ async def undo_edit(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
 
 @router.post("/{avatar_id}/crop", response_model=AvatarOut)
 @one_edit_at_a_time
-async def crop_avatar(
-    avatar_id: str, body: CropRequest, ctx: OrgMember, db: DB
-) -> Avatar:
+async def crop_avatar(avatar_id: str, body: CropRequest, ctx: OrgMember, db: DB) -> Avatar:
     """Crop the photo, and move the rig with it.
 
     The rig is in image pixels, so cropping the image without translating the

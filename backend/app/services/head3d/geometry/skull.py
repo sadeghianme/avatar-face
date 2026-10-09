@@ -36,6 +36,7 @@ class SkullFit:
     narrower than the ellipse and pushed out to clear the face edge where
     the ellipse would cut it; `k` is that per-column factor (1 = the
     ellipse), which the back rings share so the whole cranium follows."""
+
     a_x: float
     b_top: float
     b_bottom: float
@@ -64,12 +65,24 @@ def _frame_of(face: np.ndarray) -> FaceFrame:
     """A face frame in the head frame's own units (for direction-only uses)."""
     width = float(abs(face[T.EAR_RIGHT, 0] - face[T.EAR_LEFT, 0]))
     height = float(abs(face[T.CHIN, 1] - face[T.FOREHEAD, 1]))
-    return FaceFrame(width=width, height=height, centre_x=0.0, ear_y=0.0, chin_y=float(-face[T.CHIN, 1]),
-                     forehead_y=float(-face[T.FOREHEAD, 1]), mouth_width=1.0, seam=(0.0, 0.0), box=(0, 0, 1, 1))
+    return FaceFrame(
+        width=width,
+        height=height,
+        centre_x=0.0,
+        ear_y=0.0,
+        chin_y=float(-face[T.CHIN, 1]),
+        forehead_y=float(-face[T.FOREHEAD, 1]),
+        mouth_width=1.0,
+        seam=(0.0, 0.0),
+        box=(0, 0, 1, 1),
+    )
 
 
 def fit_skull(
-    face: np.ndarray, frame: FaceFrame, scale: float, hair_top_y: float | None,
+    face: np.ndarray,
+    frame: FaceFrame,
+    scale: float,
+    hair_top_y: float | None,
     silhouette: np.ndarray | None = None,
 ) -> SkullFit:
     """Fit the cranium to the face (head-frame positions (478, 3)).
@@ -107,7 +120,9 @@ def fit_skull(
         k = np.minimum(1.0, reach / radius)
     k = np.maximum(k, floor / radius)
     equator = np.column_stack((ellipse * k[:, None], np.zeros(len(theta))))
-    return SkullFit(a_x=a_x, b_top=b_top, b_bottom=b_bottom, c=c, theta=theta, oval=oval, equator=equator, k=k)
+    return SkullFit(
+        a_x=a_x, b_top=b_top, b_bottom=b_bottom, c=c, theta=theta, oval=oval, equator=equator, k=k
+    )
 
 
 @dataclass
@@ -115,6 +130,7 @@ class SkullMesh(Mesh):
     """The skull with, per vertex, its oval column (-1 for the pole) and its
     surface parameter s (0 at the face edge, SKIRT_RINGS/(rings) at the
     equator, 1 at the back pole) — what the texture and the morph share key on."""
+
     column: np.ndarray
     s: np.ndarray
     skirt_share: np.ndarray
@@ -135,11 +151,13 @@ def back_ring(fit: SkullFit, psi: float) -> np.ndarray:
     narrowed per column as the equator was. (36, 3)."""
     n_cols = len(fit.theta)
     b = np.where(np.sin(fit.theta) >= 0, fit.b_top, fit.b_bottom)
-    return np.column_stack((
-        fit.k * fit.a_x * math.cos(psi) * np.cos(fit.theta),
-        fit.k * b * math.cos(psi) * np.sin(fit.theta),
-        np.full(n_cols, -fit.c * math.sin(psi)),
-    ))
+    return np.column_stack(
+        (
+            fit.k * fit.a_x * math.cos(psi) * np.cos(fit.theta),
+            fit.k * b * math.cos(psi) * np.sin(fit.theta),
+            np.full(n_cols, -fit.c * math.sin(psi)),
+        )
+    )
 
 
 def skull_mesh(fit: SkullFit) -> SkullMesh:
@@ -178,6 +196,10 @@ def skull_mesh(fit: SkullFit) -> SkullMesh:
     P = np.array(positions)
     tri = orient_outward(P, np.array(tris), np.array((0.0, 0.0, -0.4 * fit.c)))
     return SkullMesh(
-        positions=P, uvs=np.array(uvs), triangles=tri,
-        column=np.array(column, dtype=np.int32), s=np.array(s_param), skirt_share=np.array(share),
+        positions=P,
+        uvs=np.array(uvs),
+        triangles=tri,
+        column=np.array(column, dtype=np.int32),
+        s=np.array(s_param),
+        skirt_share=np.array(share),
     )

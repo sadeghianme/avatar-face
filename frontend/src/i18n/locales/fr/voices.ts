@@ -1,4 +1,7 @@
 /** fr: voices strings. A key lives in exactly one file; add new ones here. */
+import type { voices as en } from "@/i18n/locales/en/voices";
+import type { Locale } from "@/i18n/types";
+
 export const voices = {
   clonedVoices: "Voix clonée",
   voicesTitle: "Voix clonées",
@@ -31,4 +34,9 @@ export const voices = {
   speakSample:
     "Bonjour, je suis votre assistant virtuel. Je peux répondre à vos questions, planifier un rendez-vous ou vous orienter vers la bonne page. Écrivez quelque chose et appuyez sur Parler pour m'entendre.",
   speechLanguage: "Langue",
-} as const;
+  speakClonedHint: "Une voix clonée ne dit que les répliques générées avec elle.",
+  speakClonedLines: "Répliques générées",
+  speakClonedAddLines: "Ajouter des répliques dans Voix",
+  speakUseServerVoice: "Utiliser une voix serveur",
+  speakRecordLine: "L'ajouter dans Voix",
+} as const satisfies Locale<typeof en>;

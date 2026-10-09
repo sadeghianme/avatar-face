@@ -1,0 +1,33 @@
+# Coverage of the application: `pytest --cov` (pytest-cov) and `coverage`
+# read this file (docs/process.md, "Coverage"). It is not in pyproject.toml
+# because CI's virtualenv cache is keyed on that file: raising the floor
+# must not cost a reinstall.
+
+[run]
+source = app
+branch = True
+# The async database code runs SQLAlchemy's sync core inside greenlets:
+# traced per thread only, the lines run there are missed (services/orgs.py
+# measured 48% instead of 83% on the same tests), and so would the lines
+# the job runner's threads run.
+concurrency = greenlet, thread
+# Paths stored relative to backend/, so the data files of CI's two halves
+# combine on another runner.
+relative_files = True
+
+[report]
+# The floor, on the total of lines and branches together: the value CI
+# measured minus a small margin, so it catches a regression without
+# flaking. Raise it when coverage rises; never lower it to make a change
+# pass. Measured in CI on 2026-10-09: 92.00 (lines 93.68, branches 84.30).
+fail_under = 91
+precision = 1
+skip_covered = True
+show_missing = True
+exclude_also =
+    if TYPE_CHECKING:
+    raise NotImplementedError
+    @(typing\.)?overload
+
+[html]
+directory = htmlcov

@@ -66,8 +66,12 @@ def fit_rig(
     out = dict(rig)
     out["points"] = fitted.tolist()
     out["triangles"] = triangles.tolist()
-    out["face_box"] = [float(fitted[:, 0].min()), float(fitted[:, 1].min()),
-                       float(fitted[:, 0].max()), float(fitted[:, 1].max())]
+    out["face_box"] = [
+        float(fitted[:, 0].min()),
+        float(fitted[:, 1].min()),
+        float(fitted[:, 0].max()),
+        float(fitted[:, 1].max()),
+    ]
     # Marks come from the owner's hands by definition here, whatever the
     # client claims: later lines will store detector-sourced marks too, and
     # only these may count as confirmed.

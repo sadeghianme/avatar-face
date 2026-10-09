@@ -6,7 +6,7 @@ import type { Rig } from "../../types";
 import { layOutFace, refineMesh, type HeadGeom, type Point } from "../geometry";
 import { NeckWarp, headShare, neckBlendFor, neckPin, neckPinOffset } from "../neck-blend";
 import { composeFrame, headMotionAffine } from "../render2d";
-import { apply } from "../warp-gl";
+import { apply } from "../affine";
 
 /**
  * A layered avatar's neck (neck-blend.ts): the share of the head's motion

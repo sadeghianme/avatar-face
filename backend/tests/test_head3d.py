@@ -4,6 +4,7 @@ Pure geometry on synthetic faces (no MediaPipe, no node), the GLB writer
 read back, and the whole build on a synthetic subject. The node bake runs
 only where node and the embed fixture rig are available.
 """
+
 from __future__ import annotations
 
 import json
@@ -38,7 +39,12 @@ def canonical_face(size: int = 512) -> tuple[np.ndarray, np.ndarray]:
     scale = size * 0.5 / span
     points = np.column_stack((size / 2 + xy[:, 0] * scale, size * 0.5 - xy[:, 1] * scale))
     z = -shape[:, 2] * scale
-    points = np.vstack((points, np.tile(points[[468 - 1]], (10, 1)) if False else np.repeat(points[[133]], 10, axis=0)))
+    points = np.vstack(
+        (
+            points,
+            np.tile(points[[468 - 1]], (10, 1)) if False else np.repeat(points[[133]], 10, axis=0),
+        )
+    )
     z = np.concatenate((z, np.full(10, z[133])))
     return points, z
 
@@ -77,8 +83,15 @@ def synthetic_bake(points: np.ndarray) -> dict:
                 dx += np.array(targets[key]["dx"]) * w
                 dy += np.array(targets[key]["dy"]) * w
         visemes[viseme] = {"at": 1.0, "dx": dx.tolist(), "dy": dy.tolist()}
-    return {"version": 1, "image_size": [512, 512], "profile": None, "scale": 1.0,
-            "targets": targets, "visemes": visemes, "fidelity": {}}
+    return {
+        "version": 1,
+        "image_size": [512, 512],
+        "profile": None,
+        "scale": 1.0,
+        "targets": targets,
+        "visemes": visemes,
+        "fidelity": {},
+    }
 
 
 @pytest.fixture(scope="module")
@@ -190,8 +203,12 @@ def test_the_skull_fits_the_face_and_the_hair(face, frame, model):
     forehead = positions[T.FOREHEAD, 1]
     face_h = frame.height * scale
     fit = G.fit_skull(positions, frame, scale, hair_top_y=0.0)  # hair to the picture's top edge
-    assert fit.b_top == pytest.approx(min(max((frame.ear_y - 0.0) * scale, forehead + G.CROWN_ABOVE_FOREHEAD[0] * face_h),
-                                          forehead + G.CROWN_ABOVE_FOREHEAD[1] * face_h))
+    assert fit.b_top == pytest.approx(
+        min(
+            max((frame.ear_y - 0.0) * scale, forehead + G.CROWN_ABOVE_FOREHEAD[0] * face_h),
+            forehead + G.CROWN_ABOVE_FOREHEAD[1] * face_h,
+        )
+    )
     tall = G.fit_skull(positions, frame, scale, hair_top_y=-5000.0)  # hair far above the picture
     assert tall.b_top == pytest.approx(forehead + G.CROWN_ABOVE_FOREHEAD[1] * face_h)  # clamped
     assert fit.b_bottom == pytest.approx(-positions[T.CHIN, 1])
@@ -220,7 +237,9 @@ def test_the_skull_never_leaves_the_silhouette(face, frame, model):
     top = T.FACE_OVAL.index(T.FOREHEAD)
     assert fit.k[top] < 1.0
     back = G.back_ring(fit, 0.5)
-    assert np.linalg.norm(back[top, :2]) < np.linalg.norm(G.back_ring(free, 0.5)[top, :2])  # the back follows the pull
+    assert np.linalg.norm(back[top, :2]) < np.linalg.norm(
+        G.back_ring(free, 0.5)[top, :2]
+    )  # the back follows the pull
 
 
 def test_the_skull_mesh_starts_at_the_face_edge_and_faces_outward(face, frame, model):
@@ -230,8 +249,10 @@ def test_the_skull_mesh_starts_at_the_face_edge_and_faces_outward(face, frame, m
     columns = len(T.FACE_OVAL) + 1
     rings = G.SKIRT_RINGS + G.BACK_RINGS
     assert len(skull.positions) == columns * rings + 1
-    assert np.allclose(skull.positions[:columns - 1], positions[T.FACE_OVAL], atol=1e-6)
-    assert np.allclose(skull.positions[columns - 1], positions[T.FACE_OVAL[0]], atol=1e-6)  # the wrap column
+    assert np.allclose(skull.positions[: columns - 1], positions[T.FACE_OVAL], atol=1e-6)
+    assert np.allclose(
+        skull.positions[columns - 1], positions[T.FACE_OVAL[0]], atol=1e-6
+    )  # the wrap column
     assert skull.skirt_share[0] == 1.0 and skull.skirt_share[columns * G.SKIRT_RINGS] == 0.0
     assert skull.column[-1] == -1 and skull.s[-1] == 1.0
     p = skull.positions.astype(float)
@@ -251,8 +272,10 @@ def test_the_skirt_follows_the_face_edge_by_its_share(face, frame, model):
     chin_column = T.FACE_OVAL.index(T.CHIN)
     columns = len(T.FACE_OVAL) + 1
     assert np.allclose(morph[chin_column], delta[T.CHIN])
-    assert np.allclose(morph[columns * G.SKIRT_RINGS + chin_column], 0.0)  # the equator stands still
-    assert np.allclose(morph[columns * (G.SKIRT_RINGS + 1):], 0.0)  # the back too
+    assert np.allclose(
+        morph[columns * G.SKIRT_RINGS + chin_column], 0.0
+    )  # the equator stands still
+    assert np.allclose(morph[columns * (G.SKIRT_RINGS + 1) :], 0.0)  # the back too
     assert np.count_nonzero(morph.any(axis=1)) == G.SKIRT_RINGS  # only the chin's column moves
 
 
@@ -272,7 +295,9 @@ def test_a_card_is_a_quad_over_its_box_facing_the_camera(model):
     positions, pivot, scale = model
     card = G.card_mesh((10, 20, 110, 220), -0.05, pivot, scale)
     assert card.positions.shape == (4, 3) and np.allclose(card.positions[:, 2], -0.05)
-    assert np.allclose(G.to_image(card.positions, pivot, scale), [(10, 20), (110, 20), (110, 220), (10, 220)])
+    assert np.allclose(
+        G.to_image(card.positions, pivot, scale), [(10, 20), (110, 20), (110, 220), (10, 220)]
+    )
     p = card.positions.astype(float)
     for a, b, c in card.triangles:
         assert np.cross(p[b] - p[a], p[c] - p[a])[2] > 0
@@ -326,7 +351,14 @@ def test_a_viseme_shape_takes_the_rules_by_its_weights(face, frame):
     dy = zero.copy()
     dy[T.CHIN] = 10.0
     shape = G.viseme_delta(zero, dy, {"jawOpen": 0.5, "mouthPucker": 0.5}, points, frame, 0.001)
-    assert shape[T.CHIN, 2] == pytest.approx(-G.JAW_BACK * 0.01 + 0.5 * G.LIP_PROTRUSION["mouthPucker"] * frame.mouth_width * 0.001 * G.lip_forward_weights(points, frame)[T.CHIN])
+    assert shape[T.CHIN, 2] == pytest.approx(
+        -G.JAW_BACK * 0.01
+        + 0.5
+        * G.LIP_PROTRUSION["mouthPucker"]
+        * frame.mouth_width
+        * 0.001
+        * G.lip_forward_weights(points, frame)[T.CHIN]
+    )
     assert shape[T.UPPER_INNER_LIP, 2] > 0
 
 
@@ -347,9 +379,11 @@ def test_the_surface_is_found_under_a_point(model):
 
 def test_the_mouth_interior_hides_behind_the_face(model):
     positions, _, _ = model
-    for teeth, tongue, names in (("both", True, {"Cavity", "TeethUpper", "TeethLower", "Tongue"}),
-                                 ("upper", True, {"Cavity", "TeethUpper", "Tongue"}),
-                                 ("none", False, {"Cavity"})):
+    for teeth, tongue, names in (
+        ("both", True, {"Cavity", "TeethUpper", "TeethLower", "Tongue"}),
+        ("upper", True, {"Cavity", "TeethUpper", "Tongue"}),
+        ("none", False, {"Cavity"}),
+    ):
         parts = G.mouth_interior(positions, teeth, tongue)
         assert {p.name for p in parts} == names
         for part in parts:
@@ -362,12 +396,17 @@ def test_the_mouth_interior_hides_behind_the_face(model):
 def test_interior_parts_follow_the_face_as_they_should(model):
     positions, _, _ = model
     parts = {p.name: p for p in G.mouth_interior(positions, "both", True)}
-    targets = {"jawOpen": np.zeros((T.NUM_LANDMARKS, 3)), "viseme_aa": np.zeros((T.NUM_LANDMARKS, 3))}
+    targets = {
+        "jawOpen": np.zeros((T.NUM_LANDMARKS, 3)),
+        "viseme_aa": np.zeros((T.NUM_LANDMARKS, 3)),
+    }
     targets["jawOpen"][:, 1] = -0.004
     targets["jawOpen"][T.CHIN] = (0, -0.01, -0.003)
     cavity = dict(G.interior_morphs(parts["Cavity"], targets))
     assert set(cavity) == set(targets)
-    assert np.allclose(cavity["jawOpen"][:, 1], -0.004) or np.all(cavity["jawOpen"][:, 1] <= -0.004 + 1e-9)
+    assert np.allclose(cavity["jawOpen"][:, 1], -0.004) or np.all(
+        cavity["jawOpen"][:, 1] <= -0.004 + 1e-9
+    )
     lower = dict(G.interior_morphs(parts["TeethLower"], targets))
     assert list(lower) == ["jawOpen"]
     assert np.allclose(lower["jawOpen"], np.array((0, -0.01, -0.003)) * G.LOWER_TEETH_JAW_SHARE)
@@ -389,13 +428,22 @@ def test_the_cut_out_tells_its_hair_and_silhouette(face, frame, model):
     reach = X.silhouette_reach(picture, positions, frame, pivot, scale)
     assert reach is not None and reach.shape == (36,)
     assert np.all(reach > 0)
-    assert X.silhouette_reach(np.ones((8, 8, 4), dtype=np.float32), positions, frame, pivot, scale) is None
+    assert (
+        X.silhouette_reach(np.ones((8, 8, 4), dtype=np.float32), positions, frame, pivot, scale)
+        is None
+    )
 
 
 def test_the_skull_texture_projects_the_picture(face, frame, model):
     picture = X.to_array(cut_out_picture())
     positions, pivot, scale = model
-    fit = G.fit_skull(positions, frame, scale, X.hair_top(picture, frame), X.silhouette_reach(picture, positions, frame, pivot, scale))
+    fit = G.fit_skull(
+        positions,
+        frame,
+        scale,
+        X.hair_top(picture, frame),
+        X.silhouette_reach(picture, positions, frame, pivot, scale),
+    )
     image = X.skull_texture(picture, fit, pivot, scale, size=(72, 32))
     assert image.size == (72, 32) and image.mode == "RGB"
     data = np.asarray(image)
@@ -421,7 +469,9 @@ def test_card_images_carry_complementary_alphas(face, frame):
     # In the hair (inside the head disc, past the body card's wider hole),
     # the two cards add up to the picture.
     hx, hy = int(frame.centre_x), int(frame.forehead_y - frame.height * 0.2)
-    total = int(hair[hy - int(box[1]), hx - int(box[0]), 3]) + int(body_a[hy - crop[1], hx - crop[0]])
+    total = int(hair[hy - int(box[1]), hx - int(box[0]), 3]) + int(
+        body_a[hy - crop[1], hx - crop[0]]
+    )
     assert abs(total - 255) <= 1
 
 
@@ -475,14 +525,28 @@ def test_flat_art_is_told_by_its_palette(frame):
 def test_the_writer_makes_a_glb_three_can_read_back():
     glb = GlbBuilder()
     image = glb.add_image(X.encode(Image.new("RGB", (4, 4), (255, 0, 0)), "png")[0], "image/png")
-    webp = glb.add_image(X.encode(Image.new("RGBA", (4, 4), (0, 255, 0, 128)), "webp")[0], "image/webp")
+    webp = glb.add_image(
+        X.encode(Image.new("RGBA", (4, 4), (0, 255, 0, 128)), "webp")[0], "image/webp"
+    )
     material = glb.add_material("M", glb.add_texture(image))
-    blend = glb.add_material("B", glb.add_texture(webp), alpha_mode="BLEND", unlit=True, double_sided=True)
+    blend = glb.add_material(
+        "B", glb.add_texture(webp), alpha_mode="BLEND", unlit=True, double_sided=True
+    )
     positions = np.array([(0, 0, 0), (1, 0, 0), (0, 1, 0)], dtype=np.float32)
     uvs = np.zeros((3, 2), dtype=np.float32)
     tris = np.array([(0, 1, 2)])
-    mesh = glb.add_mesh("Tri", positions, uvs, tris, material, G.vertex_normals(positions, tris),
-                        [("jawOpen", np.array([(0, -1, 0)] * 3, dtype=np.float32)), ("viseme_aa", np.zeros((3, 3)))])
+    mesh = glb.add_mesh(
+        "Tri",
+        positions,
+        uvs,
+        tris,
+        material,
+        G.vertex_normals(positions, tris),
+        [
+            ("jawOpen", np.array([(0, -1, 0)] * 3, dtype=np.float32)),
+            ("viseme_aa", np.zeros((3, 3))),
+        ],
+    )
     quad = glb.add_mesh("Quad", positions, uvs, tris, blend)
     child = glb.add_node("Face", mesh)
     head = glb.add_node("Head", children=[child], translation=(0, 0.1, 0))
@@ -497,18 +561,30 @@ def test_the_writer_makes_a_glb_three_can_read_back():
     assert [n["name"] for n in doc["nodes"]] == ["Face", "Head", "Body"]
     assert doc["nodes"][1]["children"] == [0] and doc["nodes"][1]["translation"] == [0, 0.1, 0]
     face = doc["meshes"][0]
-    assert face["extras"]["targetNames"] == ["jawOpen", "viseme_aa"] and face["weights"] == [0.0, 0.0]
+    assert face["extras"]["targetNames"] == ["jawOpen", "viseme_aa"] and face["weights"] == [
+        0.0,
+        0.0,
+    ]
     primitive = face["primitives"][0]
     position = doc["accessors"][primitive["attributes"]["POSITION"]]
     assert position["min"] == [0, 0, 0] and position["max"] == [1, 1, 0] and position["count"] == 3
-    assert doc["accessors"][primitive["indices"]]["componentType"] == 5123  # uint16 for a small mesh
-    assert np.array_equal(read_accessor(doc, binary, primitive["targets"][0]["POSITION"]), np.array([(0, -1, 0)] * 3, dtype=np.float32))
+    assert (
+        doc["accessors"][primitive["indices"]]["componentType"] == 5123
+    )  # uint16 for a small mesh
+    assert np.array_equal(
+        read_accessor(doc, binary, primitive["targets"][0]["POSITION"]),
+        np.array([(0, -1, 0)] * 3, dtype=np.float32),
+    )
     assert all(view["byteOffset"] % 4 == 0 for view in doc["bufferViews"])
-    assert doc["buffers"][0]["byteLength"] == len(binary) or doc["buffers"][0]["byteLength"] <= len(binary)
+    assert doc["buffers"][0]["byteLength"] == len(binary) or doc["buffers"][0]["byteLength"] <= len(
+        binary
+    )
     assert sorted(doc["extensionsUsed"]) == ["EXT_texture_webp", "KHR_materials_unlit"]
     assert doc["extensionsRequired"] == ["EXT_texture_webp"]
     assert doc["textures"][1]["extensions"]["EXT_texture_webp"]["source"] == webp
-    assert doc["materials"][1]["alphaMode"] == "BLEND" and doc["materials"][1]["doubleSided"] is True
+    assert (
+        doc["materials"][1]["alphaMode"] == "BLEND" and doc["materials"][1]["doubleSided"] is True
+    )
     assert "KHR_materials_unlit" in doc["materials"][1]["extensions"]
 
 
@@ -521,7 +597,14 @@ def test_the_writer_refuses_bad_meshes():
     with pytest.raises(ValueError):
         glb.add_mesh("bad", positions, np.zeros((3, 2)), np.array([(0, 1, 5)]), material)
     with pytest.raises(ValueError):
-        glb.add_mesh("bad", positions, np.zeros((3, 2)), np.array([(0, 1, 2)]), material, targets=[("x", np.zeros((2, 3)))])
+        glb.add_mesh(
+            "bad",
+            positions,
+            np.zeros((3, 2)),
+            np.array([(0, 1, 2)]),
+            material,
+            targets=[("x", np.zeros((2, 3)))],
+        )
     with pytest.raises(ValueError):
         glb.add_image(b"GIF89a", "image/gif")
     with pytest.raises(ValueError):
@@ -533,15 +616,33 @@ def test_the_writer_refuses_bad_meshes():
 
 def subject_for(profile: str | None, look: str = "photo", teeth=None) -> HeadSubject:
     points, z = canonical_face()
-    rig = build_rig(points, (512, 512), None, face_type="animal" if profile and profile.startswith("animal") else "human")
+    rig = build_rig(
+        points,
+        (512, 512),
+        None,
+        face_type="animal" if profile and profile.startswith("animal") else "human",
+    )
     rig["render_profile"] = profile
-    return HeadSubject(name="synthetic", picture=cut_out_picture(), points=points, z=z, rig=rig,
-                       bake=synthetic_bake(points), look=look, teeth=teeth)
+    return HeadSubject(
+        name="synthetic",
+        picture=cut_out_picture(),
+        points=points,
+        z=z,
+        rig=rig,
+        bake=synthetic_bake(points),
+        look=look,
+        teeth=teeth,
+    )
 
 
-@pytest.mark.parametrize("profile,teeth,tongue,shade", [
-    (None, "both", True, "human"), ("toon@1", "upper", True, "toon"), ("animal@2", "none", True, "animal"),
-])
+@pytest.mark.parametrize(
+    "profile,teeth,tongue,shade",
+    [
+        (None, "both", True, "human"),
+        ("toon@1", "upper", True, "toon"),
+        ("animal@2", "none", True, "animal"),
+    ],
+)
 def test_each_look_gets_its_interior(profile, teeth, tongue, shade):
     assert interior_for(profile) == (teeth, tongue, shade)
 
@@ -550,13 +651,39 @@ def test_the_build_is_a_whole_head():
     build = build_head(subject_for(None), texture_format="png")
     doc, binary = read_glb(build.glb)
     names = [n["name"] for n in doc["nodes"]]
-    assert names == ["Cavity", "TeethUpper", "TeethLower", "Tongue", "Face", "Skull", "HairCard", "Head", "Neck", "Body"]
+    assert names == [
+        "Cavity",
+        "TeethUpper",
+        "TeethLower",
+        "Tongue",
+        "Face",
+        "Skull",
+        "HairCard",
+        "Head",
+        "Neck",
+        "Body",
+    ]
     head = doc["nodes"][names.index("Head")]
-    assert {doc["nodes"][c]["name"] for c in head["children"]} == {"Face", "Skull", "HairCard", "Cavity", "TeethUpper", "TeethLower", "Tongue"}
-    assert doc["scenes"][0]["nodes"] == [names.index("Head"), names.index("Neck"), names.index("Body")]
+    assert {doc["nodes"][c]["name"] for c in head["children"]} == {
+        "Face",
+        "Skull",
+        "HairCard",
+        "Cavity",
+        "TeethUpper",
+        "TeethLower",
+        "Tongue",
+    }
+    assert doc["scenes"][0]["nodes"] == [
+        names.index("Head"),
+        names.index("Neck"),
+        names.index("Body"),
+    ]
     meshes = {m["name"]: m for m in doc["meshes"]}
     face = meshes["Face"]
-    assert doc["accessors"][face["primitives"][0]["attributes"]["POSITION"]]["count"] == T.NUM_LANDMARKS
+    assert (
+        doc["accessors"][face["primitives"][0]["attributes"]["POSITION"]]["count"]
+        == T.NUM_LANDMARKS
+    )
     expected = list(G.MORPH_NAMES) + [G.VISEME_MORPH_NAMES[v] for v in VISEME_BLENDSHAPES]
     assert face["extras"]["targetNames"] == expected
     assert meshes["Skull"]["extras"]["targetNames"] == expected
@@ -581,7 +708,9 @@ def test_a_toon_is_flat_and_an_animal_has_no_teeth():
     doc, _ = read_glb(toon.glb)
     names = [n["name"] for n in doc["nodes"]]
     assert "TeethUpper" in names and "TeethLower" not in names
-    face_material = doc["materials"][[m for m in doc["meshes"] if m["name"] == "Face"][0]["primitives"][0]["material"]]
+    face_material = doc["materials"][
+        [m for m in doc["meshes"] if m["name"] == "Face"][0]["primitives"][0]["material"]
+    ]
     assert "KHR_materials_unlit" in face_material["extensions"]
     assert "EXT_texture_webp" in doc["extensionsRequired"]
     animal = build_head(subject_for("animal@2", look="render"))
@@ -613,7 +742,9 @@ def test_a_bake_is_checked_before_it_is_used():
         validate(no_visemes)
 
 
-@pytest.mark.skipif(not shutil.which("node") or not HUMAN_RIG.exists(), reason="node and the embed fixture rig")
+@pytest.mark.skipif(
+    not shutil.which("node") or not HUMAN_RIG.exists(), reason="node and the embed fixture rig"
+)
 def test_the_node_bake_runs_on_a_real_rig():
     from app.services.head3d.bake import BakeUnavailable, bake_rig
 

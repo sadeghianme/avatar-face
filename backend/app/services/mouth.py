@@ -3,7 +3,7 @@ optional photo of the person's own teeth, and the avatar's own motion.
 
 Stored as one JSON blob on the avatar (`mouth_config`). The storage keys in
 it are internal; what the owner's dashboard is told is built by the owner
-API (api.avatars.presenting.mouth_view), and publishing's `_mouth_view` is
+API (api.avatars.presenting.mouth_view), and publishing's `mouth_view` is
 what a visitor's engine gets.
 
 The keys, all fresh per file (the published snapshot may still point at
@@ -149,7 +149,9 @@ def migrated_teeth_record(day: str) -> TeethRecord:
     """The standard teeth's record for an existing avatar moved from the
     classic mouth on `day` (an ISO date): `default_config`'s mouth is what
     it gets, and this says why it has no teeth of its own."""
-    return generic_teeth_record({
-        "code": MIGRATED_STANDARD,
-        "detail": f"Standard teeth: moved from the classic mouth on {day}",
-    })
+    return generic_teeth_record(
+        {
+            "code": MIGRATED_STANDARD,
+            "detail": f"Standard teeth: moved from the classic mouth on {day}",
+        }
+    )

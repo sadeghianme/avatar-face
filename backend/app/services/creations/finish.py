@@ -124,9 +124,7 @@ async def run_finish(job: Job, params: dict) -> None:
             logger.exception("could not record the kept generation of %s", creation_id)
 
 
-async def build_avatar(
-    job: Job, creation: Creation, avatar: Avatar, params: dict, storage
-) -> None:
+async def build_avatar(job: Job, creation: Creation, avatar: Avatar, params: dict, storage) -> None:
     face_type = creation.face_type
     steps = creation.steps
     items = step_items(steps)

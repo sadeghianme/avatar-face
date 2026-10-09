@@ -27,7 +27,7 @@ from app.services.performance_kit.registration import (
     mouth_frame,
     shared_triangles,
 )
-from app.services.performance_kit.requests import _checked_points
+from app.services.performance_kit.requests import checked_points
 
 GENERATED = "generated"
 RETARGETED = "retargeted"
@@ -85,20 +85,28 @@ def build_manifest(
     frame = ManifestFrame.from_base(base_points, image_size, reference)
     rest = frame.apply(base_points)
     width, cx, cy = mouth_frame(rest, OUTER_LIP_RING)
-    entries = [{
-        "id": "rest", "image": None, "source": None,
-        "points": _rounded(rest), "registration_rms": 0.0, "provenance": BASE,
-    }]
-    for shape in SHAPES:
-        pose = poses[shape]
-        entries.append({
-            "id": shape,
+    entries = [
+        {
+            "id": "rest",
             "image": None,
             "source": None,
-            "points": _rounded(frame.apply(pose.targets)),
-            "registration_rms": None if pose.rms is None else round(float(pose.rms), 6),
-            "provenance": pose.provenance,
-        })
+            "points": _rounded(rest),
+            "registration_rms": 0.0,
+            "provenance": BASE,
+        }
+    ]
+    for shape in SHAPES:
+        pose = poses[shape]
+        entries.append(
+            {
+                "id": shape,
+                "image": None,
+                "source": None,
+                "points": _rounded(frame.apply(pose.targets)),
+                "registration_rms": None if pose.rms is None else round(float(pose.rms), 6),
+                "provenance": pose.provenance,
+            }
+        )
     triangles = shared_triangles([e["points"] for e in entries], rest, (cx, cy), width)
     detail = MANIFEST_DECIMALS + 2
     return {
@@ -115,7 +123,11 @@ def build_manifest(
             "image_size": [int(image_size[0]), int(image_size[1])],
             "to_manifest": np.asarray(frame.matrix).round(10).tolist(),
         },
-        "kit": {"version": KIT_VERSION, "prompts": PROMPTS_VERSION, "reference": REFERENCE_CHARACTER},
+        "kit": {
+            "version": KIT_VERSION,
+            "prompts": PROMPTS_VERSION,
+            "reference": REFERENCE_CHARACTER,
+        },
     }
 
 
@@ -174,7 +186,7 @@ def rebase_manifest(
     unchanged. Raises ValueError for a manifest this module did not write,
     or points that are not 478 finite pixels. CPU work (the triangulation).
     """
-    points = _checked_points(base_points)
+    points = checked_points(base_points)
     if not is_kit_manifest(manifest):
         raise ValueError("not a performance kit manifest")
     width, height = (int(v) for v in (image_size or manifest["frame"]["image_size"]))
@@ -187,13 +199,19 @@ def rebase_manifest(
         return copy.deepcopy(manifest)
     reference = reference or load_reference()
     entries = {
-        shape: PoseEntry(points + (to_base(poses[shape]["points"]) - rest),
-                         poses[shape]["provenance"], poses[shape].get("registration_rms"))
+        shape: PoseEntry(
+            points + (to_base(poses[shape]["points"]) - rest),
+            poses[shape]["provenance"],
+            poses[shape].get("registration_rms"),
+        )
         for shape in SHAPES
     }
     rebased = build_manifest(
-        points, size, entries, reference,
-        kit_id=manifest["character"][len(CHARACTER_PREFIX):],
+        points,
+        size,
+        entries,
+        reference,
+        kit_id=manifest["character"][len(CHARACTER_PREFIX) :],
         jaw_range=float(manifest["jaw_range"]),
     )
     # The recipe that made these poses, not today's.

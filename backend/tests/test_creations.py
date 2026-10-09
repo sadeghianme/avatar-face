@@ -113,58 +113,58 @@ async def _upload(client, headers, org_id, data=None, face_type=None, content_ty
     return await client.post(f"/orgs/{org_id}/creations", files=files, data=form, headers=headers)
 
 
-async def _get(client, headers, base) -> dict:
+async def get_json(client, headers, base) -> dict:
     response = await client.get(base, headers=headers)
     assert response.status_code == 200, response.text
     return response.json()
 
 
-async def _create(client, headers, org_id, **kwargs) -> tuple[str, dict]:
+async def create_creation(client, headers, org_id, **kwargs) -> tuple[str, dict]:
     response = await _upload(client, headers, org_id, **kwargs)
     assert response.status_code == 202, response.text
     base = f"/orgs/{org_id}/creations/{response.json()['id']}"
     await runner.drain()
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     return base, body
 
 
-async def _run(client, headers, method: str, url: str, **kwargs):
+async def request_and_drain(client, headers, method: str, url: str, **kwargs):
     response = await client.request(method, url, headers=headers, **kwargs)
     await runner.drain()
     return response
 
 
-async def _detect(client, headers, base) -> dict:
-    response = await _run(client, headers, "POST", f"{base}/detect")
+async def detect_anchors(client, headers, base) -> dict:
+    response = await request_and_drain(client, headers, "POST", f"{base}/detect")
     assert response.status_code == 202, response.text
-    anchors = (await _get(client, headers, base))["anchors"]
+    anchors = (await get_json(client, headers, base))["anchors"]
     assert anchors is not None
     return anchors
 
 
 async def _until_running(client, headers, base) -> dict:
     for _ in range(100):
-        body = await _get(client, headers, base)
+        body = await get_json(client, headers, base)
         if body["job"] and body["job"]["state"] == "running":
             return body
         await asyncio.sleep(0.01)
     raise AssertionError("the job never started")
 
 
-def _files(prefix: str) -> list[str]:
+def stored_files(prefix: str) -> list[str]:
     root = Path(get_storage().root) / prefix
     if not root.exists():
         return []
     return sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
 
 
-def _creation_prefix(base: str) -> str:
+def creation_prefix_of(base: str) -> str:
     _, _, org_id, _, creation_id = base.split("/")
     return svc.creation_prefix(org_id, creation_id)
 
 
-async def _bytes_at(client, url: str) -> bytes:
+async def bytes_at(client, url: str) -> bytes:
     response = await client.get(url)
     assert response.status_code == 200, response.text
     return response.content
@@ -177,9 +177,7 @@ async def _row(creation_id: str) -> Creation:
 
 async def _avatar_row(avatar_id: str) -> Avatar | None:
     async with get_session_factory()() as db:
-        return (
-            await db.execute(select(Avatar).where(Avatar.id == avatar_id))
-        ).scalar_one_or_none()
+        return (await db.execute(select(Avatar).where(Avatar.id == avatar_id))).scalar_one_or_none()
 
 
 # A framing that changes the frame without cutting anything important off.
@@ -187,7 +185,7 @@ REFRAME = {"crop": {"x": 0.05, "y": 0.05, "w": 0.9, "h": 0.9}}
 WHOLE = {"x": 0, "y": 0, "w": 1, "h": 1}
 
 
-def _step(body: dict, step_id: str) -> dict | None:
+def step_of(body: dict, step_id: str) -> dict | None:
     return next((s for s in body["steps"] if s["id"] == step_id), None)
 
 
@@ -205,7 +203,7 @@ async def test_an_upload_is_ingested_analysed_and_suggested_human(client, face):
     assert queued["steps"] == []
 
     await runner.drain()
-    body = await _get(client, headers, f"/orgs/{org_id}/creations/{queued['id']}")
+    body = await get_json(client, headers, f"/orgs/{org_id}/creations/{queued['id']}")
     assert body["job"]["state"] == "done"
     assert body["current"] == "original"
     assert [s["id"] for s in body["steps"]] == ["original"]
@@ -220,17 +218,20 @@ async def test_an_upload_is_ingested_analysed_and_suggested_human(client, face):
 
 async def test_the_upload_is_stored_upright_and_without_its_metadata(client, face):
     headers, org_id = await _org(client, "phone")
-    _, body = await _create(client, headers, org_id, data=phone_jpeg(), content_type="image/jpeg")
-    assert_clean_upright(await _bytes_at(client, body["steps"][0]["url"]))
+    _, body = await create_creation(
+        client, headers, org_id, data=phone_jpeg(), content_type="image/jpeg"
+    )
+    assert_clean_upright(await bytes_at(client, body["steps"][0]["url"]))
     # The raw upload (EXIF, GPS) is gone once the clean copy is stored.
-    assert all(not name.startswith("incoming") for name in _files(_creation_prefix(
-        f"/orgs/{org_id}/creations/{body['id']}"
-    )))
+    assert all(
+        not name.startswith("incoming")
+        for name in stored_files(creation_prefix_of(f"/orgs/{org_id}/creations/{body['id']}"))
+    )
 
 
 async def test_no_face_suggests_no_line_and_the_wizard_must_ask(client):
     headers, org_id = await _org(client, "dog")
-    base, body = await _create(client, headers, org_id)
+    base, body = await create_creation(client, headers, org_id)
     assert body["face_type"] is None
     assert body["analysis"]["suggested_face_type"] is None
     assert body["background_removal"] == {"available": False, "reason": "face_type_required"}
@@ -241,7 +242,7 @@ async def test_no_face_suggests_no_line_and_the_wizard_must_ask(client):
 
 async def test_a_line_chosen_at_upload_is_kept(client, face):
     headers, org_id = await _org(client, "toon")
-    _, body = await _create(client, headers, org_id, face_type="cartoon")
+    _, body = await create_creation(client, headers, org_id, face_type="cartoon")
     assert body["face_type"] == "cartoon"
     assert body["analysis"]["suggested_face_type"] == "human"
 
@@ -255,8 +256,8 @@ async def test_uploads_that_cannot_succeed_are_refused_before_any_job(client, mo
     monkeypatch.setattr(svc.rules, "MAX_UPLOAD_BYTES", 100)
     too_big = await _upload(client, headers, org_id)
     assert too_big.status_code == 422 and too_big.json()["code"] == "image_too_large"
-    assert (await _get(client, headers, f"/orgs/{org_id}/creations")) == []
-    assert _files(f"orgs/{org_id}/creations/") == []
+    assert (await get_json(client, headers, f"/orgs/{org_id}/creations")) == []
+    assert stored_files(f"orgs/{org_id}/creations/") == []
 
 
 async def test_the_header_is_read_off_the_loop_and_only_once_admitted(client, monkeypatch):
@@ -313,12 +314,12 @@ async def test_a_photo_that_will_not_decode_fails_its_job_for_good(client):
     assert response.status_code == 202, response.text
     base = f"/orgs/{org_id}/creations/{response.json()['id']}"
     await runner.drain()
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["steps"] == []
     assert body["job"]["state"] == "failed"
     assert body["job"]["error"]["code"] == "unreadable_image"
     assert body["job"]["retryable"] is False
-    assert _files(_creation_prefix(base)) == []
+    assert stored_files(creation_prefix_of(base)) == []
     retry = await client.post(f"{base}/retry", headers=headers)
     assert retry.status_code == 409 and retry.json()["code"] == "nothing_to_retry"
 
@@ -326,8 +327,8 @@ async def test_a_photo_that_will_not_decode_fails_its_job_for_good(client):
 async def test_an_org_keeps_at_most_ten_drafts(client, monkeypatch):
     monkeypatch.setattr(svc.rules, "MAX_DRAFTS_PER_ORG", 2)
     headers, org_id = await _org(client, "hoarder")
-    await _create(client, headers, org_id)
-    await _create(client, headers, org_id)
+    await create_creation(client, headers, org_id)
+    await create_creation(client, headers, org_id)
     third = await _upload(client, headers, org_id)
     assert third.status_code == 409
     assert third.json()["code"] == "too_many_drafts"
@@ -335,15 +336,15 @@ async def test_an_org_keeps_at_most_ten_drafts(client, monkeypatch):
 
 async def test_resume_list_is_newest_activity_first_and_filters_by_status(client):
     headers, org_id = await _org(client, "resumer")
-    older, _ = await _create(client, headers, org_id)
-    newer, _ = await _create(client, headers, org_id)
-    listed = await _get(client, headers, f"/orgs/{org_id}/creations?status=draft")
+    older, _ = await create_creation(client, headers, org_id)
+    newer, _ = await create_creation(client, headers, org_id)
+    listed = await get_json(client, headers, f"/orgs/{org_id}/creations?status=draft")
     assert [c["id"] for c in listed] == [newer.rsplit("/", 1)[1], older.rsplit("/", 1)[1]]
 
     await client.patch(older, json={"face_type": "animal"}, headers=headers)
-    listed = await _get(client, headers, f"/orgs/{org_id}/creations?status=draft")
+    listed = await get_json(client, headers, f"/orgs/{org_id}/creations?status=draft")
     assert listed[0]["id"] == older.rsplit("/", 1)[1]
-    assert await _get(client, headers, f"/orgs/{org_id}/creations?status=finished") == []
+    assert await get_json(client, headers, f"/orgs/{org_id}/creations?status=finished") == []
     bad = await client.get(f"/orgs/{org_id}/creations?status=bogus", headers=headers)
     assert bad.status_code == 422
 
@@ -353,7 +354,7 @@ async def test_resume_list_is_newest_activity_first_and_filters_by_status(client
 
 async def test_another_orgs_creation_is_not_found(client):
     headers, org_id = await _org(client, "owner")
-    base, _ = await _create(client, headers, org_id)
+    base, _ = await create_creation(client, headers, org_id)
     creation_id = base.rsplit("/", 1)[1]
 
     stranger, their_org = await _org(client, "stranger")
@@ -372,11 +373,11 @@ async def test_another_orgs_creation_is_not_found(client):
         response = await client.request(method, theirs + suffix, json=body, headers=stranger)
         assert response.status_code == 404, (method, suffix, response.text)
         assert response.json()["code"] == "creation_not_found"
-    assert await _get(client, stranger, f"/orgs/{their_org}/creations") == []
+    assert await get_json(client, stranger, f"/orgs/{their_org}/creations") == []
     # And the owner's org path is closed to a non-member.
     response = await client.get(base, headers=stranger)
     assert response.status_code == 404 and response.json()["code"] == "org_not_found"
-    assert (await _get(client, headers, base))["status"] == "draft"
+    assert (await get_json(client, headers, base))["status"] == "draft"
 
 
 # --- framing and the line -------------------------------------------------------------
@@ -384,7 +385,7 @@ async def test_another_orgs_creation_is_not_found(client):
 
 async def test_framing_is_a_new_step_and_never_touches_the_original(client, face):
     headers, org_id = await _org(client, "framer")
-    base, before = await _create(client, headers, org_id)
+    base, before = await create_creation(client, headers, org_id)
     original_url = before["steps"][0]["url"]
     crop = {"x": 0.1, "y": 0.1, "w": 0.5, "h": 0.6}
 
@@ -393,26 +394,24 @@ async def test_framing_is_a_new_step_and_never_touches_the_original(client, face
     body = response.json()
     assert body["current"] == "framed"
     assert body["revision"] == before["revision"] + 1
-    framed = _step(body, "framed")
+    framed = step_of(body, "framed")
     assert (framed["width"], framed["height"]) == (200, 300)
     assert framed["from"] == "original" and framed["crop"] == crop and framed["roll"] == 4.0
-    assert _step(body, "original")["url"].split("?")[0] == original_url.split("?")[0]
-    assert Image.open(io.BytesIO(await _bytes_at(client, original_url))).size == (400, 500)
+    assert step_of(body, "original")["url"].split("?")[0] == original_url.split("?")[0]
+    assert Image.open(io.BytesIO(await bytes_at(client, original_url))).size == (400, 500)
 
     # Roll alone keeps the crop; the same framing again changes nothing.
     again = (await client.patch(base, json={"roll": 4.0}, headers=headers)).json()
     assert again["revision"] == body["revision"]
     # Back to the whole, level photo is the original itself.
-    whole = (
-        await client.patch(base, json={"crop": WHOLE, "roll": 0}, headers=headers)
-    ).json()
-    assert whole["current"] == "original" and _step(whole, "framed") is None
-    assert [n for n in _files(_creation_prefix(base)) if n.startswith("framed")] == []
+    whole = (await client.patch(base, json={"crop": WHOLE, "roll": 0}, headers=headers)).json()
+    assert whole["current"] == "original" and step_of(whole, "framed") is None
+    assert [n for n in stored_files(creation_prefix_of(base)) if n.startswith("framed")] == []
 
 
 async def test_framing_refuses_crops_it_cannot_use(client):
     headers, org_id = await _org(client, "badcrop")
-    base, _ = await _create(client, headers, org_id)
+    base, _ = await create_creation(client, headers, org_id)
     outside = await client.patch(
         base, json={"crop": {"x": 0.6, "y": 0, "w": 0.5, "h": 1}}, headers=headers
     )
@@ -427,21 +426,21 @@ async def test_framing_refuses_crops_it_cannot_use(client):
 
 async def test_reframing_or_switching_line_drops_the_cutout_and_the_marks(client, face, segmenter):
     headers, org_id = await _org(client, "reframe")
-    base, _ = await _create(client, headers, org_id)
-    await _detect(client, headers, base)
-    await _run(client, headers, "POST", f"{base}/background", json={"mode": "remove"})
-    body = await _get(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id)
+    await detect_anchors(client, headers, base)
+    await request_and_drain(client, headers, "POST", f"{base}/background", json={"mode": "remove"})
+    body = await get_json(client, headers, base)
     assert body["current"] == "cutout" and body["anchors"] is not None
-    cutout_file = [n for n in _files(_creation_prefix(base)) if n.startswith("cutout")]
+    cutout_file = [n for n in stored_files(creation_prefix_of(base)) if n.startswith("cutout")]
     assert len(cutout_file) == 1
 
     body = (await client.patch(base, json=REFRAME, headers=headers)).json()
     assert [s["id"] for s in body["steps"]] == ["original", "framed"]
     assert body["current"] == "framed"
     assert body["anchors"] is None
-    assert not [n for n in _files(_creation_prefix(base)) if n.startswith("cutout")]
+    assert not [n for n in stored_files(creation_prefix_of(base)) if n.startswith("cutout")]
 
-    await _detect(client, headers, base)
+    await detect_anchors(client, headers, base)
     body = (await client.patch(base, json={"face_type": "cartoon"}, headers=headers)).json()
     assert body["face_type"] == "cartoon" and body["anchors"] is None
     # The same line again is not a change.
@@ -458,7 +457,7 @@ async def test_nothing_can_change_before_the_photo_is_ready(client, gate):
     assert early.status_code == 409 and early.json()["code"] == "creation_not_ready"
     gate.open()
     await runner.drain()
-    assert (await _get(client, headers, base))["current"] == "original"
+    assert (await get_json(client, headers, base))["current"] == "original"
 
 
 # --- background -----------------------------------------------------------------------
@@ -466,17 +465,17 @@ async def test_nothing_can_change_before_the_photo_is_ready(client, gate):
 
 async def test_removing_the_background_blanks_the_room_and_keeps_the_marks(client, face, segmenter):
     headers, org_id = await _org(client, "cutter")
-    base, _ = await _create(client, headers, org_id)
-    anchors = await _detect(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id)
+    anchors = await detect_anchors(client, headers, base)
 
     response = await client.post(f"{base}/background", json={"mode": "remove"}, headers=headers)
     assert response.status_code == 202, response.text
     assert response.json()["job"]["step"] == "background"
     await runner.drain()
-    body = await _get(client, headers, base)
-    cutout = _step(body, "cutout")
+    body = await get_json(client, headers, base)
+    cutout = step_of(body, "cutout")
     assert body["current"] == "cutout" and cutout["from"] == "original"
-    assert_scrubbed(await _bytes_at(client, cutout["url"]))
+    assert_scrubbed(await bytes_at(client, cutout["url"]))
     # No pixel moved, so the marks still hold, bound to the same frame.
     assert body["anchors"]["id"] == anchors["id"]
     assert body["anchors"]["image"] == "original"
@@ -484,7 +483,7 @@ async def test_removing_the_background_blanks_the_room_and_keeps_the_marks(clien
     # Keep: back to the photo with its background; the cut-out stays choosable.
     kept = await client.post(f"{base}/background", json={"mode": "keep"}, headers=headers)
     assert kept.status_code == 200
-    assert kept.json()["current"] == "original" and _step(kept.json(), "cutout")
+    assert kept.json()["current"] == "original" and step_of(kept.json(), "cutout")
     assert kept.json()["anchors"]["id"] == anchors["id"]
     # Remove again: the existing cut-out of this image is simply chosen.
     again = await client.post(f"{base}/background", json={"mode": "remove"}, headers=headers)
@@ -494,7 +493,7 @@ async def test_removing_the_background_blanks_the_room_and_keeps_the_marks(clien
 async def test_background_removal_is_offered_to_people_only(client, segmenter):
     headers, org_id = await _org(client, "lines")
     for face_type in ("animal", "cartoon"):
-        base, body = await _create(client, headers, org_id, face_type=face_type)
+        base, body = await create_creation(client, headers, org_id, face_type=face_type)
         assert body["background_removal"] == {"available": False, "reason": "not_for_face_type"}
         response = await client.post(f"{base}/background", json={"mode": "remove"}, headers=headers)
         assert response.status_code == 422
@@ -505,7 +504,7 @@ async def test_background_removal_is_offered_to_people_only(client, segmenter):
 
 async def test_background_removal_needs_a_segmenter(client, face, no_segmenter):
     headers, org_id = await _org(client, "noseg")
-    base, body = await _create(client, headers, org_id)
+    base, body = await create_creation(client, headers, org_id)
     assert body["background_removal"]["reason"] == "segmentation_unavailable"
     response = await client.post(f"{base}/background", json={"mode": "remove"}, headers=headers)
     assert response.status_code == 409
@@ -519,18 +518,16 @@ async def test_choosing_another_frame_clears_the_marks_and_a_cutout_does_not(
     client, face, segmenter
 ):
     headers, org_id = await _org(client, "chooser")
-    base, _ = await _create(client, headers, org_id)
+    base, _ = await create_creation(client, headers, org_id)
     await client.patch(base, json=REFRAME, headers=headers)
-    anchors = await _detect(client, headers, base)
+    anchors = await detect_anchors(client, headers, base)
     assert anchors["image"] == "framed"
-    await _run(client, headers, "POST", f"{base}/background", json={"mode": "remove"})
+    await request_and_drain(client, headers, "POST", f"{base}/background", json={"mode": "remove"})
 
     choose = f"{base}/choose"
     to_framed = (await client.post(choose, json={"choice": "framed"}, headers=headers)).json()
     assert to_framed["current"] == "framed" and to_framed["anchors"]["id"] == anchors["id"]
-    to_original = (
-        await client.post(choose, json={"choice": "original"}, headers=headers)
-    ).json()
+    to_original = (await client.post(choose, json={"choice": "original"}, headers=headers)).json()
     assert to_original["current"] == "original" and to_original["anchors"] is None
     assert to_original["revision"] == to_framed["revision"] + 1
 
@@ -547,8 +544,8 @@ async def test_choosing_another_frame_clears_the_marks_and_a_cutout_does_not(
 
 async def test_a_detected_human_opens_on_its_landmarks_and_may_finish_in_one_click(client, face):
     headers, org_id = await _org(client, "human")
-    base, _ = await _create(client, headers, org_id)
-    anchors = await _detect(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id)
+    anchors = await detect_anchors(client, headers, base)
     assert anchors["detected"] is True
     assert anchors["image"] == "original"
     assert anchors["image_size"] == [400, 500]
@@ -561,14 +558,21 @@ async def test_a_detected_human_opens_on_its_landmarks_and_may_finish_in_one_cli
 
 async def test_an_animal_is_placed_from_the_template_and_never_one_click(client, face):
     headers, org_id = await _org(client, "animal")
-    base, _ = await _create(client, headers, org_id, face_type="animal")
-    anchors = await _detect(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id, face_type="animal")
+    anchors = await detect_anchors(client, headers, base)
     # The line's detector is the template, even with a face detector present.
     assert anchors["detected"] is False
     assert set(anchors["marks"]) == {"head", "left_eye", "right_eye", "mouth_line", "chin"}
     # The head is eight points: its edges, its temples and its jaw corners.
     assert set(anchors["marks"]["head"]) == {
-        "left", "right", "top", "bottom", "upper_left", "upper_right", "lower_right", "lower_left",
+        "left",
+        "right",
+        "top",
+        "bottom",
+        "upper_left",
+        "upper_right",
+        "lower_right",
+        "lower_left",
     }
     assert anchors["validation"]["ok"] is True
     assert anchors["validation"]["one_click"] is False
@@ -576,8 +580,8 @@ async def test_an_animal_is_placed_from_the_template_and_never_one_click(client,
 
 async def test_an_undetected_animation_gets_the_template_with_pupils(client):
     headers, org_id = await _org(client, "anime")
-    base, _ = await _create(client, headers, org_id, face_type="cartoon")
-    anchors = await _detect(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id, face_type="cartoon")
+    anchors = await detect_anchors(client, headers, base)
     assert anchors["detected"] is False
     assert {"mouth_line", "chin", "left_pupil", "right_pupil"} <= set(anchors["marks"])
     assert "mouth" not in anchors["marks"]
@@ -586,9 +590,9 @@ async def test_an_undetected_animation_gets_the_template_with_pupils(client):
 
 async def test_the_preview_is_the_rig_finish_would_build_and_saves_nothing(client, face):
     headers, org_id = await _org(client, "previewer")
-    base, _ = await _create(client, headers, org_id)
-    anchors = await _detect(client, headers, base)
-    revision = (await _get(client, headers, base))["revision"]
+    base, _ = await create_creation(client, headers, org_id)
+    anchors = await detect_anchors(client, headers, base)
+    revision = (await get_json(client, headers, base))["revision"]
 
     response = await client.post(
         f"{base}/preview-rig", json={"anchors_id": anchors["id"]}, headers=headers
@@ -618,7 +622,7 @@ async def test_the_preview_is_the_rig_finish_would_build_and_saves_nothing(clien
     )
     assert human_line.status_code == 422
     assert human_line.json()["code"] == "mouth_line_not_for_face_type"
-    assert (await _get(client, headers, base))["revision"] == revision
+    assert (await get_json(client, headers, base))["revision"] == revision
 
 
 # --- jobs: admission, progress and races ------------------------------------------
@@ -626,7 +630,7 @@ async def test_the_preview_is_the_rig_finish_would_build_and_saves_nothing(clien
 
 async def test_one_job_at_a_time_per_creation(client, face, segmenter, gate):
     headers, org_id = await _org(client, "busy")
-    base, _ = await _create(client, headers, org_id)
+    base, _ = await create_creation(client, headers, org_id)
     gate.close()
     first = await client.post(f"{base}/detect", headers=headers)
     assert first.status_code == 202
@@ -642,7 +646,7 @@ async def test_one_job_at_a_time_per_creation(client, face, segmenter, gate):
         assert response.json()["code"] == "job_in_progress"
     gate.open()
     await runner.drain()
-    assert (await _get(client, headers, base))["job"]["state"] == "done"
+    assert (await get_json(client, headers, base))["job"]["state"] == "done"
 
 
 async def test_a_busy_org_and_a_full_queue_say_when_to_come_back(client, monkeypatch):
@@ -660,13 +664,13 @@ async def test_a_busy_org_and_a_full_queue_say_when_to_come_back(client, monkeyp
     assert full.json()["code"] == "job_queue_full"
     assert int(full.headers["retry-after"]) > 0
     # Refused uploads leave nothing behind.
-    assert await _get(client, headers, f"/orgs/{org_id}/creations") == []
-    assert _files(f"orgs/{org_id}/creations/") == []
+    assert await get_json(client, headers, f"/orgs/{org_id}/creations") == []
+    assert stored_files(f"orgs/{org_id}/creations/") == []
 
 
 async def test_a_cutout_finished_after_the_line_changed_is_discarded(client, face, segmenter, gate):
     headers, org_id = await _org(client, "racer")
-    base, _ = await _create(client, headers, org_id)
+    base, _ = await create_creation(client, headers, org_id)
     gate.close()
     await client.post(f"{base}/background", json={"mode": "remove"}, headers=headers)
     await _until_running(client, headers, base)
@@ -675,17 +679,17 @@ async def test_a_cutout_finished_after_the_line_changed_is_discarded(client, fac
     gate.open()
     await runner.drain()
 
-    body = await _get(client, headers, base)
-    assert _step(body, "cutout") is None and body["current"] == "original"
+    body = await get_json(client, headers, base)
+    assert step_of(body, "cutout") is None and body["current"] == "original"
     assert body["job"]["state"] == "failed"
     assert body["job"]["error"]["code"] == "superseded"
     assert body["revision"] == changed.json()["revision"]
-    assert [n.split("-")[0] for n in _files(_creation_prefix(base))] == ["original"]
+    assert [n.split("-")[0] for n in stored_files(creation_prefix_of(base))] == ["original"]
 
 
 async def test_marks_found_on_an_image_no_longer_chosen_are_discarded(client, face, gate):
     headers, org_id = await _org(client, "racer2")
-    base, _ = await _create(client, headers, org_id)
+    base, _ = await create_creation(client, headers, org_id)
     await client.patch(base, json=REFRAME, headers=headers)
     gate.close()
     await client.post(f"{base}/detect", headers=headers)
@@ -694,7 +698,7 @@ async def test_marks_found_on_an_image_no_longer_chosen_are_discarded(client, fa
     assert chose.status_code == 200
     gate.open()
     await runner.drain()
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["anchors"] is None
     assert body["job"]["error"]["code"] == "superseded"
     assert body["job"]["retryable"] is True
@@ -702,7 +706,7 @@ async def test_marks_found_on_an_image_no_longer_chosen_are_discarded(client, fa
 
 async def test_deleting_during_a_job_leaves_no_files(client, face, segmenter, gate):
     headers, org_id = await _org(client, "deleter")
-    base, _ = await _create(client, headers, org_id)
+    base, _ = await create_creation(client, headers, org_id)
     gate.close()
     await client.post(f"{base}/background", json={"mode": "remove"}, headers=headers)
     await _until_running(client, headers, base)
@@ -710,7 +714,7 @@ async def test_deleting_during_a_job_leaves_no_files(client, face, segmenter, ga
     gate.open()
     await runner.drain()
     assert (await client.get(base, headers=headers)).status_code == 404
-    assert _files(_creation_prefix(base)) == []
+    assert stored_files(creation_prefix_of(base)) == []
 
 
 async def test_a_delete_whose_files_cannot_go_keeps_the_row_to_try_again(client, face, monkeypatch):
@@ -718,7 +722,7 @@ async def test_a_delete_whose_files_cannot_go_keeps_the_row_to_try_again(client,
     (the raw upload included) with nothing that leads back to them."""
     storage = get_storage()
     headers, org_id = await _org(client, "stubborn")
-    base, _ = await _create(client, headers, org_id)
+    base, _ = await create_creation(client, headers, org_id)
     real_delete_prefix = type(storage).delete_prefix
     failures = iter([OSError("disk said no")])
 
@@ -731,23 +735,23 @@ async def test_a_delete_whose_files_cannot_go_keeps_the_row_to_try_again(client,
     monkeypatch.setattr(type(storage), "delete_prefix", flaky)
     with pytest.raises(OSError):
         await client.delete(base, headers=headers)
-    assert (await _get(client, headers, base))["status"] == "draft"
-    assert _files(_creation_prefix(base))
+    assert (await get_json(client, headers, base))["status"] == "draft"
+    assert stored_files(creation_prefix_of(base))
 
     assert (await client.delete(base, headers=headers)).status_code == 204
     assert (await client.get(base, headers=headers)).status_code == 404
-    assert _files(_creation_prefix(base)) == []
+    assert stored_files(creation_prefix_of(base)) == []
 
 
 async def test_delete_removes_the_row_and_the_files_now(client, face):
     headers, org_id = await _org(client, "tidy")
-    base, _ = await _create(client, headers, org_id)
+    base, _ = await create_creation(client, headers, org_id)
     crop = {"x": 0.1, "y": 0.1, "w": 0.8, "h": 0.8}
     await client.patch(base, json={"crop": crop}, headers=headers)
-    assert len(_files(_creation_prefix(base))) == 2
+    assert len(stored_files(creation_prefix_of(base))) == 2
     assert (await client.delete(base, headers=headers)).status_code == 204
     assert (await client.get(base, headers=headers)).status_code == 404
-    assert _files(_creation_prefix(base)) == []
+    assert stored_files(creation_prefix_of(base)) == []
 
 
 # --- finish -----------------------------------------------------------------------------
@@ -782,8 +786,8 @@ async def _finish(client, headers, base, anchors_id: str, marks=None, name="Ada"
 
 async def test_finishing_builds_publishes_and_lets_the_creation_go(client, face):
     headers, org_id = await _org(client, "finisher")
-    base, _ = await _create(client, headers, org_id)
-    anchors = await _detect(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id)
+    anchors = await detect_anchors(client, headers, base)
 
     response = await _finish(client, headers, base, anchors["id"])
     assert response.status_code == 202, response.text
@@ -791,12 +795,12 @@ async def test_finishing_builds_publishes_and_lets_the_creation_go(client, face)
     assert response.json()["creation"]["status"] == "finishing"
     await runner.drain()
 
-    creation = await _get(client, headers, base)
+    creation = await get_json(client, headers, base)
     assert creation["status"] == "finished"
     assert creation["avatar_id"] == avatar_id
     assert creation["job"]["state"] == "done"
 
-    avatar = await _get(client, headers, f"/orgs/{org_id}/avatars/{avatar_id}")
+    avatar = await get_json(client, headers, f"/orgs/{org_id}/avatars/{avatar_id}")
     assert avatar["status"] == "ready"
     assert avatar["name"] == "Ada" and avatar["face_type"] == "human"
     # Finishing IS the owner's confirmation: the avatar is live.
@@ -810,11 +814,11 @@ async def test_finishing_builds_publishes_and_lets_the_creation_go(client, face)
     for key in (row.image_key, row.upload_image_key, row.rig_key, row.thumbnail_key):
         assert key.startswith(prefix), key
     assert row.original_image_key is None  # nothing was cut out
-    files = _files(prefix)
+    files = stored_files(prefix)
     assert {"rig.json", "fit-base.json"} <= set(files)
     assert any(f.startswith("published/r0/") for f in files)
     # The wizard's copies are gone; the avatar holds its own.
-    assert _files(_creation_prefix(base)) == []
+    assert stored_files(creation_prefix_of(base)) == []
     # The avatar page's marking panel reads the same marks back.
     marks = await client.get(f"/orgs/{org_id}/avatars/{avatar_id}/rig-anchors", headers=headers)
     assert marks.status_code == 200
@@ -822,15 +826,16 @@ async def test_finishing_builds_publishes_and_lets_the_creation_go(client, face)
 
 async def test_a_cutout_finishes_with_its_original_and_no_room_behind_it(client, face, segmenter):
     headers, org_id = await _org(client, "cutfinish")
-    base, _ = await _create(client, headers, org_id)
-    anchors = await _detect(client, headers, base)
-    await _run(client, headers, "POST", f"{base}/background", json={"mode": "remove"})
+    base, _ = await create_creation(client, headers, org_id)
+    anchors = await detect_anchors(client, headers, base)
+    await request_and_drain(client, headers, "POST", f"{base}/background", json={"mode": "remove"})
     finish = {
-        "name": "Cut", "anchors_id": anchors["id"],
+        "name": "Cut",
+        "anchors_id": anchors["id"],
         "consent_id": await depiction(client, headers, base),
     }
-    await _run(client, headers, "POST", f"{base}/finish", json=finish)
-    avatar_id = (await _get(client, headers, base))["avatar_id"]
+    await request_and_drain(client, headers, "POST", f"{base}/finish", json=finish)
+    avatar_id = (await get_json(client, headers, base))["avatar_id"]
 
     from app.services.publishing import config_of
 
@@ -848,7 +853,7 @@ async def test_a_cutout_finishes_with_its_original_and_no_room_behind_it(client,
     for private in (row.original_image_key, row.upload_image_key):
         assert Image.open(io.BytesIO(await storage.get_bytes(private))).mode == "RGB"
         assert private not in {v for v in published.values() if isinstance(v, str)}
-    avatar = await _get(client, headers, f"/orgs/{org_id}/avatars/{avatar_id}")
+    avatar = await get_json(client, headers, f"/orgs/{org_id}/avatars/{avatar_id}")
     assert avatar["original_image_key"] is not None  # the avatar page offers "restore"
     # A human gets its head/body layers, cut from the cut-out's own alpha.
     assert avatar["layer_urls"] and "background" not in avatar["layer_urls"]
@@ -856,8 +861,8 @@ async def test_a_cutout_finishes_with_its_original_and_no_room_behind_it(client,
 
 async def test_finish_is_idempotent(client, face, gate):
     headers, org_id = await _org(client, "twice")
-    base, _ = await _create(client, headers, org_id)
-    anchors = await _detect(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id)
+    anchors = await detect_anchors(client, headers, base)
     gate.close()
     first = await _finish(client, headers, base, anchors["id"])
     second = await _finish(client, headers, base, anchors["id"])
@@ -878,17 +883,17 @@ async def test_finish_is_idempotent(client, face, gate):
     await runner.drain()
     third = await _finish(client, headers, base, anchors["id"])
     assert third.json()["avatar_id"] == first.json()["avatar_id"]
-    assert len(await _get(client, headers, f"/orgs/{org_id}/avatars")) == 1
+    assert len(await get_json(client, headers, f"/orgs/{org_id}/avatars")) == 1
 
 
 async def test_marks_placed_on_another_image_are_refused(client, face):
     headers, org_id = await _org(client, "stale")
-    base, _ = await _create(client, headers, org_id)
-    old = await _detect(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id)
+    old = await detect_anchors(client, headers, base)
     await client.patch(base, json=REFRAME, headers=headers)
     cleared = await _finish(client, headers, base, old["id"])
     assert cleared.status_code == 409 and cleared.json()["code"] == "anchors_stale"
-    new = await _detect(client, headers, base)
+    new = await detect_anchors(client, headers, base)
     stale = await _finish(client, headers, base, old["id"])
     assert stale.status_code == 409 and stale.json()["code"] == "anchors_stale"
     preview = await client.post(
@@ -901,24 +906,27 @@ async def test_marks_placed_on_another_image_are_refused(client, face):
 
 async def test_a_fit_that_folds_is_refused_with_its_reasons(client, face):
     headers, org_id = await _org(client, "folder")
-    base, _ = await _create(client, headers, org_id)
-    anchors = await _detect(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id)
+    anchors = await detect_anchors(client, headers, base)
     marks = anchors["marks"]
     response = await _finish(
-        client, headers, base, anchors["id"],
+        client,
+        headers,
+        base,
+        anchors["id"],
         marks={"left_eye": marks["right_eye"], "right_eye": marks["left_eye"]},
     )
     assert response.status_code == 422
     assert response.json()["code"] == "fit_invalid"
     assert "eyes_out_of_order" in {r["code"] for r in response.json()["reasons"]}
-    assert (await _get(client, headers, base))["status"] == "draft"
-    assert await _get(client, headers, f"/orgs/{org_id}/avatars") == []
+    assert (await get_json(client, headers, base))["status"] == "draft"
+    assert await get_json(client, headers, f"/orgs/{org_id}/avatars") == []
 
 
 async def test_an_animal_is_never_finished_on_the_template_guess(client):
     headers, org_id = await _org(client, "petowner")
-    base, _ = await _create(client, headers, org_id, face_type="animal")
-    anchors = await _detect(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id, face_type="animal")
+    anchors = await detect_anchors(client, headers, base)
     bare = await _finish(client, headers, base, anchors["id"])
     assert bare.status_code == 422 and bare.json()["code"] == "marks_required"
     head_only = {"head": anchors["marks"]["head"]}
@@ -932,7 +940,7 @@ async def test_an_animal_is_never_finished_on_the_template_guess(client):
     assert response.status_code == 202, response.text
     await runner.drain()
     avatar_id = response.json()["avatar_id"]
-    avatar = await _get(client, headers, f"/orgs/{org_id}/avatars/{avatar_id}")
+    avatar = await get_json(client, headers, f"/orgs/{org_id}/avatars/{avatar_id}")
     assert avatar["face_type"] == "animal" and avatar["published"] is True
     assert avatar["layer_urls"] is None  # no layers for animals yet
     rig = (await client.get(avatar["rig_url"])).json()
@@ -942,7 +950,10 @@ async def test_an_animal_is_never_finished_on_the_template_guess(client):
 @pytest.mark.parametrize(
     "face_type, parts",
     [
-        ("cartoon", {"head", "left_eye", "right_eye", "mouth_line", "chin", "left_pupil", "right_pupil"}),
+        (
+            "cartoon",
+            {"head", "left_eye", "right_eye", "mouth_line", "chin", "left_pupil", "right_pupil"},
+        ),
         ("human", {"head", "left_eye", "right_eye", "mouth", "left_pupil", "right_pupil"}),
     ],
 )
@@ -952,8 +963,8 @@ async def test_marks_the_detector_did_not_find_are_never_finished_as_guessed(
     """No face found, so the marks opened on the face template: whatever the
     line, each part is the owner's to place, as an animal's always is."""
     headers, org_id = await _org(client, f"missed-{face_type}")
-    base, _ = await _create(client, headers, org_id, face_type=face_type)
-    anchors = await _detect(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id, face_type=face_type)
+    anchors = await detect_anchors(client, headers, base)
     assert anchors["detected"] is False
     bare = await _finish(client, headers, base, anchors["id"])
     assert bare.status_code == 422 and bare.json()["code"] == "marks_required"
@@ -965,15 +976,15 @@ async def test_marks_the_detector_did_not_find_are_never_finished_as_guessed(
     placed = await _finish(client, headers, base, anchors["id"], marks=anchors["marks"])
     assert placed.status_code == 202, placed.text
     await runner.drain()
-    assert (await _get(client, headers, base))["status"] == "finished"
+    assert (await get_json(client, headers, base))["status"] == "finished"
 
 
 async def test_a_failed_finish_goes_back_to_draft_and_can_be_retried(client, face, monkeypatch):
     from app.services import publishing
 
     headers, org_id = await _org(client, "unlucky")
-    base, _ = await _create(client, headers, org_id)
-    anchors = await _detect(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id)
+    anchors = await detect_anchors(client, headers, base)
     real_publish = publishing.publish
 
     async def broken(avatar, storage):
@@ -983,18 +994,20 @@ async def test_a_failed_finish_goes_back_to_draft_and_can_be_retried(client, fac
     response = await _finish(client, headers, base, anchors["id"])
     failed_avatar = response.json()["avatar_id"]
     await runner.drain()
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["status"] == "draft" and body["avatar_id"] is None
     assert body["job"]["state"] == "failed" and body["job"]["retryable"] is True
     assert await _avatar_row(failed_avatar) is None
-    assert _files(f"orgs/{org_id}/avatars/{failed_avatar}/") == []
+    assert stored_files(f"orgs/{org_id}/avatars/{failed_avatar}/") == []
 
     monkeypatch.setattr(finish, "publish", real_publish)
-    retried = await _run(client, headers, "POST", f"{base}/retry")
+    retried = await request_and_drain(client, headers, "POST", f"{base}/retry")
     assert retried.status_code == 202, retried.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["status"] == "finished"
-    assert (await _get(client, headers, f"/orgs/{org_id}/avatars/{body['avatar_id']}"))["published"]
+    assert (await get_json(client, headers, f"/orgs/{org_id}/avatars/{body['avatar_id']}"))[
+        "published"
+    ]
 
 
 # --- restart recovery, retry and expiry ---------------------------------------------
@@ -1010,24 +1023,24 @@ async def _restart() -> int:
 
 async def test_a_restart_mid_finish_leaves_a_retryable_draft(client, face, gate):
     headers, org_id = await _org(client, "restarted")
-    base, _ = await _create(client, headers, org_id)
-    anchors = await _detect(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id)
+    anchors = await detect_anchors(client, headers, base)
     gate.close()
     response = await _finish(client, headers, base, anchors["id"])
     lost_avatar = response.json()["avatar_id"]
     await _until_running(client, headers, base)
 
     assert await _restart() == 1
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["status"] == "draft" and body["avatar_id"] is None
     assert body["job"]["state"] == "interrupted" and body["job"]["retryable"] is True
     assert await _avatar_row(lost_avatar) is None
-    assert _files(f"orgs/{org_id}/avatars/{lost_avatar}/") == []
+    assert stored_files(f"orgs/{org_id}/avatars/{lost_avatar}/") == []
 
     gate.open()
-    retried = await _run(client, headers, "POST", f"{base}/retry")
+    retried = await request_and_drain(client, headers, "POST", f"{base}/retry")
     assert retried.status_code == 202, retried.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["status"] == "finished" and body["avatar_id"] != lost_avatar
 
 
@@ -1063,7 +1076,7 @@ class _Unreachable:
 
 
 async def _failed_finish(client, headers, base) -> str:
-    anchors = await _detect(client, headers, base)
+    anchors = await detect_anchors(client, headers, base)
     response = await _finish(client, headers, base, anchors["id"])
     assert response.status_code == 202, response.text
     await runner.drain()
@@ -1072,10 +1085,10 @@ async def _failed_finish(client, headers, base) -> str:
 
 async def test_a_finish_whose_undo_fails_once_is_undone_on_the_next_try(client, face, monkeypatch):
     headers, org_id = await _org(client, "locked-once")
-    base, _ = await _create(client, headers, org_id)
+    base, _ = await create_creation(client, headers, org_id)
     _Unreachable(monkeypatch, undo_failures=1)
     avatar_id = await _failed_finish(client, headers, base)
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["status"] == "draft" and body["avatar_id"] is None
     assert body["job"]["retryable"] is True
     assert await _avatar_row(avatar_id) is None
@@ -1090,60 +1103,60 @@ async def test_a_finish_stranded_by_a_failed_undo_is_recovered_by_the_sweeper(
     from app.services import sweeper
 
     headers, org_id = await _org(client, "locked")
-    base, _ = await _create(client, headers, org_id)
+    base, _ = await create_creation(client, headers, org_id)
     database = _Unreachable(monkeypatch, undo_failures=99)
     avatar_id = await _failed_finish(client, headers, base)
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["status"] == "finishing"
     assert body["job"]["state"] == "failed" and body["job"]["retryable"] is True
 
     database.undo_failures = 0
     await sweeper.sweep_once()
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["status"] == "draft" and body["avatar_id"] is None
     assert body["job"]["state"] == "failed" and body["job"]["retryable"] is True
     assert await _avatar_row(avatar_id) is None
-    assert _files(f"orgs/{org_id}/avatars/{avatar_id}/") == []
+    assert stored_files(f"orgs/{org_id}/avatars/{avatar_id}/") == []
 
     database.heal()
-    retried = await _run(client, headers, "POST", f"{base}/retry")
+    retried = await request_and_drain(client, headers, "POST", f"{base}/retry")
     assert retried.status_code == 202, retried.text
-    assert (await _get(client, headers, base))["status"] == "finished"
+    assert (await get_json(client, headers, base))["status"] == "finished"
 
 
 async def test_a_restart_recovers_a_finish_stranded_whatever_its_job_says(
     client, face, monkeypatch
 ):
     headers, org_id = await _org(client, "locked-restart")
-    base, _ = await _create(client, headers, org_id)
+    base, _ = await create_creation(client, headers, org_id)
     database = _Unreachable(monkeypatch, undo_failures=99)
     avatar_id = await _failed_finish(client, headers, base)
     database.undo_failures = 0
     assert await _restart() == 1
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["status"] == "draft" and body["job"]["state"] == "failed"
     assert await _avatar_row(avatar_id) is None
 
 
 async def test_the_sweeper_leaves_a_finish_that_is_still_running_alone(client, face, gate):
     headers, org_id = await _org(client, "patient")
-    base, _ = await _create(client, headers, org_id)
-    anchors = await _detect(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id)
+    anchors = await detect_anchors(client, headers, base)
     gate.close()
     await _finish(client, headers, base, anchors["id"])
     await _until_running(client, headers, base)
     assert await svc.recover_stranded() == 0
-    assert (await _get(client, headers, base))["status"] == "finishing"
+    assert (await get_json(client, headers, base))["status"] == "finishing"
     gate.open()
     await runner.drain()
-    assert (await _get(client, headers, base))["status"] == "finished"
+    assert (await get_json(client, headers, base))["status"] == "finished"
 
 
 async def test_a_job_record_left_running_without_a_task_becomes_interrupted(client, face):
     """The job's own FAILED write can fail too; its record then says
     running forever and the wizard polls forever."""
     headers, org_id = await _org(client, "ghost")
-    base, body = await _create(client, headers, org_id)
+    base, body = await create_creation(client, headers, org_id)
     creation_id = body["id"]
     async with get_session_factory()() as db:
         await db.execute(
@@ -1153,7 +1166,7 @@ async def test_a_job_record_left_running_without_a_task_becomes_interrupted(clie
         )
         await db.commit()
     assert await svc.recover_stranded() == 1
-    job = (await _get(client, headers, base))["job"]
+    job = (await get_json(client, headers, base))["job"]
     assert job["state"] == "interrupted" and job["retryable"] is True
 
 
@@ -1164,29 +1177,29 @@ async def test_an_interrupted_upload_is_retried_from_what_was_received(client, f
     base = f"/orgs/{org_id}/creations/{response.json()['id']}"
     await _until_running(client, headers, base)
     assert await _restart() == 1
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["step"] == "ingest" and body["job"]["state"] == "interrupted"
 
     gate.open()
-    assert (await _run(client, headers, "POST", f"{base}/retry")).status_code == 202
-    body = await _get(client, headers, base)
+    assert (await request_and_drain(client, headers, "POST", f"{base}/retry")).status_code == 202
+    body = await get_json(client, headers, base)
     assert body["current"] == "original"
-    assert [n.split("-")[0] for n in _files(_creation_prefix(base))] == ["original"]
+    assert [n.split("-")[0] for n in stored_files(creation_prefix_of(base))] == ["original"]
     nothing = await client.post(f"{base}/retry", headers=headers)
     assert nothing.status_code == 409 and nothing.json()["code"] == "nothing_to_retry"
 
 
 async def test_an_interrupted_background_removal_is_retryable(client, face, segmenter, gate):
     headers, org_id = await _org(client, "bgretry")
-    base, _ = await _create(client, headers, org_id)
+    base, _ = await create_creation(client, headers, org_id)
     gate.close()
     await client.post(f"{base}/background", json={"mode": "remove"}, headers=headers)
     await _until_running(client, headers, base)
     await _restart()
-    assert (await _get(client, headers, base))["job"]["state"] == "interrupted"
+    assert (await get_json(client, headers, base))["job"]["state"] == "interrupted"
     gate.open()
-    assert (await _run(client, headers, "POST", f"{base}/retry")).status_code == 202
-    assert (await _get(client, headers, base))["current"] == "cutout"
+    assert (await request_and_drain(client, headers, "POST", f"{base}/retry")).status_code == 202
+    assert (await get_json(client, headers, base))["current"] == "cutout"
 
 
 async def _age(creation_id: str, days: float) -> None:
@@ -1205,9 +1218,9 @@ async def _age(creation_id: str, days: float) -> None:
 
 async def test_idle_drafts_expire_by_their_rows(client, face):
     headers, org_id = await _org(client, "forgetful")
-    idle, _ = await _create(client, headers, org_id)
-    fresh, _ = await _create(client, headers, org_id)
-    working, _ = await _create(client, headers, org_id)
+    idle, _ = await create_creation(client, headers, org_id)
+    fresh, _ = await create_creation(client, headers, org_id)
+    working, _ = await create_creation(client, headers, org_id)
     idle_id, fresh_id, working_id = (b.rsplit("/", 1)[1] for b in (idle, fresh, working))
     await _age(idle_id, 8)
     await _age(working_id, 8)
@@ -1217,12 +1230,12 @@ async def test_idle_drafts_expire_by_their_rows(client, face):
     finally:
         runner.release(held)
 
-    body = await _get(client, headers, idle)
+    body = await get_json(client, headers, idle)
     assert body["status"] == "expired" and body["steps"] == []
-    assert _files(_creation_prefix(idle)) == []
-    assert (await _get(client, headers, fresh))["status"] == "draft"
-    assert (await _get(client, headers, working))["status"] == "draft"
-    assert _files(_creation_prefix(working))
+    assert stored_files(creation_prefix_of(idle)) == []
+    assert (await get_json(client, headers, fresh))["status"] == "draft"
+    assert (await get_json(client, headers, working))["status"] == "draft"
+    assert stored_files(creation_prefix_of(working))
     gone = await client.post(f"{idle}/detect", headers=headers)
     assert gone.status_code == 409 and gone.json()["code"] == "creation_not_draft"
 
@@ -1230,30 +1243,31 @@ async def test_idle_drafts_expire_by_their_rows(client, face):
     await _age(idle_id, 31)
     await svc.expire_idle()
     assert (await client.get(idle, headers=headers)).status_code == 404
-    assert (await _get(client, headers, fresh))["status"] == "draft"
+    assert (await get_json(client, headers, fresh))["status"] == "draft"
 
 
 async def test_the_sweeper_expires_creations(client, face, monkeypatch):
     from app.services import sweeper
 
     headers, org_id = await _org(client, "swept")
-    idle, _ = await _create(client, headers, org_id)
+    idle, _ = await create_creation(client, headers, org_id)
     await _age(idle.rsplit("/", 1)[1], 8)
     monkeypatch.setattr(config.get_settings(), "candidate_retention_hours", 0, raising=False)
     await sweeper.sweep_once()
-    assert (await _get(client, headers, idle))["status"] == "expired"
+    assert (await get_json(client, headers, idle))["status"] == "expired"
 
 
 async def test_finished_rows_do_not_count_as_drafts(client, face, monkeypatch):
     monkeypatch.setattr(svc.rules, "MAX_DRAFTS_PER_ORG", 1)
     headers, org_id = await _org(client, "counted")
-    base, _ = await _create(client, headers, org_id)
-    anchors = await _detect(client, headers, base)
+    base, _ = await create_creation(client, headers, org_id)
+    anchors = await detect_anchors(client, headers, base)
     finish = {
-        "name": "A", "anchors_id": anchors["id"],
+        "name": "A",
+        "anchors_id": anchors["id"],
         "consent_id": await depiction(client, headers, base),
     }
-    await _run(client, headers, "POST", f"{base}/finish", json=finish)
-    assert (await _get(client, headers, base))["status"] == CreationStatus.finished.value
+    await request_and_drain(client, headers, "POST", f"{base}/finish", json=finish)
+    assert (await get_json(client, headers, base))["status"] == CreationStatus.finished.value
     assert (await _upload(client, headers, org_id)).status_code == 202
     await runner.drain()

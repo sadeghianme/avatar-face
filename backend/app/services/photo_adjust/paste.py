@@ -38,9 +38,11 @@ from app.services.photo_adjust.scheme import (
 
 _D65 = np.array([0.95047, 1.0, 1.08883])
 _RGB_TO_XYZ = np.array(
-    [[0.4124564, 0.3575761, 0.1804375],
-     [0.2126729, 0.7151522, 0.0721750],
-     [0.0193339, 0.1191920, 0.9503041]]
+    [
+        [0.4124564, 0.3575761, 0.1804375],
+        [0.2126729, 0.7151522, 0.0721750],
+        [0.0193339, 0.1191920, 0.9503041],
+    ]
 )
 _XYZ_TO_RGB = np.linalg.inv(_RGB_TO_XYZ)
 
@@ -64,7 +66,7 @@ def lab_to_rgb(lab: np.ndarray) -> np.ndarray:
     fx = fy + lab[..., 1] / 500
     fz = fy - lab[..., 2] / 200
     f = np.stack((fx, fy, fz), axis=-1)
-    xyz = np.where(f > 6 / 29, f ** 3, 3 * (6 / 29) ** 2 * (f - 4 / 29)) * _D65
+    xyz = np.where(f > 6 / 29, f**3, 3 * (6 / 29) ** 2 * (f - 4 / 29)) * _D65
     linear = np.clip(xyz @ _XYZ_TO_RGB.T, 0.0, 1.0)
     c = np.where(linear <= 0.0031308, linear * 12.92, 1.055 * linear ** (1 / 2.4) - 0.055)
     return np.clip(c * 255.0, 0.0, 255.0)
@@ -85,7 +87,7 @@ def similarity_transform(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
     dst = np.asarray(dst, dtype=np.float64)
     mu_s, mu_d = src.mean(axis=0), dst.mean(axis=0)
     xs, xd = src - mu_s, dst - mu_d
-    var_s = float((xs ** 2).sum()) / len(src)
+    var_s = float((xs**2).sum()) / len(src)
     if var_s <= 0:
         raise ValueError("degenerate landmarks")
     u, s, vt = np.linalg.svd(xd.T @ xs / len(src))
@@ -119,10 +121,10 @@ def align(result_points: np.ndarray, source_points: np.ndarray) -> tuple[np.ndar
     if keep.sum() >= 6 and not keep.all():
         matrix = similarity_transform(src[keep], dst[keep])
         residual = np.linalg.norm(apply(matrix, src[keep]) - dst[keep], axis=1)
-    return matrix, float(np.sqrt(np.mean(residual ** 2)))
+    return matrix, float(np.sqrt(np.mean(residual**2)))
 
 
-def _hull_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray:
+def hull_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray:
     """Union of the convex hulls of `polygons` (pixel coords of the window)."""
     hulls = []
     for pts in polygons:
@@ -130,10 +132,10 @@ def _hull_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray
             hulls.append(pts[ConvexHull(pts).vertices])
         except (QhullError, ValueError):
             hulls.append(pts)
-    return _polygon_mask(shape, hulls)
+    return polygon_mask(shape, hulls)
 
 
-def _polygon_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray:
+def polygon_mask(shape: tuple[int, ...], polygons: list[np.ndarray]) -> np.ndarray:
     """Union of `polygons` as drawn, in their point order (a contour, not
     its hull)."""
     canvas = Image.new("L", (shape[1], shape[0]), 0)
@@ -206,7 +208,7 @@ class Region:
     within: tuple[np.ndarray, ...] = ()
 
 
-def _paste_region(
+def paste_region(
     out: np.ndarray,
     source_rgb: np.ndarray,
     result: Image.Image,
@@ -234,38 +236,47 @@ def _paste_region(
     m = to_result @ np.vstack((shift, [0.0, 0.0, 1.0]))
     coeffs = (m[0, 0], m[0, 1], m[0, 2], m[1, 0], m[1, 1], m[1, 2])
     warped = np.asarray(
-        result.transform((window[1], window[0]), Image.Transform.AFFINE, coeffs,
-                         resample=Image.Resampling.BICUBIC),
-        dtype=np.float64,
-    )
-    covered = np.asarray(
-        Image.new("L", result.size, 255).transform(
-            (window[1], window[0]), Image.Transform.AFFINE, coeffs,
-            resample=Image.Resampling.BILINEAR,
+        result.transform(
+            (window[1], window[0]),
+            Image.Transform.AFFINE,
+            coeffs,
+            resample=Image.Resampling.BICUBIC,
         ),
         dtype=np.float64,
-    ) / 255.0
+    )
+    covered = (
+        np.asarray(
+            Image.new("L", result.size, 255).transform(
+                (window[1], window[0]),
+                Image.Transform.AFFINE,
+                coeffs,
+                resample=Image.Resampling.BILINEAR,
+            ),
+            dtype=np.float64,
+        )
+        / 255.0
+    )
 
     offset = np.array([x0, y0])
-    hull = _hull_mask(window, [region.source - offset, region.result - offset])
+    hull = hull_mask(window, [region.source - offset, region.result - offset])
     # The distances alone (scipy's stub also allows the indices it returns
     # only when asked for them); likewise below.
     distance = cast(np.ndarray, distance_transform_edt(~hull))
     alpha = 1.0 - _smoothstep((distance - dilate) / feather)
     alpha *= np.clip((covered - 0.99) * 100.0, 0.0, 1.0)  # fully inside the answer only
-    ring_mask = (distance > dilate + feather) & (distance <= dilate + feather + ring) & (
-        covered > 0.999
+    ring_mask = (
+        (distance > dilate + feather) & (distance <= dilate + feather + ring) & (covered > 0.999)
     )
     if region.keep_out:
         # Nothing of the answer lands on a brow, fading in over BROW_GUARD
         # of the region's size, and the brow is not skin to measure.
-        outside = _polygon_mask(window, [p - offset for p in region.keep_out])
+        outside = polygon_mask(window, [p - offset for p in region.keep_out])
         guard = max(BROW_GUARD * size, 1.0)
         clear = cast(np.ndarray, distance_transform_edt(~outside))
         alpha *= _smoothstep(clear / guard)
         ring_mask &= clear > guard
     for polygon in region.within:
-        ring_mask &= _hull_mask(window, [polygon - offset])
+        ring_mask &= hull_mask(window, [polygon - offset])
     if not alpha.any():
         return
 
@@ -282,9 +293,9 @@ def _paste_region(
         )
         # Grain: a phone photo is noisier than a model's output. Add the
         # missing noise to lightness, so the patch does not read as smooth.
-        missing = _grain(source_lab[..., 0], ring_mask) ** 2 - _grain(
-            result_lab[..., 0], ring_mask
-        ) ** 2
+        missing = (
+            _grain(source_lab[..., 0], ring_mask) ** 2 - _grain(result_lab[..., 0], ring_mask) ** 2
+        )
         if missing > 0:
             result_lab[..., 0] += rng.normal(0.0, math.sqrt(missing), size=window)
     matched = lab_to_rgb(result_lab)
@@ -337,18 +348,27 @@ def paste_back(
     to_result = _invert(matrix)
     source_rgb = np.asarray(source.convert("RGB"))
     out = source_rgb.copy()
-    rng = np.random.default_rng(int(source_points[NOSE_TIP].sum() * 1000) % (2 ** 32))
+    rng = np.random.default_rng(int(source_points[NOSE_TIP].sum() * 1000) % (2**32))
     answer = _antialiased(result.convert("RGB"), to_result)
     ovals = (source_points[FACE_OVAL], mapped[FACE_OVAL])
     for region in (
-        Region("eye_left", source_points[EYE_IMAGE_LEFT], mapped[EYE_IMAGE_LEFT],
-               EYE_DILATE, EYE_FEATHER,
-               keep_out=(source_points[BROW_IMAGE_LEFT], mapped[BROW_IMAGE_LEFT])),
-        Region("eye_right", source_points[EYE_IMAGE_RIGHT], mapped[EYE_IMAGE_RIGHT],
-               EYE_DILATE, EYE_FEATHER,
-               keep_out=(source_points[BROW_IMAGE_RIGHT], mapped[BROW_IMAGE_RIGHT])),
-        Region("lips", source_points[LIPS], mapped[LIPS], LIP_DILATE, LIP_FEATHER,
-               within=ovals),
+        Region(
+            "eye_left",
+            source_points[EYE_IMAGE_LEFT],
+            mapped[EYE_IMAGE_LEFT],
+            EYE_DILATE,
+            EYE_FEATHER,
+            keep_out=(source_points[BROW_IMAGE_LEFT], mapped[BROW_IMAGE_LEFT]),
+        ),
+        Region(
+            "eye_right",
+            source_points[EYE_IMAGE_RIGHT],
+            mapped[EYE_IMAGE_RIGHT],
+            EYE_DILATE,
+            EYE_FEATHER,
+            keep_out=(source_points[BROW_IMAGE_RIGHT], mapped[BROW_IMAGE_RIGHT]),
+        ),
+        Region("lips", source_points[LIPS], mapped[LIPS], LIP_DILATE, LIP_FEATHER, within=ovals),
     ):
-        _paste_region(out, source_rgb, answer, to_result, region, rng)
+        paste_region(out, source_rgb, answer, to_result, region, rng)
     return Image.fromarray(out)

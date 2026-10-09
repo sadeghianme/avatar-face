@@ -40,10 +40,10 @@ from app.models.shapes import (
     KitRecord,
     MouthConfig,
     PublishedConfig,
-    PublishedView,
     SceneConfig,
     TeethRecord,
 )
+from app.schemas.published import PublishedView
 from app.services import scene as scene_service
 from app.services.disclosure import (
     with_ai_shapes,
@@ -68,7 +68,7 @@ logger = logging.getLogger("liveface.publishing")
 LAYER_NAMES = ("background", "body", "head")
 
 
-def _ext(key: str, default: str) -> str:
+def extension_of(key: str, default: str) -> str:
     tail = key.rsplit("/", 1)[-1]
     return tail.rsplit(".", 1)[-1] if "." in tail else default
 
@@ -132,7 +132,7 @@ async def publish(avatar: Avatar, storage: Storage) -> PublishedConfig:
     published snapshot serving, not a half-built one.
     """
     revision = getattr(avatar, "draft_revision", 0) or 0
-    copy = _copier(storage, published_prefix(avatar.org_id, avatar.id, revision))
+    copy = copier(storage, published_prefix(avatar.org_id, avatar.id, revision))
 
     image_key = await copy(avatar.image_key, "image", "png")
     if image_key is None:
@@ -218,7 +218,7 @@ async def publish(avatar: Avatar, storage: Storage) -> PublishedConfig:
     return config
 
 
-def _copier(storage: Storage, prefix: str):
+def copier(storage: Storage, prefix: str):
     """`copy(source, name, default_ext)`: the file at `source` copied under
     `prefix` as `name` with the source's extension, and the copy's key;
     None for no file. How every published file is written."""
@@ -226,9 +226,9 @@ def _copier(storage: Storage, prefix: str):
     async def copy(source: str | None, name: str, default_ext: str) -> str | None:
         if not source or not await storage.exists(source):
             return None
-        target = f"{prefix}/{name}.{_ext(source, default_ext)}"
+        target = f"{prefix}/{name}.{extension_of(source, default_ext)}"
         data = await storage.get_bytes(source)
-        await storage.put_bytes(target, data, _content_type(target))
+        await storage.put_bytes(target, data, content_type_of(target))
         return target
 
     return copy
@@ -237,7 +237,7 @@ def _copier(storage: Storage, prefix: str):
 async def publish_mouth(mouth: MouthConfig | None, face_type: str, copy) -> MouthConfig | None:
     """The snapshot's `mouth` for the draft's (services.mouth.load): the
     settings by value, the optional teeth photo and the avatar's own motion
-    by `copy` (a `_copier`) — same reason as everything else published, a
+    by `copy` (a `copier`) — same reason as everything else published, a
     later edit must not reach visitors. None is the classic mouth.
 
     A mouth this face type may not use publishes as the classic one (None),
@@ -262,7 +262,7 @@ async def publish_mouth(mouth: MouthConfig | None, face_type: str, copy) -> Mout
         # Where the teeth photo came from (services.mouth_photo), kept so
         # Discard can put it back with the photo: without it, restored AI
         # teeth would read as the owner's upload. Owner-facing only:
-        # _mouth_view never hands it to a visitor.
+        # mouth_view never hands it to a visitor.
         published["teeth"] = teeth
     if (kit := mouth.get("kit")) is not None:
         # What the motion is made of (services.mouth_kit), for Discard
@@ -291,15 +291,13 @@ async def republish_mouth(avatar: Avatar, storage: Storage) -> PublishedConfig |
     prefix = published_prefix(avatar.org_id, avatar.id, config.get("revision", 0))
     face_type = config.get("face_type") or getattr(avatar, "face_type", "human")
     mouth = load_mouth(getattr(avatar, "mouth_config", None))
-    config["mouth"] = await publish_mouth(mouth, face_type, _copier(storage, prefix))
+    config["mouth"] = await publish_mouth(mouth, face_type, copier(storage, prefix))
     avatar.published_config = json.dumps(config)
     return config
 
 
 def _shows_oral_photo(mouth: MouthConfig | None) -> bool:
-    return bool(
-        mouth and mouth.get("renderer") == "continuous" and mouth.get("oral_image_key")
-    )
+    return bool(mouth and mouth.get("renderer") == "continuous" and mouth.get("oral_image_key"))
 
 
 def _plays_own_motion(mouth: MouthConfig | None) -> bool:
@@ -342,15 +340,19 @@ async def _prune(avatar: Avatar, storage: Storage, keep_from: list[PublishedConf
 # The draft's own mouth files (services.mouth: mouth-<stamp>.webp/.json and
 # mouth-motion-<stamp>.json; older photos .png), beside the avatar's other
 # files. The published copies are under published/, never these names.
-_MOUTH_FILE = re.compile(r"mouth-[A-Za-z0-9-]+\.(?:webp|png|json)")
+MOUTH_FILE = re.compile(r"mouth-[A-Za-z0-9-]+\.(?:webp|png|json)")
 
 
 def _mouth_keys(mouth: MouthConfig | None) -> set[str]:
-    return {key for key in (
-        (mouth or {}).get("oral_image_key"),
-        (mouth or {}).get("oral_rig_key"),
-        (mouth or {}).get("motion_key"),
-    ) if key}
+    return {
+        key
+        for key in (
+            (mouth or {}).get("oral_image_key"),
+            (mouth or {}).get("oral_rig_key"),
+            (mouth or {}).get("motion_key"),
+        )
+        if key
+    }
 
 
 async def _sweep_mouth_files(avatar: Avatar, storage: Storage, mouth: MouthConfig | None) -> None:
@@ -370,7 +372,7 @@ async def _sweep_mouth_files(avatar: Avatar, storage: Storage, mouth: MouthConfi
         logger.exception("could not list %s", root)
         return
     for name in names:
-        if _MOUTH_FILE.fullmatch(name) and f"{root}{name}" not in named:
+        if MOUTH_FILE.fullmatch(name) and f"{root}{name}" not in named:
             try:
                 await storage.delete(f"{root}{name}")
             except STORAGE_ERRORS:
@@ -401,8 +403,8 @@ async def discard_draft(avatar: Avatar, storage: Storage) -> list[str] | None:
     async def restore(source: str | None, name: str) -> str | None:
         if not source or not await storage.exists(source):
             return None
-        target = f"{base}/{name}-{stamp}.{_ext(source, 'png')}"
-        await storage.put_bytes(target, await storage.get_bytes(source), _content_type(target))
+        target = f"{base}/{name}-{stamp}.{extension_of(source, 'png')}"
+        await storage.put_bytes(target, await storage.get_bytes(source), content_type_of(target))
         return target
 
     image_key = await restore(config.get("image_key"), "source")
@@ -426,7 +428,9 @@ async def discard_draft(avatar: Avatar, storage: Storage) -> list[str] | None:
         if source is None:
             await storage.delete(target)
         elif await storage.exists(source):
-            await storage.put_bytes(target, await storage.get_bytes(source), _content_type(source))
+            await storage.put_bytes(
+                target, await storage.get_bytes(source), content_type_of(source)
+            )
     # The mouth goes back too. Its photo and its motion are restored into
     # fresh draft keys so the draft never aliases the immutable published
     # copies.
@@ -448,13 +452,13 @@ async def discard_draft(avatar: Avatar, storage: Storage) -> list[str] | None:
         if oral_image and oral_rig:
             restored["oral_image_key"] = oral_image
             restored["oral_rig_key"] = oral_rig
-        teeth = _restored_teeth(published_mouth.get("teeth"), config, "oral_image_key" in restored)
+        teeth = restored_teeth(published_mouth.get("teeth"), config, "oral_image_key" in restored)
         if teeth is not None:
             restored["teeth"] = teeth
         motion = await restore(published_mouth.get("motion_key"), "mouth-motion")
         if motion:
             restored["motion_key"] = motion
-        kit = _restored_kit(published_mouth.get("kit"), motion is not None)
+        kit = restored_kit(published_mouth.get("kit"), motion is not None)
         if kit is not None:
             restored["kit"] = kit
         avatar.mouth_config = json.dumps(restored)
@@ -463,7 +467,7 @@ async def discard_draft(avatar: Avatar, storage: Storage) -> list[str] | None:
     # Generating, uploading and removing a teeth photo, and making or
     # dropping the mouth shapes, all change the disclosure, so it goes back
     # with them.
-    avatar.ai_edited = _restored_ai_edited(avatar, config, teeth, kit)
+    avatar.ai_edited = restored_ai_edited(avatar, config, teeth, kit)
     avatar.has_layers = bool(layer_keys)
     avatar.framing = config.get("framing", avatar.framing)
     # The scene goes back too, its picture into a fresh draft key; a
@@ -489,11 +493,13 @@ async def discard_draft(avatar: Avatar, storage: Storage) -> list[str] | None:
     # Back in step with what is published.
     avatar.draft_revision = config.get("revision", 0)
     logger.info("discarded draft for avatar %s", avatar.id)
-    restored_keys = _mouth_keys(load_mouth(avatar.mouth_config)) | scene_service.keys(scene_service.load(avatar))
+    restored_keys = _mouth_keys(load_mouth(avatar.mouth_config)) | scene_service.keys(
+        scene_service.load(avatar)
+    )
     return sorted(discarded - restored_keys)
 
 
-def _restored_teeth(
+def restored_teeth(
     published: TeethRecord | None, config: PublishedConfig, has_photo: bool
 ) -> TeethRecord | None:
     """The draft's teeth record after a Discard: the one published with the
@@ -509,7 +515,7 @@ def _restored_teeth(
     return ai_teeth_record(ai_teeth.get("model")) if ai_teeth else upload_teeth_record()
 
 
-def _restored_kit(published: KitRecord | None, has_motion: bool) -> KitRecord | None:
+def restored_kit(published: KitRecord | None, has_motion: bool) -> KitRecord | None:
     """The draft's kit record after a Discard: the one published with the
     motion (or without one, for a kit that made no shape of its own: the
     bundled motion played for it). A record of a kit whose motion did not
@@ -524,7 +530,7 @@ def _restored_kit(published: KitRecord | None, has_motion: bool) -> KitRecord | 
     return dropped
 
 
-def _restored_ai_edited(
+def restored_ai_edited(
     avatar: Avatar, config: PublishedConfig, teeth: TeethRecord | None, kit: KitRecord | None = None
 ) -> AiEdited | None:
     """The draft's `ai_edited` after a Discard: what the snapshot disclosed,
@@ -554,8 +560,8 @@ def _restored_ai_edited(
     return without_ai_shapes(ai_edited)
 
 
-def _content_type(key: str) -> str:
-    ext = _ext(key, "")
+def content_type_of(key: str) -> str:
+    ext = extension_of(key, "")
     return {
         "png": "image/png",
         "jpg": "image/jpeg",
@@ -567,40 +573,45 @@ def _content_type(key: str) -> str:
 
 
 async def published_view(avatar: Avatar, storage: Storage) -> PublishedView | None:
-    """Presigned URLs for the published snapshot, or None if never published."""
+    """Presigned URLs for the published snapshot, or None if never published.
+
+    Validated into the public contract (schemas.published) here, so a
+    snapshot that does not fit it fails in this function, not in a
+    visitor's engine."""
     config = config_of(avatar)
     if config is None:
         return None
     image_url = await storage.presign_get(config["image_key"])
     layer_keys = config.get("layer_keys") or {}
-    layer_urls = {
-        name: await storage.presign_get(key) for name, key in layer_keys.items()
-    }
+    layer_urls = {name: await storage.presign_get(key) for name, key in layer_keys.items()}
     rig_key, thumbnail_key = config.get("rig_key"), config.get("thumbnail_key")
 
-    return {
-        "framing": config.get("framing", "face"),
-        # What the avatar is, as published: the engine moves a person's head
-        # in depth and an animal's or a cartoon's as a layer, which the rig
-        # cannot tell it (one fitted before render profiles names none,
-        # whatever the face). Every snapshot carries it, migration 020's
-        # backfill included; "human" covers one that somehow does not.
-        "face_type": config.get("face_type") or "human",
-        # Null for a snapshot from before scenes existed: the engine renders
-        # by the framing, as it always did.
-        "scene": await scene_service.visitor_view(config.get("scene"), storage),
-        "voice": config.get("voice"),
-        "mouth": await _mouth_view(config.get("mouth"), storage),
-        "rig_url": await storage.presign_get(rig_key) if rig_key else "",
-        "thumbnail_url": await storage.presign_get(thumbnail_key) if thumbnail_key else "",
-        "image_url": image_url,
-        "layer_urls": layer_urls or None,
-        # Absent from snapshots published before disclosure existed.
-        "disclosure": config.get("disclosure"),
-    }
+    return PublishedView.model_validate(
+        {
+            "framing": config.get("framing", "face"),
+            # What the avatar is, as published: the engine moves a person's head
+            # in depth and an animal's or a cartoon's as a layer, which the rig
+            # cannot tell it (one fitted before render profiles names none,
+            # whatever the face). Every snapshot carries it, migration 020's
+            # backfill included; "human" covers one that somehow does not.
+            "face_type": config.get("face_type") or "human",
+            # Null for a snapshot from before scenes existed: the engine renders
+            # by the framing, as it always did.
+            "scene": await scene_service.visitor_view(config.get("scene"), storage),
+            "voice": config.get("voice"),
+            "mouth": await mouth_view(config.get("mouth"), storage),
+            "rig_url": await storage.presign_get(rig_key) if rig_key else "",
+            "thumbnail_url": await storage.presign_get(thumbnail_key) if thumbnail_key else "",
+            "image_url": image_url,
+            "layer_urls": layer_urls or None,
+            # Absent from snapshots published before disclosure existed (and
+            # left out of the answer then, not sent as null).
+            "disclosure": config.get("disclosure") or None,
+        }
+    )
 
 
-async def _mouth_view(mouth: MouthConfig | None, storage: Storage) -> dict | None:
+async def mouth_view(mouth: MouthConfig | None, storage: Storage) -> dict | None:
     """What a visitor's engine needs: renderer, fit, presigned teeth (null:
     the standard teeth, which the engine loads beside the bundled motion),
     and the presigned motion (`motion_url`: the avatar's own performance

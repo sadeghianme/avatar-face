@@ -1,7 +1,7 @@
 import type { KeyboardEvent } from "react";
-import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/IconButton";
+import { useT } from "@/i18n";
 
 /**
  * The framing's position pad: focused, the arrow keys move the picture
@@ -21,7 +21,7 @@ export function PanPad({
   onKey: (event: KeyboardEvent) => void;
   onNudge: (key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight") => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const arrow = (key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight", label: string, glyph: string) => (
     <IconButton
       variant="secondary"

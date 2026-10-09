@@ -44,8 +44,10 @@ MAX_SCALE_CHANGE = 0.10
 MAX_ROTATION_DEGREES = 4.0
 NOSE_GUARD = [1, 4, 5, 6, 168, 195, 197, 45, 275]
 MAX_NOSE_SHIFT = 0.03
+# fmt: off
 EYE_GUARD = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246,
              362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398]
+# fmt: on
 MAX_EYE_SHIFT = 0.015
 MAX_YAW_CHANGE = 0.08
 # Tighter than a regenerate's 12: a pose asks for no relighting at all.
@@ -63,7 +65,12 @@ MAX_ASPECT_CHANGE = 0.01
 # The Reference's own openings (tests: equal to the bundled motion's); its
 # widths: EE 1.05, OO 0.52, OH 0.73.
 REFERENCE_OPENINGS: dict[str, float] = {
-    "aa": 0.290, "ee": 0.165, "oo": 0.122, "oh": 0.308, "fv": 0.096, "th": 0.203,
+    "aa": 0.290,
+    "ee": 0.165,
+    "oo": 0.122,
+    "oh": 0.308,
+    "fv": 0.096,
+    "th": 0.203,
 }
 # How much further than the Reference's a shape may open AT THE KIT'S SIZE,
 # once normalize_amplitude has put this face's AA where the Reference's is.
@@ -104,6 +111,8 @@ _FLOORS: dict[str, dict[str, float]] = {
     "fv": {},
     "th": {"min_opening": 0.05},
 }
+
+
 def _raw_limit(shape: str) -> float:
     """How many times the Reference's opening an answer may open as drawn."""
     return MAX_OVER_REFERENCE if shape == "aa" else RAW_MAX_OVER_REFERENCE
@@ -140,18 +149,18 @@ class PoseRegistration:
         return self.reason is None and self.targets is not None
 
 
-def _reason(code: str, detail: str) -> dict:
+def make_reason(code: str, detail: str) -> dict:
     return {"code": code, "detail": detail}
 
 
-def _mouth_width(points: np.ndarray) -> float:
+def mouth_width(points: np.ndarray) -> float:
     """Corner to corner (61 to 291)."""
     return float(np.linalg.norm(points[MOUTH_RIGHT] - points[MOUTH_LEFT]))
 
 
 def _gap_and_width(points: np.ndarray, rest_width: float) -> tuple[float, float]:
     gap = float(np.linalg.norm(points[UPPER_INNER] - points[LOWER_INNER])) / rest_width
-    return gap, _mouth_width(points) / rest_width
+    return gap, mouth_width(points) / rest_width
 
 
 def opening(points: np.ndarray, rest: np.ndarray) -> float:
@@ -161,7 +170,7 @@ def opening(points: np.ndarray, rest: np.ndarray) -> float:
     parted opens only by what the shape adds to that; and it is linear in
     the movement, so a shape moved twice as far opens twice as much (the
     scale normalize_amplitude finds is then exact)."""
-    down, width = _down(rest)
+    down, width = down_and_width(rest)
     moved = (points[LOWER_INNER] - points[UPPER_INNER]) - (rest[LOWER_INNER] - rest[UPPER_INNER])
     return float(moved @ down) / width
 
@@ -179,13 +188,15 @@ def signed_yaw(points: np.ndarray) -> float:
     return float((points[NOSE_TIP][0] - (left + right) / 2) / half)
 
 
-def _shape_reached(shape: str, opened: float, width: float) -> str | None:
+def shape_reached(shape: str, opened: float, width: float) -> str | None:
     limits = POSE_LIMITS[shape]
     if opened < limits.get("min_opening", -math.inf):
         return f"the lips parted {opened:.2f} mouth widths, less than {limits['min_opening']}"
     if opened > limits["max_opening"]:
-        return (f"the lips parted {opened:.2f} mouth widths, more than {limits['max_opening']} "
-                f"({_raw_limit(shape)} times the Reference's)")
+        return (
+            f"the lips parted {opened:.2f} mouth widths, more than {limits['max_opening']} "
+            f"({_raw_limit(shape)} times the Reference's)"
+        )
     if width < limits.get("min_width", -math.inf):
         return f"the mouth is {width:.2f} of its rest width, narrower than {limits['min_width']}"
     if width > limits.get("max_width", math.inf):
@@ -193,16 +204,18 @@ def _shape_reached(shape: str, opened: float, width: float) -> str | None:
     return None
 
 
-def _teeth_shown(points: np.ndarray) -> str | None:
+def teeth_shown(points: np.ndarray) -> str | None:
     """Can a teeth photo's lips show the teeth at all? Its own lip gap, in
     its own mouth widths, at least the mouth-photo upload's threshold
     (portrait_photo.prepare_photo); the embed's own test decides the rest
     (fit_profile)."""
-    width = max(_mouth_width(points), 1.0)
+    width = max(mouth_width(points), 1.0)
     gap = float(np.linalg.norm(points[UPPER_INNER] - points[LOWER_INNER])) / width
     if gap < TEETH_PHOTO_MIN_GAP:
-        return (f"the lips parted {gap:.2f} of their mouth width, too little to show the teeth "
-                f"(at least {TEETH_PHOTO_MIN_GAP})")
+        return (
+            f"the lips parted {gap:.2f} of their mouth width, too little to show the teeth "
+            f"(at least {TEETH_PHOTO_MIN_GAP})"
+        )
     return None
 
 
@@ -242,24 +255,24 @@ def register_answer(
         # Broad on purpose: Pillow raises many types on bytes it cannot
         # decode, and any of them is an unusable answer.
         logger.warning("the %s answer is not a readable image", request.shape, exc_info=True)
-        result.reason = _reason("unreadable_result", "The AI returned no usable image")
+        result.reason = make_reason("unreadable_result", "The AI returned no usable image")
         return result
     aspect = image.width / image.height
     result.checks["aspect"] = round(aspect / request.aspect, 4)
     if abs(aspect / request.aspect - 1) > MAX_ASPECT_CHANGE:
         # Mapped back per axis, a reframed answer would pass the guards with
         # its mouth in the wrong place (head_square).
-        result.reason = _reason(
+        result.reason = make_reason(
             "aspect_changed", "The AI answered with a picture of another shape than it was sent"
         )
         return result
     points = detect(image)
     if points is None:
-        result.reason = _reason("no_face_in_result", "No face was found in the answer")
+        result.reason = make_reason("no_face_in_result", "No face was found in the answer")
         return result
     points = np.asarray(points, dtype=np.float64)
     if points.shape != (478, 2) or not np.isfinite(points).all():
-        result.reason = _reason("no_face_in_result", "The answer's face was not fully found")
+        result.reason = make_reason("no_face_in_result", "The answer's face was not fully found")
         return result
     result.answer_points, result.answer_size, result.answer_image = points, image.size, image
 
@@ -268,69 +281,78 @@ def register_answer(
     try:
         similarity = similarity_on_anchors(mapped, base_view)
     except MirroredPose:
-        result.reason = _reason("mirrored", "The answer is a mirror image of the face")
+        result.reason = make_reason("mirrored", "The answer is a mirror image of the face")
         return result
     checks = result.checks
     checks["scale"] = round(similarity.scale, 4)
     checks["rotation"] = round(similarity.degrees, 2)
-    if abs(similarity.scale - 1) > MAX_SCALE_CHANGE or abs(similarity.degrees) > MAX_ROTATION_DEGREES:
-        result.reason = _reason("head_moved", "The AI zoomed or tilted the head")
+    if (
+        abs(similarity.scale - 1) > MAX_SCALE_CHANGE
+        or abs(similarity.degrees) > MAX_ROTATION_DEGREES
+    ):
+        result.reason = make_reason("head_moved", "The AI zoomed or tilted the head")
         return result
 
     registered = similarity.apply(mapped)
     rms = registration_rms(registered, base_view) * frame.units_per_px
     checks["rms"] = round(rms, 6)
     if rms > MAX_REGISTRATION_RMS:
-        result.reason = _reason(
-            "registration", f"The eyes and nose do not line up (RMS {rms:.4f} > {MAX_REGISTRATION_RMS})"
+        result.reason = make_reason(
+            "registration",
+            f"The eyes and nose do not line up (RMS {rms:.4f} > {MAX_REGISTRATION_RMS})",
         )
         return result
 
     face = float(np.linalg.norm(base_view[FACE_RIGHT] - base_view[FACE_LEFT]))
-    nose = float(np.linalg.norm(registered[NOSE_GUARD] - base_view[NOSE_GUARD], axis=1).max()) / face
+    nose = (
+        float(np.linalg.norm(registered[NOSE_GUARD] - base_view[NOSE_GUARD], axis=1).max()) / face
+    )
     eyes = float(np.linalg.norm(registered[EYE_GUARD] - base_view[EYE_GUARD], axis=1).mean()) / face
     yaw = abs(signed_yaw(points) - signed_yaw(base_view))
     checks.update(nose=round(nose, 4), eyes=round(eyes, 4), yaw=round(yaw, 4))
     if nose > MAX_NOSE_SHIFT:
-        result.reason = _reason("nose_moved", "The AI moved or reshaped the nose")
+        result.reason = make_reason("nose_moved", "The AI moved or reshaped the nose")
         return result
     if eyes > MAX_EYE_SHIFT:
-        result.reason = _reason("eyes_moved", "The AI moved or reshaped the eyes")
+        result.reason = make_reason("eyes_moved", "The AI moved or reshaped the eyes")
         return result
     if yaw > MAX_YAW_CHANGE:
-        result.reason = _reason("head_turned", "The AI turned the head")
+        result.reason = make_reason("head_turned", "The AI turned the head")
         return result
 
     drift = photo_adjust.skin_drift(base_image, base_view, image, points)
     if drift is not None:
         checks["skin_delta_e"] = round(drift, 2)
         if drift > MAX_POSE_SKIN_DELTA_E:
-            result.reason = _reason("skin_tone_changed", "The AI changed the skin tone or light")
+            result.reason = make_reason(
+                "skin_tone_changed", "The AI changed the skin tone or light"
+            )
             return result
 
-    rest_width = _mouth_width(base_view)
+    rest_width = mouth_width(base_view)
     gap, width = _gap_and_width(registered, rest_width)
     opened = opening(registered, base_view)
     checks.update(gap=round(gap, 3), opening=round(opened, 3), width=round(width, 3))
     if request.shape == TEETH:
         # Not a shape of speech: how far it opens is not played, only
         # whether its lips show the teeth.
-        missed = _teeth_shown(points)
+        missed = teeth_shown(points)
         if missed:
-            result.reason = _reason("pose_not_reached", f"Not a teeth photo: {missed}")
+            result.reason = make_reason("pose_not_reached", f"Not a teeth photo: {missed}")
             return result
     else:
-        missed = _shape_reached(request.shape, opened, width)
+        missed = shape_reached(request.shape, opened, width)
         if missed:
-            result.reason = _reason("pose_not_reached",
-                                    f"Not the {request.shape.upper()} shape: {missed}")
+            result.reason = make_reason(
+                "pose_not_reached", f"Not the {request.shape.upper()} shape: {missed}"
+            )
             return result
     # What the model moved, applied to the confirmed points.
     result.targets, result.rms = base_points + (registered - base_view), rms
     return result
 
 
-def _down(points: np.ndarray) -> tuple[np.ndarray, float]:
+def down_and_width(points: np.ndarray) -> tuple[np.ndarray, float]:
     """The unit vector down the face, perpendicular to the corner line, and
     the corner-to-corner width."""
     d = points[MOUTH_RIGHT] - points[MOUTH_LEFT]

@@ -81,7 +81,8 @@ async def test_a_raw_upload_and_its_published_copy_lose_their_metadata(client):
 
 
 async def test_a_backdrop_left_behind_a_cutout_is_deleted_and_unpublished(
-    client, stub_segmenter  # noqa: F811
+    client,
+    stub_segmenter,  # noqa: F811
 ):
     """Removing a background used to leave the opaque photo's background
     layer in place, and Publish copied it behind the cut-out."""

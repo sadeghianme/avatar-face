@@ -244,19 +244,19 @@ def _move_rig(rig: dict, left: float, top: float, size: tuple[int, int]) -> dict
     # Saved hand-placed marks live in image pixels too; without this a crop
     # would reopen the marking panel with every handle off by the crop origin.
     if rig.get("user_anchors"):
-        moved["user_anchors"] = _move_anchors(rig["user_anchors"], left, top)
+        moved["user_anchors"] = move_anchors(rig["user_anchors"], left, top)
     return moved
 
 
-def _move_anchors(anchors, left: float, top: float):
+def move_anchors(anchors, left: float, top: float):
     """Every {x, y} in a marking, wherever it sits: region edges, pupils,
     the mouth line's list, the chin. Anything else (the source) is kept."""
     if isinstance(anchors, dict):
         if "x" in anchors and "y" in anchors:
             return {**anchors, "x": anchors["x"] - left, "y": anchors["y"] - top}
-        return {key: _move_anchors(value, left, top) for key, value in anchors.items()}
+        return {key: move_anchors(value, left, top) for key, value in anchors.items()}
     if isinstance(anchors, list):
-        return [_move_anchors(value, left, top) for value in anchors]
+        return [move_anchors(value, left, top) for value in anchors]
     return anchors
 
 
@@ -308,16 +308,16 @@ async def _uncrop_rig(avatar: Avatar, storage: Storage, cropped_keys: list[str])
 
 
 def _locate_crop_in(outer: bytes, inner: bytes) -> tuple[int, int] | None:
-    """`_locate_crop` for two encoded pictures; None when either cannot be
+    """`locate_crop` for two encoded pictures; None when either cannot be
     read (Pillow's unreadable file is an OSError)."""
     try:
-        return _locate_crop(Image.open(io.BytesIO(outer)), Image.open(io.BytesIO(inner)))
+        return locate_crop(Image.open(io.BytesIO(outer)), Image.open(io.BytesIO(inner)))
     except OSError:
         logger.warning("a crop candidate could not be decoded")
         return None
 
 
-def _locate_crop(outer, inner) -> tuple[int, int] | None:
+def locate_crop(outer, inner) -> tuple[int, int] | None:
     """Where `inner` sits in `outer` pixel for pixel, or None when it does
     not sit anywhere exactly once (not a crop of it, or a flat image where
     every position matches and the origin is unknowable)."""
@@ -343,9 +343,7 @@ def _locate_crop(outer, inner) -> tuple[int, int] | None:
     return found[0] if len(found) == 1 else None
 
 
-def _redetect_rig(
-    avatar: Avatar, image_bytes: bytes, previous: dict
-) -> tuple[dict, dict] | None:
+def _redetect_rig(avatar: Avatar, image_bytes: bytes, previous: dict) -> tuple[dict, dict] | None:
     """Last resort for a crop reset with no recoverable origin: the rig and
     its fit base, built as a first build would build them.
 
@@ -366,7 +364,9 @@ def _redetect_rig(
             "crop reset for avatar %s: crop origin unknown, hand marks dropped", avatar.id
         )
     rig = build_rig(
-        starting_mesh(points, size, detected, avatar.face_type), size, blendshapes,
+        starting_mesh(points, size, detected, avatar.face_type),
+        size,
+        blendshapes,
         face_type=avatar.face_type,
     )
     return rig, fit_base_record(fit_base_mesh(points, size, detected), rig, detected)

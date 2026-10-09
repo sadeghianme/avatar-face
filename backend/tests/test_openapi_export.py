@@ -39,3 +39,14 @@ def test_it_runs_as_a_script_from_anywhere(tmp_path):
         timeout=120,
     )
     assert json.loads(result.stdout)["paths"]["/embed/v1/cues"]["post"]
+
+
+def test_the_committed_document_is_the_codes(tmp_path):
+    """frontend/src/lib/api-schema.json, which the dashboard and the widget
+    generate their types from, is what this code exports (CI's backend-checks
+    job checks the same). Re-export it with `python -m scripts.export_openapi`."""
+    out = tmp_path / "openapi.json"
+    export_openapi.main([str(out)])
+    assert out.read_bytes() == export_openapi.COMMITTED.read_bytes(), (
+        "the committed OpenAPI document is stale: run python -m scripts.export_openapi"
+    )

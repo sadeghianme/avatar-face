@@ -4,18 +4,21 @@ import { describe, expect, it } from "vitest";
 import type { Rig } from "../../types";
 import { layOutFace, refineMesh, type Point } from "../geometry";
 import { POSE_LIMIT_DEG } from "../head-personality";
-import { HeadTurn, PIVOT_CM, outlineBasis, type HeadPose3D } from "../head-turn";
-import { JAW_ARC, LIP_CORNERS, LOWER_ROWS, UPPER_ROWS } from "../jaw-rig";
+import { CAMERA_IOD, projectTurn, type HeadPose3D } from "../head-camera";
+import { HeadTurn } from "../head-turn";
+import { LIP_CORNERS, LOWER_ROWS, UPPER_ROWS } from "../jaw-rig";
 import { EYE_CORNERS, IRISES, LOWER_LIDS, UPPER_LIDS } from "../landmarks";
 import { headMotionAffine } from "../render2d";
-import { apply } from "../warp-gl";
+import { apply } from "../affine";
+import { JAW_ARC } from "../neck-band";
 
 /**
- * The head's turn in depth (head-turn.ts) on the human fixture: the
- * rotation and the perspective, nothing at rest, an outline that never
- * moves in the head's frame while the chin and the nose turn, the harmonic
- * weights that hold it, each eye as one piece, and the fold clamp, which
- * the personality's limits never reach.
+ * The head's turn in depth (head-turn.ts) on the human fixture: nothing at
+ * rest, an outline that never moves in the head's frame while the chin and
+ * the nose turn, each eye and the lips as one piece, and the fold clamp,
+ * which the personality's limits never reach. The camera, the depth and the
+ * outline's weights have their own tests (head-camera, head-depth,
+ * head-outline).
  */
 const rig = JSON.parse(
   readFileSync(new URL("../../__tests__/fixtures/human-rig.json", import.meta.url), "utf8")
@@ -39,53 +42,13 @@ const turned = (pose: Partial<HeadPose3D>, rigid: Parameters<HeadTurn["apply"]>[
 };
 
 describe("HeadTurn's geometry", () => {
-  it("fits a depth with the nose ahead of the cheeks and the pivot behind the face", () => {
-    expect(turn).not.toBeNull();
-    expect(turn.depth[1]).toBeGreaterThan(turn.depth[234] + 0.5 * turn.iod);
-    expect(turn.depth[1]).toBeGreaterThan(turn.depth[454] + 0.5 * turn.iod);
-    // The pivot: behind the ears (their depth is the canonical -2.4 cm), on
-    // the face's middle line.
-    expect(turn.pivot.z).toBeLessThan(Math.min(turn.depth[234], turn.depth[454]));
-    expect(Math.abs(turn.pivot.x - (mesh.basePoints[234].x + mesh.basePoints[454].x) / 2)).toBeLessThan(0.1 * turn.iod);
-    expect(PIVOT_CM.z).toBeLessThan(-2.4);
-  });
-
-  it("rotates about the pivot and sees the result through the camera", () => {
-    // The same rotation and perspective, written out: back out of the photo's
-    // perspective, rotate (yaw, then pitch, then roll), project again.
-    const D = 9 * turn.iod;
-    const P = turn.pivot;
-    const by = (x: number, y: number, z: number, { yaw, pitch, roll }: HeadPose3D) => {
-      const k0 = (D - (z - P.z)) / D;
-      const v = [(x - P.x) * k0, (y - P.y) * k0, z - P.z];
-      const [X1, Z1] = [v[0] * Math.cos(yaw) + v[2] * Math.sin(yaw), -v[0] * Math.sin(yaw) + v[2] * Math.cos(yaw)];
-      const [Y2, Z2] = [v[1] * Math.cos(pitch) + Z1 * Math.sin(pitch), -v[1] * Math.sin(pitch) + Z1 * Math.cos(pitch)];
-      const [X3, Y3] = [X1 * Math.cos(roll) - Y2 * Math.sin(roll), X1 * Math.sin(roll) + Y2 * Math.cos(roll)];
-      const k = D / (D - Z2);
-      return { x: P.x + X3 * k, y: P.y + Y3 * k };
-    };
-    for (const [i, pose] of [
-      [1, { yaw: 0.1, pitch: 0, roll: 0 }],
-      [10, { yaw: 0, pitch: -0.08, roll: 0 }],
-      [152, { yaw: 0.05, pitch: 0.07, roll: 0.04 }],
-      [33, { yaw: -0.12, pitch: 0.03, roll: -0.05 }],
-    ] as [number, HeadPose3D][]) {
+  it("projects through the camera about its pivot, nine eye distances away", () => {
+    const pose = { yaw: 0.05, pitch: 0.07, roll: 0.04 };
+    for (const i of [1, 10, 152, 33]) {
       const p = mesh.basePoints[i];
-      const got = turn.project(p.x, p.y, turn.depth[i], pose);
-      const want = by(p.x, p.y, turn.depth[i], pose);
-      expect(got.x).toBeCloseTo(want.x, 9);
-      expect(got.y).toBeCloseTo(want.y, 9);
+      const want = projectTurn({ x: 0, y: 0 }, p.x, p.y, turn.depth[i], pose, turn.pivot, CAMERA_IOD * turn.iod);
+      expect(turn.project(p.x, p.y, turn.depth[i], pose)).toEqual(want);
     }
-    // Yaw moves a point ahead of the pivot toward +x, and further the
-    // further ahead it is; roll alone at the pivot's depth is a rotation in
-    // the picture about the pivot.
-    const nose = turn.project(P.x, P.y, P.z + turn.iod, { yaw: 0.1, pitch: 0, roll: 0 });
-    const brow = turn.project(P.x, P.y, P.z + 0.5 * turn.iod, { yaw: 0.1, pitch: 0, roll: 0 });
-    expect(nose.x - P.x).toBeGreaterThan(brow.x - P.x);
-    expect(brow.x - P.x).toBeGreaterThan(0);
-    const r = turn.project(P.x + 100, P.y, P.z, { yaw: 0, pitch: 0, roll: 0.1 });
-    expect(r.x - P.x).toBeCloseTo(100 * Math.cos(0.1), 9);
-    expect(r.y - P.y).toBeCloseTo(100 * Math.sin(0.1), 9);
   });
 
   it("moves the skull's point by the turn, for the rigid share", () => {
@@ -115,10 +78,6 @@ describe("HeadTurn on the face", () => {
       const pts = turned(pose);
       for (const i of outline) expect(moved(pts, i)).toBeLessThan(1e-9);
     }
-    // The outline is the face's edge above the jaw: the forehead, the
-    // temples, down to the jaw line's ends below the ears.
-    for (const i of [10, 234, 454, 93, 323]) expect(outline).toContain(i);
-    for (const i of [152, 148, 377, 58, 288]) expect(outline).not.toContain(i);
   });
 
   it("turns the nose and the chin the way they are asked, the jaw line with them", () => {
@@ -228,64 +187,10 @@ describe("HeadTurn on the face", () => {
   });
 });
 
-describe("the outline's harmonic weights", () => {
-  const { outline, free, weights } = turn.basis;
-  const h = outline.length;
-
-  it("are a smooth average of the outline's: each row sums to one, none negative", () => {
-    for (let r = 0; r < free.length; r++) {
-      let sum = 0;
-      for (let k = 0; k < h; k++) {
-        const w = weights[r * h + k];
-        expect(w).toBeGreaterThanOrEqual(-1e-9);
-        sum += w;
-      }
-      expect(sum).toBeCloseTo(1, 6);
-    }
-  });
-
-  it("are each free landmark's neighbours' mean (the discrete Laplace equation)", () => {
-    const value = new Float64Array(mesh.basePoints.length);
-    // A test function on the outline: its x, so the extension is near x.
-    outline.forEach((i) => (value[i] = mesh.basePoints[i].x));
-    free.forEach((i, r) => {
-      let v = 0;
-      for (let k = 0; k < h; k++) v += weights[r * h + k] * value[outline[k]];
-      value[i] = v;
-    });
-    const base = mesh.basePoints;
-    const nb = new Map<number, Map<number, number>>();
-    for (const [a, b, c] of rig.triangles) {
-      for (const [i, j] of [
-        [a, b],
-        [b, c],
-        [c, a],
-      ]) {
-        const w = 1 / Math.hypot(base[i].x - base[j].x, base[i].y - base[j].y);
-        if (!nb.has(i)) nb.set(i, new Map());
-        if (!nb.has(j)) nb.set(j, new Map());
-        nb.get(i)!.set(j, w);
-        nb.get(j)!.set(i, w);
-      }
-    }
-    for (const i of free) {
-      let s = 0,
-        t = 0;
-      for (const [j, w] of nb.get(i)!) {
-        s += w * value[j];
-        t += w;
-      }
-      expect(value[i]).toBeCloseTo(s / t, 6);
-    }
-  });
-
-  it("are the same at any viewport of the rig, so one serves them all", () => {
-    const other = meshAt(480, 0.4);
-    const tris = rig.triangles.filter((t) => t.every((i) => i < other.basePoints.length));
-    const b = outlineBasis(other.basePoints, tris);
-    expect([...b.outline]).toEqual([...outline]);
-    expect([...b.free]).toEqual([...free]);
-    for (let k = 0; k < weights.length; k += 37) expect(b.weights[k]).toBeCloseTo(weights[k], 9);
+describe("the outline's weights", () => {
+  it("are built once per rig: a turn for another viewport takes the same", () => {
+    const other = layOutFace(rig, image, { width: 480, height: 480 }, 0.4, undefined);
+    refineMesh(other, rig, image);
     const again = HeadTurn.build(other, rig.triangles, turn.basis)!;
     expect(again.basis).toBe(turn.basis);
   });

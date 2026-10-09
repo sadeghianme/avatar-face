@@ -79,7 +79,7 @@ def pose_prompt(shape: str) -> str:
 # arch, a dark gap between the rows, soft light with no stripe across them.
 TEETH_PROMPT = (
     "Edit this close-up portrait photograph. Make exactly one change: the person "
-    "says a long, broad \"ee\", lips drawn back and slightly apart, so that the "
+    'says a long, broad "ee", lips drawn back and slightly apart, so that the '
     "ENTIRE upper front teeth are clearly visible from the gumline to the biting "
     "edge, with a thin band of gum above them, all the upper front teeth in one "
     "continuous natural arch, a small dark gap between the upper and lower teeth, "

@@ -2,16 +2,18 @@ import { BrowserTTS } from "@liveface/embed";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
+import { clonedVoiceName, renderedLines } from "@/features/voices/clonedLines";
 import { api, fetchStream } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
-import type { Provider, Voice } from "@/lib/types";
+import type { Provider, Schemas, Synthesis, Voice } from "@/lib/types";
 
 /** The voice choices' provider names (the server's, the browser's, an org's clones). */
 export const BROWSER_PROVIDER = "browser";
 export const SERVER_PROVIDER = "kokoro";
 export const CLONED_PROVIDER = "cloned";
 
-/** A language the server can speak, resolved to its best provider and voice. */
+/** A language the server can speak, resolved to its best provider and voice
+ * (GET /tts/languages answers dicts: typed here). */
 export interface SpeechLanguage {
   locale: string;
   name: string;
@@ -21,6 +23,7 @@ export interface SpeechLanguage {
   voice: string;
 }
 
+/** A clone job (the clone-jobs routes answer dicts: typed here). */
 export interface CloneJob {
   id: string;
   name: string;
@@ -32,13 +35,7 @@ export interface CloneJob {
 }
 
 /** A voice cloned for this organization: rows of its speech cache. */
-export interface ClonedVoice {
-  voice: string;
-  label: string;
-  locale?: string;
-  lines: number;
-  total_ms: number;
-}
+export type ClonedVoice = Schemas["ClonedVoiceOut"];
 
 // --- Speech -------------------------------------------------------------------------
 
@@ -85,19 +82,13 @@ export function useProviderVoices(provider: string, cloned: readonly ClonedVoice
 }
 
 /** Words as they are spoken: the phrase stream the engine plays (streamSpeech). */
-export function speechStream(
-  orgId: string,
-  body: { text: string; provider: string; voice: string; locale: string }
-): Promise<Response> {
+export function speechStream(orgId: string, body: Schemas["SynthesizeRequest"]): Promise<Response> {
   return fetchStream(`/tts/orgs/${orgId}/stream`, body);
 }
 
 /** One line in a voice, whole (a cloned voice's rendered line: a cache hit). */
-export function synthesize(
-  orgId: string,
-  body: { text: string; provider: string; voice: string; locale: string }
-): Promise<{ audio_b64: string; audio_mime: string }> {
-  return api.post(`/tts/orgs/${orgId}/synthesize`, body);
+export function synthesize(orgId: string, body: Schemas["SynthesizeRequest"]): Promise<Synthesis> {
+  return api.post<Synthesis>(`/tts/orgs/${orgId}/synthesize`, body);
 }
 
 // --- Cloned voices --------------------------------------------------------------------
@@ -128,6 +119,22 @@ export function useCloneJobs(orgId: string | undefined) {
     void queryClient.invalidateQueries({ queryKey: queryKeys.clonedVoices(orgId) });
   }, [doneCount, orgId, queryClient]);
   return query;
+}
+
+/**
+ * The lines a cloned voice can say (clonedLines.ts), from the clone jobs;
+ * `voiceId` null (another provider chosen) asks nothing. The jobs' own
+ * query, read without its polling: the Speak panel follows a render the
+ * Voices page is watching, and starts none.
+ */
+export function useRenderedLines(orgId: string | undefined, voiceId: string | null, locale: string) {
+  const name = voiceId === null ? null : clonedVoiceName(voiceId);
+  return useQuery({
+    queryKey: queryKeys.cloneJobs(orgId),
+    queryFn: () => api.get<CloneJob[]>(`/orgs/${orgId}/clone-jobs`),
+    enabled: Boolean(orgId) && name !== null,
+    select: (jobs: CloneJob[]) => (name === null ? [] : renderedLines(jobs, name, locale)),
+  });
 }
 
 /** Whether this backend can render a clone on its own hardware (fixed until a restart). */

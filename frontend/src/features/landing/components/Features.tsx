@@ -1,8 +1,7 @@
-import { useTranslation } from "react-i18next";
-
 import smileUrl from "@/assets/demo/smile.webp";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { LANGUAGES, OPENNESS } from "@/features/landing/data";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 import { Reveal, SectionHeader } from "./Reveal";
@@ -42,7 +41,7 @@ function CardHead({ icon, title, body }: { icon: IconName; title: string; body: 
 }
 
 export function Features() {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <section id="features" className="scroll-mt-20 bg-gray-50/70 py-24 sm:py-32 dark:bg-white/[0.015]">
       <div className="mx-auto max-w-7xl px-5 sm:px-6">
@@ -146,7 +145,7 @@ export function Features() {
 
 /** The first demo line's measured mouth openness, with a playhead. */
 function LipSyncVisual() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const tokens = ["ih", "aa", "PP", "E", "nn", "FF", "aa", "RR", "PP", "E", "DD"];
   return (
     <div className="mt-8 rounded-2xl border border-black/[0.06] bg-gray-50 p-5 dark:border-white/[0.06] dark:bg-white/[0.02]">
@@ -188,12 +187,12 @@ function LipSyncVisual() {
 
 /** Where breath, blinks and nods fall around one spoken sentence. */
 function MotionVisual() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const rows = [
     { key: "motionBreath", d: "M0 18 C 12 18, 14 4, 22 4 S 60 12, 100 16" },
     { key: "motionBlink", d: "M0 14 H30 L32 3 L34 14 H66 L68 3 L70 14 H100" },
     { key: "motionNod", d: "M0 10 H24 Q28 16 32 10 H54 Q58 16 62 10 H100" },
-  ];
+  ] as const;
   return (
     <div className="mt-auto space-y-3 pt-7">
       {rows.map((row) => (

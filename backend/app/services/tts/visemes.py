@@ -6,10 +6,12 @@ diacritics are stripped, Cyrillic and Arabic map to phonetic viseme classes,
 and CJK/Devanagari rotate deterministically through open-mouth visemes so
 speech never freezes at "sil" for real letters. Punctuation stays "sil".
 """
+
 from __future__ import annotations
 
 import unicodedata
 
+# fmt: off
 LATIN_MAP: dict[str, str] = {
     "a": "aa", "e": "E", "i": "ih", "o": "oh", "u": "ou", "y": "ih",
     "b": "PP", "p": "PP", "m": "PP",
@@ -47,6 +49,7 @@ ARABIC_MAP: dict[str, str] = {
     "ن": "nn", "ل": "nn",
     "ر": "RR", "ي": "ih", "ى": "aa", "ء": "sil",
 }
+# fmt: on
 
 # Visemes rotated through for syllabic scripts (CJK, Devanagari ...):
 # every glyph is roughly a syllable, so cycle open/varied mouth shapes.
@@ -61,11 +64,11 @@ def _strip_diacritics(ch: str) -> str:
 def _is_syllabic(ch: str) -> bool:
     code = ord(ch)
     return (
-        0x3040 <= code <= 0x30FF      # Hiragana / Katakana
-        or 0x4E00 <= code <= 0x9FFF   # CJK Unified
-        or 0x3400 <= code <= 0x4DBF   # CJK ext A
-        or 0xAC00 <= code <= 0xD7AF   # Hangul syllables
-        or 0x0900 <= code <= 0x097F   # Devanagari
+        0x3040 <= code <= 0x30FF  # Hiragana / Katakana
+        or 0x4E00 <= code <= 0x9FFF  # CJK Unified
+        or 0x3400 <= code <= 0x4DBF  # CJK ext A
+        or 0xAC00 <= code <= 0xD7AF  # Hangul syllables
+        or 0x0900 <= code <= 0x097F  # Devanagari
     )
 
 

@@ -48,7 +48,9 @@ def vision_cache_hit(usage: AiUsage, digest: str | None, face_type: str) -> dict
     """Cached point-finder answer for these pixels, this line, this model."""
     for entry in usage.get("vision_cache") or []:
         if (entry.get("sha256"), entry.get("face_type"), entry.get("model")) == (
-            digest, face_type, MODEL
+            digest,
+            face_type,
+            MODEL,
         ):
             return entry["points"]
     return None
@@ -116,8 +118,10 @@ async def ai_points(
                 usage["detections"] = max(0, usage["detections"] - 1)
             if answered is not None:
                 entry: VisionCacheEntry = {
-                    "sha256": digest, "face_type": face_type,
-                    "model": vision_points.MODEL, "points": answered,
+                    "sha256": digest,
+                    "face_type": face_type,
+                    "model": vision_points.MODEL,
+                    "points": answered,
                 }
                 usage["vision_cache"] = (usage["vision_cache"] + [entry])[-VISION_CACHE_SIZE:]
 
@@ -131,7 +135,8 @@ async def ai_points(
     if result.anchors is None:
         return None, error_record(
             "ai_points_implausible",
-            "The AI's points did not fit this face (" + "; ".join(result.problems)
+            "The AI's points did not fit this face ("
+            + "; ".join(result.problems)
             + "); they were placed from the template instead",
         )
     return result.anchors, None
@@ -156,9 +161,7 @@ async def run_detect(job: Job, params: dict) -> None:
     if params.get("use_ai"):
         ai, warning = None, None
         if wants_ai_points(face_type, found["detected"]):
-            ai, warning = await ai_points(
-                job, params, data, face_type, tuple(found["image_size"])
-            )
+            ai, warning = await ai_points(job, params, data, face_type, tuple(found["image_size"]))
         else:
             # MediaPipe found this face; the budget admission took is returned.
             def refund(usage: AiUsage) -> None:

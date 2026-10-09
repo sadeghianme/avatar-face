@@ -32,7 +32,6 @@ from app.services.storage import (
     STORAGE_ERRORS,
     LocalStorage,
     S3Storage,
-    _check_prefix,
     get_storage,
     is_published,
     reset_storage,
@@ -191,9 +190,7 @@ async def test_a_published_files_put_url_is_not_windowed(local, frozen):
 async def test_without_an_expiry_a_published_get_url_is_not_windowed(local, frozen):
     """A zero window would divide by zero: the URL is a plain one then."""
     unwindowed = LocalStorage(local.root, "http://testserver", "secret", 0)
-    _, expires, _ = _parts(
-        await unwindowed.presign_get("orgs/o/avatars/1/published/r3/rig.json")
-    )
+    _, expires, _ = _parts(await unwindowed.presign_get("orgs/o/avatars/1/published/r3/rig.json"))
     assert expires == NOW
 
 
@@ -282,7 +279,9 @@ async def test_a_sweep_takes_only_files_both_old_and_matching(local):
         _age(local.root / key, hours)
     assert await local.sweep("orgs/", 24 * 3600, "/candidates/") == 1
     assert [key for key in keys if await local.exists(key)] == [
-        "orgs/o/candidates/new.png", "orgs/o/avatars/a/old.png", "orgs/o/avatars/a/new.png",
+        "orgs/o/candidates/new.png",
+        "orgs/o/avatars/a/old.png",
+        "orgs/o/avatars/a/new.png",
     ]
     # Files go, folders stay.
     assert (local.root / "orgs/o/candidates").is_dir()
@@ -413,10 +412,14 @@ async def test_s3_presigned_urls_name_the_bucket_key_type_and_expiry(monkeypatch
         "https://signed.example/get_object/orgs/o/a.png"
     )
     assert client.calls == [
-        ("put_object", {"Params": {"Bucket": "bucket", "Key": "orgs/o/a.png",
-                                   "ContentType": "image/png"}, "ExpiresIn": 60}),
-        ("get_object", {"Params": {"Bucket": "bucket", "Key": "orgs/o/a.png"},
-                        "ExpiresIn": 60}),
+        (
+            "put_object",
+            {
+                "Params": {"Bucket": "bucket", "Key": "orgs/o/a.png", "ContentType": "image/png"},
+                "ExpiresIn": 60,
+            },
+        ),
+        ("get_object", {"Params": {"Bucket": "bucket", "Key": "orgs/o/a.png"}, "ExpiresIn": 60}),
     ]
 
 
@@ -427,8 +430,10 @@ async def test_s3_puts_reads_and_deletes_one_object(monkeypatch):
     assert await s3.get_bytes("orgs/o/a.png") == b"bytes"
     await s3.delete("orgs/o/a.png")
     assert client.calls == [
-        ("put_object", {"Bucket": "bucket", "Key": "orgs/o/a.png", "Body": b"png",
-                        "ContentType": "image/png"}),
+        (
+            "put_object",
+            {"Bucket": "bucket", "Key": "orgs/o/a.png", "Body": b"png", "ContentType": "image/png"},
+        ),
         ("get_object", {"Bucket": "bucket", "Key": "orgs/o/a.png"}),
         ("delete_object", {"Bucket": "bucket", "Key": "orgs/o/a.png"}),
     ]
@@ -449,20 +454,20 @@ async def test_s3_sweep_deletes_only_stale_matching_keys_a_thousand_at_a_time(mo
     assert await _s3(monkeypatch, client).sweep("orgs/", 24 * 3600, "/candidates/") == 2501
 
     assert client.calls[0] == ("paginate", {"Bucket": "bucket", "Prefix": "orgs/"})
-    deletes = [kwargs["Delete"]["Objects"] for name, kwargs in client.calls
-               if name == "delete_objects"]
+    deletes = [
+        kwargs["Delete"]["Objects"] for name, kwargs in client.calls if name == "delete_objects"
+    ]
     assert [len(batch) for batch in deletes] == [1000, 1000, 500, 1]
     deleted = [obj["Key"] for batch in deletes for obj in batch]
-    assert deleted == [f"orgs/o/candidates/{i}.png" for i in range(2500)] + [
-        "candidates/top.png"
-    ]
+    assert deleted == [f"orgs/o/candidates/{i}.png" for i in range(2500)] + ["candidates/top.png"]
     assert all(kwargs["Bucket"] == "bucket" for _, kwargs in client.calls)
 
 
 async def test_s3_sweep_with_nothing_stale_deletes_nothing(monkeypatch):
     fresh = datetime.now(UTC)
-    client = FakeS3(pages=[{"Contents": [{"Key": "orgs/o/candidates/a.png",
-                                          "LastModified": fresh}]}])
+    client = FakeS3(
+        pages=[{"Contents": [{"Key": "orgs/o/candidates/a.png", "LastModified": fresh}]}]
+    )
     assert await _s3(monkeypatch, client).sweep("orgs/", 3600, "/candidates/") == 0
     assert [name for name, _ in client.calls] == ["paginate"]
 
@@ -475,18 +480,22 @@ async def test_s3_refuses_an_unguarded_sweep_or_a_bad_prefix_before_connecting(m
         await s3.list_names("orgs/o")
 
 
-# --- _check_prefix ---------------------------------------------------------------------
+# --- by prefix: only a plain folder ----------------------------------------------------
 
 
 @pytest.mark.parametrize("prefix", ["//", "///", "orgs", "orgs/a..b/", "/../", "orgs/o/../"])
-def test_a_prefix_that_is_not_a_plain_folder_is_refused(prefix):
-    with pytest.raises(ValueError, match="refusing to delete by prefix"):
-        _check_prefix(prefix)
+async def test_a_prefix_that_is_not_a_plain_folder_is_refused(monkeypatch, prefix):
+    s3 = _s3(monkeypatch, None)
+    for by_prefix in (s3.list_names, s3.delete_prefix):
+        with pytest.raises(ValueError, match="refusing to delete by prefix"):
+            await by_prefix(prefix)
 
 
 @pytest.mark.parametrize("prefix", ["orgs/", "orgs/o/avatars/1/", "/orgs/"])
-def test_a_folder_prefix_is_accepted(prefix):
-    assert _check_prefix(prefix) is None
+async def test_a_folder_prefix_is_accepted(monkeypatch, prefix):
+    client = FakeS3(pages=[{}])
+    assert await _s3(monkeypatch, client).delete_prefix(prefix) == 0
+    assert client.calls == [("paginate", {"Bucket": "bucket", "Prefix": prefix})]
 
 
 # --- get_storage -----------------------------------------------------------------------
@@ -527,14 +536,21 @@ def test_storage_is_local_files_when_r2_is_not_configured(chosen, tmp_path):
     assert type(storage) is LocalStorage
     assert storage.root == tmp_path / "files"
     assert (storage.base_url, storage.secret, storage.expiry_seconds) == (
-        "https://app.example", b"jwt", 900,
+        "https://app.example",
+        b"jwt",
+        900,
     )
 
 
 def test_storage_is_s3_when_r2_is_configured(chosen):
     use, _ = chosen
-    use(r2_endpoint="https://r2.example", r2_access_key="k", r2_secret="s", r2_bucket="b",
-        r2_region="eu")
+    use(
+        r2_endpoint="https://r2.example",
+        r2_access_key="k",
+        r2_secret="s",
+        r2_bucket="b",
+        r2_region="eu",
+    )
     storage = get_storage()
     assert type(storage) is S3Storage
     assert (storage.bucket, storage.expiry_seconds) == ("b", 900)

@@ -93,9 +93,7 @@ async def reprofile_visemes(avatar: Avatar, visemes: bool = True) -> None:
             rig["render_profile"] = profile
         else:
             rig.pop("render_profile", None)
-        await storage.put_bytes(
-            avatar.rig_key, json.dumps(rig).encode(), "application/json"
-        )
+        await storage.put_bytes(avatar.rig_key, json.dumps(rig).encode(), "application/json")
     except STORAGE_ERRORS:
         logger.exception("viseme reprofile failed for avatar %s", avatar.id)
 

@@ -12,12 +12,17 @@
  *   engine/viewport.ts             where it lies: the zoom and the pan
  *   engine/geometry.ts             the mesh laid on the canvas, refined
  *   engine/landmarks.ts            the MediaPipe landmark tables
- *   engine/jaw-rig.ts              the lower face as one rig: jaw, chin, cheeks, neck band
+ *   engine/jaw-rig.ts              the lower face as one rig: jaw, chin, cheeks, and
+ *   engine/neck-band.ts              the neck band below the jaw line
+ *   engine/head-field.ts           the head beyond the face: the hair, the ears, laid
+ *   engine/head-extent.ts            as far as the picture says the head reaches
+ *   engine/head-layer.ts           a cut-out's head cut out as its own layer (opt-in)
  *   engine/kind-profile.ts         what a line of faces (human, toon, animal) changes
  *   engine/sampling.ts             what the picture looks like
  *   engine/face-light.ts           its brightest skin, the teeth's ceiling
  *   engine/face-sharpness.ts       how sharp its edges are
  * Time
+ *   engine/animation.ts            the face, a step at a time: the mouth, the tongue, the motion
  *   engine/cues.ts                 the cue track, read
  *   engine/voice.ts                the voice: cue track, clock, audio (the 3D engine's too)
  *   engine/media-clock.ts          the audio element's own position, as the cue clock
@@ -30,24 +35,33 @@
  *   engine/state.ts                the face state those write
  *   engine/frame-loop.ts           the frame loop (the 3D engine's too)
  * The frame
+ *   engine/head-placement.ts       where the head is: its rigid motion, its turn, the neck
  *   engine/deform.ts               every vertex, this frame, with
- *   engine/head-turn.ts              the head's turn in depth
- *   engine/canonical-face.ts         the depth it is given
+ *   engine/head-turn.ts              the head's turn in depth, from
+ *   engine/head-depth.ts               the depth it is given (canonical-face.ts, fitted)
+ *   engine/head-camera.ts              the turn about the pivot, through the camera
+ *   engine/head-outline.ts             the outline held, and the weights that hold it
+ *   engine/head-field-turn.ts          the head's field turned with the face
+ *   engine/head-fold.ts                the clamp that folds no triangle
  *   engine/neck-blend.ts             a layered avatar's neck, from head to body
  *   engine/render2d.ts             the frame composed: picture, body, head
+ *   engine/affine.ts                 the transforms it composes, as the context does
  *   engine/mesh-warp.ts            the warped mesh, on the GPU or in 2D, with
- *   engine/warp-gl.ts                the GPU path
+ *   engine/warp-gl.ts                the GPU path, and
+ *   engine/warp-mesh.ts                its static mesh
  *   engine/seam-pad.ts               the overlap that hides the seams between triangles
- *   engine/paint-eyes.ts           gaze, lashes, and
- *   engine/blink-lid.ts              the painted lids
- *   engine/paint-mouth.ts          which mouth paints the mouth:
- *   engine/paint-classic-mouth.ts    the drawn mouth and its teeth, in
- *   engine/mouth-aperture.ts         the aperture the lips part to
- *   engine/character-mouth.ts        a character's or an animal's mouth, and
- *   engine/character-paint.ts        its painting
+ *   engine/paint-features.ts       what is painted over the mesh:
+ *   engine/paint-eyes.ts             gaze, lashes, and
+ *   engine/blink-lid.ts                the painted lids
+ *   engine/paint-mouth.ts            which mouth paints the mouth:
+ *   engine/paint-classic-mouth.ts      the drawn mouth and its teeth, in
+ *   engine/mouth-aperture.ts           the aperture the lips part to
+ *   engine/character-mouth.ts          a character's or an animal's mouth, and
+ *   engine/character-paint.ts          its painting
  *   engine/scene.ts                the scene, the backdrop of a cut-out
  *   engine/debug.ts                the debug mesh overlay
  *   engine/debug-handle.ts         the console handle, when a page asks for it
+ *   engine/options.ts              what a page may ask of the engine (EngineOptions)
  *   engine/seam.ts                 what the tests and the 3D bake pose and
  *                                  read; in no bundle
  *
@@ -61,115 +75,35 @@
  */
 import { mergeTraits, type CharacterTraits } from "./engine/character-mouth";
 import { defaultHeadMotion, kindProfile, type KindProfile } from "./engine/kind-profile";
-import type { MouthExtension, MouthPose } from "./mouth-extension";
-import {
-  DEFAULT_TUNING,
-  ZERO_WEIGHTS,
-  type BlendWeights,
-  type Cue,
-  type EngineTuning,
-  type FaceType,
-  type Rig,
-} from "./types";
-import { emphasisBeats, utteranceMs } from "./engine/cues";
-import { drawDebugMesh } from "./engine/debug";
+import type { MouthExtension } from "./mouth-extension";
+import { DEFAULT_TUNING, type Cue, type EngineTuning, type Rig } from "./types";
+import type { Affine } from "./engine/affine";
+import { FaceAnimation } from "./engine/animation";
 import { NO_DEBUG_HANDLE, exposeDebugHandle } from "./engine/debug-handle";
-import { deformFace } from "./engine/deform";
-import { FrameLoop, FrameStep } from "./engine/frame-loop";
+import { deformFace, type FrameVertices } from "./engine/deform";
+import { FrameLoop } from "./engine/frame-loop";
 import { validInnerRing, type Point } from "./engine/geometry";
+import { HeadPlacement } from "./engine/head-placement";
+import type { TurnStats } from "./engine/head-turn";
 import { LANDMARK_COUNT } from "./engine/landmarks";
 import { MeshWarp, type WarpMode } from "./engine/mesh-warp";
-import { YAW_GAIN } from "./engine/head-personality";
-import { HeadTurn, type OutlineBasis, type TurnStats } from "./engine/head-turn";
-import { Motion, type HeadOffset } from "./engine/motion";
-import { NeckWarp, neckBlendFor, neckPin, type NeckPin } from "./engine/neck-blend";
+import { Motion } from "./engine/motion";
+import type { NeckPin } from "./engine/neck-blend";
+import type { EngineOptions, HeadMotionMode } from "./engine/options";
 import { ClassicMouth } from "./engine/paint-classic-mouth";
-import { drawGaze, drawLashes, drawPaintedLids, type EyeSource } from "./engine/paint-eyes";
-import { paintMouthSurface } from "./engine/paint-mouth";
+import { paintFeatures } from "./engine/paint-features";
 import { FacePicture } from "./engine/picture";
-import { composeFrame, headMotionAffine, motionTravel, type Layers } from "./engine/render2d";
-import { Backdrop, type Scene } from "./engine/scene";
-import { SpeechTrack, articulate, easeTongue } from "./engine/speech";
+import { composeFrame, motionTravel, type Layers } from "./engine/render2d";
+import { Backdrop, nextScene, startingScene, type Scene } from "./engine/scene";
+import { SpeechTrack } from "./engine/speech";
 import { restingFace, type FaceState } from "./engine/state";
 
 export { articulationLead, emphasisBeats, prepareCues, type Beat } from "./engine/cues";
 export { hingeShare } from "./engine/deform";
 export type { Point } from "./engine/geometry";
 export type { WarpMode } from "./engine/mesh-warp";
+export type { EngineOptions, HeadMotionMode } from "./engine/options";
 export type { Scene, SceneBackground } from "./engine/scene";
-
-export interface EngineOptions {
-  debugMesh?: boolean;
-  /**
-   * Put this engine on `globalThis.__liveface` for the console and for
-   * measurement scripts (the last engine made wins); `destroy()` takes it
-   * back. Off by default, so a customer's page gets no globals from the
-   * engine: the widget turns it on with `data-debug` on its script tag or
-   * `?liveface-debug` in the page's URL (engine/debug-handle.ts).
-   */
-  debug?: boolean;
-  /** Optional mouth renderer (see mouth/). Omitted means the classic mouth. */
-  mouthExtension?: MouthExtension;
-  pose?: () => MouthPose | null;
-  /** Opt-in lab clock, in audio milliseconds. Omitted by all existing pages. */
-  cueClock?: () => number;
-  /**
-   * The "full" framing: the whole picture, contained and centred. Without
-   * it (or with `zoom` 1) the "face" framing: the picture composed as a
-   * portrait that fills the canvas. Either way the whole picture is drawn;
-   * the two are zoom levels of one viewport (viewport.ts).
-   */
-  fullPhoto?: boolean;
-  /** The zoom directly: 1 the face, 0 the whole picture, between in
-   *  proportion, up to 1.3 closer in. Wins over `scene.zoom` and `fullPhoto`. */
-  zoom?: number;
-  /** The scene the avatar is shown in (zoom, pan, background): what the
-   *  owner set and published. `setScene` changes it live. */
-  scene?: Scene | null;
-  /**
-   * How the mesh is warped: "auto" (the default) draws it on the GPU
-   * (warp-gl.ts) wherever WebGL works and in 2D everywhere else; "2d"
-   * forces the Canvas 2D path, for tests and for comparing the two.
-   */
-  warp?: WarpMode;
-  /**
-   * Move a cut-out's head (a picture with a transparent background, no
-   * published layers) as its own feathered layer over the still body,
-   * instead of the whole picture as one (the default). For comparison
-   * only: the layer's feathered band shows as a boundary through the hair,
-   * the neck and the shoulders whenever the head moves (render2d.ts).
-   * `setCutOutHeadLayer` switches it live. Layered avatars and opaque
-   * pictures are unaffected.
-   */
-  cutOutHeadLayer?: boolean;
-  /**
-   * How the head moves. "3d", the default for a person (faceType "human"):
-   * the face turns in depth inside the mesh, about a pivot between the ears
-   * (engine/head-turn.ts), the hair, the ears and the head's outline with it
-   * (engine/head-field.ts), at most 9 degrees of yaw, 5 of pitch and 3 of
-   * roll, with a procedural personality (engine/head-personality.ts); the
-   * head's rigid motion (the layer, the whole picture, a cut-out's bust)
-   * carries a share of it. "2d", the default for an animal or a cartoon: as
-   * a rigid layer, shifted and rolled a few pixels (render2d.ts), with nods
-   * on the speech's beats. Without a faceType the rig's render profile
-   * decides (kind-profile.ts defaultHeadMotion: none, "3d"; toon@1,
-   * animal@1, animal@2, "2d"). Either may be asked for; `setHeadMotion`
-   * switches it live, and the widget's `data-head-motion` sets it.
-   */
-  headMotion?: HeadMotionMode;
-  /**
-   * What the avatar is: its owner's face type, as the API serves it with
-   * the avatar ("human", "animal" or "cartoon"). It chooses the head
-   * motion's default (headMotion above), which the rig alone cannot: a rig
-   * fitted before render profiles existed names none, an animal's or a
-   * cartoon's included. Omitted (a host from before it was passed), the
-   * rig's profile chooses, as it always did.
-   */
-  faceType?: FaceType | null;
-}
-
-/** EngineOptions.headMotion. */
-export type HeadMotionMode = "2d" | "3d";
 
 export class AvatarEngine {
   private readonly canvas: HTMLCanvasElement;
@@ -180,7 +114,6 @@ export class AvatarEngine {
   private readonly profile: KindProfile;
   /** StrictMode guard: async callbacks bail once destroyed. */
   private destroyed = false;
-  private readonly frameStep = new FrameStep();
   /** Takes the console handle back (EngineOptions.debug). */
   private readonly releaseDebugHandle: () => void;
 
@@ -214,30 +147,44 @@ export class AvatarEngine {
   private readonly speech: SpeechTrack;
   /** Blinks, gaze, the head's drift and nods, the body's sway (motion.ts). */
   private readonly motion = new Motion(this.face);
+  /** The face a step at a time, as the speech goes (animation.ts). */
+  private readonly animation: FaceAnimation;
   /** A mouth renderer that moves and paints the mouth instead (mouth/). */
   private mouthExtension?: MouthExtension;
-  /** A mouth driver's pose, which wins over the cue track's. */
-  private readonly pose?: () => MouthPose | null;
   private readonly frameLoop: FrameLoop;
 
   // --- Drawing -------------------------------------------------------------
 
+  /** Where the head is this frame (head-placement.ts). */
+  private readonly placement: HeadPlacement;
   /** The warped mesh, on the GPU or in 2D (mesh-warp.ts). */
   private readonly meshWarp: MeshWarp;
   /** The classic drawn mouth (paint-classic-mouth.ts). */
   private readonly classicMouth: ClassicMouth;
-  /** The "3d" head motion's turn, fitted to the mesh it was built for, and
-   *  its outline's weights, which serve every viewport of this rig. */
-  private headTurn: HeadTurn | null = null;
-  private headTurnFor: unknown = null;
-  private outlineBasis: OutlineBasis | null = null;
-  /** A layered avatar's neck warp (neck-blend.ts), for the mesh it was
-   *  laid for, and the canvas its layers are drawn on. */
-  private neckWarp: NeckWarp | null = null;
-  private neckWarpFor: unknown = null;
-  private neckScratch: HTMLCanvasElement | null = null;
-  /** This frame turns the face in depth (the "3d" motion, not at rest). */
-  private turning = false;
+  /** The frame's vertices (deform.ts), the engine's own from frame to
+   *  frame: what a frame draws, and hands the painters and a mouth
+   *  extension, is valid for that frame only (mouth-extension.ts). */
+  private readonly vertices: FrameVertices = { landmarks: [], all: [] };
+  /** What composing a frame calls back (render2d.ts), made once rather
+   *  than every frame: the mesh drawn through `affine`, then the features
+   *  over it (paint-features.ts), the sound being made read when asked. */
+  private readonly drawMesh = (affine: Affine) => this.meshWarp.draw(this.ctx, this.vertices.all, affine);
+  private readonly drawFeatures = () =>
+    paintFeatures({
+      ctx: this.ctx,
+      pts: this.vertices.all,
+      picture: this.picture,
+      rig: this.rig,
+      face: this.face,
+      tuning: this.tuning,
+      profile: this.profile,
+      traits: this.traits,
+      extension: this.mouthExtension,
+      classicMouth: this.classicMouth,
+      viseme: this.viseme,
+      debugRing: this.debugMesh ? this.innerRing : null,
+    });
+  private readonly viseme = () => this.animation.visemeNow(performance.now());
 
   constructor(canvas: HTMLCanvasElement, rig: Rig, texture: HTMLImageElement, opts: EngineOptions = {}) {
     this.canvas = canvas;
@@ -254,28 +201,18 @@ export class AvatarEngine {
       onSync: (ms) => this.motion.placeBeatWalker(ms),
       onEnded: () => this.finishSpeech(),
     });
+    this.animation = new FaceAnimation(this.speech, this.motion, this.face, rig.visemes, opts.pose);
     this.mouthExtension = opts.mouthExtension;
-    this.pose = opts.pose;
     this.debugMesh = opts.debugMesh ?? false;
-    // The zoom: the option, else the scene's, else the framing.
-    this.scene = {
-      ...(opts.scene ?? {}),
-      zoom: opts.zoom ?? opts.scene?.zoom ?? (opts.fullPhoto ? 0 : 1),
-    };
+    this.scene = startingScene(opts.scene, opts.zoom, opts.fullPhoto);
     this.backdrop.load(this.scene.background);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     const picture = this.picture;
-    this.meshWarp = new MeshWarp(canvas, opts.warp ?? "auto", rig.mouth_indices, () => ({
-      texture: picture.texture,
-      mesh: picture.mesh,
-      padEverywhere: !!picture.field || picture.samples.look.flat,
-      lowerFace: picture.lowerFace,
-      replace: picture.cutOut,
-      // Turned in depth, the outline is left unpadded (mesh-warp.ts); a face at
-      // rest draws as it always did.
-      unpadOutline: this.turning,
-    }));
+    const placement = (this.placement = new HeadPlacement(rig.triangles));
+    this.meshWarp = new MeshWarp(canvas, opts.warp ?? "auto", rig.mouth_indices, () =>
+      picture.warpSource(placement.turning)
+    );
     this.innerRing = validInnerRing(rig);
     this.classicMouth = new ClassicMouth(ctx, this.profile, this.innerRing);
     this.motion.mode = opts.headMotion ?? defaultHeadMotion(this.profile, opts.faceType);
@@ -293,14 +230,10 @@ export class AvatarEngine {
   }
 
   /**
-   * Switch to the layered render path: real content behind the head.
-   *
-   * The layers are full-frame images aligned to the original photo's pixels
-   * (background may be absent — a cut-out has nothing behind it). With them,
-   * the head moves over the body's own pixels and the body sways over a
-   * still background, so nothing is ever revealed that does not exist —
-   * the punch-out and feathered-cutout machinery of the single-photo path
-   * becomes unnecessary and is simply not used.
+   * Switch to the layered render path: full-frame images aligned to the
+   * photo's pixels, a background (none for a cut-out), the body and the
+   * head. The head moves over the body's own pixels and the body sways over
+   * a still background, so nothing is revealed that does not exist.
    */
   setLayers(layers: { background?: HTMLImageElement; body: HTMLImageElement; head: HTMLImageElement }): void {
     if (this.destroyed) return;
@@ -310,13 +243,10 @@ export class AvatarEngine {
   }
 
   /**
-   * Swap in a sharper copy of the same photo, mid-flight.
-   *
-   * The widget boots on the 256px thumbnail so a face appears immediately,
-   * then upgrades to the full-resolution image when it lands. Everything
-   * sampled or derived from the texture is redone, exactly as loading this
-   * texture would have done it (picture.ts): the mesh, the cut-out probe,
-   * the head layer (if opted into), and what the picture looks like.
+   * Swap in a sharper copy of the same photo, mid-flight: the widget boots
+   * on the 256px thumbnail and upgrades when the full picture lands.
+   * Everything read from the texture is read again, as if it had been the
+   * first (picture.ts lay).
    */
   setTexture(texture: HTMLImageElement): void {
     if (this.destroyed) return;
@@ -325,19 +255,13 @@ export class AvatarEngine {
   }
 
   /**
-   * Change the scene live: the zoom and the pan move the viewport (the
-   * owner dragging the preview, a slider), the background swaps what is
-   * behind a cut-out. A background picture loads in the background and is
-   * drawn once it has; one that fails to load leaves the scene transparent
-   * and never holds the avatar up.
+   * Change the scene live: the zoom and the pan move the viewport, the
+   * background swaps what is behind a cut-out. Its picture loads on the
+   * side; one that fails leaves the scene transparent, never the avatar.
    */
   setScene(scene: Scene | null | undefined): void {
     if (this.destroyed) return;
-    const next: Scene = { ...(scene ?? {}), zoom: scene?.zoom ?? this.scene.zoom ?? 1 };
-    const moved =
-      next.zoom !== this.scene.zoom ||
-      (next.pan?.x ?? 0) !== (this.scene.pan?.x ?? 0) ||
-      (next.pan?.y ?? 0) !== (this.scene.pan?.y ?? 0);
+    const { scene: next, moved } = nextScene(this.scene, scene);
     this.scene = next;
     if (moved) this.picture.lay(this.scene.zoom ?? 1, this.scene.pan, false);
     this.backdrop.load(this.scene.background);
@@ -351,11 +275,8 @@ export class AvatarEngine {
     this.traits = mergeTraits(this.profile.traits, own);
   }
 
-  /**
-   * Stop or restart drawing, e.g. when the avatar scrolls out of view
-   * (frame-loop.ts). Time does not jump on resume: the tick clamps its
-   * step, so the motion carries on rather than lurching.
-   */
+  /** Stop or restart drawing, e.g. when the avatar scrolls out of view
+   *  (frame-loop.ts); the motion carries on from where it was. */
   setActive(active: boolean): void {
     if (this.destroyed) return;
     this.frameLoop.setActive(active);
@@ -374,16 +295,12 @@ export class AvatarEngine {
     this.frameLoop.stop();
     this.speech.destroy();
     this.meshWarp.destroy();
-    // The neck's scratch canvas is the stage's size: give its pixels back.
-    if (this.neckScratch) this.neckScratch.width = this.neckScratch.height = 1;
+    this.placement.destroy();
     this.releaseDebugHandle();
   }
 
-  /**
-   * Choose the warp path live: "2d" for the Canvas 2D triangle loop, "auto"
-   * for the GPU wherever it works. For the lab's side-by-side and for a
-   * page that must not use WebGL.
-   */
+  /** Choose the warp path live: "2d" the Canvas 2D triangle loop, "auto"
+   *  the GPU wherever it works (a side-by-side, a page without WebGL). */
   setWarp(mode: WarpMode): void {
     if (this.destroyed) return;
     this.meshWarp.setMode(mode);
@@ -426,26 +343,21 @@ export class AvatarEngine {
   /** The last "3d" frame's turn: fold counts, the share of the turn the
    *  fold clamp kept, the largest shift. */
   headTurnStats(): Readonly<TurnStats> | null {
-    return this.headTurn?.stats ?? null;
+    return this.placement.stats();
   }
 
   // --- Public speech API -----------------------------------------------------
 
   /**
-   * Play base64 audio with a viseme cue track. Resolves onEnd (also on stop()).
-   *
-   * Without a `cueClock` option (every page but the lab) cue time is the
-   * audio element's own position (media-clock.ts): held at 0 until the voice
-   * is actually playing, re-anchored on `playing` and `seeked`, followed
-   * every frame, and standing still with the mouth closed while the element
-   * is paused. A clock started at play() ran ahead of the voice by however
-   * long the audio took to start, for the whole utterance.
+   * Play base64 audio with a viseme cue track; onEnd runs when it ends, or
+   * is stopped. Without a `cueClock` (every page but the lab) cue time is
+   * the audio element's own position (media-clock.ts): the mouth waits for
+   * the voice however long it takes to start, and rests while it pauses.
    */
   playAudio(audioB64: string, mime: string, cues: Cue[], onEnd?: () => void): void {
     const audio = this.speech.load(audioB64, mime, onEnd ?? null);
     this.speech.begin(cues);
-    this.motion.beginSpeech(performance.now(), utteranceMs(cues), emphasisBeats(this.speech.cues));
-    if (this.motion.mode === "3d") this.motion.setSpeechCues(this.speech.cues);
+    this.animation.begin(performance.now(), cues);
     this.speech.play(audio, cues.length < 4);
   }
 
@@ -456,41 +368,34 @@ export class AvatarEngine {
     this.speech.begin(cues);
     const now = performance.now();
     this.speech.startClock(now);
-    this.motion.beginSpeech(now, utteranceMs(cues), emphasisBeats(this.speech.cues));
-    if (this.motion.mode === "3d") this.motion.setSpeechCues(this.speech.cues);
+    this.animation.begin(now, cues);
   }
 
-  /**
-   * Swap the mouth renderer on a live engine, or pass null for the classic
-   * drawn mouth. Progressive like setLayers: the widget is already animating
-   * on a thumbnail when the mouth bundle and its assets arrive, and an avatar
-   * that waited for them would show nothing in the meantime.
-   */
+  /** Swap the mouth renderer on a live engine (null: the classic mouth).
+   *  Progressive like setLayers: the face animates while the mouth bundle
+   *  and its assets are on their way. */
   setMouthExtension(extension: MouthExtension | null): void {
     this.mouthExtension = extension ?? undefined;
   }
 
-  /** Replace a growing external cue track without restarting articulation. */
+  /** Replace a growing external cue track without restarting articulation:
+   *  the streaming extension's look-ahead, appended without restarting the
+   *  body's motion, the articulation smoother or the speech clock. */
   updateCueTrack(cues: Cue[]): void {
-    // Opt-in streaming extension: append look-ahead without restarting body
-    // motion, the articulation smoother, or the speech clock.
     const time = this.speech.cueTime(performance.now());
     this.speech.replaceCues(cues);
-    this.motion.setBeats(emphasisBeats(this.speech.cues), time);
-    if (this.motion.mode === "3d") this.motion.setSpeechCues(this.speech.cues, time);
+    this.animation.retrack(time);
   }
 
   /** Re-align the cue clock to a known position in the track (ms). */
   syncCueTime(ms: number): void {
     this.speech.seek(ms, performance.now());
-    this.motion.placeBeatWalker(ms);
-    if (this.motion.mode === "3d") this.motion.setSpeechCues(this.speech.cues, ms);
+    this.animation.resync(ms);
   }
 
   stopSpeech(): void {
     this.speech.stop();
-    this.face.targetWeights = { ...ZERO_WEIGHTS };
-    this.motion.endSpeech(performance.now());
+    this.animation.end(performance.now());
   }
 
   isSpeaking(): boolean {
@@ -500,172 +405,53 @@ export class AvatarEngine {
   /** The voice ended on its own: as stopSpeech, then the caller's onEnd. */
   private finishSpeech(): void {
     const onEnd = this.speech.finish();
-    this.face.targetWeights = { ...ZERO_WEIGHTS };
-    this.motion.endSpeech(performance.now());
+    this.animation.end(performance.now());
     if (onEnd && !this.destroyed) onEnd();
   }
 
-  // --- Animation tick --------------------------------------------------------
+  // --- The frame ---------------------------------------------------------------
 
-  /** The cue track's co-articulated shape now, or rest when the voice is
-   *  paused (SpeechTrack.blendedWeights). */
-  private blendedCueWeights(now: number): BlendWeights {
-    return this.speech.blendedWeights(now, this.rig.visemes, this.tuning.smoothness);
-  }
-
-  /** The sound being made now: a mouth driver's, else the cue track's. */
-  private visemeNow(now: number): string {
-    return this.pose?.()?.viseme ?? this.speech.currentViseme(now);
-  }
-
+  /** One animation step at frame time `now` (animation.ts); no drawing. */
   private tick(now: number): void {
-    const speech = this.speech;
-    const face = this.face;
-    // Viseme targets: co-articulated blend across cues (+ amplitude
-    // fallback when the track is silent but audio clearly isn't).
-    const visemeWeights =
-      this.pose?.()?.weights ?? (speech.speaking ? this.blendedCueWeights(now) : { ...ZERO_WEIGHTS });
-    const silent = speech.speaking && speech.currentViseme(now) === "sil";
-    if (silent) {
-      const amp = speech.amplitude();
-      if (amp > 0.06) visemeWeights.jawOpen = Math.min(0.5, amp * 1.2);
-    }
-    // Waiting for the voice to start is not a pause in it. Cue time holds at
-    // 0 until the audio plays, which takes hundreds of ms on a phone, and a
-    // greeting that opens on /h/ is silence at 0: counted as a pause, it
-    // began with a breath, a blink and a glance away before the first word.
-    this.motion.notePause(now, silent && !speech.awaitingVoice());
-    face.targetWeights = visemeWeights;
-
-    // The frame's step, clamped (frame-loop.ts).
-    const dt = this.frameStep.next(now);
-    articulate(face.weights, face.targetWeights, dt, this.tuning.smoothness);
-
-    if (this.picture.field) face.tongue = easeTongue(face.tongue, this.visemeNow(now), dt);
-
-    this.motion.headScale = this.tuning.headMotion;
-    this.motion.update(dt, now, {
-      speaking: speech.speaking,
-      wordActive: speech.speaking && !silent,
-      energy: speech.speaking
-        ? Math.min(1, face.weights.jawOpen + face.weights.mouthStretch * 0.5 + speech.amplitude())
-        : 0,
-      cueTime: () => speech.cueTime(now),
-    });
+    this.animation.step(now, this.tuning, !!this.picture.field);
   }
 
-  // --- Deformation -----------------------------------------------------------
-
-  /** Every mesh vertex this frame (deform.ts). */
-  private deformedPoints(turn?: (pts: Point[]) => void, pin?: NeckPin | null, head?: (pts: Point[]) => void): Point[] {
+  /** Every mesh vertex this frame (deform.ts): into `into`, the frame's
+   *  own; without it (the seam's callers, which keep what they read), new
+   *  vertices. */
+  private deformedPoints(
+    turn?: (pts: Point[]) => void,
+    pin?: NeckPin | null,
+    head?: (pts: Point[]) => void,
+    into?: FrameVertices
+  ): Point[] {
     const picture = this.picture;
-    return deformFace({
-      turn,
-      pin,
-      head,
-      rig: this.rig,
-      mesh: picture.mesh,
-      innerRing: this.innerRing,
-      face: this.face,
-      tuning: this.tuning,
-      profile: this.profile,
-      field: picture.field,
-      traits: this.traits,
-      lowerFace: picture.lowerFace,
-      mouthExtension: this.mouthExtension,
-    });
-  }
-
-  // --- Rendering ---------------------------------------------------------------
-
-  /**
-   * The "3d" head motion's frame: the rigid motion's share of the turn, and
-   * the turn of the face inside the mesh, which makes up the rest, the hair
-   * and the head's outline with it (the head's field, head-field.ts, laid
-   * when the picture could be read). Where the field ends the picture goes
-   * with the rigid motion, so what the rigid motion does not carry of the
-   * head's roll is not seen: a roll, an affine motion of the whole head, is
-   * the rigid motion's alone. Half the skull's travel (its yaw's as at a 7
-   * degree limit) and 40% of the roll move a layered avatar's
-   * head, which hands the motion over to the body down the neck
-   * (neck-blend.ts); a cut-out's bust leans by half the travel and 30% of
-   * the roll (render2d.ts applyBustTransform); an opaque photo moves whole,
-   * background and all, so a third of the travel and a fifth of the roll
-   * (its edge, in the whole framing, tilts by that: at most 0.6 degrees,
-   * as today's motion's does).
-   */
-  private headFrame3d(): {
-    offset: HeadOffset;
-    turn: ((pts: Point[]) => void) | undefined;
-    head: ((pts: Point[]) => void) | undefined;
-  } {
-    const picture = this.picture;
-    const geom = picture.headGeom;
-    if (this.headTurnFor !== picture.mesh) {
-      this.headTurnFor = picture.mesh;
-      this.headTurn = HeadTurn.build(picture.mesh, this.rig.triangles, this.outlineBasis);
-      if (this.headTurn) this.outlineBasis = this.headTurn.basis;
-    }
-    const turner = this.headTurn;
-    const { pose, brow } = this.motion.pose3d(this.tuning.headMotion);
-    const still: HeadOffset = { dx: 0, dy: 0, roll: 0, fdx: 0, fdy: 0 };
-    if (!turner || !geom) return { offset: still, turn: undefined, head: undefined };
-    const layered = !!this.layers;
-    const share = layered || picture.cutOut ? 0.5 : 0.35;
-    const rollShare = layered ? 0.4 : picture.cutOut ? 0.3 : 0.2;
-    const skull = turner.skullShift(pose);
-    const offset: HeadOffset = {
-      // The rigid motion follows the skull's yaw as far as it did at a 7
-      // degree limit: the two degrees more (YAW_GAIN) are the face's and the
-      // hair's alone (head-field.ts), so the body, the shoulders and the
-      // picture's edge move no more than they did.
-      dx: (skull.x * share) / YAW_GAIN,
-      dy: skull.y * share,
-      roll: pose.roll * rollShare,
-      fdx: 0,
-      fdy: 0,
-    };
-    // The turn takes out the rigid motion's shift (or lean); its roll turns
-    // the face and the outline alike (head-turn.ts apply).
-    const rigid = headMotionAffine(geom, { ...offset, roll: 0 }, picture.cutOut && !layered);
-    const quiet = Math.abs(pose.yaw) + Math.abs(pose.pitch) + brow < 1e-6;
-    return {
-      offset,
-      turn: quiet ? undefined : (pts) => turner.apply(pts, pose, rigid, brow),
-      // The head's field (head-field.ts) turns with the face, by the turn
-      // just applied to it.
-      head: quiet || !turner.head ? undefined : (pts) => turner.field(pts),
-    };
-  }
-
-  /**
-   * A layered avatar's neck this frame (neck-blend.ts): the warp the body
-   * and head layers are drawn through and the neck band is placed by, for
-   * the head moved by `offset` relative to the body; null for any other
-   * picture, and while the head rests on its body.
-   */
-  private neckFor(offset: HeadOffset): NeckPin | null {
-    const picture = this.picture;
-    const geom = picture.headGeom;
-    if (!this.layers || !geom) return null;
-    if (this.neckWarpFor !== picture.mesh) {
-      this.neckWarpFor = picture.mesh;
-      const blend = neckBlendFor(picture.mesh);
-      this.neckWarp = blend ? new NeckWarp(blend, picture.mesh.picture) : null;
-    }
-    if (!this.neckWarp || (!offset.dx && !offset.dy && !offset.roll)) return null;
-    return neckPin(this.neckWarp, headMotionAffine(geom, offset, false));
+    return deformFace(
+      {
+        turn,
+        pin,
+        head,
+        rig: this.rig,
+        mesh: picture.mesh,
+        innerRing: this.innerRing,
+        face: this.face,
+        tuning: this.tuning,
+        profile: this.profile,
+        field: picture.field,
+        traits: this.traits,
+        lowerFace: picture.lowerFace,
+        mouthExtension: this.mouthExtension,
+      },
+      into
+    );
   }
 
   private render(): void {
     const ctx = this.ctx;
     const picture = this.picture;
     const travel = motionTravel(!!this.layers, picture.cutOut, this.tuning);
-    const head3d = this.motion.mode === "3d" ? this.headFrame3d() : null;
-    const headOffset = head3d?.offset ?? this.motion.headOffset(picture.headGeom, travel.head);
-    const neck = this.neckFor(headOffset);
-    this.turning = !!head3d?.turn;
-    const pts = this.deformedPoints(head3d?.turn, neck, head3d?.head);
+    const head = this.placement.place(picture, this.motion, !!this.layers, this.tuning.headMotion, travel.head);
+    this.deformedPoints(head.turn, head.neck, head.head, this.vertices);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     composeFrame({
       ctx,
@@ -676,40 +462,15 @@ export class AvatarEngine {
       head: picture.headGeom,
       // A cut-out's head layer (opted into) is not used in 3D: the bust
       // leans and the face turns inside the mesh.
-      headLayer: head3d ? null : picture.headLayer,
-      headOffset,
+      headLayer: this.motion.mode === "3d" ? null : picture.headLayer,
+      headOffset: head.offset,
       bodyLean: this.motion.bodyLean(travel.body),
-      neck: neck ? { warp: neck.warp, scratch: (this.neckScratch ??= document.createElement("canvas")) } : null,
-      drawMesh: (affine) => this.meshWarp.draw(ctx, pts, affine),
-      drawFeatures: () => this.paintFeatures(pts),
+      neck: head.neck ? { warp: head.neck.warp, scratch: this.placement.neckCanvas() } : null,
+      drawMesh: this.drawMesh,
+      drawFeatures: this.drawFeatures,
     });
     // The scene's background last, still, BEHIND the finished picture
     // (scene.ts).
     this.backdrop.draw(ctx, this.scene.background, picture.cutOut, this.canvas);
-  }
-
-  /** Everything painted over the warped mesh, in the head's frame: the
-   *  eyes, the lids or the lashes, the mouth, the debug mesh. */
-  private paintFeatures(pts: Point[]): void {
-    const ctx = this.ctx;
-    const { texture, mesh, samples } = this.picture;
-    const eyes: EyeSource = { texture, texPoints: mesh.texPoints };
-    drawGaze(ctx, pts, eyes, this.face.gaze);
-    if (this.profile.blink === "lid") drawPaintedLids(ctx, pts, eyes, this.face.blink, this.tuning.blink, samples);
-    else drawLashes(ctx, pts, this.face.blink, samples.lashColour);
-    paintMouthSurface({
-      ctx,
-      pts,
-      picture: this.picture,
-      rig: this.rig,
-      face: this.face,
-      tuning: this.tuning,
-      profile: this.profile,
-      traits: this.traits,
-      extension: this.mouthExtension,
-      classicMouth: this.classicMouth,
-      viseme: () => this.visemeNow(performance.now()),
-    });
-    if (this.debugMesh) drawDebugMesh(ctx, pts, mesh.triangles, this.innerRing);
   }
 }

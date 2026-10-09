@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/FieldError";
 import { Input } from "@/components/ui/Input";
 import { useIntegrations, useSaveIntegrations, useTestIntegration } from "@/features/settings/api";
+import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/errorMessage";
 import type { Integration } from "@/lib/types";
 
@@ -25,7 +26,7 @@ const FIELD_LABELS: Record<string, string> = {
  * tested on demand. Owners only.
  */
 export function ProvidersCard({ orgId, kind }: { orgId: string; kind: "voice" | "image" | "model" }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [testResult, setTestResult] = useState<Record<string, string>>({});
   const { data: integrations } = useIntegrations(orgId);
@@ -60,7 +61,7 @@ export function ProvidersCard({ orgId, kind }: { orgId: string; kind: "voice" | 
   return (
     <Card as="section">
       <CardHeader className="mb-4" title={t(`${kind}Providers`)} description={t(`${kind}ProvidersHint`)} />
-      {save.error && <p className="field-error mb-3">{errorMessage(save.error, t("error"))}</p>}
+      {save.error && <FieldError className="mb-3">{errorMessage(save.error, t("error"))}</FieldError>}
       <div className="flex flex-col gap-5">
         {integrations
           ?.filter((i) => i.kind === kind)

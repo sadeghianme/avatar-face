@@ -45,9 +45,7 @@ class _PresentingRoute(APIRoute):
 # One router for the whole package: each module registers its routes on it,
 # so they are wrapped by the route class exactly as when they were one
 # module (sub-routers included here would wrap every route once more).
-router = APIRouter(
-    prefix="/orgs/{org_id}/avatars", tags=["avatars"], route_class=_PresentingRoute
-)
+router = APIRouter(prefix="/orgs/{org_id}/avatars", tags=["avatars"], route_class=_PresentingRoute)
 
 
 def one_edit_at_a_time[R](route: Callable[..., Awaitable[R]]) -> Callable[..., Awaitable[R]]:

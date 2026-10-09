@@ -3,7 +3,7 @@ import { useMemo } from "react";
 
 import { api } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
-import type { Avatar } from "@/lib/types";
+import type { Avatar, Schemas, WithDefaults } from "@/lib/types";
 
 /** Still being built: the rig pipeline is running. */
 const building = (status: string | undefined) => status === "pending" || status === "processing";
@@ -74,11 +74,7 @@ export function useAvatarCache(orgId: string, avatarId: string) {
 }
 
 /** The draft settings a PATCH takes (each panel sends its own). */
-export type AvatarPatch = Partial<Pick<Avatar, "name" | "voice">> & {
-  mouth?: unknown;
-  scene?: unknown;
-  character?: unknown;
-};
+export type AvatarPatch = Schemas["AvatarUpdate"];
 
 /**
  * A draft edit. By default the answer is merged (a setting); `refetch`
@@ -134,7 +130,10 @@ export const useAvatarBackground = (orgId: string, avatarId: string) =>
   useAvatarAction(
     orgId,
     avatarId,
-    (remove: boolean) => api.post(`${avatarPath(orgId, avatarId)}/background`, { remove }),
+    (remove: boolean) =>
+      api.post<Avatar>(`${avatarPath(orgId, avatarId)}/background`, {
+        remove,
+      } satisfies Schemas["app__api__avatars__photo__BackgroundRequest"]),
     { list: false }
   );
 
@@ -150,8 +149,8 @@ export const useCropAvatar = (orgId: string, avatarId: string) =>
   useAvatarAction(
     orgId,
     avatarId,
-    (rect: { x: number; y: number; width: number; height: number }) =>
-      api.post(`${avatarPath(orgId, avatarId)}/crop`, rect),
+    (rect: WithDefaults<Schemas["CropRequest"], "reset">) =>
+      api.post<Avatar>(`${avatarPath(orgId, avatarId)}/crop`, rect),
     { list: false }
   );
 

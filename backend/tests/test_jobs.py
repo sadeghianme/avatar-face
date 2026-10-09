@@ -107,7 +107,9 @@ def test_a_counted_stage_says_how_far_it_is_and_the_next_label_forgets_it():
     job.report(0.6, "making the mouth shapes", count=(0, 6))
     job.report(0.7, count=(3, 6))
     assert job.progress() == {
-        "fraction": 0.7, "label": "making the mouth shapes", "count": {"done": 3, "total": 6},
+        "fraction": 0.7,
+        "label": "making the mouth shapes",
+        "count": {"done": 3, "total": 6},
     }
     job.report(0.9, "fitting the mouth")
     assert job.progress()["count"] is None
@@ -128,7 +130,7 @@ def test_the_cpu_thread_caps_opencv(monkeypatch):
 
     calls = []
     monkeypatch.setattr(cv2, "setNumThreads", calls.append)
-    jobs._limit_cpu_thread()
+    jobs.limit_cpu_thread()
     assert calls == [1]
 
 

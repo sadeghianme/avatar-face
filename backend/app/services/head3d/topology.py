@@ -14,6 +14,7 @@ a blink moves the lid vertices over the eye texture.
 Landmarks 468..477 (the irises) have no triangles of their own; they are
 kept as vertices so morph deltas keep the 2D engine's indexing.
 """
+
 from __future__ import annotations
 
 import json
@@ -31,10 +32,12 @@ NUM_MESH_VERTICES = 468
 
 # MediaPipe's face oval, from the forehead clockwise in the image (the same
 # order the 2D engine's jaw rig walks it).
+# fmt: off
 FACE_OVAL = [
     10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377,
     152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
 ]
+# fmt: on
 # The lip rows, corner to corner, inner row first (jaw-rig.ts).
 UPPER_LIP_ROWS = [
     [191, 80, 81, 82, 13, 312, 311, 310, 415],
@@ -49,9 +52,9 @@ LOWER_LIP_ROWS = [
     [146, 91, 181, 84, 17, 314, 405, 321, 375],
 ]
 LIP_CORNERS = [61, 76, 62, 78, 291, 306, 292, 308]
-LIP_VERTICES = frozenset(
-    i for row in UPPER_LIP_ROWS + LOWER_LIP_ROWS for i in row
-) | frozenset(LIP_CORNERS)
+LIP_VERTICES = frozenset(i for row in UPPER_LIP_ROWS + LOWER_LIP_ROWS for i in row) | frozenset(
+    LIP_CORNERS
+)
 
 # Lid rings: image-left eye (the subject's right) and image-right eye.
 LEFT_EYE_RING = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]
@@ -68,12 +71,33 @@ UPPER_INNER_LIP, LOWER_INNER_LIP = 13, 14
 CHEEK_LANDMARKS = [50, 280, 205, 425, 101, 330]
 
 __all__ = [
-    "CHEEK_LANDMARKS", "CHIN", "EAR_LEFT", "EAR_RIGHT", "FACE_OVAL", "FOREHEAD", "INNER_LIP_RING",
-    "LEFT_EYE_RING", "LIP_CORNERS", "LIP_VERTICES", "LOWER_INNER_LIP", "LOWER_LIP_ROWS",
-    "MOUTH_LEFT", "MOUTH_RIGHT", "NOSE_TIP", "NUM_LANDMARKS", "NUM_MESH_VERTICES",
-    "OUTER_LIP_RING", "RIGHT_EYE_RING", "UPPER_INNER_LIP", "UPPER_LIP_ROWS",
-    "canonical_shape", "canonical_uv", "canonical_triangles", "face_triangles",
-    "mouth_fill_triangles", "vertex_neighbours",
+    "CHEEK_LANDMARKS",
+    "CHIN",
+    "EAR_LEFT",
+    "EAR_RIGHT",
+    "FACE_OVAL",
+    "FOREHEAD",
+    "INNER_LIP_RING",
+    "LEFT_EYE_RING",
+    "LIP_CORNERS",
+    "LIP_VERTICES",
+    "LOWER_INNER_LIP",
+    "LOWER_LIP_ROWS",
+    "MOUTH_LEFT",
+    "MOUTH_RIGHT",
+    "NOSE_TIP",
+    "NUM_LANDMARKS",
+    "NUM_MESH_VERTICES",
+    "OUTER_LIP_RING",
+    "RIGHT_EYE_RING",
+    "UPPER_INNER_LIP",
+    "UPPER_LIP_ROWS",
+    "canonical_shape",
+    "canonical_uv",
+    "canonical_triangles",
+    "face_triangles",
+    "mouth_fill_triangles",
+    "vertex_neighbours",
 ]
 
 

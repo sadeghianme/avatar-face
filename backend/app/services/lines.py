@@ -32,17 +32,32 @@ class LineRules:
 
 LINES: dict[str, LineRules] = {
     "human": LineRules(
-        detector="mediapipe", background_removal=True, layers=True, one_click=True,
+        detector="mediapipe",
+        background_removal=True,
+        layers=True,
+        one_click=True,
         marks=("head", "left_eye", "right_eye", "mouth", "left_pupil", "right_pupil"),
     ),
     "cartoon": LineRules(
-        detector="mediapipe", background_removal=False, layers=False, one_click=True,
+        detector="mediapipe",
+        background_removal=False,
+        layers=False,
+        one_click=True,
         marks=(
-            "head", "left_eye", "right_eye", "mouth_line", "chin", "left_pupil", "right_pupil",
+            "head",
+            "left_eye",
+            "right_eye",
+            "mouth_line",
+            "chin",
+            "left_pupil",
+            "right_pupil",
         ),
     ),
     "animal": LineRules(
-        detector="template", background_removal=False, layers=False, one_click=False,
+        detector="template",
+        background_removal=False,
+        layers=False,
+        one_click=False,
         marks=("head", "left_eye", "right_eye", "mouth_line", "chin"),
     ),
 }

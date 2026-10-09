@@ -5,6 +5,7 @@ morph-target names so the client engine knows whether the model can
 lip-sync (it needs ARKit/Oculus blendshapes, e.g. a Ready Player Me
 avatar's viseme_* / eyeBlink* targets).
 """
+
 from __future__ import annotations
 
 import io
@@ -16,9 +17,21 @@ from PIL import Image, ImageDraw
 GLB_MAGIC = b"glTF"
 # The 15 Oculus visemes as morph-target names (Ready Player Me convention).
 VISEME_MORPHS = [
-    "viseme_sil", "viseme_PP", "viseme_FF", "viseme_TH", "viseme_DD",
-    "viseme_kk", "viseme_CH", "viseme_SS", "viseme_nn", "viseme_RR",
-    "viseme_aa", "viseme_E", "viseme_I", "viseme_O", "viseme_U",
+    "viseme_sil",
+    "viseme_PP",
+    "viseme_FF",
+    "viseme_TH",
+    "viseme_DD",
+    "viseme_kk",
+    "viseme_CH",
+    "viseme_SS",
+    "viseme_nn",
+    "viseme_RR",
+    "viseme_aa",
+    "viseme_E",
+    "viseme_I",
+    "viseme_O",
+    "viseme_U",
 ]
 
 

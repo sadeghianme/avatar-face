@@ -1,6 +1,7 @@
 import type { AvatarEngine } from "@liveface/embed";
 import { AudioClockComparison } from "@liveface/embed/lab/audio-clock";
 import { StreamingAudioComparison } from "@liveface/embed/lab/streaming-audio-clock";
+import { SpeechError, speechErrorOfFrame } from "@liveface/embed/speech-error";
 import {
   bufferedRecording,
   SpeechAssembly,
@@ -11,6 +12,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { streamLipSync, synthesizeLipSync } from "@/features/lab/api";
 import type { VoiceSelection } from "@/features/voices";
+import { useT } from "@/i18n";
+import { ApiError } from "@/lib/api";
+import { speechFailure } from "@/lib/speechError";
 
 export function useLipSyncComparison(
   orgId: string,
@@ -18,6 +22,7 @@ export function useLipSyncComparison(
   improved: AvatarEngine | null,
   sameTiming = false
 ) {
+  const { t } = useT();
   const player = useRef<AudioClockComparison | null>(null);
   const stream = useRef<StreamingAudioComparison | null>(null);
   const request = useRef<AbortController | null>(null);
@@ -162,8 +167,8 @@ export function useLipSyncComparison(
       let complete = false;
       for await (const event of speechEvents(response.body)) {
         if (token !== generation.current) return;
-        if (event.type === "error")
-          throw new Error(typeof event.detail === "string" ? event.detail : "Speech streaming failed");
+        // The server's reason, with its code (speechErrorOfFrame).
+        if (event.type === "error") throw speechErrorOfFrame(event);
         if (
           event.type === "start" &&
           !streamMode &&
@@ -214,9 +219,14 @@ export function useLipSyncComparison(
         setError(
           timedOut
             ? "Speech preparation timed out. Please try again."
-            : reason instanceof Error
-              ? reason.message
-              : "Playback failed"
+            : // A refusal (the request's, or one inside the stream) in the
+              // member's words where the dashboard has them; the lab's own
+              // failures say what they are.
+              reason instanceof ApiError || reason instanceof SpeechError
+              ? speechFailure(t, reason).text
+              : reason instanceof Error
+                ? reason.message
+                : "Playback failed"
         );
         setPlaying(false);
         setPaused(false);

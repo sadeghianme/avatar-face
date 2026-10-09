@@ -22,13 +22,13 @@ from app.services.mouth_kit.calls import (
     SHAPE_COUNT,
     SHAPES_LABEL,
     TEETH_LABEL,
-    _note,
     generated_count,
     make,
+    note,
     progress_to,
 )
-from app.services.mouth_kit.records import _TEETH_NOTE_CODES
-from app.services.mouth_kit.storing import _load_avatar, store
+from app.services.mouth_kit.records import TEETH_NOTE_CODES
+from app.services.mouth_kit.storing import load_avatar, store
 from app.services.publishing import mark_dirty
 from app.services.storage import get_storage
 from app.services.usage import check_image_limit
@@ -42,18 +42,26 @@ JOB_STEP = "mouth_kit"
 # in memory like every job's (services.jobs); what a job leaves is in the
 # draft. A restart forgets both, and the panel, holding the job id it
 # started, reads a record that is not its job's as "interrupted".
-_ended: OrderedDict[str, dict] = OrderedDict()
+ended: OrderedDict[str, dict] = OrderedDict()
 ENDED_KEPT = 256
 
 # A failure asking again would repeat, until something changes.
-NOT_RETRYABLE = frozenset({
-    "third_party_ai_disabled", "imagegen_unavailable", "landmarks_unavailable",
-    "mouth_not_for_face_type", "not_a_photo", "source_gone", "avatar_not_found",
-    "safety_refused", "image_limit_reached",
-})
+NOT_RETRYABLE = frozenset(
+    {
+        "third_party_ai_disabled",
+        "imagegen_unavailable",
+        "landmarks_unavailable",
+        "mouth_not_for_face_type",
+        "not_a_photo",
+        "source_gone",
+        "avatar_not_found",
+        "safety_refused",
+        "image_limit_reached",
+    }
+)
 
 
-def _job_out(job: Job, state: str, error: dict | None = None) -> dict:
+def job_out(job: Job, state: str, error: dict | None = None) -> dict:
     """A job as JobOut shows it (schemas.creation)."""
     active = state not in (DONE, FAILED)
     return {
@@ -72,15 +80,15 @@ def job_view(avatar_id: str) -> dict | None:
     it ended, or None when this process ran none for it."""
     live = runner.active_for(avatar_id)
     if live is not None and live.step == JOB_STEP:
-        return _job_out(live, live.state)
-    return _ended.get(avatar_id)
+        return job_out(live, live.state)
+    return ended.get(avatar_id)
 
 
-def _end(job: Job, state: str, error: dict | None = None) -> None:
-    _ended[job.subject_id] = _job_out(job, state, error)
-    _ended.move_to_end(job.subject_id)
-    while len(_ended) > ENDED_KEPT:
-        _ended.popitem(last=False)
+def record_end(job: Job, state: str, error: dict | None = None) -> None:
+    ended[job.subject_id] = job_out(job, state, error)
+    ended.move_to_end(job.subject_id)
+    while len(ended) > ENDED_KEPT:
+        ended.popitem(last=False)
 
 
 def start(avatar, consent_id: str) -> dict:
@@ -94,26 +102,26 @@ def start(avatar, consent_id: str) -> dict:
         )
     job = runner.reserve(avatar.org_id, avatar.id, JOB_STEP, 0)
     params = {"consent_id": consent_id}
-    _ended.pop(avatar.id, None)
-    runner.start(job, lambda j: _run(j, params))
-    return _job_out(job, QUEUED)
+    ended.pop(avatar.id, None)
+    runner.start(job, lambda j: run_job(j, params))
+    return job_out(job, QUEUED)
 
 
-async def _run(job: Job, params: dict) -> None:
+async def run_job(job: Job, params: dict) -> None:
     try:
-        await _make_for_avatar(job, params)
+        await make_for_avatar(job, params)
     except AppError as exc:
         logger.info("mouth kit %s for avatar %s failed: %s", job.id, job.subject_id, exc.detail)
-        _end(job, FAILED, {"code": exc.code, "detail": exc.detail})
+        record_end(job, FAILED, {"code": exc.code, "detail": exc.detail})
     except Exception:
         # Broad on purpose: the job boundary; the panel is told it failed.
         logger.exception("mouth kit %s for avatar %s crashed", job.id, job.subject_id)
-        _end(job, FAILED, {"code": "job_failed", "detail": "Something went wrong; try again"})
+        record_end(job, FAILED, {"code": "job_failed", "detail": "Something went wrong; try again"})
     else:
-        _end(job, DONE)
+        record_end(job, DONE)
 
 
-def _require_person(avatar) -> None:
+def require_person(avatar) -> None:
     """What the panel's action needs of the avatar, again at run time: a
     ready photo avatar of a person, with its picture and rig."""
     if avatar is None:
@@ -129,7 +137,7 @@ def _require_person(avatar) -> None:
         raise Conflict409("The avatar's picture is gone", code="source_gone")
 
 
-async def _make_for_avatar(job: Job, params: dict) -> None:
+async def make_for_avatar(job: Job, params: dict) -> None:
     """The Mouth panel's action on an existing avatar: its kit, made from
     its picture and its rig as they are now, and stored as a draft edit
     (the owner publishes). Teeth the owner uploaded are kept, and not asked
@@ -141,13 +149,14 @@ async def _make_for_avatar(job: Job, params: dict) -> None:
     storage = get_storage()
     # Read again now: the job may have waited behind others.
     async with get_session_factory()() as db:
-        avatar = await _load_avatar(db, org_id, avatar_id)
-        _require_person(avatar)
+        avatar = await load_avatar(db, org_id, avatar_id)
+        require_person(avatar)
         picture_key, rig_key = avatar.image_key, avatar.rig_key
         config = mouth.load(avatar.mouth_config) or {}
-        own_teeth = bool(config.get("oral_image_key")) and (
-            (config.get("teeth") or {}).get("source") or "upload"
-        ) == "upload"
+        own_teeth = (
+            bool(config.get("oral_image_key"))
+            and ((config.get("teeth") or {}).get("source") or "upload") == "upload"
+        )
         if await ai_switched_off(org_id):
             raise Forbidden403(
                 "Your organization turned off third-party AI, so nothing was sent",
@@ -168,7 +177,7 @@ async def _make_for_avatar(job: Job, params: dict) -> None:
         # a refusal or a rejected answer still sent a photo, and an audit
         # must find what allowed it. Not a change a visitor sees.
         async with avatar_edits.hold(avatar_id), get_session_factory()() as db:
-            row = await _load_avatar(db, org_id, avatar_id)
+            row = await load_avatar(db, org_id, avatar_id)
             if row is not None:
                 row.consent_ids = consent.with_consent(row.consent_ids, consent_id)
                 await db.commit()
@@ -176,15 +185,18 @@ async def _make_for_avatar(job: Job, params: dict) -> None:
     job.report(0.05, SHAPES_LABEL, count=(0, SHAPE_COUNT + (0 if own_teeth else 1)))
     try:
         result = await make(
-            org_id, picture, points, teeth=not own_teeth, job=job, on_first_send=sending,
+            org_id,
+            picture,
+            points,
+            teeth=not own_teeth,
+            job=job,
+            on_first_send=sending,
             on_progress=progress_to(job, 0.05, 0.85),
         )
     except (performance_kit.KitUnavailable, ValueError) as exc:
         code = getattr(exc, "code", "kit_unavailable")
         if own_teeth:
-            raise Conflict409(
-                getattr(exc, "detail", None) or str(exc), code=code
-            ) from exc
+            raise Conflict409(getattr(exc, "detail", None) or str(exc), code=code) from exc
         logger.info("mouth kit %s: no kit on this server (%s); the teeth alone", job.id, code)
         await _teeth_alone(job, org_id, avatar_id, picture, sending)
         return
@@ -192,20 +204,23 @@ async def _make_for_avatar(job: Job, params: dict) -> None:
         # None of the person's own shapes: the owner's request failed, and
         # the draft keeps what it has (shapes of an earlier kit on this
         # face are better than none; its teeth, whatever came back).
-        raise _nothing_made(result)
+        raise nothing_made(result)
 
     job.report(0.88, FIT_LABEL)
     async with avatar_edits.hold(avatar_id), get_session_factory()() as db:
-        avatar = await _load_avatar(db, org_id, avatar_id)
+        avatar = await load_avatar(db, org_id, avatar_id)
         if avatar is None:
             return
-        _require_mouth(avatar)
+        require_mouth(avatar)
         rig = json.loads(await storage.get_bytes(avatar.rig_key))
         if rig.get("points") != points or rig.get("image_size") != manifest_size(result):
             # Re-marked, re-detected or cropped meanwhile: the same face,
             # and the kit follows it (follow_points).
             result.manifest = await run_cpu(
-                performance_kit.rebase_manifest, result.manifest, rig["points"], None,
+                performance_kit.rebase_manifest,
+                result.manifest,
+                rig["points"],
+                None,
                 tuple(rig["image_size"]),
             )
         stale = await store(avatar, storage, result, source="mouth_panel")
@@ -221,7 +236,7 @@ def manifest_size(result: performance_kit.KitResult) -> list[int]:
     return list(result.manifest["frame"]["image_size"])
 
 
-def _require_mouth(avatar) -> None:
+def require_mouth(avatar) -> None:
     """What storing a kit needs of the avatar, however long its calls took:
     a face the photographic mouth is for, with its picture and rig. Its
     picture may have been cropped meanwhile, or its points re-marked or
@@ -235,14 +250,15 @@ def _require_mouth(avatar) -> None:
         raise Conflict409("The avatar's picture is gone", code="source_gone")
 
 
-def _nothing_made(result: performance_kit.KitResult) -> AppError:
+def nothing_made(result: performance_kit.KitResult) -> AppError:
     """The job's failure when the kit made none of the six shapes: why the
     calls stopped or were refused, else the first shape's reason (a check
     every answer failed)."""
     reasons = [reason for entry in result.report.values() if (reason := entry.get("reason"))]
-    stopped = next((r for r in reasons if r["code"] in _TEETH_NOTE_CODES), None)
-    reason = stopped or (reasons[0] if reasons else _note(
-        "provider_error", "The AI service did not return an image"))
+    stopped = next((r for r in reasons if r["code"] in TEETH_NOTE_CODES), None)
+    reason = stopped or (
+        reasons[0] if reasons else note("provider_error", "The AI service did not return an image")
+    )
     return AppError(
         f"None of the mouth shapes could be made: {reason['detail']}", code=reason["code"]
     )
@@ -262,10 +278,10 @@ async def _teeth_alone(job: Job, org_id: str, avatar_id: str, picture: bytes, se
         raise AppError(exc.detail, code=exc.code) from exc
     job.report(0.9, SAVE_LABEL)
     async with avatar_edits.hold(avatar_id), get_session_factory()() as db:
-        avatar = await _load_avatar(db, org_id, avatar_id)
+        avatar = await load_avatar(db, org_id, avatar_id)
         if avatar is None:
             return
-        _require_mouth(avatar)
+        require_mouth(avatar)
         previous = await mouth_photo.store(
             avatar, storage, made.photo, made.rig, mouth_config.ai_teeth_record(made.model)
         )

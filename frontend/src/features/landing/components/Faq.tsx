@@ -1,12 +1,21 @@
-import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import { Icon } from "@/components/ui/Icon";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 import { Reveal, SectionHeader } from "./Reveal";
 
-const QUESTIONS = ["faqPhoto", "faqCode", "faqLanguages", "faqChat", "faqMobile", "faqEdit", "faqPrivacy", "faqFree"];
+const QUESTIONS = [
+  "faqPhoto",
+  "faqCode",
+  "faqLanguages",
+  "faqChat",
+  "faqMobile",
+  "faqEdit",
+  "faqPrivacy",
+  "faqFree",
+] as const;
 
 const CTA_LINK = cx(
   "mt-8 inline-flex items-center gap-1.5 text-[15px] font-semibold text-brand-600 hover:text-brand-700",
@@ -26,7 +35,7 @@ const PLUS = cx(
 );
 
 export function Faq() {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <section id="faq" className="scroll-mt-20 py-24 sm:py-32">
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 px-5 sm:px-6 lg:grid-cols-[0.8fr_1.2fr]">

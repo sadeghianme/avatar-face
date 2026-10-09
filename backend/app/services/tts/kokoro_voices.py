@@ -34,7 +34,12 @@ VOICES = [
 VOICE_IDS = {v.id for v in VOICES}
 # Kokoro's voice-id prefixes ARE its language codes.
 LANG_BY_PREFIX = {
-    "a": "en-us", "b": "en-gb", "e": "es", "f": "fr-fr",
-    "i": "it", "p": "pt-br", "h": "hi",
+    "a": "en-us",
+    "b": "en-gb",
+    "e": "es",
+    "f": "fr-fr",
+    "i": "it",
+    "p": "pt-br",
+    "h": "hi",
 }
 DEFAULT_VOICE = "af_heart"

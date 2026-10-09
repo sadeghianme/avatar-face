@@ -93,8 +93,7 @@ async def start_detect(
     if body.use_ai:
         if face_type == "human":
             raise Validation422(
-                "People are found by the face detector; AI points are for animals and "
-                "animations",
+                "People are found by the face detector; AI points are for animals and animations",
                 code="ai_points_not_for_face_type",
             )
         agreed = await consent.require(
@@ -167,8 +166,7 @@ async def start_adjust(
     usage = ai_usage_of(creation)
     if usage["adjust_rounds"] >= photo_adjust.ROUNDS_PER_CREATION:
         raise Conflict409(
-            "This avatar has used its AI adjustments; choose one of the results or the "
-            "original",
+            "This avatar has used its AI adjustments; choose one of the results or the original",
             code="budget_spent",
         )
     # Refused now rather than failing in the job: nothing is spent.
@@ -400,9 +398,7 @@ async def start_finish(
         if not given:
             made = await consent.statement_about(db, org, user_id, statement, creation.id)
             given = made.id if made is not None else None
-        agreed = await consent.require(
-            db, given, org, user_id, statement, subject_id=creation.id
-        )
+        agreed = await consent.require(db, given, org, user_id, statement, subject_id=creation.id)
         consent_ids = consent.with_consent(consent_ids, agreed.id)
         body = body.model_copy(update={"consent_id": agreed.id})
     anchors = anchors_for(creation, body.anchors_id)
@@ -514,8 +510,12 @@ async def retry(
         if params.get("source_avatar_id"):
             # The source photo goes to Google again.
             agreed = await consent.require(
-                db, given or params.get("consent_id"), org, user_id,
-                consent.THIRD_PARTY_AI, PROVIDER,
+                db,
+                given or params.get("consent_id"),
+                org,
+                user_id,
+                consent.THIRD_PARTY_AI,
+                PROVIDER,
             )
             params = {**params, "consent_id": agreed.id}
             values["consent_ids"] = consent.with_consent(creation.consent_ids, agreed.id)

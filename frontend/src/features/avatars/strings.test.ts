@@ -18,7 +18,7 @@ const SRC = fileURLToPath(new URL("../../", import.meta.url));
 // The features M4 touched; the lab has keys of its own, kept apart.
 const FEATURES = ["features/avatars", "features/settings", "features/share"];
 
-function walk(dir) {
+function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const full = join(dir, name);
     if (statSync(full).isDirectory()) return walk(full);
@@ -26,16 +26,16 @@ function walk(dir) {
   });
 }
 
-function localeKeys(lang) {
+function localeKeys(lang: string) {
   const dir = join(SRC, "i18n/locales", lang);
-  const keys = new Set();
+  const keys = new Set<string>();
   for (const file of readdirSync(dir)) {
     for (const m of readFileSync(join(dir, file), "utf8").matchAll(/^\s{2}([A-Za-z0-9_]+):\s/gm)) keys.add(m[1]);
   }
   return keys;
 }
 
-const used = new Set();
+const used = new Set<string>();
 for (const feature of FEATURES) {
   for (const file of walk(join(SRC, feature))) {
     for (const m of readFileSync(file, "utf8").matchAll(/\bt\(\s*"([A-Za-z0-9_]+)"/g)) used.add(m[1]);

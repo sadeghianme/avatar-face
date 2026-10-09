@@ -4,6 +4,7 @@ Every error response has the shape {"detail": str, "code": str} so clients
 (dashboard, widget, third-party integrators) can branch on `code` without
 parsing prose.
 """
+
 from __future__ import annotations
 
 from fastapi import FastAPI, Request
@@ -75,6 +76,16 @@ class ServiceUnavailable503(AppError):
     code = "service_unavailable"
 
 
+def error_body(exc: AppError) -> dict:
+    """The envelope of `exc`: {"detail", "code"} and its extra context.
+
+    What the handler below answers, and what a stream whose headers are
+    already sent says in its own error frame (services.tts.stream), so a
+    client reads one shape wherever the refusal comes from.
+    """
+    return {**exc.extra, "detail": exc.detail, "code": exc.code}
+
+
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
@@ -83,14 +94,12 @@ def install_error_handlers(app: FastAPI) -> None:
             headers["WWW-Authenticate"] = "Bearer"
         return JSONResponse(
             status_code=exc.status_code,
-            content={**exc.extra, "detail": exc.detail, "code": exc.code},
+            content=error_body(exc),
             headers=headers or None,
         )
 
     @app.exception_handler(StarletteHTTPException)
-    async def http_error_handler(
-        request: Request, exc: StarletteHTTPException
-    ) -> JSONResponse:
+    async def http_error_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": str(exc.detail), "code": f"http_{exc.status_code}"},

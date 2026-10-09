@@ -1,8 +1,9 @@
-import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
+import { useT } from "@/i18n";
+
 export function SiteFooter() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const columns = [
     {
       title: "footerProduct",
@@ -21,7 +22,7 @@ export function SiteFooter() {
         { href: "#developers", key: "devTabRest" },
       ],
     },
-  ];
+  ] as const;
   return (
     <footer className="border-t border-black/[0.07] dark:border-white/[0.07]">
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-10 px-5 py-14 sm:px-6 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">

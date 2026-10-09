@@ -1,12 +1,13 @@
 import { useId, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Icon } from "@/components/ui/Icon";
+import { Label } from "@/components/ui/Label";
 import { RangeInput } from "@/components/ui/RangeInput";
 import { Spinner } from "@/components/ui/Spinner";
 import { CHECKER_STYLE, LookPicture, PICTURE_BACKDROP } from "@/features/avatars/components/wizard/Art";
 import type { CreationStep } from "@/features/avatars/creation";
 import { type AvatarModel, checklistRow, type Look, type PrepareStage } from "@/features/avatars/wizard";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 /** A band of light sweeping across the picture while it is worked on. */
@@ -44,7 +45,7 @@ export function Working({
   fraction: number | null;
   hint: string;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const at = checklistRow(stage, stages);
   const shown = stage === "queued" ? t("wzStage_queued") : stage ? t(`wzStage_${stage}`) : t("wzStage_create");
   return (
@@ -168,7 +169,7 @@ export function Result({
   busyLabel: string;
   badge?: React.ReactNode;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const [split, setSplit] = useState(50);
   const ids = useId();
   const transparent = Boolean(after.cutout);
@@ -219,9 +220,9 @@ export function Result({
           <span className="pointer-events-none absolute end-3 top-3 rounded-full bg-brand-600 px-2.5 py-1 text-xs font-medium text-white shadow">
             {t("wzAfter")}
           </span>
-          <label htmlFor={`${ids}-split`} className="sr-only">
+          <Label htmlFor={`${ids}-split`} srOnly>
             {t("wzCompare")}
-          </label>
+          </Label>
           <RangeInput
             id={`${ids}-split`}
             min={0}

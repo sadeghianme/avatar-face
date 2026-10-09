@@ -132,8 +132,6 @@ async def test_integrations_owner_only(client):
 async def test_test_endpoint_offline_provider(client):
     headers = await register_and_login(client, "alice")
     org_id = await create_org(client, headers)
-    response = await client.post(
-        f"/orgs/{org_id}/integrations/offline/test", headers=headers
-    )
+    response = await client.post(f"/orgs/{org_id}/integrations/offline/test", headers=headers)
     assert response.status_code == 200
     assert response.json()["ok"] is True

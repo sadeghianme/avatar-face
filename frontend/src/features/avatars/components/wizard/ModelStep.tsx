@@ -1,9 +1,8 @@
-import { useTranslation } from "react-i18next";
-
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { Icon } from "@/components/ui/Icon";
 import { LookPicture } from "@/features/avatars/components/wizard/Art";
 import { type AvatarModel, MODELS } from "@/features/avatars/wizard";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 
 /** A big picture card that lifts on hover; ringed in the brand colour when chosen. */
@@ -34,7 +33,7 @@ export function ModelStep({
   chosen: AvatarModel | null;
   onChoose: (model: AvatarModel) => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   return (
     <ul className="mx-auto grid max-w-[1400px] grid-cols-2 gap-3 sm:gap-6 xl:gap-8">
       {MODELS.map((model) => (

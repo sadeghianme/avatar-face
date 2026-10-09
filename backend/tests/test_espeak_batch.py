@@ -160,7 +160,13 @@ def test_without_espeak_nothing_is_started(monkeypatch):
     espeak.clear_cache()
 
 
-def test_the_cache_is_bounded(fake, monkeypatch):
-    monkeypatch.setattr(espeak, "_cache", espeak._Cache(10))
-    espeak.words_to_ipa([f"w{chr(97 + i)}" for i in range(26)], "fr-FR")
-    assert len(espeak._cache) == 10
+def test_the_cache_is_bounded(fake):
+    """Past CACHE_SIZE words the least recently used is forgotten: asked for
+    again, it costs a call; the most recent costs nothing."""
+    words = [_word(i) for i in range(espeak.CACHE_SIZE + 1)]
+    espeak.words_to_ipa(words, "fr-FR")
+    fake.calls.clear()
+    espeak.words_to_ipa([words[-1]], "fr-FR")
+    assert fake.calls == []
+    espeak.words_to_ipa([words[0]], "fr-FR")
+    assert fake.calls == [words[0]]

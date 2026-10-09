@@ -3,6 +3,7 @@
 Run from backend: .venv/bin/python scripts/build_reference_rig.py
 Uses the existing local MediaPipe model; no database or remote service writes.
 """
+
 import argparse
 import json
 import sys
@@ -13,7 +14,9 @@ sys.path.insert(0, str(BACKEND))
 
 from app.core import config  # noqa: E402
 
-settings = config.Settings(_env_file=None, rig_model_path=str(BACKEND / "models/face_landmarker.task"))
+settings = config.Settings(
+    _env_file=None, rig_model_path=str(BACKEND / "models/face_landmarker.task")
+)
 config.get_settings = lambda: settings
 
 from app.services.rig import build_rig, landmarks_from_image  # noqa: E402

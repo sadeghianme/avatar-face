@@ -260,9 +260,7 @@ async def require(
     return consent
 
 
-async def latest(
-    db: AsyncSession, org: Organization, user_id: str, scope: str
-) -> Consent | None:
+async def latest(db: AsyncSession, org: Organization, user_id: str, scope: str) -> Consent | None:
     """This user's most recent consent in this org for `scope` that `require`
     would accept today (the current wording; for third_party_ai, naming
     every provider it is asked for), or None.
@@ -294,9 +292,7 @@ async def latest(
     return None
 
 
-async def agreed_before(
-    db: AsyncSession, org: Organization, user_id: str, scope: str
-) -> bool:
+async def agreed_before(db: AsyncSession, org: Organization, user_id: str, scope: str) -> bool:
     """True when this user recorded `scope` in this org under an EARLIER
     wording (any version other than the one in force). With `latest` being
     None it means "agreed before, the words changed", which the dashboard

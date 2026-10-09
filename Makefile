@@ -1,6 +1,6 @@
 # Liveface monorepo tasks. Each target cd's into the right package.
 
-.PHONY: up down migrate backend frontend embed test typecheck
+.PHONY: up down migrate backend frontend embed test coverage typecheck
 
 # Start Postgres 16 + MinIO (optional — the app boots with zero config).
 up:
@@ -22,8 +22,15 @@ frontend:
 embed:
 	cd embed && npm run build
 
+# The backend suite on every core (pytest-xdist). Without `-n`, pytest runs
+# in one process, as a debugger needs.
 test:
-	cd backend && .venv/bin/python -m pytest -q
+	cd backend && .venv/bin/python -m pytest -q -n auto
+
+# The same with coverage, held to its floor (docs/process.md, "Coverage");
+# the report in backend/htmlcov/index.html.
+coverage:
+	cd backend && .venv/bin/python -m pytest -q -n auto --cov --cov-report=term --cov-report=html
 
 typecheck:
 	cd frontend && npx tsc -b

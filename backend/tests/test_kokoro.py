@@ -1,6 +1,5 @@
 """Kokoro local TTS: registration, graceful absence, and cue alignment."""
 
-
 from app.services.tts.base import SynthesisResult
 from app.services.tts.kokoro import DEFAULT_VOICE, VOICES, KokoroTTSProvider
 
@@ -19,7 +18,7 @@ def test_absent_model_files_mean_unconfigured(monkeypatch):
 def test_it_is_registered_among_the_providers():
     from app.services.tts import registry
 
-    assert any(p.name == "kokoro" for p in registry._ALL_PROVIDERS)
+    assert any(p.name == "kokoro" for p in registry.all_providers())
 
 
 async def test_voices_cover_several_languages_and_include_the_default():
@@ -55,7 +54,7 @@ async def test_an_unknown_voice_falls_back_rather_than_failing(monkeypatch):
         captured["lang"] = lang
         return b"RIFF0000WAVE", 1000
 
-    monkeypatch.setattr("app.services.tts.kokoro._render", fake_render)
+    monkeypatch.setattr("app.services.tts.kokoro.render", fake_render)
     provider = KokoroTTSProvider()
     result = await provider.synthesize("hello", "no-such-voice", "en-US")
     assert captured["voice"] == DEFAULT_VOICE
@@ -68,8 +67,8 @@ async def test_british_voices_phonemize_as_british(monkeypatch):
     captured = {}
 
     monkeypatch.setattr(
-        "app.services.tts.kokoro._render",
-        lambda text, voice_id, lang: (captured.update(lang=lang) or (b"RIFF", 500)),
+        "app.services.tts.kokoro.render",
+        lambda text, voice_id, lang: captured.update(lang=lang) or (b"RIFF", 500),
     )
     provider = KokoroTTSProvider()
     await provider.synthesize("hello", "bf_emma", "en-GB")
@@ -82,7 +81,7 @@ async def test_cues_span_the_measured_audio(monkeypatch):
     """The mouth is driven by these cues; if they do not reach the end of the
     audio the avatar stops moving while the voice is still talking."""
     monkeypatch.setattr(
-        "app.services.tts.kokoro._render", lambda text, voice_id, lang: (b"RIFF", 4000)
+        "app.services.tts.kokoro.render", lambda text, voice_id, lang: (b"RIFF", 4000)
     )
     result = await KokoroTTSProvider().synthesize(
         "Hello there, this is a test of the local voice.", DEFAULT_VOICE, "en-US"

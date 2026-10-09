@@ -1,9 +1,9 @@
 import { ReactNode, Suspense } from "react";
-import { useTranslation } from "react-i18next";
 import { Navigate, useLocation } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { Spinner } from "@/components/ui/Spinner";
+import { useT } from "@/i18n";
 import { useAuth } from "@/providers/auth";
 
 /** Already signed in? An auth page has nothing to offer — go to the app. */
@@ -16,7 +16,7 @@ export function GuestOnly({ children }: { children: ReactNode }) {
 export function Protected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const { t } = useTranslation();
+  const { t } = useT();
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center text-gray-500">{t("loading")}</div>;
   }

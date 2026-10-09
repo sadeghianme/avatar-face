@@ -1,4 +1,5 @@
 """3D (GLB) avatar support."""
+
 import json
 import struct
 
@@ -25,10 +26,24 @@ RPM_LIKE_GLTF = {
             "name": "Wolf3D_Head",
             "extras": {
                 "targetNames": [
-                    "viseme_sil", "viseme_PP", "viseme_FF", "viseme_TH", "viseme_DD",
-                    "viseme_kk", "viseme_CH", "viseme_SS", "viseme_nn", "viseme_RR",
-                    "viseme_aa", "viseme_E", "viseme_I", "viseme_O", "viseme_U",
-                    "eyeBlinkLeft", "eyeBlinkRight", "browInnerUp",
+                    "viseme_sil",
+                    "viseme_PP",
+                    "viseme_FF",
+                    "viseme_TH",
+                    "viseme_DD",
+                    "viseme_kk",
+                    "viseme_CH",
+                    "viseme_SS",
+                    "viseme_nn",
+                    "viseme_RR",
+                    "viseme_aa",
+                    "viseme_E",
+                    "viseme_I",
+                    "viseme_O",
+                    "viseme_U",
+                    "eyeBlinkLeft",
+                    "eyeBlinkRight",
+                    "browInnerUp",
                 ]
             },
             "primitives": [],
@@ -75,8 +90,12 @@ def test_build_model_rig_arkit_mode():
             {
                 "extras": {
                     "targetNames": [
-                        "jawOpen", "mouthClose", "mouthFunnel", "mouthPucker",
-                        "eyeBlinkLeft", "eyeBlinkRight",
+                        "jawOpen",
+                        "mouthClose",
+                        "mouthFunnel",
+                        "mouthPucker",
+                        "eyeBlinkLeft",
+                        "eyeBlinkRight",
                     ]
                 },
                 "primitives": [],
@@ -89,7 +108,7 @@ def test_build_model_rig_arkit_mode():
     assert rig["can_blink"] is True
 
 
-async def _upload_glb(client, headers, org_id) -> str:
+async def upload_glb(client, headers, org_id) -> str:
     created = await client.post(
         f"/orgs/{org_id}/avatars",
         json={"name": "Rpm", "content_type": "model/gltf-binary"},
@@ -114,11 +133,9 @@ async def _upload_glb(client, headers, org_id) -> str:
 async def test_glb_upload_pipeline(client):
     headers = await register_and_login(client, "alice")
     org_id = await create_org(client, headers)
-    avatar_id = await _upload_glb(client, headers, org_id)
+    avatar_id = await upload_glb(client, headers, org_id)
 
-    detail = (
-        await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)
-    ).json()
+    detail = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
     assert detail["status"] == "ready", detail
     assert detail["kind"] == "model3d"
     assert detail["model_url"]
@@ -140,9 +157,7 @@ async def test_invalid_glb_fails_gracefully(client):
     await client.put(
         body["upload_url"], content=b"junk", headers={"Content-Type": "model/gltf-binary"}
     )
-    await client.post(
-        f"/orgs/{org_id}/avatars/{body['avatar']['id']}/uploaded", headers=headers
-    )
+    await client.post(f"/orgs/{org_id}/avatars/{body['avatar']['id']}/uploaded", headers=headers)
     detail = (
         await client.get(f"/orgs/{org_id}/avatars/{body['avatar']['id']}", headers=headers)
     ).json()
@@ -176,15 +191,11 @@ async def test_from_url_rejects_http(client):
 async def test_embed_returns_model_url_for_3d(client):
     headers = await register_and_login(client, "alice")
     org_id = await create_org(client, headers)
-    avatar_id = await _upload_glb(client, headers, org_id)
+    avatar_id = await upload_glb(client, headers, org_id)
     key = (
-        await client.post(
-            f"/orgs/{org_id}/api-keys", json={"name": "k"}, headers=headers
-        )
+        await client.post(f"/orgs/{org_id}/api-keys", json={"name": "k"}, headers=headers)
     ).json()["plaintext"]
-    response = await client.get(
-        f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": key}
-    )
+    response = await client.get(f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": key})
     assert response.status_code == 200
     body = response.json()
     assert body["kind"] == "model3d"

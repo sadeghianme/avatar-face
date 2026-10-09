@@ -9,7 +9,9 @@
  */
 import type { LowerFaceRig } from "./jaw-rig";
 import { padTriangle } from "./seam-pad";
-import { WarpRenderer, buildWarpMesh, type Affine } from "./warp-gl";
+import type { Affine } from "./affine";
+import { WarpRenderer } from "./warp-gl";
+import { buildWarpMesh } from "./warp-mesh";
 import type { FaceMesh, Point, Rect } from "./geometry";
 import { LANDMARK_COUNT } from "./landmarks";
 
@@ -158,9 +160,11 @@ export class MeshWarp {
     const pads = this.trianglePads();
     const edges = this.edgePads;
     const headFrom = head ? head.triangleFrom : Infinity;
-    let t = 0;
-    for (const [a, b, c] of mesh.triangles) {
-      const k = t++;
+    const tris = mesh.triangles;
+    for (let k = 0; k < tris.length; k++) {
+      const a = tris[k][0],
+        b = tris[k][1],
+        c = tris[k][2];
       const pad = pads ? pads[k] : 0;
       if ((replace || k >= headFrom) && still(a, b, c)) continue;
       drawWarpedTriangle(ctx, texture, mesh.texPoints, pts, a, b, c, edges?.[k] ?? pad, replace);
@@ -169,7 +173,9 @@ export class MeshWarp {
 
   /** Does `keep` pass any of the mesh's triangles? */
   private anyTriangle(keep: (a: number, b: number, c: number) => boolean): boolean {
-    return this.source().mesh.triangles.some(([a, b, c]) => keep(a, b, c));
+    const tris = this.source().mesh.triangles;
+    for (let k = 0; k < tris.length; k++) if (keep(tris[k][0], tris[k][1], tris[k][2])) return true;
+    return false;
   }
 
   /** Every vertex where it rests, canvas px, in the order the deformation
@@ -382,6 +388,13 @@ function outlineEdgePads(
   });
 }
 
+/** The triangle being drawn, padded: every triangle of every 2D frame. */
+const padded: [Point, Point, Point] = [
+  { x: 0, y: 0 },
+  { x: 0, y: 0 },
+  { x: 0, y: 0 },
+];
+
 /**
  * Draw one texture triangle warped to its deformed destination.
  * Affine solved with Cramer's rule; degenerate triangles are skipped.
@@ -427,7 +440,13 @@ export function drawWarpedTriangle(
   // where the mesh moves over the still picture (seam-pad.ts). Less where
   // a thin drawn line crosses the triangles, as the lips do: a wide
   // overlap would redraw a pixel of it from the wrong triangle.
-  const [g0, g1, g2] = typeof pad === "number" ? padTriangle(d0, d1, d2, pad) : padTriangle(d0, d1, d2, 0, 0.015, pad);
+  const g =
+    typeof pad === "number"
+      ? padTriangle(d0, d1, d2, pad, 0.015, undefined, padded)
+      : padTriangle(d0, d1, d2, 0, 0.015, pad, padded);
+  const g0 = g[0],
+    g1 = g[1],
+    g2 = g[2];
   ctx.moveTo(g0.x, g0.y);
   ctx.lineTo(g1.x, g1.y);
   ctx.lineTo(g2.x, g2.y);

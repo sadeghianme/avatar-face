@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 
+import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/FieldError";
 import { Select } from "@/components/ui/Select";
 import { useAvatar, useAvatars } from "@/features/avatars";
 import type { ReferenceUpload } from "@/features/lab/api";
@@ -9,11 +10,12 @@ import { LipSyncWorkspace } from "@/features/lab/components/LipSyncWorkspace";
 import { ReferenceAvatarWorkspace } from "@/features/lab/components/ReferenceAvatarWorkspace";
 import { ReferencePhotoUpload } from "@/features/lab/components/ReferencePhotoUpload";
 import { REFERENCE_AVATAR } from "@/features/lab/reference-avatar";
+import { useT } from "@/i18n";
 import type { Avatar } from "@/lib/types";
 import { useOrg } from "@/providers/org";
 
 export function LipSyncLabPage({ reference = false }: { reference?: boolean }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { current } = useOrg();
   const [selected, setSelected] = useState("");
   const [testPhoto, setTestPhoto] = useState<(ReferenceUpload & { orgId: string }) | null>(null);
@@ -78,9 +80,7 @@ export function LipSyncLabPage({ reference = false }: { reference?: boolean }) {
         </p>
       )}
       {!isSample && !isUpload && (avatars.isError || detail.isError) ? (
-        <p role="alert" className="field-error">
-          {t("error")}
-        </p>
+        <FieldError>{t("error")}</FieldError>
       ) : active && current ? (
         reference ? (
           <ReferenceAvatarWorkspace key={`${current.id}:${active.id}`} avatar={active} orgId={current.id} />
@@ -88,9 +88,9 @@ export function LipSyncLabPage({ reference = false }: { reference?: boolean }) {
           <LipSyncWorkspace key={`${current.id}:${active.id}`} avatar={active} orgId={current.id} />
         )
       ) : (
-        <div className="card py-20 text-center text-sm text-gray-500" role="status">
+        <Card role="status" className="py-20 text-center text-sm text-gray-500">
           {avatars.isLoading || detail.isFetching ? t("loading") : t("photofaceHDEmptyBody")}
-        </div>
+        </Card>
       )}
     </div>
   );

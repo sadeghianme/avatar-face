@@ -12,8 +12,9 @@ from app.services import landmarks
 
 
 @pytest.fixture
-def fake_mediapipe(monkeypatch):
-    """A landmarker that counts how often it is built and catches overlap."""
+def fake_mediapipe(monkeypatch, tmp_path):
+    """A landmarker that counts how often it is built and catches overlap.
+    Its model path is this test's own, which no landmarker was built for."""
     from mediapipe.tasks.python import vision
 
     stats = {"built": 0, "active": 0, "overlapped": False}
@@ -35,9 +36,8 @@ def fake_mediapipe(monkeypatch):
         return Landmarker()
 
     monkeypatch.setattr(vision.FaceLandmarker, "create_from_options", build)
-    monkeypatch.setattr(config.get_settings(), "rig_model_path", "/fake/model.task", raising=False)
-    monkeypatch.setattr(landmarks, "_landmarker", None)
-    monkeypatch.setattr(landmarks, "_loaded_path", None)
+    model = str(tmp_path / "model.task")
+    monkeypatch.setattr(config.get_settings(), "rig_model_path", model, raising=False)
     return stats
 
 

@@ -140,7 +140,9 @@ def _ai_out(creation: Creation, org: Organization | None, recommendation: dict |
 def _auto_adjust(creation: Creation) -> AutoAdjustOut | None:
     """services.creations.auto_adjust_of, while nothing else runs and the
     server can make it."""
-    if (creation.job or {}).get("state") in ACTIVE_STATES or creation.status != CreationStatus.draft:
+    if (creation.job or {}).get(
+        "state"
+    ) in ACTIVE_STATES or creation.status != CreationStatus.draft:
         return None
     offer = svc.auto_adjust_of(creation)
     if offer is None or not imagegen.configured():
@@ -260,9 +262,7 @@ async def create_creation(
 
 
 @router.post("/generate", response_model=CreationOut, status_code=202)
-async def generate_creation(
-    body: GenerateCreationRequest, ctx: OrgMember, db: DB
-) -> CreationOut:
+async def generate_creation(body: GenerateCreationRequest, ctx: OrgMember, db: DB) -> CreationOut:
     """Start a creation whose original is made by the image model (a job).
 
     The generated picture becomes the creation's "original" and the wizard

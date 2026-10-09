@@ -1,29 +1,23 @@
 import "@/i18n";
 import "@/index.css";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 
 import App from "@/app/App";
+import { createQueryClient } from "@/lib/queryClient";
 import { AuthProvider } from "@/providers/auth";
 import { OrgProvider } from "@/providers/org";
 import { ThemeProvider } from "@/providers/theme";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 10_000,
-      // Don't pause queries on flaky onLine signals (embedded webviews and
-      // headless browsers misreport connectivity); let fetch itself fail.
-      networkMode: "always",
-    },
-  },
-});
-// Dev aid: lets the console inspect query state (harmless in prod).
-(window as unknown as { __queryClient: QueryClient }).__queryClient = queryClient;
+const queryClient = createQueryClient();
+// The dev server only: the console can read the query cache. Vite drops
+// this from a production build (import.meta.env.DEV is false there).
+if (import.meta.env.DEV) {
+  (window as unknown as { __queryClient: typeof queryClient }).__queryClient = queryClient;
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -15,7 +15,7 @@ import type { AvatarEngine } from "../engine";
 import type { FaceMesh, Point } from "../engine/geometry";
 import { POSE_LIMIT_DEG } from "../engine/head-personality";
 import { engineSeam } from "../engine/seam";
-import type { Affine } from "../engine/warp-gl";
+import type { Affine } from "../engine/affine";
 import type { Cue, Rig } from "../types";
 import { drawnMask, meshBoundary, type Segment } from "./seam-probe";
 

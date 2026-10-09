@@ -54,7 +54,8 @@ async def test_an_uploaded_line_becomes_a_cache_hit(client, org):
     async with get_session_factory()() as db:
         result, cached = await synthesize_cached(db, PROVIDER_NAME, voice, "en-US", "Hello there")
     assert cached is True
-    assert result.audio_mime == "audio/wav"
+    # Stored, like every cached line, as MP3 in storage (speech_cache).
+    assert result.audio_mime == "audio/mpeg"
     assert result.duration_ms > 0
     # Cues are generated server-side, so the uploader never supplies them.
     assert result.cues and result.cues[0]["t"] == 0
@@ -90,9 +91,7 @@ async def test_voices_are_scoped_to_the_organisation(client, org):
 
     other_headers = await register_and_login(client, "stranger")
     other_org = await create_org(client, other_headers, name="Other")
-    listed = (
-        await client.get(f"/orgs/{other_org}/cloned-voices", headers=other_headers)
-    ).json()
+    listed = (await client.get(f"/orgs/{other_org}/cloned-voices", headers=other_headers)).json()
     assert listed == []
 
     from app.services.tts.cloned import scoped_voice_id
@@ -114,7 +113,9 @@ async def test_deleting_a_voice_removes_every_line(client, org):
     headers, org_id = org
     await _upload(client, headers, org_id, "sarah", "One")
     await _upload(client, headers, org_id, "sarah", "Two")
-    assert (await client.get(f"/orgs/{org_id}/cloned-voices", headers=headers)).json()[0]["lines"] == 2
+    assert (await client.get(f"/orgs/{org_id}/cloned-voices", headers=headers)).json()[0][
+        "lines"
+    ] == 2
 
     response = await client.delete(f"/orgs/{org_id}/cloned-voices/sarah", headers=headers)
     assert response.status_code == 204
@@ -130,14 +131,12 @@ async def test_cloned_never_appears_in_the_global_provider_list(client):
 async def test_a_missing_line_renders_on_demand_where_hardware_allows(monkeypatch):
     """A cloned voice should be a voice, not a soundboard: on a machine that
     can render, asking for an unrecorded line produces it."""
-    from app.services import local_render
     from app.services.tts import cloned as cloned_module
     from app.services.tts.cloned import ClonedTTSProvider
 
-    monkeypatch.setattr(
-        local_render, "_probe_result", {"available": True, "device": "mps", "reason": None}
-    )
-    monkeypatch.setattr(cloned_module, "_reference_for", lambda voice: _ref())
+    available = {"available": True, "device": "mps", "reason": None}
+    monkeypatch.setattr(cloned_module, "capability", lambda: available)
+    monkeypatch.setattr(cloned_module, "reference_for", lambda voice: _ref())
 
     async def fake_render(reference, text):
         assert reference == b"REFERENCE"
@@ -157,14 +156,11 @@ async def test_a_missing_line_still_fails_where_it_cannot_render(monkeypatch):
     """On the CPU-only server, substituting a different voice for someone's
     cloned likeness would be worse than failing."""
     from app.core.errors import NotFound404
-    from app.services import local_render
+    from app.services.tts import cloned as cloned_module
     from app.services.tts.cloned import ClonedTTSProvider
 
-    monkeypatch.setattr(
-        local_render,
-        "_probe_result",
-        {"available": False, "device": None, "reason": "no accelerator"},
-    )
+    unavailable = {"available": False, "device": None, "reason": "no accelerator"}
+    monkeypatch.setattr(cloned_module, "capability", lambda: unavailable)
     with pytest.raises(NotFound404) as caught:
         await ClonedTTSProvider().synthesize("nope", "org:sarah", "en-US")
     assert caught.value.code == "cloned_line_missing"

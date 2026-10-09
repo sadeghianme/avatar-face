@@ -1,4 +1,7 @@
 /** fr: common strings. A key lives in exactly one file; add new ones here. */
+import type { common as en } from "@/i18n/locales/en/common";
+import type { Locale } from "@/i18n/types";
+
 export const common = {
   dashGreeting: "Bonjour, {{name}}",
   avatarCount_one: "{{count}} avatar",
@@ -91,4 +94,12 @@ export const common = {
   error: "Une erreur est survenue",
   mine: "Créé par moi",
   close: "Fermer",
-} as const;
+  speechErr: {
+    cloned_line_missing: "Cette phrase n'a pas encore été enregistrée avec votre voix clonée.",
+    speech_busy: "Une phrase est déjà en préparation. Arrêtez-la, ou réessayez dans un instant.",
+    speech_stream_failed: "La parole a été interrompue. Veuillez réessayer.",
+    usage_limit_reached: "Le quota de parole de ce mois est épuisé.",
+    nothing_to_speak: "Ce texte ne contient aucun mot à prononcer.",
+    provider_not_configured: "Cette voix n'est pas disponible sur ce serveur. Choisissez-en une autre.",
+  },
+} as const satisfies Locale<typeof en>;

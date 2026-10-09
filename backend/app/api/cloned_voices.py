@@ -54,9 +54,7 @@ def _wav_facts(data: bytes) -> tuple[int, int]:
         with wave.open(io.BytesIO(data)) as handle:
             frames, rate = handle.getnframes(), handle.getframerate()
     except (wave.Error, EOFError) as exc:
-        raise Validation422(
-            f"Audio must be a WAV file ({exc})", code="not_a_wav"
-        ) from exc
+        raise Validation422(f"Audio must be a WAV file ({exc})", code="not_a_wav") from exc
     if not rate:
         raise Validation422("WAV has no sample rate", code="not_a_wav")
     return int(frames * 1000 / rate), rate

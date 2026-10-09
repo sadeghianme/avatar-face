@@ -113,8 +113,24 @@ export function ConfirmButton({
       >
         {cancelLabel}
       </Button>
-      <Button variant="danger" size={confirmSize} onClick={onConfirm} onKeyDown={onKeyDown} disabled={busy}>
-        {busy ? <Spinner className="h-4 w-4" /> : confirmLabel}
+      <Button
+        variant="danger"
+        size={confirmSize}
+        onClick={onConfirm}
+        onKeyDown={onKeyDown}
+        disabled={busy}
+        aria-busy={busy || undefined}
+      >
+        {busy ? (
+          <>
+            {/* The spinner says nothing to a screen reader: the action
+                keeps its name while it runs. */}
+            <Spinner className="h-4 w-4" />
+            <span className="sr-only">{confirmLabel}</span>
+          </>
+        ) : (
+          confirmLabel
+        )}
       </Button>
     </span>
   );

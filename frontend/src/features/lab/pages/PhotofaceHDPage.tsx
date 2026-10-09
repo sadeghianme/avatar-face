@@ -1,6 +1,5 @@
 import type { CuePlayer, SpeechPlayer } from "@liveface/embed";
 import { useCallback, useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
@@ -9,6 +8,7 @@ import { Select } from "@/components/ui/Select";
 import { AvatarPreview, useAvatar, useAvatars } from "@/features/avatars";
 import { PhotoFaceHDPreview } from "@/features/lab/components/PhotoFaceHDPreview";
 import { SpeakPanel } from "@/features/voices";
+import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { useOrg } from "@/providers/org";
 
@@ -52,7 +52,7 @@ function fanout(
 }
 
 export function PhotofaceHDPage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { current } = useOrg();
   const [selectedId, setSelectedId] = useState("");
   const [hdEngine, setHdEngine] = useState<HDEngine | null>(null);
@@ -152,7 +152,7 @@ export function PhotofaceHDPage() {
           <Card>
             <h2 className="text-sm font-semibold">{t("photofaceHDInside")}</h2>
             <ul className="mt-4 space-y-3 text-[13px] text-gray-600 dark:text-gray-300">
-              {["photofaceHDDepth", "photofaceHDLayers", "photofaceHDReuse"].map((key) => (
+              {(["photofaceHDDepth", "photofaceHDLayers", "photofaceHDReuse"] as const).map((key) => (
                 <li key={key} className="flex items-start gap-2.5">
                   <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
                     <Icon name="check" className="h-3 w-3" strokeWidth={2} />

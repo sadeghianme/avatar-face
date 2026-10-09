@@ -46,14 +46,20 @@ def animal_character_mouth(creation: Creation, avatar: Avatar) -> None:
     teeth on a dog look wrong, and the owner can turn them on in the Mouth
     panel. Only where the character mouth applies and nothing is set yet."""
     plan = plan_of(creation.steps)
-    if not plan or plan.get("model") != "animal" or not mouth_config.character_allowed(avatar.face_type):
+    if (
+        not plan
+        or plan.get("model") != "animal"
+        or not mouth_config.character_allowed(avatar.face_type)
+    ):
         return
     config = json.loads(avatar.mouth_config) if avatar.mouth_config else {}
     if config.get("character"):
         return
     config.setdefault("renderer", "classic")
     config.setdefault("profile", {})
-    config["character"] = mouth_config.clean_character({**mouth_config.DEFAULT_CHARACTER, "teeth": "none"})
+    config["character"] = mouth_config.clean_character(
+        {**mouth_config.DEFAULT_CHARACTER, "teeth": "none"}
+    )
     avatar.mouth_config = json.dumps(config)
 
 
@@ -123,7 +129,11 @@ async def own_mouth(
     job.report(0.6, mouth_kit.SHAPES_LABEL, count=(0, mouth_kit.SHAPE_COUNT + 1))
     try:
         result = await mouth_kit.make(
-            avatar.org_id, image, rig["points"], job=job, on_first_send=sending,
+            avatar.org_id,
+            image,
+            rig["points"],
+            job=job,
+            on_first_send=sending,
             on_progress=mouth_kit.progress_to(job, 0.6, 0.85),
         )
     except (performance_kit.KitUnavailable, ValueError) as exc:

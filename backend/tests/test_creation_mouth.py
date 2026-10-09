@@ -18,12 +18,18 @@ from tests.test_creation_ai import (
     GOOD,
     Faces,
     FakeImages,
-    _adjust,
-    _good_portrait,
-    _org,
     ai_consent,
+    good_portrait,
+    request_adjust,
+    user_and_org,
 )
-from tests.test_creations import _create, _detect, _get, _run, depiction
+from tests.test_creations import (
+    create_creation,
+    depiction,
+    detect_anchors,
+    get_json,
+    request_and_drain,
+)
 from tests.test_photo_analysis import with_mouth
 
 
@@ -47,8 +53,8 @@ def teeth(monkeypatch, faces):
 
 
 async def _person(client, who):
-    headers, org_id = await _org(client, who)
-    base, body = await _create(client, headers, org_id, data=_good_portrait())
+    headers, org_id = await user_and_org(client, who)
+    base, body = await create_creation(client, headers, org_id, data=good_portrait())
     return headers, org_id, base, body
 
 
@@ -56,31 +62,32 @@ async def test_teeth_showing_offers_a_touchup_the_wizard_may_start(client, teeth
     headers, org_id, base, body = await _person(client, "gappy")
     assert body["analysis"]["recommendation"]["reasons"] == ["teeth_showing"]
     assert body["ai"]["auto_adjust"] == {
-        "mode": "touchup", "image": "original", "reasons": ["teeth_showing"],
+        "mode": "touchup",
+        "image": "original",
+        "reasons": ["teeth_showing"],
     }
 
     consent_id = await ai_consent(client, headers, org_id)
-    started = await _adjust(client, headers, base, consent_id, auto=True, count=1)
+    started = await request_adjust(client, headers, base, consent_id, auto=True, count=1)
     assert started.status_code == 202, started.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     assert len(images.calls) == 1
     # Offered, never chosen, and not offered again for this photo.
     assert body["current"] == "original"
     assert body["ai"]["auto_adjust"] is None
-    again = await _adjust(client, headers, base, consent_id, auto=True, count=1)
+    again = await request_adjust(client, headers, base, consent_id, auto=True, count=1)
     assert again.status_code == 409 and again.json()["code"] == "auto_adjust_not_applicable"
     assert len(images.calls) == 1
 
 
-async def test_the_offer_is_spent_even_when_the_provider_does_not_answer(
-    client, teeth, images
-):
+async def test_the_offer_is_spent_even_when_the_provider_does_not_answer(client, teeth, images):
     headers, org_id, base, _ = await _person(client, "unanswered")
     images.script = ["error"]
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  auto=True, count=1)
-    body = await _get(client, headers, base)
+    await request_adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), auto=True, count=1
+    )
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "failed"
     assert body["ai"]["adjust_rounds_left"] == 2, "the round is given back"
     assert body["ai"]["auto_adjust"] is None, "but the wizard does not loop on it"
@@ -88,30 +95,31 @@ async def test_the_offer_is_spent_even_when_the_provider_does_not_answer(
 
 async def test_a_manual_round_on_the_photo_ends_the_offer(client, teeth, images):
     headers, org_id, base, _ = await _person(client, "manual")
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id), count=1)
-    body = await _get(client, headers, base)
+    await request_adjust(client, headers, base, await ai_consent(client, headers, org_id), count=1)
+    body = await get_json(client, headers, base)
     assert body["ai"]["auto_adjust"] is None
 
 
 async def test_the_offer_needs_consent_like_any_adjust(client, teeth, images):
     headers, org_id, base, _ = await _person(client, "unconsented")
-    refused = await _adjust(client, headers, base, "not-mine", auto=True)
+    refused = await request_adjust(client, headers, base, "not-mine", auto=True)
     assert refused.status_code == 403 and refused.json()["code"] == "consent_required"
     assert images.calls == []
-    assert (await _get(client, headers, base))["ai"]["auto_adjust"] is not None
+    assert (await get_json(client, headers, base))["ai"]["auto_adjust"] is not None
 
 
 @pytest.mark.parametrize("change", [None, "closed", "open"])
 async def test_nothing_else_is_started_automatically(client, faces, images, change):
     """Closed eyes are a touch-up too, but the owner's to decide (the fix
     invents eyes); an open mouth is a regenerate; a good photo needs nothing."""
-    headers, org_id = await _org(client, f"nothing{change}")
+    headers, org_id = await user_and_org(client, f"nothing{change}")
     if change:
         faces.changes[GOOD] = change
-    base, body = await _create(client, headers, org_id, data=_good_portrait())
+    base, body = await create_creation(client, headers, org_id, data=good_portrait())
     assert body["ai"]["auto_adjust"] is None
-    response = await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                             auto=True)
+    response = await request_adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), auto=True
+    )
     assert response.status_code == 409 and response.json()["code"] == "auto_adjust_not_applicable"
     assert images.calls == []
 
@@ -121,16 +129,18 @@ async def test_no_offer_when_ai_is_off_or_unavailable(client, teeth, monkeypatch
 
     headers, org_id, base, body = await _person(client, "offline")
     monkeypatch.setattr(imagegen, "configured", lambda: False)
-    assert (await _get(client, headers, base))["ai"]["auto_adjust"] is None
+    assert (await get_json(client, headers, base))["ai"]["auto_adjust"] is None
     monkeypatch.setattr(imagegen, "configured", lambda: True)
-    assert (await _get(client, headers, base))["ai"]["auto_adjust"] is not None
+    assert (await get_json(client, headers, base))["ai"]["auto_adjust"] is not None
     await client.patch(f"/orgs/{org_id}", json={"third_party_ai_enabled": False}, headers=headers)
-    assert (await _get(client, headers, base))["ai"]["auto_adjust"] is None
+    assert (await get_json(client, headers, base))["ai"]["auto_adjust"] is None
 
 
 async def test_no_offer_for_an_animal(client, teeth, images):
-    headers, org_id = await _org(client, "dogowner")
-    _, body = await _create(client, headers, org_id, data=_good_portrait(), face_type="animal")
+    headers, org_id = await user_and_org(client, "dogowner")
+    _, body = await create_creation(
+        client, headers, org_id, data=good_portrait(), face_type="animal"
+    )
     assert body["ai"]["auto_adjust"] is None
 
 
@@ -138,11 +148,18 @@ async def test_no_offer_for_an_animal(client, teeth, images):
 
 
 async def _finish(client, headers, base):
-    anchors = await _detect(client, headers, base)
-    return await _run(client, headers, "POST", f"{base}/finish", json={
-        "name": "Ada", "anchors_id": anchors["id"],
-        "consent_id": await depiction(client, headers, base),
-    })
+    anchors = await detect_anchors(client, headers, base)
+    return await request_and_drain(
+        client,
+        headers,
+        "POST",
+        f"{base}/finish",
+        json={
+            "name": "Ada",
+            "anchors_id": anchors["id"],
+            "consent_id": await depiction(client, headers, base),
+        },
+    )
 
 
 async def test_finishing_a_picture_with_teeth_showing_warns(client, teeth):
@@ -150,10 +167,11 @@ async def test_finishing_a_picture_with_teeth_showing_warns(client, teeth):
     response = await _finish(client, headers, base)
     assert response.status_code == 202, response.text
     assert [w["code"] for w in response.json()["warnings"]] == ["teeth_showing"]
-    assert (await _get(client, headers, base))["status"] == "finished", "not a refusal"
+    assert (await get_json(client, headers, base))["status"] == "finished", "not a refusal"
     # The same answer to a repeated press.
-    again = await client.post(f"{base}/finish", json={"name": "Ada", "anchors_id": "x"},
-                              headers=headers)
+    again = await client.post(
+        f"{base}/finish", json={"name": "Ada", "anchors_id": "x"}, headers=headers
+    )
     assert [w["code"] for w in again.json()["warnings"]] == ["teeth_showing"]
 
 
@@ -215,12 +233,15 @@ async def test_parted_lips_with_eyes_to_fix_too_are_touched_up_by_themselves(
     assert recommendation["mode"] == "touchup"
     assert recommendation["reasons"] == ["gaze_off_camera", "teeth_showing"]
     assert body["ai"]["auto_adjust"] == {
-        "mode": "touchup", "image": "original", "reasons": ["gaze_off_camera", "teeth_showing"],
+        "mode": "touchup",
+        "image": "original",
+        "reasons": ["gaze_off_camera", "teeth_showing"],
     }
-    started = await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                            auto=True, count=1)
+    started = await request_adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), auto=True, count=1
+    )
     assert started.status_code == 202, started.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done" and len(images.calls) == 1
     assert body["current"] == "original", "offered, never chosen"
     assert body["ai"]["auto_adjust"] is None
@@ -233,15 +254,17 @@ async def test_the_offer_is_once_per_photo_however_it_is_cropped(client, teeth, 
     spent offer remembers it.)"""
     headers, org_id, base, _ = await _person(client, "recropped")
     images.script = ["error"]
-    await _adjust(client, headers, base, await ai_consent(client, headers, org_id),
-                  auto=True, count=1)
-    body = await _get(client, headers, base)
+    await request_adjust(
+        client, headers, base, await ai_consent(client, headers, org_id), auto=True, count=1
+    )
+    body = await get_json(client, headers, base)
     assert body["ai"]["auto_adjust"] is None and body["ai"]["adjust_rounds_left"] == 2
     # The framed picture still shows the teeth.
     framed = (round(GOOD[0] * 0.9), round(GOOD[1] * 0.9))
     teeth.changes[framed] = "teeth"
     reframed = await client.patch(
-        base, json={"crop": {"x": 0.05, "y": 0.05, "w": 0.9, "h": 0.9}}, headers=headers)
+        base, json={"crop": {"x": 0.05, "y": 0.05, "w": 0.9, "h": 0.9}}, headers=headers
+    )
     assert reframed.status_code == 200, reframed.text
     body = reframed.json()
     assert body["current"] == "framed"
@@ -256,17 +279,31 @@ def test_an_offer_spent_before_sources_were_recorded_stays_spent():
 
     from app.services import creations as svc
 
-    check = {"detector": "mediapipe", "detected": True, "checks": [{"code": "teeth_showing"}],
-             "face_state": {}, "recommendations": {
-                 "human": {"mode": "touchup", "reasons": ["teeth_showing"]}}}
-    steps = {"current": "framed", "items": {
-        "original": {"key": "orgs/o/creations/c/original-1.png", "from": None, "check": check},
-        "framed": {"key": "orgs/o/creations/c/framed-2.png", "from": "original", "check": check},
-    }}
+    check = {
+        "detector": "mediapipe",
+        "detected": True,
+        "checks": [{"code": "teeth_showing"}],
+        "face_state": {},
+        "recommendations": {"human": {"mode": "touchup", "reasons": ["teeth_showing"]}},
+    }
+    steps = {
+        "current": "framed",
+        "items": {
+            "original": {"key": "orgs/o/creations/c/original-1.png", "from": None, "check": check},
+            "framed": {
+                "key": "orgs/o/creations/c/framed-2.png",
+                "from": "original",
+                "check": check,
+            },
+        },
+    }
 
     def creation(auto_adjusted):
-        return SimpleNamespace(face_type="human", steps=steps,
-                               ai_usage={"adjust_rounds": 0, "auto_adjusted": auto_adjusted})
+        return SimpleNamespace(
+            face_type="human",
+            steps=steps,
+            ai_usage={"adjust_rounds": 0, "auto_adjusted": auto_adjusted},
+        )
 
     assert svc.auto_adjust_of(creation([])) is not None
     assert svc.auto_adjust_of(creation(["orgs/o/creations/c/framed-2.png"])) is None

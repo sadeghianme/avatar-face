@@ -73,7 +73,9 @@ def similarity_on_anchors(
     return Similarity(rotation, float(scale), ac, bc)
 
 
-def register(source: np.ndarray, target: np.ndarray, anchors: Sequence[int] = ANCHORS) -> np.ndarray:
+def register(
+    source: np.ndarray, target: np.ndarray, anchors: Sequence[int] = ANCHORS
+) -> np.ndarray:
     """Every point of `source`, carried onto `target` by the anchors' similarity."""
     return similarity_on_anchors(source, target, anchors).apply(source)
 
@@ -140,8 +142,10 @@ def _reference_paths() -> list[Path]:
     # The repository root (the image's /): this file is
     # backend/app/services/performance_kit/registration.py.
     root = Path(__file__).resolve().parents[4]
-    return [root / "embed" / "assets" / "mouth-motion.json",
-            root / "embed" / "dist" / "mouth-motion.json"]
+    return [
+        root / "embed" / "assets" / "mouth-motion.json",
+        root / "embed" / "dist" / "mouth-motion.json",
+    ]
 
 
 def load_reference(path: Path | None = None) -> ReferenceMotion:
@@ -155,13 +159,13 @@ def load_reference(path: Path | None = None) -> ReferenceMotion:
 # --- Frame ---------------------------------------------------------------------------------
 
 
-def _level(theta: float) -> np.ndarray:
+def level(theta: float) -> np.ndarray:
     """R(-theta) for column vectors: turns a line at `theta` horizontal."""
     c, s = math.cos(theta), math.sin(theta)
     return np.array([[c, s], [-s, c]])
 
 
-def _corner_angle(points: np.ndarray) -> float:
+def corner_angle(points: np.ndarray) -> float:
     d = points[MOUTH_RIGHT] - points[MOUTH_LEFT]
     return math.atan2(float(d[1]), float(d[0]))
 
@@ -187,7 +191,7 @@ class ManifestFrame:
         face = float(np.linalg.norm(base_points[FACE_RIGHT] - base_points[FACE_LEFT]))
         if face <= 0:
             raise ValueError("the base face has no width")
-        linear = reference.face_width / face * _level(_corner_angle(base_points))
+        linear = reference.face_width / face * level(corner_angle(base_points))
         middle = (base_points[MOUTH_LEFT] + base_points[MOUTH_RIGHT]) / 2
         offset = reference.corner_mid - linear @ middle
         return cls(np.hstack((linear, offset[:, None])), (int(image_size[0]), int(image_size[1])))

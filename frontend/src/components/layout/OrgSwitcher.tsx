@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { useT } from "@/i18n";
 import { useOrg } from "@/providers/org";
 
 export function OrgSwitcher() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { orgs, current, setCurrent, createOrg, loading } = useOrg();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");

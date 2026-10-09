@@ -5,12 +5,21 @@ rounded milliseconds, define the joins. Written for the lab's timestamped
 model and graduated unchanged: the production stream feeds the same packet
 shape from the standard cached Kokoro path, phrase by phrase.
 """
+
 from __future__ import annotations
 
 import base64
 import io
+import logging
 import re
 import wave
+
+from app.core.errors import AppError, error_body
+
+# What a stream says when something unexpected broke it: nothing of the
+# exception itself, which is the log's.
+STREAM_FAILED = "speech_stream_failed"
+STREAM_FAILED_DETAIL = "Speech preparation was interrupted. Please try again."
 
 
 def speech_phrases(text: str) -> list[str]:
@@ -27,7 +36,9 @@ def speech_phrases(text: str) -> list[str]:
             parts.append(rest)
             break
         boundaries = []
-        for match in re.finditer(r"[.!?;:,。！？،؛](?:[\"'”’)]*)(?:\s+|(?=[\u3000-\u9fff]))|\n+", rest[:limit + 1]):
+        for match in re.finditer(
+            r"[.!?;:,。！？،؛](?:[\"'”’)]*)(?:\s+|(?=[\u3000-\u9fff]))|\n+", rest[: limit + 1]
+        ):
             end = match.end()
             prefix = rest[:end].strip().lower()
             if re.search(r"(?:\b(?:mr|mrs|ms|dr|prof|st|vs|etc)|\b[a-z])\.$", prefix):
@@ -37,17 +48,21 @@ def speech_phrases(text: str) -> list[str]:
         if boundaries:
             end = boundaries[-1]
         else:
-            spaces = list(re.finditer(r"\s+", rest[:limit + 1]))
+            spaces = list(re.finditer(r"\s+", rest[: limit + 1]))
             # Do not cut a word, URL, number, or grapheme just to hit a target.
-            end = spaces[-1].end() if spaces else next(
-                (m.end() for m in re.finditer(r"\s+|[。！？]", rest)), len(rest)
+            end = (
+                spaces[-1].end()
+                if spaces
+                else next((m.end() for m in re.finditer(r"\s+|[。！？]", rest)), len(rest))
             )
         parts.append(rest[:end])
         rest = rest[end:]
     return parts
 
 
-def phrase_batch_size(phrases: list[str], buffered_seconds: float, seconds_per_char: float | None) -> int:
+def phrase_batch_size(
+    phrases: list[str], buffered_seconds: float, seconds_per_char: float | None
+) -> int:
     """Only batch ahead when measured inference cost fits existing audio.
 
     First/slow-server packets stay short. Faster servers can recover longer
@@ -55,18 +70,20 @@ def phrase_batch_size(phrases: list[str], buffered_seconds: float, seconds_per_c
     This is conservative headroom, not a guarantee under variable network/CPU.
     """
     count = 1
-    if not seconds_per_char or buffered_seconds <= .4:
+    if not seconds_per_char or buffered_seconds <= 0.4:
         return count
     chars = len(phrases[0])
     for phrase in phrases[1:]:
         chars += len(phrase)
-        if chars > 120 or chars * seconds_per_char * 1.25 + .4 > buffered_seconds:
+        if chars > 120 or chars * seconds_per_char * 1.25 + 0.4 > buffered_seconds:
             break
         count += 1
     return count
 
 
-def pcm_packet(audio: bytes, sequence: int, start_sample: int, cues: list[dict], baseline: list[dict]) -> dict:
+def pcm_packet(
+    audio: bytes, sequence: int, start_sample: int, cues: list[dict], baseline: list[dict]
+) -> dict:
     with wave.open(io.BytesIO(audio), "rb") as wav:
         if wav.getnchannels() != 1 or wav.getsampwidth() != 2 or wav.getframerate() != 24000:
             raise ValueError("The native stream requires mono 24 kHz PCM16")
@@ -75,7 +92,33 @@ def pcm_packet(audio: bytes, sequence: int, start_sample: int, cues: list[dict],
     if not count or count > 24000 * 90 or len(pcm) != count * 2:
         raise ValueError("Invalid native audio packet")
     return {
-        "type": "chunk", "sequence": sequence, "start_sample": start_sample,
-        "sample_count": count, "sample_rate": 24000,
-        "pcm_b64": base64.b64encode(pcm).decode(), "cues": cues, "baseline_cues": baseline,
+        "type": "chunk",
+        "sequence": sequence,
+        "start_sample": start_sample,
+        "sample_count": count,
+        "sample_rate": 24000,
+        "pcm_b64": base64.b64encode(pcm).decode(),
+        "cues": cues,
+        "baseline_cues": baseline,
     }
+
+
+def error_frame(
+    exc: Exception, logger: logging.Logger, *, detail: str = STREAM_FAILED_DETAIL
+) -> dict:
+    """The terminal `error` frame for a failure inside a speech stream.
+
+    The status line has gone out with the headers by then, so the frame
+    carries what it would have said. A refusal the app raised (an AppError:
+    a cloned line never rendered, the month's characters spent, a text with
+    nothing to say) is said exactly as the API says it anywhere else —
+    `detail`, `code`, its extra context — with its HTTP `status`, so a client
+    can tell the member what to do next. Anything else is a fault: the client
+    hears only that speech was interrupted (`detail` overrides the sentence),
+    and the exception goes to the log with its traceback.
+    """
+    if isinstance(exc, AppError):
+        logger.warning("speech stream refused (%s): %s", exc.code, exc.detail)
+        return {**error_body(exc), "type": "error", "status": exc.status_code}
+    logger.error("speech stream failed", exc_info=exc)
+    return {"type": "error", "code": STREAM_FAILED, "detail": detail, "status": 500}

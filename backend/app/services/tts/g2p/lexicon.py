@@ -6,8 +6,8 @@ from __future__ import annotations
 VOWEL_PHONEMES = frozenset("AA AE AH AO AW AY EH ER EY IH IY OW OY UH UW".split())
 CONSONANT_PHONEMES = frozenset("B CH D DH F G HH JH K L M N NG P R S SH T TH V W Y Z ZH".split())
 PHONEMES = VOWEL_PHONEMES | CONSONANT_PHONEMES
-_VOICED_CONS = frozenset("B D DH G JH L M N NG R V W Y Z ZH".split())
-_SIBILANTS = frozenset("S Z SH ZH CH JH".split())
+VOICED_CONS = frozenset("B D DH G JH L M N NG R V W Y Z ZH".split())
+SIBILANTS = frozenset("S Z SH ZH CH JH".split())
 
 LEXICON_RAW = {
     "a": "AH",

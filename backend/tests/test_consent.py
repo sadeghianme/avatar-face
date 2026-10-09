@@ -36,11 +36,16 @@ async def _creation(org_id: str) -> str:
 
     async with get_session_factory()() as db:
         owner = (
-            await db.execute(select(Membership.user_id).where(Membership.org_id == org_id))
-        ).scalars().first()
+            (await db.execute(select(Membership.user_id).where(Membership.org_id == org_id)))
+            .scalars()
+            .first()
+        )
         creation = Creation(
-            org_id=org_id, created_by_id=owner, face_type="human",
-            status=CreationStatus.draft, revision=0,
+            org_id=org_id,
+            created_by_id=owner,
+            face_type="human",
+            status=CreationStatus.draft,
+            revision=0,
         )
         db.add(creation)
         await db.commit()
@@ -49,7 +54,10 @@ async def _creation(org_id: str) -> str:
 
 async def _statement(client, headers, org_id, scope="depiction", creation_id=None):
     return await _give(
-        client, headers, org_id, scope=scope,
+        client,
+        headers,
+        org_id,
+        scope=scope,
         creation_id=creation_id or await _creation(org_id),
     )
 
@@ -65,7 +73,8 @@ async def test_the_terms_name_google_and_the_versions_in_force(client):
     assert response.status_code == 200, response.text
     assert response.json() == {
         "third_party_ai": {
-            "text_version": svc.TEXT_VERSIONS["third_party_ai"], "providers": ["google"],
+            "text_version": svc.TEXT_VERSIONS["third_party_ai"],
+            "providers": ["google"],
         },
         "depiction": {"text_version": svc.TEXT_VERSIONS["depiction"], "providers": []},
         "generated_face": {"text_version": svc.TEXT_VERSIONS["generated_face"], "providers": []},
@@ -111,22 +120,32 @@ def test_the_hash_depends_on_the_server_secret(monkeypatch):
         ({"scope": "third_party_ai", "text_version": "1999-01-01"}, "unknown_consent_version"),
         ({"scope": "depiction", "text_version": "1999-01-01"}, "unknown_consent_version"),
         (
-            {"scope": "third_party_ai", "text_version": svc.TEXT_VERSIONS["third_party_ai"],
-             "providers": ["openai"]},
+            {
+                "scope": "third_party_ai",
+                "text_version": svc.TEXT_VERSIONS["third_party_ai"],
+                "providers": ["openai"],
+            },
             "unknown_provider",
         ),
         ({"scope": "marketing", "text_version": "x"}, "validation_error"),
         # An empty list names nobody: never recorded as Google.
         (
-            {"scope": "third_party_ai", "text_version": svc.TEXT_VERSIONS["third_party_ai"],
-             "providers": []},
+            {
+                "scope": "third_party_ai",
+                "text_version": svc.TEXT_VERSIONS["third_party_ai"],
+                "providers": [],
+            },
             "unknown_provider",
         ),
         # A statement about a face says which face.
-        ({"scope": "depiction", "text_version": svc.TEXT_VERSIONS["depiction"]},
-         "consent_subject_required"),
-        ({"scope": "generated_face", "text_version": svc.TEXT_VERSIONS["generated_face"]},
-         "consent_subject_required"),
+        (
+            {"scope": "depiction", "text_version": svc.TEXT_VERSIONS["depiction"]},
+            "consent_subject_required",
+        ),
+        (
+            {"scope": "generated_face", "text_version": svc.TEXT_VERSIONS["generated_face"]},
+            "consent_subject_required",
+        ),
     ],
 )
 async def test_unknown_wordings_scopes_and_providers_are_refused(client, body, code):
@@ -154,10 +173,11 @@ async def test_consents_are_per_org_membership(client):
 # --- the switch ---------------------------------------------------------------------
 
 
-async def _member(client, owner, org_id, username, role="member"):
+async def add_member(client, owner, org_id, username, role="member"):
     invite = await client.post(
         f"/orgs/{org_id}/invitations",
-        json={"email": f"{username}@example.com", "role": role}, headers=owner,
+        json={"email": f"{username}@example.com", "role": role},
+        headers=owner,
     )
     headers = await register_and_login(client, username)
     accepted = await client.post(f"/invitations/{invite.json()['token']}/accept", headers=headers)
@@ -167,15 +187,17 @@ async def _member(client, owner, org_id, username, role="member"):
 
 async def test_only_owners_and_admins_switch_third_party_ai(client):
     owner, org_id = await _org(client, "boss")
-    member = await _member(client, owner, org_id, "worker")
-    admin = await _member(client, owner, org_id, "deputy", role="admin")
+    member = await add_member(client, owner, org_id, "worker")
+    admin = await add_member(client, owner, org_id, "deputy", role="admin")
 
     refused = await client.patch(
         f"/orgs/{org_id}", json={"third_party_ai_enabled": False}, headers=member
     )
     assert refused.status_code == 403 and refused.json()["code"] == "insufficient_role"
 
-    off = await client.patch(f"/orgs/{org_id}", json={"third_party_ai_enabled": False}, headers=admin)
+    off = await client.patch(
+        f"/orgs/{org_id}", json={"third_party_ai_enabled": False}, headers=admin
+    )
     assert off.status_code == 200, off.text
     assert off.json()["third_party_ai_enabled"] is False
     assert off.json()["name"] == "Acme", "the name is left alone"
@@ -213,13 +235,15 @@ async def test_require_accepts_only_this_users_current_consent_for_the_scope(cli
     from app.models import Membership, Organization
 
     alice, org_id = await _org(client, "alice")
-    bob = await _member(client, alice, org_id, "bob")
+    bob = await add_member(client, alice, org_id, "bob")
     ai_id = (await _give(client, alice, org_id)).json()["id"]
     depiction_id = (await _statement(client, alice, org_id)).json()["id"]
 
     async with get_session_factory()() as db:
         org = await db.get(Organization, org_id)
-        members = (await db.execute(select(Membership).where(Membership.org_id == org_id))).scalars()
+        members = (
+            await db.execute(select(Membership).where(Membership.org_id == org_id))
+        ).scalars()
         by_role = {m.role.value: m.user_id for m in members}
         alice_id, bob_id = by_role["owner"], by_role["member"]
 
@@ -227,11 +251,11 @@ async def test_require_accepts_only_this_users_current_consent_for_the_scope(cli
         assert agreed.id == ai_id
 
         for consent_id, user_id, scope, provider in (
-            (None, alice_id, svc.THIRD_PARTY_AI, "google"),       # none given
-            ("nope", alice_id, svc.THIRD_PARTY_AI, "google"),     # unknown id
-            (ai_id, bob_id, svc.THIRD_PARTY_AI, "google"),        # someone else's
-            (depiction_id, alice_id, svc.THIRD_PARTY_AI, None),   # another scope
-            (ai_id, alice_id, svc.THIRD_PARTY_AI, "openai"),      # another provider
+            (None, alice_id, svc.THIRD_PARTY_AI, "google"),  # none given
+            ("nope", alice_id, svc.THIRD_PARTY_AI, "google"),  # unknown id
+            (ai_id, bob_id, svc.THIRD_PARTY_AI, "google"),  # someone else's
+            (depiction_id, alice_id, svc.THIRD_PARTY_AI, None),  # another scope
+            (ai_id, alice_id, svc.THIRD_PARTY_AI, "openai"),  # another provider
         ):
             with pytest.raises(Forbidden403) as caught:
                 await svc.require(db, consent_id, org, user_id, scope, provider)
@@ -277,8 +301,11 @@ async def test_my_latest_consent_is_remembered_per_scope(client):
     headers, org_id = await _org(client, "rememberer")
     nothing = await _mine(client, headers, org_id)
     assert nothing == {
-        "scope": "third_party_ai", "text_version": svc.TEXT_VERSIONS["third_party_ai"],
-        "consent_id": None, "created_at": None, "stale": False,
+        "scope": "third_party_ai",
+        "text_version": svc.TEXT_VERSIONS["third_party_ai"],
+        "consent_id": None,
+        "created_at": None,
+        "stale": False,
     }
 
     first = (await _give(client, headers, org_id)).json()["id"]
@@ -367,12 +394,11 @@ async def test_an_unknown_scope_is_refused(client):
     assert response.status_code == 422
 
 
-
 # --- statements about a face ---------------------------------------------------------
 
 
 async def test_a_statement_about_a_face_counts_for_its_creation_only(client):
-    """"I am this person or have their permission" is about one face: a
+    """ "I am this person or have their permission" is about one face: a
     statement made for one creation cannot stand behind another."""
     from app.core.errors import Forbidden403
     from app.models import Organization

@@ -17,20 +17,128 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Every job below is a required check on main (docs/process.md, "Branch
-# protection"), named by its job id: rename one only together with that rule.
+# The required checks on main (docs/process.md, "Branch protection") are the
+# job ids backend, embed, frontend, frontend-lint, deploy-script and images:
+# rename one only together with that rule. backend-checks, backend-tests and
+# backend-coverage are not required themselves: `backend` passes only when
+# they all do.
 jobs:
-  backend:
+  # The backend is three jobs side by side: its static checks, and its test
+  # suite in two halves. Each restores the same virtualenv. Then
+  # backend-coverage combines the two halves' coverage.
+  backend-checks:
+    # Everything but the tests: lint, formatting, types, the API document,
+    # and the migrations against the models. No system libraries: nothing
+    # here loads mediapipe or espeak (tests/test_layering.py keeps them lazy).
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        id: python
         with:
           python-version: "3.12"
-          cache: pip
+      - name: Restore the virtualenv
+        # The whole environment, keyed on everything that decides it: the
+        # Python, the production pins and the project's own requirements. A
+        # hit skips the install; a miss installs, and the job saves it.
+        id: venv
+        uses: actions/cache@v6
+        with:
+          path: backend/.venv
+          key: venv-${{ runner.os }}-python${{ steps.python.outputs.python-version }}-${{ hashFiles('backend/constraints.txt', 'backend/pyproject.toml') }}
+      - name: Install backend
+        # With the production pins (constraints.txt, as the Dockerfile
+        # installs): the tests and the type check see the library versions
+        # that run in production, and a new release upstream cannot turn
+        # this job red on its own.
+        if: steps.venv.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -c constraints.txt -e ".[rig,dev]"
+      - name: Use the virtualenv
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Lint
+        run: ruff check .
+      - name: Formatting
+        # ruff's formatter, configured in pyproject.toml ([tool.ruff.format]).
+        # To fix: `ruff format .` from backend/.
+        run: ruff format --check .
+      - name: Type check
+        run: pyright
+      - name: OpenAPI document matches the code
+        # frontend/src/lib/api-schema.json is the contract the dashboard and
+        # the widget generate their types from, and scripts/export_openapi.py
+        # its one generator. Exported again here and compared: an API change
+        # committed without its document fails (frontend-lint and embed then
+        # hold their generated types to the document).
+        run: |
+          python scripts/export_openapi.py ../frontend/src/lib/api-schema.json
+          git diff --exit-code -- ../frontend/src/lib/api-schema.json
+      - name: Migrations match the models
+        # A fresh SQLite built by the migrations alone, compared with the
+        # models (`alembic check`: tables, columns, types, nullability,
+        # indexes, foreign keys); then the newest migration down, up again,
+        # and compared once more. Production runs the migrations when the API
+        # starts, while the tests build their schema from the models: a model
+        # change without its migration, or a downgrade that leaves something
+        # behind, fails here and nowhere else.
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///${{ runner.temp }}/migrations.sqlite3
+        run: |
+          alembic upgrade head
+          alembic check
+          alembic downgrade -1
+          alembic upgrade head
+          alembic check
+
+  backend-tests:
+    # The suite in two halves side by side (LIVEFACE_TEST_SHARD, read by
+    # tests/conftest.py: each test belongs to exactly one), each half on
+    # every core of its runner (pytest-xdist, -n auto).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # One half failing must not cancel the other: both sets of failures.
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # The two MediaPipe models, as backend/Dockerfile pins them. No test
+      # loads them yet: the one that would (the reference manifest rebuilt
+      # from the masters, test_performance_kit.py) is opt-in through
+      # LIVEFACE_FACE_MODEL, and compares bytes with the committed manifest,
+      # which the one rebuilt on this runner does not match.
+      FACE_MODEL_URL: https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+      FACE_MODEL_SHA256: 64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff
+      SEGMENT_MODEL_URL: https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite
+      SEGMENT_MODEL_SHA256: 191ac9529ae506ee0beefa6b2c945a172dab9d07d1e802a290a4e4038226658b
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        id: python
+        with:
+          python-version: "3.12"
+      - name: Restore the virtualenv
+        # As in backend-checks: the same key, so the same environment.
+        id: venv
+        uses: actions/cache@v6
+        with:
+          path: backend/.venv
+          key: venv-${{ runner.os }}-python${{ steps.python.outputs.python-version }}-${{ hashFiles('backend/constraints.txt', 'backend/pyproject.toml') }}
+      - name: Install backend
+        if: steps.venv.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -c constraints.txt -e ".[rig,dev]"
+      - name: Use the virtualenv
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Install system libraries (as the Dockerfile does)
         # espeak-ng for multilingual phonemes; libegl1/libgles2 because
         # mediapipe 1.x loads a C library needing them at its first task, and
@@ -38,24 +146,25 @@ jobs:
         run: >
           sudo apt-get update && sudo apt-get install -y --no-install-recommends
           espeak-ng libgl1 libglib2.0-0 libegl1 libgles2
-      - name: Install backend
-        # With the production pins (constraints.txt, as the Dockerfile
-        # installs): the tests and the type check see the library versions
-        # that run in production, and a new release upstream cannot turn
-        # this job red on its own.
-        run: pip install -c constraints.txt -e ".[rig,dev]"
-      - name: Lint
-        run: ruff check .
-      - name: Type check
-        run: pyright
-      - name: Fetch MediaPipe models (same URLs the Dockerfile uses)
+      - name: Restore the MediaPipe models
+        # Keyed on their checksums: a new model is a new key.
+        id: models
+        uses: actions/cache@v6
+        with:
+          path: backend/models
+          key: mediapipe-${{ env.FACE_MODEL_SHA256 }}-${{ env.SEGMENT_MODEL_SHA256 }}
+      - name: Fetch the MediaPipe models
+        if: steps.models.outputs.cache-hit != 'true'
         run: |
           mkdir -p models
-          curl -fsSL -o models/face_landmarker.task \
-            https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
-          echo "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff  models/face_landmarker.task" | sha256sum -c -
-          curl -fsSL -o models/selfie_segmenter.tflite \
-            https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite
+          curl -fsSL --retry 5 --retry-all-errors -o models/face_landmarker.task "$FACE_MODEL_URL"
+          curl -fsSL --retry 5 --retry-all-errors -o models/selfie_segmenter.tflite "$SEGMENT_MODEL_URL"
+      - name: Check the MediaPipe models
+        # Fetched or restored, the bytes the Dockerfile pins.
+        run: |
+          printf '%s  %s\n' \
+            "$FACE_MODEL_SHA256" models/face_landmarker.task \
+            "$SEGMENT_MODEL_SHA256" models/selfie_segmenter.tflite | sha256sum -c -
       - name: Stub widget bundles
         # The bundle-serving tests assert caching/CORS headers, which only
         # exist when the file does; any content works, so stubs beat pulling
@@ -66,9 +175,90 @@ jobs:
           mkdir -p ../embed/dist
           echo "// ci stub" > ../embed/dist/liveface.js
           echo "// ci stub" > ../embed/dist/liveface-3d.js
+          echo "// ci stub" > ../embed/dist/basis_transcoder.js
+          printf '\0asm\1\0\0\0' > ../embed/dist/basis_transcoder.wasm
           cp ../embed/assets/mouth-teeth.webp ../embed/assets/mouth-teeth.rig.json ../embed/dist/
-      - name: Tests
-        run: python -m pytest tests -q
+      - name: Tests (half ${{ matrix.shard }} of 2)
+        # With coverage (backend/.coveragerc): every xdist worker measures,
+        # pytest-cov merges them into this half's data file.
+        # No floor here: half the suite covers less than the whole, and
+        # backend-coverage holds the two halves combined to it.
+        env:
+          LIVEFACE_TEST_SHARD: ${{ matrix.shard }}/2
+          COVERAGE_FILE: .coverage.half${{ matrix.shard }}
+        run: python -m pytest tests -q -n auto --cov --cov-report= --cov-fail-under=0
+      - name: Upload this half's coverage data
+        uses: actions/upload-artifact@v6
+        with:
+          name: backend-coverage-data-${{ matrix.shard }}
+          path: backend/.coverage.half${{ matrix.shard }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  backend-coverage:
+    # The two halves' coverage data combined, held to the floor
+    # (fail_under in backend/.coveragerc, docs/process.md "Coverage"). Needs
+    # only coverage itself, at the version pyproject.toml pins: it reads the
+    # sources, it imports nothing.
+    needs: backend-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install coverage
+        run: |
+          pin=$(python -c 'import tomllib; dev = tomllib.load(open("pyproject.toml", "rb"))["project"]["optional-dependencies"]["dev"]; print(next(d for d in dev if d.startswith("coverage==")))')
+          pip install "$pin"
+      - name: Download both halves' data
+        uses: actions/download-artifact@v7
+        with:
+          pattern: backend-coverage-data-*
+          merge-multiple: true
+          path: backend
+      - name: Combine
+        run: coverage combine
+      - name: HTML and LCOV reports
+        # Below the floor too (--fail-under=0): the report shows what is
+        # missing.
+        run: |
+          coverage html --fail-under=0
+          coverage lcov --fail-under=0 -o htmlcov/lcov.info
+      - name: Upload the coverage report
+        uses: actions/upload-artifact@v6
+        with:
+          name: backend-coverage
+          path: backend/htmlcov/
+          retention-days: 7
+      - name: Coverage floor
+        run: coverage report
+
+  backend:
+    # The required check (branch protection names it): green only when
+    # backend-checks, both halves of backend-tests and backend-coverage are.
+    # `always()`: a required check that is skipped counts as passed, so this
+    # one never skips; it runs whatever happened before it and fails unless
+    # all passed (backend-coverage is skipped, so not a success, when a half
+    # failed).
+    if: always()
+    needs: [backend-checks, backend-tests, backend-coverage]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every backend job passed
+        env:
+          CHECKS: ${{ needs.backend-checks.result }}
+          TESTS: ${{ needs.backend-tests.result }}
+          COVERAGE: ${{ needs.backend-coverage.result }}
+        run: |
+          echo "backend-checks: $CHECKS, backend-tests: $TESTS, backend-coverage: $COVERAGE"
+          test "$CHECKS" = success && test "$TESTS" = success && test "$COVERAGE" = success
 
   embed:
     runs-on: ubuntu-latest
@@ -76,10 +266,11 @@ jobs:
       run:
         working-directory: embed
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          # As the images (node:22-alpine); Node 20 is past its end of life.
+          node-version: 22
           cache: npm
           cache-dependency-path: embed/package-lock.json
       - run: npm ci
@@ -93,6 +284,11 @@ jobs:
       # against the code it tests fails here, not by passing on stale casts.
       - name: Typecheck (sources, tests)
         run: npm run typecheck
+      # src/api-types.ts (what the widget reads from the API) is generated
+      # from the committed OpenAPI document by scripts/gen-api-types.mjs: a
+      # hand edit, or a document committed without regenerating, fails here.
+      - name: API types match the committed schema
+        run: npm run check:api
       # Tests before build: the engine's motion and cue logic had no
       # automated coverage at all, and every regression in it this far has
       # been invisible in a screenshot. The golden render snapshots are
@@ -100,56 +296,101 @@ jobs:
       # pixels.test.ts draws real frames on Skia's CPU raster
       # (@napi-rs/canvas, a prebuilt binary npm ci installs: no browser) and
       # holds them to committed goldens; a frame that fails is uploaded.
-      - run: npm test
+      # `npm test` with V8 coverage, held to the floors in vitest.config.ts
+      # (docs/process.md, "Coverage").
+      - name: Tests, with coverage
+        run: npm run test:coverage
+      - name: Upload the coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: embed-coverage
+          path: embed/coverage/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload the frames that failed the pixel goldens
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pixel-diffs
           path: embed/dist/pixel-diffs/
           if-no-files-found: ignore
       - run: npm run build
+      # The speech cache's encoder (backend/app/services/tts/speech_codec.py),
+      # run by the speech timing test below on its own: soundfile and numpy at
+      # the production pins, nothing else of the backend.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install the speech encoder
+        run: pip install -c ../backend/constraints.txt soundfile numpy
       # The browser tests (browser-tests/), in Chromium with WebGL on
       # SwiftShader: the GPU warp most visitors get, against the 2D path and
       # its goldens, and liveface.js with its names renamed against the same
-      # bundle without, pixel for pixel. Chromium is cached by Playwright's
-      # version (package-lock.json pins it); its system libraries are not
-      # in the cache, so they are installed either way.
+      # bundle without, pixel for pixel. The speech timing test also runs in
+      # Firefox and WebKit: a cached line played as the widget plays it, its
+      # sound found again where the engine's clock says it is. The browsers
+      # are cached by Playwright's version (package-lock.json pins it); their
+      # system libraries are not in the cache, so they are installed either
+      # way.
       - name: Playwright's version
         id: playwright
         run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
-      - name: Cache Chromium
-        id: chromium
-        uses: actions/cache@v4
+      - name: Cache the browsers
+        id: browsers
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: chromium-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      - name: Install Chromium
-        if: steps.chromium.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps --only-shell chromium
-      - name: Install Chromium's system libraries
-        if: steps.chromium.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
+          key: browsers-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install the browsers
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps --only-shell chromium firefox webkit
+      - name: Install the browsers' system libraries
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium firefox webkit
+      # The runner has no sound card: without a sound server Firefox's audio
+      # never starts and WebKit's runs on no device's clock. A null sink plays
+      # in real time to nowhere.
+      - name: A sound server with a null sink
+        run: |
+          sudo apt-get install -y --no-install-recommends pulseaudio
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=nowhere
+          pactl set-default-sink nowhere
       - name: Browser tests
+        env:
+          LIVEFACE_PYTHON: python
+          SPEECH_TIMING_BROWSERS: chromium,firefox,webkit
+          SPEECH_TIMING_DUMP_DIR: dist/speech-timing
         run: npm run test:browser
+      - name: Upload what the speech timing pages recorded
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: speech-timing
+          path: embed/dist/speech-timing/
+          if-no-files-found: ignore
       - name: Upload the frames that failed the browser goldens
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: browser-diffs
           path: embed/dist/browser-diffs/
           if-no-files-found: ignore
 
   frontend:
+    # The dashboard's type check, its two test suites with coverage, and its
+    # production build. Node 22, as the image: node --test runs the .test.ts
+    # files by stripping their types.
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       # The dashboard imports @liveface/embed straight from ../embed/src via
@@ -157,20 +398,40 @@ jobs:
       - name: Install embed deps
         run: npm ci --prefix ../embed
       - run: npm ci
+      # The app, then the tests' own program (tsconfig.test.json): a test
+      # that no longer type-checks against the code it tests fails here.
+      - name: Typecheck (app, tests)
+        run: npm run typecheck
+      # The two suites, each with coverage held to its own floors
+      # (docs/process.md, "Coverage"): the unit tests (node --test, the
+      # thresholds in package.json's test:coverage), then the kit and the
+      # main screens mounted in jsdom (Vitest + Testing Library, against a
+      # mocked API: src/test/; the thresholds in vitest.config.ts).
+      - name: Unit tests, with coverage
+        run: npm run test:coverage
+      - name: Rendering tests, with coverage
+        run: npm run test:ui:coverage
+      - name: Upload the coverage reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Typecheck and build
         run: npm run build
 
   frontend-lint:
     # The dashboard's lint (the UI kit and data-layer rules among them,
-    # docs/frontend-ui.md), its formatting and its unit tests. Node 22:
-    # node --test runs the .test.ts files by stripping their types.
+    # docs/frontend-ui.md), its formatting and its generated API types.
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -181,7 +442,11 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run format:check
-      - run: npm test
+      # lib/api-types.ts is generated from the committed OpenAPI schema
+      # (lib/api-schema.json, refreshed with `npm run api:schema`): a hand
+      # edit, or a schema committed without regenerating, fails here.
+      - name: API types match the committed schema
+        run: npm run check:api
 
   deploy-script:
     # The release gate itself: shellcheck on every deploy script, then
@@ -206,7 +471,9 @@ jobs:
     # they are started behind a Caddy stand-in and must report this commit on
     # /api/health and /version.json, and every page must load in headless
     # Chrome with zero Content-Security-Policy violations, the Simulator's
-    # widget and the share page's speech included (deploy/smoke/).
+    # widget and the share page's speech included; then an owner makes an
+    # avatar through the whole wizard, hears it speak, shares it and
+    # deletes it, in the same Chrome (deploy/smoke/).
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -242,9 +509,36 @@ jobs:
           curl -sf http://127.0.0.1:7090/version.json | grep -F '"version":"${{ github.sha }}"'
       - name: Every page, zero CSP violations
         run: node deploy/smoke/web-sweep.mjs http://127.0.0.1:7090
+      - name: Install the wizard test's driver
+        # playwright-core alone (deploy/smoke/package-lock.json): it drives
+        # the runner's own Chrome, as the sweep does, so nothing is downloaded.
+        run: npm ci --prefix deploy/smoke
+      - name: The avatar wizard, end to end
+        # A fresh account through the register form, the four steps on the
+        # path without AI (no AI keys here), the avatar's page speaking in
+        # Kokoro, its public link played signed out, then deleted; no console
+        # error and no CSP violation all along (deploy/smoke/wizard-e2e.mjs).
+        env:
+          WIZARD_E2E_ARTIFACTS: ${{ runner.temp }}/wizard-e2e
+        run: node deploy/smoke/wizard-e2e.mjs http://127.0.0.1:7090
       - name: Container logs
         if: failure()
         run: |
           docker logs api 2>&1 | tail -100
           docker logs web 2>&1 | tail -50
           cat proxy.log
+      - name: The API's whole log, beside the wizard test's files
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/wizard-e2e"
+          docker logs api > "$RUNNER_TEMP/wizard-e2e/api.log" 2>&1 || true
+      - name: Upload the wizard test's screenshots, traces and logs
+        # A screenshot per step and of every page open when it failed, a
+        # Playwright trace per visitor (npx playwright-core show-trace), the
+        # console and the network log.
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wizard-e2e
+          path: ${{ runner.temp }}/wizard-e2e/
+          if-no-files-found: ignore

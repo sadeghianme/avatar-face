@@ -1,6 +1,5 @@
 """Avaturn 3D: the session flow, and what happens without a token."""
 
-
 from tests.conftest import create_org, register_and_login
 
 
@@ -8,9 +7,7 @@ async def test_session_is_refused_without_a_token(client):
     """Unconfigured must be a clear 409, not a 500 from a None Authorization."""
     headers = await register_and_login(client, "no3d")
     org_id = await create_org(client, headers)
-    response = await client.post(
-        f"/orgs/{org_id}/avatars/avaturn-session", headers=headers
-    )
+    response = await client.post(f"/orgs/{org_id}/avatars/avaturn-session", headers=headers)
     assert response.status_code == 409
     assert response.json()["code"] == "avaturn_unavailable"
 
@@ -28,13 +25,11 @@ async def test_session_returns_only_the_editor_url(client, monkeypatch):
         return {"url": "https://editor.avaturn.me/s/abc", "id": "SESSION1"}
 
     monkeypatch.setattr(avaturn, "api_token", lambda: "secret-token")
-    monkeypatch.setattr(avaturn, "_post", fake_post)
+    monkeypatch.setattr(avaturn, "post", fake_post)
 
     headers = await register_and_login(client, "has3d")
     org_id = await create_org(client, headers)
-    response = await client.post(
-        f"/orgs/{org_id}/avatars/avaturn-session", headers=headers
-    )
+    response = await client.post(f"/orgs/{org_id}/avatars/avaturn-session", headers=headers)
     assert response.status_code == 200
     body = response.json()
     assert body["url"] == "https://editor.avaturn.me/s/abc"

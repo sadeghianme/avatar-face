@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Field } from "@/components/ui/Field";
 import { Select } from "@/components/ui/Select";
@@ -12,6 +11,7 @@ import {
   useSpeechLanguages,
   useSpeechProviders,
 } from "@/features/voices/api";
+import { useT } from "@/i18n";
 import { useOrg } from "@/providers/org";
 
 /** One empty list for "no clones", so the voices query is not re-keyed by a new []. */
@@ -43,14 +43,20 @@ export function VoicePicker({
   value: VoiceSelection;
   onChange: (selection: VoiceSelection) => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { current } = useOrg();
   const orgId = current?.id;
 
   // Cloned voices are rows in this org's speech cache, not a global list, so
   // they come from the org-scoped endpoint and are merged in here — the
   // generic provider listing is unauthenticated and could not scope them.
-  const { data: cloned = NO_CLONES } = useClonedVoices(orgId);
+  const clones = useClonedVoices(orgId);
+  const cloned = clones.data ?? NO_CLONES;
+  // Until the org's clones have answered (the org itself may still be
+  // loading), the provider list is not known: judged without them, a cloned
+  // voice (the avatar's own, saved) would be "invalid" and replaced — and
+  // on the avatar page, saved so.
+  const clonesKnown = clones.isSuccess || clones.isError;
 
   // Languages the server can actually speak, each already resolved to the
   // best provider and voice. Choosing a language is the primary act; the
@@ -81,10 +87,10 @@ export function VoicePicker({
 
   useEffect(() => {
     const { value, onChange } = selection.current;
-    if (allProviders?.length && !allProviders.some((p) => p.name === value.provider)) {
+    if (clonesKnown && allProviders?.length && !allProviders.some((p) => p.name === value.provider)) {
       onChange({ ...value, provider: allProviders[0].name, voice: "" });
     }
-  }, [allProviders]);
+  }, [allProviders, clonesKnown]);
 
   // Keep the voice valid when the provider (or its voice list) changes.
   useEffect(() => {

@@ -2,17 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
+import type { Org, Schemas } from "@/lib/types";
 
 /**
  * The account pages' requests that are not the session itself (sign-in,
  * sign-up and the session live in providers/auth: every page reads them).
  */
 
-export interface InviteInfo {
-  org_name: string;
-  email: string;
-  role: string;
-}
+export type InviteInfo = Schemas["InvitePublic"];
 
 /** What an invitation link is for; a dead link is an error, not retried. */
 export function useInvite(token: string | undefined) {
@@ -27,7 +24,7 @@ export function useInvite(token: string | undefined) {
 export function useAcceptInvite(token: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => api.post(`/invitations/${token}/accept`),
+    mutationFn: () => api.post<Org>(`/invitations/${token}/accept`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.orgs() }),
   });
 }
@@ -35,14 +32,16 @@ export function useAcceptInvite(token: string | undefined) {
 /** Ask for a reset link. The answer is the same whether the address exists or not. */
 export function useForgotPassword() {
   return useMutation({
-    mutationFn: (email: string) => api.post("/auth/forgot-password", { email }),
+    mutationFn: (email: string) =>
+      api.post("/auth/forgot-password", { email } satisfies Schemas["ForgotPasswordRequest"]),
   });
 }
 
-/** A new password from a reset link; answers with a session to adopt. */
+/** A new password from a reset link: every other session of the account
+ *  ends, and the answer is this browser's new one, to adopt. */
 export function useResetPassword() {
   return useMutation({
-    mutationFn: (body: { token: string; password: string }) =>
-      api.post<{ access_token: string; refresh_token: string }>("/auth/reset-password", body),
+    mutationFn: (body: Schemas["ResetPasswordRequest"]) =>
+      api.post<Schemas["AccessToken"]>("/auth/reset-password", body),
   });
 }

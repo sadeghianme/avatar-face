@@ -75,9 +75,7 @@ def detect_anchors(png: bytes, face_type: str) -> FoundAnchors:
         "marks": stored,
         "validation": {
             "ok": ok,
-            "reasons": [
-                {"code": p.code, "detail": p.detail, "count": p.count} for p in problems
-            ],
+            "reasons": [{"code": p.code, "detail": p.detail, "count": p.count} for p in problems],
             "warnings": warnings,
             "detected": detected,
             # "Looks right" in one click: the validator is happy with a real

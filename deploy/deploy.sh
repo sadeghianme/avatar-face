@@ -283,7 +283,8 @@ ssh "$REMOTE" "test -s $REMOTE_DIR/deploy/.env" || {
 
 # Not cp: the database is in WAL mode, so recent commits live in the -wal
 # file beside it, and a copy of the main file alone silently lacks them.
-# backup_db.py uses SQLite's online backup instead; see its docstring.
+# backup_db.py takes a consistent, compacted copy instead (VACUUM INTO);
+# see its docstring.
 BACKUP="/data/liveface.sqlite3.bak-$(date +%Y%m%d-%H%M%S)"
 echo "==> backing up the database to $BACKUP"
 ssh "$REMOTE" "docker exec -i $API_CONTAINER python - /data/liveface.sqlite3 $BACKUP" \

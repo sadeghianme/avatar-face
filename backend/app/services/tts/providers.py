@@ -4,6 +4,7 @@ Each appears in /tts/providers only when its credentials are configured
 (env or dashboard-managed; the credential store decides). All results are
 normalized to SynthesisResult with 15-viseme cue tracks.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -15,7 +16,7 @@ import wave
 from pathlib import Path
 
 import httpx
-from jose import jwt as jose_jwt
+import jwt
 
 from app.core.credentials import credentials
 from app.services.tts.base import SynthesisResult, TTSProvider, Voice
@@ -32,9 +33,28 @@ def _wav_duration_ms(data: bytes) -> int:
 
 # Azure's viseme event ids -> Oculus visemes.
 AZURE_VISEME_MAP = {
-    0: "sil", 1: "aa", 2: "aa", 3: "oh", 4: "E", 5: "RR", 6: "ih", 7: "ou",
-    8: "oh", 9: "aa", 10: "oh", 11: "aa", 12: "kk", 13: "RR", 14: "nn",
-    15: "SS", 16: "CH", 17: "TH", 18: "FF", 19: "DD", 20: "kk", 21: "PP",
+    0: "sil",
+    1: "aa",
+    2: "aa",
+    3: "oh",
+    4: "E",
+    5: "RR",
+    6: "ih",
+    7: "ou",
+    8: "oh",
+    9: "aa",
+    10: "oh",
+    11: "aa",
+    12: "kk",
+    13: "RR",
+    14: "nn",
+    15: "SS",
+    16: "CH",
+    17: "TH",
+    18: "FF",
+    19: "DD",
+    20: "kk",
+    21: "PP",
 }
 
 
@@ -52,7 +72,8 @@ class AzureTTSProvider(TTSProvider):
         url = f"https://{self._region()}.tts.speech.microsoft.com/cognitiveservices/voices/list"
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             response = await client.get(
-                url, headers={"Ocp-Apim-Subscription-Key": credentials.get("azure_speech_key") or ""}
+                url,
+                headers={"Ocp-Apim-Subscription-Key": credentials.get("azure_speech_key") or ""},
             )
             response.raise_for_status()
         return [
@@ -147,7 +168,9 @@ class ElevenLabsTTSProvider(TTSProvider):
             )
             response.raise_for_status()
         return [
-            Voice(id=v["voice_id"], name=v["name"], locale=v.get("labels", {}).get("language", "en"))
+            Voice(
+                id=v["voice_id"], name=v["name"], locale=v.get("labels", {}).get("language", "en")
+            )
             for v in response.json().get("voices", [])
         ]
 
@@ -182,7 +205,9 @@ class ElevenLabsTTSProvider(TTSProvider):
             cues = await asyncio.to_thread(cues_from_text, text, duration, locale)
         else:
             cues.append({"t": duration, "viseme": "sil"})
-        return SynthesisResult(audio=audio, audio_mime="audio/mpeg", duration_ms=duration, cues=cues)
+        return SynthesisResult(
+            audio=audio, audio_mime="audio/mpeg", duration_ms=duration, cues=cues
+        )
 
 
 class GoogleTTSProvider(TTSProvider):
@@ -203,7 +228,9 @@ class GoogleTTSProvider(TTSProvider):
     async def _access_token(self) -> str:
         sa = self._service_account()
         now = int(time.time())
-        assertion = jose_jwt.encode(
+        # The service account's OAuth assertion (RS256: PyJWT signs with the
+        # cryptography package).
+        assertion = jwt.encode(
             {
                 "iss": sa["client_email"],
                 "scope": "https://www.googleapis.com/auth/cloud-platform",

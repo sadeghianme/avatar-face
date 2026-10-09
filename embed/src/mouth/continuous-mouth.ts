@@ -50,6 +50,9 @@ export const CORNER_EASE = 0.4;
 /** Radial magnification of the lip mound at full rounding. Small: at 0.1 the
  *  lips visibly swelled like a bee sting rather than coming forward. */
 export const PROTRUSION = 0.05;
+/** The mound's reach: an ellipse around the mouth's centre, these shares of
+ *  the mouth's width across and down. Nothing at or beyond it moves. */
+export const MOUND_REACH: readonly [number, number] = [0.62, 0.42];
 
 /** Where a teeth photo is: the photo, and its rig (the landmarks on it). */
 export interface OralPhotoSource {
@@ -215,7 +218,7 @@ export class ContinuousMouth implements MouthExtension {
       for (let i = 0; i < points.length; i++) {
         const dx = points[i].x - mx,
           dy = points[i].y - my;
-        const r = (dx / (width * 0.62)) ** 2 + (dy / (width * 0.42)) ** 2;
+        const r = (dx / (width * MOUND_REACH[0])) ** 2 + (dy / (width * MOUND_REACH[1])) ** 2;
         if (r >= 1) continue;
         const gain = PROTRUSION * rounding * (1 - r) ** 2;
         points[i].x += dx * gain;

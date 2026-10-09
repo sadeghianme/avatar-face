@@ -7,16 +7,9 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/brand/favicon-192.png" />
     <link rel="apple-touch-icon" href="/brand/favicon-192.png" />
     <meta name="theme-color" content="#f97316" />
-    <script>
-      // Theme before first paint (same rule as providers/theme.tsx): a saved
-      // choice wins, otherwise follow the system. Avoids a white flash.
-      try {
-        var t = localStorage.getItem("liveface.theme");
-        if (t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches)) {
-          document.documentElement.classList.add("dark");
-        }
-      } catch (e) {}
-    </script>
+    <!-- The theme before first paint (public/theme.js). A file, not an
+         inline script: the CSP allows no inline script. -->
+    <script src="/theme.js"></script>
     <title>Liveface — turn one photo into a talking avatar for your website</title>
     <meta name="description" content="Liveface turns a single portrait into a real-time talking avatar: accurate lip-sync, natural voices in 13 languages, and one script tag to put it on any website." />
     <link rel="canonical" href="https://avatar.mehdisadeghian.com/" />

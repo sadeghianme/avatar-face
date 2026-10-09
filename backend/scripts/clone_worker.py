@@ -96,7 +96,9 @@ def main() -> int:
         headers["Authorization"] = f"Bearer {login()}"
 
     def request(method: str, url: str, **kwargs):
-        response = requests.request(method, url, headers=headers, timeout=kwargs.pop("timeout", 60), **kwargs)
+        response = requests.request(
+            method, url, headers=headers, timeout=kwargs.pop("timeout", 60), **kwargs
+        )
         if response.status_code == 401:
             refresh_auth()
             response = requests.request(method, url, headers=headers, timeout=60, **kwargs)
@@ -152,7 +154,10 @@ def main() -> int:
                     json={"done_lines": index},
                     timeout=30,
                 )
-                print(f"  [{index}/{len(lines)}] rendered in {time.time()-started:4.1f}s — {text[:60]}", flush=True)
+                print(
+                    f"  [{index}/{len(lines)}] rendered in {time.time() - started:4.1f}s — {text[:60]}",
+                    flush=True,
+                )
 
             request(
                 "POST", f"{base}/orgs/{args.org}/clone-jobs/{job_id}/complete", timeout=30

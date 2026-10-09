@@ -1,5 +1,4 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { Link, NavLink, useLocation } from "react-router-dom";
 
 import { LanguageMenu } from "@/components/layout/LanguageMenu";
@@ -10,6 +9,8 @@ import { Drawer } from "@/components/ui/Drawer";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { IconButton } from "@/components/ui/IconButton";
 import { Spinner } from "@/components/ui/Spinner";
+import { useT } from "@/i18n";
+import type { MessageKey } from "@/i18n/types";
 import { cx } from "@/lib/cx";
 import { useAuth } from "@/providers/auth";
 import { useOrg } from "@/providers/org";
@@ -27,7 +28,7 @@ const TOP_BAR = cx(
   "border-b border-black/[0.07] bg-white/80 backdrop-blur-xl dark:border-white/[0.07] dark:bg-ink/80"
 );
 
-const NAV: { to: string; key: string; icon: IconName }[] = [
+const NAV: { to: string; key: MessageKey; icon: IconName }[] = [
   { to: "/app", key: "avatars", icon: "faces" },
   { to: "/photoface-hd", key: "photofaceHD", icon: "cube" },
   { to: "/lip-sync-lab", key: "lipSyncLab", icon: "speaker" },
@@ -42,7 +43,7 @@ const NAV: { to: string; key: string; icon: IconName }[] = [
 /** The current page's name, for the title and breadcrumb. */
 function useCrumb(): string {
   const { pathname } = useLocation();
-  const { t } = useTranslation();
+  const { t } = useT();
   if (pathname.startsWith("/photoface-hd")) return t("photofaceHD");
   if (pathname.startsWith("/lip-sync-lab")) return t("lipSyncLab");
   if (pathname.startsWith("/reference-avatar")) return t("referenceLab");
@@ -57,7 +58,7 @@ function useCrumb(): string {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const crumb = useCrumb();
@@ -107,7 +108,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           composition (the kit's unstyled button), 44px+ tall as drawn. */}
       <Button
         variant="unstyled"
-        onClick={logout}
+        onClick={() => void logout()}
         className="mx-3 mb-3 flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"
       >
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-500 text-[13px] font-medium text-white">

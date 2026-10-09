@@ -8,10 +8,12 @@
  */
 import type { CuePlayer } from "../browser-tts";
 import type { SpeechPlayer } from "../speech";
+import { speechErrorOfFrame, speechErrorOfResponse } from "../speech-error";
 import type { Cue } from "../types";
 import { StreamingSpeechPlayer } from "./player";
 import { bufferedRecording, SpeechAssembly, speechEvents, type StreamedSpeech } from "./protocol";
 
+export { SpeechError, speechErrorOfFrame } from "../speech-error";
 export { StreamingSpeechPlayer, StreamTimeline } from "./player";
 export { bufferedRecording, SpeechAssembly, speechEvents } from "./protocol";
 export type { SpeechChunk, StreamedSpeech } from "./protocol";
@@ -19,7 +21,9 @@ export type { SpeechChunk, StreamedSpeech } from "./protocol";
 type Engine = SpeechPlayer & CuePlayer & { updateCueTrack?: (cues: Cue[]) => void };
 
 export interface StreamHandle {
-  /** Resolves when playback has finished, or rejects with the stream error. */
+  /** Resolves when playback has finished, or rejects with the stream error:
+   *  a SpeechError (its code, detail and status) when the server refused
+   *  the request or said why in an error frame. */
   readonly done: Promise<void>;
   /** The complete recording, for no-cost replay, once the stream has ended. */
   readonly recording: Promise<StreamedSpeech>;
@@ -68,7 +72,8 @@ export function streamSpeech(
 
   const done = (async () => {
     const response = await fetchStream();
-    if (!response.ok || !response.body) throw new Error(`speech stream: ${response.status}`);
+    if (!response.ok) throw await speechErrorOfResponse(response);
+    if (!response.body) throw new Error(`speech stream: ${response.status} without a body`);
     let whole: StreamedSpeech | null = null;
     for await (const event of speechEvents(response.body)) {
       if (stopped) return;
@@ -98,7 +103,9 @@ export function streamSpeech(
           await player.done;
           return;
         case "error":
-          throw new Error(String(event.detail ?? "Speech preparation was interrupted"));
+          // The server's reason, code first (a cloned line never rendered,
+          // the month's allowance spent), for the caller to act on.
+          throw speechErrorOfFrame(event);
         default:
           throw new Error("Unknown speech event");
       }

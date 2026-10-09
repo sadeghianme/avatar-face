@@ -1,4 +1,5 @@
 """Phoneme-class speech timing model."""
+
 import io
 import wave
 

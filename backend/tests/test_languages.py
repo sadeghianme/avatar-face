@@ -1,6 +1,6 @@
 """Language resolution: pick the language, get the best voice for it."""
 
-
+from app.services.tts import languages
 from app.services.tts.languages import BY_LOCALE, LANGUAGES, PROVIDER_ORDER, resolve
 
 
@@ -45,8 +45,7 @@ async def test_resolve_prefers_kokoro_when_both_can_speak(monkeypatch):
             return [Voice(id=f"{self.name}_v", name="v", locale=self._locale)]
 
     monkeypatch.setattr(
-        "app.services.tts.registry._ALL_PROVIDERS",
-        [Fake("piper", "de-DE"), Fake("kokoro", "de-DE")],
+        languages, "all_providers", lambda: [Fake("piper", "de-DE"), Fake("kokoro", "de-DE")]
     )
     assert await resolve("de-DE") == ("kokoro", "kokoro_v")
 
@@ -65,14 +64,14 @@ async def test_resolve_falls_back_to_the_bare_language(monkeypatch):
         async def voices(self):
             return [Voice(id="de", name="German", locale="de-DE")]
 
-    monkeypatch.setattr("app.services.tts.registry._ALL_PROVIDERS", [Fake()])
+    monkeypatch.setattr(languages, "all_providers", lambda: [Fake()])
     assert await resolve("de-AT") == ("piper", "de")
 
 
 async def test_unspeakable_language_resolves_to_nothing(monkeypatch):
     """Callers need a clear 'no voice' so they can fall back to browser
     speech, which still lip-syncs correctly."""
-    monkeypatch.setattr("app.services.tts.registry._ALL_PROVIDERS", [])
+    monkeypatch.setattr(languages, "all_providers", lambda: [])
     assert await resolve("sw-KE") is None
 
 

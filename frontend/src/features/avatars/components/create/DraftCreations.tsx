@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { ButtonLink } from "@/components/ui/ButtonLink";
+import { Card } from "@/components/ui/Card";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
+import { FieldError } from "@/components/ui/FieldError";
 import { Icon } from "@/components/ui/Icon";
 import { useDeleteCreation, useDrafts } from "@/features/avatars/api";
 import { type Creation, currentStep, errorText, isJobActive, jobFailure, stepById } from "@/features/avatars/creation";
 import { LINES } from "@/features/avatars/lines";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 
 /**
@@ -16,7 +18,7 @@ import { ApiError } from "@/lib/api";
  * this is a short list by construction (the server caps it at ten).
  */
 export function DraftCreations({ orgId }: { orgId: string }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { data: drafts } = useDrafts(orgId);
 
   if (!drafts?.length) return null;
@@ -36,7 +38,7 @@ export function DraftCreations({ orgId }: { orgId: string }) {
 }
 
 function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useT();
   const deleteCreation = useDeleteCreation(orgId);
   const [attempt, setAttempt] = useState(0);
   const [deleting, setDeleting] = useState(false);
@@ -68,7 +70,7 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
   };
 
   return (
-    <li className="flex gap-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm dark:border-line dark:bg-panel dark:shadow-none">
+    <Card as="li" className="flex gap-3 p-3">
       <span className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-gray-100 dark:bg-white/[0.06]">
         {image ? (
           <img src={image.url} alt="" className="h-full w-full object-cover" loading="lazy" />
@@ -80,11 +82,7 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
         <p className="truncate text-sm font-semibold">{line}</p>
         <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{t("createDraftUpdated", { when })}</p>
         {state && <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">{state}</p>}
-        {error && (
-          <p role="alert" className="field-error">
-            {error}
-          </p>
-        )}
+        {error && <FieldError>{error}</FieldError>}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <ButtonLink
             to={`/avatars/new/${draft.id}`}
@@ -111,6 +109,6 @@ function DraftCard({ draft, orgId }: { draft: Creation; orgId: string }) {
           />
         </div>
       </div>
-    </li>
+    </Card>
   );
 }

@@ -1,18 +1,19 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/FieldError";
 import { Input } from "@/components/ui/Input";
 import { useResetPassword } from "@/features/auth/api";
 import { AuthShell } from "@/features/auth/components/AuthShell";
+import { useT } from "@/i18n";
 import { useAuth } from "@/providers/auth";
 
 const MIN_LENGTH = 8;
 
 export function ResetPasswordPage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { adoptSession } = useAuth();
@@ -34,13 +35,13 @@ export function ResetPasswordPage() {
     setBusy(true);
     setError(null);
     try {
-      const tokens = await reset.mutateAsync({ token, password });
+      const session = await reset.mutateAsync({ token, password });
       // Straight in. Someone who has just proved control of the mailbox and
       // chosen a password should not be asked to type it again. Through the
-      // auth context, not setTokens: writing storage alone leaves the context
+      // auth context, not setAccessToken: the token alone leaves the context
       // believing nobody is signed in, and /app bounces straight back to
       // /login.
-      await adoptSession(tokens);
+      await adoptSession(session);
       navigate("/app", { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -93,7 +94,7 @@ export function ResetPasswordPage() {
           />
         </Field>
 
-        {error && <p className="field-error">{error}</p>}
+        {error && <FieldError>{error}</FieldError>}
 
         <Button type="submit" fullWidth disabled={busy || !ready}>
           {busy ? t("loading") : t("setNewPassword")}

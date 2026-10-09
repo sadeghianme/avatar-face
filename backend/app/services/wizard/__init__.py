@@ -54,14 +54,13 @@ The package:
               and the face found on it, in one write
     versions  going back to any picture step 3 made
 
-Everything is re-exported here, so `wizard.X` keeps working.
+The public names are re-exported here, so `wizard.X` keeps working. Nothing
+private is: each module's helpers stay in it.
 """
 
 from __future__ import annotations
 
 from app.services.wizard.plan import (
-    _ARTICLE,
-    _SEPARATORS,
     AI,
     CHANGE,
     FREE_CLEARS_PER_CREATION,
@@ -80,7 +79,6 @@ from app.services.wizard.plan import (
     SOURCES,
     STYLE_OF_LOOK,
     TECHNICAL_WORDS,
-    _as_name,
     default_name,
     inferred_plan,
     line_for,
@@ -90,10 +88,6 @@ from app.services.wizard.plan import (
     technical_file_name,
 )
 from app.services.wizard.prepare import (
-    _ask_ai,
-    _png,
-    _refund,
-    _refund_free,
     cut_out,
     head_crop_source,
     prepare_job,
@@ -107,8 +101,6 @@ from app.services.wizard.prompts import (
     LIGHT,
     LOOK_WORDS,
     PREPARE_SUBJECT,
-    _quoted,
-    _requirements,
     change_prompt,
     character_prompt,
     prepare_prompt,
@@ -120,9 +112,6 @@ from app.services.wizard.versions import (
 
 __all__ = [
     "AI",
-    "_ARTICLE",
-    "_as_name",
-    "_ask_ai",
     "AVOID",
     "BACKDROP",
     "CHANGE",
@@ -152,16 +141,10 @@ __all__ = [
     "ORIGINAL",
     "PLAN",
     "plan_of",
-    "_png",
     "prepare_job",
     "prepare_prompt",
     "PREPARE_ROUNDS_PER_CREATION",
     "PREPARE_SUBJECT",
-    "_quoted",
-    "_refund",
-    "_refund_free",
-    "_requirements",
-    "_SEPARATORS",
     "settle",
     "SOURCES",
     "STYLE_OF_LOOK",

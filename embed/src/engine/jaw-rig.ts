@@ -134,8 +134,8 @@ export const FACE_OVAL = [
 ];
 /** The jaw's arc of the oval, chin tip to the ear-level pivot, each side.
  *  Image left (the face's right) and image right. */
-const JAW_ARC_LEFT = [152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234];
-const JAW_ARC_RIGHT = [152, 377, 400, 378, 379, 365, 397, 288, 361, 323, 454];
+export const JAW_ARC_LEFT = [152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234];
+export const JAW_ARC_RIGHT = [152, 377, 400, 378, 379, 365, 397, 288, 361, 323, 454];
 
 // MediaPipe's lip rows, corner to corner, image left to right. The upper and
 // lower rows run from the inner lip outward; the commissure landmarks are the
@@ -340,80 +340,6 @@ export function buildLowerFaceRig(rest: readonly Pt[], count = 478): LowerFaceRi
       smooth((au - 0.5) / 0.3) * (1 - smooth((au - 1.0) / 0.3)) * (1 - smooth((Math.abs(vi + 0.2) - 0.35) / 0.4));
   }
   return { frame, n, role, u, v, weight, jaw, cheek, vChin, vCheek, ramp };
-}
-
-// --- The neck band --------------------------------------------------------------
-
-/**
- * The mesh ends at the jaw line, and the picture under it is drawn still.
- * A chin that now drops a fifth of a mouth width therefore ended on the
- * neck as a step: the lit chin skin cut off against the shadow it had left
- * behind. Two rings of derived vertices below the jaw line, from pivot to
- * pivot, mend that: the inner ring travels with the jaw (most of its way,
- * so the chin keeps its own shadow), the outer ring stands still where the
- * still picture begins, and the neck skin between them stretches, as skin
- * under a jaw does, instead of being overdrawn. Offsets in mouth widths
- * along the jaw line's outward normal.
- */
-export const NECK_BAND = { inner: 0.3, innerShare: 0.65, outer: 0.8 } as const;
-
-/** The jaw's arc of the oval, left pivot to right pivot through the chin. */
-export const JAW_ARC = [...JAW_ARC_LEFT].reverse().concat(JAW_ARC_RIGHT.slice(1));
-
-export interface NeckVertex {
-  x: number;
-  y: number;
-  /** The jaw-line vertex this one hangs from, and the share of its motion
-   *  it takes (0: still). */
-  parent: number;
-  share: number;
-}
-export interface NeckBand {
-  vertices: NeckVertex[];
-  triangles: [number, number, number][];
-}
-
-/**
- * The band for a rest mesh, its vertices numbered from `firstIndex` on
- * (after the mesh's own and any other derived vertices).
- */
-export function buildNeckBand(rest: readonly Pt[], firstIndex: number): NeckBand {
-  const f = mouthFrame(rest);
-  const arc = JAW_ARC.filter((i) => i < rest.length);
-  const n = arc.length;
-  const vertices: NeckVertex[] = [];
-  const triangles: [number, number, number][] = [];
-  if (n < 3) return { vertices, triangles };
-  const rings = [
-    { offset: NECK_BAND.inner * f.w, share: NECK_BAND.innerShare },
-    { offset: NECK_BAND.outer * f.w, share: 0 },
-  ];
-  for (const ring of rings) {
-    for (let k = 0; k < n; k++) {
-      const p = rest[arc[k]];
-      const prev = rest[arc[Math.max(0, k - 1)]],
-        next = rest[arc[Math.min(n - 1, k + 1)]];
-      // Outward normal of the jaw line: perpendicular to its direction here,
-      // pointing away from the mouth.
-      let nx = -(next.y - prev.y),
-        ny = next.x - prev.x;
-      const len = Math.hypot(nx, ny) || 1;
-      nx /= len;
-      ny /= len;
-      if (nx * (p.x - f.cx) + ny * (p.y - f.cy) < 0) {
-        nx = -nx;
-        ny = -ny;
-      }
-      vertices.push({ x: p.x + nx * ring.offset, y: p.y + ny * ring.offset, parent: arc[k], share: ring.share });
-    }
-  }
-  const inner = (k: number) => firstIndex + k,
-    outer = (k: number) => firstIndex + n + k;
-  for (let k = 0; k + 1 < n; k++) {
-    triangles.push([arc[k], arc[k + 1], inner(k + 1)], [arc[k], inner(k + 1), inner(k)]);
-    triangles.push([inner(k), inner(k + 1), outer(k + 1)], [inner(k), outer(k + 1), outer(k)]);
-  }
-  return { vertices, triangles };
 }
 
 /** How far to trust a driver's chin, 0..1, from its drop over the lower

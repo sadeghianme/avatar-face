@@ -6,13 +6,19 @@
   "scripts": {
     "dev": "vite",
     "check": "node scripts/check-structure.mjs",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && tsc -p tsconfig.test.json",
     "test": "node --test \"src/**/*.test.ts\"",
+    "test:coverage": "mkdir -p coverage/node && node --test --experimental-test-coverage --test-coverage-include=\"src/**\" --test-coverage-exclude=\"src/**/*.test.ts\" --test-coverage-exclude=\"src/**/fixtures.ts\" --test-coverage-lines=92 --test-coverage-branches=93 --test-coverage-functions=88 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/node/lcov.info \"src/**/*.test.ts\"",
     "lint": "eslint .",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{js,ts}\" \"scripts/**/*.mjs\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"*.{js,ts}\" \"scripts/**/*.mjs\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{js,ts}\" \"scripts/**/*.mjs\" \"public/*.js\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"*.{js,ts}\" \"scripts/**/*.mjs\" \"public/*.js\"",
     "build": "npm run check && tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:ui": "vitest run",
+    "test:ui:coverage": "vitest run --coverage",
+    "gen:api": "openapi-typescript src/lib/api-schema.json -o src/lib/api-types.ts && prettier --write src/lib/api-types.ts",
+    "api:schema": "../backend/.venv/bin/python ../backend/scripts/export_openapi.py src/lib/api-schema.json",
+    "check:api": "npm run gen:api && git diff --exit-code -- src/lib/api-types.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.6.0",
@@ -27,20 +33,30 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/node": "^22.20.5",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "@vitest/coverage-v8": "2.1.9",
     "autoprefixer": "^10.4.19",
+    "axe-core": "^4.14.0",
     "eslint": "^9.39.5",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-simple-import-sort": "^14.0.0",
     "globals": "^17.13.0",
+    "jsdom": "^26.1.0",
+    "openapi-typescript": "^7.13.0",
     "postcss": "^8.4.38",
     "prettier": "^3.9.9",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.4.5",
     "typescript-eslint": "^8.71.1",
-    "vite": "^5.3.1"
+    "vite": "^5.3.1",
+    "vitest": "^2.1.9"
   }
 }

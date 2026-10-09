@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
+import { FieldError } from "@/components/ui/FieldError";
 import { Spinner } from "@/components/ui/Spinner";
 import { useDiscardDraft, usePublishAvatar } from "@/features/avatars/api";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
 
@@ -25,7 +26,7 @@ import type { Avatar } from "@/lib/types";
  * and there is no published version to discard back to.
  */
 export function PublishBar({ avatar, orgId }: { avatar: Avatar; orgId: string }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const publish = usePublishAvatar(orgId, avatar.id);
   const discard = useDiscardDraft(orgId, avatar.id);
   const [busy, setBusy] = useState<"publish" | "discard" | null>(null);
@@ -69,7 +70,7 @@ export function PublishBar({ avatar, orgId }: { avatar: Avatar; orgId: string })
           </>
         )
       }
-      footer={error && <p className="field-error mt-2">{error}</p>}
+      footer={error && <FieldError className="mt-2">{error}</FieldError>}
     >
       {neverPublished ? t("publishFirstBody") : dirty ? t("publishDraftBody") : t("publishLiveBody")}
     </Banner>

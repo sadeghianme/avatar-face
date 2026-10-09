@@ -11,14 +11,19 @@ import json
 
 from app.api.avatars.presenting import mouth_view
 from app.services.mouth import character_style, clean_character
-from tests.test_rig_fit_api import _anchors, _fit, _rig, _setup
+from tests.test_rig_fit_api import get_rig, get_rig_anchors, post_rig_fit, setup_avatar
 
 CHARACTER = {"style": "character", "teeth": "none", "tongue": False, "jaw": 1.3}
 
 
 def test_settings_are_clamped_and_unknown_keys_dropped():
-    assert clean_character({"style": "weird", "teeth": "fangs", "tongue": "yes", "jaw": 9, "x": 1}) == {
-        "style": "character", "teeth": "upper", "tongue": True, "jaw": 1.6,
+    assert clean_character(
+        {"style": "weird", "teeth": "fangs", "tongue": "yes", "jaw": 9, "x": 1}
+    ) == {
+        "style": "character",
+        "teeth": "upper",
+        "tongue": True,
+        "jaw": 1.6,
     }
     assert clean_character({"jaw": 0})["jaw"] == 0.5
     assert clean_character({"jaw": float("nan")})["jaw"] == 1.0
@@ -32,61 +37,70 @@ def test_the_owner_is_told_their_settings_and_the_style_defaults_to_the_characte
     assert mouth_view(raw)["character"] == CHARACTER
     assert mouth_view(json.dumps({"renderer": "classic", "profile": {}}))["character"] is None
     assert character_style(None) == "character"
-    assert character_style(json.dumps({"renderer": "classic", "character": {"style": "classic"}})) == "classic"
+    assert (
+        character_style(json.dumps({"renderer": "classic", "character": {"style": "classic"}}))
+        == "classic"
+    )
 
 
 async def test_an_animation_and_an_animal_fit_with_the_character_mouth_by_default(client):
     for who, face_type, profile in (("pet1", "animal", "animal@2"), ("toon1", "cartoon", "toon@1")):
-        headers, _, _, base = await _setup(client, who, face_type)
-        await _fit(client, headers, base, await _anchors(client, headers, base), True)
-        assert (await _rig(client, headers, base))["render_profile"] == profile
+        headers, _, _, base = await setup_avatar(client, who, face_type)
+        await post_rig_fit(
+            client, headers, base, await get_rig_anchors(client, headers, base), True
+        )
+        assert (await get_rig(client, headers, base))["render_profile"] == profile
         assert (await client.get(base, headers=headers)).json()["render_profile"] == profile
 
 
-async def test_choosing_the_classic_mouth_moves_the_draft_rig_back_and_choosing_again_forward(client):
-    headers, _, _, base = await _setup(client, "pet2", "animal")
-    await _fit(client, headers, base, await _anchors(client, headers, base), True)
+async def test_choosing_the_classic_mouth_moves_the_draft_rig_back_and_choosing_again_forward(
+    client,
+):
+    headers, _, _, base = await setup_avatar(client, "pet2", "animal")
+    await post_rig_fit(client, headers, base, await get_rig_anchors(client, headers, base), True)
 
     response = await client.patch(base, json={"character": {"style": "classic"}}, headers=headers)
     assert response.status_code == 200, response.text
     assert response.json()["render_profile"] == "animal@1"
     assert response.json()["mouth"]["character"]["style"] == "classic"
-    assert (await _rig(client, headers, base))["render_profile"] == "animal@1"
+    assert (await get_rig(client, headers, base))["render_profile"] == "animal@1"
     # A fit made meanwhile keeps the owner's choice.
-    await _fit(client, headers, base, await _anchors(client, headers, base), True)
-    assert (await _rig(client, headers, base))["render_profile"] == "animal@1"
+    await post_rig_fit(client, headers, base, await get_rig_anchors(client, headers, base), True)
+    assert (await get_rig(client, headers, base))["render_profile"] == "animal@1"
 
-    response = await client.patch(base, json={"character": {"style": "character", "jaw": 1.2}}, headers=headers)
+    response = await client.patch(
+        base, json={"character": {"style": "character", "jaw": 1.2}}, headers=headers
+    )
     assert response.json()["render_profile"] == "animal@2"
-    assert (await _rig(client, headers, base))["render_profile"] == "animal@2"
+    assert (await get_rig(client, headers, base))["render_profile"] == "animal@2"
 
 
 async def test_an_animation_that_chooses_classic_has_no_profile_at_all(client):
-    headers, _, _, base = await _setup(client, "toon2", "cartoon")
-    await _fit(client, headers, base, await _anchors(client, headers, base), True)
+    headers, _, _, base = await setup_avatar(client, "toon2", "cartoon")
+    await post_rig_fit(client, headers, base, await get_rig_anchors(client, headers, base), True)
     await client.patch(base, json={"character": {"style": "classic"}}, headers=headers)
-    assert "render_profile" not in await _rig(client, headers, base)
+    assert "render_profile" not in await get_rig(client, headers, base)
     await client.patch(base, json={"character": {"style": "character"}}, headers=headers)
-    assert (await _rig(client, headers, base))["render_profile"] == "toon@1"
+    assert (await get_rig(client, headers, base))["render_profile"] == "toon@1"
 
 
 async def test_a_human_has_no_character_mouth(client):
-    headers, _, _, base = await _setup(client, "alice2")
+    headers, _, _, base = await setup_avatar(client, "alice2")
     response = await client.patch(base, json={"character": {"style": "character"}}, headers=headers)
     assert response.status_code == 422
     assert response.json()["code"] == "character_not_for_face_type"
 
 
 async def test_ranges_are_enforced_by_the_api(client):
-    headers, _, _, base = await _setup(client, "pet3", "animal")
+    headers, _, _, base = await setup_avatar(client, "pet3", "animal")
     for body in ({"jaw": 9}, {"jaw": 0.1}, {"teeth": "fangs"}, {"style": "other"}):
         response = await client.patch(base, json={"character": body}, headers=headers)
         assert response.status_code == 422, body
 
 
 async def test_settings_reach_visitors_only_when_published(client):
-    headers, _, _, base = await _setup(client, "pet4", "animal")
-    await _fit(client, headers, base, await _anchors(client, headers, base), True)
+    headers, _, _, base = await setup_avatar(client, "pet4", "animal")
+    await post_rig_fit(client, headers, base, await get_rig_anchors(client, headers, base), True)
     await client.post(f"{base}/publish", headers=headers)
     token = (await client.post(f"{base}/share", headers=headers)).json()["share_token"]
     assert (await client.get(f"/public/v1/avatars/{token}")).json()["mouth"] is None
@@ -106,8 +120,8 @@ async def test_an_avatar_fitted_before_keeps_its_look_until_it_chooses(client):
     """The migration rule: nothing live changes by itself. A rig that names
     animal@1 keeps it through an unrelated edit, and gets animal@2 when its
     owner fits it again or chooses the character mouth."""
-    headers, _, _, base = await _setup(client, "pet5", "animal")
-    await _fit(client, headers, base, await _anchors(client, headers, base), True)
+    headers, _, _, base = await setup_avatar(client, "pet5", "animal")
+    await post_rig_fit(client, headers, base, await get_rig_anchors(client, headers, base), True)
     detail = (await client.get(base, headers=headers)).json()
     from urllib.parse import unquote, urlparse
 
@@ -120,8 +134,8 @@ async def test_an_avatar_fitted_before_keeps_its_look_until_it_chooses(client):
     await storage.put_bytes(key, json.dumps(rig).encode(), "application/json")
 
     await client.patch(base, json={"name": "Rex"}, headers=headers)
-    assert (await _rig(client, headers, base))["render_profile"] == "animal@1"
+    assert (await get_rig(client, headers, base))["render_profile"] == "animal@1"
     assert (await client.get(base, headers=headers)).json()["render_profile"] == "animal@1"
 
-    await _fit(client, headers, base, await _anchors(client, headers, base), True)
-    assert (await _rig(client, headers, base))["render_profile"] == "animal@2"
+    await post_rig_fit(client, headers, base, await get_rig_anchors(client, headers, base), True)
+    assert (await get_rig(client, headers, base))["render_profile"] == "animal@2"

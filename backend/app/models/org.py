@@ -36,9 +36,7 @@ class Organization(TimestampedBase):
     # gets automatically), else null. Unique, so a user has at most one:
     # two requests racing to make it (a double-fired effect, two tabs, a
     # retry) cannot both succeed, and the loser is answered with the winner.
-    personal_owner_id: Mapped[str | None] = mapped_column(
-        String(32), nullable=True, unique=True
-    )
+    personal_owner_id: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)
 
     memberships: Mapped[list[Membership]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"

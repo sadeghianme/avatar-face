@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/FieldError";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { StackCell, StackRow, StackTable, TableAction } from "@/components/ui/Table";
@@ -15,12 +15,13 @@ import {
   useRemoveMember,
   useRevokeInvitation,
 } from "@/features/members/api";
+import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/errorMessage";
 import type { Role } from "@/lib/types";
 import { useOrg } from "@/providers/org";
 
 export function MembersPage() {
-  const { t } = useTranslation();
+  const { t } = useT();
   const { current } = useOrg();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("member");
@@ -77,7 +78,7 @@ export function MembersPage() {
           </Button>
         </Card>
       )}
-      {failed && <p className="field-error mb-4">{errorMessage(failed, t("error"))}</p>}
+      {failed && <FieldError className="mb-4">{errorMessage(failed, t("error"))}</FieldError>}
 
       <Card padding="none" className="overflow-x-auto">
         <StackTable>

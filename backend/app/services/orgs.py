@@ -252,9 +252,7 @@ async def pending_invitation(db: AsyncSession, token: str) -> tuple[Invitation, 
     return invitation, await _invitation_org(db, invitation)
 
 
-async def accept_invitation(
-    db: AsyncSession, token: str, user: User
-) -> tuple[Organization, Role]:
+async def accept_invitation(db: AsyncSession, token: str, user: User) -> tuple[Organization, Role]:
     """Join the invitation's organization, as the user it was sent to."""
     invitation = await _pending(db, token)
     if invitation.email != user.email:

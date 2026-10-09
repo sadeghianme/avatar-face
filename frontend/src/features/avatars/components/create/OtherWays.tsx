@@ -1,16 +1,17 @@
 import { useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChoiceCard } from "@/components/ui/ChoiceCard";
 import { Field } from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/FieldError";
 import { FileInput } from "@/components/ui/FileInput";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { useImportAvatar, useStockAvatars } from "@/features/avatars/api";
 import { Avaturn3DPanel } from "@/features/avatars/components/Avaturn3DPanel";
+import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import type { Avatar } from "@/lib/types";
 
@@ -21,7 +22,7 @@ import type { Avatar } from "@/lib/types";
  * screen. (Generating from words is the wizard's own "Generate with AI".)
  */
 export function OtherWays({ orgId }: { orgId: string }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const navigate = useNavigate();
   const glbInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
@@ -76,7 +77,7 @@ export function OtherWays({ orgId }: { orgId: string }) {
   };
 
   return (
-    <details className="group mx-auto mt-8 max-w-4xl rounded-2xl border border-gray-200 bg-white/60 px-5 py-4 dark:border-line dark:bg-panel/60">
+    <Card as="details" className="group mx-auto mt-8 max-w-4xl bg-white/60 px-5 py-4 shadow-none dark:bg-panel/60">
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-gray-700 dark:text-gray-200">
         <span>{t("wzOtherWays")}</span>
         <Icon name="chevron" className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90 rtl:-scale-x-100" />
@@ -86,19 +87,15 @@ export function OtherWays({ orgId }: { orgId: string }) {
       <Field id="other-name" label={t("createOtherName")} className="mt-5 max-w-sm">
         <Input value={name} maxLength={128} onChange={(e) => setName(e.target.value)} placeholder="Ava" />
       </Field>
-      {error && (
-        <p role="alert" className="field-error mt-3 text-sm">
-          {error}
-        </p>
-      )}
+      {error && <FieldError className="mt-3 text-sm">{error}</FieldError>}
 
       <h3 className="mb-3 mt-8 text-lg font-medium">{t("stockGallery")}</h3>
       <div className="grid grid-cols-3 gap-3 sm:grid-cols-6 sm:gap-4">
         {stock?.map((item) => (
           <ChoiceCard
             key={item.id}
-            look="custom"
-            className="card flex flex-col items-center gap-2 p-2 transition-shadow hover:shadow-md"
+            look="card"
+            className="flex flex-col items-center gap-2 p-2 transition-shadow hover:shadow-md"
             onClick={() => void fromStock(item.id)}
           >
             <img src={item.image_url} alt="" className="aspect-square w-full rounded-lg object-cover" />
@@ -157,6 +154,6 @@ export function OtherWays({ orgId }: { orgId: string }) {
       <h3 className="mb-1 mt-10 text-lg font-medium">{t("avaturnTitle")}</h3>
       <p className="mb-3 text-[13px] text-gray-500 dark:text-gray-400">{t("avaturnSubtitle")}</p>
       <Avaturn3DPanel orgId={orgId} />
-    </details>
+    </Card>
   );
 }

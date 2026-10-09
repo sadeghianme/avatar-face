@@ -180,7 +180,10 @@ def encode_for_visitors(photo: bytes) -> bytes:
         icc = image.info.get("icc_profile")
         out = io.BytesIO()
         image.save(
-            out, format="WEBP", quality=MOUTH_PHOTO_QUALITY, method=4,
+            out,
+            format="WEBP",
+            quality=MOUTH_PHOTO_QUALITY,
+            method=4,
             **({"icc_profile": icc} if icc else {}),
         )
     return out.getvalue()
@@ -269,9 +272,7 @@ async def store(
     return previous
 
 
-async def put_photo(
-    avatar: Avatar, storage: Storage, photo: bytes, rig: dict
-) -> tuple[str, str]:
+async def put_photo(avatar: Avatar, storage: Storage, photo: bytes, rig: dict) -> tuple[str, str]:
     """Write an admitted mouth photo and its rig under fresh keys, and
     return them (image, rig); the config is the caller's to change. Fresh
     keys per photo: the published snapshot may still point at copies of
@@ -294,9 +295,9 @@ class Request:
 def face_request(data: bytes) -> Request:
     """The face crop a touch-up sends, of `data` (a cut-out on the neutral
     grey). TeethFailure when there is no frontal face to crop. CPU work."""
-    image = pa._rgb(data)
+    image = pa.decode_rgb(data)
     try:
-        points = pa._detect(image)
+        points = pa.detect_points(image)
     except landmarks.LandmarkerUnavailable as exc:
         raise TeethFailure(
             "landmarks_unavailable", "Face detection is not available on this server", 409
@@ -306,19 +307,17 @@ def face_request(data: bytes) -> Request:
     if pa.yaw_offset(points) > pa.MAX_TOUCHUP_YAW:
         # The renderer places the teeth frontally; a turned "ee" photo would
         # give it a foreshortened arch.
-        raise TeethFailure(
-            "face_turned", "The head is turned too far to make teeth for it"
-        )
+        raise TeethFailure("face_turned", "The head is turned too far to make teeth for it")
     crop = pa.crop_face(image, pa.face_crop_box(points))
-    return Request(pa._jpeg(crop, pa.CROP_QUALITY), "image/jpeg")
+    return Request(pa.encode_jpeg(crop, pa.CROP_QUALITY), "image/jpeg")
 
 
 def fallback_request(data: bytes) -> Request | None:
     """The same photo as a head-and-shoulders crop, for one more try after
     a refusal; None when that crop would be the same picture. CPU work."""
-    image = pa._rgb(data)
+    image = pa.decode_rgb(data)
     try:
-        points = pa._detect(image)
+        points = pa.detect_points(image)
     except Exception:
         # Broad on purpose: the detector's runtime fails in its own types;
         # then there is no fallback crop to try.
@@ -329,7 +328,7 @@ def fallback_request(data: bytes) -> Request | None:
     crop = pa.head_crop(image, points)
     if crop is None:
         return None
-    return Request(pa._jpeg(crop, imagegen.SOURCE_QUALITY), "image/jpeg")
+    return Request(pa.encode_jpeg(crop, imagegen.SOURCE_QUALITY), "image/jpeg")
 
 
 @dataclass
@@ -400,8 +399,9 @@ async def make_teeth(
                 tried_crop = True
                 fallback = await run_cpu(fallback_request, source)
                 if fallback is not None:
-                    logger.info("teeth refused (%s); asking once more with the head crop",
-                                exc.reason)
+                    logger.info(
+                        "teeth refused (%s); asking once more with the head crop", exc.reason
+                    )
                     request = fallback
                     continue
             raise TeethFailure(

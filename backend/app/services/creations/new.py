@@ -140,16 +140,18 @@ async def create_generated(
     consent_ids: list[str] = []
     if body.source_avatar_id or body.consent_id:
         agreed = await consent.require(
-            db, body.consent_id, org, user_id, consent.THIRD_PARTY_AI,
+            db,
+            body.consent_id,
+            org,
+            user_id,
+            consent.THIRD_PARTY_AI,
             PROVIDER,
         )
         consent_ids.append(agreed.id)
     if body.source_avatar_id:
         origin = (
             await db.execute(
-                select(Avatar).where(
-                    Avatar.id == body.source_avatar_id, Avatar.org_id == org.id
-                )
+                select(Avatar).where(Avatar.id == body.source_avatar_id, Avatar.org_id == org.id)
             )
         ).scalar_one_or_none()
         if origin is None:

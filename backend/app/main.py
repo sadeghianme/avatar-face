@@ -1,4 +1,5 @@
 """Liveface application factory."""
+
 from __future__ import annotations
 
 import asyncio
@@ -12,6 +13,9 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from alembic.util import CommandError
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -45,6 +49,7 @@ from app.core.errors import install_error_handlers
 from app.core.logging import RequestIdMiddleware, configure_logging
 from app.db import get_engine, get_session_factory
 from app.models import Base
+from app.services import email
 from app.services.ai_models import verify_at_startup
 from app.services.avatars.build import fail_interrupted
 from app.services.creations import recover_interrupted
@@ -87,7 +92,7 @@ class PublicCorsMiddleware(BaseHTTPMiddleware):
 logger = logging.getLogger("liveface.startup")
 
 
-async def _ensure_schema(engine) -> None:
+async def ensure_schema(engine) -> None:
     """Bring the database up to date before serving.
 
     `create_all` alone is not enough and this bit us: it creates MISSING
@@ -98,12 +103,20 @@ async def _ensure_schema(engine) -> None:
 
     Fresh database  -> create_all, then stamp head, so later migrations apply.
     Managed database -> upgrade head.
+    Managed by a newer release -> serve on it as it is (a rollback): this
+    release's migrations do not know its revision, and `upgrade` would stop
+    the server from starting at all. Migrations are written so that the
+    release before them still runs on the schema they leave (docs/process.md,
+    "Rollback").
     Existing but unstamped -> refuse to guess. Stamping head would mark
     pending migrations as done and hide exactly the failure above; log it and
     let a human run `alembic stamp <rev>` once.
     """
     async with engine.begin() as conn:
         tables = await conn.run_sync(lambda c: set(inspect(c).get_table_names()))
+        current = await conn.run_sync(
+            lambda c: MigrationContext.configure(c).get_current_revision()
+        )
 
     fresh = "users" not in tables
     stamped = "alembic_version" in tables
@@ -112,12 +125,22 @@ async def _ensure_schema(engine) -> None:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
+    cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    # Keep the application's logging: alembic/env.py configures logging from
+    # alembic.ini only when the `alembic` command runs it.
+    cfg.attributes["configure_logger"] = False
+
     def run_alembic(action: str) -> None:
-        cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
         (command.stamp if action == "stamp" else command.upgrade)(cfg, "head")
 
     if fresh:
         await asyncio.to_thread(run_alembic, "stamp")
+    elif stamped and current is not None and not _known_revision(cfg, current):
+        logger.warning(
+            "database is at revision %s, which this release does not know: a newer "
+            "release migrated it (a rollback?). Serving on it as it is.",
+            current,
+        )
     elif stamped:
         await asyncio.to_thread(run_alembic, "upgrade")
     else:
@@ -127,10 +150,19 @@ async def _ensure_schema(engine) -> None:
         )
 
 
+def _known_revision(cfg: Config, revision: str) -> bool:
+    """Whether this release's migrations include `revision`."""
+    try:
+        ScriptDirectory.from_config(cfg).get_revision(revision)
+    except CommandError:
+        return False
+    return True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     engine = get_engine()
-    await _ensure_schema(engine)
+    await ensure_schema(engine)
     # Load dashboard-managed provider credentials over env settings.
     async with get_session_factory()() as db:
         await credentials.load(db)
@@ -204,10 +236,12 @@ async def lifespan(app: FastAPI):
     # interrupted (above), which is where a deploy lands anyway.
 
     await runner.shutdown()
+    # A reset mail the request already answered for is sent, not dropped.
+    await email.drain()
     await engine.dispose()
 
 
-def _bundle_etag(path) -> str:
+def bundle_etag(path) -> str:
     """A content hash of the bundle, cached against (mtime, size).
 
     Content rather than mtime: a rebuild rewrites the file on every deploy
@@ -229,7 +263,7 @@ def _bundle_etag(path) -> str:
 _ETAG_CACHE: dict[str, tuple[tuple[int, int], str]] = {}
 
 
-def _etag_matches(if_none_match: str | None, etag: str) -> bool:
+def etag_matches(if_none_match: str | None, etag: str) -> bool:
     """RFC 9110 If-None-Match, tolerant of what proxies do to the tag.
 
     Caddy and Cloudflare append a suffix like `-gzip` when they re-encode the
@@ -307,17 +341,15 @@ def create_app() -> FastAPI:
         """
         bundle = Path(__file__).resolve().parents[2] / "embed" / "dist" / filename
         if not bundle.is_file():
-            return PlainTextResponse(
-                f"// {filename} not built — run `make embed`", status_code=404
-            )
+            return PlainTextResponse(f"// {filename} not built — run `make embed`", status_code=404)
 
-        etag = _bundle_etag(bundle)
+        etag = bundle_etag(bundle)
         headers = {
             "Access-Control-Allow-Origin": "*",
             "Cache-Control": "private, no-cache, must-revalidate",
             "ETag": etag,
         }
-        if _etag_matches(request.headers.get("if-none-match"), etag):
+        if etag_matches(request.headers.get("if-none-match"), etag):
             return Response(status_code=304, headers=headers)
         return FileResponse(bundle, media_type=media_type, headers=headers)
 
@@ -357,6 +389,21 @@ def create_app() -> FastAPI:
     async def mouth_teeth_rig(request: Request):
         """The standard teeth photo's landmarks."""
         return _serve_widget_bundle("mouth-teeth.rig.json", request, "application/json")
+
+    # The KTX2 transcoder (three's Basis Universal build) that liveface-3d.js
+    # decodes a model's textures with: the embed build copies it beside the
+    # bundle (embed/scripts/build.mjs), and liveface-3d.js fetches it from
+    # its own directory, so a customer's page loads it from here, as it does
+    # the bundle, and never from a CDN.
+    @app.get("/basis_transcoder.js", include_in_schema=False)
+    async def basis_transcoder_js(request: Request):
+        """The transcoder's JavaScript wrapper (run in a worker)."""
+        return _serve_widget_bundle("basis_transcoder.js", request)
+
+    @app.get("/basis_transcoder.wasm", include_in_schema=False)
+    async def basis_transcoder_wasm(request: Request):
+        """The transcoder's WebAssembly."""
+        return _serve_widget_bundle("basis_transcoder.wasm", request, "application/wasm")
 
     app.include_router(auth.router)
     app.include_router(orgs.router)

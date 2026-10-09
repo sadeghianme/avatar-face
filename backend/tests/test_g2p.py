@@ -3,6 +3,7 @@
 These are the cases where spelling lies about pronunciation — exactly the
 words that made letter-driven lip-sync look wrong.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -68,7 +69,7 @@ def test_h_takes_the_following_vowels_shape() -> None:
 
 
 def test_yod_before_rounded_vowel_stays_rounded() -> None:
-    """"you" spread-then-puckered would be a ~20Hz flip no face can make."""
+    """ "you" spread-then-puckered would be a ~20Hz flip no face can make."""
     assert visemes("you") == ["ou"]
 
 

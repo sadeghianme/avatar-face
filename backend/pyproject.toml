@@ -12,9 +12,12 @@ dependencies = [
     "alembic>=1.13",
     "pydantic[email]>=2.7",
     "pydantic-settings>=2.3",
-    "passlib>=1.7.4",
-    "bcrypt==4.0.1",
-    "python-jose[cryptography]>=3.3",
+    # Passwords: bcrypt itself (app.core.security), which verifies the
+    # hashes passlib wrote; the exact version is constraints.txt's.
+    "bcrypt>=4.0.1",
+    # The dashboard's access tokens, and Google's service-account assertion
+    # (RS256, through cryptography below).
+    "PyJWT>=2.10",
     "python-multipart>=0.0.9",
     "aioboto3>=13.0",
     "httpx>=0.27",
@@ -38,21 +41,41 @@ clone = ["chatterbox-tts>=0.1", "resemble-perth>=1.0", "setuptools<81"]
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
+    # `pytest -n auto`: the suite on every core (CI runs it so).
+    "pytest-xdist>=3.6",
     # Both pinned: a new release of either can add diagnostics, and CI should
     # not turn red on an upgrade nobody made. Bump them deliberately.
     "ruff==0.15.16",
     "pyright==1.1.414",
+    # Coverage (`pytest --cov`, configured in .coveragerc). Pinned for the
+    # same reason: a new release can count a line or a branch differently,
+    # and the floor is a measured number.
+    "pytest-cov==7.1.0",
+    "coverage==7.16.2",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Coverage (`pytest --cov`) is configured in .coveragerc, not here: CI's
+# virtualenv cache is keyed on this file, and raising the floor must not
+# cost a reinstall.
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-# Migrations are history: never rewritten, so never linted into a rewrite.
+# Migrations are history: never rewritten, so never linted into a rewrite
+# (nor formatted).
 extend-exclude = ["alembic/versions"]
+
+# `ruff format` (CI runs `ruff format --check .`): Black's style at the line
+# length above. Double quotes, which the code already used almost everywhere.
+# A trailing comma after the last item keeps a call or a literal one item per
+# line. The hand-laid data tables (landmark index lists, sound-to-viseme maps,
+# the blendshape matrices) keep their rows between `# fmt: off` / `# fmt: on`;
+# anything else is the formatter's.
+[tool.ruff.format]
+quote-style = "double"
 
 [tool.ruff.lint]
 # Ruff's defaults (E4, E7, E9, F), and: bugbear, simplify, pyupgrade, isort,

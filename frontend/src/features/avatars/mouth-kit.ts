@@ -14,16 +14,16 @@
  */
 import type { CreationJob, DraftStore, Translate } from "@/features/avatars/creation";
 import type { TeethView } from "@/features/avatars/teeth";
+import type { MessageKey } from "@/i18n/types";
 import type { Avatar, MouthShape, Reason } from "@/lib/types";
+import type { Refine, Schemas } from "@/lib/types";
 
 /** The panel's job (step "mouth_kit"): a creation job's shape. */
 export type KitJob = CreationJob;
 
 /** What POST and GET …/mouth-kit answer. Null: this server ran none for
  * the avatar since it started. */
-export interface KitJobAnswer {
-  job: KitJob | null;
-}
+export type KitJobAnswer = Refine<Schemas["MouthKitOut"], { job: KitJob | null }>;
 
 /** The six shapes, in the manifest's order, each with its own name for
  * the owner (`mouthShape_<shape>`). */
@@ -32,6 +32,12 @@ export const KIT_SHAPES: readonly MouthShape[] = ["aa", "ee", "oo", "oh", "fv", 
 /** How often the panel asks after its job: six image edits, three at a
  * time, settle one every few seconds. */
 export const KIT_POLL_MS = 1500;
+
+/** Whether `code` is one of `codes`, narrowed to them: a key made from it
+ * (`mouthReason_${code}`) is then checked against en's keys. */
+function oneOf<T extends string>(codes: readonly T[], code: string): code is T {
+  return (codes as readonly string[]).includes(code);
+}
 
 // --- The panel's job ---------------------------------------------------------------
 
@@ -179,7 +185,7 @@ export function shapesLabel(t: Translate, view: ShapesView): string {
 export function droppedText(t: Translate, view: ShapesView): string | null {
   if (view.kind !== "standard" || view.kit !== "dropped") return null;
   const code = view.dropped?.code;
-  return code && (KIT_DROPPED_CODES as readonly string[]).includes(code) ? t(`mouthShapesDropped_${code}`) : null;
+  return code && oneOf(KIT_DROPPED_CODES, code) ? t(`mouthShapesDropped_${code}`) : null;
 }
 
 /** A shape the kit could not make, in a line: its name, and why. */
@@ -218,7 +224,7 @@ export function kitTeethReason(mouth: Avatar["mouth"], teeth: TeethView | null):
 export const KIT_TEETH_CODES = ["owner_photo", "teeth_removed"] as const;
 
 export function kitTeethText(t: Translate, reason: Reason): string {
-  if ((KIT_TEETH_CODES as readonly string[]).includes(reason.code)) return t(`mouthKitTeeth_${reason.code}`);
+  if (oneOf(KIT_TEETH_CODES, reason.code)) return t(`mouthKitTeeth_${reason.code}`);
   return t("mouthKitTeethNotUsed", { reason: reasonText(t, checkOf(reason)) });
 }
 
@@ -236,7 +242,7 @@ function checkOf(reason: Reason): Reason {
  * lips too close is not the head moved. The server's sentence for a note
  * nothing here words.
  */
-export function teethNoteText(t: Translate, note: Reason, noteKey: (code: string) => string | null): string {
+export function teethNoteText(t: Translate, note: Reason, noteKey: (code: string) => MessageKey | null): string {
   const check = checkOf(note);
   if (check !== note) return t("mouthTeethNote_teeth_photo_rejected_because", { reason: reasonText(t, check) });
   const key = noteKey(note.code);
@@ -285,7 +291,7 @@ const REASONS: ReadonlySet<string> = new Set(MOUTH_REASON_CODES);
 /** A reason in the owner's words, or the server's own when it has none. */
 export function reasonText(t: Translate, reason: Reason | null): string {
   if (!reason) return "";
-  return REASONS.has(reason.code) ? t(`mouthReason_${reason.code}`) : reason.detail;
+  return oneOf(MOUTH_REASON_CODES, reason.code) ? t(`mouthReason_${reason.code}`) : reason.detail;
 }
 
 // What the teeth alone can be refused for: worded as the teeth, since no
@@ -312,7 +318,6 @@ const TEETH_ALONE: ReadonlySet<string> = new Set([
  * (`mouthKitErr_<code>`). "interrupted" is the panel's own: its job is
  * gone. */
 export const KIT_FAILURE_CODES = ["superseded", "job_failed", "interrupted"] as const;
-const FAILURES: ReadonlySet<string> = new Set(KIT_FAILURE_CODES);
 
 /**
  * Why the panel's job failed, for the owner: its own sentence for a
@@ -327,10 +332,10 @@ const FAILURES: ReadonlySet<string> = new Set(KIT_FAILURE_CODES);
 export function kitFailureText(
   t: Translate,
   error: Reason,
-  errorKey: (code: string) => string | null,
+  errorKey: (code: string) => MessageKey | null,
   teethAlone = false
 ): string {
-  if (FAILURES.has(error.code)) return t(`mouthKitErr_${error.code}`);
+  if (oneOf(KIT_FAILURE_CODES, error.code)) return t(`mouthKitErr_${error.code}`);
   const key = errorKey(error.code);
   if (teethAlone && key && TEETH_ALONE.has(error.code)) return t(key);
   if (SHAPE_REASONS.has(error.code)) return t("mouthKitErr_none", { reason: reasonText(t, error) });
@@ -398,8 +403,12 @@ export function factNeedsAttention(fact: PreparedFact): boolean {
  * note in its own words, `noteKey` being teeth.teethNoteKey; the server's
  * sentence for a note nothing here words).
  */
-export function factText(t: Translate, fact: PreparedFact, noteKey: (code: string) => string | null): string {
-  if (fact.kind === "both_standard") return t(`finishNoticeStandard_${fact.reason.code}`);
+export function factText(t: Translate, fact: PreparedFact, noteKey: (code: string) => MessageKey | null): string {
+  if (fact.kind === "both_standard") {
+    // preparedFacts makes one for these codes only.
+    const code = fact.reason.code;
+    return oneOf(WHOLE_MOUTH_CODES, code) ? t(`finishNoticeStandard_${code}`) : reasonText(t, fact.reason);
+  }
   if (fact.kind === "shapes") {
     const view = fact.view;
     if (view.kind === "own") return t("finishNoticeShapes_own", { total: view.total });

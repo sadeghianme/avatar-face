@@ -1,8 +1,12 @@
 /** A refusal in the wizard's words (see index.ts). */
+import type { Translate } from "@/i18n/types";
 
-/** Codes the wizard has its own words for; anything else shows the
- * server's sentence, which is English but always says something. */
-export const KNOWN_ERRORS: ReadonlySet<string> = new Set([
+export type { Translate };
+
+/** Codes the wizard has its own words for (`createErr_<code>`, each one's
+ * key checked by tsc); anything else shows the server's sentence, which is
+ * English but always says something. */
+export const KNOWN_ERRORS = [
   "model_file",
   "unsupported_image_type",
   "image_too_large",
@@ -64,9 +68,11 @@ export const KNOWN_ERRORS: ReadonlySet<string> = new Set([
   "generate_not_for_upload",
   "plan_incomplete",
   "plan_with_source",
-]);
+] as const;
 
-export type Translate = (key: string, options?: Record<string, unknown>) => string;
+export type KnownError = (typeof KNOWN_ERRORS)[number];
+const KNOWN: ReadonlySet<string> = new Set(KNOWN_ERRORS);
+export const isKnownError = (code: string): code is KnownError => KNOWN.has(code);
 
 /**
  * An error for the owner: our sentence for the code when there is one,
@@ -74,6 +80,6 @@ export type Translate = (key: string, options?: Record<string, unknown>) => stri
  * (Retry-After on a busy queue), that too.
  */
 export function errorText(t: Translate, code: string, detail: string, retryAfter: number | null = null): string {
-  const text = KNOWN_ERRORS.has(code) ? t(`createErr_${code}`) : detail || t("error");
+  const text = isKnownError(code) ? t(`createErr_${code}`) : detail || t("error");
   return retryAfter ? `${text} ${t("createRetryAfter", { count: retryAfter })}` : text;
 }

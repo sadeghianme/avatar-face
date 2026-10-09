@@ -317,8 +317,10 @@ def to_marks(points: dict[str, list[float]], size: tuple[int, int], face_type: s
         pupils = sorted(
             (to_pixels(points["left_pupil"], size), to_pixels(points["right_pupil"], size))
         )
-        for name, eye, pupil in (("left_pupil", eyes[0], pupils[0]),
-                                 ("right_pupil", eyes[1], pupils[1])):
+        for name, eye, pupil in (
+            ("left_pupil", eyes[0], pupils[0]),
+            ("right_pupil", eyes[1], pupils[1]),
+        ):
             radius = max(PUPIL_RADIUS * abs(eye["right"][0] - eye["left"][0]), 2.0)
             marks[name] = {"center": _xy(pupil), "rim": _xy((pupil[0] + radius, pupil[1]))}
     return marks

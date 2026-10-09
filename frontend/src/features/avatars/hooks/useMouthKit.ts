@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { DraftStore } from "@/features/avatars/creation";
+import { tabStore } from "@/features/avatars/creation";
 import {
   heldKitJob,
   isKitActive,
@@ -15,14 +15,7 @@ import {
 } from "@/features/avatars/mouth-kit";
 import { api, ApiError } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
-
-function tabStore(): DraftStore | null {
-  try {
-    return window.sessionStorage;
-  } catch {
-    return null;
-  }
-}
+import type { Schemas } from "@/lib/types";
 
 /** How the job this tab followed ended, and what it was last seen doing
  * (a failure while making the teeth alone is worded as the teeth's). */
@@ -100,7 +93,9 @@ export function useMouthKit(orgId: string, avatarId: string, enabled: boolean, o
     async (consentId: string): Promise<void> => {
       lastStage.current = null;
       try {
-        const answer = await api.post<KitJobAnswer>(base, { consent_id: consentId });
+        const answer = await api.post<KitJobAnswer>(base, {
+          consent_id: consentId,
+        } satisfies Schemas["MouthKitRequest"]);
         if (answer.job) {
           hold(answer.job.id);
           queryClient.setQueryData(key, answer);

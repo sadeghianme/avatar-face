@@ -3,6 +3,7 @@
 Every provider returns SynthesisResult with viseme cues normalized to the 15
 Oculus visemes, regardless of what the upstream API natively emits.
 """
+
 from __future__ import annotations
 
 import hashlib

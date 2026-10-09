@@ -89,9 +89,7 @@ async def test_an_edit_does_not_reach_the_embed_until_published(client):
     during = (await client.get(f"/embed/v1/avatars/{avatar_id}", headers=key)).json()
     assert during["framing"] == "face"
 
-    published = await client.post(
-        f"/orgs/{org_id}/avatars/{avatar_id}/publish", headers=headers
-    )
+    published = await client.post(f"/orgs/{org_id}/avatars/{avatar_id}/publish", headers=headers)
     assert published.status_code == 200, published.text
     assert published.json()["unpublished"] is False
 
@@ -121,9 +119,7 @@ async def test_a_key_in_the_query_string_is_not_accepted(client):
     in_url = await client.get(f"/embed/v1/avatars/{avatar_id}", params={"key": key})
     assert in_url.status_code == 401
     assert in_url.json()["code"] == "missing_api_key"
-    spoken = await client.post(
-        "/embed/v1/synthesize", params={"key": key}, json={"text": "Hello"}
-    )
+    spoken = await client.post("/embed/v1/synthesize", params={"key": key}, json={"text": "Hello"})
     assert spoken.status_code == 401
     assert spoken.json()["code"] == "missing_api_key"
     # The same key in the header is still accepted.
@@ -133,17 +129,13 @@ async def test_a_key_in_the_query_string_is_not_accepted(client):
 
 async def test_embed_invalid_key(client):
     _, _, avatar_id, _ = await _setup(client)
-    response = await client.get(
-        f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": "lf_wrong"}
-    )
+    response = await client.get(f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": "lf_wrong"})
     assert response.status_code == 401
 
 
 async def test_revoked_key_rejected(client):
     headers, org_id, avatar_id, created = await _setup(client)
-    await client.delete(
-        f"/orgs/{org_id}/api-keys/{created['api_key']['id']}", headers=headers
-    )
+    await client.delete(f"/orgs/{org_id}/api-keys/{created['api_key']['id']}", headers=headers)
     response = await client.get(
         f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": created["plaintext"]}
     )
@@ -238,9 +230,7 @@ async def test_member_cannot_manage_api_keys(client):
     )
     bob = await register_and_login(client, "bob")
     await client.post(f"/invitations/{invite.json()['token']}/accept", headers=bob)
-    response = await client.post(
-        f"/orgs/{org_id}/api-keys", json={"name": "nope"}, headers=bob
-    )
+    response = await client.post(f"/orgs/{org_id}/api-keys", json={"name": "nope"}, headers=bob)
     assert response.status_code == 403
 
 
@@ -326,8 +316,7 @@ async def test_cues_are_rate_limited_per_client(client, monkeypatch) -> None:
     """Unauthenticated, so the client address is what is counted."""
     monkeypatch.setattr(embed, "CUES_PER_CLIENT", Limit("cues-test", 3, 60))
     statuses = [
-        (await client.post("/embed/v1/cues", json={"text": "Hello."})).status_code
-        for _ in range(4)
+        (await client.post("/embed/v1/cues", json={"text": "Hello."})).status_code for _ in range(4)
     ]
     assert statuses == [200, 200, 200, 429]
     refused = await client.post("/embed/v1/cues", json={"text": "Hello."})
@@ -367,3 +356,92 @@ async def test_cues_are_planned_off_the_event_loop(client, monkeypatch) -> None:
     response = await client.post("/embed/v1/cues", json={"text": "Bonjour.", "locale": "fr-FR"})
     assert response.status_code == 200
     assert threads and threads[0] is not threading.main_thread()
+
+
+# --- Opaque origins (Origin: null) ----------------------------------------------
+#
+# A sandboxed frame (no allow-same-origin), a data: page or a file: page sends
+# `Origin: null`. Any website can make one, so it vouches for no domain: taken
+# as "not a browser", it let any site use a key locked to someone's domain.
+
+
+async def test_a_domain_locked_key_is_refused_from_an_opaque_origin(client):
+    _, _, avatar_id, created = await _setup(client, allowed_domains=["example.com"])
+    key = {"X-Api-Key": created["plaintext"]}
+    for origin in (
+        {"Origin": "null"},
+        # The allowed domain in Referer changes nothing: Origin says null.
+        {"Origin": "null", "Referer": "https://example.com/page"},
+    ):
+        response = await client.get(f"/embed/v1/avatars/{avatar_id}", headers={**key, **origin})
+        assert response.status_code == 403
+        assert response.json()["code"] == "origin_not_allowed"
+    speak = await client.post(
+        "/embed/v1/synthesize",
+        json={"text": "Hi", "provider": "offline", "voice": "offline-warm"},
+        headers={**key, "Origin": "null"},
+    )
+    assert speak.status_code == 403
+    assert speak.json()["code"] == "origin_not_allowed"
+
+
+async def test_a_domain_locked_key_still_works_from_its_domain(client):
+    _, _, avatar_id, created = await _setup(client, allowed_domains=["example.com"])
+    response = await client.get(
+        f"/embed/v1/avatars/{avatar_id}",
+        headers={"X-Api-Key": created["plaintext"], "Origin": "https://example.com"},
+    )
+    assert response.status_code == 200
+
+
+async def test_a_key_without_domains_works_from_an_opaque_origin(client):
+    _, _, avatar_id, created = await _setup(client)
+    response = await client.get(
+        f"/embed/v1/avatars/{avatar_id}",
+        headers={"X-Api-Key": created["plaintext"], "Origin": "null"},
+    )
+    assert response.status_code == 200
+
+
+async def test_a_simulator_token_works_from_the_sandboxed_simulator_frame(client):
+    """The Simulator's frame is sandboxed without allow-same-origin, so the
+    widget inside it sends Origin: null with a token minted on the
+    dashboard's own origin."""
+    headers = await register_and_login(client, "sandboxed")
+    org_id = await create_org(client, headers)
+    avatar_id = await create_ready_avatar(client, headers, org_id)
+    minted = await client.post(
+        f"/orgs/{org_id}/api-keys/simulator-token",
+        headers={**headers, "origin": "http://testserver"},
+    )
+    assert minted.status_code == 200, minted.text
+    token = minted.json()["token"]
+    response = await client.get(
+        f"/embed/v1/avatars/{avatar_id}", headers={"X-Api-Key": token, "Origin": "null"}
+    )
+    assert response.status_code == 200, response.text
+    # A page that names a host is still held to the one it was minted for.
+    elsewhere = await client.get(
+        f"/embed/v1/avatars/{avatar_id}",
+        headers={"X-Api-Key": token, "Origin": "https://evil.example.net"},
+    )
+    assert elsewhere.status_code == 401
+    assert elsewhere.json()["code"] == "simulator_token_invalid"
+
+
+async def test_a_cloned_line_never_rendered_is_a_refusal_with_its_code(client, monkeypatch):
+    """The widget's own path, outside any stream: the API's envelope, so an
+    integrator can branch on the code."""
+    from app.services.tts import cloned
+
+    unavailable = {"available": False, "device": None, "reason": "no accelerator"}
+    monkeypatch.setattr(cloned, "capability", lambda: unavailable)
+    _, org_id, _, created = await _setup(client)
+    response = await client.post(
+        "/embed/v1/synthesize",
+        json={"text": "Never rendered", "provider": "cloned", "voice": f"{org_id}:sarah"},
+        headers={"X-Api-Key": created["plaintext"]},
+    )
+    assert response.status_code == 404
+    assert response.json()["code"] == "cloned_line_missing"
+    assert org_id not in response.text

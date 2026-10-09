@@ -11,4 +11,10 @@ export const settings = {
   aiSwitchNotAllowed: "Only owners and admins can change this.",
   usageAiImages: "AI images: {{used}} / {{limit}}",
   usageAiPoints: "AI point finding: {{used}} / {{limit}}",
+  sessionsTitle: "Signed-in devices",
+  sessionsHint:
+    "Signed in on a computer you no longer use, or think someone else has your password? Log out everywhere ends every session of your account, this one included. Setting a new password does the same.",
+  logoutEverywhere: "Log out everywhere",
+  logoutEverywhereAsk: "Log out on every device, this one too?",
+  logoutEverywhereFailed: "Could not log out everywhere. Try again.",
 } as const;

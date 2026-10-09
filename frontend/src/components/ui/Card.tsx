@@ -2,11 +2,14 @@ import { type ElementType, forwardRef, type HTMLAttributes, type ReactNode } fro
 
 import { cx } from "@/lib/cx";
 
-export type CardTone = "default" | "warning" | "danger" | "success";
+export type CardTone = "default" | "muted" | "warning" | "danger" | "success";
 export type CardPadding = "md" | "sm" | "none";
 
 const TONE: Record<CardTone, string> = {
   default: "",
+  // A grey well inside a page or a step (a job's progress, the agreements
+  // to tick): flat, no shadow.
+  muted: "bg-gray-50 shadow-none dark:bg-white/[0.03]",
   // Needs a look: a first build not yet published, a quality note.
   warning: "border-amber-300/60 dark:border-amber-500/30",
   danger: "border-red-200 dark:border-red-900",
@@ -17,8 +20,9 @@ const TONE: Record<CardTone, string> = {
 const PADDING: Record<CardPadding, string> = { md: "", sm: "px-4 py-3", none: "p-0" };
 
 export interface CardProps extends HTMLAttributes<HTMLElement> {
-  /** The element: a section when it has a heading of its own, a form… */
-  as?: "div" | "section" | "form" | "article" | "aside";
+  /** The element: a section when it has a heading of its own, a form, a
+   *  list item, a figure with its caption, a details that folds… */
+  as?: "div" | "section" | "form" | "article" | "aside" | "li" | "figure" | "details";
   tone?: CardTone;
   /** md 20px (the default) · sm a slim strip · none, for a table. */
   padding?: CardPadding;

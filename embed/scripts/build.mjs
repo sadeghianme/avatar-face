@@ -6,15 +6,20 @@
 // private or protected member whose renaming nothing outside the bundle
 // can see); bundle-mangle.test.ts holds the derivation to its rules, and
 // browser-tests/bundle.test.ts draws liveface.js renamed and not, pixel
-// for pixel.
+// for pixel. Beside liveface-3d.js, the KTX2 transcoder it loads, copied
+// from the three that is installed (bundles.mjs TRANSCODER).
 import { build } from "esbuild";
+import { copyFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-import { SHIPPED, bundleOptions } from "./bundles.mjs";
+import { SHIPPED, TRANSCODER, TRANSCODER_DIR, bundleOptions } from "./bundles.mjs";
 import { mangledNames } from "./mangle-names.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const names = await mangledNames(root);
 for (const bundle of Object.keys(SHIPPED)) {
   await build({ ...bundleOptions(root, bundle, names), logLevel: "info" });
+}
+for (const file of TRANSCODER) {
+  await copyFile(`${root}${TRANSCODER_DIR}/${file}`, `${root}dist/${file}`);
 }

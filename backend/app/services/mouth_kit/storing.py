@@ -28,14 +28,14 @@ from app.services.mouth_kit.calls import (
     OWNER_PHOTO,
     REBASE_FAILED,
     TEETH_REMOVED,
-    _note,
-    _now,
     generated_count,
     kit_model,
+    note,
+    now,
 )
 from app.services.mouth_kit.records import (
-    _standard_teeth,
     kit_record,
+    standard_teeth,
     teeth_reason,
 )
 from app.services.publishing import mark_dirty
@@ -102,7 +102,7 @@ async def store(
             # so it is refitted for the teeth that will be drawn: the
             # standard ones.
             logger.info("mouth kit: the teeth photo was refused as WebP (%s)", exc.code)
-            reason = _note("mouth_teeth_unclear", exc.detail)
+            reason = note("mouth_teeth_unclear", exc.detail)
             fitted = performance_kit.for_standard_teeth(fitted)
         else:
             new_photo = await mouth_photo.put_photo(avatar, storage, photo, rig)
@@ -118,15 +118,19 @@ async def store(
         keys = FITTED_WITHOUT_TEETH
     else:
         config["teeth"] = mouth_config.generic_teeth_record(
-            _standard_teeth(reason or _note("teeth_failed", "The teeth could not be made")))
+            standard_teeth(reason or note("teeth_failed", "The teeth could not be made"))
+        )
         keys = FITTED_WITH_TEETH
     # The fitted values the kit decides; everything else the owner set (or
     # the defaults, on a new avatar) stays. Held to the API's ranges like
     # any profile an owner saves: it is served to strangers.
-    profile = _hold_profile(config, {
-        **(config.get("profile") or {}),
-        **{k: fitted[k] for k in keys},
-    })
+    profile = _hold_profile(
+        config,
+        {
+            **(config.get("profile") or {}),
+            **{k: fitted[k] for k in keys},
+        },
+    )
 
     generated = generated_count(result)
     if generated:
@@ -141,7 +145,9 @@ async def store(
             previous.append(old)
         ai_edited = disclosure.without_ai_shapes(ai_edited)
     config["kit"] = kit_record(
-        result, source=source, teeth={"used": new_photo is not None, "reason": reason},
+        result,
+        source=source,
+        teeth={"used": new_photo is not None, "reason": reason},
         fitted={k: profile[k] for k in keys},
     )
     avatar.mouth_config = json.dumps(config)
@@ -213,9 +219,7 @@ def drop(avatar: Avatar, reason: Note) -> list[str]:
     return [key]
 
 
-async def follow_points(
-    avatar: Avatar, storage: Storage, points, image_size=None
-) -> list[str]:
+async def follow_points(avatar: Avatar, storage: Storage, points, image_size=None) -> list[str]:
     """Move the draft's kit onto the face's points as they are now, with no
     AI call: points re-confirmed on the same picture (Mark the face's saved
     marks, a re-detection), or the picture moved under the same face (a
@@ -244,7 +248,7 @@ async def follow_points(
     config["motion_key"] = new_key
     if kit := config.get("kit"):
         kit = kit.copy()
-        kit["rebased_at"] = _now()
+        kit["rebased_at"] = now()
         config["kit"] = kit
     avatar.mouth_config = json.dumps(config)
     return [key]
@@ -283,7 +287,7 @@ async def follow_redetection(org_id: str, avatar_id: str, points) -> None:
     storage = get_storage()
     stale: list[str] = []
     async with avatar_edits.hold(avatar_id), get_session_factory()() as db:
-        avatar = await _load_avatar(db, org_id, avatar_id)
+        avatar = await load_avatar(db, org_id, avatar_id)
         if avatar is None:
             return
         stale = await follow_points(avatar, storage, points)
@@ -294,7 +298,7 @@ async def follow_redetection(org_id: str, avatar_id: str, points) -> None:
         await storage.delete(key)
 
 
-async def _load_avatar(db, org_id: str, avatar_id: str):
+async def load_avatar(db, org_id: str, avatar_id: str):
     return (
         await db.execute(select(Avatar).where(Avatar.id == avatar_id, Avatar.org_id == org_id))
     ).scalar_one_or_none()

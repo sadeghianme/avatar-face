@@ -1,8 +1,8 @@
 import { AvatarEngine, type Rig } from "@liveface/embed";
 import type { MouthExtension, MouthPose } from "@liveface/embed/mouth-extension";
 import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
+import { useT } from "@/i18n";
 import { loadImage } from "@/lib/image";
 import type { Avatar } from "@/lib/types";
 
@@ -25,7 +25,7 @@ export function LipSyncPreview({
   still?: boolean;
   mouthOnly?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t } = useT();
   const canvas = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);

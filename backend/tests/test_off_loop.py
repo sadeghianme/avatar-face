@@ -58,7 +58,7 @@ async def test_provider_cues_are_built_off_the_loop(monkeypatch, tmp_path):
 
     (tmp_path / f"{CATALOGUE['fa_amir'][0]}.onnx").write_bytes(b"stub")
     monkeypatch.setattr(config.get_settings(), "piper_voices_dir", str(tmp_path), raising=False)
-    monkeypatch.setattr(piper, "_render", lambda text, stem: (b"RIFF", 2000))
+    monkeypatch.setattr(piper, "render", lambda text, stem: (b"RIFF", 2000))
     threads = _spy(monkeypatch, piper, "cues_from_text")
     await PiperTTSProvider().synthesize("سلام", "fa_amir", "fa-IR")
     assert _off_loop(threads)
@@ -111,7 +111,7 @@ async def test_a_crop_reset_searches_pixels_on_the_cpu_thread(client, avatar, mo
     del rig["crop_origin"]
     await storage.put_bytes(key, json.dumps(rig).encode(), "application/json")
 
-    searches = _spy(monkeypatch, avatar_photo, "_locate_crop")
+    searches = _spy(monkeypatch, avatar_photo, "locate_crop")
     reset = await client.post(f"{base}/crop", json={"reset": True}, headers=headers)
     assert reset.status_code == 200, reset.text
     assert _on_cpu_thread(searches)
@@ -119,7 +119,7 @@ async def test_a_crop_reset_searches_pixels_on_the_cpu_thread(client, avatar, mo
 
 async def test_lab_depth_runs_the_landmarker_on_the_cpu_thread(client, avatar, monkeypatch):
     headers, _, org_id, avatar_id = avatar
-    threads = _spy(monkeypatch, lab, "_landmark_z")
+    threads = _spy(monkeypatch, lab, "landmark_z")
     response = await client.get(f"/orgs/{org_id}/lab/avatars/{avatar_id}/depth", headers=headers)
     assert response.status_code == 200
     assert _on_cpu_thread(threads)
@@ -143,17 +143,17 @@ async def test_stock_pictures_are_drawn_off_the_loop(client, monkeypatch):
 
 def test_each_widget_bundle_is_hashed_once(tmp_path, monkeypatch):
     """One cache entry for every bundle re-hashed a bundle whenever another
-    was asked for in between, which every page loading two of them does."""
-    monkeypatch.setattr(main, "_ETAG_CACHE", {})
+    was asked for in between, which every page loading two of them does.
+    (Files of this test's own: the cache has never seen them.)"""
     first, second = tmp_path / "a.js", tmp_path / "b.js"
     first.write_text("one")
     second.write_text("two")
     reads = _spy(monkeypatch, type(first), "read_bytes")
-    tags = [main._bundle_etag(path) for path in (first, second, first, second, first)]
+    tags = [main.bundle_etag(path) for path in (first, second, first, second, first)]
     assert len(reads) == 2
     assert tags[0] == tags[2] == tags[4] != tags[1]
     first.write_text("one, rebuilt")
-    assert main._bundle_etag(first) != tags[0]
+    assert main.bundle_etag(first) != tags[0]
     assert len(reads) == 3
 
 
@@ -165,7 +165,7 @@ async def test_startup_puts_what_it_loaded_out_of_the_collectors_sight(app, monk
     async def nothing(*_args) -> None:
         return None
 
-    monkeypatch.setattr(main, "_ensure_schema", nothing)
+    monkeypatch.setattr(main, "ensure_schema", nothing)
     monkeypatch.setattr(main, "warm_native", nothing)
     monkeypatch.setattr(main, "verify_at_startup", nothing)
     monkeypatch.setattr(main, "sweep_forever", nothing)

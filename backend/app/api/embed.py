@@ -5,13 +5,16 @@ accepted) would be written to access logs, proxies and Referer headers;
 the widget has always sent the header. The key's org is the acting org —
 never a client-supplied org id. Browser calls are origin-checked against the key's
 allowed_domains, and each key (each organization's Simulator, for its
-tokens) is rate-limited per minute. The one unauthenticated route, /cues, is
+tokens) is rate-limited per minute. A page whose origin is opaque
+(`Origin: null`: a sandboxed frame, a data: or file: page) cannot use a key
+locked to domains; only a Simulator token is accepted from one. The one unauthenticated route, /cues, is
 rate-limited per client address instead.
 
 CORS for /embed/* is handled by the path-scoped middleware in main.py, which
 reflects any Origin so the widget works from anywhere the key's domain list
 allows.
 """
+
 from __future__ import annotations
 
 import base64
@@ -24,6 +27,7 @@ from app.api.deps import DB, client_address
 from app.core.config import get_settings
 from app.core.errors import Auth401, Forbidden403, NotFound404
 from app.models import ApiKey, AvatarStatus
+from app.schemas.published import EmbedAvatarOut
 from app.schemas.tts import CueOut, SynthesizeRequest, SynthesizeResponse
 from app.services import api_keys
 from app.services.avatars import repo as avatars
@@ -41,11 +45,21 @@ router = APIRouter(prefix="/embed/v1", tags=["embed"])
 
 
 def _origin_host(request: Request) -> str | None:
-    """Host from Origin (preferred) or Referer; None for non-browser clients."""
+    """Host from Origin (preferred) or Referer; None for a client that sends
+    neither (not a browser) and for an opaque origin (`_opaque_origin`)."""
     origin = request.headers.get("origin") or request.headers.get("referer")
     if not origin:
         return None
     return (urlsplit(origin).hostname or "").lower() or None
+
+
+def _opaque_origin(request: Request) -> bool:
+    """A browser that says where it is, but not who: `Origin: null` (a
+    sandboxed frame, a data: or file: page, a redirect across origins), or
+    any Origin or Referer without a host. Any website can produce one, by
+    putting the widget in a sandboxed frame, so it vouches for no domain."""
+    origin = request.headers.get("origin") or request.headers.get("referer")
+    return bool(origin) and _origin_host(request) is None
 
 
 def _host_allowed(host: str, patterns: list[str]) -> bool:
@@ -65,18 +79,21 @@ def _simulator_key(token: str, request: Request) -> ApiKey:
     nothing appears in the customer's key list. Everything downstream only
     reads org_id, an id for rate limiting, and the domain list — usage is
     metered per organisation, not per key, so there is no row to reference.
+
+    An opaque origin (`Origin: null`) is accepted here, and only here: the
+    dashboard's Simulator runs the widget in a frame sandboxed without
+    allow-same-origin, which has one. The token was minted for a signed-in
+    member, from the dashboard's own origin, for one organization, and lives
+    fifteen minutes; a page that names a host must still be the one it was
+    minted for.
     """
     try:
-        org_id = verify_simulator_token(
-            get_settings().jwt_secret, token, _origin_host(request)
-        )
+        org_id = verify_simulator_token(get_settings().jwt_secret, token, _origin_host(request))
     except InvalidSimulatorToken as exc:
         # One code for every failure: the Simulator re-mints and retries on
         # this, and distinguishing expired from forged would only help someone
         # probing.
-        raise Auth401(
-            f"Simulator token rejected ({exc})", code="simulator_token_invalid"
-        ) from exc
+        raise Auth401(f"Simulator token rejected ({exc})", code="simulator_token_invalid") from exc
 
     key = ApiKey(org_id=org_id, name="Simulator", prefix="lfsim_", key_hash="", allowed_domains="")
     key.id = f"sim:{org_id}"  # stable, so simulator traffic shares a rate-limit bucket
@@ -88,8 +105,9 @@ async def _authenticate(request: Request, db: DB) -> ApiKey:
     """The key a request presents, checked and counted.
 
     401 missing_api_key / invalid_api_key / simulator_token_invalid, 403
-    origin_not_allowed, 429 rate_limited (with Retry-After) past the per-key
-    limit. A Simulator token is limited like a key, in one bucket per
+    origin_not_allowed (a host outside a key's domains, or an opaque origin
+    for a key that has domains), 429 rate_limited (with Retry-After) past the
+    per-key limit. A Simulator token is limited like a key, in one bucket per
     organization: origin binding does not stop a client that forges the
     Origin header, so the limit is what bounds it.
     """
@@ -105,9 +123,18 @@ async def _authenticate(request: Request, db: DB) -> ApiKey:
         if found is None or not found.is_active:
             raise Auth401("Invalid API key", code="invalid_api_key")
         api_key = found
-        host = _origin_host(request)
-        if api_key.domain_list and host is not None and not _host_allowed(host, api_key.domain_list):
-            raise Forbidden403("Origin not allowed for this key", code="origin_not_allowed")
+        if api_key.domain_list:
+            # A sandboxed frame on any website sends `Origin: null`: taken as
+            # "no browser", it skipped the domain check for every such page.
+            if _opaque_origin(request):
+                raise Forbidden403(
+                    "This key is locked to its domains; a page with no origin "
+                    "(Origin: null) cannot use it",
+                    code="origin_not_allowed",
+                )
+            host = _origin_host(request)
+            if host is not None and not _host_allowed(host, api_key.domain_list):
+                raise Forbidden403("Origin not allowed for this key", code="origin_not_allowed")
 
     enforce(embed_per_key(), api_key.id, "Embed rate limit exceeded")
 
@@ -116,8 +143,14 @@ async def _authenticate(request: Request, db: DB) -> ApiKey:
     return api_key
 
 
-@router.get("/avatars/{avatar_id}")
-async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
+@router.get("/avatars/{avatar_id}", response_model=EmbedAvatarOut)
+async def embed_avatar(avatar_id: str, request: Request, db: DB) -> EmbedAvatarOut:
+    """The PUBLISHED avatar, for the widget: its files presigned, its scene,
+    voice, mouth and disclosure (schemas.published, the public contract).
+
+    401 missing_api_key / invalid_api_key; 403 origin_not_allowed; 404
+    avatar_not_found, avatar_not_ready (never published and not ready) or
+    avatar_not_published; 429 rate_limited past the key's limit."""
     api_key = await _authenticate(request, db)
     avatar = await avatars.require_in_org(db, api_key.org_id, avatar_id)
     # The draft's status says nothing about the published snapshot: a
@@ -135,34 +168,12 @@ async def embed_avatar(avatar_id: str, request: Request, db: DB) -> dict:
     view = await published_view(avatar, storage)
     if view is None:
         raise NotFound404("Avatar has not been published", code="avatar_not_published")
-    return {
-        "id": avatar.id,
-        "name": avatar.name,
-        "kind": avatar.kind.value,
-        "framing": view["framing"],
-        # The published face type ("human", "animal", "cartoon"): how the
-        # head moves by default (the widget's faceType; data-head-motion on
-        # the snippet still overrides).
-        "face_type": view["face_type"],
-        # The published scene (zoom, pan, background), or null for a
-        # snapshot from before scenes: the engine then renders by framing.
-        # data-framing / data-zoom on the snippet still override the zoom.
-        "scene": view.get("scene"),
-        # The owner's published voice choice: like framing, it reaches every
-        # embedding site on their next page load. A data-voice attribute on
-        # the snippet still overrides — that is per-site intent.
-        "voice": view.get("voice"),
-        "mouth": view.get("mouth"),
-        "rig_url": view["rig_url"],
-        "thumbnail_url": view["thumbnail_url"],
-        "image_url": view["image_url"],
-        "model_url": view["image_url"] if avatar.kind.value == "model3d" else None,
-        "layer_urls": view["layer_urls"],
-        # Only when the published snapshot carries one (see
-        # publishing.publish); a snapshot from before has no key at all,
-        # and its visitors see exactly what they saw before.
-        **({"disclosure": view["disclosure"]} if view.get("disclosure") else {}),
-    }
+    # Every field is the published snapshot's, so a site keeps what its
+    # owner last published: the face type chooses the head motion's default
+    # (data-head-motion still overrides), the scene the zoom (data-framing
+    # and data-zoom still override), the voice the speech (data-voice still
+    # overrides: that is per-site intent).
+    return EmbedAvatarOut.of(avatar, view)
 
 
 class CueRequest(BaseModel):
@@ -224,13 +235,11 @@ async def embed_cues(body: CueRequest, request: Request) -> Response:
 
 
 @router.post("/synthesize", response_model=SynthesizeResponse)
-async def embed_synthesize(
-    body: SynthesizeRequest, request: Request, db: DB
-) -> SynthesizeResponse:
+async def embed_synthesize(body: SynthesizeRequest, request: Request, db: DB) -> SynthesizeResponse:
     api_key = await _authenticate(request, db)
     await check_usage_limit(db, api_key.org_id, len(body.text))
     result, cached = await synthesize_cached(
-        db, body.provider, body.voice, body.locale, body.text
+        db, body.provider, body.voice, body.locale, body.text, org_id=api_key.org_id
     )
     await record_synthesis(
         db, api_key.org_id, body.provider, len(body.text), cached, source="embed"
