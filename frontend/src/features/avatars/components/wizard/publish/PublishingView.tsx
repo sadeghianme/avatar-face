@@ -33,7 +33,18 @@ export function PublishingView({
             PICTURE_BACKDROP
           )}
         >
-          <img src={image.url} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
+          {/* Asked for as the talking preview asked for it (loadImage:
+              crossOrigin anonymous), so the browser shows the copy it
+              already has instead of fetching it again. A fetch can come too
+              late: a finish without AI takes a moment, and its last act is
+              to delete the creation's files (the avatar has its own), which
+              left a broken picture and a 404 on most publishes. */}
+          <img
+            src={image.url}
+            crossOrigin="anonymous"
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover object-top"
+          />
           <span
             aria-hidden="true"
             className="absolute inset-0 rounded-full ring-2 ring-brand-500/60 motion-safe:animate-glow"
