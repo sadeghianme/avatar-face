@@ -44,9 +44,24 @@ from app.services import performance_kit as pk
 from app.services import photo_adjust as pa
 from app.services.jobs import Job, runner
 from app.services.storage import get_storage
-from tests.test_creation_ai import GOOD, Faces, _adjust, _org, ai_consent, face_box, png_of
-from tests.test_creations import _create, _detect, _get, _run, depiction, portrait
-from tests.test_mouth_kit import MODEL, KitWorld, _targets
+from tests.test_creation_ai import (
+    GOOD,
+    Faces,
+    ai_consent,
+    face_box,
+    png_of,
+    request_adjust,
+    user_and_org,
+)
+from tests.test_creations import (
+    create_creation,
+    depiction,
+    detect_anchors,
+    get_json,
+    portrait,
+    request_and_drain,
+)
+from tests.test_mouth_kit import MODEL, KitWorld, pose_targets
 from tests.test_photo_analysis import with_mouth
 
 EMBED = Path(__file__).resolve().parents[2] / "embed"
@@ -453,7 +468,7 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
 ):
     reports = _watch_finish(monkeypatch)
     player = embed_player(tmp_path)
-    headers, org_id = await _org(client, "stepfive")
+    headers, org_id = await user_and_org(client, "stepfive")
 
     # AI allowed: the organization's switch (on by default; set as an admin
     # would), and the member's agreement to send photos, remembered.
@@ -464,14 +479,16 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
     consent_id = await ai_consent(client, headers, org_id)
 
     # 1. Upload: a person, whose parted lips show their teeth.
-    base, body = await _create(client, headers, org_id, data=smiling_portrait())
+    base, body = await create_creation(client, headers, org_id, data=smiling_portrait())
     assert body["face_type"] == "human"
     assert body["analysis"]["recommendation"]["reasons"] == ["teeth_showing"]
 
     # 2. Background: removed, a job.
-    removed = await _run(client, headers, "POST", f"{base}/background", json={"mode": "remove"})
+    removed = await request_and_drain(
+        client, headers, "POST", f"{base}/background", json={"mode": "remove"}
+    )
     assert removed.status_code == 202, removed.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     assert body["background"] == "remove"
     cutout = body["current"]
@@ -485,16 +502,16 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
         "image": cutout,
         "reasons": ["teeth_showing"],
     }
-    started = await _adjust(client, headers, base, consent_id, auto=True, count=2)
+    started = await request_adjust(client, headers, base, consent_id, auto=True, count=2)
     assert started.status_code == 202, started.text
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["job"]["state"] == "done", body["job"]
     assert models.touchups == 2
     offered = [c for c in body["ai"]["last_round"]["candidates"] if c["ok"]]
     assert len(offered) == 2, body["ai"]["last_round"]
     assert body["current"] == cutout, "offered, never chosen for the owner"
     # "Use this": the result, a cut-out like its source, its lips closed.
-    chosen = await _run(
+    chosen = await request_and_drain(
         client, headers, "POST", f"{base}/choose", json={"choice": offered[0]["step"]}
     )
     assert chosen.status_code == 200, chosen.text
@@ -505,7 +522,7 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
 
     # 4. Place points: detected, one mouth corner moved a little by the
     # owner, previewed as the wizard does while the marks are dragged.
-    anchors = await _detect(client, headers, base)
+    anchors = await detect_anchors(client, headers, base)
     assert anchors["detected"] is True and anchors["validation"]["ok"] is True
     marks = anchors["marks"]
     marks["mouth"]["right"]["x"] += 2
@@ -543,13 +560,13 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
     assert finish.json()["warnings"] == [], "the touch-up closed the lips"
     avatar_id = finish.json()["avatar_id"]
     await asyncio.wait_for(arrived.wait(), 30)
-    running = (await _get(client, headers, base))["job"]
+    running = (await get_json(client, headers, base))["job"]
     assert running["step"] == "finish" and running["state"] == "running"
     assert running["progress"]["label"] == SHAPES_STAGE
     assert running["progress"]["count"] == {"done": 0, "total": 7}
     release.set()
     await runner.drain()
-    body = await _get(client, headers, base)
+    body = await get_json(client, headers, base)
     assert body["status"] == "finished" and body["job"]["state"] == "done", body["job"]
     assert body["avatar_id"] == avatar_id
 
@@ -566,7 +583,7 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
 
     # The avatar: live, with its own mouth, made by AI and disclosed.
     url = f"/orgs/{org_id}/avatars/{avatar_id}"
-    avatar = await _get(client, headers, url)
+    avatar = await get_json(client, headers, url)
     assert avatar["status"] == "ready" and avatar["face_type"] == "human"
     assert avatar["published"] is True and avatar["unpublished"] is False
     kit = avatar["mouth"]["kit"]
@@ -603,7 +620,7 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
     # Its rest pose is what the owner previewed and visitors' rig is.
     rig = json.loads(await _cross_origin(client, served["rig_url"], "application/json"))
     assert np.allclose(rig["points"], previewed["points"], atol=1e-6)
-    assert np.allclose(_targets(first)["rest"], rig["points"], rtol=0, atol=_quantum(first))
+    assert np.allclose(pose_targets(first)["rest"], rig["points"], rtol=0, atol=_quantum(first))
     # A tampered copy is refused by the same check: it is not vacuous.
     if player is not None:
         tampered = {**first, "jaw_range": 2.0}
@@ -620,7 +637,7 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
         f"{url}/rig-fit", json={"mouth": remarked["mouth"], "persist": True}, headers=headers
     )
     assert saved.status_code == 200, saved.text
-    avatar = await _get(client, headers, url)
+    avatar = await get_json(client, headers, url)
     assert avatar["unpublished"] is True
     assert _key(avatar["mouth"]["motion_url"]) != draft_motion
     assert not await get_storage().exists(draft_motion), "the draft's old motion is gone"
@@ -633,7 +650,7 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
     rig = json.loads(await _cross_origin(client, served["rig_url"], "application/json"))
     # Rebased: its rest pose is the new points, and every shape moves from
     # them exactly as far, and the same way, as it did before.
-    before, after = _targets(first), _targets(second)
+    before, after = pose_targets(first), pose_targets(second)
     # (Four points read back, each within 0.71 of the last decimal kept.)
     quantum = max(_quantum(first), _quantum(second))
     assert np.allclose(after["rest"], rig["points"], rtol=0, atol=quantum)
@@ -681,11 +698,11 @@ async def test_step_5_from_a_photo_to_a_visitors_page_and_back(
         headers=headers,
     )
     assert nudged.status_code == 200, nudged.text
-    draft = await _get(client, headers, url)
+    draft = await get_json(client, headers, url)
     assert draft["unpublished"] is True
     discarded = await client.post(f"{url}/discard-draft", headers=headers)
     assert discarded.status_code == 200, discarded.text
-    restored = await _get(client, headers, url)
+    restored = await get_json(client, headers, url)
     assert _published_files(prefix) == files
     after_discard = await _widget_config(client, avatar_id, key)
     assert await _files_visitors_get(client, after_discard) == visible

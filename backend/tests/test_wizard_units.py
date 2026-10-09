@@ -253,19 +253,27 @@ def test_every_model_and_look_has_its_style_and_its_subject():
     ],
 )
 def test_the_owners_words_are_quoted_on_one_line_and_cut_at_max_words(words, quoted):
-    assert prompts._quoted(words) == quoted
+    text = prompts.change_prompt("human", "animation", words)
+    assert f"in the owner's words: {quoted}. Keep everything else" in text
 
 
-def test_the_requirements_are_framing_light_backdrop_avoid_then_the_look():
-    assert prompts._requirements("animal", "animation") == " ".join(
+def requirements(model: str, look: str) -> str:
+    """What every prompt ends with: the framing, light, backdrop and what to
+    avoid, then the look."""
+    return " ".join(
         (
-            prompts.FRAMING["animal"],
+            prompts.FRAMING[model],
             prompts.LIGHT,
             prompts.BACKDROP,
             prompts.AVOID,
-            prompts.LOOK_WORDS[("animal", "animation")],
+            prompts.LOOK_WORDS[(model, look)],
         )
     )
+
+
+def test_the_requirements_are_framing_light_backdrop_avoid_then_the_look():
+    text = prompts.character_prompt("animal", "animation", "a grey cat")
+    assert text.endswith(" " + requirements("animal", "animation"))
 
 
 @pytest.mark.parametrize("description", [None, "", "   "])
@@ -275,7 +283,7 @@ def test_a_character_without_a_description_is_the_models_default_subject(descrip
         "Create a portrait of a character for a talking avatar. The character, in the "
         'owner\'s words: "a friendly, approachable adult".'
     )
-    assert text.endswith(prompts._requirements("human", "cartoon"))
+    assert text.endswith(requirements("human", "cartoon"))
 
 
 def test_an_animals_character_is_asked_for_as_an_animal_character():
@@ -287,9 +295,7 @@ def test_an_animals_character_is_asked_for_as_an_animal_character():
 @pytest.mark.parametrize("instruction", [None, "", "  \n"])
 def test_an_upload_without_an_instruction_asks_for_the_look_alone(instruction):
     assert prompts.prepare_prompt("animal", "cartoon", instruction) == (
-        prompts.PREPARE_SUBJECT[("animal", "cartoon")]
-        + " "
-        + prompts._requirements("animal", "cartoon")
+        prompts.PREPARE_SUBJECT[("animal", "cartoon")] + " " + requirements("animal", "cartoon")
     )
 
 
@@ -298,8 +304,7 @@ def test_an_uploads_instruction_is_quoted_between_the_subject_and_the_requiremen
     subject = prompts.PREPARE_SUBJECT[("human", "realistic")]
     assert text == (
         f"{subject} The owner also asks for this change, in their words: \"no 'glasses'\". "
-        "Apply it without changing anything that follows. "
-        + prompts._requirements("human", "realistic")
+        "Apply it without changing anything that follows. " + requirements("human", "realistic")
     )
 
 
@@ -310,7 +315,7 @@ def test_a_change_keeps_the_same_person_or_animal(model, noun):
         "Edit this avatar portrait. Apply only this change, in the owner's words: "
         f'"a red scarf". Keep everything else exactly as it is: the same {noun} and identity'
     )
-    assert text.endswith(prompts._requirements(model, "animation"))
+    assert text.endswith(requirements(model, "animation"))
 
 
 # --- versions --------------------------------------------------------------------------
@@ -690,21 +695,21 @@ def test_a_keyer_that_fails_leaves_the_picture_uncut(cutters, caplog):
 @pytest.mark.parametrize(("before", "after"), [(3, 2), (1, 0), (0, 0), (None, 0), ("2", 1)])
 def test_a_refund_gives_one_try_back_and_never_goes_below_zero(before, after):
     usage = {"prepare_rounds": before, "free_clears": 2, "next_adjusted": 4}
-    prepare._refund(usage)
+    prepare.refund(usage)
     assert usage == {"prepare_rounds": after, "free_clears": 2, "next_adjusted": 4}
 
 
 @pytest.mark.parametrize(("before", "after"), [(3, 2), (1, 0), (0, 0), (None, 0)])
 def test_a_free_refund_gives_one_free_removal_back_and_never_goes_below_zero(before, after):
     usage = {"prepare_rounds": 5, "free_clears": before}
-    prepare._refund_free(usage)
+    prepare.refund_free(usage)
     assert usage == {"prepare_rounds": 5, "free_clears": after}
 
 
 def test_a_refund_of_a_counter_never_set_leaves_it_at_zero():
     usage: dict = {}
-    prepare._refund(usage)
-    prepare._refund_free(usage)
+    prepare.refund(usage)
+    prepare.refund_free(usage)
     assert usage == {"prepare_rounds": 0, "free_clears": 0}
 
 

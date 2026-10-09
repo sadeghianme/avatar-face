@@ -124,7 +124,7 @@ async def render_here(job_id: str, ctx: OrgMember, background: BackgroundTasks) 
     job["error"] = None
 
     job["claimed_at"] = _time.time()
-    await clonejobs._write_job(storage, ctx.org.id, job)
+    await clonejobs.write_job(storage, ctx.org.id, job)
     background.add_task(render_job, ctx.org.id, job_id)
     return job
 

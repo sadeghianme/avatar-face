@@ -6,19 +6,19 @@ from __future__ import annotations
 import re
 
 from app.services.tts.g2p.lexicon import (
-    _SIBILANTS,
-    _VOICED_CONS,
     LEXICON,
+    SIBILANTS,
+    VOICED_CONS,
     VOWEL_PHONEMES,
 )
-from app.services.tts.g2p.rules import _RULES
+from app.services.tts.g2p.rules import RULES
 
 
 def _engine(w: str) -> list[tuple[str, int, int]]:
     out: list[tuple[str, int, int]] = []
     i, n = 0, len(w)
     while i < n:
-        for text, left, right, res in _RULES.get(w[i], ()):
+        for text, left, right, res in RULES.get(w[i], ()):
             j = i + len(text)
             if w[i:j] != text:
                 continue
@@ -82,10 +82,10 @@ def _suffix(kind: str, last: str) -> tuple[str, ...]:
     if kind == "ed":
         if last in ("T", "D"):
             return ("IH", "D")
-        return ("D",) if (last in _VOICED_CONS or last in VOWEL_PHONEMES) else ("T",)
-    if last in _SIBILANTS:
+        return ("D",) if (last in VOICED_CONS or last in VOWEL_PHONEMES) else ("T",)
+    if last in SIBILANTS:
         return ("IH", "Z")
-    return ("Z",) if (last in _VOICED_CONS or last in VOWEL_PHONEMES) else ("S",)
+    return ("Z",) if (last in VOICED_CONS or last in VOWEL_PHONEMES) else ("S",)
 
 
 def _spans(word: str) -> list[tuple[str, int, int]]:

@@ -11,7 +11,7 @@ import sys
 import threading
 import wave
 from contextlib import closing
-from datetime import timedelta
+from datetime import UTC, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -229,7 +229,8 @@ async def test_last_use_is_recorded_at_most_hourly(app):
 
         assert await speech_cache.get(db, key) is not None
         touched = (await _row(db, key)).last_used_at  # type: ignore[union-attr]
-        assert speech_cache._as_utc(touched) > long_ago + timedelta(days=2)
+        # SQLite hands the timestamp back without its zone: it is UTC.
+        assert touched.replace(tzinfo=UTC) > long_ago + timedelta(days=2)
 
         assert await speech_cache.get(db, key) is not None
         assert (await _row(db, key)).last_used_at == touched  # type: ignore[union-attr]

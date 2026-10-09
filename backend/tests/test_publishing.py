@@ -443,7 +443,7 @@ async def test_startup_runs_the_recovery(client, setup, monkeypatch):
         return None
 
     # Only the recovery is under test: no migrations, sweeper or model warm-up.
-    monkeypatch.setattr(main, "_ensure_schema", no_schema)
+    monkeypatch.setattr(main, "ensure_schema", no_schema)
     monkeypatch.setattr(lab_timing, "warm_native", nothing)
     monkeypatch.setattr(get_settings(), "candidate_retention_hours", 0, raising=False)
 

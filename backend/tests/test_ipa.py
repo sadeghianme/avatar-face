@@ -7,7 +7,7 @@ call is a thin subprocess wrapper; this is where the judgement lives.
 
 from app.services.tts.espeak import voice_for
 from app.services.tts.ipa import collapse_repeats, ipa_to_visemes
-from app.services.tts.timing import _ANY_WORD_RE, is_english, plan_utterance
+from app.services.tts.timing import ANY_WORD_RE, is_english, plan_utterance
 
 
 def test_the_lips_close_for_p_b_and_m():
@@ -64,11 +64,11 @@ def test_french_beaucoup_is_four_shapes_not_eight():
 def test_a_script_agnostic_word_regex_finds_words_the_latin_one_cannot():
     """Arabic, Cyrillic and Han are exactly where per-character shapes are
     least like speech, so they must not be excluded from the phoneme path."""
-    assert _ANY_WORD_RE.findall("Привет мир") == ["Привет", "мир"]
-    assert _ANY_WORD_RE.findall("مرحبا بالعالم") == ["مرحبا", "بالعالم"]
+    assert ANY_WORD_RE.findall("Привет мир") == ["Привет", "мир"]
+    assert ANY_WORD_RE.findall("مرحبا بالعالم") == ["مرحبا", "بالعالم"]
     # No spaces: the whole run goes to espeak, which segments it itself.
-    assert _ANY_WORD_RE.findall("你好世界") == ["你好世界"]
-    assert _ANY_WORD_RE.findall("hi 42 there") == ["hi", "there"]
+    assert ANY_WORD_RE.findall("你好世界") == ["你好世界"]
+    assert ANY_WORD_RE.findall("hi 42 there") == ["hi", "there"]
 
 
 def test_espeak_voice_is_the_language_subtag():

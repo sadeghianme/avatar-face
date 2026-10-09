@@ -135,7 +135,7 @@ async def test_a_database_a_newer_release_migrated_is_served_as_it_is(tmp_path, 
         db.commit()
     engine = create_async_engine(f"sqlite+aiosqlite:///{database}")
     try:
-        await main._ensure_schema(engine)
+        await main.ensure_schema(engine)
     finally:
         await engine.dispose()
     assert "does not know" in caplog.text

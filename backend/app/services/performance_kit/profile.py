@@ -15,9 +15,9 @@ from app.schemas.avatar import MouthProfile
 from app.services import dental_photo
 from app.services.performance_kit.answers import (
     MAX_OVER_REFERENCE,
-    _down,
-    _mouth_width,
-    _reason,
+    down_and_width,
+    make_reason,
+    mouth_width,
     opening,
 )
 from app.services.performance_kit.constants import (
@@ -29,8 +29,8 @@ from app.services.performance_kit.constants import (
 )
 from app.services.performance_kit.registration import (
     ReferenceMotion,
-    _corner_angle,
-    _level,
+    corner_angle,
+    level,
 )
 
 # --- 4. Retarget fallback -----------------------------------------------------------------------
@@ -58,10 +58,10 @@ def retarget_reference_pose(
     retargeted pose needs no amplitude of its own either.
     """
     rest, pose = reference.rest, reference.poses[shape]
-    ref_level = _level(_corner_angle(rest))
+    ref_level = level(corner_angle(rest))
     displacement = (pose - rest) @ ref_level.T
-    local = displacement * (_mouth_width(base_points) / _mouth_width(rest))
-    to_face = _level(-_corner_angle(base_points))  # R(+theta)
+    local = displacement * (mouth_width(base_points) / mouth_width(rest))
+    to_face = level(-corner_angle(base_points))  # R(+theta)
     return base_points + local @ to_face.T
 
 
@@ -100,7 +100,7 @@ REFERENCE_TEETH_Y = 0.016
 REFERENCE_TEETH_SCALE = 1.0
 
 
-def _profile_defaults() -> tuple[dict, dict[str, tuple[float, float]]]:
+def profile_defaults() -> tuple[dict, dict[str, tuple[float, float]]]:
     """Defaults and ranges: the API's MouthProfile, which mirrors the embed's
     DEFAULT_REFERENCE_PROFILE and PROFILE_LIMITS."""
     limits = {}
@@ -137,7 +137,7 @@ class ProfileFit:
     measurements: dict = field(default_factory=dict)
     # What was not fitted from this face, one entry per value (`field`), with
     # why. A teeth photo that is not drawn is teethY's entry: the standard
-    # teeth are drawn instead, and this is why (_finish reports it).
+    # teeth are drawn instead, and this is why (kit.finish reports it).
     reasons: list[dict] = field(default_factory=list)
     # True when the profile is fitted for the teeth photo, which the embed
     # accepts: the caller hands the photo on only then.
@@ -208,7 +208,7 @@ def fit_profile(
     at the Reference's jaw range and the owner's slider means what it means
     for every avatar.
     """
-    defaults, _ = _profile_defaults()
+    defaults, _ = profile_defaults()
     fit = ProfileFit(profile=for_standard_teeth(defaults))
     acceptance = None
     if teeth is not None:
@@ -217,8 +217,8 @@ def fit_profile(
     if teeth is not None and acceptance is not None and acceptance.accepted:
         # Measured whenever the photo is accepted (it has an upper arch).
         assert acceptance.upper_edge is not None
-        width = _mouth_width(base_points)
-        down_photo, photo_px = _down(teeth.targets)
+        width = mouth_width(base_points)
+        down_photo, photo_px = down_and_width(teeth.targets)
         # The arch's end in the photo's mouth frame (origin 13, corner line
         # level, in its mouth widths); the registration is a similarity, so
         # the same frame on the registered landmarks places it on the base.
@@ -235,11 +235,11 @@ def fit_profile(
         )
         return fit
     if teeth is None or acceptance is None:
-        why = why_no_teeth or _reason("no_teeth_photo", "No teeth photo of this face")
+        why = why_no_teeth or make_reason("no_teeth_photo", "No teeth photo of this face")
     elif acceptance.arch_pixels == 0:
-        why = _reason("no_teeth_visible", "The teeth photo shows no upper teeth")
+        why = make_reason("no_teeth_visible", "The teeth photo shows no upper teeth")
     else:
-        why = _reason(
+        why = make_reason(
             "teeth_photo_refused",
             "The teeth photo shows too little of the upper teeth for the photographic mouth "
             f"(central crown {acceptance.crown_coverage:.3f} of the mouth width, arch "
@@ -315,7 +315,7 @@ def normalize_amplitude(
         result.reasons.append(
             {
                 "field": "amplitude",
-                **_reason("aa_not_generated", "No AA of this face to scale its shapes by"),
+                **make_reason("aa_not_generated", "No AA of this face to scale its shapes by"),
             }
         )
     result.measurements["amplitude"] = round(result.scale, 4)
@@ -324,7 +324,7 @@ def normalize_amplitude(
         opened = opening(scaled, base_points)
         limit = MAX_OVER_REFERENCE * reference_open[shape]
         if shape != "aa" and opened > limit:
-            result.refused[shape] = _reason(
+            result.refused[shape] = make_reason(
                 "pose_not_reached",
                 f"Not the {shape.upper()} shape: at the kit's size the lips parted "
                 f"{opened:.2f} mouth widths, more than {limit:.2f} ({MAX_OVER_REFERENCE} times "

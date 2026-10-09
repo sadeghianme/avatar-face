@@ -116,7 +116,7 @@ class PiperTTSProvider(TTSProvider):
         stem, _, voice_locale = CATALOGUE[voice]
 
         async with _synth_semaphore:
-            audio, duration_ms = await asyncio.to_thread(_render, text, stem)
+            audio, duration_ms = await asyncio.to_thread(render, text, stem)
         return SynthesisResult(
             audio=audio,
             audio_mime="audio/wav",
@@ -130,7 +130,7 @@ class PiperTTSProvider(TTSProvider):
         )
 
 
-def _render(text: str, stem: str) -> tuple[bytes, int]:
+def render(text: str, stem: str) -> tuple[bytes, int]:
     voice = _get_voice(stem)
     buffer = io.BytesIO()
     with wave.open(buffer, "wb") as handle:

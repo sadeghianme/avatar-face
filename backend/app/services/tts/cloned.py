@@ -80,7 +80,7 @@ class ClonedTTSProvider(TTSProvider):
         degrade gracefully catch this code and fall back deliberately.
         """
         if capability()["available"]:
-            reference = await _reference_for(voice)
+            reference = await reference_for(voice)
             if reference is not None:
                 audio, duration_ms = await render_text(reference, text)
                 return SynthesisResult(
@@ -122,7 +122,7 @@ def _cues(text: str, duration_ms: int, locale: str, audio: bytes | None = None) 
     return cues_from_text(text, duration_ms, locale, audio=audio)
 
 
-async def _reference_for(voice: str) -> bytes | None:
+async def reference_for(voice: str) -> bytes | None:
     """The recording this voice was cloned from, if it is still on disk.
 
     Found by scanning the org's clone jobs for one with this voice name.

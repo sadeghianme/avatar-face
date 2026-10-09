@@ -205,7 +205,7 @@ def render_timed(text: str, voice_id: str, lang: str) -> tuple[bytes, int, list[
     return buffer.getvalue(), duration, [PhoneSpan(t.phoneme, t.start, t.end) for t in timings]
 
 
-def _render(text: str, voice: str) -> tuple[bytes, int, list[dict], list[dict]]:
+def render_native(text: str, voice: str) -> tuple[bytes, int, list[dict], list[dict]]:
     chosen = next(
         (v for v in VOICES if v.id == voice), next(v for v in VOICES if v.id == DEFAULT_VOICE)
     )
@@ -213,6 +213,13 @@ def _render(text: str, voice: str) -> tuple[bytes, int, list[dict], list[dict]]:
     cues = native_cues(spans, duration, audio)
     baseline = cues_from_text(text, duration, chosen.locale, audio=audio)
     return audio, duration, cues, baseline
+
+
+def reset_slot() -> None:
+    """Forget the inference slot; the next speech makes a new one (tests: a
+    semaphore belongs to the event loop that first waited on it)."""
+    global _semaphore
+    _semaphore = None
 
 
 async def synthesize_native(text: str, voice: str):
@@ -224,7 +231,7 @@ async def synthesize_native(text: str, voice: str):
     # Cancelling an HTTP stream cannot interrupt ONNX in a worker thread.
     # Keep the slot until that inference really finishes; repeated Stop clicks
     # must not accumulate abandoned workers waiting on the render lock.
-    task = asyncio.create_task(asyncio.to_thread(_render, text, voice))
+    task = asyncio.create_task(asyncio.to_thread(render_native, text, voice))
     try:
         return await asyncio.shield(task)
     finally:

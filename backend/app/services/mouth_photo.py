@@ -295,9 +295,9 @@ class Request:
 def face_request(data: bytes) -> Request:
     """The face crop a touch-up sends, of `data` (a cut-out on the neutral
     grey). TeethFailure when there is no frontal face to crop. CPU work."""
-    image = pa._rgb(data)
+    image = pa.decode_rgb(data)
     try:
-        points = pa._detect(image)
+        points = pa.detect_points(image)
     except landmarks.LandmarkerUnavailable as exc:
         raise TeethFailure(
             "landmarks_unavailable", "Face detection is not available on this server", 409
@@ -309,15 +309,15 @@ def face_request(data: bytes) -> Request:
         # give it a foreshortened arch.
         raise TeethFailure("face_turned", "The head is turned too far to make teeth for it")
     crop = pa.crop_face(image, pa.face_crop_box(points))
-    return Request(pa._jpeg(crop, pa.CROP_QUALITY), "image/jpeg")
+    return Request(pa.encode_jpeg(crop, pa.CROP_QUALITY), "image/jpeg")
 
 
 def fallback_request(data: bytes) -> Request | None:
     """The same photo as a head-and-shoulders crop, for one more try after
     a refusal; None when that crop would be the same picture. CPU work."""
-    image = pa._rgb(data)
+    image = pa.decode_rgb(data)
     try:
-        points = pa._detect(image)
+        points = pa.detect_points(image)
     except Exception:
         # Broad on purpose: the detector's runtime fails in its own types;
         # then there is no fallback crop to try.
@@ -328,7 +328,7 @@ def fallback_request(data: bytes) -> Request | None:
     crop = pa.head_crop(image, points)
     if crop is None:
         return None
-    return Request(pa._jpeg(crop, imagegen.SOURCE_QUALITY), "image/jpeg")
+    return Request(pa.encode_jpeg(crop, imagegen.SOURCE_QUALITY), "image/jpeg")
 
 
 @dataclass

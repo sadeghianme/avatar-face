@@ -130,7 +130,7 @@ def test_the_cpu_thread_caps_opencv(monkeypatch):
 
     calls = []
     monkeypatch.setattr(cv2, "setNumThreads", calls.append)
-    jobs._limit_cpu_thread()
+    jobs.limit_cpu_thread()
     assert calls == [1]
 
 

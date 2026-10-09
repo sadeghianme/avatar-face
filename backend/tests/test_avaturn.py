@@ -25,7 +25,7 @@ async def test_session_returns_only_the_editor_url(client, monkeypatch):
         return {"url": "https://editor.avaturn.me/s/abc", "id": "SESSION1"}
 
     monkeypatch.setattr(avaturn, "api_token", lambda: "secret-token")
-    monkeypatch.setattr(avaturn, "_post", fake_post)
+    monkeypatch.setattr(avaturn, "post", fake_post)
 
     headers = await register_and_login(client, "has3d")
     org_id = await create_org(client, headers)

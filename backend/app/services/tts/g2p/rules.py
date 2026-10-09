@@ -7,12 +7,12 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Sequence
 
-from app.services.tts.g2p.lexicon import _VOICED_CONS
+from app.services.tts.g2p.lexicon import VOICED_CONS
 
 Out = Sequence[str] | Callable[[list], Sequence[str]]
 # (text, left context, right context, phonemes or a function of those so far)
 Rule = tuple[str, re.Pattern[str] | None, re.Pattern[str] | None, Out]
-_RULES: dict[str, list[Rule]] = {}
+RULES: dict[str, list[Rule]] = {}
 MAGIC = r"^([^aeiouy]l?e|(st|ng|th)e)$"  # ...Ce / ...Cle / waste, change, bathe
 CE = r"^([^aeiouyr]|$)"  # consonant (not r) or word end: <ar> in car, not carry
 CEO = r"^([^aeiour]|$)"  # same, but <y> allowed: story, glory
@@ -20,7 +20,7 @@ LSUF = r"^(tion|sion|ture|tial|tient|cial|cious|cian)$"  # lengthens a/o: nation
 
 
 def _R(text: str, out: Out, left: str | None = None, right: str | None = None):
-    _RULES.setdefault(text[0], []).append(
+    RULES.setdefault(text[0], []).append(
         (
             text,
             re.compile(left) if left else None,
@@ -32,7 +32,7 @@ def _R(text: str, out: Out, left: str | None = None, right: str | None = None):
 
 def _s_end(out):  # word-final <s>
     prev = out[-1][0] if out else ""
-    return ("Z",) if prev in _VOICED_CONS else ("S",)
+    return ("Z",) if prev in VOICED_CONS else ("S",)
 
 
 # a
