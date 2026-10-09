@@ -205,7 +205,7 @@ and `# fmt: on`. The commit that formatted the backend is in
 | `frontend` | type check, the unit tests (node --test) and the rendering tests (Vitest), each with coverage at or above its floors, structure check, production build | ~1 min |
 | `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, the dashboard's generated API types match the committed document | <1 min |
 | `deploy-script` | ShellCheck (pinned) on `deploy/*.sh`; every gate of `deploy.sh` | <1 min |
-| `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 22 page visits load in headless Chrome with zero CSP violations (the Simulator injection replayed among them) | ~4 min |
+| `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 22 page visits load in headless Chrome with zero CSP violations (the Simulator injection replayed among them); then the wizard end to end, from a new account to a published, spoken, shared and deleted avatar | ~5 min, the wizard ~1 of it |
 
 The `images` job's browser sweep (`deploy/smoke/web-sweep.mjs`) seeds a user, a
 photo avatar, a 3D avatar and a share link through the API, speaks on the share
@@ -228,6 +228,66 @@ node deploy/smoke/web-sweep.mjs http://127.0.0.1:7090      # Node 22+, Chrome in
 
 Use `127.0.0.1`, not `localhost`: the dashboard points snippets at
 `localhost:7002` whenever its origin says localhost (the Vite dev setup).
+
+### The wizard, end to end
+
+After the sweep, the same job makes an avatar the way an owner does
+(`deploy/smoke/wizard-e2e.mjs`), on the path a server without AI keys offers:
+
+1. A new account through the register form, landing on the empty dashboard.
+   The test never injects a token: it signs in only through the form, so
+   it does not depend on how the dashboard keeps its session.
+2. **New avatar**, then step 1 **Human**; step 2 **Upload a photo**
+   (`deploy/smoke/fixtures/portrait.jpg`, a fictional generated face, 640
+   px), **Realistic**, the AI box left unticked, the statement about the
+   face ticked, **Create my avatar**.
+3. Step 3 prepares the photo itself (MediaPipe's cut-out and face, in the
+   API image): "No AI was used", and the picture loads.
+4. Step 4 shows the points found. The test checks that the eyes, mouth and
+   head points sit in a face's order on the picture, plays the talking
+   preview's sample (its stream must answer, not the browser's fallback
+   voice), then presses **Publish**.
+5. On the avatar's page the stage draws a picture (screenshot pixels, not
+   one flat colour). A typed line is spoken in the image's Kokoro voice:
+   **Speak** stays busy until the player has played the stream out, at
+   least about as long as the audio the stream carried. Kokoro is always in
+   the image, so there is no browser-voice fallback to test here.
+6. The public link is turned on and `/s/<token>` is opened in a separate,
+   signed-out browser context. Its avatar draws, and **Play** is busy for at
+   least the length of the recording the server sent.
+7. The avatar is deleted with the inline confirmation. The dashboard is
+   empty again, its page says it is not found, and its link is gone.
+
+The test fails on any console error, uncaught page error or
+Content-Security-Policy violation, in any page or frame, and on any 5xx. The
+only exception is the deleted avatar's own 404s in the last step, which that
+step asks for on purpose. Every wait is on something the page shows (a
+heading, a role, a text, an attribute), each with a bound; the server's jobs
+are waited out as the page polls them, and nothing sleeps.
+
+It is driven by Playwright (`playwright-core`, pinned in
+`deploy/smoke/package-lock.json` to the version the widget's browser tests
+use) on the Chrome the runner already has, which the sweep uses too. Raw CDP
+was enough for the sweep's page visits. A flow with a file picker, role and
+text waits, and a second signed-out context needed Playwright's locators,
+`filechooser` and `newContext`, which a CDP harness would have to rebuild.
+
+To run it locally, start the stack as above, then:
+
+```bash
+npm ci --prefix deploy/smoke
+node deploy/smoke/wizard-e2e.mjs http://127.0.0.1:7090   # CHROME=<path> picks the browser
+```
+
+In CI it takes about 50 seconds, after a 2-second `npm ci`. On a busy laptop
+it can take a few minutes, and every wait's bound allows for that. It prints
+each step with its time, and where its files are:
+`$WIZARD_E2E_ARTIFACTS`, or a new temp directory. That directory has a
+screenshot after every step, `console.log`, `network.json` and
+`steps.json`. On a failure it also has a screenshot of every open page and a
+Playwright trace per browser context (`npx playwright-core show-trace
+trace-owner.zip`). In CI the directory is uploaded as the `wizard-e2e`
+artifact when the job fails, with the API container's whole log beside it.
 
 ## Coverage
 
@@ -377,7 +437,7 @@ green CI (the `images` job rebuilds both images from scratch), merge, deploy.
 | Python libraries | `backend/constraints.txt` (the production `pip freeze`), used by the Dockerfile and CI; `mediapipe==1.0.1` in `backend/Dockerfile` | below |
 | Python dev tools | `ruff`, `pyright`, `pytest-cov`, `coverage` exact versions in `backend/pyproject.toml` | change the version; fix what the new one reports in the same pull request (for the coverage tools: measure again, [Coverage](#coverage)) |
 | Coverage for Vitest | `@vitest/coverage-v8` exact in both `package.json`s, always the installed `vitest`'s version | with every move of `vitest`, in the same pull request: `npm install -D --save-exact @vitest/coverage-v8@<vitest's version>`; measure again ([Coverage](#coverage)) |
-| npm packages | `embed/package-lock.json`, `frontend/package-lock.json` (`npm ci` everywhere) | in the package: `npm install <pkg>@<version>`, commit the lockfile |
+| npm packages | `embed/package-lock.json`, `frontend/package-lock.json`, `deploy/smoke/package-lock.json` (`npm ci` everywhere) | in the package: `npm install <pkg>@<version>`, commit the lockfile |
 | three.js | `embed/package.json` (the lockfile); its KTX2 transcoder is copied from the installed three into `embed/dist` by the build (`embed/scripts/build.mjs`) and served by the API beside `liveface-3d.js` | as any npm package: the transcoder moves with it |
 | Models | URL and SHA-256 of every file in `backend/Dockerfile` | below |
 | Base images | `FROM <tag>@sha256:<digest>` in both Dockerfiles | below; Dependabot proposes new digests monthly |
