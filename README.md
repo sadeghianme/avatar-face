@@ -65,16 +65,31 @@ What CI runs, per package (`.github/workflows/ci.yml`):
 
 | Package | Commands (from the package directory) |
 |---|---|
-| backend | `ruff check .` · `ruff format --check .` (`ruff format .` fixes it) · `pyright` · the OpenAPI document re-exported and compared (`python -m scripts.export_openapi`) · migrations against the models (`alembic upgrade head` then `alembic check`, on an empty SQLite) · `python -m pytest tests -q -n auto` (or `make test` from the root) |
-| embed | `npm run lint` · `npm run format:check` · `npm run typecheck` (sources and tests) · `npm run check:api` (generated API types) · `npm test` (vitest, pixel goldens included) · `npm run build` · `npm run test:browser` (Chromium; the speech timing test also in Firefox and WebKit, with the backend's speech encoder) |
-| frontend | `npm run check` (feature boundaries, en/fr parity) · `npm run lint` · `npm run format:check` · `npm run typecheck` (app and tests) · `npm run check:api` (generated API types) · `npm test` (`node --test`, Node 22+) · `npm run test:ui` (rendering tests) · `npm run build` (type check + bundle) |
+| backend | `ruff check .` · `ruff format --check .` (`ruff format .` fixes it) · `pyright` · the OpenAPI document re-exported and compared (`python -m scripts.export_openapi`) · migrations against the models (`alembic upgrade head` then `alembic check`, on an empty SQLite) · `python -m pytest tests -q -n auto --cov` (or `make test` without coverage, `make coverage` with it, from the root) |
+| embed | `npm run lint` · `npm run format:check` · `npm run typecheck` (sources and tests) · `npm run check:api` (generated API types) · `npm run test:coverage` (vitest, pixel goldens included, with coverage; `npm test` without) · `npm run build` · `npm run test:browser` (Chromium; the speech timing test also in Firefox and WebKit, with the backend's speech encoder) |
+| frontend | `npm run check` (feature boundaries, en/fr parity) · `npm run lint` · `npm run format:check` · `npm run typecheck` (app and tests) · `npm run check:api` (generated API types) · `npm run test:coverage` (`node --test` with coverage, Node 22+; `npm test` without) · `npm run test:ui:coverage` (rendering tests with coverage; `npm run test:ui` without) · `npm run build` (type check + bundle) |
 | deploy | `deploy/test-deploy.sh` (every gate of `deploy.sh`) · ShellCheck on `deploy/*.sh` |
 | images | both Dockerfiles build, boot and pass `deploy/smoke/web-sweep.mjs`: every page in headless Chrome, zero CSP violations ([docs/process.md](docs/process.md#ci)) |
 
 CI runs on every push to main and every pull request; a newer push cancels the
 run it supersedes. The backend runs as three parallel jobs: its checks, and
-its tests in two halves. The required `backend` check passes only when all
-three do ([docs/process.md](docs/process.md#ci)).
+its tests in two halves; a fourth combines the halves' coverage. The required
+`backend` check passes only when all four do ([docs/process.md](docs/process.md#ci)).
+
+### Coverage
+
+Every suite is measured, and CI fails a change that takes one below its
+floor: the value CI measured minus 1 to 2 points. Measured on 2026-10-09:
+the backend 92.0% (lines and branches together; floor 91), the widget 90.1%
+of lines (floor 89), the dashboard's unit tests 93.4% of the lines they load
+(floor 92) and its rendering tests 65.2% of the whole app (floor 64), with
+floors on branches and functions too. The floors are in
+`backend/.coveragerc`, `embed/vitest.config.ts`, `frontend/vitest.config.ts`
+and the `test:coverage` script of `frontend/package.json`. When a change
+raises a number, raise its floor in the same pull request (measured value
+minus 1, rounded down); never lower one to make a change pass. The HTML and
+LCOV reports are artifacts of every CI run, kept 7 days. Details:
+[docs/process.md](docs/process.md#coverage).
 
 ## Embedding on any site
 

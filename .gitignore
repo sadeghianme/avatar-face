@@ -8,6 +8,13 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
+# Coverage output (docs/process.md, "Coverage")
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+coverage/
+
 # Node
 node_modules/
 dist/

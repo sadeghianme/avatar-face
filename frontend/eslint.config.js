@@ -48,7 +48,7 @@ const KIT_CLASSES = [
 ].map((selector) => ({ selector, message: KIT_CLASS_MESSAGE }));
 
 export default tseslint.config(
-  { ignores: ["dist", "node_modules"] },
+  { ignores: ["dist", "node_modules", "coverage"] },
   // A disable comment that no longer disables anything is an error: the
   // ones left each say why they are there.
   { linterOptions: { reportUnusedDisableDirectives: "error" } },
