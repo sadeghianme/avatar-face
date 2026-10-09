@@ -173,7 +173,8 @@ export class MeshWarp {
 
   /** Does `keep` pass any of the mesh's triangles? */
   private anyTriangle(keep: (a: number, b: number, c: number) => boolean): boolean {
-    for (const t of this.source().mesh.triangles) if (keep(t[0], t[1], t[2])) return true;
+    const tris = this.source().mesh.triangles;
+    for (let k = 0; k < tris.length; k++) if (keep(tris[k][0], tris[k][1], tris[k][2])) return true;
     return false;
   }
 
