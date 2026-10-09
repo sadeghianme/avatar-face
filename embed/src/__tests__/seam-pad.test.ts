@@ -103,6 +103,119 @@ describe("padTriangle", () => {
     expect(Math.hypot(grown[0].x - needle[0].x, grown[0].y - needle[0].y)).toBeLessThanOrEqual(MITRE_LIMIT + 1e-9);
   });
 
+  it("measures only a mitre near its limit, and pads to the bit as measuring every mitre does", () => {
+    // The padding as it was, every corner's mitre put to Math.hypot; and
+    // how many mitres were cut, and how many came within a hair of it.
+    let cut = 0,
+      near = 0;
+    const measured = (d: Pt[], pad: number, edges?: readonly [number, number, number]): Pt[] => {
+      const cx = (d[0].x + d[1].x + d[2].x) / 3,
+        cy = (d[0].y + d[1].y + d[2].y) / 3;
+      const n = [0, 1, 2].map((k) => {
+        const a = d[k],
+          b = d[(k + 1) % 3];
+        let nx = -(b.y - a.y),
+          ny = b.x - a.x;
+        const len = Math.hypot(nx, ny) || 1;
+        nx /= len;
+        ny /= len;
+        if (nx * ((a.x + b.x) / 2 - cx) + ny * ((a.y + b.y) / 2 - cy) < 0) [nx, ny] = [-nx, -ny];
+        return [nx, ny];
+      });
+      return d.map((p, k) => {
+        const gx = p.x + (p.x - cx) * 0.015,
+          gy = p.y + (p.y - cy) * 0.015;
+        const j = (k + 2) % 3;
+        const [ax, ay] = n[k],
+          [bx, by] = n[j];
+        let mx: number, my: number, most: number;
+        if (edges) {
+          const pa = edges[k],
+            pb = edges[j];
+          const det = ax * by - ay * bx;
+          [mx, my] =
+            Math.abs(det) < 1e-3
+              ? [((ax + bx) / 2) * Math.max(pa, pb), ((ay + by) / 2) * Math.max(pa, pb)]
+              : [(pa * by - ay * pb) / det, (ax * pb - pa * bx) / det];
+          most = MITRE_LIMIT * Math.max(pa, pb);
+        } else {
+          const denom = Math.max(1e-3, 1 + ax * bx + ay * by);
+          [mx, my] = [(ax + bx) / denom, (ay + by) / denom];
+          most = MITRE_LIMIT;
+        }
+        const len = Math.hypot(mx, my);
+        if (len > most) {
+          cut++;
+          mx *= most / len;
+          my *= most / len;
+        } else if (len * len > most * most * (1 - 1e-6)) near++;
+        if (!edges) [mx, my] = [mx * pad, my * pad];
+        return { x: gx + mx, y: gy + my };
+      });
+    };
+    let seed = 11;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+    // Triangles with a corner at the angle whose mitre is the limit (and a
+    // hair either side), at every size, turned and moved; and any triangle;
+    // and none at all.
+    const atLimit = 2 * Math.asin(1 / MITRE_LIMIT);
+    const cases: Pt[][] = [
+      [
+        { x: 5, y: 5 },
+        { x: 5, y: 5 },
+        { x: 5, y: 5 },
+      ],
+      [
+        { x: NaN, y: 0 },
+        { x: 1, y: 0 },
+        { x: 0, y: 1 },
+      ],
+    ];
+    for (let i = 0; i < 3000; i++) {
+      const angle = i % 3 ? atLimit * (1 + (rand() - 0.5) * 10 ** -(3 + (i % 13))) : rand() * Math.PI,
+        size = 10 ** (rand() * 5 - 2),
+        side = size * (0.5 + rand()),
+        turn = rand() * 2 * Math.PI,
+        x = rand() * 960,
+        y = rand() * 960;
+      const corner = [
+        [0, 0],
+        [size, 0],
+        [side * Math.cos(angle), side * Math.sin(angle)],
+      ];
+      cases.push(
+        corner.map(([u, v]) => ({
+          x: x + u * Math.cos(turn) - v * Math.sin(turn),
+          y: y + u * Math.sin(turn) + v * Math.cos(turn),
+        }))
+      );
+    }
+    const differ: string[] = [];
+    const out: [Pt, Pt, Pt] = [
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+    ];
+    for (const d of cases) {
+      for (const [pad, edges] of [
+        [1, undefined],
+        [0.45, undefined],
+        [0, [1, 0.45, 0]],
+        [0, [1, 1, 1]],
+      ] as [number, [number, number, number] | undefined][]) {
+        const want = measured(d, pad, edges);
+        const got = padTriangle(d[0], d[1], d[2], pad, 0.015, edges, out);
+        for (let k = 0; k < 3; k++)
+          if (!Object.is(got[k].x, want[k].x) || !Object.is(got[k].y, want[k].y))
+            differ.push(`${JSON.stringify(d)} ${pad} ${edges}: ${k}`);
+      }
+    }
+    expect(differ).toEqual([]);
+    // Both sides of the limit were met, close.
+    expect(cut).toBeGreaterThan(1000);
+    expect(near).toBeGreaterThan(100);
+  });
+
   it("with no pad, grows only in proportion, as every triangle always did", () => {
     const tri: [Pt, Pt, Pt] = [
       { x: 0, y: 0 },

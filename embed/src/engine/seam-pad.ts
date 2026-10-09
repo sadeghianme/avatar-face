@@ -77,7 +77,7 @@ export function padTriangle(
       ay = n[2 * k + 1],
       bx = n[2 * j],
       by = n[2 * j + 1];
-    let mx: number, my: number;
+    let mx: number, my: number, most: number;
     if (edges) {
       // The corner where edge k (offset by edges[k]) meets edge k-1: the
       // point that lies that far out from each.
@@ -91,22 +91,27 @@ export function padTriangle(
         mx = (pa * by - ay * pb) / det;
         my = (ax * pb - pa * bx) / det;
       }
-      const len = Math.hypot(mx, my),
-        most = MITRE_LIMIT * Math.max(pa, pb);
-      if (len > most) {
-        mx *= most / len;
-        my *= most / len;
-      }
+      most = MITRE_LIMIT * Math.max(pa, pb);
     } else {
       // The corner between edge k (leaving it) and edge k-1 (arriving).
       const denom = Math.max(1e-3, 1 + ax * bx + ay * by);
       mx = (ax + bx) / denom;
       my = (ay + by) / denom;
+      most = MITRE_LIMIT;
+    }
+    // The mitre cut short at `most`. Math.hypot makes an array for every
+    // call in V8, and only a mitre near its limit can be cut: one whose
+    // square is under the limit's by more than a hair (1e-6) is shorter by
+    // far more than either measure's rounding, so it is left as measuring
+    // it leaves it, to the bit (as head-fold.ts `longest` does).
+    if (!(mx * mx + my * my <= most * most * (1 - 1e-6))) {
       const len = Math.hypot(mx, my);
-      if (len > MITRE_LIMIT) {
-        mx *= MITRE_LIMIT / len;
-        my *= MITRE_LIMIT / len;
+      if (len > most) {
+        mx *= most / len;
+        my *= most / len;
       }
+    }
+    if (!edges) {
       mx *= pad;
       my *= pad;
     }
