@@ -161,7 +161,15 @@ async def test_fallback_is_explicit(client, monkeypatch):
     assert [e["type"] for e in events] == ["start", "recording", "done"]
 
 
-async def test_cancelling_inference_keeps_slot_until_worker_finishes(monkeypatch):
+@pytest.fixture
+def fresh_slot():
+    """An inference slot of this test's own event loop."""
+    lab_timing.reset_slot()
+    yield
+    lab_timing.reset_slot()
+
+
+async def test_cancelling_inference_keeps_slot_until_worker_finishes(monkeypatch, fresh_slot):
     entered = threading.Event()
     release = threading.Event()
     calls = []
@@ -172,8 +180,7 @@ async def test_cancelling_inference_keeps_slot_until_worker_finishes(monkeypatch
         release.wait(3)
         return text
 
-    monkeypatch.setattr(lab_timing, "_render", render)
-    monkeypatch.setattr(lab_timing, "_semaphore", asyncio.Semaphore(1))
+    monkeypatch.setattr(lab_timing, "render_native", render)
     first = asyncio.create_task(lab_timing.synthesize_native("first", "voice"))
     assert await asyncio.to_thread(entered.wait, 2)
     first.cancel()

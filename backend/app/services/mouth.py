@@ -3,7 +3,7 @@ optional photo of the person's own teeth, and the avatar's own motion.
 
 Stored as one JSON blob on the avatar (`mouth_config`). The storage keys in
 it are internal; what the owner's dashboard is told is built by the owner
-API (api.avatars.presenting.mouth_view), and publishing's `_mouth_view` is
+API (api.avatars.presenting.mouth_view), and publishing's `mouth_view` is
 what a visitor's engine gets.
 
 The keys, all fresh per file (the published snapshot may still point at

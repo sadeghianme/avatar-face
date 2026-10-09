@@ -46,7 +46,7 @@ async def test_an_unknown_user_costs_a_password_check_too(client, hashing_thread
     )
     assert response.status_code == 401
     assert response.json()["code"] == "invalid_credentials"
-    assert [hashed for _, hashed in hashing_threads] == [security._DUMMY_HASH]
+    assert [hashed for _, hashed in hashing_threads] == [security.DUMMY_HASH]
 
 
 async def test_the_dummy_hash_never_signs_anyone_in():
@@ -55,7 +55,7 @@ async def test_the_dummy_hash_never_signs_anyone_in():
 
 async def test_the_dummy_hash_costs_what_a_real_one_does():
     real = security.hash_password("password123")
-    assert real[:7] == security._DUMMY_HASH[:7]  # same scheme, same cost
+    assert real[:7] == security.DUMMY_HASH[:7]  # same scheme, same cost
 
 
 async def test_login_is_limited_per_account(client):

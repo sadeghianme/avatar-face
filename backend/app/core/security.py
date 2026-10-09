@@ -10,7 +10,7 @@ passlib made.
 
 An access token is a JWT (PyJWT, HS256) that lives `access_token_minutes`
 and names its user (`sub`) and its session (`sid`, services.sessions). Its
-key is derived from JWT_SECRET for this one use (`_access_key`), so no other
+key is derived from JWT_SECRET for this one use (`access_key`), so no other
 value made with that secret (a reset link's signature, an address hash)
 can ever be mistaken for one. The session is the revocable part: the refresh token,
 in an httpOnly cookie, and its row in the database. api.deps checks on
@@ -87,7 +87,7 @@ _hashing = ThreadPoolExecutor(max_workers=2, thread_name_prefix="liveface-bcrypt
 # get. Checking a password against it when no account matches makes "no
 # such user" take as long as "wrong password", so response time does not
 # tell an attacker which usernames exist.
-_DUMMY_HASH = "$2b$12$x3/4aDHIb0RTc6fytEX28.Y.HGctK4NEhtR3VVzyOTyDWK.Q.4rla"
+DUMMY_HASH = "$2b$12$x3/4aDHIb0RTc6fytEX28.Y.HGctK4NEhtR3VVzyOTyDWK.Q.4rla"
 
 
 async def hash_password_async(plain: str) -> str:
@@ -104,7 +104,7 @@ async def verify_password_async(plain: str, hashed: str | None) -> bool:
     """
     loop = asyncio.get_running_loop()
     matched = await loop.run_in_executor(
-        _hashing, verify_password, plain, hashed if hashed is not None else _DUMMY_HASH
+        _hashing, verify_password, plain, hashed if hashed is not None else DUMMY_HASH
     )
     return matched and hashed is not None
 
@@ -116,7 +116,7 @@ class AccessClaims(NamedTuple):
     session_id: str
 
 
-def _access_key(secret: str) -> bytes:
+def access_key(secret: str) -> bytes:
     """The access tokens' signing key: 32 bytes, from JWT_SECRET and a
     label of their own (domain separation; and the full HS256 key length
     whatever the secret's, so PyJWT has no short key to warn about)."""
@@ -134,7 +134,7 @@ def create_access_token(user_id: str, session_id: str) -> str:
         "exp": now + timedelta(minutes=settings.access_token_minutes),
         "jti": uuid.uuid4().hex,
     }
-    return jwt.encode(claims, _access_key(settings.jwt_secret), algorithm=settings.jwt_algorithm)
+    return jwt.encode(claims, access_key(settings.jwt_secret), algorithm=settings.jwt_algorithm)
 
 
 def decode_access_token(token: str) -> AccessClaims:
@@ -146,7 +146,7 @@ def decode_access_token(token: str) -> AccessClaims:
     try:
         claims = jwt.decode(
             token,
-            _access_key(settings.jwt_secret),
+            access_key(settings.jwt_secret),
             algorithms=[settings.jwt_algorithm],
             options={"require": ["exp", "iat", "sub", "sid"]},
         )

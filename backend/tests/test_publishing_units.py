@@ -183,9 +183,9 @@ def test_a_confirmed_note_keeps_its_reason_and_loses_only_a_trailing_instruction
 
 
 def test_the_extension_is_the_file_names_never_a_folders():
-    assert publishing._ext(f"{ROOT}rig.json", "png") == "json"
-    assert publishing._ext("orgs/o.x/avatars/a/source", "png") == "png"
-    assert publishing._ext("orgs/o/avatars/a/backup.tar.gz", "png") == "gz"
+    assert publishing.extension_of(f"{ROOT}rig.json", "png") == "json"
+    assert publishing.extension_of("orgs/o.x/avatars/a/source", "png") == "png"
+    assert publishing.extension_of("orgs/o/avatars/a/backup.tar.gz", "png") == "gz"
 
 
 @pytest.mark.parametrize(
@@ -202,14 +202,14 @@ def test_the_extension_is_the_file_names_never_a_folders():
     ],
 )
 def test_a_copys_content_type_follows_its_extension(key, expected):
-    assert publishing._content_type(key) == expected
+    assert publishing.content_type_of(key) == expected
 
 
 # --- publish_mouth: the snapshot's mouth -------------------------------------------------
 
 
 async def test_no_mouth_publishes_as_the_classic_one():
-    copy_ = publishing._copier(FakeStorage(), P3)
+    copy_ = publishing.copier(FakeStorage(), P3)
     assert await publishing.publish_mouth(None, "human", copy_) is None
     assert await publishing.publish_mouth({}, "human", copy_) is None
 
@@ -227,19 +227,19 @@ async def test_a_photographic_mouth_on_a_face_that_may_not_have_it_publishes_as_
         "oral_image_key": f"{ROOT}mouth-s1.webp",
         "oral_rig_key": f"{ROOT}mouth-s1.json",
     }
-    assert await publishing.publish_mouth(mouth, face_type, publishing._copier(storage, P3)) is None
+    assert await publishing.publish_mouth(mouth, face_type, publishing.copier(storage, P3)) is None
     assert storage.names_under(f"{ROOT}published/") == []
 
 
 async def test_the_classic_mouth_publishes_on_any_face_with_the_owners_character_settings():
     mouth = {"renderer": "classic", "profile": None, "character": CHARACTER}
     published = await publishing.publish_mouth(
-        mouth, "animal", publishing._copier(FakeStorage(), P3)
+        mouth, "animal", publishing.copier(FakeStorage(), P3)
     )
     assert published == {"renderer": "classic", "profile": {}, "character": CHARACTER}
     no_settings = {"renderer": "classic", "profile": {"teethY": 0.02}, "character": None}
     assert await publishing.publish_mouth(
-        no_settings, "animal", publishing._copier(FakeStorage(), P3)
+        no_settings, "animal", publishing.copier(FakeStorage(), P3)
     ) == {"renderer": "classic", "profile": {"teethY": 0.02}}
 
 
@@ -261,7 +261,7 @@ async def test_a_photographic_mouth_is_copied_under_the_snapshots_keys_with_its_
         "teeth": teeth,
         "kit": KIT,
     }
-    published = await publishing.publish_mouth(mouth, "human", publishing._copier(storage, P3))
+    published = await publishing.publish_mouth(mouth, "human", publishing.copier(storage, P3))
     assert published == {
         "renderer": "continuous",
         "profile": {"teethScale": 1.1},
@@ -289,7 +289,7 @@ async def test_a_teeth_photo_without_its_rig_is_not_published_nor_a_motion_that_
         "oral_rig_key": f"{ROOT}mouth-s1.json",
         "motion_key": f"{ROOT}mouth-motion-s1.json",
     }
-    published = await publishing.publish_mouth(mouth, "human", publishing._copier(storage, P3))
+    published = await publishing.publish_mouth(mouth, "human", publishing.copier(storage, P3))
     assert published == {"renderer": "continuous", "profile": {}}
 
 
@@ -847,13 +847,13 @@ async def test_discard_puts_back_the_published_character_mouth_settings(stamp):
     assert json.loads(avatar.mouth_config).get("character") == CHARACTER
 
 
-# --- _restored_ai_edited: the label after a Discard --------------------------------------
+# --- restored_ai_edited: the label after a Discard ---------------------------------------
 
 
 def test_restored_ai_teeth_are_labelled_with_their_model():
     config = {"disclosure": {"ai_edited": None, "line": "human"}}
     teeth = mouth_service.ai_teeth_record("t")
-    assert publishing._restored_ai_edited(None, config, teeth) == {
+    assert publishing.restored_ai_edited(None, config, teeth) == {
         "mode": "teeth",
         "model": "t",
         "teeth": {"model": "t"},
@@ -865,11 +865,11 @@ def test_restored_teeth_that_are_not_ai_made_lose_the_teeth_label(teeth):
     picture = {
         "disclosure": {"ai_edited": {"mode": "touchup", "model": "p", "teeth": {"model": "t"}}}
     }
-    assert publishing._restored_ai_edited(None, picture, teeth) == {"mode": "touchup", "model": "p"}
+    assert publishing.restored_ai_edited(None, picture, teeth) == {"mode": "touchup", "model": "p"}
     mouth_only = {
         "disclosure": {"ai_edited": {"mode": "teeth", "model": "t", "teeth": {"model": "t"}}}
     }
-    assert publishing._restored_ai_edited(None, mouth_only, teeth) is None
+    assert publishing.restored_ai_edited(None, mouth_only, teeth) is None
 
 
 @pytest.mark.parametrize(
@@ -894,7 +894,7 @@ def test_restored_shapes_are_labelled_only_for_a_kit_that_made_some_and_was_not_
             }
         }
     }
-    restored = publishing._restored_ai_edited(None, config, None, kit)
+    restored = publishing.restored_ai_edited(None, config, None, kit)
     if shapes is None:
         assert restored is None
     else:
@@ -903,7 +903,7 @@ def test_restored_shapes_are_labelled_only_for_a_kit_that_made_some_and_was_not_
 
 def test_restored_ai_teeth_outrank_restored_ai_shapes_in_a_mouth_only_label():
     config = {"disclosure": {"ai_edited": None, "line": "human"}}
-    restored = publishing._restored_ai_edited(None, config, {"source": "ai", "model": "t"}, KIT)
+    restored = publishing.restored_ai_edited(None, config, {"source": "ai", "model": "t"}, KIT)
     assert restored == {
         "mode": "teeth",
         "model": "t",
@@ -914,18 +914,18 @@ def test_restored_ai_teeth_outrank_restored_ai_shapes_in_a_mouth_only_label():
 
 def test_the_snapshots_disclosure_wins_over_the_drafts_and_only_its_absence_falls_back():
     draft = SimpleNamespace(ai_edited={"mode": "teeth", "model": "t", "teeth": {"model": "t"}})
-    assert publishing._restored_ai_edited(draft, {"disclosure": {"ai_edited": None}}, None) is None
-    assert publishing._restored_ai_edited(draft, {"disclosure": {"ai_edited": {}}}, None) is None
+    assert publishing.restored_ai_edited(draft, {"disclosure": {"ai_edited": None}}, None) is None
+    assert publishing.restored_ai_edited(draft, {"disclosure": {"ai_edited": {}}}, None) is None
     # Published before the disclosure was recorded: the draft's own, less
     # the teeth it no longer has, plus the shapes that came back.
-    assert publishing._restored_ai_edited(draft, {}, None, KIT) == {
+    assert publishing.restored_ai_edited(draft, {}, None, KIT) == {
         "mode": "mouth_shapes",
         "model": "s",
         "mouth_shapes": {"model": "s", "generated": 6},
     }
 
 
-# --- published_view and _mouth_view: what visitors are handed -----------------------------
+# --- published_view and mouth_view: what visitors are handed ------------------------------
 
 
 async def test_a_never_published_avatar_has_no_published_view():
@@ -1013,7 +1013,7 @@ async def test_a_full_snapshot_is_served_with_presigned_urls_and_nothing_interna
     ],
 )
 async def test_the_classic_mouth_without_character_settings_is_no_mouth_to_a_visitor(mouth):
-    assert await publishing._mouth_view(mouth, FakeStorage()) is None
+    assert await publishing.mouth_view(mouth, FakeStorage()) is None
 
 
 async def test_a_visitor_gets_the_classic_mouths_character_settings_cleaned():
@@ -1022,7 +1022,7 @@ async def test_a_visitor_gets_the_classic_mouths_character_settings_cleaned():
         "profile": {},
         "character": {"style": "weird", "jaw": 9, "tongue": False, "secret": 1},
     }
-    assert await publishing._mouth_view(mouth, FakeStorage()) == {
+    assert await publishing.mouth_view(mouth, FakeStorage()) == {
         "renderer": "classic",
         "character": {"style": "character", "teeth": "upper", "tongue": False, "jaw": 1.6},
     }
@@ -1042,7 +1042,7 @@ async def test_the_photographic_mouth_view_presigns_its_files_and_never_shows_th
         "teeth": {"source": "ai", "model": "t"},
         "kit": KIT,
     }
-    assert await publishing._mouth_view(mouth, storage) == {
+    assert await publishing.mouth_view(mouth, storage) == {
         "renderer": "continuous",
         "profile": {"teethScale": 1.1},
         "character": None,
@@ -1064,7 +1064,7 @@ async def test_the_photographic_mouth_view_falls_back_to_the_standard_teeth_and_
         "oral_rig_key": f"{P3}/mouth-rig.json",
         "motion_key": f"{P3}/mouth-motion.json",
     }
-    assert await publishing._mouth_view(mouth, FakeStorage()) == {
+    assert await publishing.mouth_view(mouth, FakeStorage()) == {
         "renderer": "continuous",
         "profile": {},
         "character": None,
@@ -1555,10 +1555,10 @@ def test_draft_file_keys_sit_beside_the_avatar_where_the_sweeps_know_them():
     )
     for key in (image, rig, motion):
         name = key[len(ROOT) :]
-        assert publishing._MOUTH_FILE.fullmatch(name)
+        assert publishing.MOUTH_FILE.fullmatch(name)
         assert not scene_service.SCENE_FILE.fullmatch(name)
     assert scene_service.SCENE_FILE.fullmatch(background[len(ROOT) :])
-    assert not publishing._MOUTH_FILE.fullmatch(background[len(ROOT) :])
+    assert not publishing.MOUTH_FILE.fullmatch(background[len(ROOT) :])
 
 
 BOTH_KEYS = {"renderer": "continuous", "oral_image_key": "i", "oral_rig_key": "r"}

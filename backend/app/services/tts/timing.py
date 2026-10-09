@@ -270,7 +270,7 @@ _WORD_RE = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)*")
 # finds no words at all in Arabic, Russian or Chinese, which are exactly the
 # scripts where per-character shapes are least like speech. Languages written
 # without spaces come through as one long run, which espeak handles.
-_ANY_WORD_RE = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)*", re.UNICODE)
+ANY_WORD_RE = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)*", re.UNICODE)
 
 
 def _phoneme_segments(word: str) -> list[Segment]:
@@ -362,7 +362,7 @@ def plan_utterance(text: str, locale: str = "en-US") -> tuple[list[Segment], lis
             emit([Segment("sil", WORD_GAP_MS)])
 
     english = is_english(locale)
-    word_re = _WORD_RE if english else _ANY_WORD_RE
+    word_re = _WORD_RE if english else ANY_WORD_RE
     matches = list(word_re.finditer(text)) if phonemic else []
     # Every word's IPA in one espeak call, not one call per word.
     ipa = {} if english or not matches else words_to_ipa((m.group() for m in matches), locale)

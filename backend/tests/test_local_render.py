@@ -19,13 +19,10 @@ async def test_capability_is_honest_about_this_machine(client):
 async def test_render_refuses_cleanly_when_unavailable(client, monkeypatch):
     """On the CPU-only server this must be a 409 with a reason, never a 500
     from a missing import."""
-    from app.services import local_render
+    from app.api import clone_jobs
 
-    monkeypatch.setattr(
-        local_render,
-        "_probe_result",
-        {"available": False, "device": None, "reason": "no accelerator"},
-    )
+    unavailable = {"available": False, "device": None, "reason": "no accelerator"}
+    monkeypatch.setattr(clone_jobs, "capability", lambda: unavailable)
     headers = await register_and_login(client, "caprender")
     org_id = await create_org(client, headers)
     response = await client.post(f"/orgs/{org_id}/clone-jobs/nope/render", headers=headers)
@@ -39,14 +36,11 @@ async def test_render_claims_synchronously_so_double_clicks_are_safe(client, mon
     import json
     import wave
 
-    from app.services import local_render
-
-    monkeypatch.setattr(
-        local_render, "_probe_result", {"available": True, "device": "mps", "reason": None}
-    )
-    started = []
     from app.api import clone_jobs
 
+    available = {"available": True, "device": "mps", "reason": None}
+    monkeypatch.setattr(clone_jobs, "capability", lambda: available)
+    started = []
     monkeypatch.setattr(clone_jobs, "render_job", lambda org, job: started.append(job))
 
     buffer = io.BytesIO()

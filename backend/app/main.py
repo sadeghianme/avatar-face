@@ -92,7 +92,7 @@ class PublicCorsMiddleware(BaseHTTPMiddleware):
 logger = logging.getLogger("liveface.startup")
 
 
-async def _ensure_schema(engine) -> None:
+async def ensure_schema(engine) -> None:
     """Bring the database up to date before serving.
 
     `create_all` alone is not enough and this bit us: it creates MISSING
@@ -162,7 +162,7 @@ def _known_revision(cfg: Config, revision: str) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     engine = get_engine()
-    await _ensure_schema(engine)
+    await ensure_schema(engine)
     # Load dashboard-managed provider credentials over env settings.
     async with get_session_factory()() as db:
         await credentials.load(db)
@@ -241,7 +241,7 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-def _bundle_etag(path) -> str:
+def bundle_etag(path) -> str:
     """A content hash of the bundle, cached against (mtime, size).
 
     Content rather than mtime: a rebuild rewrites the file on every deploy
@@ -263,7 +263,7 @@ def _bundle_etag(path) -> str:
 _ETAG_CACHE: dict[str, tuple[tuple[int, int], str]] = {}
 
 
-def _etag_matches(if_none_match: str | None, etag: str) -> bool:
+def etag_matches(if_none_match: str | None, etag: str) -> bool:
     """RFC 9110 If-None-Match, tolerant of what proxies do to the tag.
 
     Caddy and Cloudflare append a suffix like `-gzip` when they re-encode the
@@ -343,13 +343,13 @@ def create_app() -> FastAPI:
         if not bundle.is_file():
             return PlainTextResponse(f"// {filename} not built — run `make embed`", status_code=404)
 
-        etag = _bundle_etag(bundle)
+        etag = bundle_etag(bundle)
         headers = {
             "Access-Control-Allow-Origin": "*",
             "Cache-Control": "private, no-cache, must-revalidate",
             "ETag": etag,
         }
-        if _etag_matches(request.headers.get("if-none-match"), etag):
+        if etag_matches(request.headers.get("if-none-match"), etag):
             return Response(status_code=304, headers=headers)
         return FileResponse(bundle, media_type=media_type, headers=headers)
 

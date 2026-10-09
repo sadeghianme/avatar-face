@@ -54,8 +54,8 @@ async def test_migrating_at_startup_keeps_the_applications_logging(
 
     engine = create_async_engine(f"sqlite+aiosqlite:///{database}")
     try:
-        await main._ensure_schema(engine)  # a fresh database: created, then stamped
-        await main._ensure_schema(engine)  # a managed one: upgraded
+        await main.ensure_schema(engine)  # a fresh database: created, then stamped
+        await main.ensure_schema(engine)  # a managed one: upgraded
     finally:
         await engine.dispose()
 

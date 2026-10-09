@@ -20,7 +20,7 @@ from jwt.warnings import InsecureKeyLengthWarning
 from sqlalchemy import select, update
 
 from app.core.config import Settings, get_settings
-from app.core.security import _access_key, create_access_token
+from app.core.security import access_key, create_access_token
 from app.db import get_session_factory
 from app.models import RefreshToken, utcnow
 from app.services import email, sessions
@@ -442,7 +442,7 @@ async def test_an_access_token_without_a_session_is_refused(client):
     now = utcnow()
     legacy = jwt.encode(
         {"sub": user_id, "type": "access", "iat": now, "exp": now + timedelta(minutes=5)},
-        _access_key("test-secret"),
+        access_key("test-secret"),
         algorithm="HS256",
     )
     assert (await me(client, legacy)).json()["code"] == "invalid_token"
@@ -457,7 +457,7 @@ async def test_an_access_token_for_a_session_that_does_not_exist_is_refused(clie
 
 async def test_an_access_token_signed_with_the_bare_secret_is_refused(client):
     access, _ = await signed_up(client, "alice")
-    claims = jwt.decode(access, _access_key("test-secret"), algorithms=["HS256"])
+    claims = jwt.decode(access, access_key("test-secret"), algorithms=["HS256"])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", InsecureKeyLengthWarning)
         resigned = jwt.encode(claims, "test-secret", algorithm="HS256")
@@ -467,7 +467,7 @@ async def test_an_access_token_signed_with_the_bare_secret_is_refused(client):
 async def test_an_access_token_for_another_users_session_is_refused(client):
     alice_access, _ = await signed_up(client, "alice")
     bob_access, _ = await signed_up(client, "bob")
-    bob_sid = jwt.decode(bob_access, _access_key("test-secret"), algorithms=["HS256"])["sid"]
+    bob_sid = jwt.decode(bob_access, access_key("test-secret"), algorithms=["HS256"])["sid"]
     alice_id = (await me(client, alice_access)).json()["id"]
     assert (await me(client, create_access_token(alice_id, bob_sid))).status_code == 401
 

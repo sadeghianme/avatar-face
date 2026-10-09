@@ -142,7 +142,7 @@ async def process_avatar(avatar_id: str) -> None:
                 rig = await run_cpu(
                     rigging.build_rig, points, size, blendshapes, face_type=avatar.face_type
                 )
-                await _carry_crop_origin(avatar, storage, rig)
+                await carry_crop_origin(avatar, storage, rig)
                 thumb, thumb_type = await run_cpu(rigging.make_thumbnail, image_bytes)
                 # What every later fit starts from (services.anchor_fit),
                 # beside the rig and never in it: rig.json is published.
@@ -213,7 +213,7 @@ async def process_avatar(avatar_id: str) -> None:
         await db.commit()
 
 
-async def _carry_crop_origin(avatar: Avatar, storage: Storage, rig: dict) -> None:
+async def carry_crop_origin(avatar: Avatar, storage: Storage, rig: dict) -> None:
     """Keep the crop origin across a re-detection.
 
     Re-detecting a cropped photo yields points in the same cropped

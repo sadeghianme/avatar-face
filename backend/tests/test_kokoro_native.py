@@ -45,12 +45,12 @@ def timed(monkeypatch):
 
     monkeypatch.setattr(lab_timing, "configured", lambda: True)
     monkeypatch.setattr(lab_timing, "render_timed", render_timed)
-    monkeypatch.setattr(kokoro, "_original_configured", lambda: True)
+    monkeypatch.setattr(kokoro, "original_configured", lambda: True)
 
     def original(*_args):
         raise AssertionError("the original model must not be used")
 
-    monkeypatch.setattr(kokoro, "_render", original)
+    monkeypatch.setattr(kokoro, "render", original)
     return calls
 
 
@@ -85,8 +85,8 @@ async def test_a_failing_timed_model_falls_back_to_the_original(monkeypatch):
     used: list[str] = []
     monkeypatch.setattr(lab_timing, "configured", lambda: True)
     monkeypatch.setattr(lab_timing, "render_timed", broken)
-    monkeypatch.setattr(kokoro, "_original_configured", lambda: True)
-    monkeypatch.setattr(kokoro, "_render", lambda text, v, lang: used.append(v) or (_wav(900), 900))
+    monkeypatch.setattr(kokoro, "original_configured", lambda: True)
+    monkeypatch.setattr(kokoro, "render", lambda text, v, lang: used.append(v) or (_wav(900), 900))
     result = await KokoroTTSProvider().synthesize("hello", DEFAULT_VOICE, "en-US")
     assert used == [DEFAULT_VOICE]
     assert result.duration_ms == 900
@@ -100,7 +100,7 @@ async def test_without_the_original_model_a_timed_failure_is_an_error(monkeypatc
 
     monkeypatch.setattr(lab_timing, "configured", lambda: True)
     monkeypatch.setattr(lab_timing, "render_timed", broken)
-    monkeypatch.setattr(kokoro, "_original_configured", lambda: False)
+    monkeypatch.setattr(kokoro, "original_configured", lambda: False)
     assert KokoroTTSProvider().is_configured()
     with pytest.raises(RuntimeError):
         await KokoroTTSProvider().synthesize("hello", DEFAULT_VOICE, "en-US")
@@ -110,7 +110,7 @@ async def test_the_switch_turns_native_timing_off(monkeypatch, timed):
     from app.core.config import get_settings
 
     monkeypatch.setattr(get_settings(), "kokoro_native_timing", False)
-    monkeypatch.setattr(kokoro, "_render", lambda *_: (_wav(700), 700))
+    monkeypatch.setattr(kokoro, "render", lambda *_: (_wav(700), 700))
     result = await KokoroTTSProvider().synthesize("hello", DEFAULT_VOICE, "en-US")
     assert timed == []
     assert result.duration_ms == 700
@@ -119,7 +119,7 @@ async def test_the_switch_turns_native_timing_off(monkeypatch, timed):
 
 async def test_no_timed_model_means_the_original_path(monkeypatch):
     monkeypatch.setattr(lab_timing, "configured", lambda: False)
-    monkeypatch.setattr(kokoro, "_render", lambda *_: (_wav(600), 600))
+    monkeypatch.setattr(kokoro, "render", lambda *_: (_wav(600), 600))
     result = await KokoroTTSProvider().synthesize("hello", DEFAULT_VOICE, "en-US")
     assert result.duration_ms == 600
     assert result.cacheable
@@ -142,7 +142,7 @@ async def test_a_stretched_row_is_never_served_once_native_timing_is_on(app, mon
     from app.services.tts import speech_cache
     from app.services.tts.base import SynthesisResult
 
-    monkeypatch.setattr(kokoro, "_original_configured", lambda: True)
+    monkeypatch.setattr(kokoro, "original_configured", lambda: True)
     async with get_session_factory()() as db:
         await speech_cache.put(
             db,
@@ -184,8 +184,8 @@ async def test_a_fallback_recording_is_not_cached(app, monkeypatch):
 
     monkeypatch.setattr(lab_timing, "configured", lambda: True)
     monkeypatch.setattr(lab_timing, "render_timed", broken)
-    monkeypatch.setattr(kokoro, "_original_configured", lambda: True)
-    monkeypatch.setattr(kokoro, "_render", lambda *_: (_wav(500), 500))
+    monkeypatch.setattr(kokoro, "original_configured", lambda: True)
+    monkeypatch.setattr(kokoro, "render", lambda *_: (_wav(500), 500))
     async with get_session_factory()() as db:
         _, cached = await registry.synthesize_cached(db, "kokoro", DEFAULT_VOICE, "en-US", "hi")
         _, again = await registry.synthesize_cached(db, "kokoro", DEFAULT_VOICE, "en-US", "hi")
@@ -253,8 +253,8 @@ async def test_a_model_that_cannot_time_its_speech_still_falls_back(monkeypatch)
     used: list[str] = []
     monkeypatch.setattr(lab_timing, "configured", lambda: True)
     monkeypatch.setattr(lab_timing, "render_timed", no_durations)
-    monkeypatch.setattr(kokoro, "_original_configured", lambda: True)
-    monkeypatch.setattr(kokoro, "_render", lambda text, v, lang: used.append(v) or (_wav(900), 900))
+    monkeypatch.setattr(kokoro, "original_configured", lambda: True)
+    monkeypatch.setattr(kokoro, "render", lambda text, v, lang: used.append(v) or (_wav(900), 900))
     result = await KokoroTTSProvider().synthesize("hello", DEFAULT_VOICE, "en-US")
     assert used == [DEFAULT_VOICE] and result.cacheable is False
 
@@ -266,7 +266,7 @@ async def test_the_original_model_refuses_unspeakable_text_the_same_way(monkeypa
         raise ValueError("Nothing to synthesize, '' produced no phonemes")
 
     monkeypatch.setattr(lab_timing, "configured", lambda: False)
-    monkeypatch.setattr(kokoro, "_render", unspeakable)
+    monkeypatch.setattr(kokoro, "render", unspeakable)
     with pytest.raises(Validation422) as refused:
         await KokoroTTSProvider().synthesize("?!", DEFAULT_VOICE, "en-US")
     assert refused.value.code == "nothing_to_speak"
@@ -280,7 +280,7 @@ async def test_unspeakable_text_is_a_422_over_the_api(client, monkeypatch):
 
     monkeypatch.setattr(lab_timing, "configured", lambda: True)
     monkeypatch.setattr(lab_timing, "render_timed", unspeakable)
-    monkeypatch.setattr(kokoro, "_original_configured", lambda: True)
+    monkeypatch.setattr(kokoro, "original_configured", lambda: True)
     headers = await register_and_login(client, "silent")
     org_id = await create_org(client, headers)
     response = await client.post(

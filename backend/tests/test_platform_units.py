@@ -32,7 +32,6 @@ from app.services.storage import (
     STORAGE_ERRORS,
     LocalStorage,
     S3Storage,
-    _check_prefix,
     get_storage,
     is_published,
     reset_storage,
@@ -481,18 +480,22 @@ async def test_s3_refuses_an_unguarded_sweep_or_a_bad_prefix_before_connecting(m
         await s3.list_names("orgs/o")
 
 
-# --- _check_prefix ---------------------------------------------------------------------
+# --- by prefix: only a plain folder ----------------------------------------------------
 
 
 @pytest.mark.parametrize("prefix", ["//", "///", "orgs", "orgs/a..b/", "/../", "orgs/o/../"])
-def test_a_prefix_that_is_not_a_plain_folder_is_refused(prefix):
-    with pytest.raises(ValueError, match="refusing to delete by prefix"):
-        _check_prefix(prefix)
+async def test_a_prefix_that_is_not_a_plain_folder_is_refused(monkeypatch, prefix):
+    s3 = _s3(monkeypatch, None)
+    for by_prefix in (s3.list_names, s3.delete_prefix):
+        with pytest.raises(ValueError, match="refusing to delete by prefix"):
+            await by_prefix(prefix)
 
 
 @pytest.mark.parametrize("prefix", ["orgs/", "orgs/o/avatars/1/", "/orgs/"])
-def test_a_folder_prefix_is_accepted(prefix):
-    assert _check_prefix(prefix) is None
+async def test_a_folder_prefix_is_accepted(monkeypatch, prefix):
+    client = FakeS3(pages=[{}])
+    assert await _s3(monkeypatch, client).delete_prefix(prefix) == 0
+    assert client.calls == [("paginate", {"Bucket": "bucket", "Prefix": prefix})]
 
 
 # --- get_storage -----------------------------------------------------------------------

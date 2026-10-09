@@ -774,16 +774,16 @@ def test_a_snapshot_from_before_the_teeth_record_is_restored_from_its_disclosure
 
     ai = disclosure.with_ai_teeth(None, "m")
     labelled = {"disclosure": {"ai_edited": ai}}
-    assert publishing._restored_teeth(None, labelled, True) == {"source": "ai", "model": "m"}
-    assert publishing._restored_teeth(None, {"disclosure": {"ai_edited": None}}, True) == {
+    assert publishing.restored_teeth(None, labelled, True) == {"source": "ai", "model": "m"}
+    assert publishing.restored_teeth(None, {"disclosure": {"ai_edited": None}}, True) == {
         "source": "upload"
     }
-    assert publishing._restored_teeth(None, labelled, False) is None
+    assert publishing.restored_teeth(None, labelled, False) is None
     gone = {"source": "ai", "model": "m"}
-    assert publishing._restored_teeth(gone, labelled, False) is None, "no photo came back"
+    assert publishing.restored_teeth(gone, labelled, False) is None, "no photo came back"
     note = {"source": None, "note": {"code": "no_ai_consent", "detail": "x"}}
-    assert publishing._restored_teeth(note, labelled, False) == note
+    assert publishing.restored_teeth(note, labelled, False) == note
 
     # Published before disclosures: the draft's own, less teeth it no longer has.
     draft = SimpleNamespace(ai_edited={"mode": "touchup", "model": "m1", "teeth": {"model": "m"}})
-    assert publishing._restored_ai_edited(draft, {}, None) == {"mode": "touchup", "model": "m1"}
+    assert publishing.restored_ai_edited(draft, {}, None) == {"mode": "touchup", "model": "m1"}

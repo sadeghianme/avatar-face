@@ -93,7 +93,7 @@ def test_upload_limits_follow_the_signed_keys_type():
 
 
 async def test_a_put_past_the_limit_is_refused(client, monkeypatch):
-    monkeypatch.setattr(storage_routes, "_DEFAULT_UPLOAD_LIMIT", 1000)
+    monkeypatch.setattr(storage_routes, "upload_limit", lambda key: 1000)
     storage = get_storage()
     url = _path(await storage.presign_put("orgs/o/big.png", "image/png"))
 
@@ -109,7 +109,7 @@ async def test_a_put_past_the_limit_is_refused(client, monkeypatch):
 
 async def test_a_put_without_a_length_is_cut_off_as_it_streams(client, monkeypatch):
     """A chunked body declares no length; it is counted as it arrives."""
-    monkeypatch.setattr(storage_routes, "_DEFAULT_UPLOAD_LIMIT", 1000)
+    monkeypatch.setattr(storage_routes, "upload_limit", lambda key: 1000)
     url = _path(await get_storage().presign_put("orgs/o/chunked.png", "image/png"))
 
     async def body():

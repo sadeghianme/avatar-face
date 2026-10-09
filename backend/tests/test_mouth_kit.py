@@ -1132,15 +1132,15 @@ def test_a_kit_whose_motion_did_not_come_back_is_restored_as_dropped():
     from app.services import publishing
 
     made = {"state": "made", "generated": 6, "model": "m"}
-    assert publishing._restored_kit(made, True) == made
-    gone = publishing._restored_kit(made, False)
+    assert publishing.restored_kit(made, True) == made
+    gone = publishing.restored_kit(made, False)
     assert gone["state"] == "dropped" and gone["dropped"]["code"] == "motion_missing"
     dropped = {**made, "state": "dropped", "dropped": mouth_kit.REBASE_FAILED}
-    assert publishing._restored_kit(dropped, False) == dropped
-    assert publishing._restored_kit(None, True) is None
+    assert publishing.restored_kit(dropped, False) == dropped
+    assert publishing.restored_kit(None, True) is None
     # A kit with no shape of its own had no motion to come back.
     none = {**made, "generated": 0}
-    assert publishing._restored_kit(none, False) == none
+    assert publishing.restored_kit(none, False) == none
     # And no label for shapes that are not there.
     config = {
         "disclosure": {
@@ -1151,8 +1151,8 @@ def test_a_kit_whose_motion_did_not_come_back_is_restored_as_dropped():
             }
         }
     }
-    assert publishing._restored_ai_edited(None, config, None, gone) is None
-    assert publishing._restored_ai_edited(None, config, None, made)["mouth_shapes"] == {
+    assert publishing.restored_ai_edited(None, config, None, gone) is None
+    assert publishing.restored_ai_edited(None, config, None, made)["mouth_shapes"] == {
         "model": "m",
         "generated": 6,
     }
@@ -1206,14 +1206,14 @@ async def test_a_redetection_never_undoes_a_kit_stored_meanwhile(client, faces, 
     # The re-detection has read its row and is detecting.
     detected = asyncio.Event()
     carry_on = asyncio.Event()
-    real_carry = rig_service._carry_crop_origin
+    real_carry = rig_service.carry_crop_origin
 
     async def carry_then_wait(avatar, storage, rig):
         await real_carry(avatar, storage, rig)
         detected.set()
         await carry_on.wait()
 
-    monkeypatch.setattr(rig_service, "_carry_crop_origin", carry_then_wait)
+    monkeypatch.setattr(rig_service, "carry_crop_origin", carry_then_wait)
     redetect = asyncio.create_task(rig_service.process_avatar(avatar_id))
     await asyncio.wait_for(detected.wait(), 20)
 

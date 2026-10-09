@@ -54,7 +54,7 @@ async def landmark_depth(avatar_id: str, ctx: OrgMember, db: DB) -> dict:
     image_bytes = await get_storage().get_bytes(avatar.image_key)
     try:
         # A decode and a MediaPipe pass: the CPU thread's work.
-        z_values = await run_cpu(_landmark_z, image_bytes)
+        z_values = await run_cpu(landmark_z, image_bytes)
     except (RuntimeError, OSError, ValueError) as exc:
         # No face, or no landmarker (RuntimeError); a picture Pillow cannot
         # read (OSError, ValueError).
@@ -63,7 +63,7 @@ async def landmark_depth(avatar_id: str, ctx: OrgMember, db: DB) -> dict:
     return {"detected": z_values is not None, "z": z_values or []}
 
 
-def _landmark_z(image_bytes: bytes) -> list[float]:
+def landmark_z(image_bytes: bytes) -> list[float]:
     """The z column the stable pipeline discards.
 
     Read from the shared landmarker (services.landmarks) rather than a
