@@ -1,4 +1,5 @@
 import { useReducer, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 import {
   CLONED_PROVIDER,
@@ -11,6 +12,7 @@ import {
   useRenderHere,
   useSubmitClone,
 } from "@/features/voices/api";
+import { renderLineRequest } from "@/features/voices/clonedLines";
 import { useVoiceRecorder } from "@/features/voices/hooks/useVoiceRecorder";
 import { useT } from "@/i18n";
 import { ApiError } from "@/lib/api";
@@ -51,15 +53,19 @@ function cloneForm(state: CloneForm, event: FormEvent): CloneForm {
  * recorder, the clone form and its queueing, the jobs (polled while one
  * renders; rendered here when this server can), the voices made, and a
  * rendered line played through the normal synthesis path (a cache hit).
+ * Opened from the Speak panel for a line a cloned voice does not have, the
+ * form starts with that voice's name and that line: a reference recorded
+ * and queued under the same name adds the line to the voice.
  */
 export function useVoicesPage() {
   const { t } = useT();
   const orgId = useOrg().current?.id;
+  const requested = renderLineRequest(useLocation().state);
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const [form, change] = useReducer(cloneForm, undefined, () => ({
-    name: "",
-    lines: t("voicesDefaultLines"),
+    name: requested?.voice ?? "",
+    lines: requested?.line ?? t("voicesDefaultLines"),
     consent: false,
   }));
   const recorder = useVoiceRecorder(() => setError(t("voicesMicDenied")));

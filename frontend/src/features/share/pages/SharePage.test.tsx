@@ -131,6 +131,45 @@ describe("the share page", () => {
     });
   });
 
+  it("a line the cloned voice was never given is said in the server's voice for its language", async () => {
+    const cloned = { provider: "cloned", voice: "org1:Mehdi voice", locale: "fr-FR" };
+    const view = setup(published({ voice: cloned }));
+    view.server
+      .on("POST", `/public/v1/avatars/${TOKEN}/speak`, (request) =>
+        (request.body as { provider: string }).provider === "cloned"
+          ? apiError(404, "cloned_line_missing", "This line has not been rendered in the cloned voice yet.")
+          : { audio_b64: "U0VSVkVS", audio_mime: "audio/wav", duration_ms: 400, cues: [] }
+      )
+      .on("GET", "/tts/languages", () => [
+        {
+          locale: "en-US",
+          name: "English",
+          native_name: "English",
+          sample: "Hi",
+          provider: "kokoro",
+          voice: "af_heart",
+        },
+        {
+          locale: "fr-FR",
+          name: "French",
+          native_name: "Français",
+          sample: "Salut",
+          provider: "kokoro",
+          voice: "ff_siwis",
+        },
+      ]);
+    await waitFor(() => expect(engine.options).toHaveLength(1));
+    await view.user.type(screen.getByPlaceholderText(t("sharePlaceholder")), "Something new{Enter}");
+    await waitFor(() => expect(engine.played).toEqual(["U0VSVkVS"]));
+    const asked = view.server.requests("POST", `/public/v1/avatars/${TOKEN}/speak`).map((r) => r.body);
+    expect(asked).toEqual([
+      { text: "Something new", ...cloned },
+      { text: "Something new", provider: "kokoro", voice: "ff_siwis", locale: "fr-FR" },
+    ]);
+    // Nothing for the visitor to be told: the avatar spoke.
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("with no server voice and none in the browser, says so", async () => {
     const view = setup();
     view.server.on("POST", `/public/v1/avatars/${TOKEN}/speak`, () => apiError(503, "tts_unavailable"));

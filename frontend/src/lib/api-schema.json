@@ -9757,7 +9757,7 @@
     },
     "/tts/orgs/{org_id}/stream": {
       "post": {
-        "description": "Speech in phrases, so the first word plays before the rest exists.\n\nNDJSON frames: `start`, ordered `chunk`s of mono 24 kHz PCM16 with the\nphrase's own cues, then `done` (or `error`). Only Kokoro streams; any\nother provider gets one `recording` frame from the existing path, and the\nclient plays it exactly as before.\n\nSame synthesis as the whole-recording endpoint — same voice, same measured\ncues, same cache — cut at clause boundaries. What changes is when the\naudio is heard, not what it sounds like. Metered per phrase, before\ndelivery, once. Never retried after audio has been delivered.",
+        "description": "Speech in phrases, so the first word plays before the rest exists.\n\nNDJSON frames: `start`, ordered `chunk`s of mono 24 kHz PCM16 with the\nphrase's own cues, then `done` — or `error`, with the `code`, `detail`\nand `status` the same refusal would answer outside a stream (a cloned\nline never rendered: 404 `cloned_line_missing`), or the generic\n`speech_stream_failed` for a fault. Only Kokoro streams; any\nother provider gets one `recording` frame from the existing path, and the\nclient plays it exactly as before.\n\nSame synthesis as the whole-recording endpoint — same voice, same measured\ncues, same cache — cut at clause boundaries. What changes is when the\naudio is heard, not what it sounds like. Metered per phrase, before\ndelivery, once. Never retried after audio has been delivered.",
         "operationId": "stream_tts_orgs__org_id__stream_post",
         "parameters": [
           {

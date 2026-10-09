@@ -169,20 +169,28 @@ export interface Entry {
   at: number;
   level: Level;
   message: string;
+  /** The API's error code a failure came with (a refused speak()), for
+   *  the log to word it in the member's language. */
+  code?: string;
 }
+
+/** What an API error code looks like; anything else the page sends is not one. */
+const CODE = /^[a-z][a-z0-9_]{0,63}$/;
 
 /**
  * A log line the customer's page sent (simulator-frame.js), or null for
  * anything else. The page runs whatever was pasted, so what it says is
- * data: a known level and a string, kept short.
+ * data: a known level and a string, kept short, and a code only when it
+ * looks like one.
  */
 export function frameMessage(data: unknown): Omit<Entry, "at"> | null {
   if (typeof data !== "object" || data === null) return null;
-  const { lf, level, message } = data as Record<string, unknown>;
+  const { lf, level, message, code } = data as Record<string, unknown>;
   if (lf !== true || (level !== "info" && level !== "ok" && level !== "error") || typeof message !== "string") {
     return null;
   }
-  return { level, message: message.slice(0, 2000) };
+  const entry: Omit<Entry, "at"> = { level, message: message.slice(0, 2000) };
+  return typeof code === "string" && CODE.test(code) ? { ...entry, code } : entry;
 }
 
 /** The key's refusal, as the widget reports it in the log. */

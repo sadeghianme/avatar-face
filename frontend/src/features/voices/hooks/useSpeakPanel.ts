@@ -9,10 +9,16 @@ import {
 } from "@liveface/embed";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 
-import { BROWSER_PROVIDER, speechStream, useSpeechLanguages } from "@/features/voices/api";
+import {
+  BROWSER_PROVIDER,
+  CLONED_PROVIDER,
+  speechStream,
+  useRenderedLines,
+  useSpeechLanguages,
+} from "@/features/voices/api";
 import { defaultVoiceSelection, type VoiceSelection } from "@/features/voices/components/VoicePicker";
 import { useT } from "@/i18n";
-import { ApiError } from "@/lib/api";
+import { type SpeechFailure, speechFailure } from "@/lib/speechError";
 
 /** The words in the box, and whether the member wrote them. */
 interface Line {
@@ -38,9 +44,13 @@ function line(state: Line, event: LineEvent): Line {
 
 /**
  * The Speak panel's state: the voice (the caller's when it owns one), the
- * words (a sample in the chosen language until the member types), and
- * saying them (the browser's voice, or the server's streamed phrase by
- * phrase) or dictating them. Stop, and leaving, end what is playing.
+ * words (a sample in the chosen language until the member types; with a
+ * cloned voice, one of the lines rendered in it), and saying them (the
+ * browser's voice, or the server's streamed phrase by phrase) or dictating
+ * them. Stop, and leaving, end what is playing. A line that cannot be said
+ * is said why, in the member's language (lib/speechError.ts), with its code
+ * for the next step: a line a cloned voice was never given can be heard in
+ * a server voice instead, without changing the voice chosen.
  */
 export function useSpeakPanel({
   engine,
@@ -59,19 +69,26 @@ export function useSpeakPanel({
   const [words, change] = useReducer(line, undefined, () => ({ text: t("speakSample"), edited: false }));
   const [ownSelection, setOwnSelection] = useState<VoiceSelection>(defaultVoiceSelection);
   const selection = controlledSelection ?? ownSelection;
-  const setSelection = onSelectionChange ?? setOwnSelection;
+  const select = onSelectionChange ?? setOwnSelection;
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<SpeechFailure | null>(null);
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
+
+  // A cloned voice plays only what was rendered in it: the lines it has,
+  // offered to pick, and the box filled with one of them rather than a
+  // sample it was never given (which could only fail).
+  const cloned = selection.provider === CLONED_PROVIDER;
+  const { data: renderedLines = [] } = useRenderedLines(orgId, cloned ? selection.voice : null, selection.locale);
 
   // Follow the chosen speech language with a sample IN that language.
   // Pressing Speak on Persian should demonstrate Persian, not an English
   // sentence read by a Persian voice — which is the one thing that makes a
   // language picker feel broken even when it works.
   const { data: languages } = useSpeechLanguages();
-  const sample = languages?.find((l) => l.locale === selection.locale)?.sample;
+  const language = languages?.find((l) => l.locale === selection.locale);
+  const sample = cloned && renderedLines.length ? renderedLines[0] : language?.sample;
   useEffect(() => {
     if (sample) change({ type: "sample", text: sample });
   }, [sample]);
@@ -91,14 +108,14 @@ export function useSpeakPanel({
   );
 
   const text = words.text;
-  const speak = async () => {
+  /** Say the box's words in `voice`. */
+  const say = async (voice: VoiceSelection) => {
     if (!text.trim()) return;
-    setError(null);
+    setFailure(null);
     setBusy(true);
     try {
-      const s = selectionRef.current;
-      if (s.provider === BROWSER_PROVIDER) {
-        await browserTts?.speak(text, s.voice, s.locale);
+      if (voice.provider === BROWSER_PROVIDER) {
+        await browserTts?.speak(text, voice.voice, voice.locale);
       } else if (engine) {
         // Streamed: the first phrase plays while the rest is still being
         // made. Providers that cannot stream answer with one recording and
@@ -110,7 +127,7 @@ export function useSpeakPanel({
         await player.unlock();
         const handle = streamSpeech(
           engine as unknown as Parameters<typeof streamSpeech>[0],
-          () => speechStream(orgId, { text, provider: s.provider, voice: s.voice, locale: s.locale }),
+          () => speechStream(orgId, { text, provider: voice.provider, voice: voice.voice, locale: voice.locale }),
           { player }
         );
         streamRef.current = handle;
@@ -121,21 +138,30 @@ export function useSpeakPanel({
         }
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : t("error"));
+      // A refused request (ApiError) or a refusal inside the stream
+      // (SpeechError): both carry the server's code and sentence.
+      setFailure(speechFailure(t, err));
     } finally {
       setBusy(false);
     }
   };
 
+  /** The server's voice for the chosen language: what "Use a server voice"
+   *  says this line in, once, leaving the chosen voice as it is. */
+  const serverVoice = (): VoiceSelection =>
+    language
+      ? { provider: language.provider, voice: language.voice, locale: language.locale }
+      : defaultVoiceSelection();
+
   const dictate = async () => {
-    setError(null);
+    setFailure(null);
     setListening(true);
     try {
       const heard = (said: string) => change({ type: "heard", text: said });
       const transcript = await listen({ lang: i18n.language, interim: heard });
       if (transcript) heard(transcript);
     } catch {
-      setError("Speech recognition failed");
+      setFailure({ code: null, text: "Speech recognition failed" });
     } finally {
       setListening(false);
     }
@@ -143,13 +169,27 @@ export function useSpeakPanel({
 
   return {
     selection,
-    setSelection,
+    // A new voice or new words: what failed before is no longer the question.
+    setSelection: (next: VoiceSelection) => {
+      setFailure(null);
+      select(next);
+    },
     text,
-    setText: (next: string) => change({ type: "typed", text: next }),
+    setText: (next: string) => {
+      setFailure(null);
+      change({ type: "typed", text: next });
+    },
     busy,
     listening,
-    error,
-    speak: () => void speak(),
+    /** Why the last line was not said, and its code; null when it was. */
+    failure,
+    /** A cloned voice is chosen: its rendered lines are what it can say. */
+    cloned,
+    renderedLines,
+    speak: () => void say(selectionRef.current),
+    /** This line once in the server's voice for the language (a cloned
+     *  voice has no recording of it); the chosen voice stays. */
+    speakInServerVoice: () => void say(serverVoice()),
     stop: () => {
       browserTts?.stop();
       streamRef.current?.stop();

@@ -22,6 +22,7 @@ import {
 } from "@/features/simulator/snippet";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
+import { speechFailure } from "@/lib/speechError";
 import { useOrg } from "@/providers/org";
 
 /** The pasted snippet: a code box of its own, not the form field look. */
@@ -298,7 +299,11 @@ export function SimulatorPage() {
                   }
                 >
                   <span className="text-gray-600">{new Date(e.at).toLocaleTimeString()} </span>
-                  {e.message}
+                  {/* A refusal with its code: in the member's words where
+                      the dashboard has them (a line a cloned voice was never
+                      given), the code beside it for the developer. */}
+                  {e.code ? speechFailure(t, { code: e.code, detail: e.message }).text : e.message}
+                  {e.code && <span className="text-gray-600"> ({e.code})</span>}
                 </div>
               ))}
             </div>

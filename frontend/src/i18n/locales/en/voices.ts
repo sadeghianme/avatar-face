@@ -30,4 +30,11 @@ export const voices = {
   speakSample:
     "Hi, I'm your virtual assistant. I can answer questions about your products, book a meeting, or point you to the right page. Just type something and press Speak to hear how I sound.",
   speechLanguage: "Language",
+  // The Speak panel with a cloned voice: what it can say, and what to do
+  // about a line it cannot.
+  speakClonedHint: "A cloned voice says only the lines rendered in it.",
+  speakClonedLines: "Rendered lines",
+  speakClonedAddLines: "Add lines on the Voices page",
+  speakUseServerVoice: "Use a server voice",
+  speakRecordLine: "Add it on the Voices page",
 } as const;

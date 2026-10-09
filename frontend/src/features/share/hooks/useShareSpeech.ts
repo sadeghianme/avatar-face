@@ -1,7 +1,7 @@
 import { type AvatarEngine, BrowserTTS } from "@liveface/embed";
 import { type RefObject, useState } from "react";
 
-import { phraseCues, type PublicAvatar, speakPublic } from "@/features/share/api";
+import { phraseCues, type PublicAvatar, serverVoiceFor, speakPublic } from "@/features/share/api";
 import { useT } from "@/i18n";
 
 /**
@@ -14,6 +14,11 @@ import { useT } from "@/i18n";
  * our own CPU, so this costs the owner no per-character fee — only their
  * monthly character allowance, and the speech cache means a phrase asked
  * twice is synthesized once.
+ *
+ * A cloned voice says only the lines rendered in it. A visitor's other
+ * words are said in the server's voice for the avatar's language instead
+ * (the owner's Voices page promises as much): one voice for everyone still,
+ * and nothing for the visitor to be told.
  *
  * If the instance has no server voice, or the request is throttled, the
  * visitor's browser voice takes over rather than the page going silent.
@@ -40,15 +45,19 @@ export function useShareSpeech(
       // visitor's own speechSynthesis below.
       const chosen = avatar?.voice;
       const serverVoice = chosen && chosen.provider !== "browser" ? chosen : null;
-      const served = await speakPublic(token, {
-        text: spoken,
+      const voice = {
         provider: serverVoice?.provider ?? "kokoro",
         voice: serverVoice?.voice ?? "af_heart",
         locale: serverVoice?.locale ?? "en-US",
-      });
-      if (served) {
+      };
+      let served = await speakPublic(token, { text: spoken, ...voice });
+      if ("refused" in served && served.refused === "cloned_line_missing") {
+        served = await speakPublic(token, { text: spoken, ...(await serverVoiceFor(voice.locale)) });
+      }
+      if ("spoken" in served) {
+        const audio = served.spoken;
         await new Promise<void>((resolve) => {
-          engineRef.current!.playAudio(served.audio_b64, served.audio_mime, served.cues, resolve);
+          engineRef.current!.playAudio(audio.audio_b64, audio.audio_mime, audio.cues, resolve);
         });
         return;
       }

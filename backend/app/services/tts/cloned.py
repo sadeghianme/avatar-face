@@ -90,9 +90,12 @@ class ClonedTTSProvider(TTSProvider):
                     cues=await asyncio.to_thread(_cues, text, duration_ms, locale, audio),
                 )
 
+        # The voice by its name alone: the scoped id carries the org's id,
+        # and a share page says this sentence to a stranger.
+        _, _, name = voice.partition(":")
         raise NotFound404(
-            f"No cloned audio for this line in voice '{voice}'. "
-            "Render it in the dashboard, or use a server voice.",
+            f"This line has not been rendered in the cloned voice '{name or voice}' yet. "
+            "Render it on the Voices page, or use a server voice.",
             code="cloned_line_missing",
         )
 

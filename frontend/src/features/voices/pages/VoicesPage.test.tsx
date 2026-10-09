@@ -85,6 +85,32 @@ describe("VoicesPage", () => {
     expect(screen.getByRole("checkbox", { name: t("voicesConsent") })).not.toBeChecked();
   });
 
+  it("opened from the Speak panel for a line a voice lacks, starts with that voice and that line", async () => {
+    const server = createServer();
+    server
+      .on("GET", JOBS, () => [])
+      .on("GET", `${JOBS}/render-capability`, () => ({ available: false, reason: null }))
+      .on("GET", `/orgs/${ORG_ID}/cloned-voices`, () => [])
+      .on("POST", JOBS, () => aJob());
+    const { user } = renderScreen(<VoicesPage />, {
+      route: { pathname: "/voices", state: { voice: "Mehdi voice", line: "How can I help you today?" } },
+      path: "/voices",
+      server,
+    });
+    expect(await screen.findByRole("textbox", { name: t("voicesName") })).toHaveValue("Mehdi voice");
+    expect(screen.getByRole("textbox", { name: new RegExp(t("voicesLines")) })).toHaveValue(
+      "How can I help you today?"
+    );
+    await user.click(screen.getByRole("button", { name: t("voicesRecord") }));
+    await user.click(await screen.findByRole("button", { name: t("voicesStop") }));
+    await user.click(screen.getByRole("checkbox", { name: t("voicesConsent") }));
+    await user.click(screen.getByRole("button", { name: t("voicesSubmit") }));
+    await waitFor(() => expect(server.requests("POST", JOBS)).toHaveLength(1));
+    const form = server.requests("POST", JOBS)[0].body as FormData;
+    expect(form.get("name")).toBe("Mehdi voice");
+    expect(JSON.parse(form.get("lines") as string)).toEqual(["How can I help you today?"]);
+  });
+
   it("a recording too short to carry a voice says so and cannot be sent", async () => {
     mic.seconds = 3;
     const { user } = setup();

@@ -101,3 +101,22 @@ async def test_another_org_cannot_revoke_your_link(client, shared):
     )
     assert response.status_code == 404
     assert (await client.get(f"/public/v1/avatars/{shared['token']}")).status_code == 200
+
+
+async def test_a_cloned_line_never_rendered_is_named_without_the_org(client, shared, monkeypatch):
+    """A visitor's line in a cloned voice that was never rendered: the code
+    the page falls back on (a server voice), and a sentence that names the
+    voice, not the owner's organization."""
+    from app.services.tts import cloned
+
+    unavailable = {"available": False, "device": None, "reason": "no accelerator"}
+    monkeypatch.setattr(cloned, "capability", lambda: unavailable)
+    org_id = shared["org_id"]
+    response = await client.post(
+        f"/public/v1/avatars/{shared['token']}/speak",
+        json={"text": "Something new", "provider": "cloned", "voice": f"{org_id}:Mehdi voice"},
+    )
+    assert response.status_code == 404
+    assert response.json()["code"] == "cloned_line_missing"
+    assert "'Mehdi voice'" in response.json()["detail"]
+    assert org_id not in response.text
