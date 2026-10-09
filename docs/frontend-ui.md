@@ -259,6 +259,10 @@ Formatting is Prettier (`printWidth` 120), applied once in its own commit;
   needs real pixels and is the visual audit's.
 - Both are type-checked (`npm run typecheck`: the app, then
   `tsconfig.test.json`).
+- Both are measured: `npm run test:coverage` (node --test) and `npm run
+  test:ui:coverage` (Vitest) run them with coverage, each held to its own
+  floors; CI runs these two in place of the plain ones (`docs/process.md`,
+  "Coverage").
 
 ## Checks
 
@@ -266,6 +270,8 @@ Formatting is Prettier (`printWidth` 120), applied once in its own commit;
 cd frontend
 npm test               # node --test: the pure logic
 npm run test:ui        # Vitest + Testing Library: the kit and the screens
+npm run test:coverage  # the first with coverage (coverage/node/lcov.info)
+npm run test:ui:coverage   # the second with coverage (coverage/ui/index.html)
 node scripts/check-structure.mjs
 npm run typecheck      # the app, then the tests
 npm run check:api      # api-types.ts matches the committed schema

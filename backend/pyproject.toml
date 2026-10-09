@@ -44,11 +44,44 @@ dev = [
     # not turn red on an upgrade nobody made. Bump them deliberately.
     "ruff==0.15.16",
     "pyright==1.1.414",
+    # Coverage (`pytest --cov`, [tool.coverage] below). Pinned for the same
+    # reason: a new release can count a line or a branch differently, and the
+    # floor is a measured number.
+    "pytest-cov==7.1.0",
+    "coverage==7.16.2",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+# Coverage of the application (`pytest --cov`, docs/process.md "Coverage").
+[tool.coverage.run]
+source = ["app"]
+branch = true
+# The async database code runs SQLAlchemy's sync core inside greenlets: traced
+# per thread only, the lines run there are missed (and the jobs' threads too).
+concurrency = ["greenlet", "thread"]
+# Paths stored relative to backend/, so the data files of CI's two halves
+# combine on another runner.
+relative_files = true
+
+[tool.coverage.report]
+# The floor: a measured value minus a small margin, so it catches a
+# regression without flaking. Raise it when coverage rises (docs/process.md,
+# "Coverage"); never lower it to make a change pass.
+fail_under = 91
+precision = 1
+skip_covered = true
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(typing\\.)?overload",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
 
 [tool.ruff]
 line-length = 100
