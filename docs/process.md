@@ -145,7 +145,7 @@ widget `embed/src/api-types.ts` (`npm run gen:api` in `embed/`). A change to
 the API is therefore three files in one pull request: export, then generate
 in both packages; CI fails on any of them left behind.
 
-**The backend is three jobs side by side**, and `backend` stands for them:
+**The backend is four jobs**, and `backend` stands for them:
 
 - `backend-checks`: everything but the tests. That is `ruff check`, `ruff format
   --check`, `pyright`, the OpenAPI document, and the migrations against the
@@ -159,9 +159,12 @@ in both packages; CI fails on any of them left behind.
   exactly one half (`LIVEFACE_TEST_SHARD=<k>/<n>`, a CRC of its id;
   `tests/conftest.py`), and each half runs on every core of its runner
   (`pytest -n auto`). Every pytest-xdist worker has its own database and
-  storage, so a test must write only under `tmp_path`.
-- `backend`: the required check. It needs the other three and fails unless
-  all three succeeded. It runs `if: always()`, because a required check that
+  storage, so a test must write only under `tmp_path`. Each half runs with
+  coverage and uploads its data file.
+- `backend-coverage`: after both halves, combines their coverage data and
+  holds it to the floor ([Coverage](#coverage)).
+- `backend`: the required check. It needs the other four and fails unless
+  all four succeeded. It runs `if: always()`, because a required check that
   is skipped counts as passed.
 
 The virtualenv is cached, keyed on the Python version, `constraints.txt` and
@@ -181,6 +184,7 @@ pyright
 rm -f /tmp/m.sqlite3 && DATABASE_URL=sqlite+aiosqlite:////tmp/m.sqlite3 \
   sh -c 'alembic upgrade head && alembic check && alembic downgrade -1 && alembic upgrade head'
 python -m pytest tests -q -n auto        # or `make test` from the root
+python -m pytest tests -q -n auto --cov --cov-report=term   # with the floor: `make coverage`
 ```
 
 Formatting is `ruff format` (`[tool.ruff.format]` in `backend/pyproject.toml`).
@@ -194,11 +198,12 @@ and `# fmt: on`. The commit that formatted the backend is in
 | Job | What it proves | Time |
 |---|---|---|
 | `backend-checks` | ruff (lint and format), pyright, the OpenAPI document exported again and identical to the committed one, the migrations against the models and the newest one down and up | ~1 min |
-| `backend-tests` (×2) | pytest, half of the suite each, on every core, against the production pins, espeak-ng and the checksummed MediaPipe models | 3–4 min |
+| `backend-tests` (×2) | pytest with coverage, half of the suite each, on every core, against the production pins, espeak-ng and the checksummed MediaPipe models | 4–5 min |
+| `backend-coverage` | the two halves' coverage combined, at or above the floor; the HTML and LCOV report uploaded | ~20 s |
 | `backend` | every backend job above passed (the required check) | seconds |
-| `embed` | lint, type check (tests included), the widget's generated API types match the committed document, vitest with the pixel goldens, build | ~2 min |
-| `frontend` | structure check, type check, production build | <1 min |
-| `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, the dashboard's generated API types match the committed document, unit tests | <1 min |
+| `embed` | lint, type check (tests included), the widget's generated API types match the committed document, vitest with the pixel goldens and coverage at or above its floors, build, the browser tests | ~2.5 min |
+| `frontend` | type check, the unit tests (node --test) and the rendering tests (Vitest), each with coverage at or above its floors, structure check, production build | ~1 min |
+| `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, the dashboard's generated API types match the committed document | <1 min |
 | `deploy-script` | ShellCheck (pinned) on `deploy/*.sh`; every gate of `deploy.sh` | <1 min |
 | `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 22 page visits load in headless Chrome with zero CSP violations (the Simulator injection replayed among them); then the wizard end to end, from a new account to a published, spoken, shared and deleted avatar | ~4 min |
 
@@ -281,6 +286,96 @@ Playwright trace per browser context (`npx playwright-core show-trace
 trace-owner.zip`). In CI the directory is uploaded as the `wizard-e2e`
 artifact when the job fails, with the API container's whole log beside it.
 
+## Coverage
+
+Every test suite runs with coverage in CI, and a change that takes a suite
+below its floor fails the package's required check. A floor is the value CI
+measured, minus 1 to 2 points: enough margin for a run that takes another
+path through a timing-dependent branch, small enough to catch a change that
+lands code without tests. It is a ratchet: raised when coverage rises, never
+lowered to make a change pass.
+
+Measured in CI on 2026-10-09 (percent, measured → floor):
+
+| Suite | Lines | Branches | Functions | Statements |
+|---|---|---|---|---|
+| backend, pytest (`app/`) | 93.68 | 84.30 | n/a | n/a |
+| embed, vitest | 90.11 → **89** | 89.93 → **88** | 87.92 → **86** | 90.11 → **89** |
+| frontend, node --test | 93.38 → **92** | 94.72 → **93** | 89.74 → **88** | n/a |
+| frontend, Vitest (`test:ui`) | 65.22 → **64** | 78.27 → **77** | 70.39 → **69** | 65.22 → **64** |
+
+The backend has one floor, on its total (lines and branches counted
+together): 92.00 → **91**.
+
+What each number counts:
+
+- **backend**: lines and branches of `app/` (branch coverage on), the two
+  halves of `backend-tests` combined; the floor is on coverage.py's
+  "TOTAL". Measured with
+  `concurrency = greenlet, thread`: SQLAlchemy's async layer runs the sync
+  core in greenlets, and per-thread tracing misses those lines
+  (`services/orgs.py` measured 48% instead of 83% on the same tests).
+- **embed**: every `src/**/*.ts` file, loaded by a test or not, but the
+  tests, their fixtures, the generated `api-types.ts` and the 3D head's
+  harness page. V8 counts statements and lines alike. The browser tests
+  (`npm run test:browser`) are not measured.
+- **frontend, node --test**: the `src/` files the unit tests load (Node
+  reports only those), but the tests and their fixtures. Node has no
+  statement count.
+- **frontend, Vitest**: every `src/**/*.{ts,tsx}` file, rendered by a test
+  or not, but the tests, `src/test/`, the fixtures, the generated
+  `api-types.ts`, the translation tables (`i18n/locales/`) and `main.tsx`.
+  The logic that node --test covers counts here too, as code no rendering
+  test reached, so this number is lower by construction: compare it with
+  itself, not with the other.
+
+Where the floors live:
+
+| Suite | Floors in | Run it (from the package) | Report |
+|---|---|---|---|
+| backend | `fail_under` in `backend/.coveragerc` | `python -m pytest tests -q -n auto --cov --cov-report=term --cov-report=html` (`make coverage` from the root) | `htmlcov/index.html` |
+| embed | `coverage.thresholds` in `embed/vitest.config.ts` | `npm run test:coverage` | `coverage/index.html` |
+| frontend, node --test | `--test-coverage-lines/branches/functions` in the `test:coverage` script of `frontend/package.json` | `npm run test:coverage` (Node 22 or newer) | `coverage/node/lcov.info` |
+| frontend, Vitest | `coverage.thresholds` in `frontend/vitest.config.ts` | `npm run test:ui:coverage` | `coverage/ui/index.html` |
+
+Locally, `pytest --cov` over part of the backend suite falls below the floor
+by design: add `--cov-fail-under=0`. Numbers on a laptop can differ from CI's
+by a few tenths (another Node, another platform, timing); CI's are the ones
+of record.
+
+In CI, each half of `backend-tests` writes its data file
+(`COVERAGE_FILE=.coverage.half<k>`) and uploads it; `backend-coverage`
+downloads both, runs `coverage combine`, and `coverage report` holds the
+total to `fail_under`. `backend` needs `backend-coverage`, so the required
+check fails with it. `embed` and `frontend` run the coverage scripts in
+place of the plain ones. Every report (HTML and LCOV) is uploaded as an
+artifact, kept 7 days: `backend-coverage`, `embed-coverage`,
+`frontend-coverage` on the run's page (`gh run download <run> -n
+embed-coverage`).
+
+What it costs, measured on this change's runs: pytest under coverage takes
+about 4.3 minutes per half instead of 3 (most runs; the runners vary by a
+minute either way), `backend-coverage` 17 seconds after them, so a whole
+run takes about 5.5 minutes instead of 4. Vitest takes 10 seconds longer in
+`embed` and 5 in `frontend`; node --test, a fraction of a second.
+
+**Raising a floor.** When a change raises a number by a point or more, raise
+its floor in the same pull request: read the measured value in the job's log
+on that pull request (the backend's in `backend-coverage`, "Coverage floor";
+the others in the coverage summary of their test step), and set the floor
+to it minus 1, rounded down to a whole number. Then update the measured
+values beside the floor and in the table above.
+To find what to test next, open the HTML report, or look at the files the
+report lists as missing lines.
+
+**When a floor fails.** Add the tests the change is missing. If the code
+cannot run under the suite at all (a developer tool, a generated file),
+exclude it in the coverage settings with a comment saying why, in a pull
+request of its own. Moving coverage.py, pytest-cov or `@vitest/coverage-v8`
+can change how lines and branches are counted: measure again on that pull
+request and move the floors with it, in either direction, saying so in the
+description.
+
 ## Branch protection
 
 Set on main: the six checks below are required, `strict` and
@@ -337,7 +432,8 @@ green CI (the `images` job rebuilds both images from scratch), merge, deploy.
 | What | Pinned in | How to move it |
 |---|---|---|
 | Python libraries | `backend/constraints.txt` (the production `pip freeze`), used by the Dockerfile and CI; `mediapipe==1.0.1` in `backend/Dockerfile` | below |
-| Python dev tools | `ruff`, `pyright` exact versions in `backend/pyproject.toml` | change the version; fix what the new one reports in the same pull request |
+| Python dev tools | `ruff`, `pyright`, `pytest-cov`, `coverage` exact versions in `backend/pyproject.toml` | change the version; fix what the new one reports in the same pull request (for the coverage tools: measure again, [Coverage](#coverage)) |
+| Coverage for Vitest | `@vitest/coverage-v8` exact in both `package.json`s, always the installed `vitest`'s version | with every move of `vitest`, in the same pull request: `npm install -D --save-exact @vitest/coverage-v8@<vitest's version>`; measure again ([Coverage](#coverage)) |
 | npm packages | `embed/package-lock.json`, `frontend/package-lock.json`, `deploy/smoke/package-lock.json` (`npm ci` everywhere) | in the package: `npm install <pkg>@<version>`, commit the lockfile |
 | three.js | `embed/package.json` (the lockfile); its KTX2 transcoder is copied from the installed three into `embed/dist` by the build (`embed/scripts/build.mjs`) and served by the API beside `liveface-3d.js` | as any npm package: the transcoder moves with it |
 | Models | URL and SHA-256 of every file in `backend/Dockerfile` | below |
@@ -385,8 +481,8 @@ docker buildx imagetools inspect nginx:1.30-alpine | grep Digest
 
 A new line (Node 24, Python 3.13, nginx 1.32) is a deliberate upgrade: change
 the tag, and the matching `node-version` / `python-version` in `ci.yml`, in one
-pull request. The images use Node 22 (Node 20 is past its end of life); the
-`embed` and `frontend` CI jobs still set Node 20 and should follow.
+pull request. The images and every CI job use Node 22 (Node 20 is past its
+end of life).
 
 ## Client addresses
 

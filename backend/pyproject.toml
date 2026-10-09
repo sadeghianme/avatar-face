@@ -44,11 +44,19 @@ dev = [
     # not turn red on an upgrade nobody made. Bump them deliberately.
     "ruff==0.15.16",
     "pyright==1.1.414",
+    # Coverage (`pytest --cov`, configured in .coveragerc). Pinned for the
+    # same reason: a new release can count a line or a branch differently,
+    # and the floor is a measured number.
+    "pytest-cov==7.1.0",
+    "coverage==7.16.2",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Coverage (`pytest --cov`) is configured in .coveragerc, not here: CI's
+# virtualenv cache is keyed on this file, and raising the floor must not
+# cost a reinstall.
 
 [tool.ruff]
 line-length = 100

@@ -19,11 +19,13 @@ concurrency:
 
 # The required checks on main (docs/process.md, "Branch protection") are the
 # job ids backend, embed, frontend, frontend-lint, deploy-script and images:
-# rename one only together with that rule. backend-checks and backend-tests
-# are not required themselves: `backend` passes only when they all do.
+# rename one only together with that rule. backend-checks, backend-tests and
+# backend-coverage are not required themselves: `backend` passes only when
+# they all do.
 jobs:
   # The backend is three jobs side by side: its static checks, and its test
-  # suite in two halves. Each restores the same virtualenv.
+  # suite in two halves. Each restores the same virtualenv. Then
+  # backend-coverage combines the two halves' coverage.
   backend-checks:
     # Everything but the tests: lint, formatting, types, the API document,
     # and the migrations against the models. No system libraries: nothing
@@ -177,17 +179,75 @@ jobs:
           printf '\0asm\1\0\0\0' > ../embed/dist/basis_transcoder.wasm
           cp ../embed/assets/mouth-teeth.webp ../embed/assets/mouth-teeth.rig.json ../embed/dist/
       - name: Tests (half ${{ matrix.shard }} of 2)
+        # With coverage (backend/.coveragerc): every xdist worker measures,
+        # pytest-cov merges them into this half's data file.
+        # No floor here: half the suite covers less than the whole, and
+        # backend-coverage holds the two halves combined to it.
         env:
           LIVEFACE_TEST_SHARD: ${{ matrix.shard }}/2
-        run: python -m pytest tests -q -n auto
+          COVERAGE_FILE: .coverage.half${{ matrix.shard }}
+        run: python -m pytest tests -q -n auto --cov --cov-report= --cov-fail-under=0
+      - name: Upload this half's coverage data
+        uses: actions/upload-artifact@v6
+        with:
+          name: backend-coverage-data-${{ matrix.shard }}
+          path: backend/.coverage.half${{ matrix.shard }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  backend-coverage:
+    # The two halves' coverage data combined, held to the floor
+    # (fail_under in backend/.coveragerc, docs/process.md "Coverage"). Needs
+    # only coverage itself, at the version pyproject.toml pins: it reads the
+    # sources, it imports nothing.
+    needs: backend-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install coverage
+        run: |
+          pin=$(python -c 'import tomllib; dev = tomllib.load(open("pyproject.toml", "rb"))["project"]["optional-dependencies"]["dev"]; print(next(d for d in dev if d.startswith("coverage==")))')
+          pip install "$pin"
+      - name: Download both halves' data
+        uses: actions/download-artifact@v7
+        with:
+          pattern: backend-coverage-data-*
+          merge-multiple: true
+          path: backend
+      - name: Combine
+        run: coverage combine
+      - name: HTML and LCOV reports
+        # Below the floor too (--fail-under=0): the report shows what is
+        # missing.
+        run: |
+          coverage html --fail-under=0
+          coverage lcov --fail-under=0 -o htmlcov/lcov.info
+      - name: Upload the coverage report
+        uses: actions/upload-artifact@v6
+        with:
+          name: backend-coverage
+          path: backend/htmlcov/
+          retention-days: 7
+      - name: Coverage floor
+        run: coverage report
 
   backend:
     # The required check (branch protection names it): green only when
-    # backend-checks and both halves of backend-tests are. `always()`: a
-    # required check that is skipped counts as passed, so this one never
-    # skips; it runs whatever happened before it and fails unless all passed.
+    # backend-checks, both halves of backend-tests and backend-coverage are.
+    # `always()`: a required check that is skipped counts as passed, so this
+    # one never skips; it runs whatever happened before it and fails unless
+    # all passed (backend-coverage is skipped, so not a success, when a half
+    # failed).
     if: always()
-    needs: [backend-checks, backend-tests]
+    needs: [backend-checks, backend-tests, backend-coverage]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -195,9 +255,10 @@ jobs:
         env:
           CHECKS: ${{ needs.backend-checks.result }}
           TESTS: ${{ needs.backend-tests.result }}
+          COVERAGE: ${{ needs.backend-coverage.result }}
         run: |
-          echo "backend-checks: $CHECKS, backend-tests: $TESTS"
-          test "$CHECKS" = success && test "$TESTS" = success
+          echo "backend-checks: $CHECKS, backend-tests: $TESTS, backend-coverage: $COVERAGE"
+          test "$CHECKS" = success && test "$TESTS" = success && test "$COVERAGE" = success
 
   embed:
     runs-on: ubuntu-latest
@@ -208,7 +269,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          # As the images (node:22-alpine); Node 20 is past its end of life.
+          node-version: 22
           cache: npm
           cache-dependency-path: embed/package-lock.json
       - run: npm ci
@@ -234,7 +296,18 @@ jobs:
       # pixels.test.ts draws real frames on Skia's CPU raster
       # (@napi-rs/canvas, a prebuilt binary npm ci installs: no browser) and
       # holds them to committed goldens; a frame that fails is uploaded.
-      - run: npm test
+      # `npm test` with V8 coverage, held to the floors in vitest.config.ts
+      # (docs/process.md, "Coverage").
+      - name: Tests, with coverage
+        run: npm run test:coverage
+      - name: Upload the coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: embed-coverage
+          path: embed/coverage/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload the frames that failed the pixel goldens
         if: failure()
         uses: actions/upload-artifact@v6
@@ -275,6 +348,9 @@ jobs:
           if-no-files-found: ignore
 
   frontend:
+    # The dashboard's type check, its two test suites with coverage, and its
+    # production build. Node 22, as the image: node --test runs the .test.ts
+    # files by stripping their types.
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -283,7 +359,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       # The dashboard imports @liveface/embed straight from ../embed/src via
@@ -295,13 +371,29 @@ jobs:
       # that no longer type-checks against the code it tests fails here.
       - name: Typecheck (app, tests)
         run: npm run typecheck
+      # The two suites, each with coverage held to its own floors
+      # (docs/process.md, "Coverage"): the unit tests (node --test, the
+      # thresholds in package.json's test:coverage), then the kit and the
+      # main screens mounted in jsdom (Vitest + Testing Library, against a
+      # mocked API: src/test/; the thresholds in vitest.config.ts).
+      - name: Unit tests, with coverage
+        run: npm run test:coverage
+      - name: Rendering tests, with coverage
+        run: npm run test:ui:coverage
+      - name: Upload the coverage reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Typecheck and build
         run: npm run build
 
   frontend-lint:
     # The dashboard's lint (the UI kit and data-layer rules among them,
-    # docs/frontend-ui.md), its formatting and its unit tests. Node 22:
-    # node --test runs the .test.ts files by stripping their types.
+    # docs/frontend-ui.md), its formatting and its generated API types.
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -324,11 +416,6 @@ jobs:
       # edit, or a schema committed without regenerating, fails here.
       - name: API types match the committed schema
         run: npm run check:api
-      - run: npm test
-      # The kit and the main screens mounted in jsdom (Vitest + Testing
-      # Library), against a mocked API: src/test/.
-      - name: Rendering tests
-        run: npm run test:ui
 
   deploy-script:
     # The release gate itself: shellcheck on every deploy script, then
