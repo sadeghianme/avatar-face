@@ -40,7 +40,9 @@ FastAPI, async throughout.
   per-key domain allow-list. `/cues` is deliberately unauthenticated: it
   synthesises nothing and costs a text scan.
 - **Dashboard API** — orgs, members, keys, usage, and the manual rig-fitting
-  endpoints, authenticated by JWT.
+  endpoints, authenticated by a short-lived JWT bound to a server-side
+  session (a rotated refresh token in an httpOnly cookie; docs/process.md,
+  "Sessions").
 - **Rig pipeline** — runs in the background on upload. MediaPipe
   FaceLandmarker finds 478 points, from which the service builds a Delaunay
   mesh, a 15-viseme blendshape set, a face box and a thumbnail. If no face is
@@ -137,7 +139,7 @@ BACKEND
   Pydantic v2 · pydantic-settings
   MediaPipe FaceLandmarker    478 landmarks + 52 ARKit blendshapes
   Pillow · numpy              image handling, mesh maths
-  passlib · python-jose       password hashing, JWT
+  bcrypt · PyJWT              password hashing, access tokens
   pytest + pytest-asyncio     behaviour tests, mostly over HTTP
 
 SPEECH
@@ -187,7 +189,8 @@ over an eye is not.
 
 - Redis and a real job queue — rig building is a FastAPI background task, which
   is fine for one box and not for many.
-- Horizontal scale: sessions are stateless, but the local-disk storage backend
-  has to become S3 before a second API replica makes sense.
+- Horizontal scale: sessions live in the database every replica shares, but
+  the local-disk storage backend has to become S3 before a second API replica
+  makes sense.
 - Server-side neural TTS (Piper/Kokoro) for good voices without a per-call bill.
 - Conversation mode: speech-to-text → LLM → speech, with the avatar as the face.

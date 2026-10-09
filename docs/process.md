@@ -114,7 +114,11 @@ ssh personal_server "docker exec -w /app/backend -e PYTHONPATH=/app/backend \
 deploy/deploy.sh --rollback
 ```
 
-The next deploy runs 028 again (it is written to be re-run). If the older code
+The next deploy runs 028 again (it is written to be re-run). Rolling back over
+029 (dashboard sessions) is the same with `alembic stamp 028_speech_clips`:
+everyone signs in again, on the old release and once more when 029 is
+deployed again, because a re-run deletes the sessions from before rather than
+trust them ([Sessions](#sessions)). If the older code
 cannot run on the newer schema at all, restore the backup the deploy took
 just before that release (its path is in that deploy's summary):
 
@@ -205,12 +209,14 @@ and `# fmt: on`. The commit that formatted the backend is in
 | `frontend` | type check, the unit tests (node --test) and the rendering tests (Vitest), each with coverage at or above its floors, structure check, production build | ~1 min |
 | `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, the dashboard's generated API types match the committed document | <1 min |
 | `deploy-script` | ShellCheck (pinned) on `deploy/*.sh`; every gate of `deploy.sh` | <1 min |
-| `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 22 page visits load in headless Chrome with zero CSP violations (the Simulator injection replayed among them); then the wizard end to end, from a new account to a published, spoken, shared and deleted avatar | ~5 min, the wizard ~1 of it |
+| `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 23 page visits load in headless Chrome with zero CSP violations (the Simulator injection replayed among them, and the session checked for tokens a script could read); then the wizard end to end, from a new account to a published, spoken, shared and deleted avatar | ~5 min, the wizard ~1 of it |
 
 The `images` job's browser sweep (`deploy/smoke/web-sweep.mjs`) seeds a user, a
 photo avatar, a 3D avatar and a share link through the API, speaks on the share
 page, runs the real widget in the Simulator for both avatars and speaks there,
-and replays the Simulator injection (N1) as a link and as a paste. To run it
+and replays the Simulator injection (N1) as a link and as a paste. It signs in
+from the page, as the login form does, and checks that a reload keeps the
+session with no token in `document.cookie` or storage. To run it
 against images built locally:
 
 ```bash
@@ -639,7 +645,8 @@ session theft through it). So:
    harness `frontend/public/simulator-frame.js`, then the widget's tag.
 2. **The frame has its own origin.** It is `sandbox="allow-scripts"` with no
    `allow-same-origin`, so its origin is opaque. A script in it cannot read the
-   dashboard's `localStorage` (where the session's tokens are), its cookies or
+   dashboard's `localStorage`, its cookies (the session's refresh cookie is
+   httpOnly besides) or
    its DOM, and the dashboard cannot reach in either. Frame and page talk only
    by `postMessage`. The frame posts to the dashboard's origin, never `"*"`, and
    acts only on its parent's messages. The page takes log lines only from that
@@ -654,6 +661,64 @@ session theft through it). So:
    inline script there.
 
 The `images` job's sweep replays the N1 proof of concept, as a link and as a
-paste, and fails if it runs. The session's tokens are still in
-`localStorage` (`docs/frontend-ui.md`, "Security notes"); moving them to
-httpOnly cookies is a separate change.
+paste, and fails if it runs. No session token is in reach of a script any
+more ([Sessions](#sessions)).
+
+## Sessions
+
+Signing in to the dashboard opens a session the server can end
+(`backend/app/services/sessions.py`, table `refresh_tokens`, migration 029).
+
+| | What and where | Lifetime |
+|---|---|---|
+| Access token | a JWT (HS256, key derived from `JWT_SECRET` for this use alone) naming the user and the session (`sid`); kept in the dashboard's memory only (`frontend/src/lib/api.ts`), sent as `Authorization: Bearer` | 15 minutes (`ACCESS_TOKEN_MINUTES`) |
+| Refresh token | 256 random bits in the `lf_refresh` cookie: `HttpOnly`, `SameSite=Strict`, `Path=/api/auth` (`SESSION_COOKIE_PATH`), `Secure` whenever `APP_BASE_URL` is https (`SESSION_COOKIE_SECURE` overrides). The database keeps its SHA-256, never the token | 30 days from its last use (`REFRESH_TOKEN_DAYS`) |
+| `lf_session=1` | a cookie the dashboard can read, `Path=/`, with nothing secret in it: whether there is a session to restore on load, so a visitor who never signed in (the landing page, a share page) makes no request | as the refresh cookie |
+
+- **Rotation.** Every refresh (`POST /api/auth/refresh`, on each page load
+  and when an access token is refused) exchanges the refresh token for the
+  next one of its session. A spent token presented again is a copy in
+  someone else's hands: the whole session is revoked
+  (`refresh_token_reused`), the copy and the owner's current token with it.
+  Within `REFRESH_REUSE_GRACE_SECONDS` (10) of the exchange it is the same
+  browser asking again (an answer lost to a reload or a dropped connection,
+  two tabs at once): it gets the same next token again, which is derived
+  from the one it replaces with a server key, so it is never stored either.
+  The dashboard also holds a Web Lock around its refresh, so its tabs take
+  turns, and a 401 refreshes once however many requests were refused.
+- **Ending one.** `POST /api/auth/logout` (this session, by its cookie or its
+  bearer token), `POST /api/auth/logout-all` (every session of the account,
+  this one included: Settings, "Log out everywhere"; bearer only), and a
+  password reset (every session, in the same commit as the new hash; the
+  browser that reset it gets a new one). An access token dies with its
+  session at once: every authenticated request checks the session in the
+  query that loads the user. The sweeper deletes tokens past their expiry.
+  Removing a member from an organization ends no session: what a session
+  proves is the account, and every request checks the organization's
+  membership itself.
+- **Cross-site requests.** The cookie authenticates only
+  `/api/auth/refresh` and `/api/auth/logout`. Those, and the routes that
+  set it (`login`, `reset-password`, against login CSRF), refuse a request
+  whose `Sec-Fetch-Site` is not `same-origin`, or, from an older browser
+  without it, whose `Origin` is not the dashboard's (`CORS_ORIGINS`,
+  `APP_BASE_URL`): 403 `cross_site_request`. `SameSite=Strict` keeps the
+  browser from sending the cookie from another site at all; the header check
+  also covers a sibling subdomain, which counts as the same site. Everything
+  else is authorized by the bearer header, which no browser attaches on its
+  own.
+- **Local development.** Vite on `http://localhost:5174` proxies `/api` to
+  the API, so the cookie's path is the same as in production, and with the
+  default `APP_BASE_URL` (http) the cookies are not marked Secure: a browser
+  would refuse a Secure cookie over plain http, from a phone on the LAN too.
+- **Passwords** are bcrypt through the `bcrypt` package (cost 12, `$2b$`);
+  the hashes passlib wrote verify unchanged (`tests/test_security.py` holds
+  real ones).
+
+**Deploying the release that brings this signs everyone out once.** The
+stateless refresh tokens issued before have no row and the old access tokens
+carry no session, so both are refused; nothing in them is worth keeping
+alive, since they are exactly the credentials that could not be revoked. A
+dashboard tab left open across the deploy still runs the old bundle: its
+requests fail with 401 from its next refresh on, until a reload loads the new
+bundle and its login page. The old `liveface.tokens` entry is deleted from
+`localStorage` on the first load of the new one. Rolling back over 029: [Rollback](#rollback).

@@ -154,10 +154,11 @@ moved: [docs/process.md](docs/process.md).
 
 1. In-memory state (credential overlay, rate limiters, job runner): one API
    process only. More workers need Redis and a real queue.
-2. Refresh tokens cannot be revoked yet (no server-side session table).
-3. Rate limits are kept per process (item 1), keyed on the visitor's own
+2. Rate limits are kept per process (item 1), keyed on the visitor's own
    address behind Cloudflare ([docs/process.md](docs/process.md#client-addresses)):
    everyone behind one carrier-grade NAT shares a bucket.
-4. The session's tokens are in `localStorage`, not httpOnly cookies. The CSP
-   allows no inline script, and the Simulator runs snippets in a frame of its
-   own origin ([docs/process.md](docs/process.md#security-headers)).
+3. A user cannot list their sessions or end one other than their own: "Log
+   out everywhere" (Settings) and a new password end them all. Sessions
+   themselves are server-side and revocable: a refresh token rotated on every
+   use, in an httpOnly cookie, and an access token kept in memory
+   ([docs/process.md](docs/process.md#sessions)).
