@@ -43,13 +43,25 @@ export function padTriangle(
     ] as [Pt, Pt, Pt]);
   const cx = (d0.x + d1.x + d2.x) / 3,
     cy = (d0.y + d1.y + d2.y) / 3;
-  // Outward unit normal of each edge k, from corner k to corner k+1.
-  if (pad || edges) {
-    edgeNormal(0, d0, d1, cx, cy);
-    edgeNormal(1, d1, d2, cx, cy);
-    edgeNormal(2, d2, d0, cx, cy);
-  }
   const n = normals;
+  // Outward unit normal of each edge k, from corner k to corner k+1 (in
+  // the loop, not a helper: V8 boxes a number handed to a call it does not
+  // inline, and the 2D warp pads every triangle of every frame).
+  for (let k = 0; (pad || edges) && k < 3; k++) {
+    const a = k ? (k > 1 ? d2 : d1) : d0,
+      b = k ? (k > 1 ? d0 : d2) : d1;
+    let nx = -(b.y - a.y),
+      ny = b.x - a.x;
+    const len = Math.hypot(nx, ny) || 1;
+    nx /= len;
+    ny /= len;
+    if (nx * ((a.x + b.x) / 2 - cx) + ny * ((a.y + b.y) / 2 - cy) < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    n[2 * k] = nx;
+    n[2 * k + 1] = ny;
+  }
   for (let k = 0; k < 3; k++) {
     const d = k ? (k > 1 ? d2 : d1) : d0;
     // The small proportional growth, every triangle.
@@ -104,25 +116,8 @@ export function padTriangle(
   return r;
 }
 
-/** The edges' outward normals of the triangle being padded, x y pairs: the
- *  2D warp pads every triangle of every frame. */
+/** The edges' outward normals of the triangle being padded, x y pairs. */
 const normals = new Float64Array(6);
-
-/** Edge k's outward unit normal, from `a` to `b`, the triangle's centroid
- *  at (cx, cy), into `normals`. */
-function edgeNormal(k: number, a: Pt, b: Pt, cx: number, cy: number): void {
-  let nx = -(b.y - a.y),
-    ny = b.x - a.x;
-  const len = Math.hypot(nx, ny) || 1;
-  nx /= len;
-  ny /= len;
-  if (nx * ((a.x + b.x) / 2 - cx) + ny * ((a.y + b.y) / 2 - cy) < 0) {
-    nx = -nx;
-    ny = -ny;
-  }
-  normals[2 * k] = nx;
-  normals[2 * k + 1] = ny;
-}
 
 /** A corner grows at most this many pads: a sharp sliver's mitre would
  *  otherwise run on as a spike, for no seam. */
