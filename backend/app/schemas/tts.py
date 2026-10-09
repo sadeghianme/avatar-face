@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from app.schemas.published import Absent, absent_when_none
+
 
 class ProviderOut(BaseModel):
     name: str
@@ -20,6 +22,20 @@ class SynthesizeRequest(BaseModel):
     provider: str = "offline"
     voice: str = "offline-warm"
     locale: str = "en-US"
+    # Optional, no default in the schema: the generated clients send it only
+    # when they mean it (a default would make it a required key there).
+    word_marks: bool | Absent = Field(
+        default=None,
+        description="Also answer each word's start time (`word_marks`): what places "
+        "a text's expressions on the voice. Absent or false, the answer has no such key.",
+    )
+
+
+class WordMark(BaseModel):
+    """Where a word starts: its first character in the text, and its time, ms."""
+
+    char: int
+    t: int
 
 
 class CueOut(BaseModel):
@@ -36,3 +52,6 @@ class SynthesizeResponse(BaseModel):
     duration_ms: int
     cues: list[CueOut]
     cached: bool
+    word_marks: list[WordMark] | Absent = absent_when_none(
+        "Each word's start in the audio, ms, when the request asked for them."
+    )

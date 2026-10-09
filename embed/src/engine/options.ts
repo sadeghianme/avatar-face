@@ -79,4 +79,11 @@ export interface EngineOptions {
    * rig's profile chooses, as it always did.
    */
   faceType?: FaceType | null;
+  /**
+   * The idle micro-expressions (docs/emotions.md): a faint resting smile
+   * and, in the "2d" head motion, a brow flash on an accent. Off by
+   * default; `setIdleExpressions` switches it live, and the widget's
+   * `data-expressions="auto"` turns it on.
+   */
+  idleExpressions?: boolean;
 }

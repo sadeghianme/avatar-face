@@ -9,6 +9,7 @@
  *
  *   Liveface.speak(text)        the FIRST widget to come up: on a page with
  *   Liveface.stop() …             one widget, that widget, as it always was
+ *   Liveface.express("happy")     (docs/emotions.md)
  *   Liveface.get("AVATAR_ID")   the widget showing that avatar (the first
  *                                 to come up, if several do), or null
  *   Liveface.get(element)       the widget drawn on that canvas, or booted
@@ -25,6 +26,7 @@
  * calls answer quietly: nothing to say, nothing speaking, no engine.
  */
 import type { AvatarEngine } from "../engine";
+import type { ExpressionTiming } from "../engine/expression-mixer";
 import type { Avatar3DEngine } from "../engine3d";
 import { listen, sttSupported, type ListenOptions } from "../stt";
 import type { EngineTuning } from "../types";
@@ -44,6 +46,11 @@ export interface LivefaceHandle {
   sttSupported(): boolean;
   /** Adjust the animation live, e.g. tune({ mouthOpen: 1.3 }). */
   tune(partial: Partial<EngineTuning>): void;
+  /** Show an expression ("happy", "surprised", "concerned", "thinking",
+   *  "serious", or an alias: "smile", "sad"…; "neutral" releases) at
+   *  `intensity` 0..1 (default 1). An unknown name, or a 3D avatar, does
+   *  nothing. */
+  express(name: string, intensity?: number, timing?: ExpressionTiming): void;
   /** The engine itself: a page may call any of its public members, so
    *  they keep their names in liveface.js (scripts/mangle-names.mjs). */
   readonly engine: AvatarEngine | Avatar3DEngine | null;
@@ -82,6 +89,7 @@ export function livefacePage(win: { Liveface?: LivefacePage } = window): Livefac
     listen: (options) => listen(options),
     sttSupported,
     tune: (partial) => first()?.tune(partial),
+    express: (name, intensity, timing) => first()?.express(name, intensity, timing),
     get engine() {
       return first()?.engine ?? null;
     },

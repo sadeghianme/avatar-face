@@ -59,6 +59,25 @@ async def test_synthesize_returns_audio_and_cues(client):
     assert all(cues[i]["t"] <= cues[i + 1]["t"] for i in range(len(cues) - 1))
 
 
+async def test_synthesize_answers_word_marks_when_asked(client):
+    headers = await register_and_login(client, "alice")
+    org_id = await create_org(client, headers)
+    response = await client.post(
+        f"/tts/orgs/{org_id}/synthesize",
+        json={
+            "text": "Good morning, all.",
+            "provider": "offline",
+            "voice": "offline-warm",
+            "word_marks": True,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    assert [m["char"] for m in response.json()["word_marks"]] == [0, 5, 14]
+    plain = await _synthesize(client, headers, org_id, "Good morning, all.")
+    assert "word_marks" not in plain.json()
+
+
 async def test_synthesize_cache_hit(client):
     headers = await register_and_login(client, "alice")
     org_id = await create_org(client, headers)

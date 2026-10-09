@@ -17,7 +17,6 @@ allows.
 
 from __future__ import annotations
 
-import base64
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request, Response
@@ -28,7 +27,7 @@ from app.core.config import get_settings
 from app.core.errors import Auth401, Forbidden403, NotFound404
 from app.models import ApiKey, AvatarStatus
 from app.schemas.published import EmbedAvatarOut
-from app.schemas.tts import CueOut, SynthesizeRequest, SynthesizeResponse
+from app.schemas.tts import CueOut, SynthesizeRequest, SynthesizeResponse, WordMark
 from app.services import api_keys
 from app.services.avatars import repo as avatars
 from app.services.publishing import published_view
@@ -37,6 +36,7 @@ from app.services.simulator_token import InvalidSimulatorToken
 from app.services.simulator_token import looks_like_one as looks_like_simulator_token
 from app.services.simulator_token import verify as verify_simulator_token
 from app.services.storage import get_storage
+from app.services.tts.answer import synthesis_answer
 from app.services.tts.registry import synthesize_cached
 from app.services.tts.timing import cue_track, on_planner_thread
 from app.services.usage import check_usage_limit, record_synthesis
@@ -181,11 +181,6 @@ class CueRequest(BaseModel):
     locale: str = "en-US"
 
 
-class WordMark(BaseModel):
-    char: int
-    t: int
-
-
 class CueResponse(BaseModel):
     cues: list[CueOut]
     duration_ms: int
@@ -244,10 +239,4 @@ async def embed_synthesize(body: SynthesizeRequest, request: Request, db: DB) ->
     await record_synthesis(
         db, api_key.org_id, body.provider, len(body.text), cached, source="embed"
     )
-    return SynthesizeResponse(
-        audio_b64=base64.b64encode(result.audio).decode(),
-        audio_mime=result.audio_mime,
-        duration_ms=result.duration_ms,
-        cues=[CueOut(**c) for c in result.cues],
-        cached=cached,
-    )
+    return await synthesis_answer(body, result, cached)

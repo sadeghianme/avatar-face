@@ -3864,6 +3864,11 @@ export interface components {
        * @default offline-warm
        */
       voice: string;
+      /**
+       * Word Marks
+       * @description Also answer each word's start time (`word_marks`): what places a text's expressions on the voice. Absent or false, the answer has no such key.
+       */
+      word_marks?: boolean;
     };
     /** SynthesizeResponse */
     SynthesizeResponse: {
@@ -3877,6 +3882,11 @@ export interface components {
       cues: components["schemas"]["CueOut"][];
       /** Duration Ms */
       duration_ms: number;
+      /**
+       * Word Marks
+       * @description Each word's start in the audio, ms, when the request asked for them.
+       */
+      word_marks?: components["schemas"]["WordMark"][];
     };
     /** UserOut */
     UserOut: {
@@ -3960,7 +3970,10 @@ export interface components {
       /** Name */
       name: string;
     };
-    /** WordMark */
+    /**
+     * WordMark
+     * @description Where a word starts: its first character in the text, and its time, ms.
+     */
     WordMark: {
       /** Char */
       char: number;

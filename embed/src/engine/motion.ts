@@ -94,6 +94,9 @@ export class Motion {
   readonly personality = new HeadPersonality(1);
   /** Where the eyes are going: offsets in eye-widths. */
   gazeTarget: Point = { x: 0, y: 0 };
+  /** Where the expressions on send the eyes, on top of the fixation (the
+   *  animation sets it every tick: expression-mixer.ts gaze). */
+  readonly gazeBias: Point = { x: 0, y: 0 };
   private nextSaccadeAt = 0;
   /** When the current run of silence inside speech began, for catch-breaths;
    *  null while a viseme is active. */
@@ -315,8 +318,8 @@ export class Motion {
     const saccadeRate = 1 - Math.exp(-dt / SACCADE_MS);
     const head3d = this.mode === "3d" ? this.personality.gaze : null;
     const k = Math.min(1, this.headScale);
-    const tx = head3d ? this.gazeTarget.x * 0.5 + head3d.x * k : this.gazeTarget.x;
-    const ty = head3d ? this.gazeTarget.y * 0.5 + head3d.y * k : this.gazeTarget.y;
+    const tx = (head3d ? this.gazeTarget.x * 0.5 + head3d.x * k : this.gazeTarget.x) + this.gazeBias.x;
+    const ty = (head3d ? this.gazeTarget.y * 0.5 + head3d.y * k : this.gazeTarget.y) + this.gazeBias.y;
     gaze.x += (tx - gaze.x) * saccadeRate;
     gaze.y += (ty - gaze.y) * saccadeRate;
   }

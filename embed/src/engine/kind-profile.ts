@@ -1,4 +1,5 @@
 import type { CharacterTraits } from "./character-mouth";
+import { ANIMAL_GAINS, HUMAN_GAINS, TOON_GAINS, type ExpressionGains } from "./expression-table";
 import type { FaceType, Rig } from "../types";
 
 /**
@@ -49,6 +50,10 @@ export interface KindProfile {
    * fit.
    */
   readonly headMotion: "2d" | "3d";
+  /** How much of each region of an expression the line takes
+   *  (expression-table.ts): a drawn mouth line needs more to read as a
+   *  smile, a muzzle has no lip corners to speak of. */
+  readonly expression: ExpressionGains;
 }
 
 export const HUMAN_PROFILE: KindProfile = {
@@ -60,6 +65,7 @@ export const HUMAN_PROFILE: KindProfile = {
   blink: "mesh",
   traits: { teeth: "upper", tongue: true, jaw: 1 },
   headMotion: "3d",
+  expression: HUMAN_GAINS,
 };
 
 const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
@@ -77,6 +83,7 @@ const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
       blink: "mesh",
       traits: { teeth: "none", tongue: true, jaw: 1 },
       headMotion: "2d",
+      expression: ANIMAL_GAINS,
     },
   ],
   [
@@ -93,6 +100,7 @@ const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
       blink: "lid",
       traits: { teeth: "upper", tongue: true, jaw: 1 },
       headMotion: "2d",
+      expression: TOON_GAINS,
     },
   ],
   [
@@ -108,6 +116,7 @@ const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
       blink: "lid",
       traits: { teeth: "none", tongue: true, jaw: 1.15 },
       headMotion: "2d",
+      expression: ANIMAL_GAINS,
     },
   ],
 ]);
