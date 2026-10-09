@@ -44,6 +44,9 @@ import {
  */
 
 const BROWSERS = (process.env.SPEECH_TIMING_BROWSERS ?? "chromium").split(",") as BrowserName[];
+/** Where to keep what each page recorded (CI uploads it when a test fails). */
+const DUMPS = process.env.SPEECH_TIMING_DUMP_DIR;
+const dumpOf = (name: string) => (DUMPS ? join(DUMPS, `${name}.json`) : undefined);
 
 /** How far the MP3 may play from where the WAV plays, ms. */
 const FORMAT_TOLERANCE_MS = 10;
@@ -87,10 +90,10 @@ function encodeAsTheCacheDoes(): { wav: Clip; cached: Clip } {
 
 /** Played through the recorder until at least three marks came out (WebKit's
  *  route into the audio graph sometimes starts late and drops some). */
-async function routed(browser: Browser, clip: Clip): Promise<Timing> {
+async function routed(browser: Browser, clip: Clip, name: string): Promise<Timing> {
   let timing: Timing | null = null;
   for (let attempt = 0; attempt < 3; attempt++) {
-    timing = await measure(browser, clip.b64, clip.mime, true);
+    timing = await measure(browser, clip.b64, clip.mime, true, dumpOf(`${name}-routed-${attempt}`));
     if (timing.found.length >= 3) return timing;
   }
   throw new Error(`only marks ${timing!.found.join(", ")} came out of ${clip.mime}`);
@@ -116,8 +119,8 @@ describe.each(BROWSERS)("cached speech in %s", (name) => {
   });
 
   it("decodes with every mark on its own sample, and plays where the WAV does", async () => {
-    const wav = await routed(browser, clips.wav);
-    const mp3 = await routed(browser, clips.cached);
+    const wav = await routed(browser, clips.wav, `${name}-wav`);
+    const mp3 = await routed(browser, clips.cached, `${name}-mp3`);
     const format = median(mp3.engine) - median(wav.engine);
     console.log(
       `${name}: decodeAudioData, MP3 marks minus source (ms) ${summary(mp3.decoded)}\n` +
@@ -133,8 +136,11 @@ describe.each(BROWSERS)("cached speech in %s", (name) => {
   }, 120_000);
 
   it("starts the mouth with the voice, not with `playing`", async () => {
-    for (const clip of [clips.wav, clips.cached]) {
-      const { startup } = await measure(browser, clip.b64, clip.mime, false);
+    for (const [label, clip] of [
+      ["wav", clips.wav],
+      ["mp3", clips.cached],
+    ] as const) {
+      const { startup } = await measure(browser, clip.b64, clip.mime, false, dumpOf(`${name}-${label}-native`));
       console.log(
         `${name}: ${clip.mime} played natively: position moved ${startup.playingToMoving.toFixed(0)} ms after \`playing\`; ` +
           `clock at most ${startup.maxLead.toFixed(0)} ms ahead of the voice, ${startup.leadOver20Ms.toFixed(0)} ms of it by over 20`

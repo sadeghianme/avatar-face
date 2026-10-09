@@ -275,11 +275,28 @@ jobs:
       - name: Install the browsers' system libraries
         if: steps.browsers.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium firefox webkit
+      # The runner has no sound card: without a sound server Firefox's audio
+      # never starts and WebKit's runs on no device's clock. A null sink plays
+      # in real time to nowhere.
+      - name: A sound server with a null sink
+        run: |
+          sudo apt-get install -y --no-install-recommends pulseaudio
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=nowhere
+          pactl set-default-sink nowhere
       - name: Browser tests
         env:
           LIVEFACE_PYTHON: python
           SPEECH_TIMING_BROWSERS: chromium,firefox,webkit
+          SPEECH_TIMING_DUMP_DIR: dist/speech-timing
         run: npm run test:browser
+      - name: Upload what the speech timing pages recorded
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: speech-timing
+          path: embed/dist/speech-timing/
+          if-no-files-found: ignore
       - name: Upload the frames that failed the browser goldens
         if: failure()
         uses: actions/upload-artifact@v6

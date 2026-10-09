@@ -7,6 +7,8 @@
  * the widget plays it, and the bursts are found again in what the browser
  * decoded.
  */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { chromium, firefox, webkit, type Browser } from "playwright";
 
 import { bundle, serve } from "./browser";
@@ -188,9 +190,16 @@ const ORIGIN = "https://speech.test";
 /**
  * Play `b64` (base64, as the API sends it) of type `mime` in `browser`.
  * `routed`: through the recorder (the marks are found in what was played);
- * else natively, as the widget plays it, for the clocks alone.
+ * else natively, as the widget plays it, for the clocks alone. `dump`: a
+ * file to keep what the page recorded in, to look at a failure.
  */
-export async function measure(browser: Browser, b64: string, mime: string, routed: boolean): Promise<Timing> {
+export async function measure(
+  browser: Browser,
+  b64: string,
+  mime: string,
+  routed: boolean,
+  dump?: string
+): Promise<Timing> {
   const script = await bundle("browser-tests/speech-timing-page.ts");
   const page = await browser.newPage();
   const errors: string[] = [];
@@ -216,6 +225,10 @@ export async function measure(browser: Browser, b64: string, mime: string, route
     ] as const);
     await page.click("#play");
     const run: PlaybackRun = await page.evaluate(() => window.played!);
+    if (dump) {
+      mkdirSync(dirname(dump), { recursive: true });
+      writeFileSync(dump, JSON.stringify({ decodedRate: decoded.rate, ...run }));
+    }
     if (errors.length) throw new Error(errors.join("\n"));
     if (!run.ended) throw new Error("the recording never ended");
     return analyse(decoded, run);
@@ -261,8 +274,15 @@ function startup(run: PlaybackRun): Timing["startup"] {
 function analyse(decoded: DecodedRun, run: PlaybackRun): Timing {
   // Context time -> perf time, as the graph renders: ctx.currentTime is the
   // end of what it has rendered when it is read.
-  const rendered = median(run.samples.map((s) => s.perf - s.ctx));
-  const found = marks(floats(run.audio), run.rate);
+  const rendered = median(run.samples.map((s) => (s.ctx === null ? Number.NaN : s.perf - s.ctx)));
+  const all = run.audio ? marks(floats(run.audio), run.rate) : [];
+  // Each mark's place in the capture against its place in the source: the
+  // same for every mark of one capture, but where the route into the graph
+  // starts with a glitch (a pair cut short, so taken for another mark), the
+  // odd one out.
+  const lag = ({ k, at }: { k: number; at: number }) => ((run.firstFrame + at) / run.rate) * 1000 - MARKS_MS[k];
+  const typical = median(all.map(lag));
+  const found = all.filter((mark) => Math.abs(lag(mark) - typical) <= 50);
   const engine: number[] = [];
   const element: number[] = [];
   for (const { k, at } of found) {
