@@ -12,9 +12,12 @@ dependencies = [
     "alembic>=1.13",
     "pydantic[email]>=2.7",
     "pydantic-settings>=2.3",
-    "passlib>=1.7.4",
-    "bcrypt==4.0.1",
-    "python-jose[cryptography]>=3.3",
+    # Passwords: bcrypt itself (app.core.security), which verifies the
+    # hashes passlib wrote; the exact version is constraints.txt's.
+    "bcrypt>=4.0.1",
+    # The dashboard's access tokens, and Google's service-account assertion
+    # (RS256, through cryptography below).
+    "PyJWT>=2.10",
     "python-multipart>=0.0.9",
     "aioboto3>=13.0",
     "httpx>=0.27",

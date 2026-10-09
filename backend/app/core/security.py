@@ -1,30 +1,71 @@
-"""Password hashing and JWT issuing/validation."""
+"""Password hashing and JWT issuing/validation.
+
+Passwords are bcrypt, through the `bcrypt` package itself. Every hash in the
+database was written by passlib's bcrypt handler, which is the same
+algorithm in the same format (`$2b$12$…`): `bcrypt.checkpw` verifies them
+as they are, and new ones are written exactly as passlib wrote them (cost
+12, `$2b$`, the password's UTF-8 cut at bcrypt's 72 bytes). So nothing is
+migrated and nobody resets a password. tests/test_security.py checks hashes
+passlib made.
+
+Tokens are PyJWT's, in the same HS256 form python-jose wrote.
+"""
 
 from __future__ import annotations
 
 import asyncio
+import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
+import jwt
 
 from app.core.config import get_settings
 from app.core.errors import Auth401
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# What passlib used for every hash already stored, and so what new ones use:
+# the cost (2^12 rounds, about a quarter of a second) and the variant.
+BCRYPT_ROUNDS = 12
+BCRYPT_PREFIX = b"2b"
+# bcrypt reads the first 72 bytes of the password and no more. passlib cut
+# longer ones there silently, so the cut stays: a long password set before
+# this change must still verify. (bcrypt 5 refuses them instead of cutting.)
+BCRYPT_MAX_BYTES = 72
+
+# What a bcrypt hash looks like: variant, cost, 22 characters of salt and 31
+# of checksum. Checked before bcrypt sees one: the library panics (an
+# exception that is not an Exception) on a truncated hash.
+_BCRYPT_HASH = re.compile(r"\$2[abxy]\$\d\d\$[./A-Za-z0-9]{53}")
 
 TokenType = Literal["access", "refresh"]
 
 
+def _secret(plain: str) -> bytes:
+    return plain.encode("utf-8")[:BCRYPT_MAX_BYTES]
+
+
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    """A bcrypt hash of `plain`, as passlib wrote them. ValueError on a NUL
+    byte, which bcrypt would read as the end of the password (passlib
+    refused those too; the request schemas refuse them first)."""
+    if "\x00" in plain:
+        raise ValueError("a password cannot contain a NUL byte")
+    salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS, prefix=BCRYPT_PREFIX)
+    return bcrypt.hashpw(_secret(plain), salt).decode("ascii")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    """Whether `plain` is the password `hashed` was made from. False, never an
+    exception, for a hash that is not bcrypt and for a NUL byte."""
+    if "\x00" in plain or not _BCRYPT_HASH.fullmatch(hashed):
+        return False
+    try:
+        return bcrypt.checkpw(_secret(plain), hashed.encode("ascii"))
+    except ValueError:
+        return False
 
 
 # bcrypt is slow on purpose (about a quarter of a second at cost 12), and
@@ -88,7 +129,7 @@ def decode_token(token: str, expected_type: TokenType) -> str:
     settings = get_settings()
     try:
         claims = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-    except JWTError as exc:
+    except jwt.PyJWTError as exc:
         raise Auth401("Invalid or expired token", code="invalid_token") from exc
     if claims.get("type") != expected_type:
         raise Auth401("Wrong token type", code="invalid_token")
