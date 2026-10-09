@@ -179,8 +179,8 @@ jobs:
           printf '\0asm\1\0\0\0' > ../embed/dist/basis_transcoder.wasm
           cp ../embed/assets/mouth-teeth.webp ../embed/assets/mouth-teeth.rig.json ../embed/dist/
       - name: Tests (half ${{ matrix.shard }} of 2)
-        # With coverage ([tool.coverage] in pyproject.toml): every xdist
-        # worker measures, pytest-cov merges them into this half's data file.
+        # With coverage (backend/.coveragerc): every xdist worker measures,
+        # pytest-cov merges them into this half's data file.
         # No floor here: half the suite covers less than the whole, and
         # backend-coverage holds the two halves combined to it.
         env:
@@ -198,8 +198,8 @@ jobs:
 
   backend-coverage:
     # The two halves' coverage data combined, held to the floor
-    # (fail_under in pyproject.toml, docs/process.md "Coverage"). Needs only
-    # coverage itself, at the version pyproject.toml pins: it reads the
+    # (fail_under in backend/.coveragerc, docs/process.md "Coverage"). Needs
+    # only coverage itself, at the version pyproject.toml pins: it reads the
     # sources, it imports nothing.
     needs: backend-tests
     runs-on: ubuntu-latest
