@@ -13,7 +13,7 @@ pronunciation. Three layers, in order of precedence:
   2. Suffix peeling, which is where naive rule sets fail: "hoping" and
      "hopping" differ only in a doubled consonant that was never pronounced,
      so the stem spelling has to be RESTORED before the rules run (see
-     `_restore`). The suffix itself is then realised by voicing —
+     `engine._restore`). The suffix itself is then realised by voicing —
      -ed is /T/ in "asked", /D/ in "played", /IH D/ in "wanted".
   3. A context-sensitive rule table, longest-match-first, where each rule may
      require a regex on the text to its left and right. That context is what
@@ -33,27 +33,19 @@ The package, by layer:
              2), and the public conversions
     stress   which vowels are stressed, for derived pronunciations
 
-Everything is re-exported here, so `g2p.X` keeps working.
+The public names are re-exported here, so `g2p.X` keeps working; what the
+modules share among themselves (lexicon.VOICED_CONS, rules.RULES, …) is
+imported from its module. Nothing private is re-exported.
 """
 
 from __future__ import annotations
 
 from app.services.tts.g2p.engine import (
-    _TOKEN,
-    _VOW,
-    _engine,
-    _has_vowel,
-    _peel,
-    _restore,
-    _spans,
-    _suffix,
     text_to_phonemes,
     word_to_pairs,
     word_to_phonemes,
 )
 from app.services.tts.g2p.lexicon import (
-    _SIBILANTS,
-    _VOICED_CONS,
     CONSONANT_PHONEMES,
     LEXICON,
     LEXICON_RAW,
@@ -61,57 +53,29 @@ from app.services.tts.g2p.lexicon import (
     VOWEL_PHONEMES,
 )
 from app.services.tts.g2p.rules import (
-    _R,
-    _RULES,
     CE,
     CEO,
     LSUF,
     MAGIC,
     Out,
     Rule,
-    _s_end,
 )
 from app.services.tts.g2p.stress import (
-    _ALWAYS_REDUCED,
-    _NEUTRAL_SUFFIXES,
-    _STRESS_PULLING_SUFFIXES,
-    _UNSTRESSED_PREFIXES,
-    _count_orthographic_syllables,
-    _primary_vowel_index,
     word_to_phonemes_stressed,
 )
 
 __all__ = [
-    "_ALWAYS_REDUCED",
     "CE",
     "CEO",
     "CONSONANT_PHONEMES",
-    "_count_orthographic_syllables",
-    "_engine",
-    "_has_vowel",
     "LEXICON",
     "LEXICON_RAW",
     "LSUF",
     "MAGIC",
-    "_NEUTRAL_SUFFIXES",
     "Out",
-    "_peel",
     "PHONEMES",
-    "_primary_vowel_index",
-    "_R",
-    "_restore",
     "Rule",
-    "_RULES",
-    "_s_end",
-    "_SIBILANTS",
-    "_spans",
-    "_STRESS_PULLING_SUFFIXES",
-    "_suffix",
     "text_to_phonemes",
-    "_TOKEN",
-    "_UNSTRESSED_PREFIXES",
-    "_VOICED_CONS",
-    "_VOW",
     "VOWEL_PHONEMES",
     "word_to_pairs",
     "word_to_phonemes",
