@@ -257,10 +257,10 @@ def _failed_teeth(reason: dict | None) -> dict:
 def _fresh_jobs():
     """The job runner and the panel's ended jobs are this process's."""
     runner.reset()
-    panel._ended.clear()
+    panel.ended.clear()
     yield
     runner.reset()
-    panel._ended.clear()
+    panel.ended.clear()
 
 
 # --- CallGuard: who may send ------------------------------------------------------------
@@ -322,7 +322,7 @@ async def test_calls_in_flight_count_against_the_limit_so_none_pass_its_last_uni
     release.set()
     results = await asyncio.gather(*tasks, return_exceptions=True)
     assert [r.image for r in results[:2]] == [b"png", b"png"]
-    assert isinstance(results[2], calls._Stopped) and results[2].code == "image_limit_reached"
+    assert isinstance(results[2], calls.CallsStopped) and results[2].code == "image_limit_reached"
     assert gate.incoming == [1, 2, 3]
     assert guard.sent == 2 and guard.metered == 2
     assert gate.rows == [(ORG, "gemini", calls.SHAPES_CALL)] * 2
@@ -343,7 +343,7 @@ async def test_a_call_stopped_at_the_consent_holds_no_place_in_flight(monkeypatc
             raise RuntimeError("database is locked")
 
     guard = calls.CallGuard(ORG, on_send)
-    with pytest.raises(calls._Stopped) as stopped:
+    with pytest.raises(calls.CallsStopped) as stopped:
         await guard("p", b"x", "image/jpeg")
     assert (stopped.value.code, stopped.value.detail) == calls.CONSENT_NOT_RECORDED
     assert isinstance(stopped.value.__cause__, RuntimeError)
@@ -480,10 +480,10 @@ def test_a_kit_with_its_teeth_photo_or_not_asked_for_one_gives_no_reason():
 
 
 def test_what_stopped_the_teeth_request_is_passed_on_as_its_own_note():
-    for code in sorted(records._TEETH_NOTE_CODES):
+    for code in sorted(records.TEETH_NOTE_CODES):
         reason = {"code": code, "detail": f"why {code}"}
         assert records.teeth_reason(_result(teeth_report=_failed_teeth(reason))) == reason, code
-    assert calls.CONSENT_NOT_RECORDED[0] in records._TEETH_NOTE_CODES
+    assert calls.CONSENT_NOT_RECORDED[0] in records.TEETH_NOTE_CODES
 
 
 def test_teeth_the_embed_would_not_draw_are_unclear():
@@ -1068,9 +1068,9 @@ async def test_follow_rig_moves_the_kit_only_for_another_rig(monkeypatch):
 
 def test_only_a_ready_photo_of_a_person_with_its_picture_takes_a_kit():
     with pytest.raises(NotFound404) as missing:
-        panel._require_person(None)
+        panel.require_person(None)
     assert missing.value.code == "avatar_not_found"
-    assert panel._require_person(_avatar()) is None
+    assert panel.require_person(_avatar()) is None
 
 
 @pytest.mark.parametrize(
@@ -1092,7 +1092,7 @@ def test_only_a_ready_photo_of_a_person_with_its_picture_takes_a_kit():
 )
 def test_the_person_a_kit_is_for_is_checked_in_order(changes, error, code):
     with pytest.raises(error) as refused:
-        panel._require_person(_avatar(**changes))
+        panel.require_person(_avatar(**changes))
     assert refused.value.code == code
 
 
@@ -1106,14 +1106,14 @@ def test_the_person_a_kit_is_for_is_checked_in_order(changes, error, code):
 )
 def test_storing_a_kit_needs_a_human_face_with_its_picture(changes, error, code):
     with pytest.raises(error) as refused:
-        panel._require_mouth(_avatar(**changes))
+        panel.require_mouth(_avatar(**changes))
     assert refused.value.code == code
 
 
 def test_storing_a_kit_does_not_ask_the_avatar_to_be_ready_again():
     """However long its calls took: a re-detection running meanwhile does
     not stop the kit, which follows the face."""
-    assert panel._require_mouth(_avatar(status=AvatarStatus.processing)) is None
+    assert panel.require_mouth(_avatar(status=AvatarStatus.processing)) is None
 
 
 async def test_a_kit_is_refused_while_anything_runs_for_the_avatar():
@@ -1126,13 +1126,13 @@ async def test_a_kit_is_refused_while_anything_runs_for_the_avatar():
 
 async def test_a_start_the_runner_refuses_keeps_how_the_last_kit_ended():
     ended = {"id": "old", "state": FAILED}
-    panel._ended[AVATAR_ID] = ended
+    panel.ended[AVATAR_ID] = ended
     runner.reserve(ORG, "other1", "creation_finish", 0)
     runner.reserve(ORG, "other2", "creation_finish", 0)
     with pytest.raises(RateLimit429) as refused:
         panel.start(_avatar(), "consent1")
     assert refused.value.code == "too_many_jobs"
-    assert panel._ended[AVATAR_ID] is ended and runner.active_for(AVATAR_ID) is None
+    assert panel.ended[AVATAR_ID] is ended and runner.active_for(AVATAR_ID) is None
 
 
 async def test_an_accepted_start_forgets_the_last_ending_and_runs_on_its_consent(monkeypatch):
@@ -1141,10 +1141,10 @@ async def test_an_accepted_start_forgets_the_last_ending_and_runs_on_its_consent
     async def run(job, params):
         ran.append((job.id, params))
 
-    monkeypatch.setattr(panel, "_run", run)
-    panel._ended[AVATAR_ID] = {"id": "old", "state": FAILED}
+    monkeypatch.setattr(panel, "run_job", run)
+    panel.ended[AVATAR_ID] = {"id": "old", "state": FAILED}
     started = panel.start(_avatar(), "consent1")
-    assert AVATAR_ID not in panel._ended
+    assert AVATAR_ID not in panel.ended
     assert started == {
         "id": started["id"],
         "step": panel.JOB_STEP,
@@ -1170,7 +1170,7 @@ def test_the_job_view_is_the_live_kit_job_else_how_the_last_one_ended():
     other = runner.reserve(ORG, AVATAR_ID, "creation_finish", 0)
     assert panel.job_view(AVATAR_ID) is None, "another step's job is not the kit's"
     ended = {"id": "old", "state": DONE}
-    panel._ended[AVATAR_ID] = ended
+    panel.ended[AVATAR_ID] = ended
     assert panel.job_view(AVATAR_ID) is ended
     runner.release(other)
     live = runner.reserve(ORG, AVATAR_ID, panel.JOB_STEP, 0)
@@ -1195,7 +1195,7 @@ def test_the_job_view_is_the_live_kit_job_else_how_the_last_one_ended():
     ],
 )
 def test_an_ended_job_says_whether_asking_again_could_help(state, error, retryable):
-    out = panel._job_out(_job(), state, error)
+    out = panel.job_out(_job(), state, error)
     assert out["retryable"] is retryable
     assert out["progress"] is None and out["error"] == error and out["state"] == state
 
@@ -1203,11 +1203,11 @@ def test_an_ended_job_says_whether_asking_again_could_help(state, error, retryab
 def test_only_the_most_recent_endings_are_kept(monkeypatch):
     monkeypatch.setattr(panel, "ENDED_KEPT", 2)
     for subject in ("a1", "a2", "a1", "a3"):
-        panel._end(
+        panel.record_end(
             Job(id=f"j-{subject}", org_id=ORG, subject_id=subject, step=panel.JOB_STEP, revision=0),
             DONE,
         )
-    assert list(panel._ended) == ["a1", "a3"], "a1 ended again, so a2 is the oldest"
+    assert list(panel.ended) == ["a1", "a3"], "a1 ended again, so a2 is the oldest"
 
 
 def test_a_kit_manifests_size_is_its_frames():
@@ -1224,15 +1224,15 @@ def _with_reasons(reasons: list) -> pk.KitResult:
 def test_a_kit_that_made_nothing_fails_with_what_stopped_it_first():
     rejected = {"code": "pose_not_reached", "detail": "Not the AA shape"}
     limit = {"code": "image_limit_reached", "detail": "Monthly image generation limit reached"}
-    failure = panel._nothing_made(_with_reasons([rejected, None, limit, rejected, None, None]))
+    failure = panel.nothing_made(_with_reasons([rejected, None, limit, rejected, None, None]))
     assert type(failure) is AppError and failure.status_code == 500
     assert failure.code == "image_limit_reached"
     assert failure.detail == f"None of the mouth shapes could be made: {limit['detail']}"
-    checks = panel._nothing_made(
+    checks = panel.nothing_made(
         _with_reasons([None, rejected, {"code": "registration", "detail": "r"}, None, None, None])
     )
     assert checks.code == "pose_not_reached"
-    silent = panel._nothing_made(_with_reasons([None] * 6))
+    silent = panel.nothing_made(_with_reasons([None] * 6))
     assert (silent.code, silent.detail) == (
         "provider_error",
         "None of the mouth shapes could be made: The AI service did not return an image",
@@ -1264,7 +1264,7 @@ class PanelWorld:
         self.answer = None
         self.made: list = []
         monkeypatch.setattr(panel, "get_session_factory", _sessions(self.db))
-        monkeypatch.setattr(panel, "_load_avatar", self._load)
+        monkeypatch.setattr(panel, "load_avatar", self._load)
         monkeypatch.setattr(panel, "ai_switched_off", self._switched_off)
         monkeypatch.setattr(imagegen, "configured", lambda: self.configured)
         monkeypatch.setattr(panel, "check_image_limit", self._check)
@@ -1311,7 +1311,7 @@ async def test_a_queued_kit_is_refused_as_things_are_when_it_runs(monkeypatch, s
     refused before anything is sent, and not offered again."""
     world = PanelWorld(monkeypatch)
     setup(world)
-    await panel._run(_job(), {"consent_id": "consent1"})
+    await panel.run_job(_job(), {"consent_id": "consent1"})
     ended = panel.job_view(AVATAR_ID)
     assert ended["state"] == FAILED and ended["error"]["code"] == code
     assert ended["retryable"] is False
@@ -1324,8 +1324,8 @@ async def test_the_job_boundary_says_how_the_kit_ended(monkeypatch):
     async def fine(job, params):
         return None
 
-    monkeypatch.setattr(panel, "_make_for_avatar", fine)
-    await panel._run(job, {"consent_id": "consent1"})
+    monkeypatch.setattr(panel, "make_for_avatar", fine)
+    await panel.run_job(job, {"consent_id": "consent1"})
     assert panel.job_view(AVATAR_ID) == {
         "id": "job1",
         "step": panel.JOB_STEP,
@@ -1339,8 +1339,8 @@ async def test_the_job_boundary_says_how_the_kit_ended(monkeypatch):
     async def crash(job, params):
         raise KeyError("points")
 
-    monkeypatch.setattr(panel, "_make_for_avatar", crash)
-    await panel._run(job, {"consent_id": "consent1"})
+    monkeypatch.setattr(panel, "make_for_avatar", crash)
+    await panel.run_job(job, {"consent_id": "consent1"})
     ended = panel.job_view(AVATAR_ID)
     assert ended["state"] == FAILED and ended["retryable"] is True
     assert ended["error"] == {"code": "job_failed", "detail": "Something went wrong; try again"}
@@ -1350,7 +1350,7 @@ async def test_a_kit_for_an_avatar_deleted_meanwhile_is_not_stored(monkeypatch):
     world = PanelWorld(monkeypatch)
     world.loads = [world.avatar, None]
     world.answer = _result()
-    await panel._make_for_avatar(_job(), {"consent_id": "consent1"})
+    await panel.make_for_avatar(_job(), {"consent_id": "consent1"})
     assert world.made[0][3]["teeth"] is True
     assert world.db.commits == 0 and len(world.storage.files) == 2
     assert world.avatar.mouth_config is None
@@ -1375,7 +1375,7 @@ async def test_a_face_re_marked_while_the_kit_was_made_gets_the_kit_moved_onto_i
 
     monkeypatch.setattr(pk, "rebase_manifest", rebase)
     job = _job()
-    await panel._make_for_avatar(job, {"consent_id": "consent1"})
+    await panel.make_for_avatar(job, {"consent_id": "consent1"})
     assert seen == [(moved, None, (400, 500))]
     config = _config(world.avatar)
     assert json.loads(world.storage.files[config["motion_key"]])["rebased"] is True
@@ -1400,7 +1400,7 @@ async def test_malformed_points_with_the_owners_teeth_fail_as_kit_unavailable(mo
     message = "base_points must be 478 finite (x, y) pixel positions"
     world.answer = ValueError(message)
     with pytest.raises(Conflict409) as refused:
-        await panel._make_for_avatar(_job(), {"consent_id": "consent1"})
+        await panel.make_for_avatar(_job(), {"consent_id": "consent1"})
     assert (refused.value.code, refused.value.detail) == ("kit_unavailable", message)
     assert world.made[0][3]["teeth"] is False
 
@@ -1417,7 +1417,7 @@ async def test_teeth_made_alone_that_fail_fail_the_job_with_their_own_reason(mon
     monkeypatch.setattr(mouth_photo, "make_teeth", make_teeth)
     job = _job()
     with pytest.raises(AppError) as failed:
-        await panel._make_for_avatar(job, {"consent_id": "consent1"})
+        await panel.make_for_avatar(job, {"consent_id": "consent1"})
     assert (failed.value.code, failed.value.detail) == (
         "safety_refused",
         "The AI declined to make the teeth",

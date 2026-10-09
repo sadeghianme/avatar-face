@@ -12,16 +12,16 @@ from app.services.mouth_kit.calls import (
     GENERATED,
     RETARGETED,
     SHAPE_COUNT,
-    _note,
-    _now,
     generated_count,
     kit_model,
+    note,
+    now,
 )
 
 # Why the kit's teeth request brought nothing, passed on as its own note
 # (the Mouth panel words each, as for the single "ee" photo's): what
 # stopped the calls, or what the AI answered.
-_TEETH_NOTE_CODES = frozenset(
+TEETH_NOTE_CODES = frozenset(
     {
         "safety_refused",
         "no_image",
@@ -50,10 +50,10 @@ def teeth_reason(result: performance_kit.KitResult) -> Note | None:
         return None
     reason = result.teeth_report.get("reason") or {}
     code = reason.get("code")
-    if code in _TEETH_NOTE_CODES:
-        return _note(code, reason["detail"])
+    if code in TEETH_NOTE_CODES:
+        return note(code, reason["detail"])
     if code in _UNCLEAR_CODES:
-        return _note(
+        return note(
             "mouth_teeth_unclear",
             "The AI's teeth photo shows too little of the upper teeth for the photographic "
             "mouth, so it was not used",
@@ -68,7 +68,7 @@ def teeth_reason(result: performance_kit.KitResult) -> Note | None:
     return rejected
 
 
-def _standard_teeth(reason: Note) -> Note:
+def standard_teeth(reason: Note) -> Note:
     """The teeth note for a mouth left with the standard teeth."""
     return {**reason, "detail": f"{reason['detail']}; this avatar uses standard teeth"}
 
@@ -101,7 +101,7 @@ def kit_record(
     return {
         "id": manifest["character"][len(performance_kit.CHARACTER_PREFIX) :],
         "state": "made",
-        "made_at": _now(),
+        "made_at": now(),
         "source": source,
         "recipe": manifest.get("kit"),
         "model": kit_model(result),

@@ -1343,7 +1343,7 @@ async def test_the_panels_kit_sends_nothing_before_its_consent_is_recorded(
 
     headers, org_id, url, consent_id = await _panel_person(client, f"panelhole{fails}")
     avatar_id = url.rsplit("/", 1)[1]
-    real = mouth_kit._load_avatar
+    real = mouth_kit.storing.load_avatar
     calls = {"n": 0}
 
     async def flaky(db, org, aid):
@@ -1353,7 +1353,7 @@ async def test_the_panels_kit_sends_nothing_before_its_consent_is_recorded(
             raise OperationalError("SELECT avatars", {}, Exception("database is locked"))
         return await real(db, org, aid)
 
-    monkeypatch.setattr(mouth_kit.panel, "_load_avatar", flaky)
+    monkeypatch.setattr(mouth_kit.panel, "load_avatar", flaky)
     recorded_before_sending: list[bool] = []
 
     async def sent_after_the_record():
