@@ -40,6 +40,8 @@ from app.services import imagegen, mouth_photo
 from app.services import performance_kit as pk
 from app.services.jobs import DONE, FAILED, QUEUED, Job, runner
 from app.services.mouth_kit import calls, panel, records, storing
+from app.services.performance_kit.answers import shape_reached, teeth_shown
+from app.services.performance_kit.kit import detect_base
 from app.services.storage import Storage
 
 ORG = "org1"
@@ -1609,7 +1611,7 @@ def test_a_base_face_with_no_width_has_no_manifest_frame():
     ],
 )
 def test_whether_an_answer_made_the_shape_it_was_asked_for(shape, opened, width, missed):
-    assert pk._shape_reached(shape, opened, width) == missed
+    assert shape_reached(shape, opened, width) == missed
 
 
 def _lips(gap: float, width: float) -> np.ndarray:
@@ -1620,13 +1622,13 @@ def _lips(gap: float, width: float) -> np.ndarray:
 
 
 def test_a_teeth_answer_must_part_its_lips_as_far_as_an_upload_must():
-    assert pk._teeth_shown(_lips(8.0, 100.0)) is None, "exactly the threshold passes"
-    assert pk._teeth_shown(_lips(5.0, 100.0)) == (
+    assert teeth_shown(_lips(8.0, 100.0)) is None, "exactly the threshold passes"
+    assert teeth_shown(_lips(5.0, 100.0)) == (
         "the lips parted 0.05 of their mouth width, too little to show the teeth (at least 0.08)"
     )
     # A mouth under a pixel wide is measured against one pixel, not divided by zero.
-    assert pk._teeth_shown(_lips(0.5, 0.0)) is None
-    assert pk._teeth_shown(_lips(0.05, 0.0)) is not None
+    assert teeth_shown(_lips(0.5, 0.0)) is None
+    assert teeth_shown(_lips(0.05, 0.0)) is not None
 
 
 def test_a_face_with_no_width_reads_as_turned_fully_away():
@@ -1671,6 +1673,6 @@ def test_a_base_detection_that_is_not_a_whole_face_is_not_used():
     base = np.random.default_rng(2).random((478, 2)) * 400
     image = Image.new("RGB", (8, 8))
     for detected in (None, np.zeros((468, 2)), np.full((478, 2), np.nan)):
-        assert pk._detect_base(lambda img, d=detected: d, image, base) is None
-    found = pk._detect_base(lambda img: base.tolist(), image, base)
+        assert detect_base(lambda img, d=detected: d, image, base) is None
+    found = detect_base(lambda img: base.tolist(), image, base)
     assert np.array_equal(found, base)

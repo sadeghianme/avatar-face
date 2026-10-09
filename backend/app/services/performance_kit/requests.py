@@ -46,13 +46,13 @@ class PoseRequest:
 
 
 @dataclass(frozen=True)
-class _Crop:
+class Crop:
     kind: str
     payload: bytes
     box: tuple[float, float, float, float]
 
 
-def _base_image(base_png: bytes) -> Image.Image:
+def load_base_image(base_png: bytes) -> Image.Image:
     """What the model and the detector are shown: a cut-out on the neutral
     grey (photo_adjust's own decoding, so a kit sees what AI adjust sees)."""
     return photo_adjust.decode_rgb(base_png)
@@ -82,7 +82,7 @@ def head_square(
     return x0 - (side - width) / 2, y0 - (side - height) / 2, side
 
 
-def _crop(image: Image.Image, points: np.ndarray, kind: str) -> _Crop | None:
+def crop_picture(image: Image.Image, points: np.ndarray, kind: str) -> Crop | None:
     """The picture sent for `kind`, reusing AI adjust's crops, both square.
     None when the head crop would be the whole photo (head_square)."""
     if kind == FACE_CROP:
@@ -90,7 +90,7 @@ def _crop(image: Image.Image, points: np.ndarray, kind: str) -> _Crop | None:
         payload = photo_adjust.encode_jpeg(
             photo_adjust.crop_face(image, (x0, y0, side)), photo_adjust.CROP_QUALITY
         )
-        return _Crop(kind, payload, (x0, y0, x0 + side, y0 + side))
+        return Crop(kind, payload, (x0, y0, x0 + side, y0 + side))
     square = head_square(image.size, points)
     if square is None:
         return None
@@ -99,7 +99,7 @@ def _crop(image: Image.Image, points: np.ndarray, kind: str) -> _Crop | None:
     # enlarged, at most the edge a source is sent at.
     edge = min(int(round(side)), photo_adjust.SOURCE_MAX_EDGE)
     crop = photo_adjust.crop_face(image, square, size=edge)
-    return _Crop(
+    return Crop(
         kind,
         photo_adjust.encode_jpeg(crop, imagegen.SOURCE_QUALITY),
         (x0, y0, x0 + side, y0 + side),
@@ -115,17 +115,17 @@ def prepare_pose_request(
     None only for a head crop that would be the whole photo. CPU work."""
     if shape not in POSE_PROMPTS and shape != TEETH:
         raise ValueError(f"unknown shape {shape!r}")
-    crop = _crop(_base_image(base_png), _checked_points(base_points), kind)
-    return None if crop is None else _request(shape, crop)
+    crop = crop_picture(load_base_image(base_png), checked_points(base_points), kind)
+    return None if crop is None else request_for(shape, crop)
 
 
-def _request(shape: str, crop: _Crop) -> PoseRequest:
+def request_for(shape: str, crop: Crop) -> PoseRequest:
     return PoseRequest(
         shape, crop.kind, request_prompt(shape), crop.payload, "image/jpeg", crop.box
     )
 
 
-def _checked_points(points) -> np.ndarray:
+def checked_points(points) -> np.ndarray:
     array = np.asarray(points, dtype=np.float64)
     if array.shape != (478, 2) or not np.isfinite(array).all():
         raise ValueError("base_points must be 478 finite (x, y) pixel positions")

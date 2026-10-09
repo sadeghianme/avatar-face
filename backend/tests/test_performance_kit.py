@@ -28,6 +28,9 @@ from PIL import Image, ImageDraw
 
 from app.services import imagegen, photo_adjust
 from app.services import performance_kit as pk
+from app.services.performance_kit.kit import Finished, finish
+from app.services.performance_kit.profile import profile_defaults
+from app.services.performance_kit.requests import load_base_image
 
 REPO = Path(__file__).resolve().parents[2]
 REFERENCE_DIR = REPO / "frontend/public/lab/reference"
@@ -417,7 +420,12 @@ def registered(scene: Scene, shape: str, alter=None, image_alter=None) -> pk.Pos
     scene.remember(answer, points)
     frame = pk.ManifestFrame.from_base(scene.base_points, BASE_SIZE, scene.reference)
     return pk.register_answer(
-        png(answer), request, pk._base_image(scene.base_png), scene.base_points, frame, scene.detect
+        png(answer),
+        request,
+        load_base_image(scene.base_png),
+        scene.base_points,
+        frame,
+        scene.detect,
     )
 
 
@@ -685,7 +693,7 @@ def test_a_teeth_answer_is_held_only_to_showing_the_teeth(scene):
 def test_no_face_a_broken_image_and_a_mirror_are_refused(scene):
     request = pk.prepare_pose_request(scene.base_png, scene.base_points, "aa")
     frame = pk.ManifestFrame.from_base(scene.base_points, BASE_SIZE, scene.reference)
-    base = pk._base_image(scene.base_png)
+    base = load_base_image(scene.base_png)
     unknown = png(Image.new("RGB", (1024, 1024), (1, 2, 3)))
     result = pk.register_answer(unknown, request, base, scene.base_points, frame, scene.detect)
     assert result.reason["code"] == "no_face_in_result"
@@ -884,7 +892,7 @@ def test_a_teeth_answer_like_the_references_ee_is_not_handed_on(reference, refer
         answer_size=image.size,
         answer_image=image,
     )
-    finished = pk._finish(
+    finished = finish(
         reference.rest * REFERENCE_SIZE,
         image.size,
         {"ee": speech, pk.TEETH: teeth},
@@ -906,7 +914,7 @@ def test_without_a_teeth_photo_the_standard_teeth_are_seated_as_the_references(
     fit = reference_fit(reference, reference_manifest, with_teeth=False)
     assert fit.profile["teethScale"] == pk.REFERENCE_TEETH_SCALE == 1.0
     assert fit.profile["teethY"] == pk.REFERENCE_TEETH_Y == 0.016
-    assert fit.profile == pk.for_standard_teeth(pk._profile_defaults()[0])
+    assert fit.profile == pk.for_standard_teeth(profile_defaults()[0])
     assert [r["code"] for r in fit.reasons] == ["no_teeth_photo"]
     why = {"code": "safety_refused", "detail": "declined"}
     told = pk.fit_profile(reference.rest * REFERENCE_SIZE, None, why)
@@ -1112,8 +1120,8 @@ def displacement(manifest: dict, shape: str) -> np.ndarray:
     return (poses[shape] - poses["rest"]) / manifest["mouth_width"]
 
 
-def fitted_kit(scene: Scene, amplitude: float = 1.25) -> pk._Finished:
-    """_finish for a face that speaks like the Reference, but whose model
+def fitted_kit(scene: Scene, amplitude: float = 1.25) -> Finished:
+    """finish for a face that speaks like the Reference, but whose model
     moved every shape it made (AA, OO, F/V) `amplitude` times as far, and
     whose EE, OH and TH were not made (retargeted)."""
     registrations = {}
@@ -1122,9 +1130,7 @@ def fitted_kit(scene: Scene, amplitude: float = 1.25) -> pk._Finished:
         registrations[shape] = pk.PoseRegistration(
             shape, targets=targets, rms=0.0015, answer_points=targets, answer_size=BASE_SIZE
         )
-    return pk._finish(
-        scene.base_points, BASE_SIZE, registrations, scene.reference, "fitted-fixture"
-    )
+    return finish(scene.base_points, BASE_SIZE, registrations, scene.reference, "fitted-fixture")
 
 
 @pytest.mark.parametrize("amplitude", [0.75, 1.0, 1.25])
@@ -1165,7 +1171,7 @@ def test_a_shape_too_open_for_the_kits_own_ah_is_refused(scene):
         registrations[shape] = pk.PoseRegistration(
             shape, targets=targets, rms=0.0015, answer_points=targets, answer_size=BASE_SIZE
         )
-    finished = pk._finish(scene.base_points, BASE_SIZE, registrations, scene.reference, "t")
+    finished = finish(scene.base_points, BASE_SIZE, registrations, scene.reference, "t")
     assert finished.refused["th"]["code"] == "pose_not_reached"
     assert "at the kit's size" in finished.refused["th"]["detail"]
     provenance = {p["id"]: p["provenance"] for p in finished.manifest["poses"]}
@@ -1185,7 +1191,7 @@ def test_lips_parted_at_rest_do_not_inflate_the_kits_size(reference):
         registration = pk.PoseRegistration(
             "aa", targets=aa, rms=0.001, answer_points=aa, answer_size=BASE_SIZE
         )
-        finished = pk._finish(rest, BASE_SIZE, {"aa": registration}, reference, "parted")
+        finished = finish(rest, BASE_SIZE, {"aa": registration}, reference, "parted")
         assert finished.fit.measurements["amplitude"] == pytest.approx(1.0, abs=2e-3), gap
         assert finished.manifest["jaw_range"] == 0.85
 
@@ -1302,7 +1308,7 @@ def corrected(reference, correct) -> tuple[Scene, np.ndarray]:
     detector's would. Returns the scene and the detector's base view."""
     scene = Scene(reference)
     detected = scene.base_points.copy()
-    scene.remember(pk._base_image(scene.base_png), detected)
+    scene.remember(load_base_image(scene.base_png), detected)
     scene.base_points = correct(detected.copy())
     return scene, detected
 
@@ -1391,7 +1397,7 @@ async def test_a_base_detection_of_another_face_is_not_used(reference):
     else in the photo): the confirmed points stand in for it."""
     scene, _ = corrected(reference, lambda points: points)
     face = float(np.linalg.norm(scene.base_points[pk.FACE_RIGHT] - scene.base_points[pk.FACE_LEFT]))
-    scene.remember(pk._base_image(scene.base_png), scene.base_points + [0.3 * face, 0.0])
+    scene.remember(load_base_image(scene.base_png), scene.base_points + [0.3 * face, 0.0])
     result = await kit(scene, FakeProvider(scene))
     assert result.base_detected is False
     assert all(r["status"] == "ok" for r in result.report.values())
@@ -1615,7 +1621,12 @@ def test_a_pixel_or_two_of_rounding_is_not_a_reframe(scene):
     scene.remember(answer, points)
     frame = pk.ManifestFrame.from_base(scene.base_points, BASE_SIZE, scene.reference)
     result = pk.register_answer(
-        png(answer), request, pk._base_image(scene.base_png), scene.base_points, frame, scene.detect
+        png(answer),
+        request,
+        load_base_image(scene.base_png),
+        scene.base_points,
+        frame,
+        scene.detect,
     )
     assert result.ok, result.reason
     assert np.allclose(result.targets, scene.truth["ee"], atol=1e-6)

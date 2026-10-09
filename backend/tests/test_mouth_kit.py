@@ -30,6 +30,7 @@ from app.models import Avatar, Organization
 from app.services import face_template, imagegen, mouth_kit
 from app.services import performance_kit as pk
 from app.services.jobs import Job, runner
+from app.services.performance_kit.requests import load_base_image
 from app.services.storage import get_storage
 from app.services.usage import IMAGE_KIND
 from tests.test_creation_ai import (
@@ -70,7 +71,7 @@ class FinishScene(Scene):
     def __init__(self, reference: pk.ReferenceMotion, base_png: bytes, base_points):
         self.reference = reference
         self.base_png = base_png
-        self.base_image = pk._base_image(base_png)
+        self.base_image = load_base_image(base_png)
         self.base_points = np.asarray(base_points, dtype=np.float64)
         self.truth = {s: isotropic_pose(s, self.base_points, reference) for s in pk.SHAPES}
         self.truth[pk.TEETH] = self.truth["ee"]
@@ -475,7 +476,7 @@ async def test_a_kit_that_breaks_never_fails_the_finish(client, faces, world, mo
     def broken(*args, **kwargs):
         raise RuntimeError("the fit broke")
 
-    monkeypatch.setattr(pk.kit, "_finish", broken)
+    monkeypatch.setattr(pk.kit, "finish", broken)
     headers, org_id = await _org(client, "broken")
     await ai_consent(client, headers, org_id)
     avatar_id, _, _ = await _finished(client, headers, org_id)
@@ -1452,7 +1453,7 @@ async def test_step_5_is_told_when_the_mouth_ended_standard(client, faces, world
     def broken(*args, **kwargs):
         raise RuntimeError("the fit broke")
 
-    monkeypatch.setattr(pk.kit, "_finish", broken)
+    monkeypatch.setattr(pk.kit, "finish", broken)
     labels.clear()
     await _finished(client, headers, org_id)
     assert labels[-1] == "publishing with the standard mouth"
