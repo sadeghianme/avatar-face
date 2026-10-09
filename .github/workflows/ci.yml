@@ -471,7 +471,9 @@ jobs:
     # they are started behind a Caddy stand-in and must report this commit on
     # /api/health and /version.json, and every page must load in headless
     # Chrome with zero Content-Security-Policy violations, the Simulator's
-    # widget and the share page's speech included (deploy/smoke/).
+    # widget and the share page's speech included; then an owner makes an
+    # avatar through the whole wizard, hears it speak, shares it and
+    # deletes it, in the same Chrome (deploy/smoke/).
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -507,9 +509,36 @@ jobs:
           curl -sf http://127.0.0.1:7090/version.json | grep -F '"version":"${{ github.sha }}"'
       - name: Every page, zero CSP violations
         run: node deploy/smoke/web-sweep.mjs http://127.0.0.1:7090
+      - name: Install the wizard test's driver
+        # playwright-core alone (deploy/smoke/package-lock.json): it drives
+        # the runner's own Chrome, as the sweep does, so nothing is downloaded.
+        run: npm ci --prefix deploy/smoke
+      - name: The avatar wizard, end to end
+        # A fresh account through the register form, the four steps on the
+        # path without AI (no AI keys here), the avatar's page speaking in
+        # Kokoro, its public link played signed out, then deleted; no console
+        # error and no CSP violation all along (deploy/smoke/wizard-e2e.mjs).
+        env:
+          WIZARD_E2E_ARTIFACTS: ${{ runner.temp }}/wizard-e2e
+        run: node deploy/smoke/wizard-e2e.mjs http://127.0.0.1:7090
       - name: Container logs
         if: failure()
         run: |
           docker logs api 2>&1 | tail -100
           docker logs web 2>&1 | tail -50
           cat proxy.log
+      - name: The API's whole log, beside the wizard test's files
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/wizard-e2e"
+          docker logs api > "$RUNNER_TEMP/wizard-e2e/api.log" 2>&1 || true
+      - name: Upload the wizard test's screenshots, traces and logs
+        # A screenshot per step and of every page open when it failed, a
+        # Playwright trace per visitor (npx playwright-core show-trace), the
+        # console and the network log.
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wizard-e2e
+          path: ${{ runner.temp }}/wizard-e2e/
+          if-no-files-found: ignore
