@@ -53,7 +53,8 @@
  *   engine/paint-features.ts       what is painted over the mesh:
  *   engine/paint-eyes.ts             gaze, lashes, and
  *   engine/blink-lid.ts                the painted lids
- *   engine/paint-mouth.ts            which mouth paints the mouth:
+ *   engine/paint-mouth.ts            which mouth paints the mouth, where:
+ *   engine/mouth-pose.ts               the mouth's frame while the head turns in depth
  *   engine/paint-classic-mouth.ts      the drawn mouth and its teeth, in
  *   engine/mouth-aperture.ts           the aperture the lips part to
  *   engine/character-mouth.ts          a character's or an animal's mouth, and
@@ -183,6 +184,7 @@ export class AvatarEngine {
       classicMouth: this.classicMouth,
       viseme: this.viseme,
       debugRing: this.debugMesh ? this.innerRing : null,
+      posed: this.placement.posedMouth(this.picture.mesh.basePoints),
     });
   private readonly viseme = () => this.animation.visemeNow(performance.now());
 
