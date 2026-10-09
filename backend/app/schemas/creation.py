@@ -341,7 +341,12 @@ class CreationOut(BaseModel):
 
 class PreviewRigOut(BaseModel):
     rig: dict
+    # What refuses the fit: Finish is refused (422 fit_invalid) while any is.
     reasons: list[FitReason] = Field(default_factory=list)
+    # What the fit smoothed on the way ("folds_smoothed", with a count):
+    # thin triangles between the marks that would have folded over. Not a
+    # refusal and nothing to act on; the rig is the smoothed one.
+    notes: list[FitReason] = Field(default_factory=list)
 
 
 class FinishWarning(BaseModel):

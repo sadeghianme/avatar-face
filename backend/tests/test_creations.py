@@ -10,6 +10,7 @@ act while a job is in flight.
 
 import asyncio
 import io
+import json
 from pathlib import Path
 
 import numpy as np
@@ -179,6 +180,8 @@ async def _avatar_row(avatar_id: str) -> Avatar | None:
     async with get_session_factory()() as db:
         return (await db.execute(select(Avatar).where(Avatar.id == avatar_id))).scalar_one_or_none()
 
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 # A framing that changes the frame without cutting anything important off.
 REFRAME = {"crop": {"x": 0.05, "y": 0.05, "w": 0.9, "h": 0.9}}
@@ -623,6 +626,90 @@ async def test_the_preview_is_the_rig_finish_would_build_and_saves_nothing(clien
     assert human_line.status_code == 422
     assert human_line.json()["code"] == "mouth_line_not_for_face_type"
     assert (await get_json(client, headers, base))["revision"] == revision
+
+
+def _detects(monkeypatch, points: np.ndarray, size: tuple[int, int]) -> None:
+    """MediaPipe finding `points` (landmarks in a `size` picture), scaled to
+    the picture it is given."""
+
+    def detect(image):
+        scale = np.array(image.size, dtype=np.float64) / np.array(size, dtype=np.float64)
+        found = np.asarray(points, dtype=np.float64) * scale
+        return landmarks.FaceLandmarks(points=found, z=np.zeros(len(found)))
+
+    monkeypatch.setattr(landmarks, "detect", detect)
+
+
+async def test_the_stuck_cartoon_opens_valid_previews_clean_and_publishes_in_one_click(
+    client, monkeypatch
+):
+    """The production dead end: a person on the Animation look, found by
+    MediaPipe, whose own marks the validator refused for one lip triangle
+    (tests/test_fit_folds). Now it opens valid, as found, and Publish
+    builds it on those very marks."""
+    case = json.loads((FIXTURES / "stuck_points_case.json").read_text())
+    _detects(monkeypatch, np.array(case["base"]), (1024, 1024))
+    headers, org_id = await _org(client, "stuck")
+    base, _ = await create_creation(
+        client, headers, org_id, data=portrait(1024, 1024), face_type="cartoon"
+    )
+    anchors = await detect_anchors(client, headers, base)
+    assert anchors["detected"] is True and anchors["source"] == "mediapipe"
+    assert anchors["marks"] == case["marks"]
+    assert anchors["validation"]["ok"] is True
+    assert anchors["validation"]["one_click"] is True
+
+    preview = await client.post(
+        f"{base}/preview-rig", json={"anchors_id": anchors["id"]}, headers=headers
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["reasons"] == [] and preview.json()["notes"] == []
+    # "Reset points" sends the marks as found: the same.
+    reset = await client.post(
+        f"{base}/preview-rig",
+        json={"anchors_id": anchors["id"], "marks": anchors["marks"]},
+        headers=headers,
+    )
+    assert reset.json()["reasons"] == []
+
+    response = await _finish(client, headers, base, anchors["id"])
+    assert response.status_code == 202, response.text
+    await runner.drain()
+    assert (await get_json(client, headers, base))["status"] == "finished"
+
+
+async def test_a_sliver_left_by_a_moved_point_is_smoothed_and_said(client, monkeypatch):
+    """An open mouth's corner moved 4 px folds one thin lip triangle: the
+    preview smooths it and says so in `notes`, nothing refuses it, and
+    Publish builds the smoothed rig."""
+    poses = np.load(FIXTURES / "reference_pose_detections.npz")
+    size = tuple(int(v) for v in poses["oh_size"])
+    _detects(monkeypatch, np.round(poses["oh_points"], 3), size)
+    headers, org_id = await _org(client, "smoother")
+    base, _ = await create_creation(
+        client, headers, org_id, data=portrait(*size), face_type="cartoon"
+    )
+    anchors = await detect_anchors(client, headers, base)
+    assert anchors["validation"]["ok"] is True
+    line = [dict(p) for p in anchors["marks"]["mouth_line"]]
+    line[0] = {"x": round(line[0]["x"] - 4, 2), "y": round(line[0]["y"] + 4, 2)}
+    moved = {"mouth_line": line}
+    preview = await client.post(
+        f"{base}/preview-rig", json={"anchors_id": anchors["id"], "marks": moved}, headers=headers
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["reasons"] == []
+    assert [(n["code"], n["count"]) for n in preview.json()["notes"]] == [("folds_smoothed", 1)]
+    rig = preview.json()["rig"]
+    assert rig["points"][61] == [line[0]["x"], line[0]["y"]]  # the mark stays where placed
+
+    response = await _finish(client, headers, base, anchors["id"], marks=moved)
+    assert response.status_code == 202, response.text
+    await runner.drain()
+    avatar_id = (await get_json(client, headers, base))["avatar_id"]
+    avatar = await get_json(client, headers, f"/orgs/{org_id}/avatars/{avatar_id}")
+    published = (await client.get(avatar["rig_url"])).json()
+    assert published["points"] == rig["points"]
 
 
 # --- jobs: admission, progress and races ------------------------------------------

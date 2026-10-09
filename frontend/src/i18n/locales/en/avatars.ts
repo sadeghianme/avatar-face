@@ -102,6 +102,7 @@ export const avatars = {
   fitEyesOrder:
     "The eye corners are out of order: each eye's left marker must be left of its right one, and the eye on the left left of the eye on the right.",
   fitMouthReversed: "The mouth's left corner is right of its right corner.",
+  fitMouthAboveEyes: "The mouth must be below the eyes.",
   fitOutsideHead: "The eyes and the mouth must be inside the head.",
   fitOutlineCrossed: "The head's outline crosses itself. Put its purple markers back in order around the face.",
   fitOutlineOrder:

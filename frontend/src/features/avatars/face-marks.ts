@@ -335,6 +335,7 @@ export const FIT_REASON_LABELS: Record<string, MessageKey> = {
   lids_inverted: "fitLidsInverted",
   eyes_out_of_order: "fitEyesOrder",
   mouth_reversed: "fitMouthReversed",
+  mouth_above_eyes: "fitMouthAboveEyes",
   outside_head: "fitOutsideHead",
   outline_crossed: "fitOutlineCrossed",
   outline_out_of_order: "fitOutlineOrder",

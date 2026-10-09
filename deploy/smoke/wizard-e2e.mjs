@@ -8,7 +8,8 @@
 // path, the one a server without AI keys offers: 1 Model (Human), 2 Photo (a
 // committed portrait, Realistic, the AI box left unticked, the statement
 // about the face ticked), 3 Prepare (the photo itself, cut out: "No AI was
-// used"), 4 Publish (the points found on the face, the talking preview's
+// used"), 4 Publish (the points found on the face; one dragged out of
+// place, refused, and put back with "Fix it for me"; the talking preview's
 // sample played, Publish), then the avatar's page:
 // the stage draws, a typed line is spoken in the image's Kokoro voice, the
 // public link is turned on and its page plays the line to a signed-out
@@ -468,6 +469,27 @@ try {
       head.top < Math.min(left.y, right.y) && Math.max(left.y, right.y) < mouth.y && mouth.y < head.bottom,
       "the head, the eyes and the mouth are not in a face's order"
     );
+    // Never a dead end: points dragged out of place are refused, the page
+    // says what to do, and one press puts them back where they were found,
+    // which publishes. The eye on the left's outer corner, moved with the
+    // keyboard (Shift: ten pixels a press) past the other eye, crosses the
+    // eyes.
+    const publishButton = page.getByRole("button", { name: "Publish", exact: true });
+    await page.getByRole("button", { name: "Eye on the left: left edge", exact: true }).focus();
+    for (let n = 0; n < 30; n++) await page.keyboard.press("Shift+ArrowRight");
+    const refusal = page.getByRole("alert").filter({ hasText: "These points would stretch the face:" });
+    await refusal.waitFor();
+    check(await publishButton.isDisabled(), "Publish is enabled on points out of place");
+    // The note beside Publish (a phone's copy sits under the picture, hidden here).
+    await page
+      .getByText("Move the points listed above back onto the face, or press “Fix it for me”.")
+      .filter({ visible: true })
+      .first()
+      .waitFor();
+    await refusal.getByRole("button", { name: "Fix it for me" }).click();
+    await refusal.waitFor({ state: "detached" });
+    await page.getByRole("button", { name: "Publish", exact: true, disabled: false }).waitFor();
+    await page.getByText("Face found automatically").first().waitFor();
     // "Press play to hear your avatar talk": the talking preview (the rig
     // Publish would build) says the sample in the server's voice. The
     // button is pressed while it speaks, and comes back when it is done.
@@ -488,7 +510,7 @@ try {
     await page
       .getByRole("button", { name: "Play a sample", exact: true, pressed: false })
       .waitFor({ timeout: LIMIT.speech });
-    await page.getByRole("button", { name: "Publish", exact: true }).click();
+    await publishButton.click();
     // "Publishing your avatar" while it builds (rig, standard teeth without
     // AI: often too brief to wait on), then the avatar's page, by itself.
     await page.waitForURL(/\/avatars\/[0-9a-f-]{32,36}$/, { timeout: LIMIT.publish });

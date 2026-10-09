@@ -3319,6 +3319,13 @@
       },
       "PreviewRigOut": {
         "properties": {
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/FitReason"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
           "reasons": {
             "items": {
               "$ref": "#/components/schemas/FitReason"
@@ -8551,7 +8558,7 @@
     },
     "/orgs/{org_id}/creations/{creation_id}/preview-rig": {
       "post": {
-        "description": "The rig finish would build from these marks, with the validator's\nreasons. Nothing is saved.\n\nComputed per request rather than as a job: a fit is milliseconds, the\nsame call the avatar rig-fit preview makes on every drag, and queueing it\nbehind someone's background removal would make the handles lag.",
+        "description": "The rig finish would build from these marks, with the validator's\nreasons (each refuses it) and notes (what was smoothed on the way: thin\ntriangles between the marks that would have folded; nothing to act\non). Nothing is saved.\n\nComputed per request rather than as a job: a fit is milliseconds, the\nsame call the avatar rig-fit preview makes on every drag, and queueing it\nbehind someone's background removal would make the handles lag.",
         "operationId": "preview_rig_orgs__org_id__creations__creation_id__preview_rig_post",
         "parameters": [
           {

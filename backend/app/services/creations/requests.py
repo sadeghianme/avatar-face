@@ -30,6 +30,7 @@ from app.schemas.creation import (
 )
 from app.services import consent, imagegen, photo_adjust, vision_points, wizard
 from app.services.ai_models import PROVIDER
+from app.services.anchor_fit import FitResult
 from app.services.creations.adjust import auto_adjust_of, source_photo_key
 from app.services.creations.detect import (
     anchors_are_current,
@@ -340,9 +341,9 @@ async def use_version(db: AsyncSession, creation: Creation, version: str) -> boo
 # --- Finishing ---------------------------------------------------------------------
 
 
-async def preview_rig(creation: Creation, body: PreviewRigRequest):
-    """(rig, problems): the rig finish would build from these marks. Nothing
-    is saved.
+async def preview_rig(creation: Creation, body: PreviewRigRequest) -> FitResult:
+    """The fit finish would build from these marks: its rig, what refuses
+    it, and what was smoothed. Nothing is saved.
 
     The fit (a Delaunay mesh and a thin-plate warp, several milliseconds on
     every drag) runs on a worker thread: off the loop, and not queued behind
@@ -412,7 +413,7 @@ async def start_finish(
             code="marks_required",
             extra={"missing": missing},
         )
-    _, problems = await asyncio.to_thread(fit_from_anchors, anchors, marks, face_type)
+    problems = (await asyncio.to_thread(fit_from_anchors, anchors, marks, face_type)).problems
     if problems:
         reasons = [FitReason(code=p.code, detail=p.detail, count=p.count) for p in problems]
         raise Validation422(
