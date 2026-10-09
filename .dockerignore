@@ -27,6 +27,8 @@
 **/.ruff_cache
 **/.mypy_cache
 **/*.tsbuildinfo
+# Coverage reports (`npm run test:coverage` and the like)
+**/coverage
 **/.DS_Store
 **/.env
 **/.env.*
