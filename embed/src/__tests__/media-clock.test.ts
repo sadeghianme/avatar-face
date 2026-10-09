@@ -26,7 +26,27 @@ describe("the media clock", () => {
     expect(clock.playing).toBe(false);
     media.paused = false;
     expect(clock.sync(1500)).toBe(0);
+    media.currentTime = 0.016;
     expect(clock.read(1516)).toBe(16);
+    expect(clock.read(1530)).toBe(30);
+  });
+
+  it("holds at zero after `playing` until the position moves", () => {
+    // Safari's media stack fires `playing` as play() starts the player, and
+    // the position (with the sound) follows up to a second later: measured
+    // in Playwright's WebKit, 16-1012 ms (browser-tests/speech-timing.test.ts).
+    // A clock that ran on from `playing` was 250 ms ahead of the voice, and
+    // then stood still while the voice caught up.
+    const media = new FakeAudio();
+    const clock = new MediaClock(media);
+    media.paused = false;
+    clock.sync(1000);
+    for (const now of [1016, 1100, 1180]) expect(clock.read(now)).toBe(0);
+    expect(clock.started).toBe(false);
+    media.currentTime = 0.004;
+    expect(clock.started).toBe(true);
+    expect(clock.read(1196)).toBe(4);
+    expect(clock.read(1212)).toBe(20);
   });
 
   it("says when the voice has started, and a pause does not unsay it", () => {
@@ -36,7 +56,11 @@ describe("the media clock", () => {
     media.paused = false;
     expect([clock.started, clock.playing, clock.paused]).toEqual([false, false, false]);
     clock.sync(0);
+    // `playing`, and the position not moving yet: still waiting.
+    expect([clock.started, clock.playing, clock.paused]).toEqual([false, false, false]);
+    media.currentTime = 0.01;
     expect([clock.started, clock.playing, clock.paused]).toEqual([true, true, false]);
+    clock.read(10);
     media.paused = true;
     expect([clock.started, clock.playing, clock.paused]).toEqual([true, false, true]);
   });
@@ -95,7 +119,11 @@ describe("the media clock", () => {
     media.currentTime = 0.5;
     media.paused = false;
     expect(clock.sync(6000)).toBe(500);
-    expect(clock.read(6100)).toBe(600);
+    // Standing at the new position until it moves from there.
+    expect(clock.read(6050)).toBe(500);
+    media.currentTime = 0.55;
+    expect(clock.read(6060)).toBe(550);
+    expect(clock.read(6100)).toBe(590);
   });
 });
 
@@ -275,6 +303,26 @@ describe("speech played by the engine", () => {
       expect(breath).not.toHaveBeenCalled();
       expect(blink).not.toHaveBeenCalled();
       expect(e.motion.gazeTarget).toEqual({ x: 0, y: 0 });
+      engine.destroy();
+    });
+
+    it("is not taken between an early `playing` and the voice (Safari)", () => {
+      const { engine, e, audio, breath, blink } = speak();
+      audio.fire("playing");
+      // The position stands at 0 for 400 ms after `playing`, as WebKit's does.
+      for (let elapsed = 0; elapsed < 400; elapsed += 1000 / 60) {
+        now += 1000 / 60;
+        e.tick(now);
+      }
+      expect(e.speech.cueTime(now)).toBe(0);
+      expect(e.speech.awaitingVoice()).toBe(true);
+      expect(breath).not.toHaveBeenCalled();
+      expect(blink).not.toHaveBeenCalled();
+      expect(e.motion.gazeTarget).toEqual({ x: 0, y: 0 });
+      run(e, audio, 300);
+      expect(e.speech.currentViseme(now)).toBe("oh");
+      expect(breath).not.toHaveBeenCalled();
+      expect(blink).not.toHaveBeenCalled();
       engine.destroy();
     });
 

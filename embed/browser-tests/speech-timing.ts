@@ -161,11 +161,12 @@ export interface Timing {
   /** The marks found in the capture, by their source ms. */
   found: number[];
   /** The start of the line, played natively: ms from the first `playing` to
-   *  the element's position first moving; and how far, at most, the
-   *  engine's clock ran ahead of where the voice was (the steady playback's
-   *  line through the element's positions, taken back to its start), and
-   *  for how long by more than 20 ms. */
-  startup: { playingToMoving: number; maxLead: number; leadOver20Ms: number };
+   *  the element's position first moving, and how far the engine's clock
+   *  read ahead of that position meanwhile; how far, at most, the clock ran
+   *  ahead of where the voice was (the steady playback's line through the
+   *  element's positions, taken back to its start), and for how long by
+   *  more than 20 ms. */
+  startup: { playingToMoving: number; aheadBeforeMoving: number; maxLead: number; leadOver20Ms: number };
   rate: number;
 }
 
@@ -264,8 +265,10 @@ function startup(run: PlaybackRun): Timing["startup"] {
     maxLead = Math.max(maxLead, lead);
     if (lead > 20 && i + 1 < early.length) over += early[i + 1].perf - s.perf;
   });
+  const before = moving ? run.samples.filter((s) => s.perf < moving.perf) : run.samples;
   return {
     playingToMoving: moving && run.playingAt !== null ? moving.perf - run.playingAt : Number.NaN,
+    aheadBeforeMoving: Math.max(0, ...before.map((s) => s.engine - s.element)),
     maxLead,
     leadOver20Ms: over,
   };

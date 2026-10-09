@@ -34,9 +34,9 @@ import {
  *   mark comes out must be where it reads for the WAV (the route through
  *   the audio graph is the same for both, so the difference is the
  *   format's), and near the mark's own time;
- * - at the start of a line, played natively, the clock must not run ahead
- *   of the voice (media-clock.ts: some browsers fire `playing` well before
- *   the sound).
+ * - at the start of a line, played natively, the clock must stand at 0
+ *   until the element's position moves (media-clock.ts: browsers fire
+ *   `playing` up to seconds before), and never run far ahead of the voice.
  *
  * Every number is printed. SPEECH_TIMING_BROWSERS (default chromium) names
  * the browsers; CI runs chromium, firefox and webkit. The encoder needs
@@ -53,9 +53,21 @@ const FORMAT_TOLERANCE_MS = 10;
 /** How far the clock may be from a mark's time when it comes out, ms: the
  *  browser's own route through the audio graph included. */
 const CLOCK_TOLERANCE_MS = 40;
-/** How far ahead of the voice the clock may run at the start of a line, ms:
- *  a browser's own first position can be ahead by about 20. */
-const STARTUP_LEAD_MS = 40;
+/** How far ahead of the voice the clock may run at the start of a line, ms.
+ *  Not ours alone: a browser's own position can run ahead of its sound
+ *  while the output starts, then stand still until the sound catches up
+ *  (Chromium on Linux about 25 ms, WebKit on macOS about 105), and the
+ *  clock follows it. A clock that ran on from `playing` was 250 ahead. */
+const STARTUP_LEAD_MS = 150;
+
+/**
+ * Whether the route into the audio graph can time a mark: not in WebKit on
+ * Linux, whose element source (GStreamer) holds about a second of audio and
+ * gave a WAV and its MP3 300 ms apart from one run to the next. There the
+ * format is held by decodeAudioData alone (the same GStreamer parsers and
+ * decoders).
+ */
+const routeTimes = (name: BrowserName) => !(name === "webkit" && process.platform === "linux");
 
 interface Clip {
   b64: string;
@@ -124,13 +136,14 @@ describe.each(BROWSERS)("cached speech in %s", (name) => {
     const format = median(mp3.engine) - median(wav.engine);
     console.log(
       `${name}: decodeAudioData, MP3 marks minus source (ms) ${summary(mp3.decoded)}\n` +
-        `${name}: engine clock minus source when each mark came out (ms), at ${wav.rate} Hz\n` +
+        `${name}: engine clock minus source when each mark came out (ms)${routeTimes(name) ? "" : " (not a ruler here)"}\n` +
         `  WAV marks ${wav.found.join(",")}: ${summary(wav.engine)} (element ${summary(wav.element)})\n` +
         `  MP3 marks ${mp3.found.join(",")}: ${summary(mp3.engine)} (element ${summary(mp3.element)})\n` +
         `  MP3 minus WAV, medians: ${format.toFixed(1)} ms`
     );
     expect(mp3.decoded).toHaveLength(MARKS_MS.length);
     for (const offset of mp3.decoded) expect(Math.abs(offset)).toBeLessThanOrEqual(0.5);
+    if (!routeTimes(name)) return;
     expect(Math.abs(format)).toBeLessThanOrEqual(FORMAT_TOLERANCE_MS);
     expect(Math.abs(median(wav.engine))).toBeLessThanOrEqual(CLOCK_TOLERANCE_MS);
   }, 120_000);
@@ -142,9 +155,12 @@ describe.each(BROWSERS)("cached speech in %s", (name) => {
     ] as const) {
       const { startup } = await measure(browser, clip.b64, clip.mime, false, dumpOf(`${name}-${label}-native`));
       console.log(
-        `${name}: ${clip.mime} played natively: position moved ${startup.playingToMoving.toFixed(0)} ms after \`playing\`; ` +
-          `clock at most ${startup.maxLead.toFixed(0)} ms ahead of the voice, ${startup.leadOver20Ms.toFixed(0)} ms of it by over 20`
+        `${name}: ${clip.mime} played natively: position moved ${startup.playingToMoving.toFixed(0)} ms after ` +
+          `\`playing\`, the clock ${startup.aheadBeforeMoving.toFixed(0)} ms ahead of it meanwhile; ` +
+          `the clock at most ${startup.maxLead.toFixed(0)} ms ahead of the voice, ` +
+          `${startup.leadOver20Ms.toFixed(0)} ms of it by over 20`
       );
+      expect(startup.aheadBeforeMoving).toBeLessThanOrEqual(1);
       expect(startup.maxLead).toBeLessThanOrEqual(STARTUP_LEAD_MS);
     }
   }, 120_000);
