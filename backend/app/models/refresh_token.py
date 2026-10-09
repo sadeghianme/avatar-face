@@ -33,7 +33,8 @@ class RefreshToken(TimestampedBase):
     # When it was exchanged for the next token of its family: spent.
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # Why: logout, logout_all, password_reset (or _change), reuse.
+    # Why: logout, logout_all, password_reset (or _change), reuse, replaced
+    # (the same browser signed in again).
     revoked_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Who asked for it: the browser's User-Agent (cut to 255) and a keyed
     # hash of its address (services.sessions.ip_hash), never the address.

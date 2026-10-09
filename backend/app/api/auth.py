@@ -122,14 +122,22 @@ async def register(body: RegisterRequest, request: Request, db: DB) -> User:
 
 
 @router.post("/login", response_model=AccessToken, dependencies=[SameOrigin])
-async def login(body: LoginRequest, request: Request, response: Response, db: DB) -> AccessToken:
+async def login(
+    body: LoginRequest,
+    request: Request,
+    response: Response,
+    db: DB,
+    lf_refresh: RefreshCookie = None,
+) -> AccessToken:
     """A new session for these credentials: its access token, and its
-    refresh cookie. 401 `invalid_credentials`; 429 `rate_limited` past
+    refresh cookie. A session this browser held before ends (its cookie is
+    replaced). 401 `invalid_credentials`; 429 `rate_limited` past
     LOGIN_PER_CLIENT attempts a minute from one address or LOGIN_PER_ACCOUNT
     attempts on one account in ten minutes; 403 `cross_site_request`."""
     enforce(LOGIN_PER_CLIENT, client_address(request), TOO_MANY)
     enforce(LOGIN_PER_ACCOUNT, body.username_or_email.strip().lower(), TOO_MANY)
     user = await accounts.login(db, body.username_or_email, body.password)
+    await sessions.end_session_of_token(db, lf_refresh, "replaced")
     return _signed_in(response, await sessions.open_session(db, user, _client(request)))
 
 
@@ -235,7 +243,11 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request, db: DB)
 
 @router.post("/reset-password", response_model=AccessToken, dependencies=[SameOrigin])
 async def reset_password(
-    body: ResetPasswordRequest, request: Request, response: Response, db: DB
+    body: ResetPasswordRequest,
+    request: Request,
+    response: Response,
+    db: DB,
+    lf_refresh: RefreshCookie = None,
 ) -> AccessToken:
     """Finish a reset: every session of the account is revoked with the old
     password, and this browser is signed straight into a new one.
@@ -250,4 +262,6 @@ async def reset_password(
     """
     enforce(RESET_PER_CLIENT, client_address(request), TOO_MANY)
     user = await accounts.reset_password(db, body.token, body.password)
+    # This browser's previous session, whoever's it was, gives way too.
+    await sessions.end_session_of_token(db, lf_refresh, "replaced")
     return _signed_in(response, await sessions.open_session(db, user, _client(request)))

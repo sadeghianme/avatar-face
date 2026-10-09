@@ -188,6 +188,23 @@ async def test_a_browser_keeps_its_session_through_the_cookie_alone(client):
     assert (await client.post("/auth/refresh")).json()["code"] == "no_session"
 
 
+async def test_signing_in_again_ends_the_browsers_previous_session(client):
+    """The new cookie replaces the old one in this browser: the old session
+    must not live on unseen (a copy of its cookie would still work)."""
+    access, old = await signed_up(client, "alice")
+    client.cookies.clear()
+    response = await client.post(
+        "/auth/login",
+        json={"username_or_email": "alice", "password": PASSWORD},
+        headers={"Cookie": f"lf_refresh={old}"},
+    )
+    assert response.status_code == 200, response.text
+    assert (await refresh(client, old)).json()["code"] == "session_revoked"
+    assert (await me(client, access)).json()["code"] == "session_revoked"
+    assert (await refresh(client, refresh_token_of(response))).status_code == 200
+    assert {row.revoked_reason for row in await rows() if row.revoked_at} == {"replaced"}
+
+
 # --- refreshing --------------------------------------------------------------
 
 

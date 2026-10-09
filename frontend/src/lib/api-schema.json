@@ -4819,8 +4819,26 @@
     },
     "/auth/login": {
       "post": {
-        "description": "A new session for these credentials: its access token, and its\nrefresh cookie. 401 `invalid_credentials`; 429 `rate_limited` past\nLOGIN_PER_CLIENT attempts a minute from one address or LOGIN_PER_ACCOUNT\nattempts on one account in ten minutes; 403 `cross_site_request`.",
+        "description": "A new session for these credentials: its access token, and its\nrefresh cookie. A session this browser held before ends (its cookie is\nreplaced). 401 `invalid_credentials`; 429 `rate_limited` past\nLOGIN_PER_CLIENT attempts a minute from one address or LOGIN_PER_ACCOUNT\nattempts on one account in ten minutes; 403 `cross_site_request`.",
         "operationId": "login_auth_login_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "lf_refresh",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lf Refresh"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5037,6 +5055,24 @@
       "post": {
         "description": "Finish a reset: every session of the account is revoked with the old\npassword, and this browser is signed straight into a new one.\n\nSigning in here is deliberate: the alternative is bouncing someone who has\njust proved control of the mailbox back to a login form to type the\npassword they set four seconds ago.\n\n401 `reset_token_invalid` / `reset_token_used`; 429 `rate_limited` past\nRESET_PER_CLIENT attempts in fifteen minutes from one address; 403\n`cross_site_request`.",
         "operationId": "reset_password_auth_reset_password_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "lf_refresh",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lf Refresh"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {

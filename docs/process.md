@@ -690,7 +690,8 @@ Signing in to the dashboard opens a session the server can end
   bearer token), `POST /api/auth/logout-all` (every session of the account,
   this one included: Settings, "Log out everywhere"; bearer only), and a
   password reset (every session, in the same commit as the new hash; the
-  browser that reset it gets a new one). An access token dies with its
+  browser that reset it gets a new one). Signing in again ends the session
+  the browser held before (its cookie comes along). An access token dies with its
   session at once: every authenticated request checks the session in the
   query that loads the user. The sweeper deletes tokens past their expiry.
   Removing a member from an organization ends no session: what a session

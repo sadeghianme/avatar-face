@@ -48,7 +48,8 @@ export interface paths {
     /**
      * Login
      * @description A new session for these credentials: its access token, and its
-     *     refresh cookie. 401 `invalid_credentials`; 429 `rate_limited` past
+     *     refresh cookie. A session this browser held before ends (its cookie is
+     *     replaced). 401 `invalid_credentials`; 429 `rate_limited` past
      *     LOGIN_PER_CLIENT attempts a minute from one address or LOGIN_PER_ACCOUNT
      *     attempts on one account in ten minutes; 403 `cross_site_request`.
      */
@@ -4027,7 +4028,9 @@ export interface operations {
       query?: never;
       header?: never;
       path?: never;
-      cookie?: never;
+      cookie?: {
+        lf_refresh?: string | null;
+      };
     };
     requestBody: {
       content: {
@@ -4198,7 +4201,9 @@ export interface operations {
       query?: never;
       header?: never;
       path?: never;
-      cookie?: never;
+      cookie?: {
+        lf_refresh?: string | null;
+      };
     };
     requestBody: {
       content: {
