@@ -147,8 +147,10 @@ async def refresh(
     cookies deleted when there is none to refresh: `no_session`,
     `invalid_refresh_token`, `session_revoked`, `session_expired`,
     `refresh_token_reused` (the session is revoked everywhere), or
-    `refresh_superseded` (exchanged a moment ago by another tab: try again).
-    403 `cross_site_request`."""
+    `refresh_superseded` (the token that replaced this one was exchanged
+    too, by another tab: try again). The same cookie again within
+    REFRESH_REUSE_GRACE_SECONDS answers with the same next token, so an
+    answer lost to a reload costs nothing. 403 `cross_site_request`."""
     try:
         issued = await sessions.rotate(db, lf_refresh, _client(request))
     except Auth401 as error:

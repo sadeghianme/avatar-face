@@ -6,14 +6,20 @@ and sends as a bearer header. The refresh token is 256 random bits that only
 ever travel in an httpOnly cookie (api.auth); the database keeps its SHA-256
 (models.RefreshToken), never the token.
 
-Each refresh EXCHANGES the token: the one presented is spent, and a new one
-of the same family (the session, `family_id`) takes its place, good for
+Each refresh EXCHANGES the token: the one presented is spent, and the next
+one of the same family (the session, `family_id`) takes its place, good for
 `refresh_token_days` from now. A spent token presented again means the
 session is in two hands, the user's and someone who copied a token: the
 whole family is revoked, so both are signed out and the copy is worthless.
-Within `refresh_reuse_grace_seconds` of the exchange it is taken for a race
-instead (two tabs refreshing at once, a retried request): refused, and the
-session stands.
+
+Except within `refresh_reuse_grace_seconds` of the exchange: then it is the
+same browser asking twice, because its answer never arrived (the page was
+reloaded or closed mid-request, the network dropped) or because two of its
+tabs refreshed at once. It gets the same next token again, not a refusal:
+the next token is derived from the one it replaces (`_successor`, an HMAC
+with a server key), so it can be given again without ever being stored.
+Nothing forks: there is still one live token per session. If that next token
+has itself been exchanged already, the answer is `refresh_superseded`.
 
 A session ends when its user signs out (that session), signs out
 everywhere, or resets the password (every session), and each access token
@@ -23,6 +29,7 @@ session on every request (`session_user`).
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import logging
@@ -48,6 +55,7 @@ USER_AGENT_MAX = 255
 # the same key must never produce a value that means something else (the
 # consent record's address hash has a context of its own).
 _IP_HASH_CONTEXT = b"liveface session ip v1:"
+_SUCCESSOR_CONTEXT = b"liveface refresh successor v1:"
 
 
 def hash_token(raw: str) -> str:
@@ -93,10 +101,20 @@ def _aware(moment: datetime) -> datetime:
     return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 
+def _successor(raw: str) -> str:
+    """The token that replaces `raw` when it is exchanged: an HMAC of it under
+    a key of the server's, so the same exchange asked again gives the same
+    token, and nobody without the key can tell what it will be."""
+    key = hashlib.sha256(_SUCCESSOR_CONTEXT + get_settings().jwt_secret.encode()).digest()
+    digest = hmac.new(key, raw.encode(), hashlib.sha256).digest()
+    return TOKEN_PREFIX + base64.urlsafe_b64encode(digest).decode().rstrip("=")
+
+
 def _new_token(
-    user_id: str, family_id: str, client: Client, now: datetime
+    user_id: str, family_id: str, client: Client, now: datetime, raw: str | None = None
 ) -> tuple[str, RefreshToken]:
-    raw = TOKEN_PREFIX + secrets.token_urlsafe(32)
+    """A token row: `raw` given (a successor), or 256 random bits (a sign-in)."""
+    raw = raw or TOKEN_PREFIX + secrets.token_urlsafe(32)
     row = RefreshToken(
         user_id=user_id,
         family_id=family_id,
@@ -133,10 +151,14 @@ async def rotate(db: AsyncSession, raw: str | None, client: Client) -> Issued:
     * `no_session`: no token at all;
     * `invalid_refresh_token`: not one this server issued (or long expired);
     * `session_revoked`: its session was ended;
-    * `refresh_superseded`: already exchanged a moment ago (a race);
-    * `refresh_token_reused`: already exchanged earlier: the session is
+    * `refresh_superseded`: exchanged a moment ago, and the token that
+      replaced it already exchanged too;
+    * `refresh_token_reused`: exchanged before the grace: the session is
       revoked now, on every device;
     * `session_expired`: unused for `refresh_token_days`.
+
+    Exchanged a moment ago (the grace), it answers with the same next token
+    again: the browser that asked never got it.
     """
     if not raw:
         raise Auth401("Not signed in", code="no_session")
@@ -149,7 +171,7 @@ async def rotate(db: AsyncSession, raw: str | None, client: Client) -> Issued:
     if row.revoked_at is not None:
         raise Auth401("This session has ended; sign in again", code="session_revoked")
     if row.last_used_at is not None:
-        await _spent_token_presented(db, row, now)
+        return await _spent_token_presented(db, row, raw, now)
     if _aware(row.expires_at) <= now:
         raise Auth401("This session has expired; sign in again", code="session_expired")
 
@@ -166,22 +188,42 @@ async def rotate(db: AsyncSession, raw: str | None, client: Client) -> Issued:
         .values(last_used_at=now),
     )
     if claimed != 1:
+        # Another request exchanged it in between: answered as a repeat.
         await db.rollback()
-        raise Auth401("This session was refreshed a moment ago", code="refresh_superseded")
+        await db.refresh(row)
+        return await _spent_token_presented(db, row, raw, now)
     if await db.get(User, row.user_id) is None:
         await db.rollback()
         raise Auth401("User no longer exists", code="unknown_user")
-    new_raw, new_row = _new_token(row.user_id, row.family_id, client, now)
+    new_raw, new_row = _new_token(row.user_id, row.family_id, client, now, _successor(raw))
     db.add(new_row)
     await db.commit()
     return _issued(row.user_id, row.family_id, new_raw)
 
 
-async def _spent_token_presented(db: AsyncSession, row: RefreshToken, now: datetime) -> None:
-    """A token already exchanged is back: a race, or a stolen copy. Raises."""
-    assert row.last_used_at is not None
+async def _spent_token_presented(
+    db: AsyncSession, row: RefreshToken, raw: str, now: datetime
+) -> Issued:
+    """A token already exchanged is back. Within the grace, the same browser
+    asking again: the same next token. Later, a copy: the session is revoked.
+    Raises unless it answers."""
+    if row.revoked_at is not None or row.last_used_at is None:
+        raise Auth401("This session has ended; sign in again", code="session_revoked")
     grace = timedelta(seconds=get_settings().refresh_reuse_grace_seconds)
     if now - _aware(row.last_used_at) <= grace:
+        successor = _successor(raw)
+        live = (
+            await db.execute(
+                select(RefreshToken.id).where(
+                    RefreshToken.token_hash == hash_token(successor),
+                    RefreshToken.family_id == row.family_id,
+                    RefreshToken.last_used_at.is_(None),
+                    RefreshToken.revoked_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if live is not None:
+            return _issued(row.user_id, row.family_id, successor)
         raise Auth401("This session was refreshed a moment ago", code="refresh_superseded")
     revoked = await _revoke(db, RefreshToken.family_id == row.family_id, "reuse")
     await db.commit()

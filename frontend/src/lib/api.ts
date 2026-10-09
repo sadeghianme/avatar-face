@@ -134,8 +134,9 @@ async function exchange(): Promise<boolean> {
       return true;
     }
     if (response.status !== 401) return false;
-    // Another tab exchanged the same cookie a moment ago; its new one is in
-    // this browser's jar now. Once more, then it is a real refusal.
+    // The cookie was exchanged a moment ago and so was the token that
+    // replaced it: a sibling tab got ahead, and the newest one is in this
+    // browser's jar now. Once more, then it is a real refusal.
     if ((await errorCode(response)) === "refresh_superseded" && attempt === 0) {
       await sleep(250);
       continue;

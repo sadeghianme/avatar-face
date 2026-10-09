@@ -77,9 +77,9 @@ class Settings(BaseSettings):
     # not keep a Secure cookie at all.
     session_cookie_secure: bool | None = None
     # A refresh token presented again within this many seconds of being
-    # exchanged is a race (two tabs refreshing at once, a retried request),
-    # not a theft: it is refused, but the session stands. Later, the whole
-    # session is revoked.
+    # exchanged is the same browser asking twice (its answer lost to a
+    # reload or a dropped connection, two tabs at once), not a theft: it
+    # gets the same next token again. Later, the whole session is revoked.
     refresh_reuse_grace_seconds: int = 10
 
     # --- Client addresses behind proxies (core.client_ip) ---

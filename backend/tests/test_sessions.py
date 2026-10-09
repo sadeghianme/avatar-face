@@ -274,27 +274,47 @@ async def test_a_reused_refresh_token_revokes_its_whole_session(client):
     assert (await refresh(client, other_refresh)).status_code == 200
 
 
-async def test_a_token_presented_twice_at_once_is_a_race_not_a_theft(
-    client, monkeypatch, _settings
-):
-    """Two tabs refreshing together send the same cookie: within the grace
-    the second is refused, and the session stands."""
+async def test_a_repeat_within_the_grace_gets_the_same_next_token(client, monkeypatch, _settings):
+    """The answer to a refresh never arrived (a reload mid-request, a dropped
+    connection), or two tabs sent the same cookie: within the grace the
+    browser asking again gets the token it missed, not a refusal. Nothing
+    forks: one live token per session, so a later reuse is still caught."""
     monkeypatch.setattr(_settings, "refresh_reuse_grace_seconds", 10)
     _, first = await signed_up(client, "alice")
-    winner = await refresh(client, first)
-    loser = await refresh(client, first)
-    assert loser.status_code == 401
-    assert loser.json()["code"] == "refresh_superseded"
-    assert "lf_refresh" not in set_cookies(loser), "the tab keeps the cookie its sibling set"
-    assert (await refresh(client, refresh_token_of(winner))).status_code == 200
+    lost = await refresh(client, first)  # answered, but never stored
+    again = await refresh(client, first)
+    assert again.status_code == 200, again.text
+    assert refresh_token_of(again) == refresh_token_of(lost)
+    assert (await me(client, again.json()["access_token"])).status_code == 200
+    assert len(await rows()) == 2, "the same next token, not a second one"
+
+    # Once that next token is exchanged too, the old one is only a refusal,
+    # and the cookie its sibling set stays.
+    third = await refresh(client, refresh_token_of(again))
+    assert third.status_code == 200
+    late = await refresh(client, first)
+    assert late.status_code == 401
+    assert late.json()["code"] == "refresh_superseded"
+    assert "lf_refresh" not in set_cookies(late)
+    assert (await refresh(client, refresh_token_of(third))).status_code == 200
+
+
+async def test_the_next_token_is_never_stored_either(client, monkeypatch, _settings):
+    monkeypatch.setattr(_settings, "refresh_reuse_grace_seconds", 10)
+    _, first = await signed_up(client, "alice")
+    second = refresh_token_of(await refresh(client, first))
+    stored = {row.token_hash for row in await rows()}
+    assert stored == {hash_token(first), hash_token(second)}
+    assert not {first, second} & stored
 
 
 async def test_concurrent_refreshes_exchange_a_token_exactly_once(client, monkeypatch, _settings):
     monkeypatch.setattr(_settings, "refresh_reuse_grace_seconds", 10)
     _, first = await signed_up(client, "alice")
     answers = await asyncio.gather(*(refresh(client, first) for _ in range(4)))
-    assert sorted(answer.status_code for answer in answers) == [200, 401, 401, 401]
-    assert {a.json()["code"] for a in answers if a.status_code == 401} == {"refresh_superseded"}
+    assert [answer.status_code for answer in answers] == [200] * 4, [a.text for a in answers]
+    assert len({refresh_token_of(answer) for answer in answers}) == 1
+    assert len(await rows()) == 2
     assert not any(row.revoked_at for row in await rows())
 
 
