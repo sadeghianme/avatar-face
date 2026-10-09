@@ -1067,13 +1067,15 @@ drawn mouth, make your own in the Mouth panel).
   `playing` or `seeked`, and `started` (the engine waiting for the voice, so
   that the silence at 0 is no pause) waits for the same. After, on macOS:
   Firefox 2-9 ms ahead at most; WebKit 104-105 ms for about 360 ms;
-  Chromium 38-82 ms for 40-170 ms, as before. *Still weak*: that remainder
-  is the browsers' own position, which runs ahead of their sound while the
-  output starts and then stands still until the sound catches up (WebKit
-  on macOS about 100 ms, Chromium about 20, which the frame clock carries
-  across the stand-still); the clock cannot see it. Real Safari and iOS are
-  untried (Safari's WebDriver is not enabled on the machine measured);
-  Playwright's WebKit uses the same AVFoundation stack on macOS.
+  Chromium 38-82 ms for 40-170 ms, as before. In CI: Firefox 1-3 ms,
+  WebKit 0, Chromium 55-60 ms for about 90 ms, as before. *Still weak*:
+  that remainder is the browsers' own position, which runs ahead of their
+  sound while the output starts and then stands still until the sound
+  catches up (WebKit on macOS about 100 ms, Chromium about 20, which the
+  frame clock carries across the stand-still); the clock cannot see it.
+  Real Safari and iOS are untried (Safari's WebDriver is not enabled on
+  the machine measured); Playwright's WebKit uses the same AVFoundation
+  stack on macOS.
 - Native timing in production (2026-09-26): the Kokoro provider speaks with
   the timestamped model when it is installed and serves its own phoneme
   spans as cues (`lab_timing.native_cues`), falling back to the stretched

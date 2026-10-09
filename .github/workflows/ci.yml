@@ -364,7 +364,7 @@ jobs:
           SPEECH_TIMING_DUMP_DIR: dist/speech-timing
         run: npm run test:browser
       - name: Upload what the speech timing pages recorded
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v6
         with:
           name: speech-timing

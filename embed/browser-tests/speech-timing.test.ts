@@ -9,6 +9,7 @@ import { ROOT } from "./browser";
 import {
   MARKS_MS,
   clickTrackWav,
+  decodedMarks,
   launchFor,
   measure,
   median,
@@ -56,16 +57,16 @@ const CLOCK_TOLERANCE_MS = 40;
 /** How far ahead of the voice the clock may run at the start of a line, ms.
  *  Not ours alone: a browser's own position can run ahead of its sound
  *  while the output starts, then stand still until the sound catches up
- *  (Chromium on Linux about 25 ms, WebKit on macOS about 105), and the
- *  clock follows it. A clock that ran on from `playing` was 250 ahead. */
+ *  (Chromium about 20 ms, WebKit on macOS about 105), and the clock follows
+ *  it. A clock that ran on from `playing` was 250 ahead. */
 const STARTUP_LEAD_MS = 150;
 
 /**
  * Whether the route into the audio graph can time a mark: not in WebKit on
- * Linux, whose element source (GStreamer) holds about a second of audio and
- * gave a WAV and its MP3 300 ms apart from one run to the next. There the
- * format is held by decodeAudioData alone (the same GStreamer parsers and
- * decoders).
+ * Linux, whose element source (GStreamer) holds about a second of audio,
+ * gave a WAV and its MP3 75 to 300 ms apart from one run to the next and
+ * sometimes never ends. There the format is held by decodeAudioData alone
+ * (the same GStreamer parsers and decoders).
  */
 const routeTimes = (name: BrowserName) => !(name === "webkit" && process.platform === "linux");
 
@@ -130,23 +131,30 @@ describe.each(BROWSERS)("cached speech in %s", (name) => {
     expect(clips.cached.mime).toBe("audio/mpeg");
   });
 
-  it("decodes with every mark on its own sample, and plays where the WAV does", async () => {
-    const wav = await routed(browser, clips.wav, `${name}-wav`);
-    const mp3 = await routed(browser, clips.cached, `${name}-mp3`);
-    const format = median(mp3.engine) - median(wav.engine);
-    console.log(
-      `${name}: decodeAudioData, MP3 marks minus source (ms) ${summary(mp3.decoded)}\n` +
-        `${name}: engine clock minus source when each mark came out (ms)${routeTimes(name) ? "" : " (not a ruler here)"}\n` +
-        `  WAV marks ${wav.found.join(",")}: ${summary(wav.engine)} (element ${summary(wav.element)})\n` +
-        `  MP3 marks ${mp3.found.join(",")}: ${summary(mp3.engine)} (element ${summary(mp3.element)})\n` +
-        `  MP3 minus WAV, medians: ${format.toFixed(1)} ms`
-    );
-    expect(mp3.decoded).toHaveLength(MARKS_MS.length);
-    for (const offset of mp3.decoded) expect(Math.abs(offset)).toBeLessThanOrEqual(0.5);
-    if (!routeTimes(name)) return;
-    expect(Math.abs(format)).toBeLessThanOrEqual(FORMAT_TOLERANCE_MS);
-    expect(Math.abs(median(wav.engine))).toBeLessThanOrEqual(CLOCK_TOLERANCE_MS);
-  }, 120_000);
+  it("decodes with every mark on its own sample", async () => {
+    const decoded = await decodedMarks(browser, clips.cached.b64);
+    console.log(`${name}: decodeAudioData, MP3 marks minus source (ms) ${summary(decoded)}`);
+    expect(decoded).toHaveLength(MARKS_MS.length);
+    for (const offset of decoded) expect(Math.abs(offset)).toBeLessThanOrEqual(0.5);
+  }, 60_000);
+
+  it.runIf(routeTimes(name))(
+    "plays where the WAV does, through the audio element",
+    async () => {
+      const wav = await routed(browser, clips.wav, `${name}-wav`);
+      const mp3 = await routed(browser, clips.cached, `${name}-mp3`);
+      const format = median(mp3.engine) - median(wav.engine);
+      console.log(
+        `${name}: engine clock minus source when each mark came out (ms)\n` +
+          `  WAV marks ${wav.found.join(",")}: ${summary(wav.engine)} (element ${summary(wav.element)})\n` +
+          `  MP3 marks ${mp3.found.join(",")}: ${summary(mp3.engine)} (element ${summary(mp3.element)})\n` +
+          `  MP3 minus WAV, medians: ${format.toFixed(1)} ms`
+      );
+      expect(Math.abs(format)).toBeLessThanOrEqual(FORMAT_TOLERANCE_MS);
+      expect(Math.abs(median(wav.engine))).toBeLessThanOrEqual(CLOCK_TOLERANCE_MS);
+    },
+    120_000
+  );
 
   it("starts the mouth with the voice, not with `playing`", async () => {
     for (const [label, clip] of [

@@ -9,7 +9,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { chromium, firefox, webkit, type Browser } from "playwright";
+import { chromium, firefox, webkit, type Browser, type Page } from "playwright";
 
 import { bundle, serve } from "./browser";
 import { RECORDER } from "./speech-recorder";
@@ -147,9 +147,6 @@ export function median(values: number[]): number {
 
 /** One recording in one browser; every offset is ms, one per mark found. */
 export interface Timing {
-  /** Where each mark is in what decodeAudioData made, minus where it is in
-   *  the source: the decoder's own offset, to the sample. */
-  decoded: number[];
   /** What the engine's cue clock read when each mark reached the audio
    *  graph, minus the mark's time in the source. Positive: the clock is
    *  ahead of the sound (the mouth leads the voice). It includes the route
@@ -188,19 +185,8 @@ export function launchFor(name: BrowserName): Promise<Browser> {
 
 const ORIGIN = "https://speech.test";
 
-/**
- * Play `b64` (base64, as the API sends it) of type `mime` in `browser`.
- * `routed`: through the recorder (the marks are found in what was played);
- * else natively, as the widget plays it, for the clocks alone. `dump`: a
- * file to keep what the page recorded in, to look at a failure.
- */
-export async function measure(
-  browser: Browser,
-  b64: string,
-  mime: string,
-  routed: boolean,
-  dump?: string
-): Promise<Timing> {
+/** A page of `browser` with speech-timing-page.ts loaded, and its errors. */
+async function open(browser: Browser): Promise<{ page: Page; errors: string[] }> {
   const script = await bundle("browser-tests/speech-timing-page.ts");
   const page = await browser.newPage();
   const errors: string[] = [];
@@ -214,10 +200,42 @@ export async function measure(
           ? RECORDER
           : undefined
   );
+  await page.goto(`${ORIGIN}/`);
+  await page.addScriptTag({ url: `${ORIGIN}/page.js` });
+  return { page, errors };
+}
+
+/** Where each mark is in what decodeAudioData made, minus where it is in the source, ms. */
+const offsets = (decoded: DecodedRun) =>
+  marks(floats(decoded.audio), decoded.rate).map(({ k, at }) => (at / decoded.rate) * 1000 - MARKS_MS[k]);
+
+/** Where decodeAudioData puts each mark of `b64`, minus where it is in the source, ms. */
+export async function decodedMarks(browser: Browser, b64: string): Promise<number[]> {
+  const { page, errors } = await open(browser);
   try {
-    await page.goto(`${ORIGIN}/`);
-    await page.addScriptTag({ url: `${ORIGIN}/page.js` });
     const decoded: DecodedRun = await page.evaluate((audio) => window.decode(audio), b64);
+    if (errors.length) throw new Error(errors.join("\n"));
+    return offsets(decoded);
+  } finally {
+    await page.close();
+  }
+}
+
+/**
+ * Play `b64` (base64, as the API sends it) of type `mime` in `browser`.
+ * `routed`: through the recorder (the marks are found in what was played);
+ * else natively, as the widget plays it, for the clocks alone. `dump`: a
+ * file to keep what the page recorded in, to look at a failure.
+ */
+export async function measure(
+  browser: Browser,
+  b64: string,
+  mime: string,
+  routed: boolean,
+  dump?: string
+): Promise<Timing> {
+  const { page, errors } = await open(browser);
+  try {
     await page.evaluate(([audio, type, recorder, route]) => window.arm(audio, type, recorder, route), [
       b64,
       mime,
@@ -228,11 +246,11 @@ export async function measure(
     const run: PlaybackRun = await page.evaluate(() => window.played!);
     if (dump) {
       mkdirSync(dirname(dump), { recursive: true });
-      writeFileSync(dump, JSON.stringify({ decodedRate: decoded.rate, ...run }));
+      writeFileSync(dump, JSON.stringify(run));
     }
     if (errors.length) throw new Error(errors.join("\n"));
     if (!run.ended) throw new Error("the recording never ended");
-    return analyse(decoded, run);
+    return analyse(run);
   } finally {
     await page.close();
   }
@@ -274,7 +292,7 @@ function startup(run: PlaybackRun): Timing["startup"] {
   };
 }
 
-function analyse(decoded: DecodedRun, run: PlaybackRun): Timing {
+function analyse(run: PlaybackRun): Timing {
   // Context time -> perf time, as the graph renders: ctx.currentTime is the
   // end of what it has rendered when it is read.
   const rendered = median(run.samples.map((s) => (s.ctx === null ? Number.NaN : s.perf - s.ctx)));
@@ -294,7 +312,6 @@ function analyse(decoded: DecodedRun, run: PlaybackRun): Timing {
     element.push(clockAt(run.samples, perf, (s) => s.element) - MARKS_MS[k]);
   }
   return {
-    decoded: marks(floats(decoded.audio), decoded.rate).map(({ k, at }) => (at / decoded.rate) * 1000 - MARKS_MS[k]),
     engine,
     element,
     found: found.map(({ k }) => MARKS_MS[k]),
