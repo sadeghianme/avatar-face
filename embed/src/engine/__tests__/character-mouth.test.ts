@@ -11,15 +11,29 @@ import {
   SOFT_CEILING,
   characterOpening,
   edgeWidth,
+  lowerEdgePath,
+  luma,
   tuckAmount,
   mergeTraits,
   mouthFrame,
+  openingPath,
   sampleLook,
   softness,
+  type CharacterLook,
   type Pt,
   type Rgb,
 } from "../character-mouth";
-import { TONGUE_RAISE, teethHeight, teethShown, tongueColour } from "../character-paint";
+import {
+  TONGUE_RAISE,
+  cavityShade,
+  lipLikeTongue,
+  shadedTongueColour,
+  shadedTongueTop,
+  teethHeight,
+  teethShown,
+  tongueColour,
+  tongueLift,
+} from "../character-paint";
 import { KNOWN_PROFILES, HUMAN_PROFILE, kindProfile } from "../kind-profile";
 import { ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
 
@@ -133,6 +147,31 @@ describe("the opening", () => {
   it("stays shut for a pucker", () => {
     expect(characterOpening(moved({ mouthPucker: 0.9 }), base)).toBeNull();
   });
+
+  it("traces the clip's own lower edge, corner to corner, for what is drawn along it", () => {
+    const o = characterOpening(moved({ jawOpen: 0.9 }), base)!;
+    const recorder = () => {
+      const ops: string[] = [];
+      const path = {
+        moveTo: (x: number, y: number) => ops.push(`M ${x} ${y}`),
+        bezierCurveTo: (...a: number[]) => ops.push(`C ${a.join(" ")}`),
+        closePath: () => ops.push("Z"),
+      };
+      return { ops, make: () => path as unknown as Path2D };
+    };
+    const clip = recorder(),
+      lower = recorder();
+    openingPath(o, clip.make);
+    lowerEdgePath(o, lower.make);
+    const right = o.upper[o.upper.length - 1];
+    expect(lower.ops[0]).toBe(`M ${right.x} ${right.y}`);
+    // The clip's own segments, from the right-hand corner along the lower lip
+    // and back to the left-hand one: the very curve, not a smoothed copy of
+    // it that cuts inside the opening.
+    const n = o.upper.length + o.lower.length - 2;
+    expect(lower.ops.slice(1)).toEqual(clip.ops.slice(o.upper.length, n + 1));
+    expect(lower.ops.at(-1)!.endsWith(`${o.lower[0].x} ${o.lower[0].y}`)).toBe(true);
+  });
 });
 
 describe("teeth and tongue", () => {
@@ -153,6 +192,64 @@ describe("teeth and tongue", () => {
     expect(TONGUE_RAISE.TH).toBe(1);
     expect(TONGUE_RAISE.DD).toBeGreaterThan(0.7);
     expect(TONGUE_RAISE.aa).toBeLessThan(0.1);
+  });
+
+  it("keeps a rendered tongue low behind the lower lip for a vowel, and lifts it for /th/ /d/ /n/ /l/", () => {
+    for (const v of ["aa", "E", "ih", "oh", "ou", "RR"]) expect(tongueLift(TONGUE_RAISE[v])).toBe(0);
+    for (const v of ["TH", "DD", "nn"]) expect(tongueLift(TONGUE_RAISE[v])).toBeGreaterThan(0.95);
+    // At rest it is the floor of the mouth, an eighth of the opening; the
+    // tongue that lay along the lip stood a third to a half of it.
+    expect(shadedTongueTop(100, TONGUE_RAISE.E, 1)).toBeCloseTo(12, 6);
+    expect(shadedTongueTop(100, TONGUE_RAISE.aa, 1)).toBeCloseTo(12, 6);
+    // Lifted, it reaches up to where the upper teeth hang.
+    expect(shadedTongueTop(100, TONGUE_RAISE.TH, 1)).toBeCloseTo(62, 6);
+    expect(shadedTongueTop(100, TONGUE_RAISE.TH, 0)).toBe(0);
+  });
+
+  // Looks read off real characters (2026-10-09): rendered people whose lips
+  // are of the tongue's red, and animals whose lips are fur.
+  const look = (flat: boolean, line: Rgb, lip: Rgb, skin: Rgb): CharacterLook => ({
+    flat,
+    line,
+    lip,
+    skin,
+    soft: 0.01,
+  });
+  const sakineh = look(false, [109, 32, 26], [175, 87, 77], [220, 164, 137]);
+  const humanAnimation = look(false, [93, 33, 25], [161, 75, 58], [229, 168, 139]);
+  const dog = look(false, [49, 26, 10], [160, 116, 79], [160, 108, 60]);
+  const furryToon = look(false, [34, 20, 11], [110, 69, 39], [208, 144, 82]);
+  const drawnDog = look(true, [55, 22, 7], [207, 139, 64], [209, 141, 66]);
+
+  it("tells lips of the tongue's red from a muzzle's fur", () => {
+    for (const l of [sakineh, humanAnimation]) expect(lipLikeTongue(l.lip)).toBe(true);
+    for (const l of [dog, furryToon, drawnDog]) expect(lipLikeTongue(l.lip)).toBe(false);
+    // Pale pink, coral, deep and grey lips are lips; black ones are a muzzle's.
+    const lips: Rgb[] = [
+      [220, 150, 150],
+      [230, 110, 80],
+      [110, 70, 60],
+      [140, 125, 122],
+    ];
+    for (const lip of lips) expect(lipLikeTongue(lip)).toBe(true);
+    expect(lipLikeTongue([30, 26, 24])).toBe(false);
+  });
+
+  it("shades a tongue behind lips of its red darker and duller than them, and lighter than the dark of the mouth", () => {
+    const chroma = (c: Rgb) => (Math.max(...c) - Math.min(...c)) / Math.max(...c);
+    for (const l of [sakineh, humanAnimation]) {
+      const cavity = cavityShade(l, 0.46);
+      const resting = shadedTongueColour(l, 0, cavity);
+      // (The lip colour is the lips' mean, shadowed corners and all; the lit
+      // lower lip beside the tongue is brighter still.)
+      expect(luma(resting)).toBeLessThan(luma(l.lip) * 0.9);
+      expect(chroma(resting)).toBeLessThan(chroma(l.lip));
+      expect(luma(resting)).toBeGreaterThan(luma(cavity) + 20);
+      // Lifted, it comes into the light, about as bright as the lips' mean.
+      const lifted = shadedTongueColour(l, 1, cavity);
+      expect(luma(lifted)).toBeGreaterThan(luma(resting) + 10);
+      expect(luma(lifted)).toBeLessThan(luma(l.lip) * 1.15);
+    }
   });
 
   it("paints a tongue that is red whatever the lips are, and lighter than the cavity", () => {

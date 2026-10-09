@@ -5,7 +5,7 @@
  * (paint-classic-mouth.ts), which hands an extension that only draws the
  * interior its aperture.
  */
-import { characterOpening, openingPath, type CharacterTraits } from "./character-mouth";
+import { characterOpening, lowerEdgePath, openingPath, type CharacterTraits } from "./character-mouth";
 import { paintCharacter } from "./character-paint";
 import type { KindProfile } from "./kind-profile";
 import type { MouthExtension } from "../mouth-extension";
@@ -80,6 +80,7 @@ function paintCharacterMouth(m: MouthSurface): void {
   paintCharacter(m.ctx, {
     opening,
     clip: openingPath(opening, () => new Path2D()),
+    lowerEdge: lowerEdgePath(opening, () => new Path2D()),
     weights: m.face.weights,
     look: m.picture.samples.look,
     traits: m.traits,

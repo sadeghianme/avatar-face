@@ -298,28 +298,50 @@ export function characterOpening(pts: readonly Pt[], rest: readonly Pt[]): Openi
   return { upper, lower, width, gap, alpha, midY: mid };
 }
 
+/** The opening's outline: along the upper lip, corner to corner, and back
+ *  along the lower. */
+const outlineOf = (o: Opening): Pt[] => [...o.upper, ...o.lower.slice(1, -1).reverse()];
+
+/** Add the outline's smooth segment from point `i` to the next (a
+ *  Catmull-Rom spline through every point) to `path`. */
+function segment(path: Path2D, outline: readonly Pt[], i: number): void {
+  const n = outline.length;
+  const p0 = outline[(i - 1 + n) % n];
+  const p1 = outline[i];
+  const p2 = outline[(i + 1) % n];
+  const p3 = outline[(i + 2) % n];
+  path.bezierCurveTo(
+    p1.x + (p2.x - p0.x) / 6,
+    p1.y + (p2.y - p0.y) / 6,
+    p2.x - (p3.x - p1.x) / 6,
+    p2.y - (p3.y - p1.y) / 6,
+    p2.x,
+    p2.y
+  );
+}
+
 /** A smooth closed path through the opening's outline, corner to corner. */
 export function openingPath(o: Opening, make: () => Path2D): Path2D {
-  const outline = [...o.upper, ...o.lower.slice(1, -1).reverse()];
+  const outline = outlineOf(o);
   const path = make();
   const n = outline.length;
   if (n < 3) return path;
   path.moveTo(outline[0].x, outline[0].y);
-  for (let i = 0; i < n; i++) {
-    const p0 = outline[(i - 1 + n) % n];
-    const p1 = outline[i];
-    const p2 = outline[(i + 1) % n];
-    const p3 = outline[(i + 2) % n];
-    path.bezierCurveTo(
-      p1.x + (p2.x - p0.x) / 6,
-      p1.y + (p2.y - p0.y) / 6,
-      p2.x - (p3.x - p1.x) / 6,
-      p2.y - (p3.y - p1.y) / 6,
-      p2.x,
-      p2.y
-    );
-  }
+  for (let i = 0; i < n; i++) segment(path, outline, i);
   path.closePath();
+  return path;
+}
+
+/** The opening's lower edge alone, corner to corner: the very curve of
+ *  `openingPath` there, so what is drawn along it lies on the edge. */
+export function lowerEdgePath(o: Opening, make: () => Path2D): Path2D {
+  const outline = outlineOf(o);
+  const path = make();
+  const n = outline.length;
+  const from = o.upper.length - 1;
+  if (n < 3 || from < 1) return path;
+  path.moveTo(outline[from].x, outline[from].y);
+  for (let i = from; i < n; i++) segment(path, outline, i);
   return path;
 }
 

@@ -978,7 +978,9 @@ drawn mouth, make your own in the Mouth panel).
     (a few colours cover the area round the mouth) and the darkest tone on its
     own mouth seam; an upper-teeth band (toons; none on a muzzle; never on a
     rounded mouth), a bottom-anchored tongue that rises for /th/ and /d/
-    (eased, the sounds are discrete).
+    (eased, the sounds are discrete); on a render whose lips are of the
+    tongue's red, a tongue that lies low behind the lower lip (2026-10-09,
+    below).
   - *Blink*: `blink: "lid"` paints a lid over the eye from the skin beside it,
     lash line on its edge, clipped to the eye, and leaves the mesh still (the
     mesh blink pinches a drawn or rendered iris). Honours `tune({blink: 0})`.
@@ -999,7 +1001,8 @@ drawn mouth, make your own in the Mouth panel).
     picture's own (`look.soft`: the picture's sharpness, since 2026-10-06
     below; the mouth seam only for a picture without one), a ring of inner-lip
     tone inside it, darker gum at the corners, warmth towards the throat, and a
-    tongue with a centre groove and a shine sized to the tongue that is there.
+    tongue with a centre groove and a shine sized to the tongue that is there
+    (between lips of its red, only once it has lifted: 2026-10-09, below).
   - *Cel art or not* is told by the palette (top eight 16-level colour bins
     cover at least 70% of the mouth area) AND by the MEDIAN step between
     neighbouring pixels being at most 4 levels. Measured on the five real
@@ -1588,6 +1591,79 @@ drawn mouth, make your own in the Mouth panel).
   motion (no more than in stage 1), her background layer's halo along the
   left shoulder at the largest turns; the 2D fallback's raster stalls on
   cut-outs; the animal crease above is unchanged.
+- One lower lip on a rendered character's open mouth (2026-10-09;
+  `embed/src/engine/character-paint.ts`, `character-mouth.ts`,
+  `paint-mouth.ts`). *The report*: the live "Sakineh Animesh" (`toon@1`, a
+  smooth render) speaking, "below the lips is weird and double": under the
+  upper teeth and a dark band, a pink crescent with a crease down its middle,
+  a dark line, then the picture's lower lip. *The cause*, measured on her
+  published rig and picture with the real engine at the dashboard's 960 px
+  stage, 4x on the mouth with the mesh, the inner lip rings, the opening and
+  the tongue drawn over it: the crescent is the painted tongue. It lay along
+  the lower lip, `here × (0.3 + 0.58 × raise)` tall (a third of the opening
+  on "aa", nearly half on "E", and the eased raise sits at 0.3 to 0.45
+  through most of a sentence), as red as her lips (shaded 190, 82, 86 against
+  a lip of 175, 87, 77), lighter at its top with a light wet line along it,
+  its top parallel to the lip line and a groove down its middle: a lip, its
+  edge's shine and its crease. Under it the lower lip's shadow, one crisp
+  stroke along a quadratic smoothing of the lip ring, cut the ring's curve
+  and so lay 3 to 9 px inside the opening, a dark line between the tongue
+  and the lip. Not the mesh: every row of the lower lip moves by the same
+  amount (held E: 60.5 px, inner to outer), the skin below takes 52 and the
+  chin 47, and the picture's own lip and outline move with it, whole. Not
+  new: the tongue's painting is the same since the character mouth's polish
+  (2026-10-04), and a build of that day draws the same frame; the classic
+  mouth on the same picture has no such band. With the tongue off the lower
+  lip read as one. Read along the lip's normal at five places across its
+  middle (the brightest luma inside the opening, from a tenth of its height
+  above the edge to the teeth, over the darkest within 3 px of the edge):
+  67 to 82 levels on held aa, E, ou, ih and oh, the band 0.85 to 1.2 times
+  the lip's brightest, on her and on the rendered human; a second lip (over
+  40 levels, at least 0.75 of the lip) in 22 and 20 of the production
+  sentence's 43 open frames with the tongue low. *The fix*: where a render's
+  lips are of the tongue's red (`lipLikeTongue`: the lip colour's hue under
+  18 degrees from red, or nearly grey; lips measured 6 to 10, fur 25 to 31),
+  the tongue lies behind the lower lip (`paintTongueBehindLip`): an ellipse
+  the opening clips, wider than tall, so its top is a shallow arch that meets
+  the lip at an angle and goes behind it; its top 12% of the opening above
+  the lip's middle at rest, the floor of the mouth, and up to 62% only as
+  `tongueLift` rises (0 for every vowel and /r/, nearly 1 for /th/, /d/ /t/
+  and /n/ /l/, from the same eased raise); half in the mouth's shade and a
+  little dulled at rest, darker and duller than the lip, into the light as it
+  lifts; its top fading into the dark over most of a resting sliver, its own
+  colour going clear (a darker colour in the fade drew a line); its groove
+  and shine only as it lifts. The lower lip's shadow follows the clip's own
+  curve (`lowerEdgePath`) and fades in five strokes from 0.27 at the edge to
+  nothing a tenth of the opening in, with no edge of its own, on every
+  shaded mouth. Cel art keeps its tongue and its drawn line, pixel for
+  pixel; so does a muzzle (fur round the mouth: a photographed dog, a
+  rendered animal), whose tongue lying along the jaw is plainly a tongue,
+  with only the softer shadow. *Measured* (the same harness, main against
+  this): on her held vowels the band over the edge 67 to 71 → 0 to 4 levels
+  (0.85 to 1.07 of the lip → 0.33 to 0.47), on the rendered human 77 to 82
+  → 4 to 12; in the sentence, frames with a second lip (over 40 levels, at
+  least 0.75 of the lip) 22 → 4 and 20 → 2 of 43, the rest being /f/ /v/'s
+  tuck, the lower lip rolled under the teeth by design, which a closing "aa"
+  into /p/ reaches; raised, /th/ and /d/ show the tongue's tip as a mound in
+  the middle, not a band across. The human cartoon (cel art) is unchanged in
+  every frame, the classic mouth on the same picture is unchanged in every
+  frame, the animals keep their tongues. CI holds it (`toon-lower-lip.test.ts`,
+  Skia): on the toon subject's held aa, E and ou, nothing inside the opening
+  stands more than 20 levels over the edge's dark at the lip's middle (main:
+  61). *Goldens*: the character golden's render cases of `toon@1` and
+  `animal@2` (aa, oh, E, TH: the lower shadow, 4 draw calls fewer; the
+  synthetic render's lip is not of the tongue's red), and 14 new cases on a
+  render with red lips (the tongue behind the lip); the flat-art cases, rest,
+  FF and blink unchanged. The toon subject's Skia and Chromium frames where
+  the mouth is open (held aa, E, ou, the sentence at 20, 60 and 80%: the
+  tongue band gone) or barely parted (held PP, the sentence at 40%: at most 6
+  levels, the shadow), darwin-arm64 and linux-x64; the human (photo) and
+  animal (`animal@1`) frames byte-identical on both. Still weak: the resting
+  tongue is nearly invisible on a wide "aa" (the mouth reads as a dark
+  hollow); the tuck's rolled lower lip, reached by "aa" closing into /p/
+  with the jaw still open, fills the opening with enamel and a pale band
+  for a frame or two; a render with orange or tan lips past 18 degrees
+  keeps the tongue that lies along the lip.
 
 ## Data changes
 
