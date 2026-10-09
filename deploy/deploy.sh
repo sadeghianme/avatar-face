@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 #
-# Deploy one commit of main to the server: exactly the tree CI tested.
+# Deploy one commit of main to the server: the two images CI built and tested
+# for exactly that commit, pulled from GitHub's registry. Nothing is built on
+# the server.
 #
 #   deploy/deploy.sh                  deploy HEAD
 #   deploy/deploy.sh --ref <commit>   deploy another commit of origin/main
-#   deploy/deploy.sh --dry-run        every check, then print what would ship;
+#   deploy/deploy.sh --dry-run        every check, then print what would happen;
 #                                     nothing is sent and the server is not contacted
 #   deploy/deploy.sh --rollback       put back the release that was live before
 #                                     the last deploy (docs/process.md, "Rollback")
+#   deploy/deploy.sh --build          the fallback: send the commit's tree and build
+#                                     both images on the server, as before images
+#                                     were pulled (a commit CI pushed no images for)
 #   deploy/deploy.sh --skip-ci-check  emergencies only: ship without a green CI run
 #
 # Before anything leaves this machine it refuses (exit code in brackets):
@@ -15,11 +20,22 @@
 #       frontend/public/brand/, which the owner keeps there on purpose and
 #       which are never shipped (see "What ships" below);
 #   [4] a commit that is not on origin/main (pushed, so CI has seen it);
-#   [5] a commit whose own `ci` run on main did not succeed (still running,
-#       failed, cancelled, or never ran).
+#   [5] a commit with no successful `ci` run of its own: its run on main
+#       still running, failed, cancelled, or never ran, and no successful
+#       merge queue run of that commit either.
+# Then on the server, before anything there changes:
+#   [7] the server cannot pull from ghcr.io: not logged in, or its token
+#       cannot read the packages. What to run, once, is printed;
+#   [8] no image of this commit in the registry: CI pushes them only for a
+#       commit on main or in the merge queue whose images job passed (and
+#       only since pull mode). --build builds it on the server instead.
 #
-# What ships is `git archive <commit>`: the committed tree of that commit and
-# nothing else. Never the working tree, so an uncommitted favicon or an
+# What ships is the commit and nothing else. Pulled: the images CI built
+# from it (ghcr.io/sadeghianme/liveface-{api,web}:<commit>), after they
+# booted, served every page and ran the avatar wizard end to end; of the
+# tree, only deploy/docker-compose.prod.yml goes to the server, out of
+# `git archive <commit>`. With --build: `git archive <commit>`, the
+# committed tree, never the working tree, so an uncommitted favicon or an
 # untracked concepts/ folder cannot reach the server by accident. The commit
 # is baked into both images (LIVEFACE_VERSION); after the restart this script
 # reads it back from /api/health and /version.json, so "deployed" means the
@@ -59,8 +75,20 @@ PUBLIC_URL="${PUBLIC_URL:-https://avatar.mehdisadeghian.com}"
 BACKUP_KEEP="${BACKUP_KEEP:-10}"
 COMPOSE="docker-compose.prod.yml"
 API_CONTAINER="liveface-liveface-api-1"
+# What compose runs: the images it names after the project and the service.
+# A deploy tags what it ships as :latest of these; :release and :previous
+# are the last two releases a deploy verified.
 API_IMAGE="liveface-liveface-api"
 WEB_IMAGE="liveface-liveface-web"
+# Where CI pushes the images it tested, tagged with the commit (private;
+# ci.yml, the images job). The server pulls them with its own login.
+REGISTRY="ghcr.io"
+REGISTRY_USER="sadeghianme"
+GHCR_API="$REGISTRY/$REGISTRY_USER/liveface-api"
+GHCR_WEB="$REGISTRY/$REGISTRY_USER/liveface-web"
+# The label both Dockerfiles set: what marks an image as this project's when
+# the leftovers of earlier releases are pruned.
+IMAGE_SOURCE="https://github.com/sadeghianme/avatar-face"
 LOCAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Uncommitted changes here are tolerated, and never shipped.
 BRAND_DIR="frontend/public/brand/"
@@ -68,6 +96,7 @@ BRAND_DIR="frontend/public/brand/"
 DRY_RUN=0
 SKIP_CI=0
 ROLLBACK=0
+BUILD=0
 REF="HEAD"
 
 # The header above, up to "What ships".
@@ -78,6 +107,7 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY_RUN=1 ;;
     --skip-ci-check) SKIP_CI=1 ;;
     --rollback) ROLLBACK=1 ;;
+    --build) BUILD=1 ;;
     --ref)
       [ $# -ge 2 ] || { usage >&2; exit 2; }
       REF="$2"
@@ -153,10 +183,10 @@ fi
 # --------------------------------------------------------------- preflight ---
 
 need git "read the commit to ship"
-need tar "unpack the release"
 [ "$SKIP_CI" = 1 ] || need gh "ask GitHub whether CI passed (or pass --skip-ci-check)"
+[ "$BUILD" = 0 ] || need tar "unpack the release"
 if [ "$DRY_RUN" = 0 ]; then
-  need rsync "send the release"
+  [ "$BUILD" = 0 ] || need rsync "send the release"
   need ssh "reach the server"
   need curl "check the site's health"
 fi
@@ -209,77 +239,196 @@ if [ "$SKIP_CI" = 1 ]; then
   } >&2
   CI_RESULT="SKIPPED (--skip-ci-check)"
 else
-  # The newest `ci` run started by a push to main for this commit decides:
-  # a pull request's run tests a merge commit, not this tree, and a re-run
-  # replaces its run's result in place.
-  latest="$(cd "$LOCAL_DIR" && gh run list --commit "$SHA" --workflow ci --branch main --event push \
+  # Two kinds of run test exactly this commit: the push of it to main, and,
+  # with the merge queue, the queue's run of the commit it then put on main
+  # (the same commit, tested before it landed). A pull request's run tests
+  # a merge commit, not this tree, and a re-run replaces its run's result in
+  # place, so the newest run of each kind decides.
+  #
+  # The push run decides when it finished other than cancelled: a red main
+  # is never shipped, even if the queue's run of it passed. When it is
+  # missing, still running or cancelled (a newer push supersedes it), a
+  # successful queue run is enough: that is what lets a deploy start as
+  # soon as the queue merges.
+  push_run="$(cd "$LOCAL_DIR" && gh run list --commit "$SHA" --workflow ci --branch main --event push \
     --limit 1 --json status,conclusion,url --jq '.[] | [.status, .conclusion, .url] | join("|")')" \
     || refuse 5 "could not ask GitHub for CI runs (gh auth status?). --skip-ci-check exists for emergencies."
-  if [ -z "$latest" ]; then
-    refuse 5 "no CI run on main for $SHA. CI runs once per push, on its newest commit: deploy that commit (or a later one)."
-  fi
-  IFS='|' read -r ci_status ci_conclusion ci_url <<EOF
-$latest
+  IFS='|' read -r push_status push_conclusion push_url <<EOF
+$push_run
 EOF
-  if [ "$ci_status" != "completed" ]; then
-    refuse 5 "CI is still running for $SHA ($ci_status): $ci_url -- wait for it (gh run watch)."
+  if [ "$push_status" = completed ] && [ "$push_conclusion" = success ]; then
+    CI_RESULT="success (push to main) $push_url"
+  elif [ "$push_status" = completed ] && [ "$push_conclusion" != cancelled ]; then
+    refuse 5 "CI concluded '$push_conclusion' for $SHA: $push_url"
+  else
+    # The queue's runs are on its own branches, gh-readonly-queue/main/<entry>.
+    queue_run="$(cd "$LOCAL_DIR" && gh run list --commit "$SHA" --workflow ci --event merge_group \
+      --limit 5 --json status,conclusion,url,headBranch \
+      --jq '[.[] | select(.headBranch | startswith("gh-readonly-queue/main/"))] | .[:1][] | [.status, .conclusion, .url] | join("|")')" \
+      || refuse 5 "could not ask GitHub for CI runs (gh auth status?). --skip-ci-check exists for emergencies."
+    IFS='|' read -r queue_status queue_conclusion queue_url <<EOF
+$queue_run
+EOF
+    if [ "$queue_status" = completed ] && [ "$queue_conclusion" = success ]; then
+      CI_RESULT="success (merge queue) $queue_url"
+    elif [ -n "$push_run" ] && [ "$push_status" != completed ]; then
+      refuse 5 "CI is still running for $SHA ($push_status): $push_url -- wait for it (gh run watch)."
+    elif [ -n "$push_run" ]; then
+      refuse 5 "CI concluded '$push_conclusion' for $SHA: $push_url"
+    elif [ -n "$queue_run" ] && [ "$queue_status" != completed ]; then
+      refuse 5 "the merge queue's CI is still running for $SHA ($queue_status): $queue_url -- wait for it (gh run watch)."
+    elif [ -n "$queue_run" ]; then
+      refuse 5 "the merge queue's CI concluded '$queue_conclusion' for $SHA: $queue_url"
+    else
+      refuse 5 "no CI run on main for $SHA. CI runs once per push, on its newest commit: deploy that commit (or a later one)."
+    fi
   fi
-  if [ "$ci_conclusion" != "success" ]; then
-    refuse 5 "CI concluded '$ci_conclusion' for $SHA: $ci_url"
-  fi
-  CI_RESULT="success $ci_url"
   echo "  $CI_RESULT"
 fi
 
 # ----------------------------------------------------------------- release ---
 
-EXPORT="$(mktemp -d "${TMPDIR:-/tmp}/liveface-release.XXXXXX")"
-trap 'rm -rf "$EXPORT"' EXIT
-git -C "$LOCAL_DIR" archive --format=tar "$SHA" | tar -x -C "$EXPORT"
-FILES="$(find "$EXPORT" -type f | wc -l | tr -d ' ')"
-KB="$(du -sk "$EXPORT" | cut -f1)"
-echo "==> release $SHA: $FILES files, $((KB / 1024)) MB (git archive of the commit)"
+API_REF="$GHCR_API:$SHA"
+WEB_REF="$GHCR_WEB:$SHA"
+
+if [ "$BUILD" = 1 ]; then
+  EXPORT="$(mktemp -d "${TMPDIR:-/tmp}/liveface-release.XXXXXX")"
+  trap 'rm -rf "$EXPORT"' EXIT
+  git -C "$LOCAL_DIR" archive --format=tar "$SHA" | tar -x -C "$EXPORT"
+  FILES="$(find "$EXPORT" -type f | wc -l | tr -d ' ')"
+  KB="$(du -sk "$EXPORT" | cut -f1)"
+  echo "==> release $SHA: $FILES files, $((KB / 1024)) MB (git archive of the commit), built on the server (--build)"
+else
+  echo "==> release $SHA: the images CI tested"
+  echo "  $API_REF"
+  echo "  $WEB_REF"
+fi
 
 if [ "$DRY_RUN" = 1 ]; then
-  for entry in "$EXPORT"/* "$EXPORT"/.[!.]*; do
-    [ -e "$entry" ] || continue
-    printf '  %8s KB  %s\n' "$(du -sk "$entry" | cut -f1)" "${entry#"$EXPORT"/}"
-  done
-  echo "==> dry run: nothing sent. A deploy would:"
-  echo "  rsync this tree to $REMOTE:$REMOTE_DIR (--delete; deploy/.env and server data kept)"
-  echo "  back up /data/liveface.sqlite3 (keeping the newest $BACKUP_KEEP backups)"
-  echo "  keep the live release as :previous, build with LIVEFACE_VERSION=$SHA, restart"
+  if [ "$BUILD" = 1 ]; then
+    for entry in "$EXPORT"/* "$EXPORT"/.[!.]*; do
+      [ -e "$entry" ] || continue
+      printf '  %8s KB  %s\n' "$(du -sk "$entry" | cut -f1)" "${entry#"$EXPORT"/}"
+    done
+    echo "==> dry run: nothing sent. A deploy with --build would:"
+    echo "  rsync this tree to $REMOTE:$REMOTE_DIR (--delete; deploy/.env and server data kept)"
+    echo "  back up /data/liveface.sqlite3 (keeping the newest $BACKUP_KEEP backups)"
+    echo "  keep the live release as :previous, build with LIVEFACE_VERSION=$SHA, restart"
+  else
+    echo "==> dry run: nothing sent, the server not contacted. A deploy would, on $REMOTE:"
+    echo "  pull both images (the server must be logged in to $REGISTRY, once: docs/process.md)"
+    echo "  update $REMOTE_DIR/deploy/$COMPOSE from the commit (deploy/.env untouched)"
+    echo "  back up /data/liveface.sqlite3 (keeping the newest $BACKUP_KEEP backups)"
+    echo "  keep the live release as :previous, tag the pulled images :latest and restart"
+    echo "  them, building nothing"
+  fi
   echo "  require $PUBLIC_URL/api/health and /version.json to report $SHA"
   exit 0
 fi
 
-echo "==> syncing the release -> $REMOTE:$REMOTE_DIR"
-# The source is the clean export, so these excludes no longer filter what is
-# sent; they protect what lives only on the server from --delete:
-# .env above all, deliberately excluded and NOT merely ignored, because it
-# exists only on the server and --delete would otherwise remove the one copy
-# of the secret. Local databases and the image store are the server's data.
-rsync -az --delete -e "ssh ${SSH_OPTS[*]}" \
-  --exclude '.git' \
-  --exclude '.claude' \
-  --exclude '.env' \
-  --exclude 'node_modules' \
-  --exclude '.venv' \
-  --exclude '__pycache__' \
-  --exclude '*.sqlite3' \
-  --exclude '*.sqlite3-wal' \
-  --exclude '*.sqlite3-shm' \
-  --exclude 'backend/local_storage' \
-  "$EXPORT/" "$REMOTE:$REMOTE_DIR/"
-
-echo "==> checking the server can still build"
-ssh "$REMOTE" "test -s $REMOTE_DIR/deploy/.env" || {
-  echo "ERROR: $REMOTE_DIR/deploy/.env is missing or empty." >&2
-  echo "If the containers are still running, recover it before restarting them:" >&2
-  echo "  docker inspect liveface-liveface-api-1 --format '{{range .Config.Env}}{{println .}}{{end}}' \\" >&2
-  echo "    | grep '^JWT_SECRET=' > $REMOTE_DIR/deploy/.env" >&2
-  exit 1
+check_env() {
+  ssh "$REMOTE" "test -s $REMOTE_DIR/deploy/.env" || {
+    echo "ERROR: $REMOTE_DIR/deploy/.env is missing or empty." >&2
+    echo "If the containers are still running, recover it before restarting them:" >&2
+    echo "  docker inspect liveface-liveface-api-1 --format '{{range .Config.Env}}{{println .}}{{end}}' \\" >&2
+    echo "    | grep '^JWT_SECRET=' > $REMOTE_DIR/deploy/.env" >&2
+    exit 1
+  }
 }
+
+if [ "$BUILD" = 1 ]; then
+  echo "==> syncing the release -> $REMOTE:$REMOTE_DIR"
+  # The source is the clean export, so these excludes no longer filter what is
+  # sent; they protect what lives only on the server from --delete:
+  # .env above all, deliberately excluded and NOT merely ignored, because it
+  # exists only on the server and --delete would otherwise remove the one copy
+  # of the secret. Local databases and the image store are the server's data.
+  rsync -az --delete -e "ssh ${SSH_OPTS[*]}" \
+    --exclude '.git' \
+    --exclude '.claude' \
+    --exclude '.env' \
+    --exclude 'node_modules' \
+    --exclude '.venv' \
+    --exclude '__pycache__' \
+    --exclude '*.sqlite3' \
+    --exclude '*.sqlite3-wal' \
+    --exclude '*.sqlite3-shm' \
+    --exclude 'backend/local_storage' \
+    "$EXPORT/" "$REMOTE:$REMOTE_DIR/"
+
+  echo "==> checking the server can still build"
+  check_env
+else
+  echo "==> checking the server's deploy/.env"
+  check_env
+
+  # Pulled before anything on the server changes: a server that cannot read
+  # the registry, or a commit with no images, stops here with the old
+  # release serving and the database untouched. A pull of a code change is
+  # a few MB: every layer below the source (system libraries, models,
+  # Python libraries) is already there.
+  echo "==> pulling the images"
+  pull_status=0
+  ssh "$REMOTE" bash -s -- "$REGISTRY" "$API_REF" "$WEB_REF" <<'REMOTE_SCRIPT' || pull_status=$?
+set -uo pipefail
+registry="$1"
+shift
+# Whether docker has a login for the registry at all: the key alone, never
+# the credential beside it.
+if ! grep -qs "\"$registry\"" "${DOCKER_CONFIG:-$HOME/.docker}/config.json"; then
+  echo "  docker on this server has no login for $registry" >&2
+  exit 7
+fi
+for ref in "$@"; do
+  started=$(date +%s)
+  if out="$(docker pull --quiet "$ref" 2>&1)"; then
+    echo "  $ref ($(($(date +%s) - started))s)"
+    continue
+  fi
+  printf '%s\n' "$out" | sed 's/^/  docker: /' >&2
+  case "$out" in
+    *"manifest unknown"* | *"not found"*) exit 8 ;;
+    *) exit 7 ;;
+  esac
+done
+REMOTE_SCRIPT
+  case "$pull_status" in
+    0) ;;
+    7)
+      {
+        echo "REFUSED: $REMOTE cannot pull from $REGISTRY (above: what docker said)."
+        echo "  The images are private, so docker on the server needs a login to $REGISTRY,"
+        echo "  made once, by the owner. This script never asks for or handles the token."
+        echo "  1. Create a personal access token (classic) with the read:packages scope"
+        echo "     alone (GitHub's registry accepts no fine-grained token):"
+        echo "       https://github.com/settings/tokens/new?scopes=read:packages&description=liveface-server-pull"
+        echo "  2. On the server, give it to docker on stdin, so it is in no shell history:"
+        echo "       ssh $REMOTE"
+        echo "       docker login $REGISTRY -u $REGISTRY_USER --password-stdin"
+        echo "     then paste the token, press Enter and Ctrl-D; it answers 'Login Succeeded'."
+        echo "  3. Run this deploy again. A token that expires stops deploys here again."
+        echo "  Meanwhile, deploy/deploy.sh --build builds the images on the server instead."
+      } >&2
+      exit 7
+      ;;
+    8)
+      refuse 8 "no image of $SHA in $REGISTRY. CI pushes both images only for a commit on main
+  or in the merge queue whose images job passed (see its run), and only since images were
+  pulled; an older commit was never pushed. Deploy a newer commit, or build this one on the
+  server with: deploy/deploy.sh --build --ref $SHA"
+      ;;
+    *)
+      echo "ERROR: pulling the images failed (ssh exit $pull_status); nothing on the server changed." >&2
+      exit 1
+      ;;
+  esac
+
+  echo "==> updating deploy/$COMPOSE on the server"
+  # That file alone, from the commit (git archive), over the server's copy.
+  # deploy/.env is not in any commit, so this cannot touch it.
+  git -C "$LOCAL_DIR" archive --format=tar "$SHA" "deploy/$COMPOSE" \
+    | ssh "$REMOTE" "mkdir -p $REMOTE_DIR && tar -x -C $REMOTE_DIR"
+fi
 
 # Not cp: the database is in WAL mode, so recent commits live in the -wal
 # file beside it, and a copy of the main file alone silently lacks them.
@@ -316,18 +465,30 @@ done
 echo "  previous: $(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$1:previous" 2>/dev/null || echo none)"
 REMOTE_SCRIPT
 
-echo "==> building and restarting"
-ssh "$REMOTE" "cd $REMOTE_DIR/deploy && LIVEFACE_VERSION=$SHA docker compose -f $COMPOSE up -d --build" || {
-  echo "  build or restart failed. Compose replaces no container until every image builds," >&2
-  echo "  so a failed BUILD leaves the old release serving. If containers were replaced:" >&2
-  echo "    deploy/deploy.sh --rollback" >&2
-  exit 1
-}
+if [ "$BUILD" = 1 ]; then
+  echo "==> building and restarting"
+  ssh "$REMOTE" "cd $REMOTE_DIR/deploy && LIVEFACE_VERSION=$SHA docker compose -f $COMPOSE up -d --build" || {
+    echo "  build or restart failed. Compose replaces no container until every image builds," >&2
+    echo "  so a failed BUILD leaves the old release serving. If containers were replaced:" >&2
+    echo "    deploy/deploy.sh --rollback" >&2
+    exit 1
+  }
+else
+  # The pulled images become what compose runs (:latest of its own names),
+  # so --rollback, :release and :previous work as they always have, and
+  # compose builds nothing.
+  echo "==> restarting on the pulled images"
+  ssh "$REMOTE" "docker tag $API_REF $API_IMAGE:latest && docker tag $WEB_REF $WEB_IMAGE:latest \
+    && cd $REMOTE_DIR/deploy && docker compose -f $COMPOSE up -d --no-build" || {
+    echo "  restart failed. If containers were replaced: deploy/deploy.sh --rollback" >&2
+    exit 1
+  }
+fi
 
 # Wait for the API to answer before exec'ing into the container. Running
 # `docker exec` against a container that is still restarting blocks with no
 # output and no timeout -- which is what the hang looked like from here.
-# Answering is not enough: it must be the release just built.
+# Answering is not enough: it must be the release just shipped.
 echo "==> waiting for the API to report $SHA"
 for attempt in $(seq 1 60); do
   version="$(curl -sf --max-time 10 "$PUBLIC_URL/api/health" | json_version || true)"
@@ -337,7 +498,7 @@ for attempt in $(seq 1 60); do
   fi
   if [ "$attempt" -eq 60 ]; then
     echo "  the API did not report $SHA within 5 minutes (last answer: ${version:-none})" >&2
-    echo "  The build may still have succeeded -- check:" >&2
+    echo "  The restart may still have succeeded -- check:" >&2
     echo "    ssh $REMOTE 'docker ps --filter name=liveface'" >&2
     echo "  and put the previous release back with: deploy/deploy.sh --rollback" >&2
     exit 1
@@ -366,9 +527,37 @@ for t in ('users','organizations','avatars','api_keys'):
 curl -sf --max-time 20 -o /dev/null -w '  app %{http_code}\n' "$PUBLIC_URL/"
 curl -sf --max-time 20 -o /dev/null -w '  api %{http_code}\n' "$PUBLIC_URL/api/health"
 
+# Leftovers, best effort (a failure here is reported, never fatal: the
+# release is verified). The registry tags of earlier releases: :release and
+# :previous keep what a rollback needs. Then this project's images that no
+# tag names any more -- the releases before :previous, which every deploy
+# leaves behind and which filled the disk by a GB each. Only images with
+# this project's source label, and only untagged ones.
+echo "==> pruning earlier releases' images"
+ssh "$REMOTE" bash -s -- "$SHA" "$IMAGE_SOURCE" "$GHCR_API" "$GHCR_WEB" <<'REMOTE_SCRIPT' \
+  || echo "  pruning failed; nothing depends on it (docker image ls on the server)" >&2
+set -uo pipefail
+keep="$1"
+source="$2"
+shift 2
+for repo in "$@"; do
+  for tag in $(docker image ls "$repo" --format '{{.Tag}}'); do
+    if [ "$tag" != "$keep" ]; then
+      docker image rm "$repo:$tag" >/dev/null && echo "  untagged $repo:$tag"
+    fi
+  done
+done
+docker image prune --force --filter "label=org.opencontainers.image.source=$source" | sed -n 's/^Total/  total/p'
+REMOTE_SCRIPT
+
 echo "==> DEPLOY"
 echo "  release   $SHA $SUBJECT"
 echo "  CI        $CI_RESULT"
+if [ "$BUILD" = 1 ]; then
+  echo "  images    built on the server (--build)"
+else
+  echo "  images    pulled: $API_REF, $WEB_REF"
+fi
 echo "  api, web  both report $SHA"
 echo "  backup    $BACKUP"
 echo "  rollback  deploy/deploy.sh --rollback (restores :previous; the database is left as is)"

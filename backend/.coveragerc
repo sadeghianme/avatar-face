@@ -11,7 +11,7 @@ branch = True
 # measured 48% instead of 83% on the same tests), and so would the lines
 # the job runner's threads run.
 concurrency = greenlet, thread
-# Paths stored relative to backend/, so the data files of CI's two halves
+# Paths stored relative to backend/, so the data files of CI's test shards
 # combine on another runner.
 relative_files = True
 

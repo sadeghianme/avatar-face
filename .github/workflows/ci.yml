@@ -9,13 +9,24 @@ on:
   push:
     branches: [main]
   pull_request:
+  # A pull request in the merge queue: the commit the queue would put on
+  # main, tested before it gets there (docs/process.md, "Merge queue").
+  # Every job runs on it, so it reports the same required checks, and the
+  # images job pushes that commit's images, which deploy.sh pulls.
+  merge_group:
 
 # A newer push to the same branch (or pull request) supersedes the run in
 # progress: its result would describe a commit nobody will deploy, and
-# deploy/deploy.sh only ships a commit whose OWN run passed.
+# deploy/deploy.sh only ships a commit whose OWN run passed. Each merge
+# queue entry has a ref of its own, so queue runs never cancel each other.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
+# Read-only by default; the images job alone may write packages, to push
+# the images it tested.
+permissions:
+  contents: read
 
 # The required checks on main (docs/process.md, "Branch protection") are the
 # job ids backend, embed, frontend, frontend-lint, deploy-script and images:
@@ -23,9 +34,9 @@ concurrency:
 # backend-coverage are not required themselves: `backend` passes only when
 # they all do.
 jobs:
-  # The backend is three jobs side by side: its static checks, and its test
-  # suite in two halves. Each restores the same virtualenv. Then
-  # backend-coverage combines the two halves' coverage.
+  # The backend is four jobs side by side: its static checks, and its test
+  # suite in three shards. Each restores the same virtualenv. Then
+  # backend-coverage combines the three shards' coverage.
   backend-checks:
     # Everything but the tests: lint, formatting, types, the API document,
     # and the migrations against the models. No system libraries: nothing
@@ -96,16 +107,17 @@ jobs:
           alembic check
 
   backend-tests:
-    # The suite in two halves side by side (LIVEFACE_TEST_SHARD, read by
-    # tests/conftest.py: each test belongs to exactly one), each half on
-    # every core of its runner (pytest-xdist, -n auto).
+    # The suite in three shards side by side (LIVEFACE_TEST_SHARD, read by
+    # tests/conftest.py: each test belongs to exactly one), each shard on
+    # every core of its runner (pytest-xdist, -n auto). Three, not two: the
+    # halves took 4-5.5 minutes and were the longest jobs of the run.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
-      # One half failing must not cancel the other: both sets of failures.
+      # One shard failing must not cancel the others: every set of failures.
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     defaults:
       run:
         working-directory: backend
@@ -178,26 +190,26 @@ jobs:
           echo "// ci stub" > ../embed/dist/basis_transcoder.js
           printf '\0asm\1\0\0\0' > ../embed/dist/basis_transcoder.wasm
           cp ../embed/assets/mouth-teeth.webp ../embed/assets/mouth-teeth.rig.json ../embed/dist/
-      - name: Tests (half ${{ matrix.shard }} of 2)
+      - name: Tests (shard ${{ matrix.shard }} of 3)
         # With coverage (backend/.coveragerc): every xdist worker measures,
-        # pytest-cov merges them into this half's data file.
-        # No floor here: half the suite covers less than the whole, and
-        # backend-coverage holds the two halves combined to it.
+        # pytest-cov merges them into this shard's data file.
+        # No floor here: a third of the suite covers less than the whole, and
+        # backend-coverage holds the three shards combined to it.
         env:
-          LIVEFACE_TEST_SHARD: ${{ matrix.shard }}/2
-          COVERAGE_FILE: .coverage.half${{ matrix.shard }}
+          LIVEFACE_TEST_SHARD: ${{ matrix.shard }}/3
+          COVERAGE_FILE: .coverage.shard${{ matrix.shard }}
         run: python -m pytest tests -q -n auto --cov --cov-report= --cov-fail-under=0
-      - name: Upload this half's coverage data
+      - name: Upload this shard's coverage data
         uses: actions/upload-artifact@v6
         with:
           name: backend-coverage-data-${{ matrix.shard }}
-          path: backend/.coverage.half${{ matrix.shard }}
+          path: backend/.coverage.shard${{ matrix.shard }}
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
 
   backend-coverage:
-    # The two halves' coverage data combined, held to the floor
+    # The three shards' coverage data combined, held to the floor
     # (fail_under in backend/.coveragerc, docs/process.md "Coverage"). Needs
     # only coverage itself, at the version pyproject.toml pins: it reads the
     # sources, it imports nothing.
@@ -216,7 +228,7 @@ jobs:
         run: |
           pin=$(python -c 'import tomllib; dev = tomllib.load(open("pyproject.toml", "rb"))["project"]["optional-dependencies"]["dev"]; print(next(d for d in dev if d.startswith("coverage==")))')
           pip install "$pin"
-      - name: Download both halves' data
+      - name: Download the three shards' data
         uses: actions/download-artifact@v7
         with:
           pattern: backend-coverage-data-*
@@ -241,10 +253,10 @@ jobs:
 
   backend:
     # The required check (branch protection names it): green only when
-    # backend-checks, both halves of backend-tests and backend-coverage are.
+    # backend-checks, every shard of backend-tests and backend-coverage are.
     # `always()`: a required check that is skipped counts as passed, so this
     # one never skips; it runs whatever happened before it and fails unless
-    # all passed (backend-coverage is skipped, so not a success, when a half
+    # all passed (backend-coverage is skipped, so not a success, when a shard
     # failed).
     if: always()
     needs: [backend-checks, backend-tests, backend-coverage]
@@ -474,17 +486,71 @@ jobs:
     # widget and the share page's speech included; then an owner makes an
     # avatar through the whole wizard, hears it speak, shares it and
     # deletes it, in the same Chrome (deploy/smoke/).
+    #
+    # On a push to main and in the merge queue, the images that passed all of
+    # that are then pushed to GitHub's registry as
+    # ghcr.io/sadeghianme/liveface-{api,web}:<commit>, private, and that is
+    # what deploy/deploy.sh pulls: the server runs the bytes tested here and
+    # builds nothing. Never on a pull request, a fork's least of all.
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    permissions:
+      contents: read
+      # The push below; the login is skipped on pull requests, whose token
+      # is read-only when they come from a fork anyway.
+      packages: write
+    env:
+      API_IMAGE: ghcr.io/sadeghianme/liveface-api
+      WEB_IMAGE: ghcr.io/sadeghianme/liveface-web
+      PUBLISH: ${{ github.event_name == 'push' || github.event_name == 'merge_group' }}
+      # No build-record artifact per build: the job summary says enough.
+      DOCKER_BUILD_RECORD_UPLOAD: false
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      # BuildKit in a container, for the layer cache in GitHub's Actions cache
+      # (type=gha): a layer whose inputs did not change -- the models, the
+      # Python libraries, the npm installs -- is restored instead of rebuilt,
+      # and keeps its digest from run to run, so the registry and the server
+      # already have it. One cache scope per image, or each would overwrite
+      # the other's index. mode=max keeps the build stages' layers too.
+      - uses: docker/setup-buildx-action@v4
       - name: Build the API image
-        run: docker build -f backend/Dockerfile --build-arg LIVEFACE_VERSION=${{ github.sha }} -t liveface-api:ci .
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: backend/Dockerfile
+          build-args: LIVEFACE_VERSION=${{ github.sha }}
+          tags: liveface-api:ci
+          load: true
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max,ignore-error=true
       - name: Build the dashboard image
-        run: docker build -f frontend/Dockerfile --build-arg LIVEFACE_VERSION=${{ github.sha }} -t liveface-web:ci .
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: frontend/Dockerfile
+          build-args: LIVEFACE_VERSION=${{ github.sha }}
+          tags: liveface-web:ci
+          load: true
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max,ignore-error=true
+      - name: The API image's libraries are constraints.txt's
+        # backend/Dockerfile installs the libraries before the source, from
+        # the dependency list and constraints.txt alone; the project goes on
+        # top with --no-deps. Its `pip freeze` must be exactly the pins (the
+        # production freeze): a dependency added without its pin, or one
+        # resolved differently, fails here instead of reaching the server.
+        run: |
+          docker run --rm --entrypoint pip liveface-api:ci freeze \
+            | grep -v '^liveface-backend' > "$RUNNER_TEMP/freeze.txt"
+          grep -v '^#' backend/constraints.txt | diff -u - "$RUNNER_TEMP/freeze.txt"
       - name: Start both behind a Caddy stand-in
         run: |
           docker run -d --name api -p 127.0.0.1:7092:7002 --tmpfs /data \
@@ -521,6 +587,91 @@ jobs:
         env:
           WIZARD_E2E_ARTIFACTS: ${{ runner.temp }}/wizard-e2e
         run: node deploy/smoke/wizard-e2e.mjs http://127.0.0.1:7090
+      # Everything above passed: publish (push to main, merge queue only).
+      - name: Log in to GitHub's registry
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The same build again, every step a hit in this runner's BuildKit
+      # (the build above just made them): it pushes the layers the tests ran,
+      # and the registry skips every layer it already has, so a code change
+      # uploads a few MB. The step after proves the pushed images are the
+      # tested ones.
+      - name: Push the API image
+        if: env.PUBLISH == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: backend/Dockerfile
+          build-args: LIVEFACE_VERSION=${{ github.sha }}
+          tags: ${{ env.API_IMAGE }}:${{ github.sha }}
+          push: true
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=api
+      - name: Push the dashboard image
+        if: env.PUBLISH == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: frontend/Dockerfile
+          build-args: LIVEFACE_VERSION=${{ github.sha }}
+          tags: ${{ env.WEB_IMAGE }}:${{ github.sha }}
+          push: true
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=web
+      - name: The pushed images are the tested ones
+        # Same layers (the uncompressed digests, which name a layer's exact
+        # bytes), same environment, command and labels (the commit among
+        # them), read back from the registry.
+        if: env.PUBLISH == 'true'
+        run: |
+          # Absent and empty read alike: `docker image inspect` fills in what
+          # the registry's copy of the config may leave out.
+          summary='{layers: .layers, env: (.config.Env // []), cmd: (.config.Cmd // []),
+            entrypoint: (.config.Entrypoint // []), workdir: (.config.WorkingDir // ""),
+            labels: (.config.Labels // {})}'
+          same() { # <tested tag> <pushed reference>
+            local tested pushed
+            tested=$(docker image inspect "$1" | jq -S -c ".[0] | {layers: .RootFS.Layers, config: .Config} | $summary")
+            pushed=$(docker buildx imagetools inspect "$2" --format '{{json .Image}}' \
+              | jq -S -c "{layers: .rootfs.diff_ids, config: .config} | $summary")
+            if [ "$tested" != "$pushed" ]; then
+              echo "::error::$2 is not the image tested as $1"
+              diff <(jq . <<<"$tested") <(jq . <<<"$pushed") || true
+              return 1
+            fi
+            echo "$2: $(jq '.layers | length' <<<"$pushed") layers, as tested"
+            docker buildx imagetools inspect "$2" | grep -m1 Digest
+            # Each layer as the registry stores it (compressed: what a pull
+            # downloads), beside the step that made it. A server that has
+            # the previous release downloads only the layers that changed:
+            # for a code change, the ones after the libraries.
+            jq -r -n --argjson m "$(docker buildx imagetools inspect --raw "$2")" \
+              --argjson c "$(docker buildx imagetools inspect "$2" --format '{{json .Image}}')" '
+              [$c.history[] | select(.empty_layer != true) | .created_by] as $by
+              | ($m.layers | map(.size) | add) as $total
+              | (range(0; $m.layers | length) as $i
+                 | "  \($m.layers[$i].size / 1048576 * 10 | round / 10) MB  \($m.layers[$i].digest[7:19])  \(($by[$i] // "") | gsub("\\s+"; " ") | .[0:90])"),
+                "  \($total / 1048576 | round) MB in all"'
+          }
+          same liveface-api:ci "$API_IMAGE:$GITHUB_SHA"
+          same liveface-web:ci "$WEB_IMAGE:$GITHUB_SHA"
+          # Private, as they should stay: the registry gives no anonymous
+          # reader a token (403) for a package that is not public. A warning,
+          # not a failure: making them public is the owner's call to make.
+          for image in "$API_IMAGE" "$WEB_IMAGE"; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://ghcr.io/token?scope=repository:${image#ghcr.io/}:pull")
+            if [ "$code" = 200 ]; then
+              echo "::warning::$image is PUBLIC: anyone can pull it (docs/process.md, \"Images\")"
+            else
+              echo "$image: private (an anonymous reader gets HTTP $code)"
+            fi
+          done
       - name: Container logs
         if: failure()
         run: |
