@@ -11,6 +11,11 @@
  * turn in depth (head-turn.ts, `turn`), which keeps the face's outline
  * where the rigid motion puts it, and the neck band's pin to a layered
  * avatar's body (neck-blend.ts, `pin`).
+ *
+ * It runs every frame, so it writes into vertices its caller keeps from
+ * frame to frame (FrameVertices) and makes no array or point of its own:
+ * the engine's are valid for the frame they were drawn in, and are moved
+ * again by the next one (mouth-extension.ts says so to a mouth extension).
  */
 import { blinkEase } from "./blink";
 import type { CharacterField, CharacterTraits } from "./character-mouth";
@@ -163,15 +168,46 @@ export interface DeformInput {
    *  layers under it (neck-blend.ts). Absent: it moves with the head. */
   pin?: NeckPin | null;
   /** The head's field's own vertices (head-field.ts, FaceMesh.head),
-   *  pushed onto the vertices after the neck band's, turned with the face
-   *  (head-turn.ts HeadTurn.field). Absent: where they rest. */
+   *  written into the vertices from FaceMesh.head.first (after the neck
+   *  band's), turned with the face (head-turn.ts HeadTurn.field). Absent:
+   *  where they rest. */
   head?: (pts: Point[]) => void;
 }
 
-/** Every vertex of the mesh this frame, canvas px, in vertex order. */
-export function deformFace(f: DeformInput): Point[] {
+/**
+ * Where a frame's vertices are written, kept by whoever draws frames: `all`
+ * every vertex of the mesh, in its order; `landmarks` the face's own (the
+ * mesh's base points), the same objects as the first of `all`, the array
+ * the mouth, the lids, a mouth extension and the turn move.
+ */
+export interface FrameVertices {
+  readonly landmarks: Point[];
+  readonly all: Point[];
+}
+
+/**
+ * Every vertex of the mesh this frame, canvas px, in vertex order: `into`'s
+ * `all`, valid until the next deformFace into it. Without `into`, new
+ * vertices of the caller's own.
+ */
+export function deformFace(f: DeformInput, into: FrameVertices = { landmarks: [], all: [] }): Point[] {
   const { mesh, face, tuning } = f;
-  const pts = mesh.basePoints.map((p) => ({ x: p.x, y: p.y }));
+  const base = mesh.basePoints;
+  const n = base.length;
+  const { landmarks: pts, all } = into;
+  // Sized for the mesh, keeping the points already there, the landmarks
+  // the first of all.
+  const total = n + mesh.derivedParents.length + mesh.neckBand.length + (mesh.head?.count ?? 0);
+  while (all.length < total) all.push({ x: 0, y: 0 });
+  all.length = total;
+  if (pts.length !== n) {
+    pts.length = n;
+    for (let i = 0; i < n; i++) pts[i] = all[i];
+  }
+  for (let i = 0; i < n; i++) {
+    pts[i].x = base[i].x;
+    pts[i].y = base[i].y;
+  }
   const w = face.weights;
 
   const mouth = mouthBox(pts, f.rig.mouth_indices);
@@ -184,8 +220,13 @@ export function deformFace(f: DeformInput): Point[] {
   // cheeks the wrong way — an opening jaw narrows the face.)
 
   // Face half-height, for expression amplitudes.
-  const ys = pts.map((p) => p.y);
-  const fh = (Math.max(...ys) - Math.min(...ys)) / 2;
+  let top = Infinity,
+    bottom = -Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    top = Math.min(top, pts[i].y);
+    bottom = Math.max(bottom, pts[i].y);
+  }
+  const fh = (bottom - top) / 2;
 
   // Lids also follow a downward gaze a little (LID_FOLLOW), so the
   // deformation runs whenever either is non-zero.
@@ -205,8 +246,9 @@ export function deformFace(f: DeformInput): Point[] {
   if (w.mouthSmile > 0.05) {
     for (let e = 0; e < 2; e++) {
       const lift = w.mouthSmile * 0.12;
-      const top = Math.min(...UPPER_LIDS[e].map((i) => pts[i].y));
-      for (const i of LOWER_LIDS[e]) pts[i].y -= (pts[i].y - top) * lift;
+      let lid = Infinity;
+      for (const i of UPPER_LIDS[e]) lid = Math.min(lid, pts[i].y);
+      for (const i of LOWER_LIDS[e]) pts[i].y -= (pts[i].y - lid) * lift;
     }
   }
 
@@ -233,32 +275,45 @@ export function deformFace(f: DeformInput): Point[] {
   if (f.lowerFace) applyLowerFace(pts, mesh.basePoints, f.lowerFace, w, tuning.mouthOpen);
 
   f.turn?.(pts);
+  // A driver that put a new point in a landmark's place rather than move
+  // it: the frame's vertices hold the new one.
+  for (let i = 0; i < pts.length; i++) if (all[i] !== pts[i]) all[i] = pts[i];
 
   // Derived midpoint vertices (mouth subdivision) follow their parents
   // through EVERY layer above — computed last, from final positions.
+  let k = n;
   for (const [a, b] of mesh.derivedParents) {
-    pts.push({ x: (pts[a].x + pts[b].x) / 2, y: (pts[a].y + pts[b].y) / 2 });
+    const q = all[k++];
+    q.x = (all[a].x + all[b].x) / 2;
+    q.y = (all[a].y + all[b].y) / 2;
   }
   // The neck band follows the jaw line by each vertex's share, and on a
   // layered avatar where the neck's warp puts the layers under it.
   const pin = f.pin;
   for (const v of mesh.neckBand) {
-    const p = pts[v.parent],
-      b = mesh.basePoints[v.parent];
-    const o = pin ? neckPinOffset(pin, v.base) : null;
-    pts.push({
-      x: v.base.x + (p.x - b.x) * v.share + (o ? o.x : 0),
-      y: v.base.y + (p.y - b.y) * v.share + (o ? o.y : 0),
-    });
+    const p = all[v.parent],
+      b = base[v.parent];
+    const o = pin ? neckPinOffset(pin, v.base, offset) : null;
+    const q = all[k++];
+    q.x = v.base.x + (p.x - b.x) * v.share + (o ? o.x : 0);
+    q.y = v.base.y + (p.y - b.y) * v.share + (o ? o.y : 0);
   }
   // The head's field: the hair, the ears and the head's outline.
   if (mesh.head) {
-    if (f.head) f.head(pts);
-    else for (const v of mesh.head.vertices) pts.push({ x: v.base.x, y: v.base.y });
+    if (f.head) f.head(all);
+    else
+      for (const v of mesh.head.vertices) {
+        const q = all[k++];
+        q.x = v.base.x;
+        q.y = v.base.y;
+      }
   }
 
-  return pts;
+  return all;
 }
+
+/** A neck band vertex's pin, this frame. */
+const offset: Point = { x: 0, y: 0 };
 
 /** The mouth's centroid and size at rest, canvas px. */
 interface MouthBox {

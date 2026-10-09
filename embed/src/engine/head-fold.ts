@@ -24,42 +24,52 @@ export function area(a: Point, b: Point, c: Point): number {
   return (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y);
 }
 
+/**
+ * Math.hypot(dx, dy) folded into `longest`: [the longest of a frame's
+ * shifts so far, as Math.hypot measures each (the turn's stats:
+ * TurnStats.maxShift, headMaxShift), the longest square so far]. Math.hypot
+ * makes an array for every call in V8, and a frame has hundreds of shifts,
+ * so only those that could be the longest are measured: one whose square is
+ * within a hair (1e-6) of the longest square so far. Every other is shorter
+ * by far more than either measure's rounding, so the longest is what
+ * measuring them all gives, to the bit.
+ */
+export function longer(longest: Float64Array, dx: number, dy: number): void {
+  const sq = dx * dx + dy * dy;
+  // A square too small to be told apart (subnormal), or not a number, is
+  // measured as it is.
+  if (longest[1] > 1e-200 && sq < longest[1] * (1 - 1e-6)) return;
+  longest[0] = Math.max(longest[0], Math.hypot(dx, dy));
+  if (sq > longest[1]) longest[1] = sq;
+}
+
 /** The rig's triangles, checked for folds after a turn, and their crushed
  *  corners eased. */
 export class FoldCheck {
-  /** The rig's own triangles, three landmark indices each. */
-  private readonly tris: Int32Array;
   private readonly restArea: Float64Array;
   /** The triangles (indices into tris) the last check found crushed, and
    *  how many. */
   private readonly crushed: Int32Array;
   private crushedCount = 0;
   /** A pass of easing: per landmark, the sum of its crushed triangles'
-   *  mean moves and how many there were; and the landmarks it reached. */
-  private readonly sumX: Float64Array;
-  private readonly sumY: Float64Array;
-  private readonly hits: Float64Array;
+   *  mean moves (x, y) and how many there were; and the landmarks it
+   *  reached. */
+  private readonly sums: Float64Array;
   private readonly reached: Int32Array;
 
-  /** `n` landmarks; `minArea`: triangles smaller than this (twice their
-   *  area, px²) are slivers with no shape to keep (the Delaunay hull's, the
-   *  eye's corners). */
+  /** The rig's own triangles, over `n` landmarks resting at `base`;
+   *  `minArea`: triangles smaller than this (twice their area, px²) are
+   *  slivers with no shape to keep (the Delaunay hull's, the eye's
+   *  corners). */
   constructor(
-    tris: readonly (readonly [number, number, number])[],
+    private readonly tris: readonly (readonly [number, number, number])[],
     base: readonly Point[],
     n: number,
     private readonly minArea: number
   ) {
-    this.tris = new Int32Array(tris.length * 3);
-    this.restArea = new Float64Array(tris.length);
-    tris.forEach(([a, b, c], k) => {
-      this.tris.set([a, b, c], 3 * k);
-      this.restArea[k] = area(base[a], base[b], base[c]);
-    });
+    this.restArea = Float64Array.from(tris, ([a, b, c]) => area(base[a], base[b], base[c]));
     this.crushed = new Int32Array(tris.length);
-    this.sumX = new Float64Array(n);
-    this.sumY = new Float64Array(n);
-    this.hits = new Float64Array(n);
+    this.sums = new Float64Array(3 * n);
     this.reached = new Int32Array(n);
   }
 
@@ -71,10 +81,10 @@ export class FoldCheck {
     const { tris, restArea, minArea, crushed } = this;
     let count = 0,
       minRatio = Infinity;
-    for (let k = 0; k < restArea.length; k++) {
-      const a = tris[3 * k],
-        b = tris[3 * k + 1],
-        c = tris[3 * k + 2];
+    for (let k = 0; k < tris.length; k++) {
+      const a = tris[k][0],
+        b = tris[k][1],
+        c = tris[k][2];
       const was =
         (before[2 * b] - before[2 * a]) * (before[2 * c + 1] - before[2 * a + 1]) -
         (before[2 * c] - before[2 * a]) * (before[2 * b + 1] - before[2 * a + 1]);
@@ -93,31 +103,30 @@ export class FoldCheck {
    *  triangle's own deformation, and what it gives up its neighbours take.
    *  `move`: per landmark, its x, y move. */
   ease(move: Float64Array, isFree: Uint8Array): void {
-    const { tris, crushed, sumX, sumY, hits, reached } = this;
+    const { tris, crushed, sums, reached } = this;
     let r = 0;
     for (let q = 0; q < this.crushedCount; q++) {
-      const k = crushed[q];
+      const tri = tris[crushed[q]];
       let mx = 0,
         my = 0;
-      for (let v = 3 * k; v < 3 * k + 3; v++) {
-        mx += move[2 * tris[v]] / 3;
-        my += move[2 * tris[v] + 1] / 3;
+      for (const i of tri) {
+        mx += move[2 * i] / 3;
+        my += move[2 * i + 1] / 3;
       }
-      for (let v = 3 * k; v < 3 * k + 3; v++) {
-        const i = tris[v];
+      for (const i of tri) {
         if (!isFree[i]) continue;
-        if (!hits[i]) reached[r++] = i;
-        sumX[i] += mx;
-        sumY[i] += my;
-        hits[i]++;
+        if (!sums[3 * i + 2]) reached[r++] = i;
+        sums[3 * i] += mx;
+        sums[3 * i + 1] += my;
+        sums[3 * i + 2]++;
       }
     }
     // Every move above is read before any is written, as a pass must.
     for (let q = 0; q < r; q++) {
       const i = reached[q];
-      move[2 * i] = 0.5 * move[2 * i] + (0.5 * sumX[i]) / hits[i];
-      move[2 * i + 1] = 0.5 * move[2 * i + 1] + (0.5 * sumY[i]) / hits[i];
-      sumX[i] = sumY[i] = hits[i] = 0;
+      move[2 * i] = 0.5 * move[2 * i] + (0.5 * sums[3 * i]) / sums[3 * i + 2];
+      move[2 * i + 1] = 0.5 * move[2 * i + 1] + (0.5 * sums[3 * i + 1]) / sums[3 * i + 2];
+      sums[3 * i] = sums[3 * i + 1] = sums[3 * i + 2] = 0;
     }
   }
 }

@@ -50,10 +50,9 @@ export function rotate(m: Affine, angle: number): Affine {
 }
 
 /** Apply an affine to a point; into `out` when given (which may be `p`). */
-export function apply(m: Affine, p: Point, out?: Point): Point {
+export function apply(m: Affine, p: Point, out: Point = { x: 0, y: 0 }): Point {
   const x = p.x,
     y = p.y;
-  if (!out) return { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f };
   out.x = m.a * x + m.c * y + m.e;
   out.y = m.b * x + m.d * y + m.f;
   return out;
@@ -61,13 +60,9 @@ export function apply(m: Affine, p: Point, out?: Point): Point {
 
 /** The inverse of `m` (the identity for a singular one, which no head's
  *  motion is); into `out` when given. */
-export function invert(m: Affine, out?: Affine): Affine {
+export function invert(m: Affine, out: Affine = { ...IDENTITY }): Affine {
   const { a, b, c, d, e, f } = m;
   const det = a * d - b * c;
-  if (!out) {
-    if (!det) return { ...IDENTITY };
-    return { a: d / det, b: -b / det, c: -c / det, d: a / det, e: (c * f - d * e) / det, f: (b * e - a * f) / det };
-  }
   if (!det) return Object.assign(out, IDENTITY);
   out.a = d / det;
   out.b = -b / det;

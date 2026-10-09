@@ -18,7 +18,7 @@ import type { FaceMesh, Point } from "./geometry";
 import { projectTurn, type HeadPose3D } from "./head-camera";
 import { SKULL_CENTRE_CM, type CanonicalFit } from "./head-depth";
 import type { HeadField } from "./head-field";
-import { area } from "./head-fold";
+import { area, longer } from "./head-fold";
 import { softLimit } from "./head-personality";
 
 /** The most a band of the head's field (outline to its end) is squeezed or
@@ -56,12 +56,12 @@ export class FieldTurn {
    *  it takes (1 near the face, 0 where the field ends). */
   private readonly headDepth: Float64Array;
   private readonly headFall: Float64Array;
-  /** The field's triangles, three vertex indices each, and their rest
-   *  areas (twice, signed). */
-  private readonly headTris: Int32Array;
+  /** The field's triangles, and their rest areas (twice, signed). */
+  private readonly headTris: [number, number, number][];
   private readonly headRestArea: Float64Array;
-  /** Where the camera puts a vertex, this frame. */
+  /** Where the camera puts a vertex, this frame, and the longest shift. */
   private readonly seen: Point = { x: 0, y: 0 };
+  private readonly longest = new Float64Array(2);
 
   /**
    * The field `head` laid on `mesh`, for a turn about `pivot` seen from
@@ -72,7 +72,7 @@ export class FieldTurn {
    * `minArea`: a triangle smaller than this has no shape to keep.
    */
   constructor(
-    readonly head: HeadField,
+    private readonly head: HeadField,
     mesh: FaceMesh,
     fit: CanonicalFit,
     depth: Float64Array,
@@ -128,10 +128,8 @@ export class FieldTurn {
           : i >= n + mesh.derivedParents.length
             ? mesh.neckBand[i - n - mesh.derivedParents.length].base
             : base[0];
-    const tris = mesh.triangles.slice(head.triangleFrom);
-    this.headTris = new Int32Array(tris.length * 3);
-    tris.forEach(([a, b, c], t) => this.headTris.set([a, b, c], 3 * t));
-    this.headRestArea = Float64Array.from(tris, ([a, b, c]) => area(rest(a), rest(b), rest(c)));
+    this.headTris = mesh.triangles.slice(head.triangleFrom).map(([a, b, c]) => [a, b, c]);
+    this.headRestArea = Float64Array.from(this.headTris, ([a, b, c]) => area(rest(a), rest(b), rest(c)));
   }
 
   /**
@@ -176,7 +174,7 @@ export class FieldTurn {
     const head = this.head;
     const inPlace = pts.length === head.first + head.count;
     const q = this.seen;
-    let maxShift = 0;
+    const longest = this.longest.fill(0);
     for (let j = 0; j < head.count; j++) {
       const v = head.vertices[j];
       const p = v.base;
@@ -188,7 +186,7 @@ export class FieldTurn {
         if (back) applyAffine(back, q, q);
         x += (q.x - p.x) * k;
         y += (q.y - p.y) * k;
-        maxShift = Math.max(maxShift, Math.hypot(x - p.x, y - p.y));
+        longer(longest, x - p.x, y - p.y);
       }
       if (inPlace) {
         const o = pts[head.first + j];
@@ -196,14 +194,14 @@ export class FieldTurn {
         o.y = y;
       } else pts.push({ x, y });
     }
-    report.headMaxShift = maxShift;
+    report.headMaxShift = longest[0];
     const tris = this.headTris,
       restArea = this.headRestArea;
     let minRatio = Infinity;
     for (let t = 0; t < restArea.length; t++) {
       const was = restArea[t];
       if (Math.abs(was) < this.minArea) continue;
-      minRatio = Math.min(minRatio, area(pts[tris[3 * t]], pts[tris[3 * t + 1]], pts[tris[3 * t + 2]]) / was);
+      minRatio = Math.min(minRatio, area(pts[tris[t][0]], pts[tris[t][1]], pts[tris[t][2]]) / was);
     }
     report.headMinAreaRatio = minRatio === Infinity ? 1 : minRatio;
   }

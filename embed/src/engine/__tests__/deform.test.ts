@@ -5,7 +5,7 @@ import type { CharacterField } from "../character-mouth";
 import { HUMAN_PROFILE, kindProfile } from "../kind-profile";
 import type { MouthExtension } from "../../mouth-extension";
 import { DEFAULT_TUNING, ZERO_WEIGHTS, type BlendWeights, type Rig } from "../../types";
-import { deformFace, type DeformInput } from "../deform";
+import { deformFace, type DeformInput, type FrameVertices } from "../deform";
 import type { FaceMesh, Point } from "../geometry";
 import { LANDMARK_COUNT, LEFT_BROW, LOWER_LIDS, RIGHT_BROW, UPPER_LIDS } from "../landmarks";
 import { restingFace } from "../state";
@@ -88,25 +88,29 @@ function mesh(): FaceMesh {
 
 function deform(
   weights: Partial<BlendWeights> = {},
-  extra: Partial<DeformInput> & { blink?: number; gaze?: Point } = {}
+  extra: Partial<DeformInput> & { blink?: number; gaze?: Point } = {},
+  into?: FrameVertices
 ): Point[] {
   const face = restingFace();
   face.weights = { ...ZERO_WEIGHTS, ...weights };
   face.blink = extra.blink ?? 0;
   face.gaze = extra.gaze ?? { x: 0, y: 0 };
-  return deformFace({
-    rig,
-    mesh: mesh(),
-    innerRing: INNER_RING,
-    face,
-    tuning: { ...DEFAULT_TUNING },
-    profile: HUMAN_PROFILE,
-    field: null,
-    traits: HUMAN_PROFILE.traits,
-    lowerFace: null,
-    mouthExtension: undefined,
-    ...extra,
-  });
+  return deformFace(
+    {
+      rig,
+      mesh: mesh(),
+      innerRing: INNER_RING,
+      face,
+      tuning: { ...DEFAULT_TUNING },
+      profile: HUMAN_PROFILE,
+      field: null,
+      traits: HUMAN_PROFILE.traits,
+      lowerFace: null,
+      mouthExtension: undefined,
+      ...extra,
+    },
+    into
+  );
 }
 
 const base = mesh().basePoints;
@@ -242,5 +246,37 @@ describe("deformFace", () => {
     const neck = pts[LANDMARK_COUNT + 2];
     expect(neck.x).toBeCloseTo(500 + (pts[CHIN].x - base[CHIN].x) * 0.5, 9);
     expect(neck.y).toBeCloseTo(900 + dy(pts, CHIN) * 0.5, 9);
+  });
+});
+
+describe("deformFace into the frame's own vertices", () => {
+  it("writes every frame into the same vertices, the landmarks the first of them, as a fresh deformation would", () => {
+    const into: FrameVertices = { landmarks: [], all: [] };
+    const first = deform({ jawOpen: 0.8 }, { blink: 0.5 }, into);
+    expect(first).toBe(into.all);
+    expect(into.landmarks).toHaveLength(LANDMARK_COUNT);
+    into.landmarks.forEach((p, i) => expect(p).toBe(into.all[i]));
+    const points = [...first];
+    const second = deform({ mouthSmile: 0.6 }, {}, into);
+    expect(second).toBe(first);
+    second.forEach((p, i) => expect(p).toBe(points[i]));
+    // The same numbers as vertices of its own.
+    expect(second).toEqual(deform({ mouthSmile: 0.6 }));
+  });
+
+  it("follows a mesh of another size, and a driver that puts a new point in a landmark's place", () => {
+    const into: FrameVertices = { landmarks: [], all: [] };
+    deform({}, {}, into);
+    const bigger = mesh();
+    bigger.neckBand.push({ base: { x: 520, y: 900 }, parent: CHIN, share: 0.5 });
+    expect(deform({ jawOpen: 0.5 }, { mesh: bigger }, into)).toHaveLength(LANDMARK_COUNT + 2 + 2);
+    expect(deform({ jawOpen: 0.5 }, {}, into)).toHaveLength(LANDMARK_COUNT + 2 + 1);
+    const apply = vi.fn<CharacterField["apply"]>((pts) => {
+      pts[14] = { x: pts[14].x, y: pts[14].y + 7 };
+    });
+    const pts = deform({}, { field: { apply } as unknown as CharacterField }, into);
+    expect(dy(pts, 14)).toBe(7);
+    expect(pts[LANDMARK_COUNT].y).toBe((pts[13].y + pts[14].y) / 2);
+    expect(into.landmarks[14]).toBe(pts[14]);
   });
 });

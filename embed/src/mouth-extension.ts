@@ -30,7 +30,19 @@ export function centralMouthAnchors(
   return [left, right].map((p) => ({ x: p.x - uy * bow, y: p.y + ux * bow })) as [MouthPoint, MouthPoint];
 }
 
-/** Optional rendering seam. The production engine never imports a lab module. */
+/**
+ * Optional rendering seam. The production engine never imports a lab module.
+ *
+ * What the engine hands an extension is valid for the call it is handed
+ * in, that frame, and no longer: the engine keeps one set of vertices and
+ * moves them again every frame (engine/deform.ts FrameVertices), so the
+ * `points` given to `deform`, the frame given to `paint` (its `points`
+ * above all) and the frame given to `draw` are the engine's own, about to
+ * change. An extension that needs any of it in a later frame copies the
+ * numbers it needs; it never keeps the arrays or the points. `deform`
+ * moves `points` in place, the face's landmarks only (478 of them); the
+ * others read what they are given and change none of it.
+ */
 export interface MouthExtension {
   deform?(points: MouthPoint[], neutral: readonly MouthPoint[], rig: Rig, weights: BlendWeights): void;
   /** Optional photographic lip/skin pass. Return true when it owns the entire
@@ -57,6 +69,8 @@ export interface MouthSurfaceFrame {
    *  Absent on a flat or tainted picture. */
   sharpness?: number;
   pixelScale?: number;
+  /** Every vertex of the mesh this frame, canvas px: the engine's own,
+   *  moved again next frame (MouthExtension). */
   points: readonly MouthPoint[];
   neutral: readonly MouthPoint[];
   rig: Rig;

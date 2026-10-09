@@ -199,6 +199,19 @@ function composeLayered(f: FrameParts, layers: Layers): void {
   ctx.restore();
 }
 
+/** A neck triangle on the stage, and in its layer's pixels: two layers'
+ *  worth of the neck's grid, every frame the head moves. */
+const neckDst: Point[] = [
+  { x: 0, y: 0 },
+  { x: 0, y: 0 },
+  { x: 0, y: 0 },
+];
+const neckSrc: Point[] = [
+  { x: 0, y: 0 },
+  { x: 0, y: 0 },
+  { x: 0, y: 0 },
+];
+
 /**
  * A full-frame layer drawn through the neck's warp (neck-blend.ts), body
  * frame, then through `body` (the body's sway and breath) onto the canvas.
@@ -228,11 +241,12 @@ function drawThroughNeck(
   g.imageSmoothingQuality = "high";
   const sx = img.naturalWidth / picture.w,
     sy = img.naturalHeight / picture.h;
-  const src = (p: Point): Point => ({ x: (p.x - picture.x) * sx, y: (p.y - picture.y) * sy });
   const W = scratch.width,
     H = scratch.height;
+  const dst = neckDst,
+    src = neckSrc;
   for (const t of warp.triangles()) {
-    const dst = t.moved.map((p) => apply(body, p));
+    for (let k = 0; k < 3; k++) apply(body, t.moved[k], dst[k]);
     // Off the stage (a face framing leaves most of a picture outside it):
     // nothing to draw.
     if (
@@ -242,7 +256,12 @@ function drawThroughNeck(
       Math.min(dst[0].y, dst[1].y, dst[2].y) > H + 2
     )
       continue;
-    drawWarpedTriangle(g, img, t.rest.map(src), dst, 0, 1, 2, 1, true);
+    // The layer's own pixels under the triangle at rest.
+    for (let k = 0; k < 3; k++) {
+      src[k].x = (t.rest[k].x - picture.x) * sx;
+      src[k].y = (t.rest[k].y - picture.y) * sy;
+    }
+    drawWarpedTriangle(g, img, src, dst, 0, 1, 2, 1, true);
   }
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);

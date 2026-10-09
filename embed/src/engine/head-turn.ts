@@ -22,13 +22,13 @@
  * It runs on every frame of the "3d" motion, so it keeps its working
  * arrays from frame to frame.
  */
-import { apply as applyAffine, invert, type Affine } from "./affine";
+import { IDENTITY, apply as applyAffine, invert, type Affine } from "./affine";
 import type { FaceMesh, Point } from "./geometry";
 import { CAMERA_IOD, projectTurn, type HeadPose3D } from "./head-camera";
 import { PIVOT_CM, SKULL_CM, fitCanonical, smoothDepth } from "./head-depth";
 import type { HeadField } from "./head-field";
 import { FieldTurn } from "./head-field-turn";
-import { EASE_PASSES, FoldCheck } from "./head-fold";
+import { EASE_PASSES, FoldCheck, longer } from "./head-fold";
 import { outlineBasis, outlineFade, type OutlineBasis } from "./head-outline";
 import { INNER_LOWER, INNER_UPPER, LIP_CORNERS, LOWER_ROWS, UPPER_ROWS } from "./jaw-rig";
 import { EYE_CORNERS, IRISES, LEFT_BROW, LOWER_LIDS, RIGHT_BROW, UPPER_LIDS } from "./landmarks";
@@ -117,7 +117,7 @@ export class HeadTurn {
    *  undone (when there is one), the share of the turn kept; nothing until
    *  the first. */
   private readonly turn: HeadPose3D = { yaw: 0, pitch: 0, roll: 0 };
-  private readonly back: Affine = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  private readonly back: Affine = { ...IDENTITY };
   private hasBack = false;
   private alpha = 1;
   private turned = false;
@@ -127,6 +127,7 @@ export class HeadTurn {
   private readonly want: Float64Array;
   private readonly shiftBy: Float64Array;
   private readonly seen: Point = { x: 0, y: 0 };
+  private readonly longest = new Float64Array(2);
 
   private constructor(
     mesh: FaceMesh,
@@ -315,10 +316,9 @@ export class HeadTurn {
       folded = fold.folds(before, pts, this.stats);
     }
     this.stats.flipsAfter = folded;
-    let maxShift = 0;
-    for (let i = 0; i < n; i++)
-      maxShift = Math.max(maxShift, Math.hypot(pts[i].x - before[2 * i], pts[i].y - before[2 * i + 1]));
-    this.stats.maxShift = maxShift;
+    const longest = this.longest.fill(0);
+    for (let i = 0; i < n; i++) longer(longest, pts[i].x - before[2 * i], pts[i].y - before[2 * i + 1]);
+    this.stats.maxShift = longest[0];
     this.hasBack = !!back;
     this.alpha = this.stats.scale;
     this.turned = true;

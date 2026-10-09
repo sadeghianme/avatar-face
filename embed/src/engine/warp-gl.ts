@@ -50,13 +50,28 @@ import type { WarpMesh } from "./warp-mesh";
 /**
  * The vertex matrix: canvas pixels through `affine`, then to clip space
  * (-1..1, y up) for a `width` x `height` drawing buffer. Column-major 3x3,
- * as uniformMatrix3fv takes it.
+ * as uniformMatrix3fv takes it; into `out` when given (the renderer keeps
+ * one).
  */
-export function clipMatrix(affine: Affine, width: number, height: number): Float32Array {
+export function clipMatrix(
+  affine: Readonly<Affine>,
+  width: number,
+  height: number,
+  out = new Float32Array(9)
+): Float32Array {
   const { a, b, c, d, e, f } = affine;
   const sx = 2 / width,
     sy = -2 / height;
-  return new Float32Array([a * sx, b * sy, 0, c * sx, d * sy, 0, e * sx - 1, f * sy + 1, 1]);
+  out[0] = a * sx;
+  out[1] = b * sy;
+  out[2] = 0;
+  out[3] = c * sx;
+  out[4] = d * sy;
+  out[5] = 0;
+  out[6] = e * sx - 1;
+  out[7] = f * sy + 1;
+  out[8] = 1;
+  return out;
 }
 
 const VERTEX_SHADER = `
@@ -112,6 +127,8 @@ export class WarpRenderer {
   private kept: Uint16Array | Uint32Array | null = null;
   private texture: WebGLTexture | null = null;
   private positions = new Float32Array(0);
+  /** The vertex matrix, rewritten per draw (clipMatrix). */
+  private readonly matrix = new Float32Array(9);
   private indexType = 0;
   private count = 0;
   private lost = false;
@@ -410,7 +427,7 @@ export class WarpRenderer {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.uvBuffer);
       gl.enableVertexAttribArray(this.aUV);
       gl.vertexAttribPointer(this.aUV, 2, gl.FLOAT, false, 0, 0);
-      gl.uniformMatrix3fv(this.uMatrix, false, clipMatrix(affine, w, h));
+      gl.uniformMatrix3fv(this.uMatrix, false, clipMatrix(affine, w, h, this.matrix));
       gl.uniform1f(this.uSolid, solid ? 1 : 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.texture);

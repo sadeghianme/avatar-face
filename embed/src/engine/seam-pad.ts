@@ -1,4 +1,4 @@
-import type { Pt } from "./jaw-rig";
+import type { Point as Pt } from "./geometry";
 
 /**
  * Grow a warped triangle so that it overlaps its neighbours and no seam
@@ -21,6 +21,9 @@ import type { Pt } from "./jaw-rig";
  * amount instead: an edge on the mesh's outer boundary has no neighbour
  * to overlap, and a pad there only paints the triangle a pixel past the
  * picture it should meet (MeshWarp.trianglePads).
+ *
+ * Into `out` when given (it may hold the corners themselves, in their
+ * order), else three new points.
  */
 export function padTriangle(
   d0: Pt,
@@ -28,38 +31,47 @@ export function padTriangle(
   d2: Pt,
   pad: number,
   scale = 0.015,
-  edges?: readonly [number, number, number]
+  edges?: readonly [number, number, number],
+  out?: [Pt, Pt, Pt]
 ): [Pt, Pt, Pt] {
+  const r =
+    out ??
+    ([
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+    ] as [Pt, Pt, Pt]);
   const cx = (d0.x + d1.x + d2.x) / 3,
     cy = (d0.y + d1.y + d2.y) / 3;
-  const v = [d0, d1, d2];
-  const grown = v.map((p) => ({ x: p.x + (p.x - cx) * scale, y: p.y + (p.y - cy) * scale }));
-  if (!pad && !edges) return grown as [Pt, Pt, Pt];
-  // Outward unit normal of each edge k, from v[k] to v[k+1].
-  const normals = [0, 1, 2].map((k) => {
-    const a = v[k],
-      b = v[(k + 1) % 3];
-    let nx = -(b.y - a.y),
-      ny = b.x - a.x;
-    const len = Math.hypot(nx, ny) || 1;
-    nx /= len;
-    ny /= len;
-    if (nx * ((a.x + b.x) / 2 - cx) + ny * ((a.y + b.y) / 2 - cy) < 0) {
-      nx = -nx;
-      ny = -ny;
+  // Outward unit normal of each edge k, from corner k to corner k+1.
+  if (pad || edges) {
+    edgeNormal(0, d0, d1, cx, cy);
+    edgeNormal(1, d1, d2, cx, cy);
+    edgeNormal(2, d2, d0, cx, cy);
+  }
+  const n = normals;
+  for (let k = 0; k < 3; k++) {
+    const d = k ? (k > 1 ? d2 : d1) : d0;
+    // The small proportional growth, every triangle.
+    const gx = d.x + (d.x - cx) * scale,
+      gy = d.y + (d.y - cy) * scale;
+    if (!pad && !edges) {
+      r[k].x = gx;
+      r[k].y = gy;
+      continue;
     }
-    return [nx, ny];
-  });
-  if (edges) {
-    return [0, 1, 2].map((k) => {
+    const j = (k + 2) % 3;
+    const ax = n[2 * k],
+      ay = n[2 * k + 1],
+      bx = n[2 * j],
+      by = n[2 * j + 1];
+    let mx: number, my: number;
+    if (edges) {
       // The corner where edge k (offset by edges[k]) meets edge k-1: the
       // point that lies that far out from each.
-      const [ax, ay] = normals[k],
-        [bx, by] = normals[(k + 2) % 3];
       const pa = edges[k],
-        pb = edges[(k + 2) % 3];
+        pb = edges[j];
       const det = ax * by - ay * bx;
-      let mx: number, my: number;
       if (Math.abs(det) < 1e-3) {
         mx = ((ax + bx) / 2) * Math.max(pa, pb);
         my = ((ay + by) / 2) * Math.max(pa, pb);
@@ -73,23 +85,43 @@ export function padTriangle(
         mx *= most / len;
         my *= most / len;
       }
-      return { x: grown[k].x + mx, y: grown[k].y + my };
-    }) as [Pt, Pt, Pt];
-  }
-  return [0, 1, 2].map((k) => {
-    // The corner between edge k (leaving it) and edge k-1 (arriving).
-    const [ax, ay] = normals[k],
-      [bx, by] = normals[(k + 2) % 3];
-    const denom = Math.max(1e-3, 1 + ax * bx + ay * by);
-    let mx = (ax + bx) / denom,
+    } else {
+      // The corner between edge k (leaving it) and edge k-1 (arriving).
+      const denom = Math.max(1e-3, 1 + ax * bx + ay * by);
+      mx = (ax + bx) / denom;
       my = (ay + by) / denom;
-    const len = Math.hypot(mx, my);
-    if (len > MITRE_LIMIT) {
-      mx *= MITRE_LIMIT / len;
-      my *= MITRE_LIMIT / len;
+      const len = Math.hypot(mx, my);
+      if (len > MITRE_LIMIT) {
+        mx *= MITRE_LIMIT / len;
+        my *= MITRE_LIMIT / len;
+      }
+      mx *= pad;
+      my *= pad;
     }
-    return { x: grown[k].x + mx * pad, y: grown[k].y + my * pad };
-  }) as [Pt, Pt, Pt];
+    r[k].x = gx + mx;
+    r[k].y = gy + my;
+  }
+  return r;
+}
+
+/** The edges' outward normals of the triangle being padded, x y pairs: the
+ *  2D warp pads every triangle of every frame. */
+const normals = new Float64Array(6);
+
+/** Edge k's outward unit normal, from `a` to `b`, the triangle's centroid
+ *  at (cx, cy), into `normals`. */
+function edgeNormal(k: number, a: Pt, b: Pt, cx: number, cy: number): void {
+  let nx = -(b.y - a.y),
+    ny = b.x - a.x;
+  const len = Math.hypot(nx, ny) || 1;
+  nx /= len;
+  ny /= len;
+  if (nx * ((a.x + b.x) / 2 - cx) + ny * ((a.y + b.y) / 2 - cy) < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  normals[2 * k] = nx;
+  normals[2 * k + 1] = ny;
 }
 
 /** A corner grows at most this many pads: a sharp sliver's mitre would
