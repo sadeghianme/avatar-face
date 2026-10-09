@@ -108,7 +108,7 @@ def test_build_model_rig_arkit_mode():
     assert rig["can_blink"] is True
 
 
-async def _upload_glb(client, headers, org_id) -> str:
+async def upload_glb(client, headers, org_id) -> str:
     created = await client.post(
         f"/orgs/{org_id}/avatars",
         json={"name": "Rpm", "content_type": "model/gltf-binary"},
@@ -133,7 +133,7 @@ async def _upload_glb(client, headers, org_id) -> str:
 async def test_glb_upload_pipeline(client):
     headers = await register_and_login(client, "alice")
     org_id = await create_org(client, headers)
-    avatar_id = await _upload_glb(client, headers, org_id)
+    avatar_id = await upload_glb(client, headers, org_id)
 
     detail = (await client.get(f"/orgs/{org_id}/avatars/{avatar_id}", headers=headers)).json()
     assert detail["status"] == "ready", detail
@@ -191,7 +191,7 @@ async def test_from_url_rejects_http(client):
 async def test_embed_returns_model_url_for_3d(client):
     headers = await register_and_login(client, "alice")
     org_id = await create_org(client, headers)
-    avatar_id = await _upload_glb(client, headers, org_id)
+    avatar_id = await upload_glb(client, headers, org_id)
     key = (
         await client.post(f"/orgs/{org_id}/api-keys", json={"name": "k"}, headers=headers)
     ).json()["plaintext"]

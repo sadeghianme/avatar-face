@@ -24,7 +24,7 @@ from scripts.migrate_classic_mouths import (
     write_backup,
 )
 from tests.conftest import create_org, create_ready_avatar, register_and_login
-from tests.test_model3d import _upload_glb
+from tests.test_model3d import upload_glb
 
 DAY = "2026-10-05"
 # What a new person gets today without AI, plus why this one has no teeth
@@ -142,7 +142,7 @@ async def world(client):
     failed = await human("Failed Fay")
     await _set(failed, status=AvatarStatus.failed)
     # A 3D model.
-    model = await _upload_glb(client, headers, org_id)
+    model = await upload_glb(client, headers, org_id)
     assert (await client.get(url(model), headers=headers)).json()["status"] == "ready"
 
     return SimpleNamespace(
