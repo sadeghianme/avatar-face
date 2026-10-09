@@ -13,7 +13,7 @@ import { BlinkScheduler } from "./blink";
 import { BodyMotion, BREATH_RISE, SWAY_TRAVEL } from "./bodymotion";
 import { HeadMotion } from "./headmotion";
 import { HeadPersonality } from "./head-personality";
-import type { HeadPose3D } from "./head-turn";
+import type { HeadPose3D } from "./head-camera";
 import type { Beat } from "./cues";
 import type { Cue } from "../types";
 import type { HeadGeom, Point } from "./geometry";

@@ -26,7 +26,7 @@
  * between triangles or a pixel drawn twice (probeLeaks).
  */
 import type { FaceMesh, Point } from "../engine/geometry";
-import type { Affine } from "../engine/warp-gl";
+import type { Affine } from "../engine/affine";
 
 const LINE = 4;
 const STEP = 16;

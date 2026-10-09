@@ -16,7 +16,7 @@ import type { KindProfile } from "./kind-profile";
 import type { Rig } from "../types";
 import { layOutFace, placeHead, refineMesh, type FaceMesh, type HeadGeom, type Point } from "./geometry";
 import type { WarpSource } from "./mesh-warp";
-import { cutHeadLayer, type HeadLayer } from "./render2d";
+import { cutHeadLayer, type HeadLayer } from "./head-layer";
 import { FaceSamples, probeCutOut } from "./sampling";
 
 export class FacePicture {

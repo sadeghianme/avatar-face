@@ -8,7 +8,7 @@
  * thumbnail may be scaled down), never to rig.image_size.
  */
 import type { HeadField } from "./head-field";
-import { buildNeckBand } from "./jaw-rig";
+import { buildNeckBand } from "./neck-band";
 import type { Rig } from "../types";
 import { eyeLine, viewportFor } from "./viewport";
 
@@ -52,7 +52,7 @@ export interface FaceMesh {
   /** Mouth-region subdivision: extra midpoint vertices (numbered after the
    *  rig's points) that follow their two parents. */
   derivedParents: [number, number][];
-  /** The neck band (jaw-rig.ts): derived vertices below the jaw line, after
+  /** The neck band (neck-band.ts): derived vertices below the jaw line, after
    *  the midpoints, each hanging from a jaw-line vertex by a share of its
    *  motion, so the chin drops over stretching neck skin, not a still one. */
   neckBand: NeckVertex[];
@@ -237,7 +237,7 @@ function subdivideMouthRegion(mesh: FaceMesh, rig: Rig): void {
 }
 
 /**
- * The neck band below the jaw line (jaw-rig.ts buildNeckBand), appended
+ * The neck band below the jaw line (neck-band.ts buildNeckBand), appended
  * after the mouth subdivision's midpoints: its vertices, their texture
  * positions (the still picture below the chin) and its triangles. Every
  * rig gets one, derived from its own points.

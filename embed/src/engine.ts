@@ -12,7 +12,11 @@
  *   engine/viewport.ts             where it lies: the zoom and the pan
  *   engine/geometry.ts             the mesh laid on the canvas, refined
  *   engine/landmarks.ts            the MediaPipe landmark tables
- *   engine/jaw-rig.ts              the lower face as one rig: jaw, chin, cheeks, neck band
+ *   engine/jaw-rig.ts              the lower face as one rig: jaw, chin, cheeks, and
+ *   engine/neck-band.ts              the neck band below the jaw line
+ *   engine/head-field.ts           the head beyond the face: the hair, the ears, laid
+ *   engine/head-extent.ts            as far as the picture says the head reaches
+ *   engine/head-layer.ts           a cut-out's head cut out as its own layer (opt-in)
  *   engine/kind-profile.ts         what a line of faces (human, toon, animal) changes
  *   engine/sampling.ts             what the picture looks like
  *   engine/face-light.ts           its brightest skin, the teeth's ceiling
@@ -33,12 +37,18 @@
  * The frame
  *   engine/head-placement.ts       where the head is: its rigid motion, its turn, the neck
  *   engine/deform.ts               every vertex, this frame, with
- *   engine/head-turn.ts              the head's turn in depth
- *   engine/canonical-face.ts         the depth it is given
+ *   engine/head-turn.ts              the head's turn in depth, from
+ *   engine/head-depth.ts               the depth it is given (canonical-face.ts, fitted)
+ *   engine/head-camera.ts              the turn about the pivot, through the camera
+ *   engine/head-outline.ts             the outline held, and the weights that hold it
+ *   engine/head-field-turn.ts          the head's field turned with the face
+ *   engine/head-fold.ts                the clamp that folds no triangle
  *   engine/neck-blend.ts             a layered avatar's neck, from head to body
  *   engine/render2d.ts             the frame composed: picture, body, head
+ *   engine/affine.ts                 the transforms it composes, as the context does
  *   engine/mesh-warp.ts            the warped mesh, on the GPU or in 2D, with
- *   engine/warp-gl.ts                the GPU path
+ *   engine/warp-gl.ts                the GPU path, and
+ *   engine/warp-mesh.ts                its static mesh
  *   engine/seam-pad.ts               the overlap that hides the seams between triangles
  *   engine/paint-features.ts       what is painted over the mesh:
  *   engine/paint-eyes.ts             gaze, lashes, and
@@ -67,9 +77,10 @@ import { mergeTraits, type CharacterTraits } from "./engine/character-mouth";
 import { defaultHeadMotion, kindProfile, type KindProfile } from "./engine/kind-profile";
 import type { MouthExtension } from "./mouth-extension";
 import { DEFAULT_TUNING, type Cue, type EngineTuning, type Rig } from "./types";
+import type { Affine } from "./engine/affine";
 import { FaceAnimation } from "./engine/animation";
 import { NO_DEBUG_HANDLE, exposeDebugHandle } from "./engine/debug-handle";
-import { deformFace } from "./engine/deform";
+import { deformFace, type FrameVertices } from "./engine/deform";
 import { FrameLoop } from "./engine/frame-loop";
 import { validInnerRing, type Point } from "./engine/geometry";
 import { HeadPlacement } from "./engine/head-placement";
@@ -150,6 +161,30 @@ export class AvatarEngine {
   private readonly meshWarp: MeshWarp;
   /** The classic drawn mouth (paint-classic-mouth.ts). */
   private readonly classicMouth: ClassicMouth;
+  /** The frame's vertices (deform.ts), the engine's own from frame to
+   *  frame: what a frame draws, and hands the painters and a mouth
+   *  extension, is valid for that frame only (mouth-extension.ts). */
+  private readonly vertices: FrameVertices = { landmarks: [], all: [] };
+  /** What composing a frame calls back (render2d.ts), made once rather
+   *  than every frame: the mesh drawn through `affine`, then the features
+   *  over it (paint-features.ts), the sound being made read when asked. */
+  private readonly drawMesh = (affine: Affine) => this.meshWarp.draw(this.ctx, this.vertices.all, affine);
+  private readonly drawFeatures = () =>
+    paintFeatures({
+      ctx: this.ctx,
+      pts: this.vertices.all,
+      picture: this.picture,
+      rig: this.rig,
+      face: this.face,
+      tuning: this.tuning,
+      profile: this.profile,
+      traits: this.traits,
+      extension: this.mouthExtension,
+      classicMouth: this.classicMouth,
+      viseme: this.viseme,
+      debugRing: this.debugMesh ? this.innerRing : null,
+    });
+  private readonly viseme = () => this.animation.visemeNow(performance.now());
 
   constructor(canvas: HTMLCanvasElement, rig: Rig, texture: HTMLImageElement, opts: EngineOptions = {}) {
     this.canvas = canvas;
@@ -381,24 +416,34 @@ export class AvatarEngine {
     this.animation.step(now, this.tuning, !!this.picture.field);
   }
 
-  /** Every mesh vertex this frame (deform.ts). */
-  private deformedPoints(turn?: (pts: Point[]) => void, pin?: NeckPin | null, head?: (pts: Point[]) => void): Point[] {
+  /** Every mesh vertex this frame (deform.ts): into `into`, the frame's
+   *  own; without it (the seam's callers, which keep what they read), new
+   *  vertices. */
+  private deformedPoints(
+    turn?: (pts: Point[]) => void,
+    pin?: NeckPin | null,
+    head?: (pts: Point[]) => void,
+    into?: FrameVertices
+  ): Point[] {
     const picture = this.picture;
-    return deformFace({
-      turn,
-      pin,
-      head,
-      rig: this.rig,
-      mesh: picture.mesh,
-      innerRing: this.innerRing,
-      face: this.face,
-      tuning: this.tuning,
-      profile: this.profile,
-      field: picture.field,
-      traits: this.traits,
-      lowerFace: picture.lowerFace,
-      mouthExtension: this.mouthExtension,
-    });
+    return deformFace(
+      {
+        turn,
+        pin,
+        head,
+        rig: this.rig,
+        mesh: picture.mesh,
+        innerRing: this.innerRing,
+        face: this.face,
+        tuning: this.tuning,
+        profile: this.profile,
+        field: picture.field,
+        traits: this.traits,
+        lowerFace: picture.lowerFace,
+        mouthExtension: this.mouthExtension,
+      },
+      into
+    );
   }
 
   private render(): void {
@@ -406,7 +451,7 @@ export class AvatarEngine {
     const picture = this.picture;
     const travel = motionTravel(!!this.layers, picture.cutOut, this.tuning);
     const head = this.placement.place(picture, this.motion, !!this.layers, this.tuning.headMotion, travel.head);
-    const pts = this.deformedPoints(head.turn, head.neck, head.head);
+    this.deformedPoints(head.turn, head.neck, head.head, this.vertices);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     composeFrame({
       ctx,
@@ -421,22 +466,8 @@ export class AvatarEngine {
       headOffset: head.offset,
       bodyLean: this.motion.bodyLean(travel.body),
       neck: head.neck ? { warp: head.neck.warp, scratch: this.placement.neckCanvas() } : null,
-      drawMesh: (affine) => this.meshWarp.draw(ctx, pts, affine),
-      drawFeatures: () =>
-        paintFeatures({
-          ctx,
-          pts,
-          picture,
-          rig: this.rig,
-          face: this.face,
-          tuning: this.tuning,
-          profile: this.profile,
-          traits: this.traits,
-          extension: this.mouthExtension,
-          classicMouth: this.classicMouth,
-          viseme: () => this.animation.visemeNow(performance.now()),
-          debugRing: this.debugMesh ? this.innerRing : null,
-        }),
+      drawMesh: this.drawMesh,
+      drawFeatures: this.drawFeatures,
     });
     // The scene's background last, still, BEHIND the finished picture
     // (scene.ts).

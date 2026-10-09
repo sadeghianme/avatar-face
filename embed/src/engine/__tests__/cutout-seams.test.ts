@@ -3,7 +3,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 
 import type { FaceMesh, HeadGeom, Point } from "../geometry";
 import { MeshWarp } from "../mesh-warp";
-import { composeFrame, cutHeadLayer, type HeadLayer } from "../render2d";
+import { cutHeadLayer, type HeadLayer } from "../head-layer";
+import { composeFrame } from "../render2d";
 
 /**
  * A cut-out's seams, in real pixels (Skia, @napi-rs/canvas): the head's
