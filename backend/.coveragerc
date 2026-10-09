@@ -19,7 +19,7 @@ relative_files = True
 # The floor, on the total of lines and branches together: the value CI
 # measured minus a small margin, so it catches a regression without
 # flaking. Raise it when coverage rises; never lower it to make a change
-# pass.
+# pass. Measured in CI on 2026-10-09: 92.00 (lines 93.68, branches 84.30).
 fail_under = 91
 precision = 1
 skip_covered = True

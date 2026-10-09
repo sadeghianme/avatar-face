@@ -41,10 +41,12 @@ export default mergeConfig(
         ],
         reporter: ["text-summary", "html", "lcov"],
         reportsDirectory: "coverage/ui",
+        // Measured in CI on 2026-10-09: lines 65.22, branches 78.27,
+        // functions 70.39, statements 65.22.
         thresholds: {
           lines: 64,
           branches: 77,
-          functions: 68,
+          functions: 69,
           statements: 64,
         },
       },

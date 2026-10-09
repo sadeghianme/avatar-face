@@ -22,6 +22,8 @@ export default defineConfig({
       ],
       reporter: ["text-summary", "html", "lcov"],
       reportsDirectory: "coverage",
+      // Measured in CI on 2026-10-09: lines 90.11, branches 89.93,
+      // functions 87.92, statements 90.11.
       thresholds: {
         lines: 89,
         branches: 88,
