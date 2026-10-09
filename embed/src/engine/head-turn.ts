@@ -67,6 +67,24 @@ export interface TurnStats {
   headMinShare: number;
 }
 
+/**
+ * What the last apply did to the face (HeadTurn.applied): what is painted
+ * in the turned face's frame is placed from it (mouth-pose.ts). Valid
+ * until the next apply, which writes over it.
+ */
+export interface AppliedTurn {
+  /** Each landmark's shift, canvas px, x and y interleaved: the turn, the
+   *  outline held, the pieces, the brows, the clamp, all of it. */
+  readonly shift: Float64Array;
+  /** The turn asked: its yaw and pitch (the roll is the rigid motion's). */
+  readonly pose: Readonly<HeadPose3D>;
+  /** The share of it the fold clamp kept (TurnStats.scale). */
+  readonly share: number;
+  /** The rigid motion the turn took out (apply's `rigid`, inverted), or
+   *  null for none. */
+  readonly back: Readonly<Affine> | null;
+}
+
 export class HeadTurn {
   /** Per landmark: depth (canvas px, + toward the camera). */
   readonly depth: Float64Array;
@@ -121,6 +139,8 @@ export class HeadTurn {
   private hasBack = false;
   private alpha = 1;
   private turned = false;
+  /** The last apply, as applied() hands it out. */
+  private readonly last: { shift: Float64Array; pose: HeadPose3D; share: number; back: Affine | null };
   /** Scratch, one frame's worth: each landmark before the turn, where the
    *  turn wants it, its move; where the camera puts one. */
   private readonly before: Float64Array;
@@ -164,6 +184,7 @@ export class HeadTurn {
     this.before = new Float64Array(n * 2);
     this.want = new Float64Array(n * 2);
     this.shiftBy = new Float64Array(n * 2);
+    this.last = { shift: this.want, pose: this.turn, share: 1, back: null };
     this.isFree = new Uint8Array(n);
     for (const i of this.basis.free) this.isFree[i] = 1;
     this.outlineShare = new Float64Array(this.basis.outline.length);
@@ -324,6 +345,13 @@ export class HeadTurn {
     this.hasBack = !!back;
     this.alpha = this.stats.scale;
     this.turned = true;
+    this.last.share = this.alpha;
+    this.last.back = back;
+  }
+
+  /** What the last apply did (AppliedTurn); null before the first. */
+  applied(): AppliedTurn | null {
+    return this.turned ? this.last : null;
   }
 
   /** The landmarks at `alpha` of this frame's moves, the brows raised by
@@ -352,9 +380,9 @@ export class HeadTurn {
   }
 
   /** (x, y) on the canvas at depth z, turned by `pose` about the pivot and
-   *  seen again through the camera (head-camera.ts). */
-  project(x: number, y: number, z: number, pose: HeadPose3D): Point {
-    return projectTurn({ x: 0, y: 0 }, x, y, z, pose, this.pivot, this.camera);
+   *  seen again through the camera (head-camera.ts); into `out` when given. */
+  project(x: number, y: number, z: number, pose: Readonly<HeadPose3D>, out: Point = { x: 0, y: 0 }): Point {
+    return projectTurn(out, x, y, z, pose, this.pivot, this.camera);
   }
 }
 

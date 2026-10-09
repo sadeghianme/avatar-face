@@ -1,4 +1,13 @@
-import type { MouthPoint, MouthSurfaceFrame } from "../mouth-extension";
+import type { MouthPoint, MouthSurfaceFrame, MouthTurn } from "../mouth-extension";
+import {
+  TurnedArch,
+  archDepthMm,
+  drawTurnedArch,
+  mouthAxis,
+  turnedLocal,
+  type MouthAxis,
+  type Rect,
+} from "./dental-arch";
 import { dentalCrownCoverage, dentalPlacement, extractDentalLayers, type DentalLayer } from "./dental-texture-model";
 import { validateOralRig, type OralPhoto } from "./oral-photo";
 import { DEFAULT_REFERENCE_PROFILE, normalizeProfile, type ReferenceProfile } from "./reference-mouth-model";
@@ -35,6 +44,14 @@ export class DentalOralSurface {
    *  known and kept while its sampled values hold (the texture upgrading
    *  from the thumbnail changes them once). */
   private fitted: { key: string; match: EnamelMatch; arches: Arch[] } | null = null;
+  /** Each arch as a turned head shows it (dental-arch.ts), and the canvas
+   *  its bent picture is drawn on: rewritten every turned frame. */
+  private readonly turned: Record<"upper" | "lower", { arch: TurnedArch; canvas: HTMLCanvasElement | null }> = {
+    upper: { arch: new TurnedArch(), canvas: null },
+    lower: { arch: new TurnedArch(), canvas: null },
+  };
+  private readonly axis: MouthAxis = { cx: 0, cy: 0, width: 1, cos: 1, sin: 0 };
+  private readonly seen: MouthPoint = { x: 0, y: 0 };
   constructor(
     photo: OralPhoto,
     private readonly origin: TeethOrigin = "own"
@@ -177,6 +194,14 @@ export class DentalOralSurface {
     );
     const rgb = (colour: readonly number[]) => `rgb(${colour.join(",")})`;
     const arches = this.fit(frame, width);
+    // A head turned in depth: the arches lie behind the lips, so they turn
+    // with them a little less (dental-arch.ts), and the lower arch shows
+    // below where the turn puts the upper's edge. Facing the camera, the
+    // same drawing reduces to the arches drawn whole.
+    const turn = frame.turn;
+    const axis = turn ? mouthAxis(left, right, this.axis) : null;
+    const upperEdge = 0.055 + this.profile.teethY;
+    const edgeY = turn && axis ? turnedLocal(axis, turn, 0, upperEdge, archDepthMm(false, 0), this.seen).y : upperEdge;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(angle);
@@ -225,12 +250,13 @@ export class DentalOralSurface {
           // shallow opening must not dissolve the entire lower row or let it
           // intersect the fixed upper crowns.
           ctx.beginPath();
-          ctx.rect(-0.8, 0.055 + this.profile.teethY + 0.045, 1.6, 1.3);
+          ctx.rect(-0.8, edgeY + 0.045, 1.6, 1.3);
           ctx.clip();
         }
         ctx.globalAlpha = Math.min(1, teethAlpha);
         ctx.filter = `brightness(${light.enamelBrightness}) sepia(${light.enamelSepia})`;
-        ctx.drawImage(arch.canvas, box.x, box.y, box.width, box.height, p.x, p.y, p.width, p.height);
+        if (turn && axis) this.drawTurned(ctx, arch.canvas, box, p, i === 1, axis, turn);
+        else ctx.drawImage(arch.canvas, box.x, box.y, box.width, box.height, p.x, p.y, p.width, p.height);
         ctx.restore();
       }
     ctx.restore();
@@ -246,6 +272,22 @@ export class DentalOralSurface {
     ctx.lineJoin = "round";
     ctx.stroke();
     ctx.restore();
+  }
+
+  /** One arch, `box` of `source`, on `rect` of the mouth's local units (the
+   *  context's frame), as the head's turn shows it (dental-arch.ts). */
+  private drawTurned(
+    ctx: CanvasRenderingContext2D,
+    source: HTMLCanvasElement,
+    box: Rect,
+    rect: Rect,
+    lower: boolean,
+    axis: MouthAxis,
+    turn: MouthTurn
+  ): void {
+    const turned = lower ? this.turned.lower : this.turned.upper;
+    turned.arch.lay(source.width, box, rect, axis, lower, turn);
+    drawTurnedArch(ctx, turned.arch, source, box, rect, (turned.canvas ??= document.createElement("canvas")));
   }
 }
 
