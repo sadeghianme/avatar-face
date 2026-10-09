@@ -1045,6 +1045,35 @@ drawn mouth, make your own in the Mouth panel).
   the whole utterance ran ahead of the voice by its start-up delay. Golden
   renders are unchanged (no frame depends on the clock). Every avatar means
   the 3D (GLB) engine too: Step 5 gives it the same audio-locked clock.
+- Speech clock in real browsers (2026-10-09; `media-clock.ts`,
+  `embed/browser-tests/speech-timing.test.ts`). Review 3 (R1) asked whether
+  cached speech, MP3 since the speech cache moved to storage, plays where
+  its cues say: an MP3 starts late by its encoder's delay (46 ms at 24 kHz)
+  unless the decoder honours the LAME header. Measured with a click track
+  encoded by the production encoder (`speech_codec.py`) and played as the
+  widget plays it, in Chromium 153, Firefox 155 and WebKit 26.6
+  (Playwright, on macOS and in CI on Linux): it does not. decodeAudioData
+  puts every mark on its source sample in all three; through the audio
+  element the MP3 comes out within 4 ms of its WAV (WebKit on Linux can be
+  checked by decodeAudioData only; docs/process.md has the table). The
+  clock itself was the fault, at the start of every line: browsers fire
+  `playing` before the position (and the sound) moves (macOS: Firefox
+  50-270 ms, WebKit 110-265; CI's Linux with a null sound sink: Firefox
+  1.4 s, WebKit 1.9 s), and the clock ran on from `playing` up to its
+  250 ms limit, then stood still until the voice caught up: the mouth ahead
+  of the voice by 51-222 ms in Firefox and 122-236 ms in WebKit for up to
+  half a second (macOS), by 250 ms for up to two seconds (CI). Now it
+  stands at the element's position until that position moves after
+  `playing` or `seeked`, and `started` (the engine waiting for the voice, so
+  that the silence at 0 is no pause) waits for the same. After, on macOS:
+  Firefox 2-9 ms ahead at most; WebKit 104-105 ms for about 360 ms;
+  Chromium 38-82 ms for 40-170 ms, as before. *Still weak*: that remainder
+  is the browsers' own position, which runs ahead of their sound while the
+  output starts and then stands still until the sound catches up (WebKit
+  on macOS about 100 ms, Chromium about 20, which the frame clock carries
+  across the stand-still); the clock cannot see it. Real Safari and iOS are
+  untried (Safari's WebDriver is not enabled on the machine measured);
+  Playwright's WebKit uses the same AVFoundation stack on macOS.
 - Native timing in production (2026-09-26): the Kokoro provider speaks with
   the timestamped model when it is installed and serves its own phoneme
   spans as cues (`lab_timing.native_cues`), falling back to the stretched

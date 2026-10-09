@@ -10,13 +10,14 @@ the WAV, stay on time. One that ignored it would play every line 46 ms late,
 the mouth ahead of the voice.
 
 Measured on 2026-10-09 (embed/browser-tests/speech-timing.test.ts, which CI
-runs on every change with this module's own output): Chromium, Firefox and
-WebKit (Safari's media stack) all honour it, through the audio element the
-widget and the share page play speech with and through decodeAudioData.
-decodeAudioData puts every mark on its source sample; through the element an
-MP3 and its WAV are within 3 ms of each other. `encode` still checks every
-line with libsndfile's decoder, and keeps the WAV when its samples would not
-come back in full.
+runs on every change with this module's own output; docs/process.md has the
+numbers): Chromium, Firefox and WebKit all honour it. decodeAudioData puts
+every mark on its source sample in all three, on macOS and on Linux; played
+through the audio element, as the widget and the share page play speech, an
+MP3 and its WAV come out within 4 ms of each other (WebKit on Linux cannot be
+timed that way, see the test). `encode` still checks every line with
+libsndfile's decoder, and keeps the WAV when its samples would not come back
+in full.
 
 No application imports: the browser test runs this module alone
 (scripts/encode_speech.py), with soundfile and numpy and nothing else of the
