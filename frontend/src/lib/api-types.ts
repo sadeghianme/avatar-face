@@ -629,6 +629,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/orgs/{org_id}/avatars/{avatar_id}/expressions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Expressions
+     * @description The DRAFT's AI expression pictures: whether the owner chose them, what
+     *     was made (per expression, or why not: that one plays animated), the
+     *     pictures and their manifest presigned for the preview, and the job.
+     */
+    get: operations["get_expressions_orgs__org_id__avatars__avatar_id__expressions_get"];
+    /**
+     * Choose Expressions
+     * @description Choose AI expression pictures (or not), and how a publish makes them
+     *     when none are made for the avatar's picture: `now` (about twenty
+     *     seconds after the publish) or `batch` (half the price, ready within
+     *     hours). On needs the caller's third_party_ai consent (403
+     *     consent_required) and the organization's switch (403
+     *     third_party_ai_disabled), on a person's ready photo avatar (409
+     *     not_a_photo, 422 not_a_person). Nothing is sent here: the next publish,
+     *     or Make, sends the picture. Pictures already made are kept when turned
+     *     off. A DRAFT edit when visitors would see a change.
+     */
+    put: operations["choose_expressions_orgs__org_id__avatars__avatar_id__expressions_put"];
+    post?: never;
+    /**
+     * Remove Expressions
+     * @description Remove the AI expression pictures from the draft and turn the choice
+     *     off (the animated expressions play). The published snapshot keeps its
+     *     own copies until the next publish.
+     */
+    delete: operations["remove_expressions_orgs__org_id__avatars__avatar_id__expressions_delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org_id}/avatars/{avatar_id}/expressions/make": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Make Expressions
+     * @description Make the five expression pictures now from the avatar's picture: a
+     *     job (202, `job`), followed with GET above; five image-model calls take
+     *     about twenty seconds. 409 expressions_in_progress while one runs for
+     *     this avatar (and the runner's 429 too_many_jobs, 503 job_queue_full).
+     *     Needs the caller's third_party_ai consent (403 consent_required) and the
+     *     organization's switch (403 third_party_ai_disabled); metered against the
+     *     monthly image limit (429 image_limit_reached, read again before each
+     *     call). The choice is turned on. A DRAFT edit: visitors get the pictures,
+     *     and the disclosure that AI made them, when the owner publishes.
+     */
+    post: operations["make_expressions_orgs__org_id__avatars__avatar_id__expressions_make_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/orgs/{org_id}/avatars/{avatar_id}/mouth-kit": {
     parameters: {
       query?: never;
@@ -723,6 +791,12 @@ export interface paths {
      *     Copies the draft's assets into an immutable snapshot rather than
      *     recording which keys were live — layer files are overwritten in place,
      *     so pointers would silently drift. See services/publishing.
+     *
+     *     When the owner chose AI expression pictures and none are made for the
+     *     avatar's picture, publishing also starts the job that makes them (or
+     *     sends them as a batch): they are published as soon as they are ready
+     *     (GET /avatars/{id}/expressions follows it). A publish never fails for
+     *     them.
      */
     post: operations["publish_avatar_orgs__org_id__avatars__avatar_id__publish_post"];
     delete?: never;
@@ -2805,6 +2879,11 @@ export interface components {
        */
       disclosure?: components["schemas"]["PublishedDisclosure"];
       /**
+       * Expressions
+       * @description The AI expression pictures; absent when there are none (the engine plays its animated expressions).
+       */
+      expressions?: components["schemas"]["PublishedExpressions"];
+      /**
        * Face Type
        * @description How the head moves: a person's in depth, an animal's or a cartoon's as a layer.
        * @enum {string}
@@ -2856,6 +2935,97 @@ export interface components {
        */
       thumbnail_url: string;
       voice: components["schemas"]["PublishedVoice"] | null;
+    };
+    /** ExpressionKitOut */
+    ExpressionKitOut: {
+      /** Calls */
+      calls: number;
+      /** Id */
+      id: string;
+      /** Made */
+      made: number;
+      /** Made At */
+      made_at: string;
+      /** Model */
+      model?: string | null;
+      /** Shots */
+      shots: {
+        [key: string]: components["schemas"]["ExpressionShotOut"];
+      };
+      /**
+       * Source
+       * @enum {string}
+       */
+      source: "panel" | "publish" | "batch";
+    };
+    /**
+     * ExpressionShotOut
+     * @description One expression of a kit: made, or why not (the animated one plays).
+     */
+    ExpressionShotOut: {
+      /** Outcome */
+      outcome: string;
+      reason?: components["schemas"]["JobError"] | null;
+      /**
+       * Smile
+       * @description A parted-lips smile, shown while the avatar is silent.
+       * @default false
+       */
+      smile: boolean;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "ok" | "failed";
+    };
+    /**
+     * ExpressionsChoice
+     * @description The owner's choice. `ai` true needs `consent_id`: a third_party_ai
+     *     consent naming google, by this member (POST /consents). `delivery`: how
+     *     a publish makes missing pictures; unchanged when omitted.
+     */
+    ExpressionsChoice: {
+      /** Ai */
+      ai: boolean;
+      /** Consent Id */
+      consent_id?: string | null;
+      /** Delivery */
+      delivery?: ("now" | "batch") | null;
+    };
+    /** ExpressionsMake */
+    ExpressionsMake: {
+      /** Consent Id */
+      consent_id: string;
+    };
+    /**
+     * ExpressionsOut
+     * @description The DRAFT's expression pictures: the owner's choice, the kit, the
+     *     pictures and manifest presigned for the preview, a batch on its way
+     *     (`pending`), and the job (live while it runs, then how it ended; null
+     *     when this server ran none for it).
+     */
+    ExpressionsOut: {
+      /** Ai */
+      ai: boolean;
+      /**
+       * Delivery
+       * @default now
+       * @enum {string}
+       */
+      delivery: "now" | "batch";
+      job?: components["schemas"]["JobOut"] | null;
+      kit?: components["schemas"]["ExpressionKitOut"] | null;
+      /** Manifest Url */
+      manifest_url?: string | null;
+      /**
+       * Pending
+       * @default false
+       */
+      pending: boolean;
+      /** Picture Urls */
+      picture_urls?: {
+        [key: string]: string;
+      };
     };
     /** FailIn */
     FailIn: {
@@ -3066,7 +3236,16 @@ export interface components {
        * Step
        * @enum {string}
        */
-      step: "ingest" | "generate" | "adjust" | "background" | "detect" | "finish" | "mouth_kit" | "prepare";
+      step:
+        | "ingest"
+        | "generate"
+        | "adjust"
+        | "background"
+        | "detect"
+        | "finish"
+        | "mouth_kit"
+        | "prepare"
+        | "expression_kit";
     };
     /** JobProgress */
     JobProgress: {
@@ -3386,9 +3565,15 @@ export interface components {
     /**
      * PublishedAiEdited
      * @description What an AI made or changed: the picture (`touchup`, `stylise`,
-     *     `regenerate`, `generate`), or only the mouth (`teeth`, `mouth_shapes`).
+     *     `regenerate`, `generate`), or only parts of the face (`teeth`,
+     *     `mouth_shapes`, `expressions`).
      */
     PublishedAiEdited: {
+      /**
+       * Expressions
+       * @description Present when AI made the expression pictures shown.
+       */
+      expressions?: components["schemas"]["PublishedAiExpressions"];
       /** Mode */
       mode: string;
       /** Model */
@@ -3403,6 +3588,13 @@ export interface components {
        * @description Present when AI made the teeth photo shown.
        */
       teeth?: components["schemas"]["PublishedAiTeeth"];
+    };
+    /** PublishedAiExpressions */
+    PublishedAiExpressions: {
+      /** Made */
+      made: number;
+      /** Model */
+      model: string | null;
     };
     /** PublishedAiMouthShapes */
     PublishedAiMouthShapes: {
@@ -3426,6 +3618,11 @@ export interface components {
        * @description Absent from snapshots published before disclosures were recorded.
        */
       disclosure?: components["schemas"]["PublishedDisclosure"];
+      /**
+       * Expressions
+       * @description The AI expression pictures; absent when there are none (the engine plays its animated expressions).
+       */
+      expressions?: components["schemas"]["PublishedExpressions"];
       /**
        * Face Type
        * @description How the head moves: a person's in depth, an animal's or a cartoon's as a layer.
@@ -3545,6 +3742,23 @@ export interface components {
        * @enum {string}
        */
       line: "human" | "animal" | "cartoon";
+    };
+    /**
+     * PublishedExpressions
+     * @description The avatar's AI expression pictures (services.expressions): the
+     *     manifest (per expression its picture's landmarks and where they go on
+     *     the face) and each picture, presigned.
+     */
+    PublishedExpressions: {
+      /**
+       * Image Urls
+       * @description By expression: happy, surprised, concerned, thinking, serious.
+       */
+      image_urls: {
+        [key: string]: string;
+      };
+      /** Manifest Url */
+      manifest_url: string;
     };
     /**
      * PublishedMouthProfile
@@ -5038,6 +5252,142 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["AvatarOut"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_expressions_orgs__org_id__avatars__avatar_id__expressions_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        avatar_id: string;
+        org_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExpressionsOut"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  choose_expressions_orgs__org_id__avatars__avatar_id__expressions_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        avatar_id: string;
+        org_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ExpressionsChoice"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExpressionsOut"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  remove_expressions_orgs__org_id__avatars__avatar_id__expressions_delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        avatar_id: string;
+        org_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExpressionsOut"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  make_expressions_orgs__org_id__avatars__avatar_id__expressions_make_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        avatar_id: string;
+        org_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ExpressionsMake"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExpressionsOut"];
         };
       };
       /** @description Validation Error */

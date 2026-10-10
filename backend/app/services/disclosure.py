@@ -9,39 +9,48 @@ them depends on the others for everything else.
 regenerate, generate) when an AI made or changed the picture, outranking
 the mouth's; otherwise "teeth" or "mouth_shapes" while only the mouth was
 AI-made, with the entries for each ({"teeth": {model}}, {"mouth_shapes":
-{model, generated}}). New dicts every time: JSON columns are replaced,
+{model, generated}}); "expressions" ({"expressions": {model, made}}) while
+only the expression pictures were. New dicts every time: JSON columns are replaced,
 never mutated.
 """
 
 from __future__ import annotations
 
-from app.models.shapes import AiEdited, AiShapesEntry
+from app.models.shapes import AiEdited, AiExpressionsEntry, AiShapesEntry
 
 # The disclosure's modes that say only the MOUTH was AI-made, the picture
 # itself not: its teeth photo (`teeth`), its mouth shapes (`mouth_shapes`,
-# services.mouth_kit). Every other mode is the picture's own (touchup,
-# stylise, regenerate, generate) and outranks them.
-MOUTH_MODES = ("teeth", "mouth_shapes")
+# services.mouth_kit), its expression pictures (`expressions`,
+# services.expression_kit), in that order of rank. Every other mode is the
+# picture's own (touchup, stylise, regenerate, generate) and outranks them.
+MOUTH_MODES = ("teeth", "mouth_shapes", "expressions")
 
 
 def mouth_disclosure(ai_edited: AiEdited | None) -> AiEdited | None:
-    """`ai_edited` with its mode re-derived when only the mouth was AI-made:
-    "teeth" while there is a teeth entry, else "mouth_shapes" while there is
-    a shapes entry, else nothing to disclose (None). The model is that
+    """`ai_edited` with its mode re-derived when only parts of the face were
+    AI-made: "teeth" while there is a teeth entry, else "mouth_shapes" while
+    there is a shapes entry, else "expressions" while there is an
+    expressions entry, else nothing to disclose (None). The model is that
     entry's. A picture's own mode is left as it is."""
     if not ai_edited:
         return None
     if ai_edited.get("mode") not in MOUTH_MODES:
         return ai_edited
     teeth, shapes = ai_edited.get("teeth"), ai_edited.get("mouth_shapes")
+    expressions = ai_edited.get("expressions")
     if teeth:
         derived: AiEdited = {"mode": "teeth", "model": teeth.get("model"), "teeth": teeth}
-        if shapes:
-            derived["mouth_shapes"] = shapes
-        return derived
+    elif shapes:
+        derived = {"mode": "mouth_shapes", "model": shapes.get("model")}
+    elif expressions:
+        derived = {"mode": "expressions", "model": expressions.get("model")}
+    else:
+        return None
     if shapes:
-        return {"mode": "mouth_shapes", "model": shapes.get("model"), "mouth_shapes": shapes}
-    return None
+        derived["mouth_shapes"] = shapes
+    if expressions:
+        derived["expressions"] = expressions
+    return derived
 
 
 def with_ai_teeth(ai_edited: AiEdited | None, model: str | None) -> AiEdited:
@@ -88,4 +97,27 @@ def without_ai_shapes(ai_edited: AiEdited | None) -> AiEdited | None:
         return None
     rest = ai_edited.copy()
     rest.pop("mouth_shapes", None)
+    return mouth_disclosure(rest)
+
+
+def with_ai_expressions(ai_edited: AiEdited | None, model: str | None, made: int) -> AiEdited:
+    """The disclosure once AI made `made` of the expression pictures shown
+    (a new dict: JSON columns are replaced, never mutated)."""
+    entry: AiExpressionsEntry = {"model": model, "made": made}
+    if not ai_edited:
+        return {"mode": "expressions", "model": model, "expressions": entry}
+    edited = ai_edited.copy()
+    edited["expressions"] = entry
+    disclosed = mouth_disclosure(edited)
+    assert disclosed is not None  # an expressions entry is always disclosed
+    return disclosed
+
+
+def without_ai_expressions(ai_edited: AiEdited | None) -> AiEdited | None:
+    """The disclosure once no AI-made expression picture is shown (removed,
+    turned off, or none made): whatever else AI made stays disclosed."""
+    if not ai_edited:
+        return None
+    rest = ai_edited.copy()
+    rest.pop("expressions", None)
     return mouth_disclosure(rest)

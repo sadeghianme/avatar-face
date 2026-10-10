@@ -7,7 +7,7 @@ from sqlalchemy import JSON, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import TimestampedBase
-from app.models.shapes import AiEdited, SceneConfig
+from app.models.shapes import AiEdited, ExpressionConfig, SceneConfig
 
 
 class AvatarStatus(str, enum.Enum):
@@ -113,6 +113,14 @@ class Avatar(TimestampedBase):
     # before scenes existed, which renders by `framing` alone. Draft/
     # published like framing: changing it marks the draft dirty.
     scene_config: Mapped[SceneConfig | None] = mapped_column("scene", JSON, nullable=True)
+    # The AI expression pictures (services.expression_kit): {ai, consent_id,
+    # kit, pending}. `ai` is the owner's choice to have them; `kit` what was
+    # made (its manifest and pictures beside the avatar's other files).
+    # Null plays the animated expressions alone. Draft/published like the
+    # mouth: changing it marks the draft dirty.
+    expression_config: Mapped[ExpressionConfig | None] = mapped_column(
+        "expressions", JSON, nullable=True
+    )
 
     @property
     def voice(self) -> dict | None:

@@ -6,7 +6,7 @@ from app.api.avatars.routing import one_edit_at_a_time, router
 from app.api.deps import DB, OrgMember
 from app.models import Avatar
 from app.schemas.avatar import AvatarOut
-from app.services.avatars import lifecycle, repo
+from app.services.avatars import expression_edits, lifecycle, repo
 
 
 @router.post("/{avatar_id}/publish", response_model=AvatarOut)
@@ -17,9 +17,16 @@ async def publish_avatar(avatar_id: str, ctx: OrgMember, db: DB) -> Avatar:
     Copies the draft's assets into an immutable snapshot rather than
     recording which keys were live — layer files are overwritten in place,
     so pointers would silently drift. See services/publishing.
+
+    When the owner chose AI expression pictures and none are made for the
+    avatar's picture, publishing also starts the job that makes them (or
+    sends them as a batch): they are published as soon as they are ready
+    (GET /avatars/{id}/expressions follows it). A publish never fails for
+    them.
     """
     avatar = await repo.require_in_org(db, ctx.org.id, avatar_id)
     await lifecycle.publish_draft(db, avatar)
+    await expression_edits.after_publish(db, avatar, ctx.org)
     return avatar
 
 

@@ -325,6 +325,7 @@ async def test_a_publish_copies_the_draft_into_its_revisions_folder_and_records_
         "face_type": "cartoon",
         "voice": VOICE,
         "mouth": None,
+        "expressions": None,
         "image_key": f"{prefix}/image.png",
         "rig_key": f"{prefix}/rig.json",
         "thumbnail_key": f"{prefix}/thumb.jpg",

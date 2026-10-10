@@ -325,6 +325,11 @@ class AiShapesEntry(TypedDict):
     generated: int
 
 
+class AiExpressionsEntry(TypedDict):
+    model: str | None
+    made: int
+
+
 class AiEdited(TypedDict):
     """Avatar.ai_edited: what an AI made or changed (services.disclosure)."""
 
@@ -332,6 +337,7 @@ class AiEdited(TypedDict):
     model: str | None
     teeth: NotRequired[AiTeethEntry]
     mouth_shapes: NotRequired[AiShapesEntry]
+    expressions: NotRequired[AiExpressionsEntry]
 
 
 class Disclosure(TypedDict):
@@ -431,6 +437,88 @@ class OralUrls(TypedDict):
     rig_url: str
 
 
+# --- Avatar.expression_config (services.expression_kit) ----------------------------------
+
+
+ExpressionName = Literal["happy", "surprised", "concerned", "thinking", "serious"]
+
+
+class ExpressionShot(TypedDict):
+    """One expression of a kit: made (`image_key` set) or why not."""
+
+    status: Literal["ok", "failed"]
+    outcome: str
+    reason: Note | None
+    attempts: list[str]
+    image_key: NotRequired[str]
+    smile: NotRequired[bool]
+
+
+class ExpressionPicture(TypedDict):
+    """The picture of the avatar the kit was made on: a kit for another
+    picture is stale (a crop, a new photo); new points on the same picture
+    are followed (expression_kit.follow_points)."""
+
+    image_key: str | None
+    image_size: list[int]
+
+
+class ExpressionKitRecord(TypedDict):
+    """expression_config["kit"]: what was made, and where it lives."""
+
+    id: str
+    made_at: str
+    source: Literal["panel", "publish", "batch"]
+    recipe: dict
+    model: str | None
+    manifest_key: str | None
+    shots: dict[str, ExpressionShot]
+    made: int
+    calls: int
+    billed_calls: int
+    picture: ExpressionPicture
+    rebased_at: str | None
+
+
+class PendingBatch(TypedDict):
+    """expression_config["pending"]: a batch sent to the provider and not yet
+    collected (expression_kit.batch)."""
+
+    name: str
+    submitted_at: str
+    consent_id: str | None
+    picture: ExpressionPicture
+    # The picture's points when it was sent: the crop sent was cut on them,
+    # and the answers are registered on them (then follow the points as
+    # they are when collected).
+    points: list[list[float]]
+    requests: list[str]
+    # The published revision the batch completes (a publish asked for it).
+    revision: int | None
+
+
+class ExpressionConfig(TypedDict):
+    """Avatar.expression_config: the owner's choice (`ai`), the consent it
+    relies on, the kit made, and a batch in flight."""
+
+    ai: bool
+    consent_id: NotRequired[str | None]
+    consent_user_id: NotRequired[str | None]
+    # How a publish makes missing pictures: now (full price, about twenty
+    # seconds), or as a batch (half the price, minutes to hours).
+    delivery: NotRequired[Literal["now", "batch"]]
+    kit: NotRequired[ExpressionKitRecord | None]
+    pending: NotRequired[PendingBatch | None]
+
+
+class PublishedExpressions(TypedDict):
+    """PublishedConfig["expressions"]: the copied manifest and pictures."""
+
+    manifest_key: str
+    image_keys: dict[str, str]
+    kit: ExpressionKitRecord
+
+
 # --- Avatar.scene_config (services.scene) -------------------------------------------------
 
 
@@ -498,6 +586,7 @@ class PublishedConfig(TypedDict):
     voice: NotRequired[VoiceChoice | None]
     mouth: NotRequired[MouthConfig | None]
     disclosure: NotRequired[Disclosure]
+    expressions: NotRequired[PublishedExpressions | None]
 
 
 # --- The rig file (services.rig) -------------------------------------------------------------

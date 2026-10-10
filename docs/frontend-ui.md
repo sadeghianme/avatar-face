@@ -99,7 +99,7 @@ hex colour.
 - **Keys**: `lib/queryKeys.ts` makes every query key (`queryKeys.avatar(org,
   id)`), and `keyMatches` documents the prefix matching invalidation relies
   on. No literal key is written anywhere else.
-- **Modules**: each feature's `api.ts` (`avatars/api/`, a folder of four)
+- **Modules**: each feature's `api.ts` (`avatars/api/`, a folder of five)
   holds its server calls as hooks: a query hook per read, a mutation hook
   per write that refreshes what the write changed in its `onSuccess`. The
   avatars' rule for what a change refreshes is in one place,
@@ -140,6 +140,7 @@ lines, no component with more than five `useState`.
 | Step 4, publishing | `usePublishEditor` | `wizard/publish/` |
 | The avatar page | `useAvatarDetail` | `components/detail/` |
 | Its Mouth panel | `useMouthPanel` | `components/mouth/` |
+| Its Expressions panel (AI pictures) | `useExpressionsPanel` | `components/expressions/` |
 | Its Framing & scene | `useSceneEditor`, `useDragPan` | `components/scene/` |
 | Marking the face | `useMarkFace` | `components/mark/` (`MarkFacePreview`, `FitReasons`) |
 | The marking canvas | `useMarkCanvas`, `useElementWidth` | `mark/MarkLoupe` (and `placeLoupe`), `mark/MarkOutlines` |

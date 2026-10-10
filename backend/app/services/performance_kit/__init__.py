@@ -66,6 +66,8 @@ The package, in the order of the steps above:
     profile       4. the retarget fallback, 3. the mouth profile fit, 3b. the
                   kit's own size (normalize_amplitude)
     manifest      5. the manifest, and a kit moved onto new points
+    sending       1c. the requests sent, once each (and once more on the head
+                  crop after a refusal), every call accounted for
     kit           6. build_kit, the orchestrator, and what it reports
 
 The public names are re-exported here, so `performance_kit.X` keeps
@@ -93,9 +95,11 @@ from app.services.performance_kit.answers import (
     REFERENCE_OPENINGS,
     TEETH_PHOTO_MIN_GAP,
     Detector,
+    FaceRegistration,
     PoseRegistration,
     opening,
     register_answer,
+    register_face,
     signed_yaw,
 )
 from app.services.performance_kit.constants import (
@@ -120,16 +124,12 @@ from app.services.performance_kit.constants import (
 )
 from app.services.performance_kit.kit import (
     MAX_BASE_DETECTION_SHIFT,
-    EditedImage,
-    EditImage,
     KitFailed,
     KitResult,
     KitUnavailable,
     Progress,
     TeethSource,
     build_kit,
-    call_billing,
-    stop_reason,
 )
 from app.services.performance_kit.manifest import (
     BASE,
@@ -185,6 +185,13 @@ from app.services.performance_kit.requests import (
     PoseRequest,
     head_square,
     prepare_pose_request,
+)
+from app.services.performance_kit.sending import (
+    EditedImage,
+    EditImage,
+    Sender,
+    call_billing,
+    stop_reason,
 )
 
 __all__ = [
@@ -264,6 +271,9 @@ __all__ = [
     "ReferenceMotion",
     "register",
     "register_answer",
+    "register_face",
+    "FaceRegistration",
+    "Sender",
     "registration_rms",
     "request_prompt",
     "retarget_reference_pose",

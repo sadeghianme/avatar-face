@@ -4,13 +4,16 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Disclosure, DisclosureGroup } from "@/components/ui/Disclosure";
+import { useExpressions } from "@/features/avatars/api";
 import { EmbedSnippet } from "@/features/avatars/components/EmbedSnippet";
+import { ExpressionsPanel } from "@/features/avatars/components/ExpressionsPanel";
 import { FinishNotice } from "@/features/avatars/components/FinishNotice";
 import { FramingScenePanel } from "@/features/avatars/components/FramingScenePanel";
 import { MouthPanel } from "@/features/avatars/components/MouthPanel";
 import { PublishBar } from "@/features/avatars/components/PublishBar";
 import { SharePanel } from "@/features/avatars/components/SharePanel";
 import { TuningPanel } from "@/features/avatars/components/TuningPanel";
+import { summaryKey } from "@/features/avatars/expressions";
 import type { AvatarDetailState } from "@/features/avatars/hooks/useAvatarDetail";
 import type { useOpenSections } from "@/features/avatars/hooks/useOpenSections";
 import { draftMouthConfig } from "@/features/avatars/mouth-config";
@@ -21,7 +24,8 @@ import type { Avatar, Org } from "@/lib/types";
 /**
  * The settings column: the quality note when there is one, the publish
  * state, the finish notice, Speak, then the settings in named groups
- * (Disclosure): Look (Framing & scene, Mouth), Publish & share (the public
+ * (Disclosure): Look (Framing & scene, Mouth, Expressions for a person's
+ * photo), Publish & share (the public
  * link, the embed snippet), Advanced (animation tuning, the mesh).
  */
 export function SettingsColumn({
@@ -41,6 +45,8 @@ export function SettingsColumn({
   const photo = avatar.kind === "photo";
   const is3d = avatar.kind === "model3d";
   const human = (avatar.face_type ?? "human") === "human";
+  // The section's summary; the panel inside asks the same query.
+  const expressions = useExpressions(org.id, avatar.id, photo && human);
   const mouthSummary = human
     ? t(avatar.mouth?.renderer === "continuous" ? "mouthContinuous" : "mouthClassic")
     : t("mouthSummary");
@@ -133,6 +139,18 @@ export function SettingsColumn({
               onMotion={page.setMotion}
             />
           </Disclosure>
+          {photo && human && (
+            <Disclosure
+              id="expressions"
+              icon="sparkles"
+              title={t("exprTitle")}
+              summary={t(summaryKey(expressions.data))}
+              open={sections.open.expressions}
+              onToggle={() => sections.toggle("expressions")}
+            >
+              <ExpressionsPanel avatar={avatar} orgId={org.id} />
+            </Disclosure>
+          )}
         </DisclosureGroup>
       )}
 

@@ -141,11 +141,19 @@ export class WarpRenderer {
   private readonly onLost: (event: Event) => void;
   private readonly onRestored: () => void;
 
+  /** The textures uploaded, newest last; at most `keep` of them (the
+   *  engine's warp keeps its one picture, the expression pictures' overlay
+   *  a few, expression-overlay.ts). */
+  private readonly uploaded = new Map<TexImageSource, WebGLTexture>();
+  private keep = 1;
+
   /**
    * A renderer with its own context, or null where WebGL is unavailable.
-   * Never throws: the engine falls back to 2D on null.
+   * Never throws: the engine falls back to 2D on null. `keep`: how many
+   * textures it holds uploaded at once (setTexture switches among them
+   * without uploading again).
    */
-  static create(width: number, height: number): WarpRenderer | null {
+  static create(width: number, height: number, keep = 1): WarpRenderer | null {
     if (!webglSupported()) return null;
     try {
       const canvas = document.createElement("canvas");
@@ -166,6 +174,7 @@ export class WarpRenderer {
       // no WebGL context; only the real thing will do.
       if (!gl || !(gl instanceof WebGLRenderingContext)) return null;
       const renderer = new WarpRenderer(canvas, gl);
+      renderer.keep = Math.max(1, keep);
       return renderer.ready ? renderer : null;
     } catch {
       return null;
@@ -184,6 +193,9 @@ export class WarpRenderer {
     this.onRestored = () => {
       if (this.destroyed) return;
       this.lost = false;
+      // The context's textures went with it.
+      this.uploaded.clear();
+      this.texture = null;
       this.setup();
       if (this.image) this.imageOk = this.upload(this.image);
       if (this.mesh) this.uploadMesh(this.mesh);
@@ -290,16 +302,29 @@ export class WarpRenderer {
 
   private upload(image: TexImageSource): boolean {
     const gl = this.gl;
+    const held = this.uploaded.get(image);
+    if (held) {
+      this.texture = held;
+      this.uploaded.delete(image);
+      this.uploaded.set(image, held);
+      return true;
+    }
     try {
       const size = image as { naturalWidth?: number; naturalHeight?: number; width?: number; height?: number };
       const w = size.naturalWidth ?? size.width ?? 0,
         h = size.naturalHeight ?? size.height ?? 0;
       const max = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
       if (!w || !h || w > max || h > max) return false;
-      if (this.texture) gl.deleteTexture(this.texture);
+      while (this.uploaded.size >= this.keep) {
+        const [oldest, old] = this.uploaded.entries().next().value as [TexImageSource, WebGLTexture];
+        gl.deleteTexture(old);
+        this.uploaded.delete(oldest);
+      }
+      this.texture = null;
       const texture = gl.createTexture();
       if (!texture) return false;
       this.texture = texture;
+      this.uploaded.set(image, texture);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
@@ -448,7 +473,8 @@ export class WarpRenderer {
     this.canvas.removeEventListener("webglcontextlost", this.onLost);
     this.canvas.removeEventListener("webglcontextrestored", this.onRestored);
     try {
-      if (this.texture) gl.deleteTexture(this.texture);
+      for (const texture of this.uploaded.values()) gl.deleteTexture(texture);
+      this.uploaded.clear();
       if (this.posBuffer) gl.deleteBuffer(this.posBuffer);
       if (this.uvBuffer) gl.deleteBuffer(this.uvBuffer);
       if (this.indexBuffer) gl.deleteBuffer(this.indexBuffer);

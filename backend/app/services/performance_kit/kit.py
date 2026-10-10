@@ -7,21 +7,18 @@ import asyncio
 import inspect
 import logging
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
 
-import httpx
 import numpy as np
 from PIL import Image
 
 from app.core.config import get_settings
-from app.services import imagegen, photo_adjust
+from app.services import photo_adjust
 from app.services.jobs import run_cpu
 from app.services.performance_kit.answers import (
     Detector,
     PoseRegistration,
-    make_reason,
     register_answer,
 )
 from app.services.performance_kit.constants import (
@@ -50,14 +47,14 @@ from app.services.performance_kit.registration import (
     load_reference,
 )
 from app.services.performance_kit.requests import (
-    FACE_CROP,
-    HEAD_CROP,
-    Crop,
     PoseRequest,
     checked_points,
-    crop_picture,
     load_base_image,
     request_for,
+)
+from app.services.performance_kit.sending import (
+    EditImage,
+    Sender,
 )
 from app.services.photo_io import png_bytes
 from app.services.rig import build_rig
@@ -122,50 +119,10 @@ class KitResult:
     teeth_report: dict | None = None
 
 
-class EditedImage(Protocol):
-    """What an edit answers with: imagegen.Generated, or a test's fake (whose
-    `model`, read with getattr, is optional)."""
-
-    image: bytes
-
-
-EditImage = Callable[[str, bytes, str], Awaitable[EditedImage]]
 # on_progress(fraction, message, done, total): `done` of the `total`
 # requests (the six shapes, and the teeth photo when asked for) are
 # settled: made, or given up on (a shape is then retargeted).
 Progress = Callable[[float, str, int, int], object]
-
-
-def call_billing(error: BaseException | None) -> bool | None:
-    """Was a provider call that ended with `error` (None: it returned an
-    image) billed? True for any answer: an image, a refusal, an answer
-    without an image. None when it was sent and may have been answered:
-    it timed out, while or after it was written (the kit's own bound, or
-    httpx's read or write timeout, which is how a real 90 s imagegen
-    timeout arrives), or it was cancelled in flight. False when nothing
-    was sent (ImageGenUnavailable, httpx never connected) or the provider
-    failed without answering (an HTTP error, a broken connection).
-
-    The one classification the kit's call_log and a caller metering its
-    calls as they end (services.mouth_kit) both use, so they agree."""
-    if error is None or isinstance(error, (imagegen.ImageGenRefused, imagegen.ImageGenNoImage)):
-        return True
-    if isinstance(error, (httpx.ConnectTimeout, httpx.PoolTimeout)):
-        return False
-    if isinstance(error, (TimeoutError, httpx.TimeoutException, asyncio.CancelledError)):
-        return None
-    return False
-
-
-def stop_reason(error: BaseException) -> dict:
-    """Why no more calls are sent, from the ImageGenUnavailable that said
-    so: the `code` and `detail` a caller's edit function gave it (its AI
-    switch turned off, the monthly image limit reached), else imagegen's
-    own meaning, no provider configured."""
-    return make_reason(
-        getattr(error, "code", None) or "imagegen_unavailable",
-        getattr(error, "detail", None) or "AI editing is not configured on this server",
-    )
 
 
 def _require_landmarker() -> None:
@@ -345,8 +302,6 @@ async def build_kit(
     if detect is None:
         _require_landmarker()
         detect = _default_detect
-    if per_call_timeout is None:
-        per_call_timeout = imagegen.TIMEOUT_SECONDS
     if reference is None:
         reference = await run_cpu(load_reference)
     kit_id = kit_id or uuid.uuid4().hex
@@ -356,10 +311,16 @@ async def build_kit(
     base_detected = await run_cpu(detect_base, detect, base_image, points)
     asked = SHAPES + ((TEETH,) if teeth else ())
 
-    semaphore = asyncio.Semaphore(max(1, int(concurrency)))
-    crops: dict[str, asyncio.Future] = {}
-    call_log: list[dict] = []
-    state: dict = {"calls": 0, "billed": 0, "stopped": None, "done": 0}
+    sender = Sender(
+        base_image,
+        points,
+        edit_image,
+        request_for,
+        concurrency=concurrency,
+        per_call_timeout=per_call_timeout,
+        bound_calls=bound_calls,
+    )
+    state: dict = {"done": 0}
 
     async def report_progress(message: str, fraction: float | None = None) -> None:
         if on_progress is None:
@@ -370,143 +331,11 @@ async def build_kit(
         if inspect.isawaitable(outcome):
             await outcome
 
-    async def crop_for(kind: str) -> Crop | None:
-        # One crop per kind, shared by every request that needs it;
-        # shielded, so a request torn down while it waits does not cancel
-        # it for the others (and a crop nobody waits for any more is not
-        # left with an unretrieved error).
-        if kind not in crops:
-            future = asyncio.ensure_future(run_cpu(crop_picture, base_image, points, kind))
-            future.add_done_callback(lambda done: done.cancelled() or done.exception())
-            crops[kind] = future
-        return await asyncio.shield(crops[kind])
-
-    async def send(request: PoseRequest):
-        call = edit_image(request.prompt, request.payload, request.mime)
-        if not bound_calls:
-            return await call
-        return await asyncio.wait_for(call, timeout=per_call_timeout)
+    def check(image: bytes, request: PoseRequest) -> PoseRegistration:
+        return register_answer(image, request, base_image, points, frame, detect, base_detected)
 
     async def one(shape: str) -> tuple[PoseRegistration | None, dict]:
-        entry: dict = {"attempts": []}
-        kind = FACE_CROP
-        while True:
-            crop = await crop_for(kind)
-            if crop is None:
-                entry.update(
-                    outcome="refused",
-                    reason=make_reason(
-                        "safety_refused", "The AI declined this edit, so it was not asked again"
-                    ),
-                )
-                return None, entry
-            request = request_for(shape, crop)
-            async with semaphore:
-                if state["stopped"] is not None:
-                    entry.update(outcome="unavailable", reason=state["stopped"])
-                    return None, entry
-                state["calls"] += 1
-                record = {"shape": shape, "kind": kind, "model": None}
-                call_log.append(record)
-                entry["attempts"].append(kind)
-                try:
-                    generated = await send(request)
-                except imagegen.ImageGenRefused as exc:
-                    state["billed"] += 1
-                    record.update(outcome="refused", billed=True, detail=exc.reason)
-                    if kind == FACE_CROP:
-                        # Once more on the head crop: a different picture,
-                        # the same pose asked for (photo_adjust's pattern).
-                        kind = HEAD_CROP
-                        continue
-                    entry.update(
-                        outcome="refused",
-                        reason=make_reason(
-                            "safety_refused", "The AI declined this edit, so it was not asked again"
-                        ),
-                    )
-                    return None, entry
-                except imagegen.ImageGenNoImage as exc:
-                    state["billed"] += 1
-                    record.update(outcome="no_image", billed=True, detail=exc.reason)
-                    entry.update(
-                        outcome="no_image",
-                        reason=make_reason(
-                            "no_image",
-                            "The AI answered without an image, so it was not asked again",
-                        ),
-                    )
-                    return None, entry
-                except imagegen.ImageGenUnavailable as exc:
-                    # Nothing was sent: no provider, or the caller sends no
-                    # more (its switch, its limit, a consent it could not
-                    # record). Nothing more is asked.
-                    state["calls"] -= 1
-                    call_log.remove(record)
-                    entry["attempts"].pop()
-                    reason = stop_reason(exc)
-                    state["stopped"] = state["stopped"] or reason
-                    entry.update(outcome="unavailable", reason=reason)
-                    return None, entry
-                except asyncio.CancelledError:
-                    # Torn down (another request failed) or the caller was
-                    # cancelled: this call was sent, and may be billed.
-                    record.update(outcome="cancelled", billed=None)
-                    raise
-                except Exception as exc:
-                    # Broad on purpose: the provider's call, classified by
-                    # call_billing whatever it raised.
-                    if call_billing(exc) is None:
-                        # Sent, and possibly billed: the kit's own bound, or
-                        # the provider's read or write timeout (imagegen's
-                        # 90 s arrives as httpx's). Never asked again; the
-                        # caller decides how to meter it.
-                        logger.warning("performance kit: the %s edit timed out (%r)", shape, exc)
-                        record.update(outcome="timeout", billed=None)
-                        entry.update(
-                            outcome="timeout",
-                            reason=make_reason("timeout", "The AI did not answer in time"),
-                        )
-                        return None, entry
-                    logger.exception("performance kit: the %s edit failed", shape)
-                    record.update(outcome="provider_error", billed=False)
-                    entry.update(
-                        outcome="provider_error",
-                        reason=make_reason(
-                            "provider_error", "The AI service did not return an image"
-                        ),
-                    )
-                    return None, entry
-            state["billed"] += 1
-            record.update(outcome="image", billed=True, model=getattr(generated, "model", None))
-            try:
-                registration = await run_cpu(
-                    register_answer,
-                    generated.image,
-                    request,
-                    base_image,
-                    points,
-                    frame,
-                    detect,
-                    base_detected,
-                )
-            except Exception:
-                # Broad on purpose. A check that breaks on an answer is a check the answer did
-                # not pass: given up, like any rejected one, and the other
-                # requests' paid calls carry on.
-                logger.exception("performance kit: checking the %s answer failed", shape)
-                registration = PoseRegistration(
-                    shape,
-                    reason=make_reason(
-                        "check_failed", "The AI's answer could not be checked, so it was not used"
-                    ),
-                )
-            entry.update(
-                outcome="generated" if registration.ok else "rejected",
-                reason=registration.reason,
-                checks=registration.checks,
-            )
-            return registration, entry
+        return await sender.ask(shape, check)
 
     async def tracked(shape: str) -> tuple[PoseRegistration | None, dict]:
         result = await one(shape)
@@ -557,17 +386,17 @@ async def build_kit(
         # Broad on purpose: whatever stopped the task group is reported as
         # KitFailed, with every call sent accounted for.
         cause = exc.exceptions[0] if isinstance(exc, ExceptionGroup) else exc
-        logger.error("performance kit failed after %d call(s): %r", state["calls"], cause)
-        raise KitFailed(state["calls"], state["billed"], call_log) from cause
+        logger.error("performance kit failed after %d call(s): %r", sender.calls, cause)
+        raise KitFailed(sender.calls, sender.billed, sender.call_log) from cause
     return KitResult(
         manifest=finished.manifest,
         profile=finished.fit.profile,
         profile_fit=finished.fit.as_dict(),
         teeth_source=finished.teeth,
         report=report,
-        calls=state["calls"],
-        billed_calls=state["billed"],
-        call_log=call_log,
+        calls=sender.calls,
+        billed_calls=sender.billed,
+        call_log=sender.call_log,
         base_detected=base_detected is not None,
         teeth_report=teeth_report,
     )

@@ -6,11 +6,12 @@ import { useState } from "react";
  * what was opened is kept for the next avatar (a member tuning mouths
  * does not unfold Mouth on every page).
  */
-export type SectionId = "scene" | "mouth" | "share" | "embed" | "tuning";
+export type SectionId = "scene" | "mouth" | "expressions" | "share" | "embed" | "tuning";
 
 const OPEN_BY_DEFAULT: Record<SectionId, boolean> = {
   scene: true,
   mouth: false,
+  expressions: false,
   share: false,
   embed: false,
   tuning: false,

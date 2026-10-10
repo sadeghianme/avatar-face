@@ -85,6 +85,8 @@ import { FaceAnimation } from "./engine/animation";
 import { NO_DEBUG_HANDLE, exposeDebugHandle } from "./engine/debug-handle";
 import { deformFace, type FrameVertices } from "./engine/deform";
 import type { ExpressionCue, ExpressionState, ExpressionTiming } from "./engine/expression-mixer";
+import { ExpressionPictureLayer } from "./engine/expression-overlay";
+import { loadImage, loadPictures, type ExpressionPictureSource, type PictureName } from "./engine/expression-pictures";
 import { ExpressionRigs } from "./engine/expression-rig";
 import type { ExpressionName } from "./engine/expression-table";
 import { FrameLoop } from "./engine/frame-loop";
@@ -157,6 +159,10 @@ export class AvatarEngine {
   private readonly animation: FaceAnimation;
   /** The expressions laid on the mesh now, built when first needed. */
   private readonly expressionRigs: ExpressionRigs;
+  /** The AI expression pictures, once loaded (expression-overlay.ts); null
+   *  for an avatar without any, or while they load. */
+  private pictures: ExpressionPictureLayer | null = null;
+  private picturesLoad: AbortController | null = null;
   /** A mouth renderer that moves and paints the mouth instead (mouth/). */
   private mouthExtension?: MouthExtension;
   private readonly frameLoop: FrameLoop;
@@ -176,8 +182,36 @@ export class AvatarEngine {
   /** What composing a frame calls back (render2d.ts), made once rather
    *  than every frame: the mesh drawn through `affine`, then the features
    *  over it (paint-features.ts), the sound being made read when asked. */
-  private readonly drawMesh = (affine: Affine) => this.meshWarp.draw(this.ctx, this.vertices.all, affine);
-  private readonly drawFeatures = () =>
+  private readonly drawMesh = (affine: Affine) => {
+    this.meshAffine = affine;
+    this.meshWarp.draw(this.ctx, this.vertices.all, affine);
+    this.pictures?.draw(
+      this.ctx,
+      this.vertices.all,
+      affine,
+      this.picture.mesh,
+      this.face.expression,
+      this.tuning.expression,
+      performance.now()
+    );
+  };
+  /** The head's transform the mesh was drawn through this frame (the
+   *  silent smile's mouth is drawn through it after the features). */
+  private meshAffine: Affine = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  private readonly drawFeatures = () => {
+    this.paintFeatures();
+    this.pictures?.draw(
+      this.ctx,
+      this.vertices.all,
+      this.meshAffine,
+      this.picture.mesh,
+      this.face.expression,
+      this.tuning.expression,
+      performance.now(),
+      "mouth"
+    );
+  };
+  private readonly paintFeatures = () =>
     paintFeatures({
       ctx: this.ctx,
       pts: this.vertices.all,
@@ -192,6 +226,7 @@ export class AvatarEngine {
       viseme: this.viseme,
       debugRing: this.debugMesh ? this.innerRing : null,
       expressionRig: this.expressionRigs.built,
+      cueMix: this.pictures?.withoutPictures(this.face.expression, performance.now()),
       posed: this.placement.posedMouth(this.picture.mesh.basePoints),
     });
   private readonly viseme = () => this.animation.visemeNow(performance.now());
@@ -306,6 +341,8 @@ export class AvatarEngine {
 
   destroy(): void {
     this.destroyed = true;
+    this.picturesLoad?.abort();
+    this.pictures?.destroy();
     this.frameLoop.stop();
     this.speech.destroy();
     this.meshWarp.destroy();
@@ -374,6 +411,36 @@ export class AvatarEngine {
   /** The idle micro-expressions on or off (EngineOptions.idleExpressions). */
   setIdleExpressions(on: boolean): void {
     this.animation.expressions.setIdle(on);
+  }
+
+  /**
+   * The avatar's AI expression pictures (docs/emotions.md, "AI expression
+   * pictures"): the manifest and each picture, presigned, as the published
+   * snapshot (or the dashboard's draft) names them; null for none. Loaded
+   * on the side: the animated expressions play until they are in, then the
+   * pictures come in over ARRIVE_MS. A set that cannot be loaded leaves the
+   * animated ones. Resolves when loaded (or given up).
+   */
+  async setExpressionPictures(source: ExpressionPictureSource | null): Promise<void> {
+    this.picturesLoad?.abort();
+    this.picturesLoad = null;
+    this.pictures?.destroy();
+    this.pictures = null;
+    if (!source || this.destroyed) return;
+    const load = (this.picturesLoad = new AbortController());
+    try {
+      const { base, pictures } = await loadPictures(source, loadImage, fetch, load.signal);
+      if (this.destroyed || load.signal.aborted || !pictures.length) return;
+      this.pictures = new ExpressionPictureLayer(pictures, base, performance.now(), this.meshWarp.renderer !== null);
+    } catch {
+      // The animated expressions stay: a picture set is an improvement,
+      // never a requirement.
+    }
+  }
+
+  /** The expressions an AI picture shows now (empty without any). */
+  expressionPictures(): PictureName[] {
+    return this.pictures?.names ?? [];
   }
 
   /** Whether the idle micro-expressions are on (off unless asked for). */
@@ -453,6 +520,16 @@ export class AvatarEngine {
   /** One animation step at frame time `now` (animation.ts); no drawing. */
   private tick(now: number): void {
     this.animation.step(now, this.tuning, !!this.picture.field);
+    if (this.pictures) {
+      const t = this.face.targetWeights;
+      const articulation = Math.max(
+        t.jawOpen,
+        t.mouthFunnel,
+        t.mouthPucker,
+        this.speech.speaking ? 0.07 * t.mouthClose : 0
+      );
+      this.pictures.smileLevel = this.pictures.smile.step(now, articulation);
+    }
   }
 
   /** Every mesh vertex this frame (deform.ts): into `into`, the frame's
@@ -481,6 +558,7 @@ export class AvatarEngine {
         lowerFace: picture.lowerFace,
         mouthExtension: this.mouthExtension,
         expression: this.expressionRigs.get(picture.mesh, picture.texture, this.animation.expressions.active()),
+        pictures: this.pictures ? { layer: this.pictures, now: performance.now() } : null,
       },
       into
     );

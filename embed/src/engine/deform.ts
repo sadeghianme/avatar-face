@@ -19,6 +19,7 @@
  */
 import { blinkEase } from "./blink";
 import type { CharacterField, CharacterTraits } from "./character-mouth";
+import type { ExpressionPictureLayer } from "./expression-overlay";
 import type { ExpressionRig } from "./expression-rig";
 import { applyLowerFace, UPPER_FACE, type LowerFaceRig } from "./jaw-rig";
 import type { KindProfile } from "./kind-profile";
@@ -171,6 +172,11 @@ export interface DeformInput {
   /** The face's expressions (expression-rig.ts), laid on after the lower
    *  face and before the turn; absent or with nothing on, none. */
   expression?: ExpressionRig | null;
+  /** The AI expression pictures (expression-overlay.ts), when the avatar
+   *  has some: the expressions they show move the landmarks toward the
+   *  picture under its mask, the rig's displacement outside it. `now`: the
+   *  frame's time (they come in over a moment when they arrive). */
+  pictures?: { layer: ExpressionPictureLayer; now: number } | null;
   /** The head's field's own vertices (head-field.ts, FaceMesh.head),
    *  written into the vertices from FaceMesh.head.first (after the neck
    *  band's), turned with the face (head-turn.ts HeadTurn.field). Absent:
@@ -280,7 +286,9 @@ export function deformFace(f: DeformInput, into: FrameVertices = { landmarks: []
 
   // The expressions, in the face's rest frame, over whatever the speech
   // did (expression-rig.ts: speech keeps the lips); the turn turns both.
-  f.expression?.apply(pts, face.expression, tuning.expression);
+  if (f.pictures)
+    f.pictures.layer.apply(pts, mesh, face.expression, tuning.expression, f.expression ?? null, f.pictures.now);
+  else f.expression?.apply(pts, face.expression, tuning.expression);
 
   f.turn?.(pts);
   // A driver that put a new point in a landmark's place rather than move

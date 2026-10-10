@@ -19,9 +19,10 @@ from app.core.config import get_settings
 from app.core.errors import Validation422
 from app.db import get_session_factory
 from app.models import Avatar, AvatarKind, AvatarStatus
-from app.services import mouth_kit, photo_io
+from app.services import photo_io
 from app.services import rig as rigging
 from app.services.anchor_fit import fit_base_key, fit_base_record, write_fit_base
+from app.services.avatars import kits
 from app.services.jobs import run_cpu
 from app.services.layers import store_layers
 from app.services.model3d import build_model_rig, make_model_thumbnail
@@ -165,7 +166,7 @@ async def process_avatar(avatar_id: str) -> None:
                 # and a mouth edit in between must not be undone by it
                 # (services.mouth_kit.follow_redetection).
 
-                await mouth_kit.follow_redetection(avatar.org_id, avatar.id, rig["points"])
+                await kits.follow_redetection(avatar.org_id, avatar.id, rig["points"])
             await storage.put_bytes(thumb_key, thumb, thumb_type)
 
             avatar.rig_key = rig_key

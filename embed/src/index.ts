@@ -2,6 +2,7 @@ export { AvatarEngine, prepareCues } from "./engine";
 export type { EngineOptions, HeadMotionMode, Scene, SceneBackground, WarpMode } from "./engine";
 export { ZOOM_MAX, PAN_MAX } from "./engine/viewport";
 export type { ExpressionCue, ExpressionState, ExpressionTiming } from "./engine/expression-mixer";
+export type { ExpressionPictureSource, PictureName } from "./engine/expression-pictures";
 export { EXPRESSION_NAMES, expressionNamed, type ExpressionName } from "./engine/expression-table";
 export { parseExpressionTags, timeExpressionMarks, autoExpressions, spokenText } from "./expression-markup";
 export type { ExpressionMark, ParsedText } from "./expression-markup";

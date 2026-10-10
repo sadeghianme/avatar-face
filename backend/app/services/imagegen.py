@@ -302,7 +302,14 @@ async def _request(prompt: str, source: bytes | None, source_mime: str) -> Gener
         )
         raise RuntimeError(f"image generation failed ({response.status_code})")
 
-    body = response.json()
+    return answer_of(response.json())
+
+
+def answer_of(body: dict) -> Generated:
+    """The image in a generateContent answer (`body`, as Google sends it,
+    alone or as one answer of a batch), or why there is none: raises
+    ImageGenRefused (a policy reason) or ImageGenNoImage (answered, no
+    image). Either way the call was answered, so billed."""
     for candidate in body.get("candidates", []):
         for part in (candidate.get("content") or {}).get("parts", []):
             blob = part.get("inline_data") or part.get("inlineData")
@@ -318,9 +325,29 @@ async def _request(prompt: str, source: bytes | None, source_mime: str) -> Gener
         logger.info("gemini declined the image (%s)", refused)
         raise ImageGenRefused(refused)
     # A response with only text is usually a refusal, and the text says why.
-    logger.error("gemini returned no image: %s", response.text[:400])
+    logger.error("gemini returned no image: %s", str(body)[:400])
     reasons = [c.get("finishReason") for c in body.get("candidates") or [] if c.get("finishReason")]
     raise ImageGenNoImage(str(reasons[0]) if reasons else None)
+
+
+def edit_request(prompt: str, source: bytes, source_mime: str) -> dict:
+    """The generateContent request body for an edit of `source` (the one
+    _request sends, and a batch carries for each of its requests)."""
+    return {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt},
+                    {
+                        "inline_data": {
+                            "mime_type": source_mime,
+                            "data": base64.b64encode(source).decode(),
+                        }
+                    },
+                ]
+            }
+        ]
+    }
 
 
 async def verify_key() -> dict:

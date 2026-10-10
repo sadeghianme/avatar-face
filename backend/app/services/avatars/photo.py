@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import Conflict409, Validation422
 from app.models import Avatar, AvatarKind
-from app.services import mouth_kit
 from app.services.anchor_fit import (
     fit_base_key,
     fit_base_points,
@@ -28,6 +27,7 @@ from app.services.anchor_fit import (
     read_fit_base,
     write_fit_base,
 )
+from app.services.avatars import kits
 from app.services.avatars.derived import rebuild_layers, rebuild_thumbnail
 from app.services.avatars.history import snapshot
 from app.services.jobs import run_cpu
@@ -219,7 +219,7 @@ def _crop_png(
 
 async def _kit_follows_rig(avatar: Avatar, storage: Storage) -> list[str]:
     """The mouth kit moved onto the rig now in place after a crop or its
-    reset (mouth_kit.follow_points): a crop cuts the same pixels at whole
+    reset (kits.follow_points: the mouth kit and the expression pictures): a crop cuts the same pixels at whole
     pixels, so the kit is the face's still, only elsewhere in the picture.
     Returns the keys to delete after the commit."""
     if not avatar.rig_key:
@@ -229,7 +229,7 @@ async def _kit_follows_rig(avatar: Avatar, storage: Storage) -> list[str]:
     except STORAGE_ERRORS:
         logger.exception("rig read failed for avatar %s", avatar.id)
         return []
-    return await mouth_kit.follow_points(avatar, storage, rig["points"], rig["image_size"])
+    return await kits.follow_points(avatar, storage, rig["points"], rig["image_size"])
 
 
 def _move_rig(rig: dict, left: float, top: float, size: tuple[int, int]) -> dict:
