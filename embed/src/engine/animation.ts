@@ -29,6 +29,9 @@ export class FaceAnimation {
   private readonly rest: BlendWeights = { ...ZERO_WEIGHTS };
   /** The expressions over time (engine.setExpression, a text's tags). */
   readonly expressions = new ExpressionMixer();
+  /** How much of an expression's silent jaw drop this face takes (its
+   *  line's ExpressionGains.jaw). */
+  expressionJaw = 1;
   /** The speech's accents, walked for the idle brow flash ("2d" motion:
    *  the "3d" personality flashes the brows itself). */
   private beats: Beat[] = [];
@@ -70,7 +73,8 @@ export class FaceAnimation {
     this.stepExpressions(now, tuning);
     // An expression's jaw (surprise's) only while nothing is said: the
     // voice owns the jaw, and a mouth driver's pose wins over both.
-    if (!posed && !speech.speaking) visemeWeights.jawOpen = this.expressions.jaw() * tuning.expression;
+    if (!posed && !speech.speaking)
+      visemeWeights.jawOpen = this.expressions.jaw() * this.expressionJaw * tuning.expression;
     const silent = speech.speaking && speech.currentViseme(now) === "sil";
     if (silent) {
       const amp = speech.amplitude();

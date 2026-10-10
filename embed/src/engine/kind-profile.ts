@@ -145,5 +145,22 @@ export function defaultHeadMotion(
   return faceType === "human" ? "3d" : "2d";
 }
 
+/**
+ * How much of an expression this avatar takes (docs/emotions.md,
+ * "Characters and animals"): its rig profile's gains, unless the avatar's
+ * face type (EngineOptions.faceType) says more. An animal takes the
+ * animal's faint, safe amplitudes and no skin cues whatever its rig (a
+ * cat fitted with the human profile got a smile that cracked its drawn
+ * eyes); a cartoon takes no skin cues (on drawn skin a shaded fold reads as
+ * a line drawn across it). Whether a person's picture is a photograph,
+ * which alone takes the cues, is read from the picture itself
+ * (expression-look.ts).
+ */
+export function expressionGains(profile: Pick<KindProfile, "expression">, faceType?: FaceType | null): ExpressionGains {
+  if (faceType === "animal") return ANIMAL_GAINS;
+  if (faceType === "cartoon") return { ...profile.expression, cues: 0 };
+  return profile.expression;
+}
+
 /** The profile names this build knows; the backend writes only these. */
 export const KNOWN_PROFILES: readonly string[] = [...PROFILES.keys()];

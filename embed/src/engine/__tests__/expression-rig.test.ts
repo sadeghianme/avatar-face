@@ -120,6 +120,39 @@ describe.each(Object.entries(RIGS))("the expression rig on the %s fixture", (fix
     }
   });
 
+  it("presses the lips thin in anger while they meet, and not once the speech parts them", () => {
+    const iod = iodOf(base);
+    // The red of each lip at its middle: the outer edge to the inner lip.
+    const red = (p: readonly Point[]) => [dist(p, 0, 13), dist(p, 17, 14)];
+    const angry = expressed({ serious: 1 });
+    const [up, low] = red(angry),
+      [up0, low0] = red(base);
+    expect(up).toBeLessThan(up0 - 0.01 * iod);
+    expect(low).toBeLessThan(low0 - 0.01 * iod);
+    // The inner lips stay where they were.
+    expect(angry[13]).toEqual(base[13]);
+    expect(angry[14]).toEqual(base[14]);
+    // A mouth the speech opened: the lower lip down 0.05 IOD.
+    const open = () => {
+      const pts = pointsOf(rig);
+      for (const i of [...INNER_LOWER.slice(1, -1), 17, 84, 314, 181, 405]) pts[i].y += 0.05 * iod;
+      return pts;
+    };
+    const speaking = open();
+    xr.apply(speaking, mix({ serious: 1 }), 1);
+    const still = open();
+    expect(speaking[17].y).toBeCloseTo(still[17].y, 6);
+    expect(speaking[0].y).toBeCloseTo(still[0].y, 6);
+  });
+
+  it("leaves room for the head's turn: the mouth's and cheeks' shapes keep half of every triangle", () => {
+    // The turn squeezes the far cheek to about half again; a smile that
+    // had pressed a thin cheek triangle to 0.4 of its area took it below
+    // the fifth the fold check allows while the head turned.
+    for (const name of ["happy", "concerned"] as const)
+      expect(smallestRatio(rig, base, expressed({ [name]: 1 })), name).toBeGreaterThan(0.45);
+  });
+
   it("moves a brow as a rigid strip: its thickness, edge to edge down a column, kept", () => {
     // The lower edge's height at `x` (its landmarks as a polyline).
     const lowerAt = (p: readonly Point[], side: 0 | 1, x: number) => {
@@ -167,7 +200,11 @@ describe.each(Object.entries(RIGS))("the expression rig on the %s fixture", (fix
         const change = opening(pts, e) / opening(base, e) - 1;
         if (name === "surprised") expect(change, name).toBeGreaterThan(0.03);
         else if (name === "happy") expect(change, name).toBeLessThan(0);
-        else expect(Math.abs(change), `${name} eye ${e}`).toBeLessThanOrEqual(0.03);
+        // Anger's hard look: the upper lids a little lowered, no more.
+        else if (name === "serious") {
+          expect(change, name).toBeLessThan(-0.01);
+          expect(change, name).toBeGreaterThan(-0.1);
+        } else expect(Math.abs(change), `${name} eye ${e}`).toBeLessThanOrEqual(0.03);
       }
     }
   });

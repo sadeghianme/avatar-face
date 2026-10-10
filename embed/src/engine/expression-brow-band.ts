@@ -317,19 +317,21 @@ export function landmarkBand(local: readonly Point[], side: 0 | 1): BrowBand {
   return { centre, half };
 }
 
-/** The landmarks the brows' search reaches: the brows and the lids. */
-const SEARCHED = [...BROW_UPPER.flat(), ...BROW_LOWER.flat(), 159, 386, 33, 263, 133, 362];
+/** The landmarks the picture is read round: the brows and the lids (the
+ *  brows' search), and the cheeks (the skin's grain, expression-look.ts). */
+const SEARCHED = [...BROW_UPPER.flat(), ...BROW_LOWER.flat(), 159, 386, 33, 263, 133, 362, 50, 280, 205, 425];
 
 /**
  * The luminance of `texture` at a canvas point of the face laid as `mesh`
  * (its rest landmarks `basePoints` over the texture's `texPoints`), read
- * once round the brows; null when the picture cannot be read (a
- * cross-origin texture taints the canvas) or the face is degenerate.
+ * once round the brows and the cheeks; null when the picture cannot be
+ * read (a cross-origin texture taints the canvas) or the face is
+ * degenerate. Its `texel` is one texel's size in canvas px.
  */
 export function textureLuma(
   texture: HTMLImageElement,
   mesh: { readonly basePoints: readonly Point[]; readonly texPoints: readonly Point[] }
-): ((p: Point) => number) | null {
+): TextureLuma | null {
   const b = mesh.basePoints,
     t = mesh.texPoints;
   const kx = (t[263].x - t[33].x) / (b[263].x - b[33].x);
@@ -341,7 +343,7 @@ export function textureLuma(
   const x0 = Math.max(0, Math.floor(Math.min(...xs) - 0.3 * iod));
   const y0 = Math.max(0, Math.floor(Math.min(...ys) - 0.35 * iod));
   const x1 = Math.min(texture.naturalWidth, Math.ceil(Math.max(...xs) + 0.3 * iod));
-  const y1 = Math.min(texture.naturalHeight, Math.ceil(Math.max(...ys) + 0.1 * iod));
+  const y1 = Math.min(texture.naturalHeight, Math.ceil(Math.max(...ys) + 0.12 * iod));
   const w = x1 - x0,
     h = y1 - y0;
   if (!(w > 0 && h > 0)) return null;
@@ -357,7 +359,7 @@ export function textureLuma(
   } catch {
     return null;
   }
-  return (p) => {
+  const read = (p: Point) => {
     const x = Math.round(t[33].x + (p.x - b[33].x) * kx) - x0;
     const y = Math.round(t[10].y + (p.y - b[10].y) * ky) - y0;
     if (x < 0 || y < 0 || x >= w || y >= h) return NaN;
@@ -366,4 +368,8 @@ export function textureLuma(
     if (data[k + 3] < 128) return NaN;
     return 0.299 * data[k] + 0.587 * data[k + 1] + 0.114 * data[k + 2];
   };
+  return Object.assign(read, { texel: 1 / kx });
 }
+
+/** The picture's luminance at a canvas point, and one texel's size (px). */
+export type TextureLuma = ((p: Point) => number) & { readonly texel: number };

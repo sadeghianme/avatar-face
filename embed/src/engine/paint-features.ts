@@ -6,7 +6,7 @@
  * (debug.ts).
  */
 import { drawDebugMesh } from "./debug";
-import { paintSkinCues } from "./expression-shading";
+import type { ExpressionRig } from "./expression-rig";
 import { drawGaze, drawLashes, drawPaintedLids, type EyeSource } from "./paint-eyes";
 import { paintMouthSurface, type MouthSurface } from "./paint-mouth";
 
@@ -14,13 +14,16 @@ export interface Features extends MouthSurface {
   /** The inner-lip ring the debug mesh marks, or null for no debug mesh
    *  (EngineOptions.debugMesh). */
   debugRing: number[] | null;
+  /** The expressions laid on this face (null until one was first on):
+   *  its skin cues' painter and whether this face takes them. */
+  expressionRig: ExpressionRig | null;
 }
 
 export function paintFeatures(f: Features): void {
   const { ctx, pts, face } = f;
   const { texture, mesh, samples } = f.picture;
   const eyes: EyeSource = { texture, texPoints: mesh.texPoints };
-  paintSkinCues(ctx, pts, face.expression, f.profile.expression.cues * f.tuning.expression);
+  f.expressionRig?.paintCues(ctx, pts, face.expression, f.tuning.expression);
   drawGaze(ctx, pts, eyes, face.gaze);
   if (f.profile.blink === "lid") drawPaintedLids(ctx, pts, eyes, face.blink, f.tuning.blink, samples);
   else drawLashes(ctx, pts, face.blink, samples.lashColour);

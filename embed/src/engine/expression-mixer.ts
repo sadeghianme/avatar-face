@@ -230,6 +230,18 @@ export class ExpressionMixer {
     this.seek(ms);
   }
 
+  /** The same track's cues moved in time (a stream learning how long its
+   *  speech is): the walker keeps its place in the list, so a cue already
+   *  fired is not fired again and one not yet reached still will be. */
+  retime(track: readonly ExpressionCue[]): void {
+    if (track.length !== this.track.length) {
+      this.track = [...track];
+      this.nextCue = Math.min(this.nextCue, this.track.length);
+      return;
+    }
+    this.track = [...track];
+  }
+
   /** The track's walker placed at cue time `ms` (a seek, a re-sync). */
   seek(ms: number): void {
     const i = this.track.findIndex((c) => c.t > ms);

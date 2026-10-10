@@ -77,7 +77,7 @@
  * StrictMode: the loop and every async callback bail once it is set.
  */
 import { mergeTraits, type CharacterTraits } from "./engine/character-mouth";
-import { defaultHeadMotion, kindProfile, type KindProfile } from "./engine/kind-profile";
+import { defaultHeadMotion, expressionGains, kindProfile, type KindProfile } from "./engine/kind-profile";
 import type { MouthExtension } from "./mouth-extension";
 import { DEFAULT_TUNING, type Cue, type EngineTuning, type Rig } from "./types";
 import type { Affine } from "./engine/affine";
@@ -191,6 +191,7 @@ export class AvatarEngine {
       classicMouth: this.classicMouth,
       viseme: this.viseme,
       debugRing: this.debugMesh ? this.innerRing : null,
+      expressionRig: this.expressionRigs.built,
       posed: this.placement.posedMouth(this.picture.mesh.basePoints),
     });
   private readonly viseme = () => this.animation.visemeNow(performance.now());
@@ -223,7 +224,9 @@ export class AvatarEngine {
       picture.warpSource(placement.turning)
     );
     this.innerRing = validInnerRing(rig);
-    this.expressionRigs = new ExpressionRigs(rig.triangles, this.profile.expression);
+    const gains = expressionGains(this.profile, opts.faceType);
+    this.expressionRigs = new ExpressionRigs(rig.triangles, gains);
+    this.animation.expressionJaw = gains.jaw;
     this.animation.expressions.setIdle(opts.idleExpressions ?? false);
     this.classicMouth = new ClassicMouth(ctx, this.profile, this.innerRing);
     this.motion.mode = opts.headMotion ?? defaultHeadMotion(this.profile, opts.faceType);
@@ -373,6 +376,11 @@ export class AvatarEngine {
     this.animation.expressions.setIdle(on);
   }
 
+  /** Whether the idle micro-expressions are on (off unless asked for). */
+  idleExpressions(): boolean {
+    return this.animation.expressions.idleOn;
+  }
+
   // --- Public speech API -----------------------------------------------------
 
   /**
@@ -410,6 +418,12 @@ export class AvatarEngine {
     const time = this.speech.cueTime(performance.now());
     this.speech.replaceCues(cues);
     this.animation.retrack(time);
+  }
+
+  /** The speech's expression track moved in time (the same cues, in the
+   *  same order): a stream that learnt how long its speech is. */
+  retimeExpressions(track: ExpressionCue[]): void {
+    this.animation.expressions.retime(track);
   }
 
   /** Re-align the cue clock to a known position in the track (ms). */

@@ -96,10 +96,10 @@ describe("the expression table", () => {
       }
   });
 
-  it("anchors every region on real landmarks, with a reach (the mouth's field has its own)", () => {
+  it("anchors every region on real landmarks, with a reach (the mouth's and the lips' fields have their own)", () => {
     for (const region of REGIONS) {
       const spec = REGION_SPECS[region];
-      if (spec.mask === "mouth") continue;
+      if (spec.mask === "mouth" || spec.mask === "lips") continue;
       expect(spec.reach).toBeGreaterThan(0);
       for (const side of spec.anchors) {
         expect(side.length).toBeGreaterThan(0);

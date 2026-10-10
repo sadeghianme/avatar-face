@@ -49,7 +49,7 @@ export function expressionNamed(word: string): ExpressionName | null {
 
 // --- The regions (everything but the brows) ---------------------------------------
 
-export const REGIONS = ["upperLid", "lowerLid", "cheek", "mouthCorner"] as const;
+export const REGIONS = ["upperLid", "lowerLid", "cheek", "mouthCorner", "lipPress"] as const;
 export type Region = (typeof REGIONS)[number];
 /** The picture's left or right (the viewer's, not the subject's). */
 export type Side = "left" | "right";
@@ -66,7 +66,12 @@ export type RegionMask =
   | "belowLids"
   /** The mouth's own field: nothing at the lips' middle, rising smoothly to
    *  the corner and carrying the cheek beyond it (no anchors). */
-  | "mouth";
+  | "mouth"
+  /** The red of the lips (no anchors): its outer edge, the upper lip's
+   *  weighted down and the lower lip's up (a negative weight), nothing at
+   *  the inner lips (speech keeps its opening) or the corners: a "down"
+   *  displacement presses the lips thin. */
+  | "lips";
 
 export interface RegionSpec {
   /** The anchor landmarks, the picture's left side then its right. */
@@ -88,6 +93,7 @@ export const REGION_SPECS: Readonly<Record<Region, RegionSpec>> = {
     mask: "belowLids",
   },
   mouthCorner: { anchors: [[61], [291]], reach: 0, mask: "mouth" },
+  lipPress: { anchors: [[], []], reach: 0, mask: "lips" },
 };
 
 /** The most a region moves, IODs, however many expressions sum in it. */
@@ -96,6 +102,7 @@ export const REGION_CAP: Readonly<Record<Region, number>> = {
   lowerLid: 0.03,
   cheek: 0.05,
   mouthCorner: 0.1,
+  lipPress: 0.03,
 };
 
 // --- The brows -------------------------------------------------------------------
@@ -176,13 +183,14 @@ export const EXPRESSIONS: Readonly<Record<ShapeName, ExpressionShape>> = {
     cues: { foreheadLines: 1 },
     jaw: 0.16,
   },
-  // The oblique "worried" brow: the inner third up (not together: a knit
-  // reads as anger), the outer end level; the corners down; a few creases
-  // in the forehead's middle only (not the furrows between the brows: those
-  // are anger's, and read as it).
+  // The oblique "worried" brow: the inner third up (not together, never
+  // down: a knit or a lowered inner end reads as anger), the outer end level
+  // or a touch down; the corners down; a few creases in the forehead's
+  // middle only (not the furrows between the brows: those are anger's, and
+  // read as it). The eyes stay open.
   concerned: {
-    regions: { mouthCorner: [0, 0.06] },
-    brows: { both: brow([-0.65, -0.16, 0.05]) },
+    regions: { mouthCorner: [0, 0.07] },
+    brows: { both: brow([-0.66, -0.2, 0.1], [0.008, 0, 0]) },
     cues: { foreheadLines: 0.5 },
   },
   // One brow (the picture's right) up, arched; the other a little down and
@@ -193,12 +201,13 @@ export const EXPRESSIONS: Readonly<Record<ShapeName, ExpressionShape>> = {
     brows: { right: brow([-0.22, -0.42, -0.36]), left: brow([0.12, 0.08, 0.04], [-0.01, 0, 0]) },
     gaze: [0.3, -0.2],
   },
-  // The inner ends down and knit, the outer level; the lips pressed, the
-  // corners hardly down (a downturn is concern's); the vertical lines
-  // between the brows.
+  // The inner ends down and knit, the outer level; the upper lids a little
+  // lowered (a hard, level look), the lips pressed thin, the corners
+  // hardly down (a downturn is concern's); the vertical lines between the
+  // brows.
   serious: {
-    regions: { mouthCorner: [0, 0.015] },
-    brows: { both: brow([0.42, 0.2, 0.04], [-0.035, -0.012, 0]) },
+    regions: { mouthCorner: [-0.008, 0.012], upperLid: [0, 0.01], lipPress: [0, 0.022] },
+    brows: { both: brow([0.5, 0.24, 0.04], [-0.04, -0.014, 0]) },
     cues: { glabellaLines: 1 },
   },
   // The idle brow flash: the brows alone.
@@ -210,17 +219,20 @@ export const EXPRESSIONS: Readonly<Record<ShapeName, ExpressionShape>> = {
 /** How much of each part a line of faces takes (KindProfile.expression):
  *  each region, the brows, the skin cues' shading, and how much a brow
  *  may press or stretch the skin round it (`slack`, expression-brow-caps.ts:
- *  a drawn face's flat skin shows a stretch less than a photo's). */
-export type ExpressionGains = Readonly<Record<Region | "brows" | "cues" | "slack", number>>;
+ *  a drawn face's flat skin shows a stretch less than a photo's), and how
+ *  much of an expression's silent jaw drop (surprise's) it takes. */
+export type ExpressionGains = Readonly<Record<Region | "brows" | "cues" | "slack" | "jaw", number>>;
 
 export const HUMAN_GAINS: ExpressionGains = {
   upperLid: 1,
   lowerLid: 1,
   cheek: 1,
   mouthCorner: 1,
+  lipPress: 1,
   brows: 1,
   cues: 1,
   slack: 1,
+  jaw: 1,
 };
 
 /** A drawn or rendered character: its drawn eyes widen more in surprise
@@ -232,21 +244,29 @@ export const TOON_GAINS: ExpressionGains = {
   lowerLid: 1,
   cheek: 0.8,
   mouthCorner: 1.2,
+  lipPress: 1,
   brows: 1,
   cues: 0,
   slack: 2,
+  jaw: 1,
 };
 
 /** An animal: no lip corners to speak of (a muzzle's are a fit's anchors),
- *  fur over the brows, no skin to crease. Faint by design. */
+ *  fur over the brows, no skin to crease, and a fitted mesh whose eyes and
+ *  lids sit inside large drawn eyes: faint by design, and safe. No skin
+ *  cues; no silent jaw drop (on a fitted muzzle it pulled the drawn eyes
+ *  apart: a cat's surprise cracked its eye's rim); the brows and lids at a
+ *  third (a brow strip over a drawn eye moved the eye's own rim). */
 export const ANIMAL_GAINS: ExpressionGains = {
-  upperLid: 0.7,
-  lowerLid: 0.7,
+  upperLid: 0.35,
+  lowerLid: 0.35,
   cheek: 0.5,
   mouthCorner: 0.5,
-  brows: 0.6,
+  lipPress: 0.5,
+  brows: 0.35,
   cues: 0,
   slack: 1,
+  jaw: 0,
 };
 
 /** The region and the sides a key names. */

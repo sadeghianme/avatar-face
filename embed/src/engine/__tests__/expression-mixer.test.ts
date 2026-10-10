@@ -113,6 +113,33 @@ describe("the expression mixer", () => {
     expect(m.state().name).toBe("neutral");
   });
 
+  it("retimes a track in place: a fired cue is not fired again, an unreached one still is", () => {
+    const m = new ExpressionMixer();
+    m.setTrack([
+      { t: 100, name: "happy", intensity: 1 },
+      { t: 500, name: "concerned", intensity: 0.7 },
+    ]);
+    m.walk(150, 10);
+    expect(m.state().name).toBe("happy");
+    // The speech turned out longer: both later; happy, already on, is not
+    // set again (a page's expression set since would be kept).
+    m.set("thinking", 1, {}, 20, "api");
+    m.retime([
+      { t: 200, name: "happy", intensity: 1 },
+      { t: 1000, name: "concerned", intensity: 0.7 },
+    ]);
+    m.walk(600, 30);
+    expect(m.state().name).toBe("thinking");
+    // Shorter again: concerned, not yet reached, fires as soon as its time
+    // has passed.
+    m.retime([
+      { t: 50, name: "happy", intensity: 1 },
+      { t: 400, name: "concerned", intensity: 0.7 },
+    ]);
+    m.walk(600, 40);
+    expect(m.state()).toMatchObject({ name: "concerned", source: "text" });
+  });
+
   it("lets a text's neutral release only what a text set", () => {
     const m = new ExpressionMixer();
     m.set("thinking", 1, {}, 0, "api");

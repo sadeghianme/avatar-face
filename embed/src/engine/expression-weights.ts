@@ -11,7 +11,7 @@
  * column share one weight, so an opening the speech makes is carried.
  */
 import type { Point } from "./geometry";
-import { FACE_OVAL, INNER_LOWER, INNER_UPPER } from "./jaw-rig";
+import { FACE_OVAL, INNER_LOWER, INNER_UPPER, LOWER_ROWS, UPPER_ROWS } from "./jaw-rig";
 import { EYE_CORNERS, IRISES, LANDMARK_COUNT, LOWER_LIDS, UPPER_LIDS } from "./landmarks";
 import { REGION_SPECS, type Region, type RegionMask } from "./expression-table";
 
@@ -143,6 +143,7 @@ export function regionWeights(
   outline: Float64Array
 ): Float64Array {
   const spec = REGION_SPECS[region];
+  if (spec.mask === "lips") return lipsField(local, side, outline);
   const field = spec.mask === "mouth" ? mouthField(local, side) : bumpField(local, spec.anchors[side], spec.reach);
   const mask = maskOf(spec.mask, local, side);
   const w = new Float64Array(local.length);
@@ -188,6 +189,36 @@ function mouthField(local: readonly Point[], side: 0 | 1): (p: Point) => number 
       sx <= 1 ? smoothstep((sx - MOUTH.middle) / (1 - MOUTH.middle)) : 1 - smoothstep((sx - 1) / MOUTH.beyond);
     return lateral * (1 - smoothstep((across - MOUTH.lips) / MOUTH.band));
   };
+}
+
+/**
+ * The lips' red on `side`, pressed: each row of the upper lip from the
+ * inner lip (0) to its outer edge (1) weighted by how far out it is (down
+ * presses it toward the mouth's line), the lower lip's the same negated
+ * (it rises), fading toward the corners over the outer fifth of the
+ * mouth; the inner lips never move, so the opening the speech makes is
+ * kept; the midline's fade splits the lips between the sides.
+ */
+function lipsField(local: readonly Point[], side: 0 | 1, outline: Float64Array): Float64Array {
+  const w = new Float64Array(local.length);
+  const a = local[61],
+    b = local[291];
+  const cx = (a.x + b.x) / 2;
+  const half = Math.max(1e-6, Math.abs(b.x - a.x) / 2);
+  for (const [rows, sign] of [
+    [UPPER_ROWS, 1],
+    [LOWER_ROWS, -1],
+  ] as const) {
+    rows.forEach((row, r) => {
+      const depth = r / (rows.length - 1);
+      for (const i of row) {
+        const p = local[i];
+        const corner = 1 - smoothstep((Math.abs(p.x - cx) / half - 0.8) / 0.2);
+        w[i] = sign * depth * corner * midlineKeep(p.x, side) * smoothstep(outline[i] / OUTLINE_FADE);
+      }
+    });
+  }
+  return w;
 }
 
 /** An iris rim landmark hidden under `side`'s lower lid moves as the lid
@@ -297,5 +328,7 @@ function maskOf(kind: RegionMask, local: readonly Point[], side: 0 | 1): (p: Poi
       const noseY = local[2].y;
       return (p) => smoothstep((p.y - noseY) / 0.08);
     }
+    case "lips":
+      return () => 1;
   }
 }
