@@ -127,7 +127,8 @@ export function mouthErrorKey(code: string, action: MouthAction): MessageKey | n
  * The disclosure an avatar carries, as translation keys: what the AI did to
  * the picture, then "AI teeth" when the teeth photo was made by AI as well
  * (`ai_edited.teeth`), then "AI mouth shapes" when some of the mouth shapes
- * were (`ai_edited.mouth_shapes`). Each is said once: on its own, it is
+ * were (`ai_edited.mouth_shapes`), then "AI expressions" when the
+ * expression pictures were (`ai_edited.expressions`). Each is said once: on its own, it is
  * the mode. Visitors are told the same, from the published snapshot.
  */
 export function aiEditedLabels(edited: Avatar["ai_edited"]): MessageKey[] {
@@ -135,12 +136,15 @@ export function aiEditedLabels(edited: Avatar["ai_edited"]): MessageKey[] {
   const keys: MessageKey[] = [`aiEdited_${edited.mode}`];
   if (edited.teeth && edited.mode !== "teeth") keys.push("aiEdited_teeth");
   if (edited.mouth_shapes && edited.mode !== "mouth_shapes") keys.push("aiEdited_mouth_shapes");
+  if (edited.expressions && edited.mode !== "expressions") keys.push("aiEdited_expressions");
   return keys;
 }
 
 /** The models behind the disclosure, each once, for its tooltip. */
 export function aiEditedModels(edited: Avatar["ai_edited"]): string[] {
   if (!edited) return [];
-  const models = [edited.model, edited.teeth?.model, edited.mouth_shapes?.model].filter((m): m is string => Boolean(m));
+  const models = [edited.model, edited.teeth?.model, edited.mouth_shapes?.model, edited.expressions?.model].filter(
+    (m): m is string => Boolean(m)
+  );
   return [...new Set(models)];
 }

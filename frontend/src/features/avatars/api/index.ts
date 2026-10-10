@@ -6,5 +6,6 @@
  */
 export * from "./avatars";
 export * from "./creations";
+export * from "./expressions";
 export * from "./imports";
 export * from "./rig";

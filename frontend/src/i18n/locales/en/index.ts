@@ -2,6 +2,7 @@ import { api_keys } from "./api-keys";
 import { auth } from "./auth";
 import { avatars } from "./avatars";
 import { common } from "./common";
+import { expressions } from "./expressions";
 import { lab } from "./lab";
 import { landing } from "./landing";
 import { members } from "./members";
@@ -16,6 +17,7 @@ export const messages = {
   ...auth,
   ...avatars,
   ...common,
+  ...expressions,
   ...lab,
   ...landing,
   ...members,

@@ -106,14 +106,16 @@ export interface AvatarMouth {
 
 /** How an AI was involved in an avatar, as it is disclosed. `mode` is what
  *  it did to the picture; when it did nothing there, "teeth" (it made the
- *  teeth photo) or else "mouth_shapes" (it made some of the mouth shapes).
- *  `teeth` and `mouth_shapes` say so beside any mode; `mouth_shapes` only
- *  counts shapes an AI drew, never the standard ones fitted to the face. */
+ *  teeth photo), else "mouth_shapes" (it made some of the mouth shapes),
+ *  else "expressions" (it made some of the expression pictures). `teeth`,
+ *  `mouth_shapes` and `expressions` say so beside any mode; `mouth_shapes`
+ *  only counts shapes an AI drew, never the standard ones fitted to the face. */
 export interface AiEdited {
-  mode: "touchup" | "stylise" | "regenerate" | "generate" | "teeth" | "mouth_shapes";
+  mode: "touchup" | "stylise" | "regenerate" | "generate" | "teeth" | "mouth_shapes" | "expressions";
   model: string | null;
   teeth?: { model: string | null };
   mouth_shapes?: { model: string | null; generated: number };
+  expressions?: { model: string | null; made: number };
 }
 
 /** A reason, as the server gives one: a code to word, and its sentence;

@@ -25,6 +25,7 @@ export const queryKeys = {
   avatar: (orgId: Id, avatarId: Id) => ["avatar", orgId, avatarId] as const,
   rigAnchors: (avatarId: Id, rigUrl: string | null | undefined) => ["rig-anchors", avatarId, rigUrl] as const,
   mouthKit: (orgId: Id, avatarId: Id) => ["mouth-kit", orgId, avatarId] as const,
+  expressions: (orgId: Id, avatarId: Id) => ["expressions", orgId, avatarId] as const,
   stockAvatars: () => ["stock-avatars"] as const,
 
   // The creation wizard: one creation, and every creation of an org (prefix).

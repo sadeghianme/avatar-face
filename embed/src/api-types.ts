@@ -26,6 +26,10 @@ export interface EmbedAvatarOut {
    */
   disclosure?: PublishedDisclosure;
   /**
+   * The AI expression pictures; absent when there are none (the engine plays its animated expressions).
+   */
+  expressions?: PublishedExpressions;
+  /**
    * How the head moves: a person's in depth, an animal's or a cartoon's as a layer.
    */
   face_type: "human" | "animal" | "cartoon";
@@ -69,9 +73,14 @@ export interface EmbedAvatarOut {
 
 /**
  * What an AI made or changed: the picture (`touchup`, `stylise`,
- * `regenerate`, `generate`), or only the mouth (`teeth`, `mouth_shapes`).
+ * `regenerate`, `generate`), or only parts of the face (`teeth`,
+ * `mouth_shapes`, `expressions`).
  */
 export interface PublishedAiEdited {
+  /**
+   * Present when AI made the expression pictures shown.
+   */
+  expressions?: PublishedAiExpressions;
   mode: string;
   model: string | null;
   /**
@@ -82,6 +91,11 @@ export interface PublishedAiEdited {
    * Present when AI made the teeth photo shown.
    */
   teeth?: PublishedAiTeeth;
+}
+
+export interface PublishedAiExpressions {
+  made: number;
+  model: string | null;
 }
 
 export interface PublishedAiMouthShapes {
@@ -140,6 +154,19 @@ export interface PublishedDisclosure {
    */
   ai_edited: PublishedAiEdited | null;
   line: "human" | "animal" | "cartoon";
+}
+
+/**
+ * The avatar's AI expression pictures (services.expressions): the
+ * manifest (per expression its picture's landmarks and where they go on
+ * the face) and each picture, presigned.
+ */
+export interface PublishedExpressions {
+  /**
+   * By expression: happy, surprised, concerned, thinking, serious.
+   */
+  image_urls: Record<string, string>;
+  manifest_url: string;
 }
 
 /**
