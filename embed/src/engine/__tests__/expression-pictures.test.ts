@@ -287,6 +287,15 @@ describe("a picture on the face", () => {
       layer.smileLevel = 1;
       layer.draw(ctx, all, identity, mesh, mix({ surprised: 0.5, happy: 1 }), 1, 1000);
       expect(drawn.mock.calls.length).toBeGreaterThan(50);
+      // The silent smile's mouth, drawn after the painted mouth: only the
+      // smiling picture's, and only while the silence lets it.
+      drawn.mockClear();
+      layer.smileLevel = 0;
+      layer.draw(ctx, all, identity, mesh, mix({ surprised: 1, happy: 1 }), 1, 1000, "mouth");
+      expect(drawn).not.toHaveBeenCalled();
+      layer.smileLevel = 1;
+      layer.draw(ctx, all, identity, mesh, mix({ surprised: 1, happy: 1 }), 1, 1000, "mouth");
+      expect(drawn.mock.calls.length).toBeGreaterThan(5);
       layer.destroy();
     });
   });

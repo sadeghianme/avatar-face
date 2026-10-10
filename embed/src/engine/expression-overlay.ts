@@ -26,6 +26,9 @@ import { drawWarpedTriangle } from "./mesh-warp";
 import { WarpRenderer } from "./warp-gl";
 import { buildWarpMesh, type WarpMesh } from "./warp-mesh";
 
+/** Which part of the pictures a draw lays: the face, or the silent smile's mouth. */
+export type OverlayPart = "face" | "mouth";
+
 /** How long a picture takes to come in once loaded (it never pops). */
 export const ARRIVE_MS = 150;
 
@@ -212,13 +215,13 @@ export class ExpressionPictureLayer {
     return built;
   }
 
-  /** The pictures shown this frame, the silent smile's mouth after its picture's face. */
-  private shown(mix: ShapeMix, scale: number, now: number): Shown[] {
+  /** The pictures shown this frame: their faces, or the silent smile's mouths. */
+  private shown(part: OverlayPart, mix: ShapeMix, scale: number, now: number): Shown[] {
     const out: Shown[] = [];
     for (const [laid, w] of this.weights(mix, scale, now)) {
       const textures = this.textureOf(laid);
-      out.push({ texture: textures.upper, laid, alpha: w });
-      if (textures.mouth && this.smileLevel > 0.001)
+      if (part === "face") out.push({ texture: textures.upper, laid, alpha: w });
+      else if (textures.mouth && this.smileLevel > 0.001)
         out.push({ texture: textures.mouth, laid, alpha: w * this.smileLevel });
     }
     return out;
@@ -227,7 +230,11 @@ export class ExpressionPictureLayer {
   /**
    * Draw the pictures shown into `ctx` through the frame's vertices `pts`
    * (all of them, deform.ts) and `affine` (the head's transform, as the
-   * warp's): after the warped photo, before the painted features.
+   * warp's): their faces ("face") after the warped photo and before the
+   * painted features; the silent smile's mouth ("mouth") after the painted
+   * mouth, so the picture's own lips and teeth show, not the mouth
+   * painter's teeth in the picture's opening (a smaller row with dark
+   * corners: "pasted on", a blind judge said).
    */
   draw(
     ctx: CanvasRenderingContext2D,
@@ -236,10 +243,11 @@ export class ExpressionPictureLayer {
     mesh: FaceMesh,
     mix: ShapeMix,
     scale: number,
-    now: number
+    now: number,
+    part: OverlayPart = "face"
   ): void {
     this.lay(mesh);
-    const shown = this.shown(mix, scale, now);
+    const shown = this.shown(part, mix, scale, now);
     if (!shown.length || !this.triangles.length) return;
     const gl = this.gpu ? this.gl(ctx.canvas.width, ctx.canvas.height) : null;
     for (const s of shown) {

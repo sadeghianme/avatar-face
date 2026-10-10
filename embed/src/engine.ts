@@ -183,6 +183,7 @@ export class AvatarEngine {
    *  than every frame: the mesh drawn through `affine`, then the features
    *  over it (paint-features.ts), the sound being made read when asked. */
   private readonly drawMesh = (affine: Affine) => {
+    this.meshAffine = affine;
     this.meshWarp.draw(this.ctx, this.vertices.all, affine);
     this.pictures?.draw(
       this.ctx,
@@ -194,7 +195,23 @@ export class AvatarEngine {
       performance.now()
     );
   };
-  private readonly drawFeatures = () =>
+  /** The head's transform the mesh was drawn through this frame (the
+   *  silent smile's mouth is drawn through it after the features). */
+  private meshAffine: Affine = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  private readonly drawFeatures = () => {
+    this.paintFeatures();
+    this.pictures?.draw(
+      this.ctx,
+      this.vertices.all,
+      this.meshAffine,
+      this.picture.mesh,
+      this.face.expression,
+      this.tuning.expression,
+      performance.now(),
+      "mouth"
+    );
+  };
+  private readonly paintFeatures = () =>
     paintFeatures({
       ctx: this.ctx,
       pts: this.vertices.all,
