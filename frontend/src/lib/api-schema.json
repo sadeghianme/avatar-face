@@ -2073,6 +2073,11 @@
             "description": "Absent from snapshots published before disclosures were recorded.",
             "title": "Disclosure"
           },
+          "expressions": {
+            "$ref": "#/components/schemas/PublishedExpressions",
+            "description": "The AI expression pictures; absent when there are none (the engine plays its animated expressions).",
+            "title": "Expressions"
+          },
           "face_type": {
             "description": "How the head moves: a person's in depth, an animal's or a cartoon's as a layer.",
             "enum": [
@@ -2205,6 +2210,248 @@
           "id"
         ],
         "title": "EmbedAvatarOut",
+        "type": "object"
+      },
+      "ExpressionKitOut": {
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "made": {
+            "title": "Made",
+            "type": "integer"
+          },
+          "made_at": {
+            "title": "Made At",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "shots": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ExpressionShotOut"
+            },
+            "propertyNames": {
+              "enum": [
+                "happy",
+                "surprised",
+                "concerned",
+                "thinking",
+                "serious"
+              ]
+            },
+            "title": "Shots",
+            "type": "object"
+          },
+          "source": {
+            "enum": [
+              "panel",
+              "publish",
+              "batch"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "made_at",
+          "source",
+          "made",
+          "calls",
+          "shots"
+        ],
+        "title": "ExpressionKitOut",
+        "type": "object"
+      },
+      "ExpressionShotOut": {
+        "description": "One expression of a kit: made, or why not (the animated one plays).",
+        "properties": {
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "smile": {
+            "default": false,
+            "description": "A parted-lips smile, shown while the avatar is silent.",
+            "title": "Smile",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "outcome"
+        ],
+        "title": "ExpressionShotOut",
+        "type": "object"
+      },
+      "ExpressionsChoice": {
+        "description": "The owner's choice. `ai` true needs `consent_id`: a third_party_ai\nconsent naming google, by this member (POST /consents). `delivery`: how\na publish makes missing pictures; unchanged when omitted.",
+        "properties": {
+          "ai": {
+            "title": "Ai",
+            "type": "boolean"
+          },
+          "consent_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consent Id"
+          },
+          "delivery": {
+            "anyOf": [
+              {
+                "enum": [
+                  "now",
+                  "batch"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery"
+          }
+        },
+        "required": [
+          "ai"
+        ],
+        "title": "ExpressionsChoice",
+        "type": "object"
+      },
+      "ExpressionsMake": {
+        "properties": {
+          "consent_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Consent Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "consent_id"
+        ],
+        "title": "ExpressionsMake",
+        "type": "object"
+      },
+      "ExpressionsOut": {
+        "description": "The DRAFT's expression pictures: the owner's choice, the kit, the\npictures and manifest presigned for the preview (none for a kit made on\nanother picture: `stale`), a batch on its way (`pending`), and the job\n(live while it runs, then how it ended; null when this server ran none\nfor it).",
+        "properties": {
+          "ai": {
+            "title": "Ai",
+            "type": "boolean"
+          },
+          "delivery": {
+            "default": "now",
+            "enum": [
+              "now",
+              "batch"
+            ],
+            "title": "Delivery",
+            "type": "string"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpressionKitOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "manifest_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Url"
+          },
+          "pending": {
+            "default": false,
+            "title": "Pending",
+            "type": "boolean"
+          },
+          "picture_urls": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "enum": [
+                "happy",
+                "surprised",
+                "concerned",
+                "thinking",
+                "serious"
+              ]
+            },
+            "title": "Picture Urls",
+            "type": "object"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ai"
+        ],
+        "title": "ExpressionsOut",
         "type": "object"
       },
       "FailIn": {
@@ -2789,7 +3036,8 @@
               "detect",
               "finish",
               "mouth_kit",
-              "prepare"
+              "prepare",
+              "expression_kit"
             ],
             "title": "Step",
             "type": "string"
@@ -3497,8 +3745,13 @@
         "type": "object"
       },
       "PublishedAiEdited": {
-        "description": "What an AI made or changed: the picture (`touchup`, `stylise`,\n`regenerate`, `generate`), or only the mouth (`teeth`, `mouth_shapes`).",
+        "description": "What an AI made or changed: the picture (`touchup`, `stylise`,\n`regenerate`, `generate`), or only parts of the face (`teeth`,\n`mouth_shapes`, `expressions`).",
         "properties": {
+          "expressions": {
+            "$ref": "#/components/schemas/PublishedAiExpressions",
+            "description": "Present when AI made the expression pictures shown.",
+            "title": "Expressions"
+          },
           "mode": {
             "title": "Mode",
             "type": "string"
@@ -3530,6 +3783,31 @@
           "model"
         ],
         "title": "PublishedAiEdited",
+        "type": "object"
+      },
+      "PublishedAiExpressions": {
+        "properties": {
+          "made": {
+            "title": "Made",
+            "type": "integer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "required": [
+          "model",
+          "made"
+        ],
+        "title": "PublishedAiExpressions",
         "type": "object"
       },
       "PublishedAiMouthShapes": {
@@ -3584,6 +3862,11 @@
             "$ref": "#/components/schemas/PublishedDisclosure",
             "description": "Absent from snapshots published before disclosures were recorded.",
             "title": "Disclosure"
+          },
+          "expressions": {
+            "$ref": "#/components/schemas/PublishedExpressions",
+            "description": "The AI expression pictures; absent when there are none (the engine plays its animated expressions).",
+            "title": "Expressions"
           },
           "face_type": {
             "description": "How the head moves: a person's in depth, an animal's or a cartoon's as a layer.",
@@ -3849,6 +4132,29 @@
           "line"
         ],
         "title": "PublishedDisclosure",
+        "type": "object"
+      },
+      "PublishedExpressions": {
+        "description": "The avatar's AI expression pictures (services.expressions): the\nmanifest (per expression its picture's landmarks and where they go on\nthe face) and each picture, presigned.",
+        "properties": {
+          "image_urls": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "By expression: happy, surprised, concerned, thinking, serious.",
+            "title": "Image Urls",
+            "type": "object"
+          },
+          "manifest_url": {
+            "title": "Manifest Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "manifest_url",
+          "image_urls"
+        ],
+        "title": "PublishedExpressions",
         "type": "object"
       },
       "PublishedMouthProfile": {
@@ -6281,6 +6587,230 @@
         ]
       }
     },
+    "/orgs/{org_id}/avatars/{avatar_id}/expressions": {
+      "delete": {
+        "description": "Remove the AI expression pictures from the draft and turn the choice\noff (the animated expressions play). The published snapshot keeps its\nown copies until the next publish.",
+        "operationId": "remove_expressions_orgs__org_id__avatars__avatar_id__expressions_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "avatar_id",
+            "required": true,
+            "schema": {
+              "title": "Avatar Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpressionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Expressions",
+        "tags": [
+          "avatars"
+        ]
+      },
+      "get": {
+        "description": "The DRAFT's AI expression pictures: whether the owner chose them, what\nwas made (per expression, or why not: that one plays animated), the\npictures and their manifest presigned for the preview, and the job.",
+        "operationId": "get_expressions_orgs__org_id__avatars__avatar_id__expressions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "avatar_id",
+            "required": true,
+            "schema": {
+              "title": "Avatar Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpressionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Expressions",
+        "tags": [
+          "avatars"
+        ]
+      },
+      "put": {
+        "description": "Choose AI expression pictures (or not), and how a publish makes them\nwhen none are made for the avatar's picture: `now` (about twenty\nseconds after the publish) or `batch` (half the price, ready within\nhours). On needs the caller's third_party_ai consent (403\nconsent_required) and the organization's switch (403\nthird_party_ai_disabled), on a person's ready photo avatar (409\nnot_a_photo, 422 not_a_person). Nothing is sent here: the next publish,\nor Make, sends the picture. Pictures already made are kept when turned\noff. A DRAFT edit when visitors would see a change.",
+        "operationId": "choose_expressions_orgs__org_id__avatars__avatar_id__expressions_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "avatar_id",
+            "required": true,
+            "schema": {
+              "title": "Avatar Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpressionsChoice"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpressionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Choose Expressions",
+        "tags": [
+          "avatars"
+        ]
+      }
+    },
+    "/orgs/{org_id}/avatars/{avatar_id}/expressions/make": {
+      "post": {
+        "description": "Make the five expression pictures now from the avatar's picture: a\njob (202, `job`), followed with GET above; five image-model calls take\nabout twenty seconds. 409 expressions_in_progress while one runs for\nthis avatar (and the runner's 429 too_many_jobs, 503 job_queue_full).\nNeeds the caller's third_party_ai consent (403 consent_required) and the\norganization's switch (403 third_party_ai_disabled); metered against the\nmonthly image limit (429 image_limit_reached, read again before each\ncall). The choice is turned on. A DRAFT edit: visitors get the pictures,\nand the disclosure that AI made them, when the owner publishes.",
+        "operationId": "make_expressions_orgs__org_id__avatars__avatar_id__expressions_make_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "avatar_id",
+            "required": true,
+            "schema": {
+              "title": "Avatar Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpressionsMake"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpressionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Make Expressions",
+        "tags": [
+          "avatars"
+        ]
+      }
+    },
     "/orgs/{org_id}/avatars/{avatar_id}/mouth-kit": {
       "get": {
         "description": "The avatar's mouth-kit job: its progress while it runs (\"making the\nmouth shapes\", with how many of its requests are settled (seven, or\nsix when the owner's own teeth are kept), \"fitting the\nmouth\", \"saving\"; \"making the teeth\" where only the teeth can be made),\nthen done or failed with the reason. Null when this server ran none for\nit (a restart forgets jobs). Once done, the avatar's draft has it.",
@@ -6507,7 +7037,7 @@
     },
     "/orgs/{org_id}/avatars/{avatar_id}/publish": {
       "post": {
-        "description": "Make the current draft what embedded sites and share links serve.\n\nCopies the draft's assets into an immutable snapshot rather than\nrecording which keys were live — layer files are overwritten in place,\nso pointers would silently drift. See services/publishing.",
+        "description": "Make the current draft what embedded sites and share links serve.\n\nCopies the draft's assets into an immutable snapshot rather than\nrecording which keys were live — layer files are overwritten in place,\nso pointers would silently drift. See services/publishing.\n\nWhen the owner chose AI expression pictures and none are made for the\navatar's picture, publishing also starts the job that makes them (or\nsends them as a batch): they are published as soon as they are ready\n(GET /avatars/{id}/expressions follows it). A publish never fails for\nthem.",
         "operationId": "publish_avatar_orgs__org_id__avatars__avatar_id__publish_post",
         "parameters": [
           {

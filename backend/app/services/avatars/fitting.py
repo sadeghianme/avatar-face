@@ -16,7 +16,6 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import Conflict409, Validation422
 from app.models import Avatar, AvatarKind, AvatarStatus
-from app.services import mouth_kit
 from app.services.anchor_fit import (
     NUM_POINTS,
     FitProblem,
@@ -35,6 +34,7 @@ from app.services.anchor_fit import (
     with_head_outline,
     write_fit_base,
 )
+from app.services.avatars import kits
 from app.services.mouth import character_style
 from app.services.publishing import mark_dirty
 from app.services.rig import (
@@ -249,7 +249,7 @@ async def save_fit(db: AsyncSession, avatar: Avatar, rig: dict) -> None:
     await storage.put_bytes(avatar.rig_key, json.dumps(rig).encode(), "application/json")
     # The mouth kit's rest pose is the rig's points: it follows the
     # marks, on the same picture, with no AI call.
-    stale = await mouth_kit.follow_points(avatar, storage, rig["points"])
+    stale = await kits.follow_points(avatar, storage, rig["points"])
     mark_dirty(avatar)
     # Committed, or the dirty mark is lost with the session: the saved
     # marks would reach visitors silently on the next unrelated publish,

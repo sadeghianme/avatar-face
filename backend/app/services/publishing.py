@@ -44,6 +44,7 @@ from app.models.shapes import (
     TeethRecord,
 )
 from app.schemas.published import PublishedView
+from app.services import expressions as expressions_service
 from app.services import scene as scene_service
 from app.services.disclosure import (
     with_ai_shapes,
@@ -166,6 +167,11 @@ async def publish(avatar: Avatar, storage: Storage) -> PublishedConfig:
         ai_edited = without_ai_teeth(ai_edited)
     if not _plays_own_motion(mouth_published):
         ai_edited = without_ai_shapes(ai_edited)
+    # The AI expression pictures (services.expressions): copied like the
+    # mouth's files while the owner has chosen them and some were made, and
+    # disclosed exactly then.
+    expressions_published = await expressions_service.publish_expressions(avatar, copy)
+    ai_edited = expressions_service.published_disclosure(ai_edited, expressions_published)
 
     # The scene (services.scene): by value, with its background picture
     # copied like the other files, only when it is shown.
@@ -191,6 +197,7 @@ async def publish(avatar: Avatar, storage: Storage) -> PublishedConfig:
         "face_type": face_type,
         "voice": getattr(avatar, "voice", None),
         "mouth": mouth_published,
+        "expressions": expressions_published,
         "image_key": image_key,
         "rig_key": rig_key,
         "thumbnail_key": thumbnail_key,
@@ -213,6 +220,9 @@ async def publish(avatar: Avatar, storage: Storage) -> PublishedConfig:
     # window where the config points at files that no longer exist.
     await _prune(avatar, storage, keep_from=[config, previous])
     await _sweep_mouth_files(avatar, storage, mouth)
+    await expressions_service.sweep_files(
+        avatar_root(avatar.org_id, avatar.id), storage, expressions_service.load(avatar)
+    )
     await scene_service.sweep_files(avatar, storage, scene)
     logger.info("published avatar %s at revision %d", avatar.id, revision)
     return config
@@ -396,6 +406,8 @@ async def discard_draft(avatar: Avatar, storage: Storage) -> list[str] | None:
         return None
 
     discarded = _mouth_keys(load_mouth(getattr(avatar, "mouth_config", None)))
+    draft_expressions = expressions_service.load(avatar)
+    discarded |= expressions_service.keys(draft_expressions)
 
     stamp = uuid4().hex[:8]
     base = f"orgs/{avatar.org_id}/avatars/{avatar.id}"
@@ -490,11 +502,17 @@ async def discard_draft(avatar: Avatar, storage: Storage) -> list[str] | None:
         avatar.scene_config = None
     if face_type := config.get("face_type"):
         avatar.face_type = face_type
+    # The expression pictures go back too, into fresh draft keys.
+    avatar.expression_config = await expressions_service.restore(
+        config.get("expressions"), draft_expressions, restore
+    )
     # Back in step with what is published.
     avatar.draft_revision = config.get("revision", 0)
     logger.info("discarded draft for avatar %s", avatar.id)
-    restored_keys = _mouth_keys(load_mouth(avatar.mouth_config)) | scene_service.keys(
-        scene_service.load(avatar)
+    restored_keys = (
+        _mouth_keys(load_mouth(avatar.mouth_config))
+        | scene_service.keys(scene_service.load(avatar))
+        | expressions_service.keys(expressions_service.load(avatar))
     )
     return sorted(discarded - restored_keys)
 
@@ -600,6 +618,11 @@ async def published_view(avatar: Avatar, storage: Storage) -> PublishedView | No
             "scene": await scene_service.visitor_view(config.get("scene"), storage),
             "voice": config.get("voice"),
             "mouth": await mouth_view(config.get("mouth"), storage),
+            # The AI expression pictures; absent from a snapshot without
+            # them (the engine plays its animated expressions).
+            "expressions": await expressions_service.visitor_view(
+                config.get("expressions"), storage
+            ),
             "rig_url": await storage.presign_get(rig_key) if rig_key else "",
             "thumbnail_url": await storage.presign_get(thumbnail_key) if thumbnail_key else "",
             "image_url": image_url,

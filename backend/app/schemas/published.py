@@ -133,9 +133,15 @@ class PublishedAiMouthShapes(BaseModel):
     generated: int
 
 
+class PublishedAiExpressions(BaseModel):
+    model: str | None
+    made: int
+
+
 class PublishedAiEdited(BaseModel):
     """What an AI made or changed: the picture (`touchup`, `stylise`,
-    `regenerate`, `generate`), or only the mouth (`teeth`, `mouth_shapes`)."""
+    `regenerate`, `generate`), or only parts of the face (`teeth`,
+    `mouth_shapes`, `expressions`)."""
 
     mode: str
     model: str | None
@@ -144,6 +150,20 @@ class PublishedAiEdited(BaseModel):
     )
     mouth_shapes: PublishedAiMouthShapes | Absent = absent_when_none(
         "Present when AI made the mouth shapes played."
+    )
+    expressions: PublishedAiExpressions | Absent = absent_when_none(
+        "Present when AI made the expression pictures shown."
+    )
+
+
+class PublishedExpressions(BaseModel):
+    """The avatar's AI expression pictures (services.expressions): the
+    manifest (per expression its picture's landmarks and where they go on
+    the face) and each picture, presigned."""
+
+    manifest_url: str
+    image_urls: dict[str, str] = Field(
+        description="By expression: happy, surprised, concerned, thinking, serious."
     )
 
 
@@ -175,6 +195,10 @@ class PublishedView(BaseModel):
     )
     disclosure: PublishedDisclosure | Absent = absent_when_none(
         "Absent from snapshots published before disclosures were recorded."
+    )
+    expressions: PublishedExpressions | Absent = absent_when_none(
+        "The AI expression pictures; absent when there are none (the engine plays "
+        "its animated expressions)."
     )
 
 

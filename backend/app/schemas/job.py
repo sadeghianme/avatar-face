@@ -27,7 +27,9 @@ class JobProgress(BaseModel):
     # "publishing with the standard mouth" when a person's own mouth was
     # not made after all (no AI allowed, or it failed); the Mouth panel's
     # kit (step "mouth_kit") "making the mouth shapes", "fitting the mouth",
-    # "making the teeth", "saving". A label a client does not know is shown
+    # "making the teeth", "saving"; the expression pictures' (step
+    # "expression_kit") "making the expressions" (counted, of five), then
+    # "saving", or "sending the batch". A label a client does not know is shown
     # as nothing, never as a wrong stage.
     label: str | None = None
     # How far a counted stage is ("making the mouth shapes": 3 of 7 settled,
@@ -41,8 +43,18 @@ class JobOut(BaseModel):
     # "mouth_kit": an avatar's mouth shapes and teeth made from its photo
     # (POST /avatars/{id}/mouth-kit); every other step is a creation's.
     # "prepare": the four-step wizard's step 3 (services.wizard).
+    # "expression_kit": an avatar's AI expression pictures
+    # (POST /avatars/{id}/expressions/make, or a publish).
     step: Literal[
-        "ingest", "generate", "adjust", "background", "detect", "finish", "mouth_kit", "prepare"
+        "ingest",
+        "generate",
+        "adjust",
+        "background",
+        "detect",
+        "finish",
+        "mouth_kit",
+        "prepare",
+        "expression_kit",
     ]
     state: Literal["queued", "running", "done", "failed", "interrupted"]
     error: JobError | None = None

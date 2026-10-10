@@ -52,6 +52,8 @@ IMAGE_CALLS = (
     "mouth_shapes",
     # The wizard's step 3 (services.wizard): the upload in its look, or a change.
     "prepare",
+    # The expression pictures (services.expression_kit): one per expression.
+    "expressions",
 )
 
 

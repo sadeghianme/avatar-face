@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import Conflict409
 from app.models import Avatar
-from app.services import mouth_kit
+from app.services.avatars import kits
 from app.services.avatars.derived import rebuild_layers
 from app.services.publishing import mark_dirty
 from app.services.storage import STORAGE_ERRORS, Storage, get_storage
@@ -104,7 +104,7 @@ async def undo(db: AsyncSession, avatar: Avatar) -> None:
             # Undoing a crop puts the whole picture back, the same face
             # elsewhere in it (the mouth kit follows); undoing a background
             # change the same rig (it stays).
-            stale = await mouth_kit.follow_rig(avatar, storage, before, after)
+            stale = await kits.follow_rig(avatar, storage, before, after)
 
     avatar.edit_history = json.dumps(history)
     await rebuild_layers(avatar, storage)

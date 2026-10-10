@@ -99,8 +99,16 @@ class CallGuard:
     record is not the provider's time). After each call, under the same
     lock, it is metered if it was billed, as the kit classifies it."""
 
-    def __init__(self, org_id: str, on_first_send: Callable[[], Awaitable[None]] | None = None):
+    def __init__(
+        self,
+        org_id: str,
+        on_first_send: Callable[[], Awaitable[None]] | None = None,
+        call: str = SHAPES_CALL,
+    ):
         self.org_id = org_id
+        # What each call is recorded as in usage (usage.IMAGE_CALLS): the
+        # mouth's shapes, or the expression pictures (services.expression_kit).
+        self.call = call
         self._on_first_send = on_first_send
         self._lock = asyncio.Lock()
         self._in_flight = 0
@@ -153,12 +161,12 @@ class CallGuard:
             try:
                 if billed is not False:
                     async with get_session_factory()() as db:
-                        await record_generation(db, self.org_id, "gemini", SHAPES_CALL)
+                        await record_generation(db, self.org_id, "gemini", self.call)
                     self.metered += 1
             except Exception:
                 # Broad on purpose: the call happened either way; a lost usage row must not
                 # turn an answer into a failure.
-                logger.exception("could not meter a mouth shape call for org %s", self.org_id)
+                logger.exception("could not meter a %s call for org %s", self.call, self.org_id)
             finally:
                 self._in_flight -= 1
 
