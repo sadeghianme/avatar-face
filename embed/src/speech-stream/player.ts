@@ -1,7 +1,11 @@
 import type { CuePlayer } from "../browser-tts";
+import type { ExpressionCue } from "../engine/expression-mixer";
 import type { Cue } from "../types";
 
-type Receiver = CuePlayer & { updateCueTrack?: (cues: Cue[]) => void };
+type Receiver = CuePlayer & {
+  updateCueTrack?: (cues: Cue[]) => void;
+  retimeExpressions?: (track: ExpressionCue[]) => void;
+};
 interface Span {
   start: number;
   end: number;
@@ -64,6 +68,8 @@ export class StreamingSpeechPlayer {
   private first = true;
   private paused = false;
   private cues: Cue[] = [];
+  /** The text's expression track on the stream's clock, if it has one. */
+  private expressions: ExpressionCue[] | undefined;
   private lastTime = 0;
   private lastState = "";
 
@@ -146,8 +152,10 @@ export class StreamingSpeechPlayer {
     }
     const active = this.timeline.active(now);
     if (active) {
-      if (!this.speaking) this.engine.playCues(this.cues);
-      else if (this.dirty) (this.engine.updateCueTrack ?? this.engine.playCues).call(this.engine, this.cues);
+      if (!this.speaking) {
+        if (this.expressions) this.engine.playCues(this.cues, this.expressions);
+        else this.engine.playCues(this.cues);
+      } else if (this.dirty) (this.engine.updateCueTrack ?? this.engine.playCues).call(this.engine, this.cues);
       this.speaking = true;
       this.dirty = false;
       this.engine.syncCueTime(this.position * 1000);
@@ -160,6 +168,14 @@ export class StreamingSpeechPlayer {
       this.onState(state, active && this.first);
       if (active) this.first = false;
     }
+  }
+
+  /** The text's expression track (expression-markup.ts), on the stream's
+   *  clock; set again as the speech's length becomes known, it moves the
+   *  same cues in time. */
+  setExpressions(track: ExpressionCue[]): void {
+    this.expressions = track;
+    if (this.speaking) this.engine.retimeExpressions?.(track);
   }
 
   /** No more phrases will arrive; stop once the last one has played. */

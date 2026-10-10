@@ -43,9 +43,11 @@
  * engine on globalThis.__liveface for the console (engine/debug-handle.ts).
  *
  * Tags in the text said, `[happy]`, `[surprised:0.6]`, set expressions in
- * time with the voice and are never read aloud. data-expressions="auto"
- * also guesses them for a text without tags and adds idle
- * micro-expressions; "off" ignores tags (still stripped).
+ * time with the voice and are never read aloud (on by default). Both of the
+ * rest are opt-in: data-expressions="auto" also guesses them for a text
+ * without tags and adds idle micro-expressions; data-idle-expressions="on"
+ * adds the idle ones alone ("off" keeps them off even with "auto");
+ * data-expressions="off" ignores tags (still stripped).
  *
  * data-head-motion="2d" or "3d" chooses how the head moves (engine.ts
  * EngineOptions.headMotion); without it, the avatar's own default, by its
@@ -223,7 +225,12 @@ async function mount(
       // turns in depth, an animal's or a cartoon's moves as a layer).
       headMotion: headMotionAttr(script.dataset.headMotion),
       faceType: info.face_type,
-      idleExpressions: expressions === "auto",
+      // Off unless asked for: by data-idle-expressions, or with the
+      // automatic mode.
+      idleExpressions:
+        script.dataset.idleExpressions !== undefined
+          ? switchedOn(script.dataset.idleExpressions)
+          : expressions === "auto",
       debug,
     });
     engine = photoEngine;

@@ -314,6 +314,23 @@ describe("liveface.js on a customer's page", () => {
       engine.destroy();
     });
 
+    it.each([
+      ["by default (tags only)", {}, false],
+      ['with data-expressions="auto"', { expressions: "auto" }, true],
+      ['with data-idle-expressions="on"', { idleExpressions: "on" }, true],
+      [
+        'with data-expressions="auto" and data-idle-expressions="off"',
+        { expressions: "auto", idleExpressions: "off" },
+        false,
+      ],
+    ])("keeps the idle micro-expressions off unless asked: %s", async (_, dataset, on) => {
+      const p = page(resources as Record<string, Resource>);
+      await settled(await p.embed({ avatar: "av_1", ...dataset }));
+      const engine = p.window.Liveface!.engine as AvatarEngine;
+      expect(engine.idleExpressions()).toBe(on);
+      engine.destroy();
+    });
+
     // The rig in these is a person's with no render profile, as a cat's or a
     // cartoon's fitted before profiles existed is: only the published face
     // type tells them apart.

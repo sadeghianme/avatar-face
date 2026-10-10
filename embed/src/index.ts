@@ -3,7 +3,7 @@ export type { EngineOptions, HeadMotionMode, Scene, SceneBackground, WarpMode } 
 export { ZOOM_MAX, PAN_MAX } from "./engine/viewport";
 export type { ExpressionCue, ExpressionState, ExpressionTiming } from "./engine/expression-mixer";
 export { EXPRESSION_NAMES, expressionNamed, type ExpressionName } from "./engine/expression-table";
-export { parseExpressionTags, timeExpressionMarks, autoExpressions } from "./expression-markup";
+export { parseExpressionTags, timeExpressionMarks, autoExpressions, spokenText } from "./expression-markup";
 export type { ExpressionMark, ParsedText } from "./expression-markup";
 // NOTE: Avatar3DEngine is intentionally NOT re-exported here — importing it
 // pulls Three.js (~600KB) into the consumer bundle. Dashboard and widget

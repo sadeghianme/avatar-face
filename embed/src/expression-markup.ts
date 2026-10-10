@@ -191,3 +191,16 @@ export function expressionMode(value: string | undefined | null): ExpressionMode
   const v = (value ?? "").trim().toLowerCase();
   return v === "auto" || v === "off" ? v : "tags";
 }
+
+/**
+ * What a voice should say for `raw` and the expressions it carries (`mode`,
+ * "tags" by default): the text with its tags taken out, and their marks,
+ * closed by a release at the text's end when there are any (so a tag's
+ * expression ends with the speech). For a caller that speaks a text in one
+ * piece (the dashboard's Speak panel's streamed voice).
+ */
+export function spokenText(raw: string, mode: ExpressionMode = "tags", locale?: string): ParsedText {
+  const parsed = expressionMarks(raw, mode, locale);
+  if (parsed.marks.length) parsed.marks.push({ char: parsed.text.length, name: "neutral", intensity: 0 });
+  return parsed;
+}

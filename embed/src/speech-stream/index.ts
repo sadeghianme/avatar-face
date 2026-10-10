@@ -7,6 +7,7 @@
  * providers that cannot stream — so callers need no branch of their own.
  */
 import type { CuePlayer } from "../browser-tts";
+import { timeExpressionMarks, type ExpressionMark } from "../expression-markup";
 import type { SpeechPlayer } from "../speech";
 import { speechErrorOfFrame, speechErrorOfResponse } from "../speech-error";
 import type { Cue } from "../types";
@@ -35,7 +36,15 @@ export interface StreamOptions {
   player?: StreamingSpeechPlayer;
   onState?: (state: "playing" | "buffering", first: boolean) => void;
   signal?: AbortSignal;
+  /** The expressions of the text spoken (the text sent, its tags taken
+   *  out, and where each stood: expression-markup.ts spokenText). They are
+   *  placed in proportion to the text over the speech's length, estimated
+   *  until the stream says it (a phrase stream gives no word times). */
+  expressions?: { text: string; marks: readonly ExpressionMark[] };
 }
+
+/** A first guess at a stream's speech per character, ms, until it ends. */
+export const STREAM_MS_PER_CHAR = 65;
 
 /**
  * Play a phrase stream into an engine.
@@ -53,6 +62,18 @@ export function streamSpeech(
 ): StreamHandle {
   const player = options.player ?? new StreamingSpeechPlayer(engine, undefined, options.onState);
   const assembly = new SpeechAssembly();
+  // The text's expressions, placed over the speech's length: a guess from
+  // the text first, then no shorter than what was heard, then the length
+  // the stream says at its end.
+  const expressed = options.expressions?.marks.length ? options.expressions : null;
+  let length = expressed ? Math.max(600, expressed.text.length * STREAM_MS_PER_CHAR) : 0;
+  const track = (ms: number) => (expressed ? timeExpressionMarks(expressed.marks, expressed.text, ms) : undefined);
+  const place = (ms: number) => {
+    length = ms;
+    const t = track(ms);
+    if (t) (player as { setExpressions?: (track: typeof t) => void }).setExpressions?.(t);
+  };
+  if (expressed) place(length);
   let stopped = false;
   let resolveRecording!: (value: StreamedSpeech) => void;
   let rejectRecording!: (error: unknown) => void;
@@ -82,6 +103,8 @@ export function streamSpeech(
           break;
         case "chunk": {
           const part = assembly.append(event);
+          const heard = (assembly.samples * 1000) / assembly.sampleRate;
+          if (expressed && heard > length) place(heard);
           player.append(part.samples, part.offset, assembly.cues);
           break;
         }
@@ -93,12 +116,19 @@ export function streamSpeech(
             // Not a phrase stream: the ordinary path, through the engine.
             player.stop();
             resolveRecording(whole);
+            const t = track(whole.duration_ms);
             await new Promise<void>((resolve) =>
-              engine.playAudio(whole!.audio_b64, whole!.audio_mime, whole!.cues, resolve)
+              t
+                ? engine.playAudio(whole!.audio_b64, whole!.audio_mime, whole!.cues, resolve, t)
+                : engine.playAudio(whole!.audio_b64, whole!.audio_mime, whole!.cues, resolve)
             );
             return;
           }
-          resolveRecording(assembly.finish(event));
+          {
+            const recording = assembly.finish(event);
+            if (expressed) place(recording.duration_ms);
+            resolveRecording(recording);
+          }
           player.finish();
           await player.done;
           return;

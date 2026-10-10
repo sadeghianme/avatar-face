@@ -3,6 +3,7 @@ import {
   type CuePlayer,
   listen,
   type SpeechPlayer,
+  spokenText,
   type StreamHandle,
   StreamingSpeechPlayer,
   streamSpeech,
@@ -125,10 +126,20 @@ export function useSpeakPanel({
           engine as unknown as ConstructorParameters<typeof StreamingSpeechPlayer>[0]
         );
         await player.unlock();
+        // Expression tags ("[happy] Hello!") are the face's, never the
+        // voice's: taken out of what is sent, and played in time with it
+        // (docs/emotions.md). The browser's voice reads them itself.
+        const spoken = spokenText(text);
         const handle = streamSpeech(
           engine as unknown as Parameters<typeof streamSpeech>[0],
-          () => speechStream(orgId, { text, provider: voice.provider, voice: voice.voice, locale: voice.locale }),
-          { player }
+          () =>
+            speechStream(orgId, {
+              text: spoken.text,
+              provider: voice.provider,
+              voice: voice.voice,
+              locale: voice.locale,
+            }),
+          { player, expressions: spoken }
         );
         streamRef.current = handle;
         try {

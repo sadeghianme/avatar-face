@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { SpeechError, streamSpeech } from "../index";
+import { spokenText } from "../../expression-markup";
+import { SpeechError, STREAM_MS_PER_CHAR, streamSpeech } from "../index";
 
 /**
  * The orchestration between wire and engine. The player is faked (it needs
@@ -35,7 +36,7 @@ const ndjson = (frames: object[]) =>
   new Response(new Blob([frames.map((f) => JSON.stringify(f)).join("\n") + "\n"]).stream(), { status: 200 });
 
 const fakeEngine = () => ({
-  playAudio: vi.fn((_a: string, _m: string, _c: unknown[], onEnd?: () => void) => onEnd?.()),
+  playAudio: vi.fn((_a: string, _m: string, _c: unknown[], onEnd?: () => void, _x?: unknown) => onEnd?.()),
   playCues: vi.fn(),
   syncCueTime: vi.fn(),
   stopSpeech: vi.fn(),
@@ -45,7 +46,14 @@ const fakeEngine = () => ({
 const fakePlayer = () => {
   let resolve!: () => void;
   const done = new Promise<void>((r) => (resolve = r));
-  return { append: vi.fn(), finish: vi.fn(() => resolve()), stop: vi.fn(() => resolve()), done, unlock: vi.fn() };
+  return {
+    append: vi.fn(),
+    finish: vi.fn(() => resolve()),
+    stop: vi.fn(() => resolve()),
+    done,
+    unlock: vi.fn(),
+    setExpressions: vi.fn(),
+  };
 };
 
 describe("streamSpeech", () => {
@@ -74,6 +82,75 @@ describe("streamSpeech", () => {
     const recording = await handle.recording;
     expect(recording.duration_ms).toBe(300);
     expect(recording.audio_mime).toBe("audio/wav");
+  });
+
+  it("places a text's expressions over the speech: guessed, then as long as heard, then exact", async () => {
+    const engine = fakeEngine();
+    const player = fakePlayer();
+    // "[happy] Hi there. [concerned] Oh no." -> the tags out, released at the end.
+    const spoken = spokenText("[happy] Hi there. [concerned] Oh no.");
+    expect(spoken.text).toBe("Hi there. Oh no.");
+    const handle = streamSpeech(
+      engine as never,
+      async () =>
+        ndjson([
+          { type: "start", version: 1, mode: "phrases" },
+          chunk(0, 0, 24000 * 2),
+          chunk(1, 24000 * 2, 24000),
+          { type: "done", chunks: 2, total_samples: 24000 * 3, sample_rate: 24000 },
+        ]),
+      { player: player as never, expressions: spoken }
+    );
+    await handle.done;
+    const calls = player.setExpressions.mock.calls.map(([track]) => track as { t: number; name: string }[]);
+    // A guess from the text's length first, before any audio.
+    const guess = Math.max(600, spoken.text.length * STREAM_MS_PER_CHAR);
+    expect(calls[0].map((c) => c.name)).toEqual(["happy", "concerned", "neutral"]);
+    expect(calls[0][2].t).toBe(guess);
+    // The last: the speech's real length (3 s), each tag where its word is.
+    const last = calls[calls.length - 1];
+    expect(last[2].t).toBe(3000);
+    expect(last[0].t).toBe(0);
+    const at = (3000 * spoken.text.indexOf("Oh")) / spoken.text.length - 150;
+    expect(last[1].t).toBe(Math.round(at));
+    // Nothing of the tags reached the voice: the caller sends spoken.text.
+    expect(spoken.text).not.toMatch(/\[/);
+  });
+
+  it("plays a whole recording's expressions on its own length", async () => {
+    const engine = fakeEngine();
+    const player = fakePlayer();
+    const spoken = spokenText("[surprised:0.8] Really?");
+    const handle = streamSpeech(
+      engine as never,
+      async () =>
+        ndjson([
+          { type: "start", version: 1, mode: "recording" },
+          {
+            type: "recording",
+            audio_b64: "AAAA",
+            audio_mime: "audio/wav",
+            duration_ms: 800,
+            cues: [
+              { t: 0, viseme: "aa", a: 1 },
+              { t: 800, viseme: "sil", a: 1 },
+            ],
+            baseline_cues: [
+              { t: 0, viseme: "aa", a: 1 },
+              { t: 800, viseme: "sil", a: 1 },
+            ],
+            timing_source: "existing_provider",
+          },
+          { type: "done", chunks: 0 },
+        ]),
+      { player: player as never, expressions: spoken }
+    );
+    await handle.done;
+    const track = engine.playAudio.mock.calls[0][4] as unknown as { t: number; name: string; intensity: number }[];
+    expect(track).toEqual([
+      { t: 0, name: "surprised", intensity: 0.8 },
+      { t: 800, name: "neutral", intensity: 0 },
+    ]);
   });
 
   it("plays a whole recording through the engine's ordinary path", async () => {
