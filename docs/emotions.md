@@ -1,12 +1,14 @@
-# Emotions and expressions (design, v2 2026-10-11)
+# Emotions and expressions (design, v2.1 2026-10-11)
 
 Step 2 of the roadmap against SitePal: the 2D photo engine and the character
 engine show a small set of named expressions, driven by an API, by tags in
 the text the avatar speaks, by an optional automatic mode, and by faint idle
 micro-expressions. This document is the design; the branch
 `proto/emotions-expressions` implements it as a prototype for the owner to
-see before anything ships (evidence: `scratchpad/emotions2/deliver/`; the
-rejected v1's: `scratchpad/emotions/deliver/`).
+see before anything ships. The owner chose v2 ("do #1"); v2.1 is its
+polish for shipping (evidence: `scratchpad/emotions3/deliver/`; v2's:
+`scratchpad/emotions2/deliver/`; the rejected v1's:
+`scratchpad/emotions/deliver/`).
 
 ## Goals and non-goals
 
@@ -75,6 +77,7 @@ MediaPipe landmarks on each side of the face:
 | `lowerLid` | the lower lid row (`LOWER_LIDS`) | 0.14 | below the corner line only, fading toward both corners |
 | `cheek` | 50 101 118 117 205 36 / 280 330 347 346 425 266 | 0.32 | nothing above the lower lid; the lid over the iris held |
 | `mouthCorner` | 61 / 291 | its own field | nothing at the lips' middle, rising smoothly to the corner and carrying the cheek beyond it |
+| `lipPress` | the lips' rows | its own field | the upper lip's red weighted down and the lower's up by how far out the row is (the outer edge 1, the inner lip 0), fading at the corners: pressed lips |
 
 For every region:
 
@@ -166,10 +169,46 @@ share of itself (blue and green a little more than red, as light lost under
 skin is; a fold in black read grey and drawn); a lift is "color-dodge" with
 a dark grey (26), a gain of about a ninth, so no channel clips. Capped: a
 fold takes at most 16% of the light at its core, a lift adds at most 10%.
-Feathered by stamping elliptical radial-gradient dabs along the curve on a
-bell profile (no canvas filter: a filtered fill is a whole-canvas pass).
-Characters and animals take none (`cues: 0`): on a drawn face's flat skin a
-fold read as a line drawn across it.
+Feathered by elliptical dabs on a bell profile laid along the curve.
+
+**Sprites, not dabs, every frame (v2.1).** v2 stamped about 400
+radial-gradient dabs a frame for a smile or a surprise (1.5-1.8 ms on a
+960 px canvas, measured with a readback). Now everything one shape shades
+in one ink (a smile's folds; its lifts) is rasterised ONCE per face into
+one alpha sprite (`SkinCuePainter`, half the canvas's resolution: the folds
+are soft), laid on the rest face with that shape at full, normalised to
+its peak; each frame it is drawn with ONE `drawImage`, carried by an
+affine least-squares fit of the landmarks it was laid on (the brows' tops
+and the forehead's row for the forehead, the nose's wing, the mouth's
+corner and the cheek for the nasolabial fold, ...), at the shape's weight
+as `globalAlpha`. Both inks are linear in alpha, so a weight is exactly a
+strength. A frame costs one or two `drawImage` calls per shape on; a
+sprite is laid at most one a frame (a cue's first frames are its faintest),
+and a face laid anew (a viewport, a texture) lays them anew. Pixels match
+v2's dabs within 2 levels (99.9th percentile) on sakineh's smile and
+surprise. Cost: below, "Measured".
+
+**Only photographs take them (v2.1, `expression-look.ts`).** A cartoon
+(`faceType` "cartoon", or a `toon@1` rig) and an animal (`faceType`
+"animal", or an `animal@N` rig) take none: on a drawn face's flat skin a
+fold read as a line drawn across it. A person's picture that is not a
+photograph (a stylised 3D character, a cartoon uploaded as a person) takes
+none either, read once from the picture when the rig is built:
+
+- the eyes' opening at rest, lid to lid: a photograph's is 0.13-0.19 IOD
+  (the 9 photos of the 17 development and production faces), a stylised
+  face's large drawn eyes 0.21-0.27 (and a cat's 0.59): at
+  `APERTURE_DRAWN` (0.2) or above the face is not a photograph's...
+- ...unless its cheeks' skin has a photograph's grain (each texel's
+  luminance against its 3x3 neighbourhood's mean, as a share of the
+  skin's light, median over four cheek patches) of `SKIN_GRAIN` (2%) or
+  more: a wide-eyed person. Grain alone does not tell them apart (a 3D
+  render's skin reads 1.4%, a smoothed small photo's 0.3%), so it only
+  rescues a photograph the eyes would have refused.
+
+On the held-out production avatars this keeps the cues on all 7 photos and
+takes them off the 3D anime girl (8c23), the Pixar-styled "mehdi" (200e)
+and the drawn "bab", all three published as people.
 
 ### Units: face-relative
 
@@ -185,19 +224,31 @@ happy:     regions { mouthCorner: [0.05, -0.075], cheek: [0.02, -0.045], lowerLi
            brows both [-0.03, -0.05, -0.05]; cues nasolabial 1, cheekLift 1, crowsFeet 0.8
 surprised: regions { upperLid: [0, -0.025] }; brows both [-0.4, -0.46, -0.38] (outer knit 0.005)
            cues foreheadLines 1; jaw 0.16
-concerned: regions { mouthCorner: [0, 0.06] }; brows both [-0.65, -0.16, 0.05]; cues foreheadLines 0.5
+concerned: regions { mouthCorner: [0, 0.07] }; brows both [-0.66, -0.2, 0.1] knit [0.008, 0, 0]
+           cues foreheadLines 0.5
 thinking:  regions { "mouthCorner.left": [0, 0.035], "mouthCorner.right": [0.01, -0.015] }
            brows right [-0.22, -0.42, -0.36], left [0.12, 0.08, 0.04] knit [-0.01, 0, 0]; gaze [0.3, -0.2]
-serious:   regions { mouthCorner: [0, 0.015] }; brows both [0.42, 0.2, 0.04] knit [-0.035, -0.012, 0]
-           cues glabellaLines 1
+serious:   regions { mouthCorner: [-0.008, 0.012], upperLid: [0, 0.01], lipPress: [0, 0.022] }
+           brows both [0.5, 0.24, 0.04] knit [-0.04, -0.014, 0]; cues glabellaLines 1
 browFlash: brows both [-0.25, -0.28, -0.22]       (internal: the idle flash)
 ```
+
+**Concern against anger (v2.1).** Judges swapped the two on mehdi_avatar
+in every v2 round. They are now opposite at every part the face shows:
+concern lifts the inner brows (further, 0.66 of the brow-to-lid distance)
+and slants them (the outer end a touch DOWN), never knits them (the inner
+ends drift a little apart) and turns the corners down; anger lowers and
+knits the inner ends (further), lowers the upper lids a little (a hard,
+level look: the eyes' opening 5-7% smaller at 1) and presses the lips thin
+(`lipPress`: the red of both lips drawn toward the mouth's line, the
+inner lips untouched, so the speech's opening is kept exactly).
 
 (brow values: `[inner, mid, outer]` rise, negative up.) A region key is
 `"cheek"` (both sides, mirrored) or `"mouthCorner.right"` (one side: the
 picture's right), typed as a template literal, so a typo is a compile
-error. Only happy lifts the lower lid and only surprise the upper; no other
-expression changes the eye's opening (tested: under 3%).
+error. Only happy lifts the lower lid, only surprise lifts the upper and
+only anger lowers it a little; no other expression changes the eye's
+opening (tested: under 3%).
 
 ### Layered on speech, additively, in rest space
 
@@ -229,15 +280,25 @@ depth, then the derived vertices. So:
 ### Safety for photos
 
 - **Per-region caps** (`REGION_CAP`, IODs), however many expressions sum:
-  upper lid 0.035, lower lid 0.03, cheek 0.05, mouth corner 0.1. The brows
-  have their per-face caps (above) and `BROW_CAP`.
+  upper lid 0.035, lower lid 0.03, cheek 0.05, mouth corner 0.1, pressed
+  lips 0.03. The brows have their per-face caps (above) and `BROW_CAP`.
+- **Room for the turn (v2.1, `ExpressionRig.relieve`)**: for each shape at
+  1, every rig triangle the regions alone press below half its rest area
+  has its most moved landmark's region weights eased (a tenth at a time,
+  the lips never), until none is. The head's turn squeezes the far cheek to
+  about half again: in v2 a smile pressed a thin triangle under
+  mehdi_avatar's lower lid (449-448-347) to 0.4 at rest and the turn took
+  it below a fifth for 5 frames of the tagged line (a crushed patch by the
+  face's edge). Now it keeps 0.54 at its worst in the same clip; no
+  expression adds a crushed triangle in the tagged clips of the four
+  development faces.
 - **Per-face fold calibration**: when a face's rig is built, each expression
   at 1 is laid on the rest mesh, and if any of the rig's triangles would fold
   or fall below a fifth of its area (`head-fold.ts FoldCheck`), that
   expression's ceiling on that face is lowered (bisection) until none does.
   It stays 1 on the four development faces and on 11 of 13 held-out
-  production avatars; it lowered one person's anger to 0.58 and a cat's
-  smile to 0.37.
+  production avatars; it lowers a cartoon's anger to 0.47 (mehdi_1501's
+  low drawn brows) and img_6108's to 0.99.
 - **The outline is still** (above): no pixel outside the face's oval changes
   for any expression but surprise, whose silent jaw drop moves the chin as
   speech does.
@@ -252,19 +313,24 @@ The same 478-landmark rig is fitted to every character, so the same table
 drives it. Each profile scales the parts (`KindProfile.expression`,
 `ExpressionGains`):
 
-| Profile | Upper lid | Lower lid | Cheek | Mouth corners | Brows | Skin cues | Brow slack |
-|---|---|---|---|---|---|---|---|
-| human | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
-| `toon@1` | 1.5 | 1 | 0.8 | 1.2 | 1 | 0 | 2 |
-| `animal@1`, `animal@2` | 0.7 | 0.7 | 0.5 | 0.5 | 0.6 | 0 | 1 |
+| Profile | Upper lid | Lower lid | Cheek | Mouth corners | Pressed lips | Brows | Skin cues | Brow slack | Silent jaw |
+|---|---|---|---|---|---|---|---|---|---|
+| human | 1 | 1 | 1 | 1 | 1 | 1 | 1 (photographs only) | 1 | 1 |
+| `toon@1` | 1.5 | 1 | 0.8 | 1.2 | 1 | 1 | 0 | 2 | 1 |
+| `animal@1`, `animal@2` | 0.35 | 0.35 | 0.5 | 0.5 | 0.5 | 0.35 | 0 | 1 | 0 |
 
-A toon's drawn eyes widen more in surprise; its flat skin takes no shaded
-folds and stretches without showing it (slack 2). An animal's "lip corners"
-are a fit's anchors on a muzzle, so its expressions are faint by design;
-its brows are usually fur the band reader does not find, so its landmarks
-stand in. Limits: a stylised 3D face laid out as a photo (the `human`
-profile) takes the photo's skin cues, which read as drawn lines on
-airbrushed skin; ears, muzzles and painted brow shapes are not modelled.
+The avatar's published face type wins over its rig's profile
+(`expressionGains`, `EngineOptions.faceType`): an animal takes the animal's
+gains whatever its rig (the cat in production was fitted with the human
+profile: its smile took a fold-calibration cap of 0.37 and its warp drew
+ghost arcs by the muzzle and a crack over one eye), and a cartoon takes no
+skin cues. A toon's drawn eyes widen more in surprise; its flat skin
+stretches without showing it (slack 2). An animal's "lip corners" are a
+fit's anchors on a muzzle, its eyes and lids sit inside large drawn eyes,
+and its jaw is a fit's: its expressions are faint and safe by design (no
+silent jaw drop, the brows and lids at a third), and on the cat every
+ceiling is 1 and no expression folds a triangle at rest. Ears, muzzles and
+painted brow shapes are not modelled.
 
 ## Driving
 
@@ -357,7 +423,24 @@ The lexicon is English (`locale` starting "en"); elsewhere only the
 punctuation rules apply. `data-expressions="off"` strips tags and expresses
 nothing; the default `"tags"` reads tags only.
 
-### Idle micro-expressions (with the automatic mode, or `setIdleExpressions`)
+**Defaults (v2.1, the owner's).** Tags are on everywhere a text is
+spoken: the widget (server and browser voices), the share page (its
+server voice and its browser fallback) and the dashboard's Speak panel
+(its streamed server voice and the browser's): the tags are taken out
+before the text reaches any voice (`spokenText`) and drive the face. The
+automatic mode and the idle micro-expressions are off unless a page asks
+(`data-expressions="auto"`, `data-idle-expressions="on"`).
+
+**A streamed voice** (the Speak panel's `POST /tts/orgs/{org}/stream`)
+gives no word times, so `streamSpeech({ expressions })` places the tags in
+proportion to the text over the speech's length: a guess from the text
+(`STREAM_MS_PER_CHAR`, 65 ms a character) until audio arrives, then no
+shorter than what was heard, then the length the stream says at its end;
+each re-placing moves the same cues in time (`engine.retimeExpressions`:
+a cue already fired is not fired again). A provider that answers with one
+recording plays its tags on that recording's length.
+
+### Idle micro-expressions (off by default: `data-idle-expressions="on"`, the automatic mode, or `setIdleExpressions`)
 
 `IdleExpressions`, on its own seeded random source (it never draws on
 `Math.random`, so turning it on moves no other part's sequence: tested): a
@@ -371,17 +454,19 @@ beats. The "3d" personality flashes the brows itself.
 
 | File | Lines | What |
 |---|---|---|
-| `embed/src/engine/expression-table.ts` | 260 | names, aliases, regions, the table, caps, per-line gains: data and types |
-| `embed/src/engine/expression-rig.ts` | 303 | a face's rig: region weights, the brows, the fold calibration, `apply`, the lazy per-mesh cache (reads the texture once) |
-| `embed/src/engine/expression-weights.ts` | 301 | the face frame, the outline distances, the region masks, the lids' lines, the held lid over the iris, the paired inner lips |
-| `embed/src/engine/expression-brow-band.ts` | 369 | where each brow's hair is in the picture: column profiles, dark runs, tracking, the landmark fallback, the texture sampler |
+| `embed/src/engine/expression-table.ts` | 281 | names, aliases, regions, the table, caps, per-line gains: data and types |
+| `embed/src/engine/expression-rig.ts` | 437 | a face's rig: region weights, the brows, the room for the turn, the fold calibration, the lip press's room, `apply`, the look and the skin cues' painter, the lazy per-mesh cache (reads the texture once) |
+| `embed/src/engine/expression-weights.ts` | 334 | the face frame, the outline distances, the region masks, the lips' press field, the lids' lines, the held lid over the iris, the paired inner lips |
+| `embed/src/engine/expression-brow-band.ts` | 375 | where each brow's hair is in the picture: column profiles, dark runs, tracking, the landmark fallback, the texture sampler (the brows and the cheeks) |
 | `embed/src/engine/expression-brows.ts` | 386 | the brows as rigid strips: hair triangles, forehead and lid-fold weights, the three controls, `apply` |
 | `embed/src/engine/expression-brow-caps.ts` | 134 | how far a brow may move on a face: the area-linear press and stretch limits |
-| `embed/src/engine/expression-shading.ts` | 357 | the skin cues: strengths, curves, the feathered multiply / colour-dodge dabs |
-| `embed/src/engine/expression-mixer.ts` | 293 | the envelope, the mixer (set, state, jaw, gaze), the timed track, the idle micro-expressions |
-| `embed/src/expression-markup.ts` | 193 | the tag parser and stripper, the automatic mode, the alignment of tags to word times |
-| `engine/paint-features.ts`, `engine.ts` | +2, +1 | the cue pass before the eyes; the texture to the rig cache |
-| `engine/deform.ts`, `state.ts`, `animation.ts`, `motion.ts`, `kind-profile.ts`, `options.ts`, `types.ts`, `widget.ts`, `speech.ts`, ... | (v1) | the hooks and the API, unchanged since v1 |
+| `embed/src/engine/expression-look.ts` | 101 | whether a person's picture is a photograph: the eyes' opening, the skin's grain |
+| `embed/src/engine/expression-shading.ts` | 788 | the skin cues: strengths, curves, the dabs, the pieces, the sprites (rasterised once, carried by an affine fit), `SkinCuePainter` |
+| `embed/src/engine/expression-mixer.ts` | 305 | the envelope, the mixer (set, state, jaw, gaze), the timed track and its retiming, the idle micro-expressions |
+| `embed/src/expression-markup.ts` | 206 | the tag parser and stripper, `spokenText`, the automatic mode, the alignment of tags to word times |
+| `embed/src/speech-stream/index.ts`, `player.ts` | +40 | a streamed voice's tags placed over the speech's length, retimed as it is learnt |
+| `frontend/src/features/voices/hooks/useSpeakPanel.ts`, `features/share/hooks/useShareSpeech.ts` | +20 | the Speak panel and the share page: tags out of what is sent, played on the face |
+| `engine/kind-profile.ts` (`expressionGains`), `engine.ts`, `animation.ts`, `paint-features.ts`, `widget.ts` | small | the face type's gains, the silent jaw's gain, the cue pass through the rig, `data-idle-expressions`, `idleExpressions()`, `retimeExpressions` |
 
 ## Tests
 
@@ -406,6 +491,23 @@ beats. The "3d" personality flashes the brows itself.
   placed off the landmarks, giving up on a flat or unreadable picture; the
   caps keep every triangle round a lifted brow above a quarter of its area,
   change along the brow no faster than their slope, grow with slack.
+- `engine/__tests__/expression-look.test.ts` (v2.1): a photograph's eyes
+  and grain read as a photograph (and a smoothed or unreadable one still
+  does); a stylised face's large eyes on flat skin do not (a wide-eyed
+  person with a photograph's grain does); the rig gives the cues only to
+  the photograph and paints nothing on the other; the face type's gains (a
+  cartoon none, an animal the animal's, whatever its rig).
+- `engine/__tests__/expression-rig.test.ts` (v2.1 additions): a smile and
+  concern keep half of every triangle (room for the turn); anger lowers
+  the lids a little (1-10%), and no other expression but a smile and a
+  surprise changes the opening.
+- `speech-stream/__tests__/stream.test.ts`, `engine/__tests__/expression-mixer.test.ts`,
+  `__tests__/widget.test.ts` (v2.1): a stream's tags guessed, then placed
+  on the heard and the final length; a whole recording's on its own; a
+  retimed track fires no cue twice and misses none; the idle
+  micro-expressions off unless asked.
+- `frontend` `SpeakPanel.test.tsx`, `SharePage.test.tsx` (v2.1): a tagged
+  line reaches the voice without its tags and the face with them.
 - `engine/__tests__/expression-shading.test.ts` (Skia pixels): nothing
   painted with no cue or no gain; a fold or a lift changes the light by a
   capped share of the skin's own (at most 20% darker, 12% lighter), the
@@ -418,57 +520,67 @@ beats. The "3d" personality flashes the brows itself.
 - Goldens (pixel and GL warp): unchanged, every one (no expression is on by
   default); seams in Chromium, GL and 2D: none.
 
-## Measured (v2, 2026-10-11)
+## Measured (v2.1, 2026-10-11)
 
 The real engine in headless Chrome (Metal), 960 px stage, face framing,
 each avatar's own mouth: sakineh (her own kit), mehdi_avatar and bita
 (standard teeth), Sakineh Animesh (`toon@1`). The full table is
+`scratchpad/emotions3/deliver/numbers.txt`; v2's is
 `scratchpad/emotions2/deliver/numbers.txt`.
 
-- **Recognition** (blind, fresh judges, 3 per set): v2 6/6 at 1.0 and 6/6 at
-  0.6 on sakineh, bita and the cartoon; mehdi_avatar 4/6 at 1.0 (concern
-  and anger swapped) and 2/6 at 0.6. v1 was 6/6 at 1.0 on all four and 4/6
-  at 0.6 on the three humans.
-- **v1 against v2** (blind, both orders): v2 preferred on sakineh (6-2) and
-  mehdi_avatar (7-1); on bita (2-0) and the cartoon (4-3) most judgements
-  followed the side, not the system.
-- **Brows**: thickness within 3% of neutral in 20 of 20 measurements on
-  sakineh, bita and the cartoon (v1: 9-16 of 20 off), 14 of 20 on
-  mehdi_avatar (worst 6%; v1 33%). Surprise lifts the brow 19-31% of its
-  distance to the lid on the photos, below the 35-45% aimed at.
-- **Eyes**: concern, thinking and anger change the opening by 0.0% (v1: up
-  to 25%); a smile closes it 6-10%, a surprise opens it 13-16%.
-- **Lip-sync**: inner-lip openings unchanged (difference 0) under every
-  expression and in the tagged clips. **Folds**: none at rest; one known
-  viseme fold (bita's surprise, the mouth's own); in the clips one cheek
-  triangle by the outline crushed to 0.17-0.20 for 5 frames of a smile on
-  mehdi_avatar and on the cartoon. **GL and 2D**: the same landmarks, pixels
-  within 0.2 levels on average.
-- **Cost**: the deformation +2.5-5 µs. The skin-cue pass is the cost to
-  watch: 1.5-1.8 ms a frame on a 960 px canvas while a smile or a surprise
-  is on (0.6 ms concern, 0.1 ms anger), from about 400 gradient dabs; a
-  sprite per fold piece would make it a few `drawImage` calls.
+- **Recognition** (blind, fresh judges, 3 per set, shuffled, majority per
+  picture): sakineh 6/6 at 1.0 and 6/6 at 0.6, mehdi_avatar 5/6 and 5/6
+  (v2: 4/6 and 2/6, concern and anger swapped), bita 6/6 and 4/6 (v2: 6/6
+  and 6/6; at 0.6 one judge in three swapped anger and thinking), the
+  cartoon 6/6 and 6/6. A stronger anger (inner end 0.62, knit 0.042, lips
+  0.026) was tried: mehdi_avatar 6/6 and 4/6, but sakineh fell to 4/6 at
+  1.0 (concern and anger swapped), so it was not kept.
+- **Skin cues' cost**: v2's own measure (the pass at 1 on a 960 px canvas,
+  20 passes per 1 px readback): a smile 1.0-1.2 ms -> 0.13 ms, a surprise
+  1.2-1.35 -> 0.11, concern 0.46-0.5 -> 0.11, anger 0.07-0.09 -> 0.11; with
+  Chrome's CPU throttled 4x (a phone's proxy) 4.3-5.6 ms -> 0.29-0.36 ms.
+  In that harness one `drawImage` of anything (a 1 px canvas) already costs
+  0.10 ms (0.29 at 4x): the sprites add 0-0.03 ms over it. Main-thread time
+  of the pass (no readback): median 0.01 ms, 95th percentile 0.03 ms (0.12
+  at 4x). On the engine's own canvas, whole frames with the cues on and
+  off differ by no more than the noise (0.06 ms) on the GPU path and in 2D.
+  Laying a face's sprites, once per shape: 0.2-0.6 ms (1.1-3 ms at 4x), one
+  sprite a frame.
+- **Brows, eyes, lip-sync**: as v2 (thickness within 3% in 20 of 20 on
+  sakineh, bita and the cartoon, 3.7% at worst on mehdi_avatar); concern
+  and thinking change the eyes' opening by 0.0%; at 1, anger closes it
+  5-7% (by design), a smile 6-10%, and a surprise opens it 13-16%. Inner-lip openings
+  unchanged (difference 0) under every expression, with a held viseme and
+  in the tagged clips of all four faces.
+- **Folds**: none at rest on the four faces; no new crushed triangle in the
+  tagged clips of the four (v2: 5 frames on mehdi_avatar and on the
+  cartoon). Known: bita's surprise (her mouth's own small-opening fold
+  under the silent jaw), and one more of the 'ou' viseme's own 15 under
+  anger on bita.
+- **Held-out production avatars** (13): skin cues on all 7 photographs, off
+  the 3 stylised people (8c23, mehdi_200e, bab) and the 3 cartoons and the
+  cat; ceilings 1 everywhere but mehdi_1501's anger (0.47, a cartoon) and
+  img_6108's (0.99); the cat has every ceiling 1 and no fold at rest.
 
 ## Open issues
 
-1. mehdi_avatar: concern and anger are confused by judges; his painted brows
-   sit low on the lid fold, so the brow-to-lid unit is small and the caps
-   bind early.
+1. Recognition is from one model's judges; bita's anger at 0.6 is the
+   weakest picture (1 judge in 3 calls it thinking or neutral).
 2. Surprise lifts less than the anatomical target on photos (the caps); a
    larger lift needs the forehead to fold (a crease cue moving with it), not
    to stretch further.
-3. The skin-cue pass costs up to 1.8 ms a frame (above); not yet measured on
-   a phone.
-4. A stylised 3D face on the photo profile gets photo creases; the cat's
-   warp shows faint ghost arcs and a crack at full intensity.
-5. Judges still sometimes call the forehead lines and the inner brow heads
-   "painted" or "heavy".
+3. A streamed voice (the Speak panel) places tags in proportion to the
+   text, not at their words (the phrase stream has no word times); a
+   buffering gap mid-speech releases the expression until the next tag.
+4. The look reader is two thresholds on 17 faces: a wide-eyed person on a
+   heavily smoothed photo loses the cues (the safe side), and a stylised
+   face with small eyes keeps them.
+5. The cat's blinks still move its lower lids with the blink tuned to 0
+   (deform.ts `blinkLids`, not expressions).
 
 ## Open questions for the owner
 
-1. Defaults: tags on everywhere (they must be stripped anyway), the automatic
-   mode and the idle micro-expressions off until approved per avatar?
-2. The amplitudes in the sheets: too strong, too weak, per expression? (They
+1. The amplitudes in the sheets: too strong, too weak, per expression? (They
    are one table: a change is a number.)
-3. Should the dashboard's Speak panel accept tags too? Today a tag typed
-   there is read aloud (it does not go through the widget's queue).
+2. The automatic mode and the idle micro-expressions stay opt-in: should
+   the dashboard offer them per avatar?
