@@ -457,3 +457,18 @@ async def test_concurrency_is_bounded(scene):
 
     await make(scene, slow, concurrency=2)
     assert most == 2
+
+
+def test_uv_follows_the_owners_corrected_marks():
+    """A mark the owner moved from the detection samples the picture where
+    the corrected feature is: through the registration, not at the
+    detector's landmark."""
+    rng = np.random.default_rng(2)
+    answer = rng.uniform(100, 900, size=(478, 2))
+    registered = answer * 0.5 + [30.0, 40.0]  # answer px to base px
+    confirmed = registered.copy()
+    confirmed[70] += [6.0, -4.0]
+    targets = confirmed + (registered - registered)
+    uv = build.picture_uv(answer, registered, targets)
+    assert np.allclose(uv[10], answer[10], atol=1e-6)
+    assert np.allclose(uv[70], answer[70] + [12.0, -8.0], atol=1e-6)

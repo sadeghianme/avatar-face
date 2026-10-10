@@ -94,6 +94,22 @@ def to_request(points: np.ndarray, request: PoseRequest, size: tuple[int, int]) 
     return (points - np.array([x0, y0])) * np.array([size[0] / (x1 - x0), size[1] / (y1 - y0)])
 
 
+def picture_uv(
+    answer_points: np.ndarray, registered: np.ndarray, targets: np.ndarray
+) -> np.ndarray:
+    """Where each target is in the answer's own pixels: the targets (the
+    owner's confirmed points plus what the answer moved) taken back through
+    the registration (base px to answer px, an affine fitted on the answer's
+    landmarks and where the registration put them). The engine draws the
+    picture's point `uv[i]` where the mesh puts landmark i, so a point the
+    owner corrected samples the picture where the corrected feature is, not
+    where the detector saw it (a face whose marks were moved from the
+    detection by a sixth of its width drew its brow and its nose smeared)."""
+    ones = np.ones((len(registered), 1))
+    fit, *_ = np.linalg.lstsq(np.hstack([registered, ones]), answer_points, rcond=None)
+    return np.hstack([targets, np.ones((len(targets), 1))]) @ fit
+
+
 def encode(image: Image.Image) -> bytes:
     out = io.BytesIO()
     image.save(out, format="WEBP", quality=IMAGE_QUALITY, method=6)
@@ -139,9 +155,10 @@ class Checker:
         kept = keep_skin(sent, to_request(base_view, request, sent.size), image, answer_points)
         targets = self.points + (registered - base_view)
         result.targets = targets
+        uv = picture_uv(answer_points, registered, targets)
         self.made[name] = Made(
             encode(kept),
-            ExpressionEntry(kept.size, answer_points, targets, shows_smile(name, values)),
+            ExpressionEntry(kept.size, uv, targets, shows_smile(name, values)),
         )
         return result
 

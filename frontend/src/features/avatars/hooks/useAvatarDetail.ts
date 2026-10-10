@@ -7,12 +7,14 @@ import {
   useAvatar,
   useAvatarBackground,
   useDeleteAvatar,
+  useExpressions,
   useRetryAvatar,
   useUndoAvatarEdit,
   useUpdateAvatar,
 } from "@/features/avatars/api";
 import { errorText } from "@/features/avatars/creation";
 import { useAvatarMouth } from "@/features/avatars/hooks/useAvatarMouth";
+import { useExpressionPictures } from "@/features/avatars/hooks/useExpressionPictures";
 import {
   draftMouthConfig,
   type MotionChoice,
@@ -145,6 +147,14 @@ export function useAvatarDetail() {
   useAvatarMouth(
     avatar?.kind === "model3d" ? null : (engine as Parameters<typeof useAvatarMouth>[0]),
     previewMotion(preview.mouth === undefined ? savedMouth : preview.mouth, preview.motion)
+  );
+  // The draft's AI expression pictures, on while the owner has chosen them.
+  const expressions = useExpressions(orgId, id, Boolean(orgId && id && avatar?.kind === "photo"));
+  const pictures = expressions.data?.ai ? expressions.data : null;
+  useExpressionPictures(
+    avatar?.kind === "model3d" ? null : (engine as Parameters<typeof useExpressionPictures>[0]),
+    pictures?.manifest_url,
+    pictures?.picture_urls
   );
 
   const saveVoice = async (selection: VoiceSelection) => {

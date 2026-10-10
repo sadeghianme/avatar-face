@@ -1,7 +1,7 @@
 import { AvatarEngine, type Rig } from "@liveface/embed";
 import { type RefObject, useEffect, useRef, useState } from "react";
 
-import { useAvatarMouth } from "@/features/avatars";
+import { useAvatarMouth, useExpressionPictures } from "@/features/avatars";
 import { fetchPublicAvatar, type PublicAvatar } from "@/features/share/api";
 import { loadImage } from "@/lib/image";
 
@@ -76,6 +76,7 @@ export function useShareEngine(token: string | undefined, canvasRef: RefObject<H
   }, [token, canvasRef]);
 
   useAvatarMouth(mouthEngine, avatar?.mouth ?? null);
+  useExpressionPictures(mouthEngine, avatar?.expressions?.manifest_url, avatar?.expressions?.image_urls);
 
   return { avatar, failed, engineRef, dpr };
 }

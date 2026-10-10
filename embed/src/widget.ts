@@ -258,6 +258,16 @@ async function mount(
         .catch(() => undefined);
     }
 
+    // The AI expression pictures, when the owner chose them: progressive
+    // too, the animated expressions play until they are in (and stay, should
+    // they fail).
+    if (info.expressions) {
+      void photoEngine.setExpressionPictures({
+        manifestUrl: info.expressions.manifest_url,
+        imageUrls: info.expressions.image_urls,
+      });
+    }
+
     // Layered upgrade, also progressive: the avatar is already animating on
     // the flat photo; when the background/body/head decomposition lands the
     // engine flips render paths mid-flight. All-or-nothing — a body without
