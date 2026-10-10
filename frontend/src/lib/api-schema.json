@@ -2375,7 +2375,7 @@
         "type": "object"
       },
       "ExpressionsOut": {
-        "description": "The DRAFT's expression pictures: the owner's choice, the kit, the\npictures and manifest presigned for the preview (none for a kit made on\nanother picture: `stale`), a batch on its way (`pending`), and the job\n(live while it runs, then how it ended; null when this server ran none\nfor it).",
+        "description": "The DRAFT's expression pictures: the owner's choice, the kit, the\npictures and manifest presigned for the preview, a batch on its way\n(`pending`), and the job (live while it runs, then how it ended; null\nwhen this server ran none for it).",
         "properties": {
           "ai": {
             "title": "Ai",
@@ -2441,11 +2441,6 @@
             },
             "title": "Picture Urls",
             "type": "object"
-          },
-          "stale": {
-            "default": false,
-            "title": "Stale",
-            "type": "boolean"
           }
         },
         "required": [

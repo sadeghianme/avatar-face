@@ -80,22 +80,14 @@ def made_count(kit: ExpressionKitRecord | None) -> int:
     return int(kit.get("made", 0)) if kit else 0
 
 
-def is_stale(config: ExpressionConfig | None, avatar: Any) -> bool:
-    """Was the kit made on another picture than the avatar's now (a new
-    photo; a crop the kit followed is the avatar's picture)? A missing kit
-    is not stale."""
-    kit = (config or {}).get("kit")
-    if not kit:
-        return False
-    return kit["picture"].get("image_key") != getattr(avatar, "image_key", None)
-
-
-def wants_kit(config: ExpressionConfig | None, avatar: Any) -> bool:
-    """Has the owner asked for AI expressions, with none made for this
-    picture yet (none at all, or a stale kit) and none on its way?"""
+def wants_kit(config: ExpressionConfig | None) -> bool:
+    """Has the owner asked for AI expressions, with none made yet and none
+    on its way? (A kit follows every later edit of the face, a crop, new
+    marks, a cut-out, so a kit once made is the avatar's for good; one that
+    could not follow is dropped, and is wanted again.)"""
     if not config or not config.get("ai") or config.get("pending"):
         return False
-    return config.get("kit") is None or is_stale(config, avatar)
+    return config.get("kit") is None
 
 
 def file_keys(kit: ExpressionKitRecord | None) -> set[str]:
@@ -149,15 +141,13 @@ def public_kit(kit: ExpressionKitRecord | None) -> dict | None:
 
 async def owner_view(avatar: Any, storage: Storage, job: dict | None = None) -> dict:
     """The draft's expressions as the dashboard shows them: the choice, the
-    kit, presigned pictures and manifest for the preview (none for a stale
-    kit), whether the kit is for another picture, a batch on its way, and
-    the job."""
+    kit, presigned pictures and manifest for the preview, a batch on its
+    way, and the job."""
     config = load(avatar) or {"ai": False}
     kit = config.get("kit")
     pictures: dict[str, str] = {}
     manifest_url = None
-    stale = is_stale(config, avatar)
-    if kit and not stale:
+    if kit:
         for name, shot in kit["shots"].items():
             if image := shot.get("image_key"):
                 pictures[name] = await storage.presign_get(image)
@@ -167,7 +157,6 @@ async def owner_view(avatar: Any, storage: Storage, job: dict | None = None) -> 
         "ai": bool(config.get("ai")),
         "delivery": config.get("delivery") or "now",
         "kit": public_kit(kit),
-        "stale": stale,
         "pending": bool(config.get("pending")),
         "manifest_url": manifest_url,
         "picture_urls": pictures,

@@ -36,13 +36,12 @@ logger = logging.getLogger("liveface.expression_kit")
 
 @dataclass(frozen=True)
 class Origin:
-    """What a kit was made from and for: the avatar's picture and points
-    when it was asked for, and the published revision it completes (a
-    publish's kit, None for the panel's)."""
+    """What a kit was made from and for: the avatar's points when it was
+    asked for (its answers are registered on them), and the published
+    revision it completes (a publish's kit, None for the panel's)."""
 
     org_id: str
     avatar_id: str
-    image_key: str
     points: list
     source: Source
     revision: int | None = None
@@ -123,9 +122,9 @@ async def save(origin: Origin, result: ExpressionsResult) -> None:
     """Store `result` on the avatar (expression_kit.store), under its edit
     lock, on the row as it is now.
 
-    The picture must still be the one the kit was made on (409
-    picture_changed otherwise: the pictures are of another photo); new
-    points on it (re-marked meanwhile) are followed. A kit that made
+    The face may have been re-marked, cropped or cut out meanwhile (an
+    avatar's face never changes, only how its picture is framed): the kit
+    follows it. A kit that made
     nothing replaces only a kit that made nothing either (the pictures an
     earlier kit made stay), and raises nothing_made for the caller to
     report. A panel's kit is a draft edit (the owner publishes). A publish's
@@ -139,14 +138,18 @@ async def save(origin: Origin, result: ExpressionsResult) -> None:
         avatar = await load_avatar(db, origin.org_id, origin.avatar_id)
         if avatar is None:
             return
-        if avatar.image_key != origin.image_key or not avatar.rig_key:
-            raise Conflict409(
-                "The avatar's picture changed while its expressions were made; make them again",
-                code="picture_changed",
-            )
+        if not avatar.rig_key:
+            raise Conflict409("The avatar's picture is gone", code="source_gone")
         rig = json.loads(await storage.get_bytes(avatar.rig_key))
-        if result.manifest is not None and rig.get("points") != origin.points:
-            result.manifest = await run_cpu(rebase, result.manifest, rig["points"])
+        if result.manifest is not None and (
+            rig.get("points") != origin.points
+            or list(rig.get("image_size") or []) != result.manifest["image_size"]
+        ):
+            # Re-marked, re-detected, cropped or cut out meanwhile: the same
+            # face, and the kit follows it (storing.follow_points).
+            result.manifest = await run_cpu(
+                rebase, result.manifest, rig["points"], rig.get("image_size")
+            )
         previous = (load(avatar) or {}).get("kit")
         if not result.made and made_count(previous):
             raise nothing_made(result)

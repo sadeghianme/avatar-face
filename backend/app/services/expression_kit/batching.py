@@ -181,14 +181,7 @@ async def collect(org_id: str, avatar_id: str, pending: PendingBatch) -> int:
         await clear_pending(org_id, avatar_id, pending["name"])
         return 1
     result.calls, result.billed_calls = answered + len(state.errors), answered
-    origin = Origin(
-        org_id,
-        avatar_id,
-        image_key or "",
-        pending["points"],
-        "batch",
-        pending.get("revision"),
-    )
+    origin = Origin(org_id, avatar_id, pending["points"], "batch", pending.get("revision"))
     try:
         await save(origin, result)
     except AppError as exc:

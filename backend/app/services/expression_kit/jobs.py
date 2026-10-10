@@ -51,7 +51,6 @@ NOT_RETRYABLE = frozenset(
         "source_gone",
         "avatar_not_found",
         "image_limit_reached",
-        "picture_changed",
     }
 )
 
@@ -192,6 +191,6 @@ async def make_for_avatar(job: Job, params: dict) -> None:
             "The expression pictures could not be finished; try again", code="expressions_failed"
         ) from exc
     job.report(0.92, SAVE_LABEL)
-    origin = Origin(org_id, avatar_id, image_key, points, params["source"], params.get("revision"))
+    origin = Origin(org_id, avatar_id, points, params["source"], params.get("revision"))
     await save(origin, result)
     job.report(1.0, SAVE_LABEL)

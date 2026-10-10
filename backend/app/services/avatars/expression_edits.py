@@ -100,7 +100,7 @@ async def after_publish(db: AsyncSession, avatar: Avatar, org: Organization) -> 
     panel can make them, and the next publish asks again). Returns the
     job, or None."""
     config = expressions.load(avatar)
-    if not expressions.wants_kit(config, avatar):
+    if not expressions.wants_kit(config):
         return None
     assert config is not None  # wants_kit is False without one
     try:

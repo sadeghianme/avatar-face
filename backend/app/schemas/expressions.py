@@ -51,15 +51,13 @@ class ExpressionKitOut(BaseModel):
 
 class ExpressionsOut(BaseModel):
     """The DRAFT's expression pictures: the owner's choice, the kit, the
-    pictures and manifest presigned for the preview (none for a kit made on
-    another picture: `stale`), a batch on its way (`pending`), and the job
-    (live while it runs, then how it ended; null when this server ran none
-    for it)."""
+    pictures and manifest presigned for the preview, a batch on its way
+    (`pending`), and the job (live while it runs, then how it ended; null
+    when this server ran none for it)."""
 
     ai: bool
     delivery: Delivery = "now"
     kit: ExpressionKitOut | None = None
-    stale: bool = False
     pending: bool = False
     manifest_url: str | None = None
     picture_urls: dict[ExpressionName, str] = Field(default_factory=dict)
