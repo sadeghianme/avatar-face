@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   ALIASES,
   ANIMAL_GAINS,
+  BROW_CAP,
+  BROW_SATURATES,
+  SKIN_CUES,
+  browPoseOf,
   EXPRESSION_NAMES,
   EXPRESSIONS,
   HUMAN_GAINS,
@@ -36,7 +40,7 @@ describe("the expression table", () => {
         for (const side of sides) expect(["left", "right"]).toContain(side);
       }
     }
-    expect(regionOf("browOuter.right")).toEqual({ region: "browOuter", sides: ["right"] });
+    expect(regionOf("mouthCorner.right")).toEqual({ region: "mouthCorner", sides: ["right"] });
     expect(regionOf("cheek")).toEqual({ region: "cheek", sides: ["left", "right"] });
   });
 
@@ -49,15 +53,53 @@ describe("the expression table", () => {
   });
 
   it("is asymmetric only where it means to be: thinking", () => {
-    const sided = SHAPE_NAMES.filter((n) => Object.keys(EXPRESSIONS[n].regions).some((k) => k.includes(".")));
+    const sided = SHAPE_NAMES.filter(
+      (n) =>
+        Object.keys(EXPRESSIONS[n].regions).some((k) => k.includes(".")) ||
+        (EXPRESSIONS[n].brows !== undefined && EXPRESSIONS[n].brows?.both === undefined)
+    );
     expect(sided).toEqual(["thinking"]);
     expect(EXPRESSIONS.thinking.gaze).toBeDefined();
     expect(EXPRESSIONS.surprised.jaw).toBeGreaterThan(0);
+    // One brow up, the other not.
+    expect(browPoseOf(EXPRESSIONS.thinking.brows, "right")!.mid[1]).toBeLessThan(-0.3);
+    expect(browPoseOf(EXPRESSIONS.thinking.brows, "left")!.mid[1]).toBeGreaterThanOrEqual(0);
   });
 
-  it("anchors every region on real landmarks, with a reach", () => {
+  it("shapes the brows as anatomy does: a surprise lifts them whole, concern the inner end, anger lowers and knits it", () => {
+    const s = EXPRESSIONS.surprised.brows!.both!;
+    for (const part of [s.inner, s.mid, s.outer]) expect(part[1]).toBeLessThanOrEqual(-0.35);
+    const c = EXPRESSIONS.concerned.brows!.both!;
+    expect(c.inner[1]).toBeLessThan(-0.3);
+    expect(c.outer[1]).toBeGreaterThanOrEqual(0);
+    const a = EXPRESSIONS.serious.brows!.both!;
+    expect(a.inner[1]).toBeGreaterThan(0.2);
+    expect(a.inner[0]).toBeLessThan(0);
+    for (const name of SHAPE_NAMES)
+      for (const side of ["left", "right"] as const) {
+        const pose = browPoseOf(EXPRESSIONS[name].brows, side);
+        if (!pose) continue;
+        for (const part of [pose.inner, pose.mid, pose.outer]) {
+          // Reaches the cap, if at all, no earlier than BROW_SATURATES.
+          expect(Math.abs(part[0]) * BROW_SATURATES).toBeLessThanOrEqual(BROW_CAP.knit);
+          expect(Math.abs(part[1]) * BROW_SATURATES).toBeLessThanOrEqual(BROW_CAP.rise);
+        }
+      }
+  });
+
+  it("names only real skin cues, each at most at full strength", () => {
+    for (const name of SHAPE_NAMES)
+      for (const [cue, k] of Object.entries(EXPRESSIONS[name].cues ?? {})) {
+        expect(SKIN_CUES).toContain(cue);
+        expect(k).toBeGreaterThan(0);
+        expect(k).toBeLessThanOrEqual(1);
+      }
+  });
+
+  it("anchors every region on real landmarks, with a reach (the mouth's field has its own)", () => {
     for (const region of REGIONS) {
       const spec = REGION_SPECS[region];
+      if (spec.mask === "mouth") continue;
       expect(spec.reach).toBeGreaterThan(0);
       for (const side of spec.anchors) {
         expect(side.length).toBeGreaterThan(0);
@@ -82,5 +124,7 @@ describe("the expression table", () => {
     expect(kindProfile({ render_profile: "animal@2" }).expression).toBe(ANIMAL_GAINS);
     expect(kindProfile({ render_profile: "animal@1" }).expression).toBe(ANIMAL_GAINS);
     for (const region of REGIONS) expect(ANIMAL_GAINS[region]).toBeLessThan(1);
+    expect(ANIMAL_GAINS.cues).toBe(0);
+    expect(TOON_GAINS.cues).toBe(0);
   });
 });

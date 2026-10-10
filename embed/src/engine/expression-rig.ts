@@ -1,63 +1,51 @@
 /**
- * The expressions laid on one face (docs/emotions.md): each region's weight
- * on each landmark, read once from the rest mesh, and the frame's pass that
- * moves the landmarks by the mix of expressions on (deform.ts).
+ * The expressions laid on one face (docs/emotions.md): the brows as rigid
+ * strips (expression-brows.ts), the lids, the cheeks and the mouth's
+ * corners as regions (expression-weights.ts), all read once from the rest
+ * mesh; and the frame's pass that moves the landmarks by the mix of
+ * expressions on (deform.ts).
  *
- * The displacement of a landmark is read at its REST position and added to
+ * A landmark's displacement is read at its REST position and added to
  * wherever the frame's mouth, lids and jaw put it, and the upper and lower
  * inner lip of each column take one weight, so an opening the speech makes
  * is carried, not changed: speech keeps the lips. The pass runs before the
  * head's turn in depth, which then turns the face it made.
- *
- * Every region fades to nothing at the face's outline (FACE_OVAL), so the
- * mesh's edge, the neck band, the head's field and a cut-out's silhouette
- * never move: there is no boundary for a seam to show at.
  */
 import type { FaceMesh, Point } from "./geometry";
 import { FoldCheck } from "./head-fold";
-import { FACE_OVAL, INNER_LOWER, INNER_UPPER } from "./jaw-rig";
-import { EYE_CORNERS, IRISES, LANDMARK_COUNT, LOWER_LIDS, UPPER_LIDS } from "./landmarks";
+import { LANDMARK_COUNT } from "./landmarks";
+import { BrowRig } from "./expression-brows";
 import {
   EXPRESSIONS,
   REGION_CAP,
-  REGION_SPECS,
   REGIONS,
   SHAPE_NAMES,
+  browPoseOf,
   regionOf,
+  type BrowPose,
   type ExpressionGains,
   type Region,
   type RegionKey,
-  type RegionMask,
   type ShapeName,
   type Vec,
 } from "./expression-table";
-
-/** The irises' centres, never moved (paint-eyes.ts paints the iris about
- *  them), and their rims, moved by the lids' regions only: a rim point
- *  hidden under a lid goes with it, or the lid moved over it would fold
- *  the triangles between them (Sakineh's upper lid on a surprise). */
-const IRIS_CENTRES: ReadonlySet<number> = new Set(IRISES.map(([c]) => c));
-const IRIS_FIRST = 468;
-const LID_REGIONS: ReadonlySet<Region> = new Set(["upperLid", "lowerLid"]);
-/** The band inside the face's outline over which a region fades in, IODs. */
-const OUTLINE_FADE = 0.2;
-/** The band over which a mask lets a region in, IODs. The cheek's under
- *  the lower lid is narrow on purpose: a wide one (0.15) held the skin just
- *  under the eye while the cheek rose into it, crushing a triangle there on
- *  mehdi_avatar's smile at rest. */
-const MASK_BAND = { corners: 0.03, lids: 0.08, nose: 0.08 } as const;
-/** Over this band across the face's midline a side's region fades out,
- *  IODs: a raised brow does not raise the other one. */
-const MIDLINE_BAND = 0.1;
-/** The lids' regions fade out toward the eye's corners over this share of
- *  the eye's width: the corners stay, and a lid moved up to them crushed
- *  the corner's thin triangles (with a spread vowel's own lid lift). */
-const LID_CORNER_FADE = 0.3;
-/** The nose's base (subnasale). */
-const NOSE_BASE = 2;
+import { measureBrowBands, textureLuma, type BrowBand } from "./expression-brow-band";
+import {
+  faceFrame,
+  fromFace,
+  lidLine,
+  outlineDistance,
+  regionWeights,
+  toCanvas,
+  toFace,
+  type FaceFrame,
+} from "./expression-weights";
 
 /** How much of each shape is on, 0..1 each (the mixer's weights). */
 export type ShapeMix = Readonly<Record<ShapeName, number>>;
+
+/** No shape on. */
+export const NONE: ShapeMix = Object.fromEntries(SHAPE_NAMES.map((s) => [s, 0])) as Record<ShapeName, number>;
 
 /** One region on one side: the landmarks it moves and how much, and what
  *  each shape asks of it at 1 (IODs, [outward, down]). */
@@ -68,6 +56,13 @@ interface Channel {
   readonly index: Int32Array;
   readonly weight: Float64Array;
   readonly terms: readonly { readonly shape: ShapeName; readonly out: number; readonly down: number }[];
+}
+
+/** A brow pose being summed this frame. */
+interface MutablePose {
+  inner: [number, number];
+  mid: [number, number];
+  outer: [number, number];
 }
 
 /** What each shape asks of `region` on `side`, from the table. */
@@ -83,44 +78,29 @@ function termsOf(region: Region, side: 0 | 1): Channel["terms"] {
   return terms;
 }
 
-const smoothstep = (t: number): number => {
-  const s = Math.max(0, Math.min(1, t));
-  return s * s * (3 - 2 * s);
-};
-
-/** The face's frame: the eyes' midpoint, the eye line (u, to the picture's
- *  right) and the down axis (n), in IODs. */
-interface FaceFrame {
-  ox: number;
-  oy: number;
-  ux: number;
-  uy: number;
-  iod: number;
-}
-
-function faceFrame(base: readonly Point[]): FaceFrame | null {
-  const centre = ([a, b]: [number, number]) => ({ x: (base[a].x + base[b].x) / 2, y: (base[a].y + base[b].y) / 2 });
-  let l = centre(EYE_CORNERS[0]),
-    r = centre(EYE_CORNERS[1]);
-  if (l.x > r.x) [l, r] = [r, l];
-  const iod = Math.hypot(r.x - l.x, r.y - l.y);
-  if (!(iod > 4)) return null;
-  return { ox: (l.x + r.x) / 2, oy: (l.y + r.y) / 2, ux: (r.x - l.x) / iod, uy: (r.y - l.y) / iod, iod };
-}
-
 export class ExpressionRig {
   /** Each shape's ceiling on this face: lowered from 1 where the shape at
    *  1 would fold or crush one of the rig's triangles (calibrate). */
   readonly ceiling: Record<ShapeName, number>;
+  /** The brows as rigid strips. */
+  readonly brows: BrowRig;
+  /** Each brow's hair as the picture showed it (null: the landmarks'). */
+  readonly bands: readonly [BrowBand | null, BrowBand | null];
   private readonly channels: Channel[];
   private readonly frame: FaceFrame;
   /** This frame's displacement per channel, canvas px (x, y pairs). */
   private readonly shift: Float64Array;
+  private readonly moved = { x: 0, y: 0 };
+  /** Each side's brow pose from each shape, and this frame's sum. */
+  private readonly browTerms: [{ shape: ShapeName; pose: BrowPose }[], { shape: ShapeName; pose: BrowPose }[]];
+  private readonly browSum: [MutablePose, MutablePose];
 
   private constructor(
     base: readonly Point[],
     frame: FaceFrame,
-    private readonly gains: ExpressionGains
+    private readonly gains: ExpressionGains,
+    triangles: readonly (readonly [number, number, number])[],
+    luma: ((p: Point) => number) | null
   ) {
     this.frame = frame;
     const local = base.slice(0, LANDMARK_COUNT).map((p) => toFace(frame, p));
@@ -128,7 +108,7 @@ export class ExpressionRig {
     this.channels = [];
     for (const region of REGIONS) {
       for (const side of [0, 1] as const) {
-        const weights = pairInnerLips(regionWeights(local, region, side, outline));
+        const weights = regionWeights(local, region, side, outline);
         const index: number[] = [];
         const weight: number[] = [];
         weights.forEach((w, i) => {
@@ -137,33 +117,49 @@ export class ExpressionRig {
             weight.push(w);
           }
         });
-        this.channels.push({
-          region,
-          side,
-          index: Int32Array.from(index),
-          weight: Float64Array.from(weight),
-          terms: termsOf(region, side),
-        });
+        const terms = termsOf(region, side);
+        this.channels.push({ region, side, index: Int32Array.from(index), weight: Float64Array.from(weight), terms });
       }
     }
+    const tris = triangles.filter((t) => t.every((i) => i < LANDMARK_COUNT));
+    const bands = luma
+      ? measureBrowBands(
+          local,
+          (p) => luma(fromFace(frame, p)),
+          (side, x) => lidLine(local, side, true)(x)
+        )
+      : ([null, null] as const);
+    this.bands = bands;
+    this.brows = new BrowRig(local, outline, frame, tris, bands, gains.slack);
+    const browsOf = (side: "left" | "right") =>
+      SHAPE_NAMES.flatMap((shape) => {
+        const pose = browPoseOf(EXPRESSIONS[shape].brows, side);
+        return pose ? [{ shape, pose }] : [];
+      });
+    this.browTerms = [browsOf("left"), browsOf("right")];
+    const zero = (): MutablePose => ({ inner: [0, 0], mid: [0, 0], outer: [0, 0] });
+    this.browSum = [zero(), zero()];
     this.shift = new Float64Array(this.channels.length * 2);
     this.ceiling = Object.fromEntries(SHAPE_NAMES.map((s) => [s, 1])) as Record<ShapeName, number>;
   }
 
   /**
    * The rig for the face resting at `base` (canvas px), its rig triangles
-   * `triangles` checked for folds, its line's `gains`; null for a face too
-   * small or with too few landmarks.
+   * `triangles` checked for folds, its line's `gains`, the picture's
+   * luminance at a canvas point `luma` (for the brows' hair; null: the
+   * landmarks stand for it); null for a face too small or with too few
+   * landmarks.
    */
   static build(
     base: readonly Point[],
     triangles: readonly (readonly [number, number, number])[],
-    gains: ExpressionGains
+    gains: ExpressionGains,
+    luma: ((p: Point) => number) | null = null
   ): ExpressionRig | null {
     if (base.length < LANDMARK_COUNT) return null;
     const frame = faceFrame(base);
     if (!frame) return null;
-    const rig = new ExpressionRig(base, frame, gains);
+    const rig = new ExpressionRig(base, frame, gains, triangles, luma);
     rig.calibrate(base, triangles);
     return rig;
   }
@@ -177,12 +173,17 @@ export class ExpressionRig {
 
   /**
    * Move the landmarks in `pts` by the expressions in `mix` at `scale` (the
-   * tuning's expression): each region's displacement read off the table,
-   * capped, scaled by the line's gain, at each landmark's rest weight.
-   * Returns false, having moved nothing, when nothing is on.
+   * tuning's expression): the brows' strips, then each region's
+   * displacement read off the table, capped, scaled by the line's gain, at
+   * each landmark's rest weight. Returns false, having moved nothing, when
+   * nothing is on.
    */
   apply(pts: Point[], mix: ShapeMix, scale: number): boolean {
-    if (!(scale > 0) || !this.displace(mix, scale)) return false;
+    if (!(scale > 0)) return false;
+    const browsOn = this.sumBrows(mix);
+    const regionsOn = this.displace(mix, scale);
+    if (!browsOn && !regionsOn) return false;
+    if (browsOn) this.brows.apply(pts, this.browSum, this.gains.brows * scale);
     const { channels, shift } = this;
     for (let c = 0; c < channels.length; c++) {
       const dx = shift[2 * c],
@@ -198,9 +199,28 @@ export class ExpressionRig {
     return true;
   }
 
+  /** Each side's brow pose this frame into `browSum`; false for none. */
+  private sumBrows(mix: ShapeMix): boolean {
+    let any = false;
+    for (const side of [0, 1] as const) {
+      const sum = this.browSum[side];
+      sum.inner[0] = sum.inner[1] = sum.mid[0] = sum.mid[1] = sum.outer[0] = sum.outer[1] = 0;
+      for (const { shape, pose } of this.browTerms[side]) {
+        const on = Math.min(mix[shape], this.ceiling[shape]);
+        if (!(on > 0)) continue;
+        any = true;
+        for (const part of ["inner", "mid", "outer"] as const) {
+          sum[part][0] += pose[part][0] * on;
+          sum[part][1] += pose[part][1] * on;
+        }
+      }
+    }
+    return any;
+  }
+
   /** This frame's displacement per channel into `shift`; false for none. */
   private displace(mix: ShapeMix, scale: number): boolean {
-    const { channels, shift, frame, ceiling } = this;
+    const { channels, shift, frame, ceiling, moved } = this;
     let any = false;
     for (let c = 0; c < channels.length; c++) {
       const { region, side, terms } = channels[c];
@@ -215,12 +235,12 @@ export class ExpressionRig {
       // The region's cap, however many shapes sum in it; then the line's gain.
       const length = Math.hypot(out, down);
       const cap = REGION_CAP[region];
-      const k = (length > cap ? cap / length : 1) * this.gains[region] * scale * frame.iod;
+      const k = (length > cap ? cap / length : 1) * this.gains[region] * scale;
       // Outward is toward the picture's left on its left side.
-      const sx = side ? out : -out;
-      shift[2 * c] = (sx * frame.ux - down * frame.uy) * k;
-      shift[2 * c + 1] = (sx * frame.uy + down * frame.ux) * k;
-      if (shift[2 * c] || shift[2 * c + 1]) any = true;
+      toCanvas(frame, (side ? out : -out) * k, down * k, moved);
+      shift[2 * c] = moved.x;
+      shift[2 * c + 1] = moved.y;
+      if (moved.x || moved.y) any = true;
     }
     return any;
   }
@@ -269,125 +289,15 @@ export class ExpressionRigs {
     private readonly gains: ExpressionGains
   ) {}
 
-  /** The rig for `mesh` when an expression is `on`; null when none is. */
-  get(mesh: FaceMesh, on: boolean): ExpressionRig | null {
+  /** The rig for `mesh` laid over `texture` when an expression is `on`;
+   *  null when none is. */
+  get(mesh: FaceMesh, texture: HTMLImageElement | null, on: boolean): ExpressionRig | null {
     if (!on) return null;
     if (this.for !== mesh) {
       this.for = mesh;
-      this.rig = ExpressionRig.build(mesh.basePoints, this.triangles, this.gains);
+      const luma = texture ? textureLuma(texture, mesh) : null;
+      this.rig = ExpressionRig.build(mesh.basePoints, this.triangles, this.gains, luma);
     }
     return this.rig;
-  }
-}
-
-/** No shape on. */
-export const NONE: ShapeMix = Object.fromEntries(SHAPE_NAMES.map((s) => [s, 0])) as Record<ShapeName, number>;
-
-/** `p` in the face's frame, IODs. */
-function toFace(f: FaceFrame, p: Point): Point {
-  const dx = p.x - f.ox,
-    dy = p.y - f.oy;
-  return { x: (dx * f.ux + dy * f.uy) / f.iod, y: (-dx * f.uy + dy * f.ux) / f.iod };
-}
-
-/** Each landmark's distance to the face's outline (FACE_OVAL, closed), IODs. */
-function outlineDistance(local: readonly Point[]): Float64Array {
-  const d = new Float64Array(local.length);
-  for (let i = 0; i < local.length; i++) {
-    let best = Infinity;
-    for (let k = 0; k < FACE_OVAL.length; k++) {
-      const a = local[FACE_OVAL[k]],
-        b = local[FACE_OVAL[(k + 1) % FACE_OVAL.length]];
-      best = Math.min(best, segmentDistance(local[i], a, b));
-    }
-    d[i] = best;
-  }
-  return d;
-}
-
-function segmentDistance(p: Point, a: Point, b: Point): number {
-  const vx = b.x - a.x,
-    vy = b.y - a.y;
-  const len = vx * vx + vy * vy;
-  const t = len > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / len)) : 0;
-  return Math.hypot(p.x - a.x - vx * t, p.y - a.y - vy * t);
-}
-
-/** Every movable landmark's weight in `region` on `side` (face frame,
- *  IODs): a smooth bump of its distance to the nearest anchor, (1 - d²)²,
- *  times the region's mask, the outline's fade and the midline's. */
-function regionWeights(local: readonly Point[], region: Region, side: 0 | 1, outline: Float64Array): Float64Array {
-  const spec = REGION_SPECS[region];
-  const anchors = spec.anchors[side].map((i) => local[i]);
-  const mask = maskOf(spec.mask, local, side);
-  const w = new Float64Array(local.length);
-  const sign = side ? 1 : -1;
-  const lid = LID_REGIONS.has(region);
-  for (let i = 0; i < local.length; i++) {
-    if (i >= IRIS_FIRST && (!lid || IRIS_CENTRES.has(i))) continue;
-    const p = local[i];
-    let best = 0;
-    for (const a of anchors) {
-      const dx = p.x - a.x,
-        dy = p.y - a.y;
-      const sy = dy < 0 ? spec.up : spec.down;
-      const d2 = (dx * dx + (dy / sy) * (dy / sy)) / (spec.reach * spec.reach);
-      if (d2 < 1) best = Math.max(best, (1 - d2) ** 2);
-    }
-    if (!best) continue;
-    const midline = smoothstep((sign * p.x) / MIDLINE_BAND + 0.5);
-    w[i] = best * mask(p) * smoothstep(outline[i] / OUTLINE_FADE) * midline;
-  }
-  return w;
-}
-
-/**
- * `w` with each inner-lip column's two landmarks (the upper and the lower
- * inner lip at one place along the mouth) given one weight, their mean: the
- * two move together, so the opening the speech makes there is carried
- * exactly, on a mouth slightly open at rest too.
- */
-function pairInnerLips(w: Float64Array): Float64Array {
-  for (let k = 0; k < INNER_UPPER.length; k++) {
-    const u = INNER_UPPER[k],
-      l = INNER_LOWER[k];
-    w[u] = w[l] = (w[u] + w[l]) / 2;
-  }
-  return w;
-}
-
-/** The mask `kind` on `side`'s eye, as a function of a point (face frame). */
-function maskOf(kind: RegionMask, local: readonly Point[], side: 0 | 1): (p: Point) => number {
-  const ys = (ids: readonly number[]) => ids.map((i) => local[i].y);
-  const [c0, c1] = EYE_CORNERS[side];
-  const cornerY = (local[c0].y + local[c1].y) / 2;
-  const lidTop = Math.min(...ys(UPPER_LIDS[side]));
-  const lidBottom = Math.max(...ys(LOWER_LIDS[side]));
-  const eyeWidth = Math.hypot(local[c1].x - local[c0].x, local[c1].y - local[c0].y);
-  const awayFromCorners = (p: Point): number => {
-    const d = Math.min(
-      Math.hypot(p.x - local[c0].x, p.y - local[c0].y),
-      Math.hypot(p.x - local[c1].x, p.y - local[c1].y)
-    );
-    return smoothstep(d / (LID_CORNER_FADE * eyeWidth));
-  };
-  switch (kind) {
-    case "aboveLids": {
-      // Full at and above the brows' own line, thinning to nothing just
-      // above the lid (as head-turn.ts browLift thins).
-      const browY = REGION_SPECS.browInner.anchors[side].reduce((s, i) => s + local[i].y, 0) / 4;
-      const barrier = lidTop - 0.03;
-      return (p) => (p.y >= barrier ? 0 : p.y <= browY ? 1 : smoothstep((barrier - p.y) / (barrier - browY)));
-    }
-    case "aboveCorners":
-      return (p) => smoothstep((cornerY - p.y) / MASK_BAND.corners) * awayFromCorners(p);
-    case "belowCorners":
-      return (p) => smoothstep((p.y - cornerY) / MASK_BAND.corners) * awayFromCorners(p);
-    case "belowLids":
-      return (p) => smoothstep((p.y - lidBottom) / MASK_BAND.lids);
-    case "belowNose": {
-      const noseY = local[NOSE_BASE].y;
-      return (p) => smoothstep((p.y - noseY) / MASK_BAND.nose);
-    }
   }
 }

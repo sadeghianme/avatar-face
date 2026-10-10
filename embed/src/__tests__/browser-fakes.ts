@@ -69,7 +69,10 @@ export function stubNetwork(resources: Record<string, Resource>): FakeNetwork {
   const find = (url: string): Resource => resources[url] ?? { status: 404 };
   vi.stubGlobal(
     "fetch",
-    async (input: string | URL, init?: { signal?: AbortSignal | null; headers?: Record<string, string> }) => {
+    async (
+      input: string | URL,
+      init?: { signal?: AbortSignal | null; headers?: Record<string, string>; body?: unknown }
+    ) => {
       const url = String(input);
       requested.push(url);
       fetches.push({

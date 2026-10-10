@@ -1,14 +1,17 @@
 /**
- * The expressions, as data (docs/emotions.md): their names, the regions of
- * the face they move, how far, and how much of it each line of faces takes.
+ * The expressions, as data (docs/emotions.md): their names, how each moves
+ * the brows (as rigid strips, expression-brows.ts), the lids, the cheeks
+ * and the mouth's corners (regions, expression-rig.ts), which skin cues it
+ * shades (expression-shading.ts), and how much of it each line of faces
+ * takes.
  *
- * A region is a group of the 478 landmarks on each side of the face. A
- * displacement is in IODs (the distance between the eye centres) in the
- * face's own frame: x along the eye line, positive OUTWARD from the face's
- * midline (one number mirrors itself across the face), y down the face. So
- * a tilted photo, a small face and a large one read the same table, and an
- * expression is defined once, never per avatar. expression-rig.ts lays the
- * regions on a face; nothing here knows about one.
+ * Units are the face's own, never pixels: a region's displacement is in
+ * IODs (the distance between the eye centres) in the face's frame, x along
+ * the eye line positive OUTWARD from the midline (one number mirrors itself
+ * across the face), y down the face; a brow's rise is in its own
+ * brow-to-lid distance, as anatomy measures it. So a tilted photo, a small
+ * face and a large one read the same table, and an expression is defined
+ * once, never per avatar.
  */
 import { LOWER_LIDS, UPPER_LIDS } from "./landmarks";
 
@@ -44,202 +47,215 @@ export function expressionNamed(word: string): ExpressionName | null {
   return ALIASES[key] ?? null;
 }
 
-// --- The regions ---------------------------------------------------------------
+// --- The regions (everything but the brows) ---------------------------------------
 
-export const REGIONS = ["browInner", "browOuter", "upperLid", "lowerLid", "cheek", "mouthCorner"] as const;
+export const REGIONS = ["upperLid", "lowerLid", "cheek", "mouthCorner"] as const;
 export type Region = (typeof REGIONS)[number];
 /** The picture's left or right (the viewer's, not the subject's). */
 export type Side = "left" | "right";
 /** A region on both sides (mirrored) or on one. */
 export type RegionKey = Region | `${Region}.${Side}`;
 
-/** What bounds a region's reach besides its distance (expression-rig.ts). */
+/** What bounds a region's reach besides its distance (expression-weights.ts). */
 export type RegionMask =
-  /** Nothing at or below the upper lid's top: the forehead follows the
-   *  brows, the eye does not. */
-  | "aboveLids"
-  /** Above the eye's corner line only: the corners stay. */
+  /** Above the eye's corner line only, fading toward the corners. */
   | "aboveCorners"
-  /** Below the eye's corner line only. */
+  /** Below the eye's corner line only, fading toward the corners. */
   | "belowCorners"
   /** Nothing above the lower lid. */
   | "belowLids"
-  /** Nothing above the nose's base. */
-  | "belowNose";
+  /** The mouth's own field: nothing at the lips' middle, rising smoothly to
+   *  the corner and carrying the cheek beyond it (no anchors). */
+  | "mouth";
 
 export interface RegionSpec {
   /** The anchor landmarks, the picture's left side then its right. */
   readonly anchors: readonly [readonly number[], readonly number[]];
   /** How far a displacement reaches from the nearest anchor, IODs. */
   readonly reach: number;
-  /** The reach's scale upward and downward (1: round). */
-  readonly up: number;
-  readonly down: number;
   readonly mask: RegionMask;
 }
 
 export const REGION_SPECS: Readonly<Record<Region, RegionSpec>> = {
-  // The brows' upper and lower rows, inner and outer halves; the forehead
-  // above them follows a long way up, the lid crease below hardly at all.
-  browInner: {
-    anchors: [
-      [107, 66, 55, 65],
-      [336, 296, 285, 295],
-    ],
-    reach: 0.3,
-    up: 1.7,
-    down: 0.6,
-    mask: "aboveLids",
-  },
-  browOuter: {
-    anchors: [
-      [70, 63, 46, 53],
-      [300, 293, 276, 283],
-    ],
-    reach: 0.3,
-    up: 1.7,
-    down: 0.6,
-    mask: "aboveLids",
-  },
-  upperLid: { anchors: [UPPER_LIDS[0], UPPER_LIDS[1]], reach: 0.14, up: 1, down: 1, mask: "aboveCorners" },
-  lowerLid: { anchors: [LOWER_LIDS[0], LOWER_LIDS[1]], reach: 0.14, up: 1, down: 1, mask: "belowCorners" },
+  upperLid: { anchors: [UPPER_LIDS[0], UPPER_LIDS[1]], reach: 0.14, mask: "aboveCorners" },
+  lowerLid: { anchors: [LOWER_LIDS[0], LOWER_LIDS[1]], reach: 0.14, mask: "belowCorners" },
   cheek: {
     anchors: [
       [50, 101, 118, 117, 205, 36],
       [280, 330, 347, 346, 425, 266],
     ],
     reach: 0.32,
-    up: 1,
-    down: 1,
     mask: "belowLids",
   },
-  mouthCorner: {
-    anchors: [
-      [61, 78, 76, 62],
-      [291, 308, 306, 292],
-    ],
-    reach: 0.28,
-    up: 1,
-    down: 1.2,
-    mask: "belowNose",
-  },
+  mouthCorner: { anchors: [[61], [291]], reach: 0, mask: "mouth" },
 };
 
-/**
- * The most a region moves, IODs, however many expressions sum in it: what a
- * photo takes before it reads as distorted (docs/emotions.md, calibrated on
- * three published people at the dashboard's 960 px).
- */
+/** The most a region moves, IODs, however many expressions sum in it. */
 export const REGION_CAP: Readonly<Record<Region, number>> = {
-  browInner: 0.11,
-  browOuter: 0.11,
-  upperLid: 0.04,
-  lowerLid: 0.035,
-  cheek: 0.06,
-  mouthCorner: 0.11,
+  upperLid: 0.035,
+  lowerLid: 0.03,
+  cheek: 0.05,
+  mouthCorner: 0.1,
 };
+
+// --- The brows -------------------------------------------------------------------
+
+/** A displacement: [outward, down]; IODs for a region, and for a brow
+ *  [IODs outward, brow-to-lid distances down]. */
+export type Vec = readonly [number, number];
+
+/** A brow's move: its inner end, its middle and its outer end, smoothly
+ *  interpolated along it (a whole lift, a slant, an arch, a knit). */
+export interface BrowPose {
+  readonly inner: Vec;
+  readonly mid: Vec;
+  readonly outer: Vec;
+}
+
+/** A brow pose for both brows (mirrored), or for one, which wins. */
+export type BrowPoses = Readonly<Partial<Record<"both" | Side, BrowPose>>>;
+
+/** The most a brow's point moves however many expressions sum: its rise in
+ *  brow-to-lid distances, its knit in IODs. A shape may ask for more, up to
+ *  the cap over BROW_SATURATES, so that it is already clear at a partial
+ *  intensity and reaches the cap before full (concern's inner end: at 0.77). */
+export const BROW_CAP = { rise: 0.5, knit: 0.05 } as const;
+export const BROW_SATURATES = 0.75;
+
+// --- The skin cues ---------------------------------------------------------------
+
+/** The skin's own signs of an expression, shaded over the photo. */
+export const SKIN_CUES = ["foreheadLines", "glabellaLines", "nasolabial", "cheekLift", "crowsFeet"] as const;
+export type SkinCue = (typeof SKIN_CUES)[number];
 
 // --- The expressions -------------------------------------------------------------
 
-/** A displacement, IODs: [outward, down]. */
-export type Vec = readonly [number, number];
-
 export interface ExpressionShape {
-  /** Each region's displacement at intensity 1. */
+  /** Each region's displacement at intensity 1, IODs. */
   readonly regions: Readonly<Partial<Record<RegionKey, Vec>>>;
+  /** The brows' move at intensity 1. */
+  readonly brows?: BrowPoses;
+  /** How strongly each skin cue is shaded at intensity 1, 0..1. */
+  readonly cues?: Readonly<Partial<Record<SkinCue, number>>>;
   /** A jaw opening (the cue blend's jawOpen), while nothing is said. */
   readonly jaw?: number;
   /** Where the eyes go, eye widths ([x, y], y down). */
   readonly gaze?: Vec;
 }
 
+/** A brow pose, at a glance: [inner, mid, outer] rises (brow-to-lid
+ *  distances, + down) and knits (IODs, + outward). */
+const brow = (rise: [number, number, number], knit: [number, number, number] = [0, 0, 0]): BrowPose => ({
+  inner: [knit[0], rise[0]],
+  mid: [knit[1], rise[1]],
+  outer: [knit[2], rise[2]],
+});
+
+/**
+ * The amplitudes are anatomy's (docs/emotions.md): a surprise lifts the
+ * whole brow about 40% of the brow-to-lid distance, arched; concern lifts
+ * the inner third about 30%, the outer end level or a little down; anger
+ * lowers the inner end about 22% and knits each inner end 3.5% of the IOD.
+ * The eyes' opening changes only where an expression means it to: a smile's
+ * cheek pushes the lower lid up, a surprise lifts the upper lid.
+ */
 export const EXPRESSIONS: Readonly<Record<ShapeName, ExpressionShape>> = {
   neutral: { regions: {} },
-  // The corners up and back, the cheeks lifted, the lower lids up: a smile
-  // that reaches the eyes (a mouth-only smile reads as polite).
+  // The corners up and out with the cheek mass, the lower lids pushed up a
+  // little, the brows hardly; the fold from the nose deepens.
   happy: {
-    regions: { mouthCorner: [0.06, -0.08], cheek: [0.02, -0.035], lowerLid: [0, -0.03], browOuter: [0, -0.012] },
+    regions: { mouthCorner: [0.05, -0.075], cheek: [0.02, -0.045], lowerLid: [0, -0.028] },
+    brows: { both: brow([-0.03, -0.05, -0.05]) },
+    cues: { nasolabial: 1, cheekLift: 1, crowsFeet: 0.8 },
   },
-  // Brows up whole, the eyes opened, the jaw dropped a little when silent.
+  // The brows up whole and arched, the upper lids up, the jaw dropped a
+  // little when silent; the forehead creases.
   surprised: {
-    regions: { browInner: [0, -0.1], browOuter: [0.006, -0.09], upperLid: [0, -0.035], lowerLid: [0, 0.008] },
+    regions: { upperLid: [0, -0.025] },
+    brows: { both: brow([-0.4, -0.46, -0.38], [0, 0, 0.005]) },
+    cues: { foreheadLines: 1 },
     jaw: 0.16,
   },
-  // The inner brows up and together (the "grief" brow), the outer ends
-  // down, the corners down, the lids a little heavy.
+  // The oblique "worried" brow: the inner third up (not together: a knit
+  // reads as anger), the outer end level; the corners down; a few creases
+  // in the forehead's middle only (not the furrows between the brows: those
+  // are anger's, and read as it).
   concerned: {
-    regions: {
-      browInner: [-0.02, -0.08],
-      browOuter: [0, 0.02],
-      upperLid: [0, 0.012],
-      mouthCorner: [0, 0.06],
-    },
+    regions: { mouthCorner: [0, 0.06] },
+    brows: { both: brow([-0.65, -0.16, 0.05]) },
+    cues: { foreheadLines: 0.5 },
   },
-  // One brow up, the other a little down, the eyes up and aside, one
-  // corner pressed down: asymmetric on purpose.
+  // One brow (the picture's right) up, arched; the other a little down and
+  // in; the eyes up and aside; the mouth drawn to one side, one corner
+  // pressed down and the other a touch up.
   thinking: {
-    regions: {
-      "browOuter.right": [0, -0.09],
-      "browInner.right": [0, -0.04],
-      "browInner.left": [-0.012, 0.03],
-      "mouthCorner.left": [0, 0.025],
-      lowerLid: [0, -0.012],
-    },
-    gaze: [0.22, -0.16],
+    regions: { "mouthCorner.left": [0, 0.035], "mouthCorner.right": [0.01, -0.015] },
+    brows: { right: brow([-0.22, -0.42, -0.36]), left: brow([0.12, 0.08, 0.04], [-0.01, 0, 0]) },
+    gaze: [0.3, -0.2],
   },
-  // Brows down and together, lids narrowed, the corners pressed down (not
-  // in: with a rounded vowel's own narrowing that crushed the corner).
+  // The inner ends down and knit, the outer level; the lips pressed, the
+  // corners hardly down (a downturn is concern's); the vertical lines
+  // between the brows.
   serious: {
-    regions: {
-      browInner: [-0.04, 0.06],
-      browOuter: [0, 0.025],
-      upperLid: [0, 0.015],
-      lowerLid: [0, -0.025],
-      mouthCorner: [0, 0.025],
-    },
+    regions: { mouthCorner: [0, 0.015] },
+    brows: { both: brow([0.42, 0.2, 0.04], [-0.035, -0.012, 0]) },
+    cues: { glabellaLines: 1 },
   },
   // The idle brow flash: the brows alone.
-  browFlash: { regions: { browInner: [0, -0.06], browOuter: [0, -0.045] } },
+  browFlash: { regions: {}, brows: { both: brow([-0.25, -0.28, -0.22]) } },
 };
 
 // --- The lines of faces ------------------------------------------------------------
 
-/** How much of each region a line of faces takes (KindProfile.expression). */
-export type ExpressionGains = Readonly<Record<Region, number>>;
+/** How much of each part a line of faces takes (KindProfile.expression):
+ *  each region, the brows, the skin cues' shading, and how much a brow
+ *  may press or stretch the skin round it (`slack`, expression-brow-caps.ts:
+ *  a drawn face's flat skin shows a stretch less than a photo's). */
+export type ExpressionGains = Readonly<Record<Region | "brows" | "cues" | "slack", number>>;
 
 export const HUMAN_GAINS: ExpressionGains = {
-  browInner: 1,
-  browOuter: 1,
   upperLid: 1,
   lowerLid: 1,
   cheek: 1,
   mouthCorner: 1,
+  brows: 1,
+  cues: 1,
+  slack: 1,
 };
 
-/** A drawn or rendered character: its drawn mouth line needs a little more
- *  to read as a smile; flat cheeks have little to show. */
+/** A drawn or rendered character: its drawn eyes widen more in surprise
+ *  and its drawn mouth line needs a little more to read as a smile; its
+ *  clean, flat skin takes no shaded folds (a fold on it read as a line
+ *  drawn across the forehead) and shows a stretch less than a photo's. */
 export const TOON_GAINS: ExpressionGains = {
-  browInner: 1.1,
-  browOuter: 1.1,
-  upperLid: 1,
+  upperLid: 1.5,
   lowerLid: 1,
   cheek: 0.8,
   mouthCorner: 1.2,
+  brows: 1,
+  cues: 0,
+  slack: 2,
 };
 
 /** An animal: no lip corners to speak of (a muzzle's are a fit's anchors),
- *  fur over the brows. Faint by design. */
+ *  fur over the brows, no skin to crease. Faint by design. */
 export const ANIMAL_GAINS: ExpressionGains = {
-  browInner: 0.6,
-  browOuter: 0.6,
   upperLid: 0.7,
   lowerLid: 0.7,
   cheek: 0.5,
   mouthCorner: 0.5,
+  brows: 0.6,
+  cues: 0,
+  slack: 1,
 };
 
 /** The region and the sides a key names. */
 export function regionOf(key: RegionKey): { region: Region; sides: readonly Side[] } {
   const [region, side] = key.split(".") as [Region, Side | undefined];
   return { region, sides: side ? [side] : ["left", "right"] };
+}
+
+/** The brow pose `poses` gives `side`, if any. */
+export function browPoseOf(poses: BrowPoses | undefined, side: Side): BrowPose | undefined {
+  return poses?.[side] ?? poses?.both;
 }

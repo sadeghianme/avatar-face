@@ -466,7 +466,7 @@ export class AvatarEngine {
         traits: this.traits,
         lowerFace: picture.lowerFace,
         mouthExtension: this.mouthExtension,
-        expression: this.expressionRigs.get(picture.mesh, this.animation.expressions.active()),
+        expression: this.expressionRigs.get(picture.mesh, picture.texture, this.animation.expressions.active()),
       },
       into
     );
