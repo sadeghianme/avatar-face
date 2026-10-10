@@ -219,6 +219,127 @@ def teeth_shown(points: np.ndarray) -> str | None:
     return None
 
 
+@dataclass
+class FaceRegistration:
+    """An answer's face carried onto the base photo by register_face: the
+    registration so far (refused, or not yet), the answer's landmarks
+    registered into base pixels, and the view of the base they were
+    measured against (the detector's, or the confirmed points)."""
+
+    registration: PoseRegistration
+    registered: np.ndarray | None = None
+    base_view: np.ndarray | None = None
+
+
+def register_face(
+    answer: bytes,
+    request: PoseRequest,
+    base_image: Image.Image,
+    base_points: np.ndarray,
+    frame: ManifestFrame,
+    detect: Detector,
+    base_detected: np.ndarray | None = None,
+    *,
+    eye_guard: bool = True,
+) -> FaceRegistration:
+    """The part of registering an answer that every edit of this face
+    shares, whatever it asked for (a mouth shape, the teeth photo, an
+    expression): decode, the shape of the picture, detect, carry the
+    landmarks back through the crop and onto the base's anchors, and the
+    drift guards (head scale and rotation, the anchors' RMS, the nose, the
+    eyes unless `eye_guard` is False, the head's turn, the skin's colour).
+
+    `registered` is set only when every guard passed; `registration` then
+    has no reason yet and its checks so far. CPU work. See register_answer
+    for why the answer is compared with `base_detected`."""
+    base_view = base_points if base_detected is None else base_detected
+    result = PoseRegistration(request.shape)
+    out = FaceRegistration(result, base_view=base_view)
+    try:
+        with Image.open(io.BytesIO(answer)) as decoded:
+            image = decoded.convert("RGB")
+    except Exception:
+        # Broad on purpose: Pillow raises many types on bytes it cannot
+        # decode, and any of them is an unusable answer.
+        logger.warning("the %s answer is not a readable image", request.shape, exc_info=True)
+        result.reason = make_reason("unreadable_result", "The AI returned no usable image")
+        return out
+    aspect = image.width / image.height
+    result.checks["aspect"] = round(aspect / request.aspect, 4)
+    if abs(aspect / request.aspect - 1) > MAX_ASPECT_CHANGE:
+        # Mapped back per axis, a reframed answer would pass the guards with
+        # its mouth in the wrong place (head_square).
+        result.reason = make_reason(
+            "aspect_changed", "The AI answered with a picture of another shape than it was sent"
+        )
+        return out
+    points = detect(image)
+    if points is None:
+        result.reason = make_reason("no_face_in_result", "No face was found in the answer")
+        return out
+    points = np.asarray(points, dtype=np.float64)
+    if points.shape != (478, 2) or not np.isfinite(points).all():
+        result.reason = make_reason("no_face_in_result", "The answer's face was not fully found")
+        return out
+    result.answer_points, result.answer_size, result.answer_image = points, image.size, image
+
+    to_base = request.to_base(image.size)
+    mapped = points @ to_base[:, :2].T + to_base[:, 2]
+    try:
+        similarity = similarity_on_anchors(mapped, base_view)
+    except MirroredPose:
+        result.reason = make_reason("mirrored", "The answer is a mirror image of the face")
+        return out
+    checks = result.checks
+    checks["scale"] = round(similarity.scale, 4)
+    checks["rotation"] = round(similarity.degrees, 2)
+    if (
+        abs(similarity.scale - 1) > MAX_SCALE_CHANGE
+        or abs(similarity.degrees) > MAX_ROTATION_DEGREES
+    ):
+        result.reason = make_reason("head_moved", "The AI zoomed or tilted the head")
+        return out
+
+    registered = similarity.apply(mapped)
+    rms = registration_rms(registered, base_view) * frame.units_per_px
+    checks["rms"] = round(rms, 6)
+    if rms > MAX_REGISTRATION_RMS:
+        result.reason = make_reason(
+            "registration",
+            f"The eyes and nose do not line up (RMS {rms:.4f} > {MAX_REGISTRATION_RMS})",
+        )
+        return out
+
+    face = float(np.linalg.norm(base_view[FACE_RIGHT] - base_view[FACE_LEFT]))
+    nose = (
+        float(np.linalg.norm(registered[NOSE_GUARD] - base_view[NOSE_GUARD], axis=1).max()) / face
+    )
+    eyes = float(np.linalg.norm(registered[EYE_GUARD] - base_view[EYE_GUARD], axis=1).mean()) / face
+    yaw = abs(signed_yaw(points) - signed_yaw(base_view))
+    checks.update(nose=round(nose, 4), eyes=round(eyes, 4), yaw=round(yaw, 4))
+    if nose > MAX_NOSE_SHIFT:
+        result.reason = make_reason("nose_moved", "The AI moved or reshaped the nose")
+        return out
+    if eye_guard and eyes > MAX_EYE_SHIFT:
+        result.reason = make_reason("eyes_moved", "The AI moved or reshaped the eyes")
+        return out
+    if yaw > MAX_YAW_CHANGE:
+        result.reason = make_reason("head_turned", "The AI turned the head")
+        return out
+
+    drift = photo_adjust.skin_drift(base_image, base_view, image, points)
+    if drift is not None:
+        checks["skin_delta_e"] = round(drift, 2)
+        if drift > MAX_POSE_SKIN_DELTA_E:
+            result.reason = make_reason(
+                "skin_tone_changed", "The AI changed the skin tone or light"
+            )
+            return out
+    result.rms = rms
+    out.registered = registered
+    return out
+
+
 def register_answer(
     answer: bytes,
     request: PoseRequest,
@@ -246,88 +367,15 @@ def register_answer(
     the registered answer when nothing was corrected. Without a detection
     of the base (none found) the confirmed points stand in for it.
     """
-    base_view = base_points if base_detected is None else base_detected
-    result = PoseRegistration(request.shape)
-    try:
-        with Image.open(io.BytesIO(answer)) as decoded:
-            image = decoded.convert("RGB")
-    except Exception:
-        # Broad on purpose: Pillow raises many types on bytes it cannot
-        # decode, and any of them is an unusable answer.
-        logger.warning("the %s answer is not a readable image", request.shape, exc_info=True)
-        result.reason = make_reason("unreadable_result", "The AI returned no usable image")
+    face = register_face(answer, request, base_image, base_points, frame, detect, base_detected)
+    result, registered, base_view = face.registration, face.registered, face.base_view
+    if registered is None or base_view is None:
         return result
-    aspect = image.width / image.height
-    result.checks["aspect"] = round(aspect / request.aspect, 4)
-    if abs(aspect / request.aspect - 1) > MAX_ASPECT_CHANGE:
-        # Mapped back per axis, a reframed answer would pass the guards with
-        # its mouth in the wrong place (head_square).
-        result.reason = make_reason(
-            "aspect_changed", "The AI answered with a picture of another shape than it was sent"
-        )
-        return result
-    points = detect(image)
-    if points is None:
-        result.reason = make_reason("no_face_in_result", "No face was found in the answer")
-        return result
-    points = np.asarray(points, dtype=np.float64)
-    if points.shape != (478, 2) or not np.isfinite(points).all():
-        result.reason = make_reason("no_face_in_result", "The answer's face was not fully found")
-        return result
-    result.answer_points, result.answer_size, result.answer_image = points, image.size, image
-
-    to_base = request.to_base(image.size)
-    mapped = points @ to_base[:, :2].T + to_base[:, 2]
-    try:
-        similarity = similarity_on_anchors(mapped, base_view)
-    except MirroredPose:
-        result.reason = make_reason("mirrored", "The answer is a mirror image of the face")
-        return result
+    rms = result.rms
+    result.rms = None
     checks = result.checks
-    checks["scale"] = round(similarity.scale, 4)
-    checks["rotation"] = round(similarity.degrees, 2)
-    if (
-        abs(similarity.scale - 1) > MAX_SCALE_CHANGE
-        or abs(similarity.degrees) > MAX_ROTATION_DEGREES
-    ):
-        result.reason = make_reason("head_moved", "The AI zoomed or tilted the head")
-        return result
-
-    registered = similarity.apply(mapped)
-    rms = registration_rms(registered, base_view) * frame.units_per_px
-    checks["rms"] = round(rms, 6)
-    if rms > MAX_REGISTRATION_RMS:
-        result.reason = make_reason(
-            "registration",
-            f"The eyes and nose do not line up (RMS {rms:.4f} > {MAX_REGISTRATION_RMS})",
-        )
-        return result
-
-    face = float(np.linalg.norm(base_view[FACE_RIGHT] - base_view[FACE_LEFT]))
-    nose = (
-        float(np.linalg.norm(registered[NOSE_GUARD] - base_view[NOSE_GUARD], axis=1).max()) / face
-    )
-    eyes = float(np.linalg.norm(registered[EYE_GUARD] - base_view[EYE_GUARD], axis=1).mean()) / face
-    yaw = abs(signed_yaw(points) - signed_yaw(base_view))
-    checks.update(nose=round(nose, 4), eyes=round(eyes, 4), yaw=round(yaw, 4))
-    if nose > MAX_NOSE_SHIFT:
-        result.reason = make_reason("nose_moved", "The AI moved or reshaped the nose")
-        return result
-    if eyes > MAX_EYE_SHIFT:
-        result.reason = make_reason("eyes_moved", "The AI moved or reshaped the eyes")
-        return result
-    if yaw > MAX_YAW_CHANGE:
-        result.reason = make_reason("head_turned", "The AI turned the head")
-        return result
-
-    drift = photo_adjust.skin_drift(base_image, base_view, image, points)
-    if drift is not None:
-        checks["skin_delta_e"] = round(drift, 2)
-        if drift > MAX_POSE_SKIN_DELTA_E:
-            result.reason = make_reason(
-                "skin_tone_changed", "The AI changed the skin tone or light"
-            )
-            return result
+    points = result.answer_points
+    assert points is not None  # set by register_face before any guard passes
 
     rest_width = mouth_width(base_view)
     gap, width = _gap_and_width(registered, rest_width)
