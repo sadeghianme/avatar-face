@@ -96,6 +96,15 @@ describe("the masks", () => {
       expect(at(masks.upper, i), `landmark ${i}`).toBeLessThan(0.08);
   });
 
+  it("keep the source's own under-eyes for a surprise, and nothing else changes", () => {
+    const kept = pictureMasks(UV, SIZE, false, 1);
+    // Under each eye: right below the lower lid's middle mostly the
+    // source's, fading toward the corners.
+    for (const i of [23, 253]) expect(at(kept.upper, i), `landmark ${i}`).toBeLessThan(at(masks.upper, i) * 0.5);
+    for (const i of [230, 450]) expect(at(kept.upper, i), `landmark ${i}`).toBeLessThan(at(masks.upper, i) * 0.8);
+    for (const i of [9, 105, 334]) expect(at(kept.upper, i)).toBeCloseTo(at(masks.upper, i), 6);
+  });
+
   it("give a smiling picture its mouth, and no other picture one", () => {
     expect(at(masks.mouth!, 13)).toBeGreaterThan(0.9);
     expect(at(masks.mouth!, 9)).toBeLessThan(0.01);
@@ -242,6 +251,27 @@ describe("a picture on the face", () => {
     expect(Math.abs(at(1000 + ARRIVE_MS / 2) - at(1000 + ARRIVE_MS))).toBeGreaterThan(0.1);
     expect(layer.withoutPictures(mix({ surprised: 1, happy: 0.5 }), 5000)).toEqual(mix({ surprised: 0, happy: 0.5 }));
     expect(layer.withoutPictures(mix({ surprised: 1 }), 1000)).toEqual(mix({ surprised: 1 }));
+  });
+
+  it("takes the animation's amplitude as a floor where the picture moves less the same way", () => {
+    // A picture that moved nothing: with the floor, the masked landmarks
+    // move as the animation does; without it, not at all.
+    const still = { ...picture("happy"), name: "surprised" as const };
+    const layer = new ExpressionPictureLayer([still], m.base, 0, false);
+    const animated = restPts();
+    xr.apply(animated, mix({ surprised: 1 }), 1);
+    const i = 105;
+    const run = (floor: number) => {
+      layer.floor = floor;
+      const pts = restPts();
+      layer.apply(pts, mesh, mix({ surprised: 1 }), 1, xr, 1000);
+      return pts[i].y - mesh.basePoints[i].y;
+    };
+    expect(layer.floor).toBe(1);
+    const lift = animated[i].y - mesh.basePoints[i].y;
+    expect(lift).toBeLessThan(-1);
+    expect(run(1)).toBeCloseTo(lift, 6);
+    expect(Math.abs(run(0) - lift * (1 - layPicture(still, m.base, mesh).upper[i]))).toBeLessThan(1e-6);
   });
 
   it("shows a smiling picture's mouth only as far as the silence lets it", () => {

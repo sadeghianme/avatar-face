@@ -10,6 +10,10 @@
  *   mouth's middle (the speech moves the lips and the jaw). What is left is
  *   the brows, the forehead, the lids and the eyes' corners, the nose and the
  *   cheeks: what an expression changes and the speech does not.
+ * - With `underEye`, the skin under the eyes kept from the source: a
+ *   surprise changes the brows and the upper lids, never the cheeks under
+ *   the eyes, and a picture's darker, puffier under-eyes there read as
+ *   tired, not surprised (the blind judges, 2026-10-11).
  * - The mouth: the lips and a little round them, the opening included. Only
  *   for a picture that smiles with parted lips: the smile shown while the
  *   avatar is silent.
@@ -37,6 +41,8 @@ const BELOW_FROM = -0.04;
 const BELOW_TO = 0.04;
 /** The eyes' openings, cut with a narrow feather. */
 const EYE_FEATHER = 0.012;
+/** How far below the eye the source's own under-eye may be kept (pictureMasks `underEye`). */
+const UNDER_EYE = 0.12;
 /** The smile's mouth: the lips grown, feathered over this. */
 const SMILE_GROWN = 1.45;
 const SMILE_FEATHER = 0.08;
@@ -141,7 +147,12 @@ function field(size: readonly [number, number], value: (p: Point) => number): Ma
 }
 
 /** The picture's masks (see the module docstring). */
-export function pictureMasks(uv: readonly Point[], size: readonly [number, number], smile: boolean): PictureMasks {
+export function pictureMasks(
+  uv: readonly Point[],
+  size: readonly [number, number],
+  smile: boolean,
+  underEye = 0
+): PictureMasks {
   const face = Math.hypot(uv[454].x - uv[234].x, uv[454].y - uv[234].y) || 1;
   const oval = FACE_OVAL.map((i) => uv[i]);
   const lips = OUTER_LIPS.map((i) => uv[i]);
@@ -162,8 +173,15 @@ export function pictureMasks(uv: readonly Point[], size: readonly [number, numbe
     const below = ((p.x - mouth.x) * down.x + (p.y - mouth.y) * down.y) / face;
     const above = 1 - smoothstep((below - BELOW_FROM) / (BELOW_TO - BELOW_FROM));
     let open = 1;
-    for (const eye of eyes) open = Math.min(open, smoothstep(signedDistance(p, eye) / face / EYE_FEATHER));
-    return inOval * offLips * above * open;
+    let kept = 0;
+    for (const eye of eyes) {
+      const d = signedDistance(p, eye) / face;
+      open = Math.min(open, smoothstep(d / EYE_FEATHER));
+      // Below the eye, the source's own under-eye (`underEye` of it).
+      if (underEye > 0 && (p.x - eye[0].x) * down.x + (p.y - eye[0].y) * down.y > 0)
+        kept = Math.max(kept, underEye * (1 - smoothstep(d / UNDER_EYE)));
+    }
+    return inOval * offLips * above * open * (1 - kept);
   });
   const mouthField = smile
     ? field(size, (p) => 1 - smoothstep(signedDistance(p, smileLips) / face / SMILE_FEATHER))

@@ -117,6 +117,15 @@ avatar is silent. An expression with no picture plays animated.
   
   The picture's features land where the mesh put them. This is what removed
   mehdi_avatar's doubled smile fold, which a plain cross-fade drew.
+- **The animation's amplitude as a floor** (`floor`, 1): where the animated
+  expression moves a covered landmark further the same way than the
+  picture does, the landmark goes as far as the animation. A picture drawn
+  timidly still reads as its expression: Sakineh's surprise (brows up 0.02
+  of the face, the eyes not widened) went from losing to the animated one
+  in both orders to a split, and every other expression kept its wins.
+- **A surprise keeps the source's under-eyes** (`UNDER_EYE_KEPT`): a
+  surprise does not change the cheeks under the eyes, and the picture's
+  darker, puffier ones read as tired (the judges' note on that loss).
 - **The silent smile** (`PauseSmile`) eases in after 250 ms with no
   articulation, over 300 ms, and out over 90 ms as soon as the speech's
   target opens the mouth. The target leads the mouth, so the smile is gone

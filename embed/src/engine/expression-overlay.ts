@@ -67,8 +67,23 @@ function masked(picture: LoadedPicture, field: MaskField): HTMLCanvasElement {
   return out;
 }
 
+/** `picture` moved toward `animated` by `share` where the animation moves
+ *  further the same way (or the picture not at all): its amplitude a floor. */
+function atLeast(picture: number, animated: number, share: number): number {
+  const same = Math.sign(picture) === Math.sign(animated) || Math.abs(picture) < 1e-6;
+  return same && Math.abs(animated) > Math.abs(picture) ? picture + share * (animated - picture) : picture;
+}
+
 export class ExpressionPictureLayer {
   readonly smile = new PauseSmile();
+  /** How far the animated expression's amplitude is a floor under the
+   *  picture's, where both move a landmark the same way (0: the picture's
+   *  alone). A picture drawn timidly (Sakineh's surprise: brows up 0.02 of
+   *  the face where the animation lifts them twice that, the eyes not
+   *  widened) still reads as the expression; in the blind round it took
+   *  surprise from a loss in both orders to a tie and kept every other
+   *  expression's wins. */
+  floor = 1;
   /** How much of the silent smile shows this frame (PauseSmile). */
   smileLevel = 0;
   private laidFor: FaceMesh | null = null;
@@ -180,8 +195,14 @@ export class ExpressionPictureLayer {
         mask += (w / total) * m;
       }
       if (animated) {
-        dx += (warped[i].x - rest[i].x) * (1 - mask);
-        dy += (warped[i].y - rest[i].y) * (1 - mask);
+        const ax = warped[i].x - rest[i].x,
+          ay = warped[i].y - rest[i].y;
+        if (this.floor > 0) {
+          dx = atLeast(dx, ax * mask, this.floor);
+          dy = atLeast(dy, ay * mask, this.floor);
+        }
+        dx += ax * (1 - mask);
+        dy += ay * (1 - mask);
       }
       pts[i].x += dx;
       pts[i].y += dy;

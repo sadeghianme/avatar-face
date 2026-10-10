@@ -30,6 +30,16 @@ import { pictureMasks, type MaskField, type PictureMasks } from "./expression-pi
 export const PICTURE_NAMES = ["happy", "surprised", "concerned", "thinking", "serious"] as const;
 export type PictureName = (typeof PICTURE_NAMES)[number];
 
+/** How much of the source's own under-eye each picture leaves (pictureMasks):
+ *  all of it for a surprise, which does not change it. */
+export const UNDER_EYE_KEPT: Readonly<Record<PictureName, number>> = {
+  happy: 0,
+  surprised: 1,
+  concerned: 0,
+  thinking: 0,
+  serious: 0,
+};
+
 /** Where an avatar's pictures are: the manifest and each picture (presigned). */
 export interface ExpressionPictureSource {
   manifestUrl: string;
@@ -118,7 +128,7 @@ export async function loadPictures(
       if (!entry || !url) return null;
       try {
         const image = await loadImage(url);
-        return { name, entry, image, masks: pictureMasks(entry.uv, entry.size, entry.smile) };
+        return { name, entry, image, masks: pictureMasks(entry.uv, entry.size, entry.smile, UNDER_EYE_KEPT[name]) };
       } catch {
         return null;
       }
