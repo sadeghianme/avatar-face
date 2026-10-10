@@ -450,6 +450,10 @@ proportion to it; in the "2d" head motion, a brow flash (0.8 of `browFlash`,
 160 ms up, 120 held, 320 down, at most every 1.5 s) on the speech's emphasis
 beats. The "3d" personality flashes the brows itself.
 
+## AI expression pictures (option 2)
+
+For an avatar whose owner chose them, an expression with an AI picture is laid from that picture (its upper face, morphed under a mask; the mouth stays the speech's, a smile shows while silent) instead of the warp above; the others play as here. See docs/ai-expressions.md.
+
 ## Module map
 
 | File | Lines | What |
