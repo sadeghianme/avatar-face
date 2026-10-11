@@ -13,6 +13,14 @@ export const LANDMARK_COUNT = 478;
 // Canonical MediaPipe brow rows, inner -> outer.
 export const LEFT_BROW = [55, 65, 52, 53, 46];
 export const RIGHT_BROW = [285, 295, 282, 283, 276];
+/** Each brow's upper and lower edge, inner end to outer, column by column:
+ *  the picture's left brow, then its right (the lower edges are the rows
+ *  above). */
+export const BROW_UPPER: readonly [readonly number[], readonly number[]] = [
+  [107, 66, 105, 63, 70],
+  [336, 296, 334, 293, 300],
+];
+export const BROW_LOWER: readonly [readonly number[], readonly number[]] = [LEFT_BROW, RIGHT_BROW];
 
 // Eyes split into lids: a blink is the UPPER lid sweeping down over the
 // eyeball (skin from above stretches down to cover it) — NOT the whole ring

@@ -14,12 +14,12 @@ from app.api.deps import DB, OrgMember
 from app.core.errors import RateLimit429
 from app.db import get_session_factory
 from app.schemas.tts import (
-    CueOut,
     ProviderOut,
     SynthesizeRequest,
     SynthesizeResponse,
     VoiceOut,
 )
+from app.services.tts.answer import synthesis_answer
 from app.services.tts.languages import available_languages
 from app.services.tts.registry import available_providers, get_provider, synthesize_cached
 from app.services.tts.stream import error_frame, pcm_packet, phrase_batch_size, speech_phrases
@@ -71,13 +71,7 @@ async def synthesize(body: SynthesizeRequest, ctx: OrgMember, db: DB) -> Synthes
     await record_synthesis(
         db, ctx.org.id, body.provider, len(body.text), cached, source="dashboard"
     )
-    return SynthesizeResponse(
-        audio_b64=base64.b64encode(result.audio).decode(),
-        audio_mime=result.audio_mime,
-        duration_ms=result.duration_ms,
-        cues=[CueOut(**c) for c in result.cues],
-        cached=cached,
-    )
+    return await synthesis_answer(body, result, cached)
 
 
 @router.post("/orgs/{org_id}/stream")

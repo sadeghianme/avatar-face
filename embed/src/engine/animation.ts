@@ -6,12 +6,17 @@
  * speech is going. And the speech's course as the motion follows it: an
  * utterance begun, its track grown or re-synced, ended.
  *
+ * The expressions (expression-mixer.ts) are stepped here too: the track a
+ * text's tags made, walked on the speech's clock, an expression's jaw as a
+ * floor while nothing is said, its gaze on top of the motion's.
+ *
  * The speech (speech.ts), the motion and the face state (state.ts) are the
  * engine's; this sequences them.
  */
 import type { MouthPose } from "../mouth-extension";
 import { ZERO_WEIGHTS, type BlendWeights, type Cue, type EngineTuning, type Rig } from "../types";
-import { emphasisBeats, utteranceMs } from "./cues";
+import { emphasisBeats, utteranceMs, type Beat } from "./cues";
+import { ExpressionMixer, type ExpressionCue } from "./expression-mixer";
 import { FrameStep } from "./frame-loop";
 import type { Motion } from "./motion";
 import { articulate, easeTongue, type SpeechTrack } from "./speech";
@@ -22,6 +27,15 @@ export class FaceAnimation {
   /** The mouth's target while nothing speaks: one, reset each frame, not a
    *  copy a frame. */
   private readonly rest: BlendWeights = { ...ZERO_WEIGHTS };
+  /** The expressions over time (engine.setExpression, a text's tags). */
+  readonly expressions = new ExpressionMixer();
+  /** How much of an expression's silent jaw drop this face takes (its
+   *  line's ExpressionGains.jaw). */
+  expressionJaw = 1;
+  /** The speech's accents, walked for the idle brow flash ("2d" motion:
+   *  the "3d" personality flashes the brows itself). */
+  private beats: Beat[] = [];
+  private nextBeat = 0;
 
   constructor(
     private readonly speech: SpeechTrack,
@@ -52,9 +66,15 @@ export class FaceAnimation {
     const face = this.face;
     // Viseme targets: co-articulated blend across cues (+ amplitude
     // fallback when the track is silent but audio clearly isn't).
+    const posed = this.pose?.()?.weights;
     const visemeWeights =
-      this.pose?.()?.weights ??
+      posed ??
       (speech.speaking ? this.blendedCueWeights(now, tuning.smoothness) : Object.assign(this.rest, ZERO_WEIGHTS));
+    this.stepExpressions(now, tuning);
+    // An expression's jaw (surprise's) only while nothing is said: the
+    // voice owns the jaw, and a mouth driver's pose wins over both.
+    if (!posed && !speech.speaking)
+      visemeWeights.jawOpen = this.expressions.jaw() * this.expressionJaw * tuning.expression;
     const silent = speech.speaking && speech.currentViseme(now) === "sil";
     if (silent) {
       const amp = speech.amplitude();
@@ -84,30 +104,68 @@ export class FaceAnimation {
     });
   }
 
+  /** The expressions at `now`: the track walked on the speech's clock, the
+   *  accents' brow flash, the mix into the face state, the gaze. */
+  private stepExpressions(now: number, tuning: EngineTuning): void {
+    const { speech, expressions } = this;
+    if (speech.speaking) {
+      const cueTime = speech.cueTime(now);
+      expressions.walk(cueTime, now);
+      while (this.nextBeat < this.beats.length && this.beats[this.nextBeat].t <= cueTime) {
+        this.nextBeat++;
+        if (this.motion.mode === "2d") expressions.accent(now);
+      }
+    }
+    this.face.expression = expressions.step(now, speech.speaking);
+    const bias = expressions.gaze(this.motion.gazeBias);
+    bias.x *= tuning.expression;
+    bias.y *= tuning.expression;
+  }
+
   // --- The speech's course, as the motion follows it -------------------------
 
-  /** An utterance of `cues` begins at `now`: the speech has its track. */
-  begin(now: number, cues: Cue[]): void {
-    this.motion.beginSpeech(now, utteranceMs(cues), emphasisBeats(this.speech.cues));
+  /** An utterance of `cues` begins at `now`, with the expression track a
+   *  text's tags made (none: an empty track). */
+  begin(now: number, cues: Cue[], expressions: readonly ExpressionCue[] = []): void {
+    this.speech.begin(cues);
+    this.expressions.setTrack(expressions);
+    this.beats = emphasisBeats(this.speech.cues);
+    this.nextBeat = 0;
+    this.motion.beginSpeech(now, utteranceMs(cues), this.beats);
     if (this.motion.mode === "3d") this.motion.setSpeechCues(this.speech.cues);
   }
 
   /** The speech's track was replaced (it grew), at cue time `ms`. */
   retrack(ms: number): void {
-    this.motion.setBeats(emphasisBeats(this.speech.cues), ms);
+    this.beats = emphasisBeats(this.speech.cues);
+    this.placeBeats(ms);
+    this.motion.setBeats(this.beats, ms);
     if (this.motion.mode === "3d") this.motion.setSpeechCues(this.speech.cues, ms);
   }
 
   /** The speech's clock was re-aligned to cue time `ms`. */
   resync(ms: number): void {
+    this.placeBeats(ms);
+    this.expressions.seek(ms);
     this.motion.placeBeatWalker(ms);
     if (this.motion.mode === "3d") this.motion.setSpeechCues(this.speech.cues, ms);
   }
 
-  /** The speech ended, stopped or on its own, at `now`: the mouth heads
-   *  for rest. */
-  end(now: number): void {
+  /** The speech ended at `now`, on its own or `stopped`: the mouth heads
+   *  for rest. A stop releases what the text's tags set; a voice that ended
+   *  on its own sets what of its track it did not reach (an expression at
+   *  the very end carries into the next chunk; the text's closing release
+   *  always lands). */
+  end(now: number, stopped = false): void {
+    if (stopped) this.expressions.releaseText(now);
+    else this.expressions.walk(Infinity, now);
     this.face.targetWeights = { ...ZERO_WEIGHTS };
     this.motion.endSpeech(now);
+  }
+
+  /** The accents' walker placed at cue time `ms`. */
+  private placeBeats(ms: number): void {
+    const i = this.beats.findIndex((b) => b.t > ms);
+    this.nextBeat = i < 0 ? this.beats.length : i;
   }
 }

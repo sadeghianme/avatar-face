@@ -4498,6 +4498,11 @@
             "default": "offline-warm",
             "title": "Voice",
             "type": "string"
+          },
+          "word_marks": {
+            "description": "Also answer each word's start time (`word_marks`): what places a text's expressions on the voice. Absent or false, the answer has no such key.",
+            "title": "Word Marks",
+            "type": "boolean"
           }
         },
         "required": [
@@ -4530,6 +4535,14 @@
           "duration_ms": {
             "title": "Duration Ms",
             "type": "integer"
+          },
+          "word_marks": {
+            "description": "Each word's start in the audio, ms, when the request asked for them.",
+            "items": {
+              "$ref": "#/components/schemas/WordMark"
+            },
+            "title": "Word Marks",
+            "type": "array"
           }
         },
         "required": [
@@ -4726,6 +4739,7 @@
         "type": "object"
       },
       "WordMark": {
+        "description": "Where a word starts: its first character in the text, and its time, ms.",
         "properties": {
           "char": {
             "title": "Char",

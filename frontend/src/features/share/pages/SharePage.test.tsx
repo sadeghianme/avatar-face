@@ -17,6 +17,8 @@ import { apiError, createServer } from "@/test/server";
 const engine = vi.hoisted(() => ({
   options: [] as unknown[],
   played: [] as string[],
+  /** Each played line's expression track. */
+  tracks: [] as unknown[],
   destroyed: 0,
   browserVoice: false,
 }));
@@ -27,8 +29,9 @@ vi.mock("@liveface/embed", async (importOriginal) => ({
     constructor(_canvas: unknown, _rig: unknown, _texture: unknown, options: unknown) {
       engine.options.push(options);
     }
-    playAudio(audio: string, _mime: string, _cues: unknown, done: () => void) {
+    playAudio(audio: string, _mime: string, _cues: unknown, done: () => void, track?: unknown) {
       engine.played.push(audio);
+      engine.tracks.push(track);
       done();
     }
     setLayers() {}
@@ -87,6 +90,7 @@ describe("the share page", () => {
   beforeEach(() => {
     engine.options = [];
     engine.played = [];
+    engine.tracks = [];
     engine.destroyed = 0;
     engine.browserVoice = false;
   });
@@ -112,6 +116,22 @@ describe("the share page", () => {
     await waitFor(() => expect(engine.played).toEqual(["UklGRg=="]));
     const [request] = view.server.requests("POST", `/public/v1/avatars/${TOKEN}/speak`);
     expect(request.body).toEqual({ text: "Hello there", provider: "kokoro", voice: "am_adam", locale: "en-GB" });
+  });
+
+  it("keeps a line's expression tags from the voice and plays them on the face", async () => {
+    const view = setup();
+    const play = await screen.findByRole("button", { name: t("sharePlay") });
+    await waitFor(() => expect(engine.options).toHaveLength(1));
+    // userEvent reads "[" as a key descriptor: "[[" types one.
+    await view.user.type(screen.getByPlaceholderText(t("sharePlaceholder")), "[[happy] Hello there");
+    await view.user.click(play);
+    await waitFor(() => expect(engine.played).toHaveLength(1));
+    const [request] = view.server.requests("POST", `/public/v1/avatars/${TOKEN}/speak`);
+    expect(request.body).toMatchObject({ text: "Hello there" });
+    expect(engine.tracks[0]).toEqual([
+      { t: 0, name: "happy", intensity: 1 },
+      { t: 400, name: "neutral", intensity: 0 },
+    ]);
   });
 
   it("Enter says the line; Shift+Enter is a new line", async () => {

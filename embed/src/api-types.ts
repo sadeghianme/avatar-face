@@ -228,8 +228,15 @@ export interface SynthesizeResponse {
   cached: boolean;
   cues: CueOut[];
   duration_ms: number;
+  /**
+   * Each word's start in the audio, ms, when the request asked for them.
+   */
+  word_marks?: WordMark[];
 }
 
+/**
+ * Where a word starts: its first character in the text, and its time, ms.
+ */
 export interface WordMark {
   char: number;
   t: number;

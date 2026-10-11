@@ -31,6 +31,8 @@ const speech = vi.hoisted(() => ({
   failWith: null as unknown,
   /** Holds the next stream open until released. */
   hold: null as null | (() => void),
+  /** Every stream's expressions (its options'), in order. */
+  expressed: [] as unknown[],
 }));
 
 vi.mock("@liveface/embed", async (importOriginal) => ({
@@ -41,8 +43,9 @@ vi.mock("@liveface/embed", async (importOriginal) => ({
       return Promise.resolve();
     }
   },
-  streamSpeech: (_engine: unknown, request: () => Promise<Response>) => {
+  streamSpeech: (_engine: unknown, request: () => Promise<Response>, options?: { expressions?: unknown }) => {
     void request();
+    speech.expressed.push(options?.expressions);
     const failure = speech.failWith;
     speech.failWith = null;
     return {
@@ -149,6 +152,7 @@ describe("the Speak panel", () => {
     speech.stopped = 0;
     speech.failWith = null;
     speech.hold = null;
+    speech.expressed = [];
   });
 
   it("offers a sample in the chosen language, and follows the language until the member types", async () => {
@@ -173,6 +177,32 @@ describe("the Speak panel", () => {
     await view.user.click(screen.getByRole("button", { name: t("stop") }));
     expect(speech.stopped).toBe(1);
     await waitFor(() => expect(speak).toBeEnabled());
+  });
+
+  it("never sends a line's expression tags to the voice: they drive the face, in time with it", async () => {
+    const view = setup();
+    await waitFor(() => expect(box()).toHaveValue("Hello there"));
+    await view.user.clear(box());
+    // userEvent reads "[" as a key descriptor: "[[" types one.
+    await view.user.type(box(), "[[happy] Hello! [[concerned:0.6] Bad news.");
+    await view.user.click(screen.getByRole("button", { name: t("speak") }));
+    await waitFor(() => expect(speech.said).toEqual(["Hello! Bad news."]));
+    expect(speech.expressed[0]).toEqual({
+      text: "Hello! Bad news.",
+      marks: [
+        { char: 0, name: "happy", intensity: 1 },
+        { char: 7, name: "concerned", intensity: 0.6 },
+        { char: 16, name: "neutral", intensity: 0 },
+      ],
+    });
+  });
+
+  it("sends a line without tags as it is", async () => {
+    const view = setup();
+    await waitFor(() => expect(box()).toHaveValue("Hello there"));
+    await view.user.click(screen.getByRole("button", { name: t("speak") }));
+    await waitFor(() => expect(speech.said).toEqual(["Hello there"]));
+    expect(speech.expressed[0]).toEqual({ text: "Hello there", marks: [] });
   });
 
   it("a refused line is said under the box", async () => {

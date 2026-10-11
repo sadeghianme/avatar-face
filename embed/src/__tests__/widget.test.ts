@@ -314,6 +314,23 @@ describe("liveface.js on a customer's page", () => {
       engine.destroy();
     });
 
+    it.each([
+      ["by default (tags only)", {}, false],
+      ['with data-expressions="auto"', { expressions: "auto" }, true],
+      ['with data-idle-expressions="on"', { idleExpressions: "on" }, true],
+      [
+        'with data-expressions="auto" and data-idle-expressions="off"',
+        { expressions: "auto", idleExpressions: "off" },
+        false,
+      ],
+    ])("keeps the idle micro-expressions off unless asked: %s", async (_, dataset, on) => {
+      const p = page(resources as Record<string, Resource>);
+      await settled(await p.embed({ avatar: "av_1", ...dataset }));
+      const engine = p.window.Liveface!.engine as AvatarEngine;
+      expect(engine.idleExpressions()).toBe(on);
+      engine.destroy();
+    });
+
     // The rig in these is a person's with no render profile, as a cat's or a
     // cartoon's fitted before profiles existed is: only the published face
     // type tells them apart.
@@ -466,6 +483,29 @@ describe("liveface.js on a customer's page", () => {
       destroyAll(p);
     });
 
+    it("shows an expression on one widget; Liveface.express is the first's, and tags never reach the voice", async () => {
+      vi.stubGlobal("Audio", FakeAudio);
+      const p = page(resources);
+      await settled(await p.embed({ avatar: "av_1" }));
+      await settled(await p.embed({ avatar: "av_2" }));
+      const Liveface = p.window.Liveface!;
+      const [one, other] = Liveface.all() as LivefaceHandle[];
+      other.express("smile", 0.6);
+      expect((other.engine as AvatarEngine).expression).toMatchObject({ name: "happy", intensity: 0.6 });
+      expect((one.engine as AvatarEngine).expression.name).toBe("neutral");
+      Liveface.express("surprised");
+      expect((one.engine as AvatarEngine).expression.name).toBe("surprised");
+      one.express("not-an-expression");
+      expect((one.engine as AvatarEngine).expression.name).toBe("surprised");
+
+      void one.speak("Hello there, [happy:0.5] my friend, how are you today?");
+      await vi.waitFor(() => expect(one.engine!.isSpeaking()).toBe(true));
+      const sent = JSON.parse(p.network.fetches.find((f) => f.url === SYNTH)!.body!);
+      expect(sent).toMatchObject({ text: "Hello there, my friend, how are you today?", word_marks: true });
+      one.stop();
+      destroyAll(p);
+    });
+
     it("speaks with each widget's own key and voice, and stops one while the other speaks on", async () => {
       vi.stubGlobal("Audio", FakeAudio);
       const p = page(resources);
@@ -528,6 +568,8 @@ describe("liveface.js on a customer's page", () => {
       expect(Liveface.engine).toBe(Liveface.get("av_1")!.engine);
       Liveface.get("m_1")!.tune({ mouthOpen: 1.5 });
       expect(engine3d.tuning.mouthOpen).toBe(1.5);
+      // No expressions on a 3D avatar yet: a quiet no-op.
+      expect(() => Liveface.get("m_1")!.express("happy")).not.toThrow();
       (Liveface.get("av_1")!.engine as AvatarEngine).destroy();
     });
 

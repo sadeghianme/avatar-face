@@ -19,6 +19,7 @@
  */
 import { blinkEase } from "./blink";
 import type { CharacterField, CharacterTraits } from "./character-mouth";
+import type { ExpressionRig } from "./expression-rig";
 import { applyLowerFace, UPPER_FACE, type LowerFaceRig } from "./jaw-rig";
 import type { KindProfile } from "./kind-profile";
 import type { MouthExtension } from "../mouth-extension";
@@ -167,6 +168,9 @@ export interface DeformInput {
   /** A layered avatar's neck band, placed where the neck's warp puts the
    *  layers under it (neck-blend.ts). Absent: it moves with the head. */
   pin?: NeckPin | null;
+  /** The face's expressions (expression-rig.ts), laid on after the lower
+   *  face and before the turn; absent or with nothing on, none. */
+  expression?: ExpressionRig | null;
   /** The head's field's own vertices (head-field.ts, FaceMesh.head),
    *  written into the vertices from FaceMesh.head.first (after the neck
    *  band's), turned with the face (head-turn.ts HeadTurn.field). Absent:
@@ -273,6 +277,10 @@ export function deformFace(f: DeformInput, into: FrameVertices = { landmarks: []
   // the cheeks follow the jaw and the lip shapes. After the driver, so it
   // reads what the lip actually did, jaw range and all.
   if (f.lowerFace) applyLowerFace(pts, mesh.basePoints, f.lowerFace, w, tuning.mouthOpen);
+
+  // The expressions, in the face's rest frame, over whatever the speech
+  // did (expression-rig.ts: speech keeps the lips); the turn turns both.
+  f.expression?.apply(pts, face.expression, tuning.expression);
 
   f.turn?.(pts);
   // A driver that put a new point in a landmark's place rather than move

@@ -1,4 +1,4 @@
-import { type AvatarEngine, BrowserTTS } from "@liveface/embed";
+import { type AvatarEngine, BrowserTTS, spokenText, timeExpressionMarks } from "@liveface/embed";
 import { type RefObject, useState } from "react";
 
 import { phraseCues, type PublicAvatar, serverVoiceFor, speakPublic } from "@/features/share/api";
@@ -50,14 +50,18 @@ export function useShareSpeech(
         voice: serverVoice?.voice ?? "af_heart",
         locale: serverVoice?.locale ?? "en-US",
       };
-      let served = await speakPublic(token, { text: spoken, ...voice });
+      // Expression tags ("[happy] Hello!") are the face's: never sent to
+      // the voice, played in time with it (docs/emotions.md).
+      const said = spokenText(spoken);
+      let served = await speakPublic(token, { text: said.text, ...voice });
       if ("refused" in served && served.refused === "cloned_line_missing") {
-        served = await speakPublic(token, { text: spoken, ...(await serverVoiceFor(voice.locale)) });
+        served = await speakPublic(token, { text: said.text, ...(await serverVoiceFor(voice.locale)) });
       }
       if ("spoken" in served) {
         const audio = served.spoken;
+        const track = said.marks.length ? timeExpressionMarks(said.marks, said.text, audio.duration_ms) : undefined;
         await new Promise<void>((resolve) => {
-          engineRef.current!.playAudio(audio.audio_b64, audio.audio_mime, audio.cues, resolve);
+          engineRef.current!.playAudio(audio.audio_b64, audio.audio_mime, audio.cues, resolve, track);
         });
         return;
       }

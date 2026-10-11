@@ -1,4 +1,5 @@
 import type { CharacterTraits } from "./character-mouth";
+import { ANIMAL_GAINS, HUMAN_GAINS, TOON_GAINS, type ExpressionGains } from "./expression-table";
 import type { FaceType, Rig } from "../types";
 
 /**
@@ -49,6 +50,10 @@ export interface KindProfile {
    * fit.
    */
   readonly headMotion: "2d" | "3d";
+  /** How much of each region of an expression the line takes
+   *  (expression-table.ts): a drawn mouth line needs more to read as a
+   *  smile, a muzzle has no lip corners to speak of. */
+  readonly expression: ExpressionGains;
 }
 
 export const HUMAN_PROFILE: KindProfile = {
@@ -60,6 +65,7 @@ export const HUMAN_PROFILE: KindProfile = {
   blink: "mesh",
   traits: { teeth: "upper", tongue: true, jaw: 1 },
   headMotion: "3d",
+  expression: HUMAN_GAINS,
 };
 
 const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
@@ -77,6 +83,7 @@ const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
       blink: "mesh",
       traits: { teeth: "none", tongue: true, jaw: 1 },
       headMotion: "2d",
+      expression: ANIMAL_GAINS,
     },
   ],
   [
@@ -93,6 +100,7 @@ const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
       blink: "lid",
       traits: { teeth: "upper", tongue: true, jaw: 1 },
       headMotion: "2d",
+      expression: TOON_GAINS,
     },
   ],
   [
@@ -108,6 +116,7 @@ const PROFILES: ReadonlyMap<string, KindProfile> = new Map([
       blink: "lid",
       traits: { teeth: "none", tongue: true, jaw: 1.15 },
       headMotion: "2d",
+      expression: ANIMAL_GAINS,
     },
   ],
 ]);
@@ -134,6 +143,23 @@ export function defaultHeadMotion(
 ): KindProfile["headMotion"] {
   if (faceType == null) return profile.headMotion;
   return faceType === "human" ? "3d" : "2d";
+}
+
+/**
+ * How much of an expression this avatar takes (docs/emotions.md,
+ * "Characters and animals"): its rig profile's gains, unless the avatar's
+ * face type (EngineOptions.faceType) says more. An animal takes the
+ * animal's faint, safe amplitudes and no skin cues whatever its rig (a
+ * cat fitted with the human profile got a smile that cracked its drawn
+ * eyes); a cartoon takes no skin cues (on drawn skin a shaded fold reads as
+ * a line drawn across it). Whether a person's picture is a photograph,
+ * which alone takes the cues, is read from the picture itself
+ * (expression-look.ts).
+ */
+export function expressionGains(profile: Pick<KindProfile, "expression">, faceType?: FaceType | null): ExpressionGains {
+  if (faceType === "animal") return ANIMAL_GAINS;
+  if (faceType === "cartoon") return { ...profile.expression, cues: 0 };
+  return profile.expression;
 }
 
 /** The profile names this build knows; the backend writes only these. */

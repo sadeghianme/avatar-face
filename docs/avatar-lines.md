@@ -1745,6 +1745,25 @@ drawn mouth, make your own in the Mouth panel).
   resampled twice (its picture bent, then drawn), a softening of under a
   picture pixel (the photo has 512 per mouth width) that a frontal one does
   not have.
+- Expressions (2026-10-10, prototype on `proto/emotions-expressions`;
+  docs/emotions.md is the design; `engine/expression-table.ts`,
+  `expression-rig.ts`, `expression-mixer.ts`, `src/expression-markup.ts`).
+  Six named expressions (neutral, happy, surprised, concerned, thinking,
+  serious) at 0..1, as displacements of six landmark regions per side (inner
+  and outer brow, upper and lower lid, cheek, mouth corner) in IODs in the
+  face's frame, one typed table for every avatar, scaled per line
+  (`KindProfile.expression`). Laid on in `deformFace` after the lower face
+  and before the turn, read at each landmark's REST position and the inner
+  lips of a column given one weight, so the speech's opening is carried
+  exactly; the outline never moves (no seam), the iris centres never move,
+  their rims go with the lids; a per-face fold calibration lowers a shape's
+  ceiling where it would fold (none needed on any face measured). Driven by
+  `engine.setExpression(name, intensity, {attackMs, holdMs, releaseMs})`,
+  `Liveface.express`, `[happy]`/`[happy:0.6]` tags stripped before the voice
+  and timed by word marks the synthesize routes answer on request
+  (`word_marks`), an automatic mode and seeded idle micro-expressions
+  (`data-expressions="auto"`), off by default: every golden byte-identical.
+  Measured: docs/emotions.md, "Measured".
 
 ## Data changes
 

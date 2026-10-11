@@ -65,6 +65,10 @@ export interface EngineTuning {
    * the escape hatch: on a portrait where it still reads wrong, turn it off
    * and lose nothing but the blink. */
   blink: number;
+  /** Scales every expression (engine.setExpression, a text's tags, the
+   *  idle micro-expressions), 0..1; 0 turns them off. For a photo where a
+   *  raised brow drags glasses or a fringe, as `blink` is for a blink. */
+  expression: number;
 }
 
 export const DEFAULT_TUNING: EngineTuning = {
@@ -79,6 +83,7 @@ export const DEFAULT_TUNING: EngineTuning = {
   // becomes visible as a wash across the eye well before the lid looks
   // closed. This is the largest sweep that stays under that.
   blink: 0.22,
+  expression: 1,
 };
 
 export const ZERO_WEIGHTS: BlendWeights = {

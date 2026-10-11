@@ -184,6 +184,25 @@ async def test_embed_synthesize(client):
     )
     assert response.status_code == 200
     assert response.json()["cues"]
+    # Word times only when asked: every other answer is as it was.
+    assert "word_marks" not in response.json()
+
+
+async def test_embed_synthesize_word_marks_place_a_texts_expressions(client):
+    _, _, _, created = await _setup(client)
+    text = "Hello! I'm so glad you're here."
+    response = await client.post(
+        "/embed/v1/synthesize",
+        json={"text": text, "provider": "offline", "voice": "offline-warm", "word_marks": True},
+        headers={"X-Api-Key": created["plaintext"]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    marks = body["word_marks"]
+    assert [text[m["char"] : m["char"] + 2] for m in marks] == ["He", "I'", "so", "gl", "yo", "he"]
+    assert marks[0]["t"] == 0
+    assert all(a["t"] < b["t"] for a, b in zip(marks, marks[1:], strict=False))
+    assert marks[-1]["t"] < body["duration_ms"]
 
 
 async def test_embed_rate_limit(client):

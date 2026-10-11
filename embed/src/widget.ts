@@ -17,6 +17,9 @@
  *   Liveface.listen({lang}) — browser STT, resolves with the transcript
  *   Liveface.sttSupported()
  *   Liveface.tune({...}), Liveface.engine
+ *   Liveface.express(name, intensity?, timing?) — an expression ("happy",
+ *                           "surprised", "concerned", "thinking", "serious";
+ *                           "neutral" releases), docs/emotions.md
  *
  * With several widgets on a page, those act on the FIRST to come up (on a
  * page with one, that one), and each widget has its own handle with the
@@ -39,6 +42,13 @@
  * data-debug on the snippet (or ?liveface-debug in the page's URL) puts the
  * engine on globalThis.__liveface for the console (engine/debug-handle.ts).
  *
+ * Tags in the text said, `[happy]`, `[surprised:0.6]`, set expressions in
+ * time with the voice and are never read aloud (on by default). Both of the
+ * rest are opt-in: data-expressions="auto" also guesses them for a text
+ * without tags and adds idle micro-expressions; data-idle-expressions="on"
+ * adds the idle ones alone ("off" keeps them off even with "auto");
+ * data-expressions="off" ignores tags (still stripped).
+ *
  * data-head-motion="2d" or "3d" chooses how the head moves (engine.ts
  * EngineOptions.headMotion); without it, the avatar's own default, by its
  * published face type: the turn in depth for a person, the rigid layer for
@@ -49,6 +59,8 @@ import { BrowserTTS } from "./browser-tts";
 import { aiLabel, renderAiLabel } from "./widget/disclosure";
 import { AvatarEngine, type HeadMotionMode } from "./engine";
 import type { Avatar3DEngine, Avatar3DOptions } from "./engine3d";
+import { expressionNamed } from "./engine/expression-table";
+import { expressionMode } from "./expression-markup";
 import { SpeechQueue } from "./speech";
 import { speechErrorOfResponse } from "./speech-error";
 import { listen, sttSupported, ListenOptions } from "./stt";
@@ -147,6 +159,8 @@ async function mount(
   let locale = script.dataset.locale ?? "";
   // The console handle (engine/debug-handle.ts): off unless asked for.
   const debug = switchedOn(script.dataset.debug) || new URLSearchParams(location.search).has("liveface-debug");
+  // How a text's expressions are read: tags (the default), auto, off.
+  const expressions = expressionMode(script.dataset.expressions);
 
   const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
   // The published avatar (backend schemas.published, EmbedAvatarOut): its
@@ -211,6 +225,12 @@ async function mount(
       // turns in depth, an animal's or a cartoon's moves as a layer).
       headMotion: headMotionAttr(script.dataset.headMotion),
       faceType: info.face_type,
+      // Off unless asked for: by data-idle-expressions, or with the
+      // automatic mode.
+      idleExpressions:
+        script.dataset.idleExpressions !== undefined
+          ? switchedOn(script.dataset.idleExpressions)
+          : expressions === "auto",
       debug,
     });
     engine = photoEngine;
@@ -254,18 +274,20 @@ async function mount(
     }
   }
 
-  const synth = async (text: string): Promise<SynthesizeResponse> => {
+  const synth = async (text: string, options?: { wordMarks?: boolean }): Promise<SynthesizeResponse> => {
+    // Each word's start time only for a text with expressions to place.
+    const marks = options?.wordMarks ? { word_marks: true } : {};
     const response = await fetch(`${apiBase}/embed/v1/synthesize`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ text, provider, voice, locale }),
+      body: JSON.stringify({ text, provider, voice, locale, ...marks }),
     });
     // Liveface.speak() rejects with the API's reason (SpeechError: its
     // code, detail and status), so a page can branch on the code.
     if (!response.ok) throw await speechErrorOfResponse(response);
     return (await response.json()) as SynthesizeResponse;
   };
-  const queue = new SpeechQueue(engine, synth);
+  const queue = new SpeechQueue(engine, synth, { expressions, locale });
   // data-provider="browser": free local speechSynthesis voices.
   const useBrowserVoice = provider === "browser" && BrowserTTS.supported();
   // The browser voice gets its timing from the same phoneme-duration model
@@ -280,7 +302,7 @@ async function mount(
     const data = (await response.json()) as CueResponse;
     return { cues: data.cues, durationMs: data.duration_ms, wordMarks: data.word_marks };
   };
-  const browserTts = useBrowserVoice ? new BrowserTTS(engine, fetchCues) : null;
+  const browserTts = useBrowserVoice ? new BrowserTTS(engine, fetchCues, expressions) : null;
 
   const handle: LivefaceHandle = {
     avatar: avatarId,
@@ -295,6 +317,11 @@ async function mount(
     sttSupported,
     tune: (partial: Partial<EngineTuning>) => {
       Object.assign(engine.tuning, partial);
+    },
+    // The 3D engine has no expressions yet: a quiet no-op there.
+    express: (name, intensity = 1, timing) => {
+      const known = expressionNamed(name);
+      if (known && engine instanceof AvatarEngine) engine.setExpression(known, intensity, timing);
     },
     engine,
   };

@@ -4,6 +4,7 @@
  * the deformation and the painters read it.
  */
 import { ZERO_WEIGHTS, type BlendWeights } from "../types";
+import { NONE, type ShapeMix } from "./expression-rig";
 import type { Point } from "./geometry";
 
 export interface FaceState {
@@ -19,6 +20,9 @@ export interface FaceState {
   blink: number;
   /** Where the eyes look: offsets in eye-widths. */
   gaze: Point;
+  /** How much of each expression is on, 0..1 each (expression-mixer.ts):
+   *  laid on the face after the mouth and the jaw (expression-rig.ts). */
+  expression: ShapeMix;
 }
 
 /** A face at rest: mouth closed, eyes open and on the viewer. */
@@ -29,5 +33,6 @@ export function restingFace(): FaceState {
     tongue: 0,
     blink: 0,
     gaze: { x: 0, y: 0 },
+    expression: NONE,
   };
 }

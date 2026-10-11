@@ -55,7 +55,7 @@ export interface FakeNetwork {
   /** Every download in order, fetch() and image sources alike. */
   requested: string[];
   /** Every fetch() in order, with the headers it sent. */
-  fetches: { url: string; headers: Record<string, string> }[];
+  fetches: { url: string; headers: Record<string, string>; body?: string }[];
 }
 
 /**
@@ -69,10 +69,17 @@ export function stubNetwork(resources: Record<string, Resource>): FakeNetwork {
   const find = (url: string): Resource => resources[url] ?? { status: 404 };
   vi.stubGlobal(
     "fetch",
-    async (input: string | URL, init?: { signal?: AbortSignal | null; headers?: Record<string, string> }) => {
+    async (
+      input: string | URL,
+      init?: { signal?: AbortSignal | null; headers?: Record<string, string>; body?: unknown }
+    ) => {
       const url = String(input);
       requested.push(url);
-      fetches.push({ url, headers: { ...(init?.headers ?? {}) } });
+      fetches.push({
+        url,
+        headers: { ...(init?.headers ?? {}) },
+        ...(typeof init?.body === "string" ? { body: init.body } : {}),
+      });
       if (init?.signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
       const resource = find(url);
       if ("offline" in resource) throw new TypeError("Failed to fetch");

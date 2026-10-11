@@ -7,6 +7,8 @@
  * driven by estimated per-character cues, re-synchronized on every word
  * boundary event the engine emits.
  */
+import type { ExpressionCue } from "./engine/expression-mixer";
+import { expressionMarks, timeExpressionMarks, type ExpressionMode } from "./expression-markup";
 import { Cue } from "./types";
 
 const LATIN: Record<string, string> = {
@@ -65,7 +67,8 @@ export function estimatedCues(text: string, durationMs: number): Cue[] {
 
 /** What BrowserTTS needs from an engine (both 2D and 3D provide it). */
 export interface CuePlayer {
-  playCues(cues: Cue[]): void;
+  /** `expressions`: the text's expression track, on the cues' clock. */
+  playCues(cues: Cue[], expressions?: ExpressionCue[]): void;
   syncCueTime(ms: number): void;
   stopSpeech(): void;
 }
@@ -89,7 +92,9 @@ export class BrowserTTS {
    */
   constructor(
     private player: CuePlayer,
-    private cueSource?: (text: string) => Promise<CueTiming | null>
+    private cueSource?: (text: string) => Promise<CueTiming | null>,
+    /** How the text's expressions are read (speech.ts SpeechQueueOptions). */
+    private expressions: ExpressionMode = "tags"
   ) {}
 
   static supported(): boolean {
@@ -120,8 +125,12 @@ export class BrowserTTS {
   private heartbeat = 0;
   private startTimeout = 0;
 
-  async speak(text: string, voiceURI?: string, lang?: string): Promise<void> {
+  async speak(tagged: string, voiceURI?: string, lang?: string): Promise<void> {
     this.stop();
+    // The expressions' tags out of what is said (expression-markup.ts),
+    // released when the text ends.
+    const { text, marks: expressed } = expressionMarks(tagged, this.expressions, lang);
+    if (expressed.length) expressed.push({ char: text.length, name: "neutral", intensity: 0 });
     // Fetch BEFORE speaking: cues must be ready the instant onstart fires,
     // or the first word plays against a still-closed mouth.
     let timing: CueTiming | null = null;
@@ -168,7 +177,8 @@ export class BrowserTTS {
       utterance.onstart = () => {
         clearTimeout(this.startTimeout);
         this.active = true;
-        this.player.playCues(cues);
+        if (expressed.length) this.player.playCues(cues, timeExpressionMarks(expressed, text, estimate, marks));
+        else this.player.playCues(cues);
         // Chrome bug #2: long speech silently dies after ~15s unless the
         // engine is poked with resume() periodically.
         this.heartbeat = window.setInterval(() => {

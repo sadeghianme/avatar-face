@@ -32,11 +32,13 @@
  *   engine/headmotion.ts             where the head is going (the rigid "2d" motion)
  *   engine/head-personality.ts       where it is turning (the "3d" motion)
  *   engine/bodymotion.ts             the sway and the breath
+ *   engine/expression-mixer.ts     the expressions over time (expression-table.ts the data)
  *   engine/state.ts                the face state those write
  *   engine/frame-loop.ts           the frame loop (the 3D engine's too)
  * The frame
  *   engine/head-placement.ts       where the head is: its rigid motion, its turn, the neck
  *   engine/deform.ts               every vertex, this frame, with
+ *   engine/expression-rig.ts         the expressions laid on the face, then
  *   engine/head-turn.ts              the head's turn in depth, from
  *   engine/head-depth.ts               the depth it is given (canonical-face.ts, fitted)
  *   engine/head-camera.ts              the turn about the pivot, through the camera
@@ -75,13 +77,16 @@
  * StrictMode: the loop and every async callback bail once it is set.
  */
 import { mergeTraits, type CharacterTraits } from "./engine/character-mouth";
-import { defaultHeadMotion, kindProfile, type KindProfile } from "./engine/kind-profile";
+import { defaultHeadMotion, expressionGains, kindProfile, type KindProfile } from "./engine/kind-profile";
 import type { MouthExtension } from "./mouth-extension";
 import { DEFAULT_TUNING, type Cue, type EngineTuning, type Rig } from "./types";
 import type { Affine } from "./engine/affine";
 import { FaceAnimation } from "./engine/animation";
 import { NO_DEBUG_HANDLE, exposeDebugHandle } from "./engine/debug-handle";
 import { deformFace, type FrameVertices } from "./engine/deform";
+import type { ExpressionCue, ExpressionState, ExpressionTiming } from "./engine/expression-mixer";
+import { ExpressionRigs } from "./engine/expression-rig";
+import type { ExpressionName } from "./engine/expression-table";
 import { FrameLoop } from "./engine/frame-loop";
 import { validInnerRing, type Point } from "./engine/geometry";
 import { HeadPlacement } from "./engine/head-placement";
@@ -150,6 +155,8 @@ export class AvatarEngine {
   private readonly motion = new Motion(this.face);
   /** The face a step at a time, as the speech goes (animation.ts). */
   private readonly animation: FaceAnimation;
+  /** The expressions laid on the mesh now, built when first needed. */
+  private readonly expressionRigs: ExpressionRigs;
   /** A mouth renderer that moves and paints the mouth instead (mouth/). */
   private mouthExtension?: MouthExtension;
   private readonly frameLoop: FrameLoop;
@@ -184,6 +191,7 @@ export class AvatarEngine {
       classicMouth: this.classicMouth,
       viseme: this.viseme,
       debugRing: this.debugMesh ? this.innerRing : null,
+      expressionRig: this.expressionRigs.built,
       posed: this.placement.posedMouth(this.picture.mesh.basePoints),
     });
   private readonly viseme = () => this.animation.visemeNow(performance.now());
@@ -216,6 +224,10 @@ export class AvatarEngine {
       picture.warpSource(placement.turning)
     );
     this.innerRing = validInnerRing(rig);
+    const gains = expressionGains(this.profile, opts.faceType);
+    this.expressionRigs = new ExpressionRigs(rig.triangles, gains);
+    this.animation.expressionJaw = gains.jaw;
+    this.animation.expressions.setIdle(opts.idleExpressions ?? false);
     this.classicMouth = new ClassicMouth(ctx, this.profile, this.innerRing);
     this.motion.mode = opts.headMotion ?? defaultHeadMotion(this.profile, opts.faceType);
     this.picture.useHeadLayer(opts.cutOutHeadLayer ?? false);
@@ -348,6 +360,27 @@ export class AvatarEngine {
     return this.placement.stats();
   }
 
+  // --- Expressions (docs/emotions.md) -----------------------------------------
+  /** Show `name` at `intensity` (0..1) on `timing`, over the speech; "neutral" releases. */
+  setExpression(name: ExpressionName, intensity = 1, timing: ExpressionTiming = {}): void {
+    this.animation.expressions.set(name, intensity, timing, performance.now(), "api");
+  }
+
+  /** The expressions now: the one asked for, how far in, every weight. */
+  get expression(): ExpressionState {
+    return this.animation.expressions.state();
+  }
+
+  /** The idle micro-expressions on or off (EngineOptions.idleExpressions). */
+  setIdleExpressions(on: boolean): void {
+    this.animation.expressions.setIdle(on);
+  }
+
+  /** Whether the idle micro-expressions are on (off unless asked for). */
+  idleExpressions(): boolean {
+    return this.animation.expressions.idleOn;
+  }
+
   // --- Public speech API -----------------------------------------------------
 
   /**
@@ -356,21 +389,19 @@ export class AvatarEngine {
    * the audio element's own position (media-clock.ts): the mouth waits for
    * the voice however long it takes to start, and rests while it pauses.
    */
-  playAudio(audioB64: string, mime: string, cues: Cue[], onEnd?: () => void): void {
+  playAudio(audioB64: string, mime: string, cues: Cue[], onEnd?: () => void, expressions?: ExpressionCue[]): void {
     const audio = this.speech.load(audioB64, mime, onEnd ?? null);
-    this.speech.begin(cues);
-    this.animation.begin(performance.now(), cues);
+    this.animation.begin(performance.now(), cues, expressions);
     this.speech.play(audio, cues.length < 4);
   }
 
   /** Drive lip-sync from an externally played voice (e.g. speechSynthesis):
-   * cues only, no audio element. */
-  playCues(cues: Cue[]): void {
+   * cues only, no audio element; `expressions` on the same clock. */
+  playCues(cues: Cue[], expressions?: ExpressionCue[]): void {
     this.speech.stopAudio();
-    this.speech.begin(cues);
     const now = performance.now();
+    this.animation.begin(now, cues, expressions);
     this.speech.startClock(now);
-    this.animation.begin(now, cues);
   }
 
   /** Swap the mouth renderer on a live engine (null: the classic mouth).
@@ -389,6 +420,12 @@ export class AvatarEngine {
     this.animation.retrack(time);
   }
 
+  /** The speech's expression track moved in time (the same cues, in the
+   *  same order): a stream that learnt how long its speech is. */
+  retimeExpressions(track: ExpressionCue[]): void {
+    this.animation.expressions.retime(track);
+  }
+
   /** Re-align the cue clock to a known position in the track (ms). */
   syncCueTime(ms: number): void {
     this.speech.seek(ms, performance.now());
@@ -397,7 +434,7 @@ export class AvatarEngine {
 
   stopSpeech(): void {
     this.speech.stop();
-    this.animation.end(performance.now());
+    this.animation.end(performance.now(), true);
   }
 
   isSpeaking(): boolean {
@@ -443,6 +480,7 @@ export class AvatarEngine {
         traits: this.traits,
         lowerFace: picture.lowerFace,
         mouthExtension: this.mouthExtension,
+        expression: this.expressionRigs.get(picture.mesh, picture.texture, this.animation.expressions.active()),
       },
       into
     );

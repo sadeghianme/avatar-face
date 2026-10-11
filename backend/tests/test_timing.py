@@ -10,8 +10,10 @@ from app.services.tts.timing import (
     PAUSE_MS,
     cues_for_duration,
     cues_from_segments,
+    plan_utterance,
     segment_text,
     total_duration_ms,
+    word_marks_for_duration,
 )
 
 
@@ -58,6 +60,22 @@ def test_cues_for_duration_scales_to_audio():
     cues = cues_for_duration("Hello there, friend.", 2000)
     assert cues[-1]["t"] <= 2001
     assert cues[-1]["t"] > 1500  # actually fills the audio
+
+
+def test_word_marks_for_duration_retime_the_planned_words_to_the_audio():
+    text = "Hello! I'm so glad you're here."
+    segments, planned = plan_utterance(text)
+    modelled = total_duration_ms(segments)
+    marks = word_marks_for_duration(text, modelled * 2)
+    assert [m["char"] for m in marks] == [m["char"] for m in planned]
+    assert [text[m["char"] : m["char"] + 4] for m in marks][:2] == ["Hell", "I'm "]
+    assert [m["t"] for m in marks] == [round(m["t"] * 2) for m in planned]
+    assert all(a["t"] <= b["t"] for a, b in zip(marks, marks[1:], strict=False))
+
+
+def test_word_marks_for_duration_handles_no_audio_or_no_words():
+    assert all(m["t"] == 0 for m in word_marks_for_duration("Hello there.", 0))
+    assert word_marks_for_duration("", 1000) == []
 
 
 def test_cues_for_duration_handles_empty():

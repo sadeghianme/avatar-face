@@ -217,6 +217,22 @@ def cues_for_duration(
     return cues_from_segments(segments, scale=duration_ms / modelled, envelope=envelope)
 
 
+def word_marks_for_duration(text: str, duration_ms: int, locale: str = "en-US") -> list[dict]:
+    """Each word's start in audio of a KNOWN duration, ms: the planner's own
+    word offsets retimed to fit it, as `cues_for_duration` retimes the cues,
+    so the two agree. Places a text's expressions (docs/emotions.md); for a
+    provider with timing of its own (Kokoro's native spans) it is the
+    model's estimate, within a word or so.
+
+    BLOCKS outside English, as `plan_utterance` does: on the event loop, run
+    it on a planning thread.
+    """
+    segments, marks = plan_utterance(text, locale)
+    modelled = total_duration_ms(segments)
+    scale = duration_ms / modelled if modelled > 0 and duration_ms > 0 else 0.0
+    return [{"char": m["char"], "t": round(m["t"] * scale)} for m in marks]
+
+
 def cues_from_text(
     text: str, duration_ms: int, locale: str = "en-US", audio: bytes | None = None
 ) -> list[dict]:
