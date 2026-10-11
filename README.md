@@ -68,13 +68,14 @@ What CI runs, per package (`.github/workflows/ci.yml`):
 | backend | `ruff check .` · `ruff format --check .` (`ruff format .` fixes it) · `pyright` · the OpenAPI document re-exported and compared (`python -m scripts.export_openapi`) · migrations against the models (`alembic upgrade head` then `alembic check`, on an empty SQLite) · `python -m pytest tests -q -n auto --cov` (or `make test` without coverage, `make coverage` with it, from the root) |
 | embed | `npm run lint` · `npm run format:check` · `npm run typecheck` (sources and tests) · `npm run check:api` (generated API types) · `npm run test:coverage` (vitest, pixel goldens included, with coverage; `npm test` without) · `npm run build` · `npm run test:browser` (Chromium; the speech timing test also in Firefox and WebKit, with the backend's speech encoder) |
 | frontend | `npm run check` (feature boundaries, en/fr parity) · `npm run lint` · `npm run format:check` · `npm run typecheck` (app and tests) · `npm run check:api` (generated API types) · `npm run test:coverage` (`node --test` with coverage, Node 22+; `npm test` without) · `npm run test:ui:coverage` (rendering tests with coverage; `npm run test:ui` without) · `npm run build` (type check + bundle) |
-| deploy | `deploy/test-deploy.sh` (every gate of `deploy.sh`) · ShellCheck on `deploy/*.sh` |
-| images | both Dockerfiles build, boot and pass `deploy/smoke/web-sweep.mjs`: every page in headless Chrome, zero CSP violations ([docs/process.md](docs/process.md#ci)) |
+| deploy | `deploy/test-deploy.sh` (every gate of `deploy.sh`, and a whole pulled deploy against a pretend server) · ShellCheck on `deploy/*.sh` |
+| images | both Dockerfiles build (BuildKit, the Actions layer cache), the API's `pip freeze` is `backend/constraints.txt`, both boot and pass `deploy/smoke/web-sweep.mjs` (every page in headless Chrome, zero CSP violations) and `deploy/smoke/wizard-e2e.mjs`; on main and in the merge queue the tested images are then pushed to `ghcr.io/sadeghianme/liveface-{api,web}:<commit>`, which the owner keeps private ([docs/process.md](docs/process.md#images)) |
 
-CI runs on every push to main and every pull request; a newer push cancels the
-run it supersedes. The backend runs as three parallel jobs: its checks, and
-its tests in two halves; a fourth combines the halves' coverage. The required
-`backend` check passes only when all four do ([docs/process.md](docs/process.md#ci)).
+CI runs on every push to main, every pull request and every merge queue
+entry; a newer push cancels the run it supersedes. The backend runs as four
+parallel jobs: its checks, and its tests in three shards; another combines
+the shards' coverage. The required `backend` check passes only when all of
+them do ([docs/process.md](docs/process.md#ci)).
 
 ### Coverage
 
@@ -130,16 +131,19 @@ public page that may be framed by any site.
 ## Deploy and roll back
 
 ```bash
-deploy/deploy.sh --dry-run    # every check, then what would ship
+deploy/deploy.sh --dry-run    # every check, then what would happen
 deploy/deploy.sh              # ship HEAD: clean tree, pushed to origin/main, CI green on it
 deploy/deploy.sh --rollback   # put back the release that was live before
+deploy/deploy.sh --build      # fallback: build on the server instead of pulling
 ```
 
-A deploy ships `git archive` of one commit, never the working tree, bakes the
-commit into both images, backs up the database first, and finishes only when
+A deploy ships one commit, never the working tree: the server pulls the two
+images CI built and tested for it (`ghcr.io/sadeghianme/liveface-{api,web}:<commit>`,
+private, read with a one-time `docker login` on the server) and builds
+nothing. It backs up the database first, and finishes only when
 `/api/health` and `/version.json` report that commit. The whole release path,
-branch protection, rollback with a database restore, and how every pin is
-moved: [docs/process.md](docs/process.md).
+the server's registry login, the merge queue, branch protection, rollback with
+a database restore, and how every pin is moved: [docs/process.md](docs/process.md).
 
 ## Scaling up (all optional)
 

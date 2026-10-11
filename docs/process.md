@@ -8,33 +8,57 @@ and `.github/workflows/ci.yml`.
 ## Release path
 
 ```
-branch ──PR──▶ CI green ──merge──▶ CI green on main ──▶ deploy.sh <commit> ──▶ verified ──(if needed)──▶ deploy.sh --rollback
+branch ──PR──▶ CI green ──merge──▶ CI green on main ──▶ deploy.sh ──▶ verified ──(if needed)──▶ deploy.sh --rollback
+                                    (images pushed)      (pulls them)
 ```
 
 1. **Branch and pull request.** `git switch -c <topic>`, commit, `git push -u
    origin <topic>`, `gh pr create --fill`. CI runs every job on the pull
    request (table below).
 2. **Merge when green.** Branch protection (below) refuses the merge until
-   every job passes and the branch is up to date with main.
+   every job passes and the branch is up to date with main. With the
+   [merge queue](#merge-queue), **Merge when ready** queues the pull request
+   instead, and the queue tests and merges it.
 3. **CI on main.** The merge is a push to main, and CI runs again on that exact
-   commit. `deploy.sh` accepts only a commit whose *own* push run on main
-   succeeded: a pull request's run tested a merge commit, not this tree.
-   `gh run watch` follows it.
+   commit. When every test has passed, its `images` job pushes the two images
+   it tested to GitHub's registry, tagged with the commit ([Images](#images)).
+   `deploy.sh` accepts only a commit whose *own* push run on main succeeded:
+   a pull request's run tested a merge commit, not this tree. In the merge
+   queue, the queue's run of the commit counts too: it is the same commit,
+   tested (and its images pushed) before it reached main. `gh run watch`
+   follows a run.
 4. **Deploy.** From a clean checkout of main at that commit:
 
    ```bash
    git switch main && git pull --ff-only
-   deploy/deploy.sh --dry-run    # every check, then what would ship; contacts no server
+   deploy/deploy.sh --dry-run    # every check, then what would happen; contacts no server
    deploy/deploy.sh              # or: deploy/deploy.sh --ref <commit on origin/main>
    ```
 
+   The server pulls the images and restarts on them. It builds nothing.
 5. **Verified by the script, not by eye.** The deploy ends only when
    `https://avatar.mehdisadeghian.com/api/health` and `/version.json` both report
-   the commit it built, then prints the alembic revision, row counts and a
+   the commit it shipped. It then prints the alembic revision, row counts and a
    summary. Embedding sites cache the widget for up to 4 hours: hard-refresh one
    to see a widget change.
 6. **Roll back** if anything looks wrong: `deploy/deploy.sh --rollback`
    ([Rollback](#rollback)).
+
+**How long it takes.** Measured on 2026-10-09. CI takes about 5 minutes with a
+warm layer cache. The `images` job is the longest, and its browser sweep and
+wizard take 3 of those minutes. The first run on a branch, and the first on
+main, takes about 10, because it fills the cache. Pushing the images adds 5 to
+20 seconds. A pulled deploy should take about a minute (estimated from its
+parts before the first one ran: one ssh connection, a pull of a few MB, the
+backup, the restart and the health check; the first pulled deploy downloads
+everything once and prunes the old images, a minute or two more). So from
+merge to live should be about 6 to 7 minutes of machine time. Before pull mode, CI took 4.6 to 6.9
+minutes, and the server built for about a minute when its layer cache held
+everything below the source. When the cache missed, the build fetched ~850 MB
+of models and reinstalled the libraries. What remains between "ready" and
+"merged" is mostly `strict`: a pull request that is behind main must be
+updated and tested again first. That wait is what the
+[merge queue](#merge-queue) removes.
 
 ### What deploy.sh refuses
 
@@ -45,45 +69,249 @@ Before anything leaves the machine:
 | 2 | unknown option, or `--ref` is not a commit | `deploy/deploy.sh --help` |
 | 3 | the working tree has changes | commit and push them (and wait for CI), or stash them |
 | 4 | the commit is not on `origin/main` | push it; CI must run on it first |
-| 5 | the commit's own `ci` run on main is still running, failed, was cancelled, or never ran | wait (`gh run watch`), fix, or deploy the newest pushed commit |
-| 6 | a tool is missing (`git`, `gh`, `rsync`, `ssh`, `curl`, `tar`) | install it; `gh auth status` must be logged in |
+| 5 | no successful `ci` run of this commit: its push run on main is still running, failed, was cancelled, or never ran, and no merge queue run of it succeeded (a *failed* main run is refused even then) | wait (`gh run watch`), fix, or deploy the newest pushed commit |
+| 6 | a tool is missing (`git`, `gh`, `ssh`, `curl`; with `--build`, `rsync` and `tar`) | install it; `gh auth status` must be logged in |
+
+Then on the server, before anything there changes:
+
+| Exit | Refused because | What to do |
+|---|---|---|
+| 7 | the server cannot pull from `ghcr.io`: the images are private and docker there has no login, or the registry refused its login (a token without `read:packages`, or an expired one). The pull is tried first, so public images need no login | [the one-time login](#one-time-the-servers-registry-login); the script prints the steps and says which case it is |
+| 8 | the registry has no image of this commit: CI pushes them only for a commit on main or in the merge queue whose `images` job passed, and only since images are pulled | deploy a newer commit, or build this one on the server: `deploy/deploy.sh --build --ref <commit>` |
 
 Uncommitted files under `frontend/public/brand/` are the one exception to exit
 3: the owner keeps brand experiments there. They are listed as *not shipped*
-and never are, because what ships is `git archive <commit>`, not the working
-tree. Every gate is tested in CI by `deploy/test-deploy.sh` (a scratch
-repository with a stub `gh`).
+and never are: what ships is the commit (its images, or with `--build` its
+`git archive`), never the working tree. Every gate is tested in CI by
+`deploy/test-deploy.sh`: a scratch repository with a stub `gh`, and a whole
+pulled deploy against a pretend server (stub `ssh`, `docker` and `curl`) that
+checks the order of the server's steps, that nothing is built, and that
+refusals 7 and 8 come before any change.
 
 ### What a deploy does on the server
 
-1. `rsync --delete` the exported commit to `/root/projects/liveface`. The
-   excludes (`.env`, databases, `backend/local_storage`, …) only protect
-   server-side files from `--delete`; `deploy/.env` exists only there.
-2. Refuse to continue if `deploy/.env` is missing or empty.
-3. Back up the live SQLite database with `VACUUM INTO` (`deploy/backup_db.py`:
+All of it runs over one ssh connection, multiplexed. A new connection to the
+server takes 3.5 s and a deploy runs about a dozen commands; over the first
+connection each takes 0.6 s.
+
+1. Refuse to continue if `deploy/.env` is missing or empty.
+2. Pull `ghcr.io/sadeghianme/liveface-api:<commit>` and
+   `ghcr.io/sadeghianme/liveface-web:<commit>`. Refusals 7 and 8 come from
+   this step, with the old release serving and nothing changed. After the
+   first pull the server has every layer below the application's source
+   (system libraries, models, Python libraries, nginx), so a code change
+   downloads only the layers above it. Measured on the first push: the API
+   image is 1,530 MB compressed in 20 layers, and its layers above the
+   libraries are about 3 MB (the source 0.4, the installed project 1.7, the
+   widget bundles 0.8). The dashboard image is 35 MB, 9.7 of it the build. A
+   code change pulls 3 to 13 MB, under a second at the 170 to 290 MB/s the
+   server measured from `ghcr.io`. The first pull, about 1.6 GB, is about 10
+   seconds of download, plus the unpacking (estimated at under a minute).
+3. Write `deploy/docker-compose.prod.yml` from `git archive <commit>`, the only
+   file of the tree the server needs. `deploy/.env` is in no commit, so this
+   cannot touch it.
+4. Back up the live SQLite database with `VACUUM INTO` (`deploy/backup_db.py`:
    one consistent snapshot through the WAL, compacted, so free pages are not
    copied) to `/data/liveface.sqlite3.bak-<stamp>` and keep the newest 10
    (`BACKUP_KEEP=<n>` to change). The backups hold the database only: the
    files in storage (pictures, rigs, the speech cache) are not in them.
-4. Tag the last verified release (`:release`) as `:previous`, for `--rollback`.
-5. `LIVEFACE_VERSION=<commit> docker compose -f docker-compose.prod.yml up -d --build`.
-   The commit is baked into both images: `ENV LIVEFACE_VERSION` and the
+5. Tag the last verified release (`:release`) as `:previous`, for `--rollback`.
+6. Tag the pulled images as the ones compose runs,
+   `liveface-liveface-api:latest` and `liveface-liveface-web:latest`, and
+   `docker compose -f docker-compose.prod.yml up -d --no-build`. The commit is
+   baked into both images: `ENV LIVEFACE_VERSION` and the
    `org.opencontainers.image.revision` label in the API, `/version.json` and
-   the label in the dashboard. Compose replaces no container until both images
-   build, so a failed build leaves the old release serving.
-6. Wait up to 5 minutes for `/api/health` to report the commit, then check
+   the label in the dashboard.
+7. Wait up to 5 minutes for `/api/health` to report the commit, then check
    `/version.json`; only then tag the new images `:release`.
+8. Prune what earlier releases left: the registry tags of other commits
+   (`:release` and `:previous` still name what a rollback needs), then this
+   project's images that no tag names any more (`docker image prune
+   --filter label=org.opencontainers.image.source=https://github.com/sadeghianme/avatar-face`,
+   untagged images only). Each release before `:previous` used to stay on the
+   disk, about a GB apiece. Best effort: a failure is reported and changes
+   nothing else.
 
 Migrations run when the API container starts (`app/main.py`, `ensure_schema`).
 A migration that fails crash-loops the new container: roll back.
+
+### The fallback: `--build`
+
+`deploy/deploy.sh --build` deploys the way every release was made before
+images were pulled. It runs the same gates, then `rsync --delete` of the
+commit's `git archive` to `/root/projects/liveface` (the excludes, `.env`,
+databases, `backend/local_storage`, …, only protect server-side files from
+`--delete`), the backup and `:previous` as above, and
+`LIVEFACE_VERSION=<commit> docker compose -f docker-compose.prod.yml up -d --build`.
+Compose replaces no container until both images build, so a failed build
+leaves the old release serving. It takes as long as it always did: about a
+minute on the last deploys before pull mode, when the server's layer cache
+held everything below the source, and longer when it did not and the build
+fetched the models (~850 MB) and the libraries again.
+
+Use it for a commit the registry has no images of (exit 8): one from before
+images were pulled, or one shipped with `--skip-ci-check` before its `images`
+job pushed. Use it also while the server cannot reach the registry.
+
+### One-time: the server's registry login
+
+The images are private, so docker on the server needs a login to `ghcr.io`
+before the first pulled deploy. Until then `deploy.sh` stops with exit 7 and
+prints these steps. The owner does this once; `deploy.sh` never asks for,
+reads or passes on the token.
+
+0. Make both packages private, if they are not yet (GitHub created them
+   public, [Images](#images)): on
+   <https://github.com/users/sadeghianme/packages/container/liveface-api/settings>
+   and <https://github.com/users/sadeghianme/packages/container/liveface-web/settings>,
+   **Danger Zone**, **Change visibility**, **Private**. Until this is done,
+   every push to main publishes both images for anyone to pull.
+1. Create a personal access token (classic) with the `read:packages` scope
+   and nothing else:
+   <https://github.com/settings/tokens/new?scopes=read:packages&description=liveface-server-pull>.
+   GitHub's registry accepts no fine-grained token. Read-only is enough: CI
+   pushes with its own `GITHUB_TOKEN`.
+2. Give it to docker on the server on stdin, so it is in no shell history:
+
+   ```bash
+   ssh personal_server
+   docker login ghcr.io -u sadeghianme --password-stdin
+   # paste the token, press Enter, then Ctrl-D: "Login Succeeded"
+   ```
+
+Docker keeps it in `/root/.docker/config.json`, base64-encoded rather than
+encrypted (docker says so): a token that can only read these packages is what
+it should be. A token with an expiry date stops deploys at exit 7 the day it
+expires: create a new one and log in again. To revoke it, delete it on
+GitHub's token page; `docker logout ghcr.io` on the server forgets it there.
+
+### Images
+
+CI's `images` job builds both images with BuildKit and GitHub's Actions
+cache (`type=gha`, a scope per image): a layer whose inputs did not change is
+restored instead of rebuilt and keeps its digest, so the registry and the
+server already have it. On a push to main and in the merge queue, after
+every test passed, it pushes them as `ghcr.io/sadeghianme/liveface-api:<commit>`
+and `ghcr.io/sadeghianme/liveface-web:<commit>`, with `GITHUB_TOKEN` and
+`packages: write` on that job alone (never on a pull request, whose token is
+read-only when it comes from a fork). It then reads each back from the
+registry and fails unless its layers, environment, command and labels are
+the tested image's, and lists every layer with its compressed size (what a
+pull downloads).
+
+- **Layer order is what makes a pull small.** In `backend/Dockerfile`
+  everything that does not depend on the source comes first: system
+  libraries, the models (checksummed), then the Python libraries, installed
+  from the dependency list alone (a small stage extracts it from
+  `pyproject.toml`, so a dev-tool pin there does not invalidate it) and
+  `constraints.txt`. The source and the project itself (`pip install
+  --no-deps .`) come after. The job checks the image's `pip freeze` equals
+  `constraints.txt`. Keep new layers in that order: a file copied above the
+  libraries makes every commit reinstall them.
+- **Private, once the owner makes them so.** GitHub creates a package that a
+  workflow publishes with the visibility of the workflow's repository, so
+  both came out *public*, like the repository. The owner makes each private
+  once ([step 0 of the login](#one-time-the-servers-registry-login)); it stays
+  so for every later push. The job's last step warns, on every push, while one is public
+  (an anonymous reader gets a token for it), with the link to the setting.
+  Public images would need no login on the server, but anyone could pull
+  them, the third-party models and voices inside included.
+- Container storage and transfer on `ghcr.io` are free at present (GitHub's
+  billing docs). Old versions are not deleted automatically. To delete
+  some, use the package's settings page, or
+  `gh api --method DELETE /user/packages/container/liveface-api/versions/<id>`
+  with a token that has `delete:packages`.
+- **What it costs**, measured on this change's
+  runs. With an empty cache, the API image took 271 s: 62 s of build, 72 s
+  exporting it to docker for the tests, and 134 s filling the Actions cache,
+  which happens once per branch. The dashboard took 68 s. Pushing every layer of
+  both to an empty registry took 13 s and 5 s, and the read-back 4 s. With the
+  cache warm, the API image takes 81 s and the dashboard 9 s (the plain
+  `docker build` this replaced took 76 s and 28 s). The cache shares GitHub's
+  10 GB per repository with the virtualenv, npm and browser caches, and the
+  least recently used entry is evicted first. The two images take about 1.9 GB
+  per branch that built them.
+
+### Merge queue
+
+**Not available to this repository today.** GitHub offers merge queues only
+in repositories owned by an organization (any public one, or private ones on
+GitHub Enterprise Cloud). `sadeghianme/avatar-face` belongs to a personal
+account, so the rule is not offered to it (GitHub's docs; not tried here,
+since settings are the owner's). Everything else is ready: the workflow
+runs every job on `merge_group` and reports the same six checks, the
+`images` job pushes the queue's commit, and `deploy.sh` accepts the queue's
+run.
+
+To use it, transfer the repository to an organization (a free one is enough
+for a public repository). The registry namespace follows the owner, so in
+the same change, rename `ghcr.io/sadeghianme/…` to the organization's in
+`ci.yml` (`API_IMAGE`, `WEB_IMAGE`, the warning's settings link),
+`deploy/deploy.sh` (`IMAGE_OWNER`, `IMAGE_SOURCE`) and the
+`org.opencontainers.image.source` label of both Dockerfiles, and make the
+organization's new packages private as above. The server's login can stay
+the owner's own (`-u sadeghianme`): a classic token reads the packages of
+the organizations its account can read. Then add the rule (repository
+admin):
+
+```bash
+gh api --method POST repos/<owner>/avatar-face/rulesets \
+  -H "Accept: application/vnd.github+json" --input - <<'EOF'
+{
+  "name": "main: merge queue",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
+  "rules": [
+    {
+      "type": "merge_queue",
+      "parameters": {
+        "merge_method": "MERGE",
+        "max_entries_to_build": 2,
+        "min_entries_to_merge": 1,
+        "max_entries_to_merge": 1,
+        "min_entries_to_merge_wait_minutes": 0,
+        "grouping_strategy": "ALLGREEN",
+        "check_response_timeout_minutes": 60
+      }
+    }
+  ]
+}
+EOF
+```
+
+- **Merge method `MERGE`**: merge commits, as the history uses them.
+- **Build concurrency 2** (`max_entries_to_build`): a second queued pull
+  request is tested on top of the first while the first runs, and a third
+  waits. Each CI run is about ten jobs, and the account's runners are shared
+  by every run.
+- **One pull request per merge** (`min_entries_to_merge`,
+  `max_entries_to_merge` 1, no wait): every commit on main is one queue
+  entry, so each has its own tested images.
+- **`ALLGREEN`**: only pull requests whose own checks passed are merged.
+  60 minutes for the checks to report (the `images` job's timeout is 40).
+- **The required checks stay the same six** (`backend`, `embed`, `frontend`,
+  `frontend-lint`, `deploy-script`, `images`), in the branch protection rule
+  below. The queue requires them of its own run.
+- **Turn `strict` off** in that rule. The queue tests every pull request
+  merged onto the newest main, which is what `strict` was for, and keeping
+  it would make authors update their branches for nothing:
+  `gh api --method PATCH repos/<owner>/avatar-face/branches/main/protection/required_status_checks -F strict=false`.
+
+Check it: `gh api repos/<owner>/avatar-face/rules/branches/main`. With the
+queue, the push run on main still runs, and `deploy.sh` can start as soon as
+the queue merges: the queue's run already passed and pushed the images.
 
 ### Emergencies: `--skip-ci-check`
 
 Ships a pushed commit without a green CI run, behind a banner, and records
 "SKIPPED" in the summary. Everything else still applies: a clean tree, a commit
-on `origin/main`, the version check after the restart. Afterwards, watch that
-commit's own run finish (`gh run watch`) or re-run it if it failed for a
-reason outside the code (`gh run rerun <id>`), and roll back if it stays red.
+on `origin/main`, the version check after the restart. CI pushes the images
+only after its `images` job passed, so a commit whose run has not got that
+far has none: add `--build` (`deploy/deploy.sh --skip-ci-check --build`).
+Afterwards, watch that commit's own run finish (`gh run watch`) or re-run it
+if it failed for a reason outside the code (`gh run rerun <id>`), and roll
+back if it stays red.
 
 ## Rollback
 
@@ -97,7 +325,8 @@ building, and waits until `/api/health` reports the previous release's commit
 (read from its image label). `:previous` is always the last release a deploy
 *verified*, so a deploy that failed its checks never becomes the target. One
 step back only: for anything older, deploy that commit again with
-`deploy/deploy.sh --ref <commit>` (it rebuilds; the model layers are cached).
+`deploy/deploy.sh --ref <commit>`, which pulls its images from the registry
+(a commit from before images were pulled has none: add `--build`).
 
 The database is not touched. If the release being undone ran a migration, the
 older code now runs on the newer schema, which migrations are written to allow
@@ -138,8 +367,11 @@ restored file, SQLite would replay the newer log onto it.
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every push to main and every pull request. A
-newer push to the same branch or pull request cancels the run it supersedes.
+`.github/workflows/ci.yml` runs on every push to main, every pull request and
+every [merge queue](#merge-queue) entry (`merge_group`). A newer push to the
+same branch or pull request cancels the run it supersedes. The workflow's
+token is read-only (`contents: read`); only the `images` job may write
+packages, to push the images it tested ([Images](#images)).
 
 **The API contract.** `frontend/src/lib/api-schema.json` is the OpenAPI
 document, and `backend/scripts/export_openapi.py` its only generator
@@ -156,7 +388,7 @@ that owns it, and a test drives a public function or patches a public seam
 (`backend/tests/test_private_names.py`, in the suite, beside the layering
 checks of `test_layering.py`).
 
-**The backend is four jobs**, and `backend` stands for them:
+**The backend is four jobs** (six with the shards), and `backend` stands for them:
 
 - `backend-checks`: everything but the tests. That is `ruff check`, `ruff format
   --check`, `pyright`, the OpenAPI document, and the migrations against the
@@ -166,17 +398,18 @@ checks of `test_layering.py`).
   down and up again and checks once more. Production migrates when the API
   starts, but the tests build their schema from the models, so this step is
   the only one that catches a model change committed without its migration.
-- `backend-tests (1)` and `(2)`: the suite in two halves. Each test belongs to
-  exactly one half (`LIVEFACE_TEST_SHARD=<k>/<n>`, a CRC of its id;
-  `tests/conftest.py`), and each half runs on every core of its runner
+- `backend-tests (1)`, `(2)` and `(3)`: the suite in three shards. Each test
+  belongs to exactly one shard (`LIVEFACE_TEST_SHARD=<k>/<n>`, a CRC of its
+  id; `tests/conftest.py`), and each shard runs on every core of its runner
   (`pytest -n auto`). Every pytest-xdist worker has its own database and
-  storage, so a test must write only under `tmp_path`. Each half runs with
-  coverage and uploads its data file.
-- `backend-coverage`: after both halves, combines their coverage data and
-  holds it to the floor ([Coverage](#coverage)).
-- `backend`: the required check. It needs the other four and fails unless
-  all four succeeded. It runs `if: always()`, because a required check that
-  is skipped counts as passed.
+  storage, so a test must write only under `tmp_path`. Each shard runs with
+  coverage and uploads its data file. Three, not two: the halves took 4 to
+  5.5 minutes and were the longest jobs of the run.
+- `backend-coverage`: after the three shards, combines their coverage data
+  and holds it to the floor ([Coverage](#coverage)).
+- `backend`: the required check. It needs `backend-checks`, every shard and
+  `backend-coverage`, and fails unless all succeeded. It runs `if:
+  always()`, because a required check that is skipped counts as passed.
 
 The virtualenv is cached, keyed on the Python version, `constraints.txt` and
 `pyproject.toml`. The MediaPipe models are cached, keyed on their checksums,
@@ -209,14 +442,14 @@ and `# fmt: on`. The commit that formatted the backend is in
 | Job | What it proves | Time |
 |---|---|---|
 | `backend-checks` | ruff (lint and format), pyright, the OpenAPI document exported again and identical to the committed one, the migrations against the models and the newest one down and up | ~1 min |
-| `backend-tests` (×2) | pytest with coverage, half of the suite each, on every core, against the production pins, espeak-ng and the checksummed MediaPipe models | 4–5 min |
-| `backend-coverage` | the two halves' coverage combined, at or above the floor; the HTML and LCOV report uploaded | ~20 s |
+| `backend-tests` (×3) | pytest with coverage, a third of the suite each, on every core, against the production pins, espeak-ng and the checksummed MediaPipe models | 2.7–4.1 min (pytest 133–206 s per shard) |
+| `backend-coverage` | the three shards' coverage combined, at or above the floor; the HTML and LCOV report uploaded | ~20 s |
 | `backend` | every backend job above passed (the required check) | seconds |
 | `embed` | lint, type check (tests included), the widget's generated API types match the committed document, vitest with the pixel goldens and coverage at or above its floors, build, the browser tests (Chromium; the speech timing test also in Firefox and WebKit, with the backend's speech encoder and a null sound sink: about a minute and a half of it) | ~4 min |
 | `frontend` | type check, the unit tests (node --test) and the rendering tests (Vitest), each with coverage at or above its floors, structure check, production build | ~1 min |
 | `frontend-lint` | ESLint (UI kit and data-layer rules), Prettier, the dashboard's generated API types match the committed document | <1 min |
 | `deploy-script` | ShellCheck (pinned) on `deploy/*.sh`; every gate of `deploy.sh` | <1 min |
-| `images` | both production images build (every model checksum, `nginx -t`), boot, report the commit, and all 23 page visits load in headless Chrome with zero CSP violations (the Simulator injection replayed among them, and the session checked for tokens a script could read); then the wizard end to end, from a new account to a published, spoken, shared and deleted avatar | ~5 min, the wizard ~1 of it |
+| `images` | both production images build (every model checksum, `nginx -t`; BuildKit with the Actions layer cache), the API's `pip freeze` is `constraints.txt`, both boot, report the commit, and all 23 page visits load in headless Chrome with zero CSP violations (the Simulator injection replayed among them, and the session checked for tokens a script could read); then the wizard end to end, from a new account to a published, spoken, shared and deleted avatar. On main and in the merge queue it then pushes both images and checks the pushed ones are the tested ones ([Images](#images)) | ~5 min with a warm layer cache, the sweep and the wizard 3 of them; ~10 on a branch's first run, filling the cache; the push 5–20 s |
 
 The `images` job's browser sweep (`deploy/smoke/web-sweep.mjs`) seeds a user, a
 photo avatar, a 3D avatar and a share link through the API, speaks on the share
@@ -325,8 +558,8 @@ together): 92.00 → **91**.
 
 What each number counts:
 
-- **backend**: lines and branches of `app/` (branch coverage on), the two
-  halves of `backend-tests` combined; the floor is on coverage.py's
+- **backend**: lines and branches of `app/` (branch coverage on), the three
+  shards of `backend-tests` combined; the floor is on coverage.py's
   "TOTAL". Measured with
   `concurrency = greenlet, thread`: SQLAlchemy's async layer runs the sync
   core in greenlets, and per-thread tracing misses those lines
@@ -359,9 +592,9 @@ by design: add `--cov-fail-under=0`. Numbers on a laptop can differ from CI's
 by a few tenths (another Node, another platform, timing); CI's are the ones
 of record.
 
-In CI, each half of `backend-tests` writes its data file
-(`COVERAGE_FILE=.coverage.half<k>`) and uploads it; `backend-coverage`
-downloads both, runs `coverage combine`, and `coverage report` holds the
+In CI, each shard of `backend-tests` writes its data file
+(`COVERAGE_FILE=.coverage.shard<k>`) and uploads it; `backend-coverage`
+downloads the three, runs `coverage combine`, and `coverage report` holds the
 total to `fail_under`. `backend` needs `backend-coverage`, so the required
 check fails with it. `embed` and `frontend` run the coverage scripts in
 place of the plain ones. Every report (HTML and LCOV) is uploaded as an
@@ -369,7 +602,8 @@ artifact, kept 7 days: `backend-coverage`, `embed-coverage`,
 `frontend-coverage` on the run's page (`gh run download <run> -n
 embed-coverage`).
 
-What it costs, measured on this change's runs: pytest under coverage takes
+What it costs, measured when coverage was added (the suite then ran in two
+halves; three shards since, [CI](#ci)): pytest under coverage takes
 about 4.3 minutes per half instead of 3 (most runs; the runners vary by a
 minute either way), `backend-coverage` 17 seconds after them, so a whole
 run takes about 5.5 minutes instead of 4. Vitest takes 10 seconds longer in
@@ -429,7 +663,9 @@ EOF
 - `backend-checks` and `backend-tests` are not in the rule, and do not need to
   be: `backend` fails unless all of them succeeded ([CI](#ci)).
 - `strict`: a pull request must be up to date with main, so what CI tested is
-  what main becomes.
+  what main becomes. With the [merge queue](#merge-queue) it goes off: the
+  queue tests every pull request on the newest main itself. The six checks
+  stay, and the queue requires them of its own run (`merge_group`).
 - `enforce_admins`: the owner is held to it too. With it, a direct `git push`
   to main is refused: changes arrive through pull requests. To lift it for an
   emergency: `gh api --method DELETE repos/sadeghianme/avatar-face/branches/main/protection/enforce_admins`
@@ -447,7 +683,7 @@ green CI (the `images` job rebuilds both images from scratch), merge, deploy.
 
 | What | Pinned in | How to move it |
 |---|---|---|
-| Python libraries | `backend/constraints.txt` (the production `pip freeze`), used by the Dockerfile and CI; `mediapipe==1.0.1` in `backend/Dockerfile` | below |
+| Python libraries | `backend/constraints.txt` (the production `pip freeze`), used by the Dockerfile and CI, which holds the image's `pip freeze` to it; `mediapipe==1.0.1` in `backend/Dockerfile` | below |
 | Python dev tools | `ruff`, `pyright`, `pytest-cov`, `coverage` exact versions in `backend/pyproject.toml` | change the version; fix what the new one reports in the same pull request (for the coverage tools: measure again, [Coverage](#coverage)) |
 | Coverage for Vitest | `@vitest/coverage-v8` exact in both `package.json`s, always the installed `vitest`'s version | with every move of `vitest`, in the same pull request: `npm install -D --save-exact @vitest/coverage-v8@<vitest's version>`; measure again ([Coverage](#coverage)) |
 | npm packages | `embed/package-lock.json`, `frontend/package-lock.json`, `deploy/smoke/package-lock.json` (`npm ci` everywhere) | in the package: `npm install <pkg>@<version>`, commit the lockfile |

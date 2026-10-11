@@ -1,6 +1,12 @@
 # Production deployment behind the shared Caddy reverse proxy.
-# deploy/deploy.sh runs it (docs/process.md): it ships one commit, then on
-# the server, from deploy/:
+# deploy/deploy.sh runs it (docs/process.md). By default it pulls the images
+# CI tested for one commit (ghcr.io/sadeghianme/liveface-{api,web}:<commit>),
+# tags them as the images compose names after the services below
+# (liveface-liveface-api:latest, liveface-liveface-web:latest), and on the
+# server, from deploy/:
+#   docker compose -f docker-compose.prod.yml up -d --no-build
+# so nothing is built there. The build sections are for `deploy.sh --build`,
+# the fallback that sends the tree and builds on the server:
 #   LIVEFACE_VERSION=<commit> docker compose -f docker-compose.prod.yml up -d --build
 # Built by hand without LIVEFACE_VERSION, the images say "dev" on /health
 # and /version.json, and deploy.sh --rollback cannot tell what they are.

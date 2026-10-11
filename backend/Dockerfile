@@ -12,6 +12,15 @@ RUN npm ci
 COPY embed/ ./
 RUN npm run build
 
+# The project's runtime dependencies alone ([project] dependencies), out of
+# pyproject.toml: the rest of that file (dev tool pins, ruff and pytest
+# settings) changes far more often, and must not invalidate the ~1GB layer
+# the libraries are installed in below. Same base image as the API's.
+FROM python:3.12-slim-trixie@sha256:ddb0207ae1f0356c2b724d740769b0c5f5f51cc54a0525178f721825f78fe74c AS requirements
+COPY backend/pyproject.toml /pyproject.toml
+RUN python -c 'import tomllib; print("\n".join(tomllib.load(open("/pyproject.toml", "rb"))["project"]["dependencies"]))' \
+    > /requirements.txt
+
 FROM python:3.12-slim-trixie@sha256:ddb0207ae1f0356c2b724d740769b0c5f5f51cc54a0525178f721825f78fe74c
 WORKDIR /app/backend
 
@@ -123,18 +132,30 @@ RUN set -e; rev=c10ece1aade47bb51c153c893d14e5bf8e5b7117; mkdir -p models/piper;
     | sha256sum -c -
 ENV PIPER_VOICES_DIR=/app/backend/models/piper
 
-COPY backend/pyproject.toml backend/constraints.txt ./
+# The libraries, before any source: like the models, they depend only on
+# what they are (the dependency list and constraints.txt), so a code change
+# reuses this ~1GB layer, and a deploy that pulls the image (deploy/deploy.sh)
+# downloads only the few MB of layers below it. It used to come after the
+# source, and every commit reinstalled every library.
+# Pinned: mediapipe was unpinned, and a rebuild silently upgraded to a
+# major version with a different runtime dependency, breaking detection on a
+# deploy that changed nothing in this repo. constraints.txt pins every other
+# library to the versions running in production (see docs/process.md,
+# "Dependency pins"); it restricts versions only, it adds no packages. CI
+# holds the image's `pip freeze` to it (the images job).
+COPY backend/constraints.txt ./
+COPY --from=requirements /requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -c constraints.txt -r requirements.txt "mediapipe==1.0.1"
+
+COPY backend/pyproject.toml ./
 COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./
 # One-off maintenance scripts, run with `python -m scripts.<name>`.
 COPY backend/scripts ./scripts
-# Pinned: this was unpinned, and a rebuild silently upgraded to a mediapipe
-# major version with a different runtime dependency, breaking detection on a
-# deploy that changed nothing in this repo. constraints.txt pins every other
-# library to the versions running in production (see docs/process.md,
-# "Dependency pins"); it restricts versions only, it adds no packages.
-RUN pip install --no-cache-dir -c constraints.txt . "mediapipe==1.0.1"
+# The project itself, on the libraries above (--no-deps: nothing new can be
+# resolved here, so nothing can drift from the layer above).
+RUN pip install --no-cache-dir --no-deps .
 # Widget bundles served at /liveface.js and /liveface-3d.js
 COPY --from=embed-build /build/embed/dist /app/embed/dist
 
